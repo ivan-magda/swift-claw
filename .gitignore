@@ -1,0 +1,68 @@
+# ───────────────────────── macOS ─────────────────────────
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# ───────────────────── Swift Package Manager ─────────────────────
+.build/
+.swiftpm/
+# Package.resolved IS tracked on purpose (swift-claw ships an executable/daemon —
+# lock dependency versions). Do not ignore it.
+
+# ───────────────────────── Xcode ─────────────────────────
+DerivedData/
+build/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# ───────────────────── Secrets (NEVER commit) ─────────────────────
+# Live secrets & keys — swift-claw uses sops+age + a .env dev fallback.
+.env
+.env.*
+!.env.example
+*.age
+*.agekey
+age.key
+*.key
+secrets/
+*.sops.dec
+*.decrypted
+# Live config may hold the owner allowlist / base_url; commit an example instead.
+config.toml
+config.local.toml
+config.*.rejected.*
+!config.example.toml
+
+# ───────────────── Runtime state / local workspace ─────────────────
+# Default state root is ~/.swift-claw (outside the repo); this covers an
+# in-repo profile or local run.
+.swift-claw/
+.swift-claw-*/
+workspace/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+logs/
+*.log
+
+# ───────────────────────── Editors / tooling ─────────────────────────
+.idea/
+.vscode/
+*.swp
+*~
+.playwright-mcp/
+
+# ─────────────────── Claude Code (personal, local) ───────────────────
+.claude/settings.local.json
+
+# ───────────────── Project-private (not for the repo) ─────────────────
+docs/alt-solutions/
+docs/teleclaw-prompt.md
