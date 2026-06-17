@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>swift-claw — Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ============ THEME — Blueprint (dark-first) ============ */
+:root {
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+  --bg: #0b1520;
+  --surface: #112032;
+  --surface-2: #162a40;
+  --surface-3: #1d3450;
+  --border: rgba(74,159,212,0.12);
+  --border-bright: rgba(74,159,212,0.28);
+  --text: #d8e8f4;
+  --text-dim: #7a9ab8;
+  --text-faint: #3f5f7a;
+
+  --accent: #4a9fd4;
+  --accent-dim: rgba(74,159,212,0.10);
+  --gold: #d4a73a;
+  --gold-dim: rgba(212,167,58,0.10);
+  --green: #4aad7a;
+  --green-dim: rgba(74,173,122,0.10);
+  --red: #d45c5c;
+  --red-dim: rgba(212,92,92,0.10);
+  --orange: #d47a3a;
+  --orange-dim: rgba(212,122,58,0.10);
+  --purple: #9d7ad4;
+  --purple-dim: rgba(157,122,212,0.10);
+  --teal: #4ac9d4;
+  --teal-dim: rgba(74,201,212,0.10);
+
+  --mod-core:      #4a9fd4;
+  --mod-data:      #4aad7a;
+  --mod-gateway:   #7a9ad4;
+  --mod-agent:     #4ac9d4;
+  --mod-telegram:  #d4a73a;
+  --mod-llm:       #d47a3a;
+  --mod-tools:     #d45c5c;
+  --mod-workspace: #9d7ad4;
+}
+
+/* ============ RESET ============ */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body { overflow-wrap: break-word; }
+
+body {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.65;
+  padding: 48px 24px;
+  min-height: 100vh;
+}
+
+.container { max-width: 1120px; margin: 0 auto; }
+
+/* ============ ANIMATIONS ============ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate {
+  animation: fadeUp 0.45s ease-out both;
+  animation-delay: calc(var(--i, 0) * 0.07s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============ HEADER ============ */
+.page-header {
+  margin-bottom: 52px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--accent);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-label::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+}
+
+h1 {
+  font-size: clamp(26px, 4vw, 42px);
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1.1;
+  margin-bottom: 10px;
+}
+
+.page-subtitle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ============ SECTIONS ============ */
+.section { margin-bottom: 60px; }
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.section-num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--border-bright);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.section-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+  max-width: 760px;
+  line-height: 1.6;
+}
+
+.section-desc code, .callout code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ============ CALLOUT ============ */
+.callout {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  padding: 13px 17px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  margin-top: 16px;
+}
+.callout--gold { border-left-color: var(--gold); }
+.callout--gold strong { color: var(--gold); }
+.callout strong { color: var(--text); }
+
+/* ============ CARDS ============ */
+.ve-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  min-width: 0;
+}
+.ve-card--elevated {
+  background: var(--surface-2);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+.ve-card code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ============ MODULE GRID ============ */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.module-grid > * { min-width: 0; }
+
+@media (max-width: 900px) { .module-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .module-grid { grid-template-columns: 1fr; } }
+
+.module-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 15px 17px;
+  min-width: 0;
+  transition: border-color 0.2s ease;
+}
+.module-card:hover { border-color: var(--border-bright); }
+.module-card--span-all { grid-column: 1 / -1; background: var(--surface-2); }
+
+.module-card__kind {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.module-card__dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.module-card__name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+.module-card__role {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin-bottom: 10px;
+}
+.module-card__types {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.module-card__types li {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  padding-left: 12px;
+  position: relative;
+  line-height: 1.85;
+}
+.module-card__types li::before {
+  content: '›';
+  position: absolute;
+  left: 0;
+  color: var(--text-faint);
+}
+.module-card__types code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* ============ MERMAID SHELL ============ */
+.diagram-shell { position: relative; margin-bottom: 12px; }
+
+.diagram-shell__hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+  opacity: 0.8;
+}
+
+.mermaid-wrap {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px 24px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 420px;
+  cursor: grab;
+}
+.mermaid-wrap.is-panning { cursor: grabbing; user-select: none; }
+
+.zoom-controls {
+  position: absolute;
+  top: 8px; right: 8px;
+  display: flex;
+  gap: 2px;
+  z-index: 10;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+.zoom-controls button {
+  width: 28px; height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.zoom-controls button:hover { background: var(--border); color: var(--text); }
+
+.mermaid-viewport {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+}
+.mermaid-canvas { position: absolute; top: 0; left: 0; }
+
+.zoom-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+/* ============ MERMAID OVERRIDES ============ */
+.mermaid .nodeLabel,
+.mermaid .nodeLabel p,
+.mermaid .label,
+.mermaid .label p {
+  font-family: var(--font-body) !important;
+  font-size: 13px !important;
+  color: var(--text) !important;
+  fill: var(--text) !important;
+}
+.mermaid .edgeLabel,
+.mermaid .edgeLabel p {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  color: var(--text-dim) !important;
+  fill: var(--text-dim) !important;
+  background-color: var(--bg) !important;
+}
+.mermaid .edgeLabel rect { fill: var(--bg) !important; }
+.mermaid text { fill: var(--text) !important; }
+.mermaid .edgeLabel text { fill: var(--text-dim) !important; }
+.mermaid .node rect,
+.mermaid .node circle,
+.mermaid .node polygon,
+.mermaid .node ellipse { stroke-width: 1.5px !important; }
+
+/* ============ BUDGET GRID ============ */
+.budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+.budget-grid > * { min-width: 0; }
+
+.budget-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.budget-item__field {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-faint);
+  margin-bottom: 3px;
+}
+.budget-item__value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: -0.5px;
+}
+.budget-item__meaning {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+
+/* ============ CODE BLOCK ============ */
+.code-block {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  margin-top: 10px;
+}
+.code-block .cm { color: var(--text-faint); }
+.code-block .kw { color: var(--accent); }
+.code-block .ty { color: var(--teal); }
+.code-block .fn { color: var(--gold); }
+
+/* ============ TABLE ============ */
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.data-table thead { position: sticky; top: 0; z-index: 2; }
+.data-table th {
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-bright);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover { background: var(--accent-dim); }
+.data-table code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.data-table small { display: block; color: var(--text-dim); font-size: 10px; margin-top: 2px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.badge--low  { background: var(--green-dim); color: var(--green); }
+.badge--med  { background: var(--orange-dim); color: var(--orange); }
+.badge--high { background: var(--red-dim); color: var(--red); }
+.badge--info { background: var(--teal-dim); color: var(--teal); }
+
+/* ============ ROADMAP ============ */
+.roadmap-item {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.roadmap-item > * { min-width: 0; }
+.roadmap-item:last-child { border-bottom: none; }
+
+.roadmap-inc {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.roadmap-inc--v1 { color: var(--gold); }
+.roadmap-phase {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--gold);
+  margin-top: 3px;
+}
+.roadmap-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.roadmap-done {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.roadmap-done code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 768px) {
+  body { padding: 20px 16px; }
+  h1 { font-size: 22px; }
+  .roadmap-item { grid-template-columns: 66px 1fr; gap: 10px; }
+  .budget-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ── HEADER ── -->
+  <header class="page-header animate" style="--i:0">
+    <div class="page-label">swift-claw &middot; normative technical spec</div>
+    <h1>System Architecture</h1>
+    <p class="page-subtitle">clawd — persistent single-owner Telegram AI assistant in pure Swift &middot; v1 scope approved &middot; 2026-06-15</p>
+  </header>
+
+  <!-- ── § 01  SYSTEM CONTEXT ── -->
+  <section class="section animate" style="--i:1">
+    <div class="section-header">
+      <span class="section-num">§ 01</span>
+      <h2>System Context — High Level</h2>
+    </div>
+    <p class="section-desc">
+      A single long-running supervised daemon (<code>clawd</code>) owns all connectivity, state, policy, routing, sessions, and tools.
+      Telegram is the only surface in v1 (long-polling, no listen socket — better secure-by-default posture).
+      The LLM is reached via one OpenAI-compatible Chat Completions contract. All state is local-first on the owner's machine.
+    </p>
+
+    <div class="diagram-shell">
+      <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom &nbsp;&middot;&nbsp; drag to pan &nbsp;&middot;&nbsp; double-click to fit</p>
+      <div class="mermaid-wrap">
+        <div class="zoom-controls">
+          <button type="button" data-action="zoom-in"     title="Zoom in">+</button>
+          <button type="button" data-action="zoom-out"    title="Zoom out">&minus;</button>
+          <button type="button" data-action="zoom-fit"    title="Smart fit">&#8634;</button>
+          <button type="button" data-action="zoom-one"    title="1:1 zoom">1:1</button>
+          <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
+          <span class="zoom-label">Loading...</span>
+        </div>
+        <div class="mermaid-viewport">
+          <div class="mermaid mermaid-canvas"></div>
+        </div>
+      </div>
+      <script type="text/plain" class="diagram-source">
+graph TD
+  subgraph ext["External Systems"]
+    TG["Telegram Bot API<br/>long-poll · getUpdates<br/>sendMessage · editMessageText"]
+    LLM["LLM Provider<br/>OpenAI-compatible<br/>Chat Completions + SSE"]
+  end
+
+  CLAWD["clawd — supervised daemon<br/>ServiceGroup · TelegramPollerService<br/>Gateway · AgentRuntime · Memory<br/>Audit · OutboxDispatcher"]
+
+  DB[("SQLite WAL<br/>GRDB · FTS5<br/>sessions · runs · messages<br/>outbox · audit · memory")]
+  WS["Workspace files<br/>~/.swift-claw/workspace/<br/>SOUL · AGENTS · USER · TOOLS<br/>MEMORY.md · skills/"]
+  SB["ExecutionBackend<br/>apple/container — macOS<br/>microVM/Podman — Linux<br/>(Inc 5)"]
+
+  TG <-->|"getUpdates / long-poll<br/>sendMessage / callbacks"| CLAWD
+  CLAWD <-->|"Chat Completions<br/>SSE streaming"| LLM
+  CLAWD --> DB
+  CLAWD --> WS
+  CLAWD -.->|"shell exec — Inc 5"| SB
+      </script>
+    </div>
+
+    <div class="callout">
+      <strong>Local-first principle.</strong> No data leaves the machine except to the configured LLM endpoint and Telegram.
+      <code>base_url</code> is pinned/allowlisted and documented as a trust dependency — it is an outbound exfiltration sink.
+      The owner can export and delete all conversation history and memory items.
+    </div>
+  </section>
+
+  <!-- ── § 02  MODULE DEPENDENCY DAG ── -->
+  <section class="section animate" style="--i:2">
+    <div class="section-header">
+      <span class="section-num">§ 02</span>
+      <h2>Component Architecture — Module Dependency DAG</h2>
+    </div>
+    <p class="section-desc">
+      SwiftPM package <code>swift-claw</code>. A layered DAG — never a star.
+      Stores are reached through <strong>protocols declared in <code>ClawCore</code></strong>.
+      Concrete <code>ClawData</code> is injected only at the <code>clawd</code> composition root — no module outside ClawData imports GRDB.
+    </p>
+
+    <div class="diagram-shell">
+      <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom &nbsp;&middot;&nbsp; drag to pan &nbsp;&middot;&nbsp; double-click to fit</p>
+      <div class="mermaid-wrap">
+        <div class="zoom-controls">
+          <button type="button" data-action="zoom-in"     title="Zoom in">+</button>
+          <button type="button" data-action="zoom-out"    title="Zoom out">&minus;</button>
+          <button type="button" data-action="zoom-fit"    title="Smart fit">&#8634;</button>
+          <button type="button" data-action="zoom-one"    title="1:1 zoom">1:1</button>
+          <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
+          <span class="zoom-label">Loading...</span>
+        </div>
+        <div class="mermaid-viewport">
+          <div class="mermaid mermaid-canvas"></div>
+        </div>
+      </div>
+      <script type="text/plain" class="diagram-source">
+graph TD
+  BIN["clawd<br/>(binary — entry)"]:::entry
+  GW["ClawGateway<br/>wiring · services · routing"]:::gateway
+  AG["ClawAgent<br/>runtime · context · lane"]:::agent
+  TL["ClawTelegram<br/>client · poller · splitter"]:::telegram
+  LM["ClawLLM<br/>provider · SSE · cost"]:::llm
+  TLS["ClawTools<br/>registry · policy · tools"]:::tools
+  WS["ClawWorkspace<br/>identity · memory files"]:::workspace
+  DA["ClawData<br/>GRDB store impls · FTS5"]:::data
+  CO["ClawCore<br/>domain types · protocols<br/>error taxonomy"]:::core
+
+  BIN --> GW
+  GW --> AG
+  GW --> TL
+  GW --> DA
+  AG --> LM
+  AG --> TLS
+  AG --> WS
+  AG --> CO
+  TL --> CO
+  LM --> CO
+  TLS --> CO
+  WS --> CO
+  DA --> CO
+
+  classDef entry    fill:#1d344988,stroke:#7a9ad4,stroke-width:2px
+  classDef gateway  fill:#1d344988,stroke:#7a9ad4
+  classDef agent    fill:#1a354088,stroke:#4ac9d4
+  classDef telegram fill:#352d1a88,stroke:#d4a73a
+  classDef llm      fill:#3a2a1a88,stroke:#d47a3a
+  classDef tools    fill:#3a1a1a88,stroke:#d45c5c
+  classDef workspace fill:#2a1a3888,stroke:#9d7ad4
+  classDef data     fill:#1a2e2888,stroke:#4aad7a
+  classDef core     fill:#0c1d3088,stroke:#4a9fd4,stroke-width:2px
+      </script>
+    </div>
+
+    <div class="callout">
+      <strong>Dependency rule:</strong> <code>ClawAgent</code> and <code>ClawGateway</code> depend only on <code>ClawCore</code> for persistence protocols.
+      Concrete <code>ClawData</code> is injected at the composition root only — clean, testable seam at every boundary.
+    </div>
+  </section>
+
+  <!-- ── § 03  MODULE DETAIL CARDS ── -->
+  <section class="section animate" style="--i:3">
+    <div class="section-header">
+      <span class="section-num">§ 03</span>
+      <h2>Module Detail</h2>
+    </div>
+
+    <div class="module-grid">
+
+      <div class="module-card module-card--span-all animate" style="--i:4; border-left:3px solid var(--mod-gateway)">
+        <div class="module-card__kind" style="color:var(--mod-gateway)">
+          <span class="module-card__dot" style="background:var(--mod-gateway)"></span>
+          executable &middot; composition root
+        </div>
+        <div class="module-card__name" style="color:var(--mod-gateway)">clawd</div>
+        <div class="module-card__role">Thin entry point. Loads and validates <code>AppConfig</code>, acquires cross-process advisory flock (single-instance guard), builds the <code>ServiceGroup</code> with all services injected, then runs. No business logic — only wires things together.</div>
+        <ul class="module-card__types">
+          <li>Load + validate <code>AppConfig</code> &middot; distinct exit codes for config/secret failures</li>
+          <li>Acquire advisory flock on state root (refuses boot if another clawd is running)</li>
+          <li><code>ServiceGroup</code> orchestration: ordered startup + ordered graceful shutdown on SIGTERM/SIGINT</li>
+          <li><code>clawd doctor --check-config</code> — validates without starting the daemon</li>
+        </ul>
+      </div>
+
+      <div class="module-card animate" style="--i:5; border-left:3px solid var(--mod-gateway)">
+        <div class="module-card__kind" style="color:var(--mod-gateway)">
+          <span class="module-card__dot" style="background:var(--mod-gateway)"></span>
+          lib &middot; orchestration
+        </div>
+        <div class="module-card__name" style="color:var(--mod-gateway)">ClawGateway</div>
+        <div class="module-card__role">Wires the whole system. Services, routing, access control (numeric-ID default-deny), session resolution, outbox dispatch, graceful shutdown choreography.</div>
+        <ul class="module-card__types">
+          <li><code>Gateway</code>, <code>TelegramPollerService</code></li>
+          <li><code>SchedulerService</code> (Inc 4)</li>
+          <li><code>Router</code>, <code>AccessControl</code>, <code>RateLimiter</code></li>
+          <li><code>OutboxDispatcher</code></li>
+        </ul>
+      </div>
+
+      <div class="module-card animate" style="--i:6; border-left:3px solid var(--mod-agent)">
+        <div class="module-card__kind" style="color:var(--mod-agent)">
+          <span class="module-card__dot" style="background:var(--mod-agent)"></span>
+          lib &middot; runtime
+        </div>
+        <div class="module-card__name" style="color:var(--mod-agent)">ClawAgent</div>
+        <div class="module-card__role">Core agent runtime. Context assembly, ReAct loop, per-session FIFO lane via Task chaining, RunBudget enforcement (turns / tokens / USD / wall-clock), cooperative cancellation.</div>
+        <ul class="module-card__types">
+          <li><code>AgentRuntime</code>, <code>SessionActor</code></li>
+          <li><code>ContextBuilder</code> — budgeted, priority-ordered</li>
+          <li><code>RunBudget</code> — all caps checked before each call</li>
+        </ul>
+      </div>
+
+      <div class="module-card animate" style="--i:7; border-left:3px solid var(--mod-telegram)">
+        <div class="module-card__kind" style="color:var(--mod-telegram)">
+          <span class="module-card__dot" style="background:var(--mod-telegram)"></span>
+          lib &middot; transport
+        </div>
+        <div class="module-card__name" style="color:var(--mod-telegram)">ClawTelegram</div>
+        <div class="module-card__role">Thin clean-room Bot API client over AsyncHTTPClient. Long-poll intake, envelope normalization, MarkdownV2/HTML escaping, code-fence-aware reply splitter. ~8–10 endpoints.</div>
+        <ul class="module-card__types">
+          <li><code>TelegramClient</code>, <code>TelegramLongPoller</code></li>
+          <li><code>MessageEnvelope</code>, <code>MarkdownEscaper</code></li>
+          <li><code>ReplySplitter</code> — safe split at code-fence boundaries</li>
+        </ul>
+      </div>
+
+      <div class="module-card animate" style="--i:8; border-left:3px solid var(--mod-llm)">
+        <div class="module-card__kind" style="color:var(--mod-llm)">
+          <span class="module-card__dot" style="background:var(--mod-llm)"></span>
+          lib &middot; provider
+        </div>
+        <div class="module-card__name" style="color:var(--mod-llm)">ClawLLM</div>
+        <div class="module-card__role">OpenAI-compatible Chat Completions. SSE streaming (v1), per-call usage/cost attribution from a local <code>CostTable</code>, retries with capped exponential backoff + full jitter, USD breaker integration.</div>
+        <ul class="module-card__types">
+          <li><code>OpenAICompatibleProvider</code>, <code>LLMProvider</code> protocol</li>
+          <li><code>SSEParser</code>, <code>ChatMessage</code>, <code>ToolCall</code></li>
+          <li><code>CostTable</code>, <code>Usage</code> — feeds USD breaker</li>
+        </ul>
+      </div>
+
+      <div class="module-card animate" style="--i:9; border-left:3px solid var(--mod-tools)">
+        <div class="module-card__kind" style="color:var(--mod-tools)">
+          <span class="module-card__dot" style="background:var(--mod-tools)"></span>
+          lib &middot; policy gate
+        </div>
+        <div class="module-card__name" style="color:var(--mod-tools)">ClawTools</div>
+        <div class="module-card__role">Tool registry + in-code policy enforcement. v1 ships read-only safe-tier tools. Risk-tier dispatch, SSRF blocklist, workspace-scope path canonicalization, exfil gate. Approval FSM arrives Inc 5.</div>
+        <ul class="module-card__types">
+          <li><code>ToolRegistry</code>, <code>PolicyGate</code>, <code>ToolContext</code></li>
+          <li><code>WebSearchTool</code>, <code>WebFetchTool</code>, <code>FileReadTool</code></li>
+          <li><code>ApprovalCoordinator</code> — Inc 5 (nonce + FSM + callback auth)</li>
+        </ul>
+      </div>
+
+      <div class="module-card animate" style="--i:10; border-left:3px solid var(--mod-workspace)">
+        <div class="module-card__kind" style="color:var(--mod-workspace)">
+          <span class="module-card__dot" style="background:var(--mod-workspace)"></span>
+          lib &middot; memory files
+        </div>
+        <div class="module-card__name" style="color:var(--mod-workspace)">ClawWorkspace</div>
+        <div class="module-card__role">Loads identity and memory files from workspace root. Injects at the <strong>untrusted tier</strong> with per-file grapheme caps and truncation markers. Missing files never crash.</div>
+        <ul class="module-card__types">
+          <li><code>WorkspaceStore</code>, <code>WorkspaceFile</code>, <code>MemoryDoc</code></li>
+          <li><code>FrontmatterParser</code> (Yams — SKILL.md frontmatter)</li>
+          <li>MEMORY.md cap = 2200 graphemes &middot; USER.md = 1375</li>
+        </ul>
+      </div>
+
+      <div class="module-card animate" style="--i:11; border-left:3px solid var(--mod-data)">
+        <div class="module-card__kind" style="color:var(--mod-data)">
+          <span class="module-card__dot" style="background:var(--mod-data)"></span>
+          lib &middot; persistence
+        </div>
+        <div class="module-card__name" style="color:var(--mod-data)">ClawData</div>
+        <div class="module-card__role">GRDB.swift v7, WAL mode, FTS5 external-content index, explicit versioned <code>DatabaseMigrator</code>. Thin Sendable wrappers over <code>DatabaseWriter</code>. Implements all protocols from ClawCore.</div>
+        <ul class="module-card__types">
+          <li>Concrete <code>MessageStore</code>, <code>SessionStore</code>, <code>RunStore</code></li>
+          <li><code>OutboxStore</code>, <code>AuditLog</code>, <code>MemoryStore</code>, <code>ApprovalStore</code></li>
+          <li>FTS5 external-content over <code>messages</code> — single delete source of truth</li>
+        </ul>
+      </div>
+
+      <div class="module-card animate" style="--i:12; border-left:3px solid var(--mod-core); background:var(--surface-2)">
+        <div class="module-card__kind" style="color:var(--mod-core)">
+          <span class="module-card__dot" style="background:var(--mod-core)"></span>
+          lib &middot; pure domain &middot; no I/O &middot; depends on nothing
+        </div>
+        <div class="module-card__name" style="color:var(--mod-core)">ClawCore</div>
+        <div class="module-card__role">The pure domain layer. All value types, config model, full error taxonomy, and every store / provider / transport / tool / sandbox protocol. Zero I/O — trivially unit-testable in isolation.</div>
+        <ul class="module-card__types">
+          <li>Value types: <code>IncomingMessage</code>, <code>OutgoingReply</code>, <code>SessionKey</code>, <code>Principal</code>, <code>AppConfig</code></li>
+          <li>FSM: <code>RunState</code>, <code>ApprovalState</code>, <code>RiskLevel</code>, <code>RunBudget</code></li>
+          <li>Error taxonomy: <code>ProviderError</code>, <code>TelegramError</code> (incl. typed 409), <code>PolicyDenied</code>, <code>BudgetExhausted</code>, <code>StoreError</code>, <code>ConfigError</code></li>
+          <li>Protocols: <code>LLMProvider</code>, <code>TelegramTransport</code>, <code>SecretStore</code>, <code>ExecutionBackend</code>, <code>Tool</code>, all Store protocols</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── § 04  CONCURRENCY ── -->
+  <section class="section animate" style="--i:4">
+    <div class="section-header">
+      <span class="section-num">§ 04</span>
+      <h2>Concurrency — Per-Session Lane</h2>
+    </div>
+
+    <div class="callout callout--gold" style="margin-top:0; margin-bottom:14px;">
+      <strong>Critical correctness trap.</strong> Swift actors do <strong>NOT</strong> serialize across <code>await</code> —
+      an actor reentrantly admits other calls while a turn is suspended on a network <code>await</code>.
+      &ldquo;An actor serializes turns&rdquo; is false. The lane uses explicit Task chaining.
+    </div>
+
+    <div class="ve-card ve-card--elevated">
+      <div style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--mod-agent);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--mod-agent);display:inline-block;"></span>
+        SessionActor — Task chaining
+      </div>
+      <pre class="code-block"><code><span class="cm">// One SessionActor per SessionKey. Holds one stored Task.</span>
+<span class="kw">var</span> currentTurn: <span class="ty">Task</span>&lt;<span class="ty">Void</span>, <span class="ty">Never</span>&gt;?
+
+<span class="kw">func</span> <span class="fn">enqueue</span>(_ work: <span class="ty">@Sendable @escaping</span> () <span class="kw">async</span> -&gt; <span class="ty">Void</span>) {
+    <span class="kw">let</span> prev = currentTurn
+    currentTurn = <span class="ty">Task</span> {
+        _ = <span class="kw">await</span> prev?.value   <span class="cm">// wait out the previous turn fully</span>
+        <span class="kw">await</span> work()            <span class="cm">// run this turn to completion</span>
+    }
+}</code></pre>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:10px;line-height:1.55;">
+        Default = strict FIFO per session. Plain messages queue. Only <code>/stop</code> (&#x2192; CANCELLED) and
+        <code>/new</code> (&#x2192; SUPERSEDED + detaint) supersede. Cross-session work runs concurrently.
+      </p>
+    </div>
+
+    <div class="budget-grid">
+      <div class="budget-item"><div class="budget-item__field">maxTurns</div><div class="budget-item__value">12</div><div class="budget-item__meaning">LLM round-trips per run</div></div>
+      <div class="budget-item"><div class="budget-item__field">maxToolCalls</div><div class="budget-item__value">20</div><div class="budget-item__meaning">tool calls per run</div></div>
+      <div class="budget-item"><div class="budget-item__field">maxInputTokens</div><div class="budget-item__value">100k</div><div class="budget-item__meaning">context-assembly cap</div></div>
+      <div class="budget-item"><div class="budget-item__field">max_tokens</div><div class="budget-item__value">4096</div><div class="budget-item__meaning">reserved output (non-null; doctor rejects null)</div></div>
+      <div class="budget-item"><div class="budget-item__field">wallClockDeadline</div><div class="budget-item__value">180 s</div><div class="budget-item__meaning">per-run wall-clock cap</div></div>
+      <div class="budget-item"><div class="budget-item__field">perRunUSD</div><div class="budget-item__value">$0.50</div><div class="budget-item__meaning">cost ceiling per run</div></div>
+      <div class="budget-item"><div class="budget-item__field">perDayUSD</div><div class="budget-item__value">$10.00</div><div class="budget-item__meaning">rolling daily kill-switch + owner DM</div></div>
+      <div class="budget-item"><div class="budget-item__field">retryBudget</div><div class="budget-item__value">3</div><div class="budget-item__meaning">attempts per LLM request</div></div>
+    </div>
+  </section>
+
+  <!-- ── § 05  INBOUND LIFECYCLE ── -->
+  <section class="section animate" style="--i:5">
+    <div class="section-header">
+      <span class="section-num">§ 05</span>
+      <h2>Inbound Message Lifecycle — Normative Sequence</h2>
+    </div>
+    <p class="section-desc">
+      The most safety-critical invariant in the system.
+      The offset cursor advances <strong>LAST</strong> — only after the inbound write commits.
+      The dedup check (<code>claimUpdate</code>) is <strong>synchronous</strong> — never spanning an <code>await</code>.
+    </p>
+
+    <div class="diagram-shell">
+      <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom &nbsp;&middot;&nbsp; drag to pan &nbsp;&middot;&nbsp; double-click to fit</p>
+      <div class="mermaid-wrap" style="min-height:500px;">
+        <div class="zoom-controls">
+          <button type="button" data-action="zoom-in"     title="Zoom in">+</button>
+          <button type="button" data-action="zoom-out"    title="Zoom out">&minus;</button>
+          <button type="button" data-action="zoom-fit"    title="Smart fit">&#8634;</button>
+          <button type="button" data-action="zoom-one"    title="1:1 zoom">1:1</button>
+          <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
+          <span class="zoom-label">Loading...</span>
+        </div>
+        <div class="mermaid-viewport" style="min-height:460px;">
+          <div class="mermaid mermaid-canvas"></div>
+        </div>
+      </div>
+      <script type="text/plain" class="diagram-source">
+graph TD
+  S1["(1) getUpdates<br/>long-poll offset = lastUpdateId + 1<br/>409 Conflict = typed error, not retryable"]
+  S2{"(2) claimUpdate<br/>INSERT OR IGNORE<br/>SYNCHRONOUS — no await across check"}
+  S3{"(3) normalize + AccessControl<br/>numeric userId in allowlist?<br/>default-DENY, fail-closed on error"}
+  S3a["(3a) RateLimiter<br/>token-bucket · honor retry_after<br/>fail-closed on store/lock error"]
+  S3b["(3b) Non-text intake<br/>unsupported → friendly reply<br/>caption text IS processed · edited = /retry"]
+  S4["(4) ONE db.write transaction<br/>persist inbound message + side effects<br/>COMMIT"]
+  S5["(5) advance lastUpdateId<br/>ONLY after (4) commits<br/>next getUpdates acks update to Telegram"]
+  S6["SessionActor lane<br/>AgentRuntime.runTurn<br/>context → LLM → tools → persist → outbox"]
+
+  SKIP["SKIP<br/>(already seen)"]
+  DENY["minimal reply<br/>'private bot'<br/>never reveals allowlist"]
+
+  S1 --> S2
+  S2 -->|"inserted = true"| S3
+  S2 -->|"already seen"| SKIP
+  S3 -->|"allowlisted"| S3a
+  S3 -->|"unknown sender"| DENY
+  S3a --> S3b --> S4 --> S5 --> S6
+
+  classDef crit  fill:#0c1d3088,stroke:#4a9fd4,stroke-width:2px
+  classDef gate  fill:#2a200f88,stroke:#d4a73a,stroke-width:2px
+  classDef deny  fill:#3a1a1a88,stroke:#d45c5c
+  classDef skip  fill:#1a1a2288,stroke:#3f5f7a
+  classDef step  fill:#11203288,stroke:#4a6880
+
+  class S4,S5 crit
+  class S2,S3 gate
+  class DENY deny
+  class SKIP skip
+  class S1,S3a,S3b,S6 step
+      </script>
+    </div>
+
+    <div class="callout">
+      <strong>Poison-update policy:</strong> if normalization of one update throws, advance the offset past it
+      (never wedge the poller), log it, increment a <code>dropped_updates</code> counter surfaced in <code>doctor</code>.
+    </div>
+  </section>
+
+  <!-- ── § 06  RUN FSM ── -->
+  <section class="section animate" style="--i:6">
+    <div class="section-header">
+      <span class="section-num">§ 06</span>
+      <h2>Run State Machine</h2>
+    </div>
+    <p class="section-desc">
+      <code>RunState</code> = PENDING / RUNNING / AWAITING_APPROVAL / DONE / FAILED / CANCELLED / SUPERSEDED.
+      FSM invariants: synchronous reduce, no default arm, side effects after commit.
+      A boot reconciliation sweep resolves orphaned states at startup.
+    </p>
+
+    <div class="diagram-shell">
+      <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom &nbsp;&middot;&nbsp; drag to pan &nbsp;&middot;&nbsp; double-click to fit</p>
+      <div class="mermaid-wrap" style="min-height:460px;">
+        <div class="zoom-controls">
+          <button type="button" data-action="zoom-in"     title="Zoom in">+</button>
+          <button type="button" data-action="zoom-out"    title="Zoom out">&minus;</button>
+          <button type="button" data-action="zoom-fit"    title="Smart fit">&#8634;</button>
+          <button type="button" data-action="zoom-one"    title="1:1 zoom">1:1</button>
+          <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
+          <span class="zoom-label">Loading...</span>
+        </div>
+        <div class="mermaid-viewport" style="min-height:420px;">
+          <div class="mermaid mermaid-canvas"></div>
+        </div>
+      </div>
+      <script type="text/plain" class="diagram-source">
+graph TD
+  START["inbound claimed + persisted"]
+  PEND["PENDING"]
+  RUN["RUNNING"]
+  AWAIT["AWAITING_APPROVAL<br/>(Inc 5)"]
+  DONE["DONE"]
+  FAIL["FAILED"]
+  CANC["CANCELLED"]
+  SUP["SUPERSEDED"]
+
+  START -->|"claim + persist"| PEND
+  PEND  -->|"lane picks up"| RUN
+  PEND  -->|"/stop"| CANC
+  PEND  -->|"/new"| SUP
+  RUN   -->|"turn completes<br/>reply enqueued"| DONE
+  RUN   -->|"retries exhausted<br/>or terminal error"| FAIL
+  RUN   -->|"/stop"| CANC
+  RUN   -->|"/new"| SUP
+  RUN   -->|"tool needs approval"| AWAIT
+  AWAIT -->|"APPROVED"| RUN
+  AWAIT -->|"REJECTED or<br/>EXPIRED to DENY"| FAIL
+  AWAIT -->|"/stop or /new"| CANC
+
+  classDef active   fill:#0c1d3088,stroke:#4a9fd4,stroke-width:2px
+  classDef terminal fill:#1a2e2888,stroke:#4aad7a,stroke-width:2px
+  classDef failed   fill:#3a1a1a88,stroke:#d45c5c
+  classDef stopped  fill:#1a1a2888,stroke:#3f5f7a
+  classDef waiting  fill:#2a200f88,stroke:#d4a73a
+  classDef start    fill:#0b152088,stroke:#3f5f7a
+
+  class PEND,RUN active
+  class DONE terminal
+  class FAIL failed
+  class CANC,SUP stopped
+  class AWAIT waiting
+  class START start
+      </script>
+    </div>
+
+    <div class="callout">
+      <strong>Boot reconciliation sweep:</strong> any <code>RUNNING</code> at boot &#x2192; <code>FAILED</code> (or re-enqueue via outbox);
+      any expired <code>AWAITING_APPROVAL</code> &#x2192; DENY. An <code>updated_ts</code> lease distinguishes stuck-forever from in-flight.
+      The 60s ticker enforces <code>PENDING &#x2192; EXPIRED &#x2192; DENY</code>.
+    </div>
+  </section>
+
+  <!-- ── § 07  CONTEXT ASSEMBLY ── -->
+  <section class="section animate" style="--i:7">
+    <div class="section-header">
+      <span class="section-num">§ 07</span>
+      <h2>Context Assembly — Instruction Hierarchy</h2>
+    </div>
+    <p class="section-desc">
+      Budget: <code>inputCap = modelMax &minus; reservedOutput</code>, filled greedily by priority, grapheme-counted (<code>String.count</code>).
+      Untrusted data is wrapped/labeled and can never claim system authority — durable memory is never injected at the system tier.
+    </p>
+
+    <div class="table-wrap animate" style="--i:8">
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Section</th>
+              <th>Tier</th>
+              <th>Priority</th>
+              <th>Truncatable / Cap</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>1</code></td>
+              <td><strong>System / security policy</strong></td>
+              <td><span class="badge badge--info">system trusted</span></td>
+              <td>Highest</td>
+              <td>No — degrade, never drop</td>
+            </tr>
+            <tr>
+              <td><code>2</code></td>
+              <td><strong>Identity files</strong> (SOUL &middot; AGENTS)</td>
+              <td><span class="badge badge--info">system trusted</span></td>
+              <td>High</td>
+              <td>No</td>
+            </tr>
+            <tr>
+              <td><code>3</code></td>
+              <td><strong>Developer config / tool policy</strong> (TOOLS)</td>
+              <td><span class="badge badge--info">system trusted</span></td>
+              <td>High</td>
+              <td>No</td>
+            </tr>
+            <tr>
+              <td><code>4</code></td>
+              <td><strong>Current date / time</strong></td>
+              <td><span class="badge badge--info">system trusted</span></td>
+              <td>High</td>
+              <td>No</td>
+            </tr>
+            <tr>
+              <td><code>5</code></td>
+              <td><strong>Owner profile</strong> (USER.md)</td>
+              <td><span class="badge badge--med">untrusted / labeled</span></td>
+              <td>Med-high</td>
+              <td>Yes — &#x2264; 1375 graphemes</td>
+            </tr>
+            <tr>
+              <td><code>6</code></td>
+              <td><strong>Durable memory</strong> (MEMORY.md &middot; memory_items)</td>
+              <td><span class="badge badge--med">untrusted / labeled</span></td>
+              <td>Med</td>
+              <td>Yes — &#x2264; 2200 graphemes; overflow &#x2192; error + consolidation</td>
+            </tr>
+            <tr>
+              <td><code>7</code></td>
+              <td><strong>Session history / rolling summary</strong></td>
+              <td><span class="badge badge--med">mixed; provenance preserved</span></td>
+              <td>Med</td>
+              <td>Yes</td>
+            </tr>
+            <tr>
+              <td><code>8</code></td>
+              <td><strong>Retrieved (FTS5 recall) + tool observations</strong></td>
+              <td><span class="badge badge--high">untrusted / labeled</span></td>
+              <td>Low</td>
+              <td>Yes — per-tool output cap ~25k tokens</td>
+            </tr>
+            <tr>
+              <td><code>9</code></td>
+              <td><strong>Skills</strong></td>
+              <td><span class="badge badge--high">untrusted / labeled</span></td>
+              <td>Low</td>
+              <td>Yes</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Security invariant:</strong> §5–6 (MEMORY.md / USER.md) is wrapped in the same untrusted/labeled wrapper as tool output.
+      High-sensitivity memory is <strong>not</strong> auto-injected into a turn that already ingested untrusted content.
+      Compaction preserves untrusted provenance — never folds a tool result into the trusted rolling summary.
+    </div>
+  </section>
+
+  <!-- ── § 08  TECHNOLOGY DECISIONS ── -->
+  <section class="section animate" style="--i:9">
+    <div class="section-header">
+      <span class="section-num">§ 08</span>
+      <h2>Technology Decisions</h2>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Decision</th>
+              <th>Choice</th>
+              <th>Rationale / Trade-offs</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Daemon framework</strong></td>
+              <td><code>swift-service-lifecycle</code><br/><small>ServiceGroup / NIO</small></td>
+              <td><strong>No listen socket by default</strong> (long-polling is outbound — better secure-by-default posture). Structured supervised lifecycle.</td>
+              <td><span class="badge badge--low">Low</span></td>
+            </tr>
+            <tr>
+              <td><strong>Telegram client</strong></td>
+              <td>Thin clean-room client<br/><small>over AsyncHTTPClient</small></td>
+              <td>Deliberate clean-room provenance, zero bus-factor, full transport + escaping + offset-durability control. Research primary was <code>nerzh/swift-telegram-bot</code> — this is the considered runner-up.</td>
+              <td><span class="badge badge--low">Low–Med</span></td>
+            </tr>
+            <tr>
+              <td><strong>Persistence</strong></td>
+              <td><code>GRDB.swift v7</code><br/><small>WAL · FTS5 · DatabaseMigrator</small></td>
+              <td>Swift-6 concurrency-native, boring, full-featured. FTS5 for cross-session recall. Pin GRDB; vendor SQLite amalgamation with FTS5 compiled in.</td>
+              <td><span class="badge badge--low">Low (macOS)</span> <span class="badge badge--med">Med (Linux)</span></td>
+            </tr>
+            <tr>
+              <td><strong>HTTP / SSE</strong></td>
+              <td>AsyncHTTPClient + custom SSE parser</td>
+              <td>URLSession cannot stream SSE on Linux. Streaming is v1. AsyncHTTPClient is the portable choice.</td>
+              <td><span class="badge badge--low">Low</span></td>
+            </tr>
+            <tr>
+              <td><strong>LLM provider</strong></td>
+              <td>OpenAI-compatible + <code>LLMProvider</code> protocol</td>
+              <td>Swap providers / models via config (OpenAI, OpenRouter, Groq, Ollama, LiteLLM). <code>base_url</code> pinned/allowlisted. Protocol seam for native Anthropic adapter later.</td>
+              <td><span class="badge badge--med">Med</span></td>
+            </tr>
+            <tr>
+              <td><strong>Concurrency</strong></td>
+              <td>stdlib actors + stored <code>currentTurn</code> Task</td>
+              <td>Per-session lanes without an external queue lib. <code>dfed/swift-async-queue</code> is the escape hatch if measured bugs appear.</td>
+              <td><span class="badge badge--low">Low</span></td>
+            </tr>
+            <tr>
+              <td><strong>Secrets</strong></td>
+              <td><code>SecretStore</code> over sops + age<br/><small>+ swift-crypto AES-GCM</small></td>
+              <td>A launchd daemon cannot use the macOS Data-Protection Keychain. Sops + age is portable. Age identity lives outside the repo at <code>0600</code>.</td>
+              <td><span class="badge badge--low">Low</span></td>
+            </tr>
+            <tr>
+              <td><strong>Sandbox (Inc 5)</strong></td>
+              <td><code>apple/container</code> (macOS)<br/>microVM / Podman (Linux)</td>
+              <td>Hardware-virtualization boundary for untrusted code. One execution = one disposable never-reused VM. Linux backend is an open question (Podman + microVM vs gVisor <code>runsc</code>).</td>
+              <td><span class="badge badge--med">Med</span></td>
+            </tr>
+            <tr>
+              <td><strong>Vector search</strong></td>
+              <td>Deferred — FTS5/BM25 for v1</td>
+              <td><code>sqlite-vec</code> requires a custom SQLite amalgamation + separate Linux CI re-validation. A stock <code>DatabaseMigrator</code> cannot create a <code>vec0</code> table. Strictly behind a protocol.</td>
+              <td><span class="badge badge--high">High</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── § 09  ROADMAP ── -->
+  <section class="section animate" style="--i:10">
+    <div class="section-header">
+      <span class="section-num">§ 09</span>
+      <h2>Development Roadmap — Technical Increments</h2>
+    </div>
+    <p class="section-desc">
+      Inc 0–3 = <strong>v1 daily-driver milestone</strong>: conversational + durable memory + read-only tools + streaming.
+      Each increment lands a working supervised slice; &ldquo;Done when&rdquo; is an automated acceptance test, not a manual check.
+    </p>
+
+    <div class="ve-card" style="padding:0; overflow:hidden;">
+      <div style="padding:2px 20px 16px;">
+
+        <div class="roadmap-item">
+          <div><div class="roadmap-inc roadmap-inc--v1">Inc 0 &middot; v1</div><div class="roadmap-phase">Daily Driver</div></div>
+          <div>
+            <div class="roadmap-title">Supervised default-deny Telegram daemon (echo)</div>
+            <div class="roadmap-done">Bot echoes allowlisted DMs; un-allowlisted refused. Startup flock blocks second <code>clawd</code>. <code>409</code> handled as distinct typed error. Onboarding self-ID echo. Non-text &ldquo;I can&rsquo;t read X yet&rdquo;. Doctor skeleton. Survives SIGTERM + restart.</div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div><div class="roadmap-inc roadmap-inc--v1">Inc 1 &middot; v1</div></div>
+          <div>
+            <div class="roadmap-title">LLM turn (blocking) + persistence</div>
+            <div class="roadmap-done">Real OpenAI-compatible answer; persisted (sessions / messages / runs / usage / audit + outbox + <code>claimUpdate</code> ordering). Escaper + splitter. Degradation UX. USD budget breaker. Context caps.</div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div><div class="roadmap-inc roadmap-inc--v1">Inc 2 &middot; v1</div></div>
+          <div>
+            <div class="roadmap-title">Streaming + per-session lane</div>
+            <div class="roadmap-done">SSE &#x2192; throttled <code>editMessageText</code>. Per-session Task-chaining lane. Second message queues in order. <code>/stop</code> cancels. <code>/new</code> resets + detaints. SecretStore (no plaintext on disk).</div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div><div class="roadmap-inc roadmap-inc--v1">Inc 3 &middot; v1</div></div>
+          <div>
+            <div class="roadmap-title">Memory &amp; workspace + read-only tools</div>
+            <div class="roadmap-done">Workspace files at untrusted tier (budgeted, caps, flush-before-compact). Durable facts on confirm. FTS5 recall. <code>/memory</code>. <code>web_search</code> / <code>web_fetch</code> / file READ at <code>safe</code> tier with exfil gate.</div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div><div class="roadmap-inc">Inc 4</div></div>
+          <div>
+            <div class="roadmap-title">Scheduler &amp; proactive</div>
+            <div class="roadmap-done">&ldquo;Every weekday 07:00 Europe/Berlin&rdquo; fires once per occurrence across restarts and DST changes. Confirm-before-arm. Reduced-privilege runs. Clock-gap catch-up. Opt-in heartbeat with quiet hours.</div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div><div class="roadmap-inc">Inc 5</div></div>
+          <div>
+            <div class="roadmap-title">Write / shell tools + approvals + sandbox</div>
+            <div class="roadmap-done">Consequential tools require explicit approval (callback auth + &#x2265;128-bit nonce + FSM). Forged or third-party callback cannot approve. Untrusted code in per-exec disposable VM. Enforced lethal-trifecta gate forces approval path in code.</div>
+          </div>
+        </div>
+
+        <div class="roadmap-item">
+          <div><div class="roadmap-inc">Inc 6</div></div>
+          <div>
+            <div class="roadmap-title">Linux portability &amp; deployment</div>
+            <div class="roadmap-done">Same source &#x2192; running supervised binary on fresh Linux box (static SDK, distroless, systemd). CI Linux build including GRDB + FTS5 passes — <strong>the one hard portability gate</strong>.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+const cfg = {
+  fitPadding:28, minHeight:360, maxHeightPx:960,
+  maxHeightVh:0.84, maxInitialZoom:1.8, minZoom:0.08,
+  maxZoom:6.5, zoomStep:0.14, readabilityFloor:0.58
+};
+const clamp = (n,lo,hi) => Math.max(lo,Math.min(hi,n));
+let activeDrag = null;
+addEventListener('mousemove', e => activeDrag?.onMove(e));
+addEventListener('mouseup',   () => { activeDrag?.onEnd(); activeDrag = null; });
+
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  look: 'classic',
+  themeVariables: {
+    fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+    fontSize: '13px',
+    primaryColor:        '#112032',
+    primaryBorderColor:  '#4a9fd4',
+    primaryTextColor:    '#d8e8f4',
+    secondaryColor:      '#1a2e28',
+    secondaryBorderColor:'#4aad7a',
+    secondaryTextColor:  '#d8e8f4',
+    tertiaryColor:       '#2a2010',
+    tertiaryBorderColor: '#d4a73a',
+    tertiaryTextColor:   '#d8e8f4',
+    lineColor:           '#4a6880',
+    noteBkgColor:        '#1d3450',
+    noteTextColor:       '#d8e8f4',
+    noteBorderColor:     '#4a9fd4',
+    background:          '#0b1520',
+    mainBkg:             '#112032',
+    clusterBkg:          '#0f1f30',
+    clusterBorder:       '#4a9fd4',
+    titleColor:          '#d8e8f4',
+    edgeLabelBackground: '#0b1520',
+    nodeTextColor:       '#d8e8f4',
+  }
+});
+
+function initDiagram(shell) {
+  const wrap     = shell.querySelector('.mermaid-wrap');
+  const viewport = shell.querySelector('.mermaid-viewport');
+  const canvas   = shell.querySelector('.mermaid-canvas');
+  const source   = shell.querySelector('.diagram-source');
+  const label    = shell.querySelector('.zoom-label');
+  if (!wrap||!viewport||!canvas||!source||!label) return;
+
+  let zoom=1, fitMode='contain', panX=0, panY=0, svgW=0, svgH=0;
+  let sx=0, sy=0, spx=0, spy=0, touchDist=0, touchCx=0, touchCy=0;
+
+  const constrainPan = () => {
+    const vpW=viewport.clientWidth, vpH=viewport.clientHeight, p=cfg.fitPadding;
+    const rW=svgW*zoom, rH=svgH*zoom;
+    panX = rW+p*2<=vpW ? (vpW-rW)/2 : clamp(panX, vpW-rW-p, p);
+    panY = rH+p*2<=vpH ? (vpH-rH)/2 : clamp(panY, vpH-rH-p, p);
+  };
+  const applyT = () => {
+    const svg=canvas.querySelector('svg'); if (!svg||!svgW) return;
+    constrainPan();
+    svg.style.width=svgW*zoom+'px'; svg.style.height=svgH*zoom+'px';
+    canvas.style.transform=`translate(${panX}px,${panY}px)`;
+    label.textContent=Math.round(zoom*100)+'% — '+fitMode;
+  };
+  const canPan = () => svgW*zoom+cfg.fitPadding*2>viewport.clientWidth || svgH*zoom+cfg.fitPadding*2>viewport.clientHeight;
+  const smartFit = () => {
+    const vpW=viewport.clientWidth, vpH=viewport.clientHeight;
+    const aW=Math.max(80,vpW-cfg.fitPadding*2), aH=Math.max(80,vpH-cfg.fitPadding*2);
+    const c=Math.min(aW/svgW,aH/svgH); let z=c, m='contain';
+    if (c<cfg.readabilityFloor) svgH/svgW>=vpH/Math.max(vpW,1) ? (z=aW/svgW,m='width-priority') : (z=aH/svgH,m='height-priority');
+    return {zoom:clamp(z,cfg.minZoom,cfg.maxInitialZoom),mode:m};
+  };
+  const fitDiagram = () => {
+    if (!svgW) return; const f=smartFit(); zoom=f.zoom; fitMode=f.mode;
+    panX=(viewport.clientWidth-svgW*zoom)/2; panY=(viewport.clientHeight-svgH*zoom)/2; applyT();
+  };
+  const zoomAround = (factor,cx,cy) => {
+    const next=clamp(zoom*factor,cfg.minZoom,cfg.maxZoom), r=next/zoom;
+    panX=cx-r*(cx-panX); panY=cy-r*(cy-panY); zoom=next; fitMode='custom'; applyT();
+  };
+  const readSize = svg => {
+    let w=0,h=0;
+    if (svg.viewBox?.baseVal?.width>0){w=svg.viewBox.baseVal.width;h=svg.viewBox.baseVal.height;}
+    if (!w){w=parseFloat(svg.getAttribute('width'))||0;h=parseFloat(svg.getAttribute('height'))||0;}
+    if (!w){const b=svg.getBBox();w=b.width;h=b.height;}
+    if (!w){const r=svg.getBoundingClientRect();w=r.width||1000;h=r.height||700;}
+    if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+    return {w,h};
+  };
+  const setHeight = () => {
+    if (!svgW) return;
+    const usW=Math.max(280,wrap.getBoundingClientRect().width-2);
+    const idealH=(svgH/svgW)*usW+cfg.fitPadding*2;
+    const maxH=Math.min(cfg.maxHeightPx,Math.max(cfg.minHeight+40,Math.floor(innerHeight*cfg.maxHeightVh)));
+    wrap.style.height=Math.round(clamp(idealH,cfg.minHeight,maxH))+'px';
+  };
+  const openInNewTab = () => {
+    const svg=canvas.querySelector('svg'); if (!svg) return;
+    const clone=svg.cloneNode(true); clone.style.width=''; clone.style.height='';
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Diagram</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b1520;padding:40px;box-sizing:border-box}svg{max-width:100%;max-height:90vh;height:auto}</style></head><body>${clone.outerHTML}</body></html>`;
+    open(URL.createObjectURL(new Blob([html],{type:'text/html'})),'_blank');
+  };
+
+  const render = async () => {
+    try {
+      const code=source.textContent.trim(); if (!code){label.textContent='Error: Empty source';return;}
+      const id='diag-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+      const {svg}=await mermaid.render(id,code); canvas.innerHTML=svg;
+      const svgNode=canvas.querySelector('svg'); if (!svgNode){label.textContent='Error: No SVG';return;}
+      const s=readSize(svgNode); svgW=s.w; svgH=s.h;
+      svgNode.removeAttribute('width'); svgNode.removeAttribute('height');
+      svgNode.style.maxWidth='none'; svgNode.style.display='block';
+      setHeight(); fitDiagram();
+    } catch(err){ console.error('Mermaid render failed:',err); label.textContent='Error: '+(err.message||'Render failed'); }
+  };
+
+  const actions = {
+    'zoom-in':     ()=>zoomAround(1+cfg.zoomStep,viewport.clientWidth/2,viewport.clientHeight/2),
+    'zoom-out':    ()=>zoomAround(1/(1+cfg.zoomStep),viewport.clientWidth/2,viewport.clientHeight/2),
+    'zoom-fit':    fitDiagram,
+    'zoom-one':    ()=>{ zoom=clamp(1,cfg.minZoom,cfg.maxZoom);fitMode='1:1';panX=(viewport.clientWidth-svgW*zoom)/2;panY=(viewport.clientHeight-svgH*zoom)/2;applyT(); },
+    'zoom-expand': openInNewTab
+  };
+  Object.entries(actions).forEach(([a,h])=>wrap.querySelector(`[data-action="${a}"]`)?.addEventListener('click',h));
+  viewport.addEventListener('dblclick', fitDiagram);
+  viewport.addEventListener('wheel', e=>{
+    if (e.ctrlKey||e.metaKey){
+      e.preventDefault(); const r=viewport.getBoundingClientRect();
+      zoomAround(e.deltaY<0?1+cfg.zoomStep:1/(1+cfg.zoomStep),e.clientX-r.left,e.clientY-r.top);
+    } else if (canPan()){e.preventDefault();panX-=e.deltaX;panY-=e.deltaY;applyT();}
+  },{passive:false});
+  viewport.addEventListener('mousedown', e=>{
+    if (e.target.closest('.zoom-controls')||!canPan()) return;
+    wrap.classList.add('is-panning'); sx=e.clientX;sy=e.clientY;spx=panX;spy=panY; e.preventDefault();
+    activeDrag={
+      onMove:ev=>{panX=spx+(ev.clientX-sx);panY=spy+(ev.clientY-sy);applyT();},
+      onEnd:()=>wrap.classList.remove('is-panning')
+    };
+  });
+  viewport.addEventListener('touchstart', e=>{
+    if (e.touches.length===1){sx=e.touches[0].clientX;sy=e.touches[0].clientY;spx=panX;spy=panY;}
+    else if (e.touches.length===2){
+      const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
+      touchDist=Math.sqrt(dx*dx+dy*dy); const r=viewport.getBoundingClientRect();
+      touchCx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left;
+      touchCy=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top;
+    }
+  },{passive:true});
+  viewport.addEventListener('touchmove', e=>{
+    if (e.touches.length===1&&canPan()){
+      if (touchDist>0){sx=e.touches[0].clientX;sy=e.touches[0].clientY;spx=panX;spy=panY;touchDist=0;}
+      e.preventDefault();panX=spx+(e.touches[0].clientX-sx);panY=spy+(e.touches[0].clientY-sy);applyT();
+    } else if (e.touches.length===2&&touchDist>0){
+      e.preventDefault(); const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
+      const d=Math.sqrt(dx*dx+dy*dy); zoomAround(d/touchDist,touchCx,touchCy); touchDist=d;
+    }
+  },{passive:false});
+  new ResizeObserver(()=>{if (svgW){setHeight();fitDiagram();}}).observe(wrap);
+  render();
+}
+
+document.querySelectorAll('.diagram-shell').forEach(initDiagram);
+</script>
+</body>
+</html>
