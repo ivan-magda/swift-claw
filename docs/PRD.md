@@ -140,7 +140,7 @@ Requirements tagged *(v1)* are part of the daily-driver milestone (§9); others 
 ### 6.5 LLM provider
 - **FR-P1.** *(v1)* One **OpenAI-compatible Chat Completions** contract is the provider interface; provider/model/`base_url`/key are configurable, enabling swap between OpenAI, OpenRouter, Groq, local Ollama/LM Studio, an Anthropic OpenAI-compat endpoint, or a LiteLLM proxy — without code changes. `base_url` is **pinned/allowlisted** and documented as a trust dependency.
 - **FR-P2.** *(v1 seam)* Behind an `LLMProvider` protocol so a future *native* adapter (e.g. Anthropic Messages for prompt caching) can be added.
-- **FR-P3.** *(v1)* Records token usage and computes per-call cost from a local pricing table (feeds the USD budget, FR-R3/NFR-Cost). Per-call USD attribution **dashboards** are deferred (NG9).
+- **FR-P3.** *(v1 — not approved)* Records token usage and computes per-call cost from a local pricing table (feeds the USD budget, FR-R3/NFR-Cost). Per-call USD attribution **dashboards** are deferred (NG9).
 - **FR-P4.** *(v1)* **Streaming.** Replies stream incrementally: an SSE parser maps chunks onto throttled Telegram `editMessageText` (coalesced, min-interval ~1–2 s, first chunk sent ASAP). If streaming is unavailable, fall back to blocking completion and re-issue `sendChatAction` every ~4 s for the turn's duration. The metric is **perceived latency (time-to-first-token)**, not just first-reply latency.
 
 ### 6.6 Memory *(v1)*
