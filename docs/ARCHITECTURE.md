@@ -560,7 +560,7 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 | **5** | Write/shell tools + policy + approvals + sandbox | A consequential tool requires explicit approval (**callback auth + ≥128-bit nonce + FSM**); a **forged or third-party callback cannot approve**; untrusted code runs in a per-exec disposable VM (no host FS/network by default); the **enforced lethal-trifecta gate** forces approval on a tainted privileged action. |
 | **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (static SDK, distroless, systemd); **CI Linux build incl. GRDB+FTS5 passes** (the one hard portability gate). |
 
-*(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards.)*
+*(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards; **Telegram Bot API 10.1 rich messages** — `sendRichMessage` / `sendRichMessageDraft` + Markdown→`MessageEntity` converter in `ClawTelegram`, replacing `MarkdownEscaper`; pairs naturally with SSE streaming; see `docs/research/telegram-bot-api-10.1-rich-messages-2026-06-11.md`.)*
 
 ## 21. Open architectural questions
 
