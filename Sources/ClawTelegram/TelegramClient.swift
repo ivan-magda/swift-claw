@@ -79,8 +79,6 @@ extension TelegramClient {
   ) async throws -> Response {
     let payload: Data
     do {
-      // Parameterless methods send `{}`, not empty bytes: the request always carries
-      // Content-Type: application/json, and an empty body is not parseable JSON (→ 400).
       payload = try body.map { try Self.encoder.encode($0) } ?? Data("{}".utf8)
     } catch {
       throw TelegramError.transport(sanitize("encode \(methodName): \(error)"))
