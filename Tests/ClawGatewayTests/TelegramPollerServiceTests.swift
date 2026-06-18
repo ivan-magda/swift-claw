@@ -43,22 +43,6 @@ import Testing
     return (poller, transport, cursor)
   }
 
-  /// Spins until `condition` holds or the deadline passes — the loop runs on another task,
-  /// so the cursor/send side effects land asynchronously.
-  private func waitUntil(
-    _ condition: @Sendable () async -> Bool,
-    timeout: Duration = .seconds(2)
-  ) async throws {
-    let start = ContinuousClock().now
-    while await !condition() {
-      if ContinuousClock().now - start > timeout {
-        Issue.record("timed out waiting")
-        return
-      }
-      try await Task.sleep(for: .milliseconds(10))
-    }
-  }
-
   @Test func processesABatchAndAdvancesCursor() async throws {
     // given
     let (poller, transport, cursor) = try makeStack(

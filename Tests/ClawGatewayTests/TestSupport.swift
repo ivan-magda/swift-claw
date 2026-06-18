@@ -1,5 +1,6 @@
 import ClawCore
 import Foundation
+import Testing
 
 /// Records outbound sends; scripts getUpdates batches and optional errors for poller tests.
 actor RecordingTransport: TelegramTransport {
@@ -45,6 +46,22 @@ actor RecordingTransport: TelegramTransport {
       throw sendError  // simulate a transient send failure
     }
     sent.append((chatId, text))
+  }
+}
+
+/// Polls `condition` until it holds or the deadline passes — the service under test runs on a
+/// separate task, so its side effects (sends, cursor advances) land asynchronously.
+func waitUntil(
+  _ condition: @Sendable () async -> Bool,
+  timeout: Duration = .seconds(2)
+) async throws {
+  let start = ContinuousClock().now
+  while await !condition() {
+    if ContinuousClock().now - start > timeout {
+      Issue.record("timed out waiting")
+      return
+    }
+    try await Task.sleep(for: .milliseconds(10))
   }
 }
 
