@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ivanmagda.swift-claw</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/run-clawd.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true />
+    <!-- Restart only on a non-zero (failure) exit; deterministic startup failures
+         (config/secret/lock exit codes) still exit non-zero but ThrottleInterval
+         spaces the retries so they back off instead of hot-looping. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false />
+    </dict>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/clawd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/clawd.err.log</string>
+</dict>
+</plist>

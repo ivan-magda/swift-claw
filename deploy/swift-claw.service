@@ -1,0 +1,18 @@
+[Unit]
+Description=swift-claw Telegram assistant daemon
+After=network-online.target
+Wants=network-online.target
+# Give up (and stop hot-looping) after 5 failed starts within 60s.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/clawd run
+EnvironmentFile=%h/.swift-claw/clawd.env
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target
