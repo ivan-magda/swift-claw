@@ -64,5 +64,6 @@ logs/
 .claude/settings.local.json
 
 # ───────────────── Project-private (not for the repo) ─────────────────
+docs/superpowers/
 docs/alt-solutions/
 docs/teleclaw-prompt.md
