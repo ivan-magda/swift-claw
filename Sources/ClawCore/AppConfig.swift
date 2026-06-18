@@ -35,7 +35,7 @@ public struct AppConfig: Sendable, Equatable {
       throw ConfigError.missingBotToken
     }
 
-    let allowlist = try parseAllowlist(env[EnvKey.allowlist])
+    let allowlist = try parseAllowlist(from: env[EnvKey.allowlist])
     let stateRoot = try createStateRootURL(for: env[EnvKey.stateRoot])
     let pollTimeoutSeconds =
       env[EnvKey.pollTimeout].flatMap(Int.init) ?? EnvDefaults.pollTimeoutSeconds
@@ -48,27 +48,27 @@ public struct AppConfig: Sendable, Equatable {
     )
   }
 
-  private static func parseAllowlist(_ allowlist: String?) throws -> Set<Int64> {
+  private static func parseAllowlist(from environmentValue: String?) throws -> Set<Int64> {
     guard
-      let allowlist = allowlist?.trimmingCharacters(in: .whitespaces),
-      !allowlist.isEmpty
+      let environmentValue = environmentValue?.trimmingCharacters(in: .whitespaces),
+      !environmentValue.isEmpty
     else {
       return []
     }
 
-    var result = Set<Int64>()
+    var allowlist = Set<Int64>()
 
-    for part in allowlist.split(separator: ",") {
+    for part in environmentValue.split(separator: ",") {
       let trimmed = part.trimmingCharacters(in: .whitespaces)
 
       guard let id = Int64(trimmed) else {
         throw ConfigError.invalidAllowlist(trimmed)
       }
 
-      result.insert(id)
+      allowlist.insert(id)
     }
 
-    return result
+    return allowlist
   }
 
   private static func createStateRootURL(for path: String?) throws -> URL {
