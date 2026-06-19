@@ -29,8 +29,10 @@ public struct MessageRouter: Sendable {
   static let welcomeText = "Hi — I'm online. Send me a message and I'll echo it back."
 
   /// Returns an outcome instead of throwing so the poller advances the offset only when an
-  /// update is fully handled and re-polls otherwise. A claim or send error is transient:
-  /// nothing was committed, so re-delivery is safe and the synchronous claim dedups it.
+  /// update is fully handled and re-polls otherwise. A claim error is transient — nothing was
+  /// committed, so re-delivery is safe. A send failure after a committed claim is the known
+  /// at-least-once gap: dedup prevents a double echo, but the re-poll cannot resurrect the lost
+  /// one (a transactional outbox closes this later).
   @discardableResult
   public func handle(rawUpdate: RawUpdate) async -> HandleOutcome {
     let claimed: Bool

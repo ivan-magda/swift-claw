@@ -71,9 +71,10 @@ public struct AppConfig: Sendable, Equatable {
     return allowlist
   }
 
-  private static func createStateRootURL(for path: String?) throws -> URL {
+  private static func createStateRootURL(for rawPath: String?) throws -> URL {
+    let trimmedPath = rawPath?.trimmingCharacters(in: .whitespaces)
     let stateRootURL =
-      if let path {
+      if let path = trimmedPath, !path.isEmpty {
         URL(fileURLWithPath: path, isDirectory: true)
       } else {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(

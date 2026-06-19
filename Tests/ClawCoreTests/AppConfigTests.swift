@@ -78,4 +78,19 @@ import Testing
     // then
     #expect(config.pollTimeoutSeconds == 30)
   }
+
+  @Test func blankStateRootFallsBackToHomeDefaultNotCwd() throws {
+    // given — copying .env.example verbatim leaves CLAW_STATE_ROOT blank
+    let blankEnv = [EnvKey.botToken: "t", EnvKey.stateRoot: "   "]
+    let omittedEnv = [EnvKey.botToken: "t"]
+
+    // when
+    let fromBlank = try AppConfig.load(environment: blankEnv)
+    let fromOmitted = try AppConfig.load(environment: omittedEnv)
+
+    // then — a blank value resolves like an absent one (home default), never the working dir
+    let workingDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    #expect(fromBlank.stateRoot == fromOmitted.stateRoot)
+    #expect(fromBlank.stateRoot.standardizedFileURL != workingDir.standardizedFileURL)
+  }
 }

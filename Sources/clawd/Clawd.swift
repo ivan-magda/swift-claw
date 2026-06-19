@@ -85,13 +85,21 @@ struct Run: AsyncParsableCommand {
     )
 
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
+    var runFailure: Error?
     do {
       try await daemon.run()
     } catch {
+      // A graceful shutdown returns without throwing; a thrown error means a service failed
+      // unexpectedly. Re-raise it after cleanup so the process exits non-zero and the
+      // supervisor restarts us (a clean stop still returns 0).
+      runFailure = error
       logger.error("daemon exited with error: \(error)")
     }
 
     try? await httpClient.shutdown()
+    if let runFailure {
+      throw runFailure
+    }
     logger.info("clawd stopped")
   }
 }
