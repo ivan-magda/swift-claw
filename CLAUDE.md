@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-swift-claw — a persistent, always-on, **single-owner personal AI assistant** controlled via **Telegram**, written in **pure Swift**. Clean-room, OpenClaw-inspired. **Status: design phase — docs only, no code yet.**
+swift-claw — a persistent, always-on, **single-owner personal AI assistant** controlled via **Telegram**, written in **pure Swift**. Clean-room, OpenClaw-inspired.
 
 ## Read first (authoritative)
 
@@ -30,4 +30,4 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 
 ## Build & test
 
-No build system yet. Once scaffolded it is a SwiftPM package (executable `clawd`): `swift build`, `swift test`, and `swift test --filter <Suite>/<test>` for a single test. Build order + each increment's acceptance test → `docs/ARCHITECTURE.md` §20. Start at **Increment 0**.
+SwiftPM package (executable `clawd`): `swift build`, `swift test`, `swift test --filter <Suite>/<test>` for a single test. Build order + each increment's acceptance test → `docs/ARCHITECTURE.md` §20.
