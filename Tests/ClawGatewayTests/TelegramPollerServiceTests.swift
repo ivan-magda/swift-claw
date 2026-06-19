@@ -50,10 +50,9 @@ import Testing
       allowed: [42]
     )
 
-    // when
+    // when — once the echo is sent and the loop stops, the synchronous advance has already run
     let task = Task { try await poller.run() }
-    try await waitUntil { await transport.sentCount >= 1 }
-    try await waitUntil { (try? cursor.loadCursor()) == 100 }
+    await transport.waitForSends(atLeast: 1)
     task.cancel()
     try await task.value
 
@@ -65,11 +64,11 @@ import Testing
 
   @Test func cancellationStopsTheLoop() async throws {
     // given
-    let (poller, _, _) = try makeStack(batches: [], allowed: [42])
+    let (poller, transport, _) = try makeStack(batches: [], allowed: [42])
 
     // when
     let task = Task { try await poller.run() }
-    try await Task.sleep(for: .milliseconds(30))
+    await transport.waitForPolls(atLeast: 1)
     task.cancel()
 
     // then
@@ -79,11 +78,11 @@ import Testing
   @Test func poisonUpdateAdvancesCursorPastIt() async throws {
     // given — an update with no actionable content normalizes to nil → no reply, cursor advances
     let empty = RawUpdate(updateId: 200, message: nil, editedMessage: nil)
-    let (poller, _, cursor) = try makeStack(batches: [[empty]], allowed: [42])
+    let (poller, transport, cursor) = try makeStack(batches: [[empty]], allowed: [42])
 
-    // when
+    // when — a second poll only happens after the batch (incl. the synchronous advance) is done
     let task = Task { try await poller.run() }
-    try await waitUntil { (try? cursor.loadCursor()) == 200 }
+    await transport.waitForPolls(atLeast: 2)
     task.cancel()
     try await task.value
 
@@ -102,7 +101,7 @@ import Testing
 
     // when
     let task = Task { try await poller.run() }
-    try await waitUntil { await transport.attempts >= 1 }  // the send was attempted…
+    await transport.waitForAttempts(atLeast: 1)  // the send was attempted…
     task.cancel()
     try await task.value
 
@@ -112,15 +111,15 @@ import Testing
 
   @Test func conflict409IsHandledLoudlyWithoutHotSpin() async throws {
     // given — getUpdates throws 409; react logs critical + backs off, the loop survives
-    let (poller, _, _) = try makeStack(
+    let (poller, transport, _) = try makeStack(
       batches: [],
       allowed: [42],
       throwOnGetUpdates: .conflict409(description: "terminated by other getUpdates")
     )
 
-    // when
+    // when — wait until the 409 has been hit, then cancel mid-backoff
     let task = Task { try await poller.run() }
-    try await Task.sleep(for: .milliseconds(50))  // let it hit the 409 and enter back-off
+    await transport.waitForPolls(atLeast: 1)
     task.cancel()
 
     // then

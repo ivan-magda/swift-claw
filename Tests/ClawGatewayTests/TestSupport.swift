@@ -1,17 +1,20 @@
 import ClawCore
 import Foundation
-import Testing
 
-/// Records outbound sends; scripts getUpdates batches and optional errors for poller tests.
+/// Records outbound sends and scripts getUpdates batches/errors for poller tests. Exposes
+/// deterministic, continuation-based wait points (`waitForSends`/`waitForAttempts`/`waitForPolls`)
+/// that resume exactly when an event lands — no polling or timeouts, so tests stay parallel-safe.
 actor RecordingTransport: TelegramTransport {
   private(set) var sent: [(chatId: Int64, text: String)] = []
   private(set) var sendAttempts = 0
+  private(set) var pollCount = 0
   private var batches: [[RawUpdate]]
   private let onExhausted: TelegramError?
   private let sendError: TelegramError?
 
-  var sentCount: Int { sent.count }
-  var attempts: Int { sendAttempts }
+  private enum Event { case sent, attempt, poll }
+  private var waiters: [Event: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)]] =
+    [:]
 
   init(
     batches: [[RawUpdate]] = [],
@@ -30,11 +33,13 @@ actor RecordingTransport: TelegramTransport {
     timeout: Int,
     allowedUpdates: [String]
   ) async throws -> [RawUpdate] {
+    pollCount += 1
+    resumeWaiters(.poll, reached: pollCount)
     if batches.isEmpty {
       if let onExhausted {
         throw onExhausted
       }
-      try? await Task.sleep(for: .milliseconds(5))  // emulate an idle long-poll
+      try? await Task.sleep(for: .milliseconds(5))  // emulate an idle long-poll, not a tight spin
       return []
     }
     return batches.removeFirst()
@@ -42,26 +47,42 @@ actor RecordingTransport: TelegramTransport {
 
   func sendMessage(chatId: Int64, text: String) async throws {
     sendAttempts += 1
+    resumeWaiters(.attempt, reached: sendAttempts)
     if let sendError {
       throw sendError  // simulate a transient send failure
     }
     sent.append((chatId, text))
+    resumeWaiters(.sent, reached: sent.count)
   }
-}
 
-/// Polls `condition` until it holds or the deadline passes — the service under test runs on a
-/// separate task, so its side effects (sends, cursor advances) land asynchronously.
-func waitUntil(
-  _ condition: @Sendable () async -> Bool,
-  timeout: Duration = .seconds(2)
-) async throws {
-  let start = ContinuousClock().now
-  while await !condition() {
-    if ContinuousClock().now - start > timeout {
-      Issue.record("timed out waiting")
-      return
+  /// Suspends until at least `threshold` messages have been recorded as sent.
+  func waitForSends(atLeast threshold: Int) async {
+    await wait(.sent, current: sent.count, threshold: threshold)
+  }
+
+  /// Suspends until at least `threshold` send attempts (successful or failed) have been made.
+  func waitForAttempts(atLeast threshold: Int) async {
+    await wait(.attempt, current: sendAttempts, threshold: threshold)
+  }
+
+  /// Suspends until `getUpdates` has been called at least `threshold` times.
+  func waitForPolls(atLeast threshold: Int) async {
+    await wait(.poll, current: pollCount, threshold: threshold)
+  }
+
+  private func wait(_ event: Event, current: Int, threshold: Int) async {
+    guard current < threshold else { return }
+    await withCheckedContinuation { continuation in
+      waiters[event, default: []].append((threshold, continuation))
     }
-    try await Task.sleep(for: .milliseconds(10))
+  }
+
+  private func resumeWaiters(_ event: Event, reached current: Int) {
+    guard let pending = waiters[event] else { return }
+    waiters[event] = pending.filter { $0.threshold > current }
+    for waiter in pending where waiter.threshold <= current {
+      waiter.continuation.resume()
+    }
   }
 }
 

@@ -46,7 +46,7 @@ import Testing
 
     // when
     let task = Task { try await daemon.run() }
-    try await waitUntil { await transport.sentCount >= 3 }
+    await transport.waitForSends(atLeast: 3)
     task.cancel()
     try await task.value
 
