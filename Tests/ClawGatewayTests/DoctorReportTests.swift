@@ -41,6 +41,33 @@ import Testing
     #expect(text.contains("FAIL"))
   }
 
+  @Test func mixedReportRendersOkAndFailMarkers() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "db.writable", value: "true")
+    report.add(key: "allowlist.owners", value: "0", ok: false)
+
+    // when
+    let text = report.renderText()
+
+    // then
+    #expect(text.contains("[ok]"))
+    #expect(text.contains("[FAIL]"))
+  }
+
+  @Test func passingCheckRendersAsOkWithoutTrailingSpaces() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "config", value: "OK")
+
+    // when
+    let text = report.renderText()
+
+    // then
+    #expect(text.contains("[ok]"))
+    #expect(!text.contains("[ok  ]"))
+  }
+
   @Test func jsonRenderIsParseable() {
     // given
     var report = DoctorReport()

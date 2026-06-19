@@ -25,7 +25,7 @@ public struct DoctorReport: Sendable {
   public func renderText() -> String {
     let keyWidth = checks.map(\.key.count).max() ?? 0
     return checks.map { check in
-      let marker = check.ok ? "ok  " : "FAIL"
+      let marker = check.ok ? "ok" : "FAIL"
       let paddedKey = check.key.padding(toLength: keyWidth, withPad: " ", startingAt: 0)
       return "[\(marker)] \(paddedKey) \(check.value)"
     }.joined(separator: "\n")
