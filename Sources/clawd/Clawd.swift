@@ -64,6 +64,8 @@ struct Run: AsyncParsableCommand {
       throw ExitCode(ClawExitCode.storeError.rawValue)
     }
     do {
+      // Additive only — removing an ID from config doesn't revoke it. Revocation is deferred
+      // to pairing (§17), which needs an audited remove path, not a config-mirroring reconcile.
       try stores.allowlist.seedAllowlist(userIds: Array(config.allowlist))
     } catch {
       logger.error("failed to seed allowlist: \(error)")
