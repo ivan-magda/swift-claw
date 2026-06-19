@@ -21,6 +21,13 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 - **Persistence = GRDB + SQLite (WAL, FTS5)**; secrets via `SecretStore` (sops+age), **not** the macOS Keychain (a launchd daemon can't use it).
 - **Concurrency trap:** a Swift actor does NOT serialize across `await`. The per-session lane chains a stored `Task` (`var currentTurn`), it does not rely on actor isolation alone — `docs/ARCHITECTURE.md` §5.
 
+## Code style
+
+- **Formatting = `swift format`** using the repo's `.swift-format` (2-space indent, line length 100). Run `swift format -i -r Sources Tests Package.swift` before committing.
+- **Tests follow Given-When-Then** — separate the body with `// given` / `// when` / `// then` sections (AAA equivalent).
+- **Variable names ≥ 3 chars** — no single/double-letter locals (`incoming`, not `m`).
+- **Comments: signal, not noise** — explain non-obvious *why*/contract; never restate what the code already says.
+
 ## Build & test
 
 No build system yet. Once scaffolded it is a SwiftPM package (executable `clawd`): `swift build`, `swift test`, and `swift test --filter <Suite>/<test>` for a single test. Build order + each increment's acceptance test → `docs/ARCHITECTURE.md` §20. Start at **Increment 0**.
