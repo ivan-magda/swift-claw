@@ -47,7 +47,7 @@ public enum ClawDatabase {
         table.column("last_update_id", .integer).notNull()
       }
     }
-    migrator.registerMigration("v2_inc1") { db in
+    migrator.registerMigration("v2") { db in
       try db.create(table: "sessions") { table in
         table.autoIncrementedPrimaryKey("id")
         table.column("session_key", .text).notNull().unique()
