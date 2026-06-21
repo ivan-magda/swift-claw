@@ -1,0 +1,35 @@
+name: Lint
+
+on:
+  push:
+    paths:
+      - "**/*.swift"
+      - ".swift-format"
+      - ".swiftlint.yml"
+      - ".github/workflows/lint.yml"
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-format:
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.3.2
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run swift-format
+        run: |
+          swift format lint \
+            --recursive \
+            --strict \
+            --parallel \
+            .
+
+  swiftlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run swiftlint
+        uses: docker://ghcr.io/realm/swiftlint:latest

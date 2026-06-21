@@ -1,0 +1,54 @@
+# swift-format owns layout/cosmetic style;
+# SwiftLint owns complexity, correctness smells, and idiom rules.
+# Formatting rules both tools would touch are disabled below so they never disagree.
+
+included:
+  - Sources
+  - Tests
+excluded:
+  - .build
+
+disabled_rules:
+  - line_length
+  - trailing_comma # swift-format adds multi-element trailing commas;
+  - trailing_whitespace
+  - vertical_whitespace
+
+opt_in_rules:
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - empty_count
+  - empty_string
+  - first_where
+  - last_where
+  - contains_over_first_not_nil
+  - sorted_first_last
+  - reduce_into
+  - redundant_nil_coalescing
+  - toggle_bool
+  - explicit_init
+  - fatal_error_message
+  - unneeded_parentheses_in_closure_argument
+  - convenience_type
+  - joined_default_parameter
+  - prefer_self_in_static_references
+  - yoda_condition
+
+identifier_name:
+  excluded: [id, db, ts, ok]
+
+function_body_length:
+  warning: 60
+  error: 120
+
+type_body_length:
+  warning: 300
+  error: 450
+
+file_length:
+  warning: 600
+  error: 1000
+
+cyclomatic_complexity:
+  warning: 12
+  error: 20
