@@ -12,8 +12,8 @@ import Testing
     )
 
     // when / then
-    #expect(result.header("x-litellm-response-cost") == "0.0023")
-    #expect(result.header("RETRY-AFTER") == "7")
-    #expect(result.header("absent") == nil)
+    #expect(result.getHeader(for: "x-litellm-response-cost") == "0.0023")
+    #expect(result.getHeader(for: "RETRY-AFTER") == "7")
+    #expect(result.getHeader(for: "absent") == nil)
   }
 }

@@ -35,7 +35,6 @@ public struct AsyncHTTPExecutor: HTTPExecuting {
     let buffer = try await response.body.collect(upTo: maxResponseBytes)
 
     var responseHeaders: [String: String] = [:]
-    // Duplicate header names collapse to the last value — fine for the scalar cost/rate-limit headers we read.
     for header in response.headers {
       responseHeaders[header.name] = header.value
     }
