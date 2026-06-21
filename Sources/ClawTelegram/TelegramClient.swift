@@ -88,6 +88,7 @@ extension TelegramClient {
     do {
       result = try await http.post(
         url: "\(baseURL)/bot\(token)/\(methodName)",
+        headers: [:],
         jsonBody: payload,
         timeoutSeconds: httpTimeout
       )

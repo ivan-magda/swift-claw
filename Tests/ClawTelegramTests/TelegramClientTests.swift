@@ -7,7 +7,9 @@ import Testing
 struct MockHTTPExecutor: HTTPExecuting {
   let result: HTTPResult
 
-  func post(url: String, jsonBody: Data, timeoutSeconds: Int) async throws -> HTTPResult { result }
+  func post(
+    url: String, headers: [String: String], jsonBody: Data, timeoutSeconds: Int
+  ) async throws -> HTTPResult { result }
 }
 
 /// Simulates a transport error whose description echoes the request URL (which carries the token).
@@ -17,7 +19,9 @@ struct URLEchoingExecutor: HTTPExecuting {
     var description: String { "connection failed for \(url)" }
   }
 
-  func post(url: String, jsonBody: Data, timeoutSeconds: Int) async throws -> HTTPResult {
+  func post(
+    url: String, headers: [String: String], jsonBody: Data, timeoutSeconds: Int
+  ) async throws -> HTTPResult {
     throw URLEchoError(url: url)
   }
 }
@@ -25,7 +29,8 @@ struct URLEchoingExecutor: HTTPExecuting {
 private func client(status: Int, json: String) -> TelegramClient {
   TelegramClient(
     token: "T",
-    http: MockHTTPExecutor(result: HTTPResult(statusCode: status, body: Data(json.utf8))),
+    http: MockHTTPExecutor(
+      result: HTTPResult(statusCode: status, headers: [:], body: Data(json.utf8))),
     baseURL: "https://example.test")
 }
 
