@@ -1,0 +1,89 @@
+import ClawCore
+import Foundation
+import GRDB
+import Testing
+
+@testable import ClawData
+
+@Suite struct AuditLogTests {
+  @Test func appendPersistsEveryColumnInOrder() throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let log = AuditLogGRDB(writer: queue)
+    let when = Date(timeIntervalSince1970: 1_700_000_000)
+    let event = AuditEvent(
+      actor: "owner",
+      action: "tool_call",
+      tool: "web.fetch",
+      argsRedacted: "{\"url\":\"<redacted>\"}",
+      resultSize: 4096,
+      decision: "allow",
+      runId: 7,
+      sessionId: 3,
+      ts: when
+    )
+
+    // when
+    try log.appendAudit(event)
+
+    // then
+    let row = try #require(
+      try queue.read { db in
+        try Row.fetchOne(
+          db,
+          sql: """
+            SELECT ts, actor, action, tool, args_redacted, result_size, decision, run_id, session_id
+            FROM audit_events
+            """
+        )
+      }
+    )
+    let ts: Date = row["ts"]
+    let actor: String = row["actor"]
+    let action: String = row["action"]
+    let tool: String? = row["tool"]
+    let argsRedacted: String = row["args_redacted"]
+    let resultSize: Int = row["result_size"]
+    let decision: String = row["decision"]
+    let runId: Int64? = row["run_id"]
+    let sessionId: Int64? = row["session_id"]
+    #expect(ts == when)
+    #expect(actor == "owner")
+    #expect(action == "tool_call")
+    #expect(tool == "web.fetch")
+    #expect(argsRedacted == "{\"url\":\"<redacted>\"}")
+    #expect(resultSize == 4096)
+    #expect(decision == "allow")
+    #expect(runId == 7)
+    #expect(sessionId == 3)
+  }
+
+  @Test func appendStoresNullForOmittedToolRunAndSession() throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let log = AuditLogGRDB(writer: queue)
+    let event = AuditEvent(
+      actor: "owner",
+      action: "message_in",
+      ts: Date(timeIntervalSince1970: 1_700_000_000)
+    )
+
+    // when
+    try log.appendAudit(event)
+
+    // then
+    let row = try #require(
+      try queue.read { db in
+        try Row.fetchOne(db, sql: "SELECT tool, run_id, session_id FROM audit_events")
+      }
+    )
+    let tool: String? = row["tool"]
+    let runId: Int64? = row["run_id"]
+    let sessionId: Int64? = row["session_id"]
+    #expect(tool == nil)
+    #expect(runId == nil)
+    #expect(sessionId == nil)
+  }
+}

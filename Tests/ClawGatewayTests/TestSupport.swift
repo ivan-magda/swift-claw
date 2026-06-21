@@ -13,6 +13,7 @@ actor RecordingTransport: TelegramTransport {
   private let sendError: TelegramError?
 
   private enum Event { case sent, attempt, poll }
+
   private var waiters: [Event: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)]] =
     [:]
 

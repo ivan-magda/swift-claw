@@ -56,7 +56,8 @@ import Testing
     #expect(
       sent.contains { $0.chatId == 7 && $0.text.contains("7") && $0.text.contains("private bot") }
     )  // onboarding
-    #expect(sent.contains { $0.chatId == 7 && $0.text.contains("42") } == false)  // never leaks allowlist
+    // never leaks allowlist
+    #expect(sent.contains { $0.chatId == 7 && $0.text.contains("42") } == false)
     #expect(sent.contains { $0.text == "I can't read photos yet." })  // non-text
   }
 

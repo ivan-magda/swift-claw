@@ -36,7 +36,7 @@ public struct DoctorReport: Sendable {
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     let payload = DoctorReportPayload(ok: ok, checks: checks)
     let data = (try? encoder.encode(payload)) ?? Data("{}".utf8)
-    return String(decoding: data, as: UTF8.self)
+    return String(bytes: data, encoding: .utf8) ?? "{}"
   }
 }
 

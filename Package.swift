@@ -22,14 +22,16 @@ let package = Package(
       dependencies: [
         "ClawCore",
         .product(name: "GRDB", package: "GRDB.swift"),
-      ]),
+      ]
+    ),
     .target(
       name: "ClawTelegram",
       dependencies: [
         "ClawCore",
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "NIOCore", package: "swift-nio"),
-      ]),
+      ]
+    ),
     .target(
       name: "ClawGateway",
       dependencies: [
@@ -37,7 +39,8 @@ let package = Package(
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "UnixSignals", package: "swift-service-lifecycle"),
         .product(name: "Logging", package: "swift-log"),
-      ]),
+      ]
+    ),
     .executableTarget(
       name: "clawd",
       dependencies: [
@@ -45,7 +48,8 @@ let package = Package(
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "Logging", package: "swift-log"),
-      ]),
+      ]
+    ),
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore"]),
     .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore"]),
     .testTarget(name: "ClawTelegramTests", dependencies: ["ClawTelegram", "ClawCore"]),

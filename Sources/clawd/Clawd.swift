@@ -155,7 +155,8 @@ struct Doctor: AsyncParsableCommand {
     // Best-effort connectivity check.
     let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
     let transport = TelegramClient(
-      token: config.botToken, http: AsyncHTTPExecutor(client: httpClient)
+      token: config.botToken,
+      http: AsyncHTTPExecutor(client: httpClient)
     )
     if let identity = try? await transport.getMe() {
       report.add(key: "telegram.bot", value: identity.username ?? "id:\(identity.id)")
@@ -171,6 +172,7 @@ struct Doctor: AsyncParsableCommand {
   }
 
   private func emit(_ report: DoctorReport) {
+    // swiftlint:disable:next no_print_in_production
     print(json ? report.renderJSON() : report.renderText())
   }
 }

@@ -8,7 +8,10 @@ struct MockHTTPExecutor: HTTPExecuting {
   let result: HTTPResult
 
   func post(
-    url: String, headers: [String: String], jsonBody: Data, timeoutSeconds: Int
+    url: String,
+    headers: [String: String],
+    jsonBody: Data,
+    timeoutSeconds: Int
   ) async throws -> HTTPResult { result }
 }
 
@@ -20,7 +23,10 @@ struct URLEchoingExecutor: HTTPExecuting {
   }
 
   func post(
-    url: String, headers: [String: String], jsonBody: Data, timeoutSeconds: Int
+    url: String,
+    headers: [String: String],
+    jsonBody: Data,
+    timeoutSeconds: Int
   ) async throws -> HTTPResult {
     throw URLEchoError(url: url)
   }
@@ -30,8 +36,10 @@ private func client(status: Int, json: String) -> TelegramClient {
   TelegramClient(
     token: "T",
     http: MockHTTPExecutor(
-      result: HTTPResult(statusCode: status, headers: [:], body: Data(json.utf8))),
-    baseURL: "https://example.test")
+      result: HTTPResult(statusCode: status, headers: [:], body: Data(json.utf8))
+    ),
+    baseURL: "https://example.test"
+  )
 }
 
 @Suite struct TelegramClientTests {
@@ -127,7 +135,8 @@ private func client(status: Int, json: String) -> TelegramClient {
   @Test func mapsOtherApiErrors() async throws {
     // given
     let telegram = client(
-      status: 400, json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#
+      status: 400,
+      json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#
     )
 
     // then
@@ -147,7 +156,9 @@ private func client(status: Int, json: String) -> TelegramClient {
   @Test func transportErrorRedactsTheBotToken() async throws {
     // given: the token is in the request URL; a transport error echoing the URL must NOT leak it
     let telegram = TelegramClient(
-      token: "SECRET-123:abc", http: URLEchoingExecutor(), baseURL: "https://example.test"
+      token: "SECRET-123:abc",
+      http: URLEchoingExecutor(),
+      baseURL: "https://example.test"
     )
 
     // then

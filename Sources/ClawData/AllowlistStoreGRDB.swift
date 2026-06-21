@@ -14,7 +14,8 @@ public struct AllowlistStoreGRDB: AllowlistStore {
       for userId in userIds {
         try db.execute(
           sql: "INSERT OR IGNORE INTO allowlist(user_id, added_at) VALUES (?, ?)",
-          arguments: [userId, Date()])
+          arguments: [userId, Date()]
+        )
       }
     }
   }

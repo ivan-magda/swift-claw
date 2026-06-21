@@ -1,3 +1,7 @@
+// swift-format-ignore-file: AlwaysUseLowerCamelCase
+
+// swiftlint:disable identifier_name discouraged_optional_boolean discouraged_optional_collection
+// Wire structs mirror Telegram's API: snake_case keys, and optionals model absent JSON fields.
 import ClawCore
 
 struct TResponse<R: Decodable>: Decodable {
@@ -71,3 +75,4 @@ struct TUpdate: Decodable {
     )
   }
 }
+// swiftlint:enable identifier_name discouraged_optional_boolean discouraged_optional_collection

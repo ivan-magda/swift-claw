@@ -12,8 +12,13 @@ import Testing
     media: String? = nil
   ) -> RawMessage {
     RawMessage(
-      messageId: messageId, fromUserId: from, chatId: chat,
-      text: text, caption: caption, mediaKind: media)
+      messageId: messageId,
+      fromUserId: from,
+      chatId: chat,
+      text: text,
+      caption: caption,
+      mediaKind: media
+    )
   }
 
   @Test func plainTextMessageNormalizes() throws {
@@ -34,7 +39,9 @@ import Testing
   @Test func captionIsTreatedAsText() throws {
     // given
     let raw = RawUpdate(
-      updateId: 2, message: msg(caption: "look", media: "photos"), editedMessage: nil
+      updateId: 2,
+      message: msg(caption: "look", media: "photos"),
+      editedMessage: nil
     )
 
     // when

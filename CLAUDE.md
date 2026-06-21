@@ -23,7 +23,7 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 
 ## Code style
 
-- **Formatting = `swift format`** using the repo's `.swift-format` (2-space indent, line length 100). Run `swift format -i -r Sources Tests Package.swift` before committing.
+- **Lint gate = `scripts/lint.sh`** — swift-format owns layout (`.swift-format`: 2-space, width 100, one-arg-per-line), SwiftLint owns correctness/idiom (`.swiftlint.yml`). Run `scripts/lint.sh --fix` to auto-apply both, then `scripts/lint.sh` to check; both must pass before committing (CI enforces it).
 - **Tests follow Given-When-Then** — separate the body with `// given` / `// when` / `// then` sections (AAA equivalent).
 - **Variable names ≥ 3 chars** — no single/double-letter locals (`incoming`, not `m`).
 - **Comments: signal, not noise** — explain non-obvious *why*/contract; never restate what the code already says.
