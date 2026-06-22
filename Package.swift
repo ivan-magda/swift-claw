@@ -33,6 +33,11 @@ let package = Package(
       ]
     ),
     .target(
+      name: "ClawLLM",
+      dependencies: ["ClawCore"],
+      resources: [.copy("Prices.json")]
+    ),
+    .target(
       name: "ClawGateway",
       dependencies: [
         "ClawCore",
@@ -53,6 +58,7 @@ let package = Package(
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore"]),
     .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore"]),
     .testTarget(name: "ClawTelegramTests", dependencies: ["ClawTelegram", "ClawCore"]),
+    .testTarget(name: "ClawLLMTests", dependencies: ["ClawLLM", "ClawCore"]),
     .testTarget(name: "ClawGatewayTests", dependencies: ["ClawGateway", "ClawCore", "ClawData"]),
   ]
 )

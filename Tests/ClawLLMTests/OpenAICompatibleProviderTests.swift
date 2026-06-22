@@ -1,0 +1,163 @@
+import Foundation
+import Testing
+
+@testable import ClawCore
+@testable import ClawLLM
+
+@Suite struct OpenAICompatibleProviderTests {
+  @Test func sendsModelMessagesAndDefaultMaxCompletionTokens() async throws {
+    // given
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // when
+    _ = try await provider.complete(request: sampleRequest)
+
+    // then
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    #expect(body["max_completion_tokens"] as? Int == 256)
+    #expect(body["stream"] as? Bool == false)
+    #expect(body["model"] as? String == "gpt-4o")
+    #expect(body["messages"] is [Any])
+    #expect(recorded.headers["Authorization"] == "Bearer sk-test")
+  }
+
+  @Test func switchesToMaxTokensFieldAndOmitsAuthWhenKeyEmpty() async throws {
+    // given
+    let config = makeConfig(maxTokensField: .maxTokens, apiKey: "")
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(config: config, http: exec)
+
+    // when
+    _ = try await provider.complete(request: sampleRequest)
+
+    // then
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    #expect(body["max_tokens"] as? Int == 256)
+    #expect(body["max_completion_tokens"] == nil)
+    #expect(recorded.headers["Authorization"] == nil)
+  }
+
+  @Test func nullContentBecomesEmptyAndAbsentUsageBecomesZero() async throws {
+    // given — Ollama-style: null content and no usage object
+    let json = #"{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":null}}]}"#
+    let exec = ScriptedHTTPExecutor([
+      .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8)))
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // when
+    let response = try await provider.complete(request: sampleRequest)
+
+    // then
+    #expect(response.content.isEmpty)
+    #expect(response.usage == .zero)
+  }
+
+  @Test func parsesProviderCostFromUsageAndFromLiteLLMHeader() async throws {
+    // given — OpenRouter carries cost in usage.cost; LiteLLM carries it in a response header
+    let openRouterJSON = """
+      {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},
+      "finish_reason":"stop"}],
+      "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"cost":0.0012}}
+      """
+    let openRouter = ScriptedHTTPExecutor([
+      .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(openRouterJSON.utf8)))
+    ])
+    let liteLLM = ScriptedHTTPExecutor([
+      okStep(headers: ["x-litellm-response-cost": "0.0034"])
+    ])
+
+    // when
+    let fromUsage = try await makeProvider(config: makeConfig(), http: openRouter)
+      .complete(request: sampleRequest)
+    let fromHeader = try await makeProvider(config: makeConfig(), http: liteLLM)
+      .complete(request: sampleRequest)
+
+    // then
+    #expect(fromUsage.costFromProvider == 0.0012)
+    #expect(fromHeader.costFromProvider == 0.0034)
+  }
+
+  @Test func maps400ToTerminalWithoutRetry() async throws {
+    // given
+    let exec = ScriptedHTTPExecutor([errorStep(400)])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // then
+    do {
+      _ = try await provider.complete(request: sampleRequest)
+      Issue.record("expected a terminal error")
+    } catch let ProviderError.terminal(status, _) {
+      #expect(status == 400)
+    }
+    let attempts = await exec.recorded.count
+    #expect(attempts == 1)
+  }
+
+  @Test func retriesRetryableUntilSuccessHonoringRetryAfter() async throws {
+    // given — two 503s (first carries Retry-After: 2), then a 200
+    let exec = ScriptedHTTPExecutor([
+      errorStep(503, headers: ["Retry-After": "2"]),
+      errorStep(503),
+      okStep(),
+    ])
+    let recorder = SleepRecorder()
+    let provider = makeProvider(config: makeConfig(), http: exec, recorder: recorder)
+
+    // when
+    _ = try await provider.complete(request: sampleRequest)
+
+    // then
+    let attempts = await exec.recorded.count
+    let delays = await recorder.delays
+    #expect(attempts == 3)
+    #expect(delays.count == 2)
+    #expect(delays.first == 2.0)
+  }
+
+  @Test func exhaustedRetriesThrowRetryable() async throws {
+    // given — every attempt is a 500; the retry budget is 3
+    let exec = ScriptedHTTPExecutor([errorStep(500), errorStep(500), errorStep(500)])
+    let provider = makeProvider(config: makeConfig(retryBudget: 3), http: exec)
+
+    // then
+    do {
+      _ = try await provider.complete(request: sampleRequest)
+      Issue.record("expected a retryable error after exhausting the budget")
+    } catch let ProviderError.retryable(status, _) {
+      #expect(status == 500)
+    }
+    let attempts = await exec.recorded.count
+    #expect(attempts == 3)
+  }
+
+  @Test func transportErrorRedactsTheApiKey() async throws {
+    // given — a transport error whose text embeds the key; retried then surfaced
+    let apiKey = "sk-super-secret-123"
+    let exec = ScriptedHTTPExecutor([
+      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
+      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
+      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
+    ])
+    let provider = makeProvider(config: makeConfig(apiKey: apiKey, retryBudget: 3), http: exec)
+
+    // then
+    do {
+      _ = try await provider.complete(request: sampleRequest)
+      Issue.record("expected a retryable transport error")
+    } catch let ProviderError.retryable(_, message) {
+      #expect(message.contains(apiKey) == false)
+      #expect(message.contains("<redacted-key>"))
+    }
+  }
+
+  @Test func isReasoningModelDetectsKnownPrefixes() {
+    // then
+    #expect(OpenAICompatibleProvider.isReasoningModel("o3-mini"))
+    #expect(OpenAICompatibleProvider.isReasoningModel("gpt-5-reasoning"))
+    #expect(OpenAICompatibleProvider.isReasoningModel("gpt-4o") == false)
+  }
+}

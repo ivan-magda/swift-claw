@@ -11,12 +11,20 @@ public enum ConfigError: Error, Sendable, Equatable {
   case missingBotToken
   case invalidAllowlist(String)
   case unwritableStateRoot(String)
+  case missingLLMBaseURL
+  case missingLLMModel
+  case invalidMaxTokensField(String)
+  case invalidMaxTokens(String)
 
   public var exitCode: Int32 {
     switch self {
     case .missingBotToken: ClawExitCode.secretLoadFailed.rawValue
     case .invalidAllowlist: ClawExitCode.configInvalid.rawValue
     case .unwritableStateRoot: ClawExitCode.configInvalid.rawValue
+    case .missingLLMBaseURL: ClawExitCode.configInvalid.rawValue
+    case .missingLLMModel: ClawExitCode.configInvalid.rawValue
+    case .invalidMaxTokensField: ClawExitCode.configInvalid.rawValue
+    case .invalidMaxTokens: ClawExitCode.configInvalid.rawValue
     }
   }
 }
