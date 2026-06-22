@@ -177,7 +177,7 @@ public struct AssistantTurn: Sendable, Equatable {
 }
 
 public struct AuditEvent: Sendable, Equatable {
-  public let `actor`: String
+  public let actor: String
   public let action: String
   public let tool: String?
   public let argsRedacted: String
