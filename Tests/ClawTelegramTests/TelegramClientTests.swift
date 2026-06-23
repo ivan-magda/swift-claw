@@ -159,19 +159,19 @@ private func client(status: Int, json: String) -> TelegramClient {
       baseURL: "https://example.test"
     )
 
-    // then
-    var caught: TelegramError?
+    // when
+    var thrownMessage: String?
     await #expect {
       _ = try await telegram.getMe()
     } throws: { error in
-      caught = error as? TelegramError
-      return caught != nil
+      guard case TelegramError.transport(let message) = error else { return false }
+      thrownMessage = message
+      return true
     }
-    if case .transport(let message) = caught {
-      #expect(message.contains("SECRET-123:abc") == false)
-      #expect(message.contains("<redacted-token>"))
-    } else {
-      Issue.record("expected .transport, got \(String(describing: caught))")
-    }
+
+    // then
+    let message = try #require(thrownMessage)
+    #expect(message.contains("SECRET-123:abc") == false)
+    #expect(message.contains("<redacted-token>"))
   }
 }

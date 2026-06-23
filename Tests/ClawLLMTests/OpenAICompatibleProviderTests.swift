@@ -94,7 +94,7 @@ import Testing
     let exec = ScriptedHTTPExecutor([errorStep(400)])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
-    // then
+    // when
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
@@ -133,7 +133,7 @@ import Testing
     let exec = ScriptedHTTPExecutor([errorStep(500), errorStep(500), errorStep(500)])
     let provider = makeProvider(config: makeConfig(retryBudget: 3), http: exec)
 
-    // then
+    // when
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
@@ -154,20 +154,22 @@ import Testing
     ])
     let provider = makeProvider(config: makeConfig(apiKey: apiKey, retryBudget: 3), http: exec)
 
-    // then
-    var caught: ProviderError?
+    // when
+    var thrownMessage: String?
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      caught = error as? ProviderError
-      return caught != nil
+      guard case ProviderError.retryable(_, let message) = error else { return false }
+      thrownMessage = message
+      return true
     }
-    if case .retryable(_, let message) = caught {
-      #expect(message.contains(apiKey) == false)
-      #expect(message.contains("<redacted-key>"))
-    } else {
-      Issue.record("expected .retryable, got \(String(describing: caught))")
-    }
+
+    // then
+    let message = try #require(thrownMessage)
+    #expect(message.contains(apiKey) == false)
+    #expect(message.contains("<redacted-key>"))
+    let attempts = await exec.recorded.count
+    #expect(attempts == 3)
   }
 
   @Test func isReasoningModelDetectsKnownPrefixes() {
