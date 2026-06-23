@@ -18,32 +18,15 @@ import Testing
   /// Seeds a session + run (so the `run_id` FK holds) and one PENDING `"**hi**"` outbound row,
   /// exactly as a committed turn would.
   private func makeFixtureWithPendingHi() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-
-    let chatId: Int64 = 42
-    let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
-      InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
-        text: "hi",
-        isEdited: false,
-        ts: Date()
-      )
-    )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try RunStoreGRDB(writer: queue).createRun(sessionId: sessionId, now: Date())
-    let outbox = OutboxStoreGRDB(writer: queue)
-    _ = try outbox.claimOutbound(
-      runId: runId,
+    let seeded = try makeSeededFixture()
+    _ = try seeded.outbox.claimOutbound(
+      runId: seeded.runId,
       stepIndex: 0,
-      chatId: chatId,
+      chatId: seeded.chatId,
       payload: "**hi**",
       payloadHash: "hash"
     )
-    return Fixture(outbox: outbox, runId: runId, chatId: chatId)
+    return Fixture(outbox: seeded.outbox, runId: seeded.runId, chatId: seeded.chatId)
   }
 
   private func makeDispatcher(

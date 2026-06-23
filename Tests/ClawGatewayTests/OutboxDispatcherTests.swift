@@ -1,7 +1,6 @@
 import ClawCore
 import ClawData
 import Foundation
-import GRDB
 import Logging
 import Testing
 
@@ -36,9 +35,6 @@ private struct MarkSentFailingOutbox: OutboxStore {
 }
 
 @Suite struct OutboxDispatcherTests {
-  /// Real GRDB stores over an in-memory DB, so the tests exercise the actual `pendingOutbound`/
-  /// `markSent` SQL. A session + run are seeded first because `outbound_deliveries.run_id` FKs
-  /// `runs`, so `claimOutbound` writes a valid PENDING row exactly as a committed turn would.
   private struct Fixture {
     let outbox: OutboxStoreGRDB
     let runId: Int64
@@ -46,25 +42,8 @@ private struct MarkSentFailingOutbox: OutboxStore {
   }
 
   private func makeFixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-
-    let chatId: Int64 = 42
-    let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
-      InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
-        text: "hi",
-        isEdited: false,
-        ts: Date()
-      )
-    )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try RunStoreGRDB(writer: queue).createRun(sessionId: sessionId, now: Date())
-
-    return Fixture(outbox: OutboxStoreGRDB(writer: queue), runId: runId, chatId: chatId)
+    let seeded = try makeSeededFixture()
+    return Fixture(outbox: seeded.outbox, runId: seeded.runId, chatId: seeded.chatId)
   }
 
   /// Enqueues a PENDING outbound row via the real claim path (as a committed turn would).

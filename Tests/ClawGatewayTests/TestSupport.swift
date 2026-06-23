@@ -1,5 +1,8 @@
 import ClawCore
+import ClawData
 import Foundation
+import GRDB
+import Testing
 
 @testable import ClawGateway
 
@@ -148,4 +151,28 @@ func textUpdate(id: Int64, from: Int64, chat: Int64? = nil, text: String) -> Raw
     ),
     editedMessage: nil
   )
+}
+
+/// Seeds an in-memory database with a session, an inbound message, and a run so that the
+/// `outbound_deliveries.run_id` FK is satisfied. Returns the outbox store, the seeded run ID,
+/// and the chat ID — ready for callers to claim outbound rows.
+func makeSeededFixture() throws -> (outbox: OutboxStoreGRDB, runId: Int64, chatId: Int64) {
+  let queue = try ClawDatabase.makeInMemoryQueue()
+  try ClawDatabase.migrate(queue)
+
+  let chatId: Int64 = 42
+  let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
+    InboundMessage(
+      updateId: 1,
+      sessionKey: SessionKey.telegramDM(chatId: chatId),
+      chatId: chatId,
+      userId: chatId,
+      text: "hi",
+      isEdited: false,
+      ts: Date()
+    )
+  )
+  let sessionId = try #require(claim.sessionId)
+  let runId = try RunStoreGRDB(writer: queue).createRun(sessionId: sessionId, now: Date())
+  return (outbox: OutboxStoreGRDB(writer: queue), runId: runId, chatId: chatId)
 }
