@@ -68,9 +68,11 @@ import Testing
     #expect(
       history.contains(StoredMessage(role: .assistant, content: "answer", provenance: .trusted))
     )
-    let state = try env.queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
-    }
+    let state = try #require(
+      try env.queue.read { db in
+        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+      }
+    )
     #expect(state == RunState.done.rawValue)
     #expect(try env.outbox.pendingOutbound().count == 1)
     let (tokens, _) = try env.usage.todayTokensAndCost(now: Date())
@@ -86,9 +88,11 @@ import Testing
     let replies = try env.runs.reconcileRunsAtBoot(now: Date(), degradationText: "didn't finish")
 
     // then
-    let state = try env.queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
-    }
+    let state = try #require(
+      try env.queue.read { db in
+        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+      }
+    )
     #expect(state == RunState.failed.rawValue)
     #expect(replies == [DegradationReply(chatId: 42, runId: runId, text: "didn't finish")])
     #expect(try env.outbox.pendingOutbound().count == 1)  // degradation reply enqueued
@@ -135,15 +139,21 @@ import Testing
     // when / then — the commit throws and writes NOTHING: no assistant message, run still RUNNING,
     // no provider_usage (F6 atomicity — all four side effects share one transaction)
     #expect(throws: (any Error).self) { try env.runs.commitAssistantTurn(turn, now: Date()) }
-    let assistantCount = try env.queue.read { db in
-      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE role = 'assistant'")
-    }
-    let state = try env.queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
-    }
-    let usageCount = try env.queue.read { db in
-      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM provider_usage")
-    }
+    let assistantCount = try #require(
+      try env.queue.read { db in
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE role = 'assistant'")
+      }
+    )
+    let state = try #require(
+      try env.queue.read { db in
+        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+      }
+    )
+    let usageCount = try #require(
+      try env.queue.read { db in
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM provider_usage")
+      }
+    )
     #expect(assistantCount == 0)
     #expect(state == RunState.running.rawValue)  // NOT flipped to DONE
     #expect(usageCount == 0)

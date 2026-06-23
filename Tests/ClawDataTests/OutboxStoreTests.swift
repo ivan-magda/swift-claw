@@ -46,13 +46,14 @@ import Testing
   @Test func markSentRemovesRowFromPending() throws {
     // given
     let (outbox, runId) = try fixture()
-    _ = try outbox.claimOutbound(
+    let claimed = try outbox.claimOutbound(
       runId: runId,
       stepIndex: 0,
       chatId: 42,
       payload: "p",
       payloadHash: "h"
     )
+    #expect(claimed)
 
     // when
     try outbox.markSent(runId: runId, stepIndex: 0, telegramMessageId: 555, now: Date())

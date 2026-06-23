@@ -39,13 +39,13 @@ import Testing
         )
       }
     )
-    let ts: Date = row["ts"]
-    let actor: String = row["actor"]
-    let action: String = row["action"]
+    let ts: Date = try #require(row["ts"])
+    let actor: String = try #require(row["actor"])
+    let action: String = try #require(row["action"])
     let tool: String? = row["tool"]
-    let argsRedacted: String = row["args_redacted"]
-    let resultSize: Int = row["result_size"]
-    let decision: String = row["decision"]
+    let argsRedacted: String = try #require(row["args_redacted"])
+    let resultSize: Int = try #require(row["result_size"])
+    let decision: String = try #require(row["decision"])
     let runId: Int64? = row["run_id"]
     let sessionId: Int64? = row["session_id"]
     #expect(ts == when)

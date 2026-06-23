@@ -84,11 +84,16 @@ import Testing
     #expect(throws: (any Error).self) {
       try store.claimAndPersistInbound(inbound(updateId: 1, text: "hi"))
     }
-    let claims = try queue.read { db in
-      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM processed_updates")
-    }
-    let sessions = try queue.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sessions")
-    }
+    let claims = try #require(
+      try queue.read { db in
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM processed_updates")
+      }
+    )
+    let sessions = try #require(
+      try queue.read { db in
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sessions")
+      }
+    )
     #expect(claims == 0)
     #expect(sessions == 0)
   }
