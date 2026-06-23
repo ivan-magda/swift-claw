@@ -26,45 +26,69 @@ import Testing
     #expect(free == ResolvedCost(costUSD: 0.0, source: .providerReturned, isEstimated: false))
   }
 
-  @Test func priceFileComputesFromTokensWhenNoProviderCost() {
-    // given — gpt-4o at $2.5 in / $10 out per MTok, exactly 1M of each
-    let prices = ["gpt-4o": ModelPrice(inputUSDPerMTok: 2.5, outputUSDPerMTok: 10.0)]
-    let usage = ChatUsage(
-      promptTokens: 1_000_000,
-      completionTokens: 1_000_000,
-      totalTokens: 2_000_000
+  struct ResolveCase: CustomTestStringConvertible, Sendable {
+    let name: String
+    let model: String
+    let prices: [String: ModelPrice]
+    let usage: ChatUsage
+    let expectedCostUSD: Double
+    let tolerance: Double
+    let expectedSource: CostSource
+    let expectedIsEstimated: Bool
+
+    var testDescription: String { name }
+  }
+
+  static let resolveCases: [ResolveCase] = [
+    ResolveCase(
+      name: "price-file source",
+      model: "gpt-4o",
+      prices: ["gpt-4o": ModelPrice(inputUSDPerMTok: 2.5, outputUSDPerMTok: 10.0)],
+      usage: ChatUsage(
+        promptTokens: 1_000_000,
+        completionTokens: 1_000_000,
+        totalTokens: 2_000_000
+      ),
+      expectedCostUSD: 12.5,
+      tolerance: 1e-9,
+      expectedSource: .priceFile,
+      expectedIsEstimated: false
+    ),
+    ResolveCase(
+      name: "heuristic — unknown model",
+      model: "mystery-model",
+      prices: [:],
+      usage: ChatUsage(promptTokens: 600, completionTokens: 400, totalTokens: 1000),
+      expectedCostUSD: 0.015,
+      tolerance: 1e-9,
+      expectedSource: .heuristic,
+      expectedIsEstimated: true
+    ),
+    ResolveCase(
+      name: "heuristic floor — absent usage",
+      model: "mystery-model",
+      prices: [:],
+      usage: .zero,
+      expectedCostUSD: CostResolver.heuristicFloorUSD,
+      tolerance: 0,
+      expectedSource: .heuristic,
+      expectedIsEstimated: true
+    ),
+  ]
+
+  @Test(arguments: resolveCases)
+  func resolveWithNoProviderCost(_ testCase: ResolveCase) {
+    // given
+    let resolved = resolver(testCase.prices).resolve(
+      model: testCase.model,
+      usage: testCase.usage,
+      providerCost: nil
     )
 
-    // when
-    let resolved = resolver(prices).resolve(model: "gpt-4o", usage: usage, providerCost: nil)
-
     // then
-    #expect(abs(resolved.costUSD - 12.5) < 1e-9)
-    #expect(resolved.source == .priceFile)
-    #expect(resolved.isEstimated == false)
-  }
-
-  @Test func heuristicCarriesUnknownModelAndIsFlaggedEstimated() {
-    // given — no price entry; cost falls to the reference-per-token heuristic
-    let usage = ChatUsage(promptTokens: 600, completionTokens: 400, totalTokens: 1000)
-
-    // when
-    let resolved = resolver().resolve(model: "mystery-model", usage: usage, providerCost: nil)
-
-    // then
-    #expect(abs(resolved.costUSD - 0.015) < 1e-9)
-    #expect(resolved.source == .heuristic)
-    #expect(resolved.isEstimated)
-  }
-
-  @Test func absentProviderUsageIsFlooredNotSilentlyZero() {
-    // given — provider returned no usage; a guessed cost must never be a silent $0
-    let resolved = resolver().resolve(model: "mystery-model", usage: .zero, providerCost: nil)
-
-    // then
-    #expect(resolved.costUSD == CostResolver.heuristicFloorUSD)
-    #expect(resolved.source == .heuristic)
-    #expect(resolved.isEstimated)
+    #expect(abs(resolved.costUSD - testCase.expectedCostUSD) <= testCase.tolerance)
+    #expect(resolved.source == testCase.expectedSource)
+    #expect(resolved.isEstimated == testCase.expectedIsEstimated)
   }
 
   @Test func tokenEstimateMatchesTheFormula() {

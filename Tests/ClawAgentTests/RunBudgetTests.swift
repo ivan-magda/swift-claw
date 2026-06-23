@@ -14,28 +14,44 @@ struct RunBudgetTests {
     #expect(budget.maxInputTokens + budget.maxOutputTokens < budget.dayTokenCeiling)
   }
 
-  @Test("preflight denies when today plus the estimate would cross the token ceiling")
-  func preflightDeniesWhenTodayPlusEstimateExceedsTokenCeiling() {
-    // given
-    let gate = BudgetGate(budget: .default)
+  struct DenyCase: CustomTestStringConvertible, Sendable {
+    let todayTokens: Int
+    let todayUSD: Double
+    let estimatedTotalTokens: Int
+    let expectedCap: String
 
-    // when
-    let decision = gate.preflight(todayTokens: 666_000, todayUSD: 0, estimatedTotalTokens: 5_000)
-
-    // then
-    #expect(decision == .deny(cap: "per-day token ceiling"))
+    var testDescription: String { "deny — \(expectedCap)" }
   }
 
-  @Test("preflight denies when the daily USD cap is already met")
-  func preflightDeniesWhenDailyUSDAlreadyMet() {
+  static let denyCases: [DenyCase] = [
+    DenyCase(
+      todayTokens: 666_000,
+      todayUSD: 0,
+      estimatedTotalTokens: 5_000,
+      expectedCap: "per-day token ceiling"
+    ),
+    DenyCase(
+      todayTokens: 0,
+      todayUSD: 10.0,
+      estimatedTotalTokens: 100,
+      expectedCap: "per-day USD cap"
+    ),
+  ]
+
+  @Test("preflight denies when a cap is exceeded", arguments: denyCases)
+  func preflightDeniesWhenCapExceeded(_ testCase: DenyCase) {
     // given
     let gate = BudgetGate(budget: .default)
 
     // when
-    let decision = gate.preflight(todayTokens: 0, todayUSD: 10.0, estimatedTotalTokens: 100)
+    let decision = gate.preflight(
+      todayTokens: testCase.todayTokens,
+      todayUSD: testCase.todayUSD,
+      estimatedTotalTokens: testCase.estimatedTotalTokens
+    )
 
     // then
-    #expect(decision == .deny(cap: "per-day USD cap"))
+    #expect(decision == .deny(cap: testCase.expectedCap))
   }
 
   @Test("preflight allows a fresh day")
