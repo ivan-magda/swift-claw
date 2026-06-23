@@ -150,7 +150,13 @@ private func client(status: Int, json: String) -> TelegramClient {
     let telegram = client(status: 200, json: "not json")
 
     // then
-    await #expect(throws: TelegramError.self) { _ = try await telegram.getMe() }
+    await #expect {
+      _ = try await telegram.getMe()
+    } throws: { error in
+      guard let telegramErr = error as? TelegramError else { return false }
+      if case .decoding = telegramErr { return true }
+      return false
+    }
   }
 
   @Test func transportErrorRedactsTheBotToken() async throws {

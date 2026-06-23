@@ -34,6 +34,7 @@ import Testing
 
     // then — unchanged: a non-diskFull DatabaseError is never re-typed to StoreError
     #expect(classified as? StoreError == nil)
-    #expect((classified as? DatabaseError)?.resultCode.primaryResultCode == .SQLITE_CONSTRAINT)
+    let dbErr = try #require(classified as? DatabaseError)
+    #expect(dbErr.resultCode.primaryResultCode == .SQLITE_CONSTRAINT)
   }
 }

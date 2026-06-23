@@ -35,7 +35,7 @@ import Testing
     try ClawDatabase.migrate(queue)
 
     // then — a message referencing a missing session violates the FK
-    #expect(throws: (any Error).self) {
+    #expect {
       try queue.write { db in
         try db.execute(
           sql:
@@ -43,6 +43,10 @@ import Testing
           arguments: [Date()]
         )
       }
+    } throws: { error in
+      guard let dbErr = error as? DatabaseError else { return false }
+      return dbErr.resultCode.primaryResultCode == .SQLITE_CONSTRAINT
+        && (dbErr.message?.contains("FOREIGN KEY") ?? false)
     }
   }
 }
