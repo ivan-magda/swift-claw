@@ -6,11 +6,15 @@ import Testing
 @testable import ClawData
 
 @Suite struct AuditLogTests {
-  @Test func appendPersistsEveryColumnInOrder() throws {
-    // given
+  private func freshLog() throws -> (AuditLogGRDB, DatabaseQueue) {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
-    let log = AuditLogGRDB(writer: queue)
+    return (AuditLogGRDB(writer: queue), queue)
+  }
+
+  @Test func appendPersistsEveryColumnInOrder() throws {
+    // given
+    let (log, queue) = try freshLog()
     let when = Date(timeIntervalSince1970: 1_700_000_000)
     let event = AuditEvent(
       actor: .owner,
@@ -61,9 +65,7 @@ import Testing
 
   @Test func appendStoresNullForOmittedToolRunAndSession() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let log = AuditLogGRDB(writer: queue)
+    let (log, queue) = try freshLog()
     let event = AuditEvent(
       actor: .owner,
       action: .messageIn,
