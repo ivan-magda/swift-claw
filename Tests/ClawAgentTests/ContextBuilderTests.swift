@@ -6,7 +6,7 @@ import Testing
 @Suite("ContextBuilder")
 struct ContextBuilderTests {
   @Test("keeps the system prompt and drops the oldest history to fit the cap")
-  func keepsSystemPromptAndDropsOldestHistoryToFit() {
+  func keepsSystemPromptAndDropsOldestHistoryToFit() throws {
     // given — cap 11 minus a 3-grapheme prompt leaves 8 graphemes; two 4-grapheme messages fit.
     let history = [userMessage("aaaa"), userMessage("bbbb"), userMessage("cccc")]
 
@@ -18,13 +18,14 @@ struct ContextBuilderTests {
     )
 
     // then — oldest "aaaa" dropped; survivors stay chronological; marker on the system prompt.
-    #expect(result.first?.role == .system)
-    #expect(result.first?.content.contains("[…earlier conversation truncated]") == true)
+    let systemMessage = try #require(result.first)
+    #expect(systemMessage.role == .system)
+    #expect(systemMessage.content.contains("[…earlier conversation truncated]"))
     #expect(result.dropFirst().map(\.content) == ["bbbb", "cccc"])
   }
 
   @Test("the system prompt is never dropped even when it alone exceeds the cap")
-  func systemPromptIsNeverDroppedEvenWhenOverCap() {
+  func systemPromptIsNeverDroppedEvenWhenOverCap() throws {
     // given
     let systemPrompt = "A very long system prompt that alone exceeds the cap"
 
@@ -37,7 +38,8 @@ struct ContextBuilderTests {
 
     // then — exactly the system message, unchanged (no history was dropped → no marker).
     #expect(result.count == 1)
-    #expect(result.first?.role == .system)
-    #expect(result.first?.content == systemPrompt)
+    let systemMessage = try #require(result.first)
+    #expect(systemMessage.role == .system)
+    #expect(systemMessage.content == systemPrompt)
   }
 }

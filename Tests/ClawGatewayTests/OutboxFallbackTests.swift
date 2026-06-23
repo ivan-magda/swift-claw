@@ -68,7 +68,8 @@ import Testing
     await dispatcher.drainOnce()
 
     // then — delivered via the rich path, never the plain one
-    #expect(await transport.richSends.first?.markdown == "**hi**")
+    let firstRich = try #require(await transport.richSends.first)
+    #expect(firstRich.markdown == "**hi**")
     #expect(await transport.sent.isEmpty)
     #expect(try fixture.outbox.pendingOutbound().isEmpty)
   }
@@ -83,7 +84,8 @@ import Testing
     await dispatcher.drainOnce()
 
     // then — the same payload landed as plain text and the row is no longer PENDING
-    #expect(await transport.sent.first?.text == "**hi**")
+    let firstSent = try #require(await transport.sent.first)
+    #expect(firstSent.text == "**hi**")
     #expect(try fixture.outbox.pendingOutbound().isEmpty)
   }
 }

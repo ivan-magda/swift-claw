@@ -41,8 +41,8 @@ private actor CapturingExecutor: HTTPExecuting {
     // then — the assigned id comes back, and the markdown rode inside `rich_message` verbatim
     #expect(messageId == 99)
     let body = try #require(await executor.capturedBody)
-    let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-    let richMessage = json?["rich_message"] as? [String: Any]
-    #expect(richMessage?["markdown"] as? String == "**hi**")
+    let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let richMessage = try #require(json["rich_message"] as? [String: Any])
+    #expect(richMessage["markdown"] as? String == "**hi**")
   }
 }

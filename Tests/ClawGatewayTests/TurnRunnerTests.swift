@@ -141,7 +141,8 @@ struct DiskFullRuns: RunStore {
     #expect(history.contains { $0.role == .assistant && $0.content == "Hello there" })
     let pending = try env.outbox.pendingOutbound()
     #expect(pending.count == 1)
-    #expect(pending.first?.payload == "Hello there")
+    let firstPending = try #require(pending.first)
+    #expect(firstPending.payload == "Hello there")
   }
 
   @Test func degradedTurnFailsRunAndEnqueuesADegradationReply() async throws {
@@ -155,7 +156,8 @@ struct DiskFullRuns: RunStore {
     #expect(try latestRunState(env.queue) == "FAILED")
     let pending = try env.outbox.pendingOutbound()
     #expect(pending.count == 1)
-    #expect(pending.first?.payload == Degradation.providerUnavailable)
+    let firstPending = try #require(pending.first)
+    #expect(firstPending.payload == Degradation.providerUnavailable)
   }
 
   @Test func diskFullDuringCommitIsRethrownForTheStorageFullPath() async throws {
