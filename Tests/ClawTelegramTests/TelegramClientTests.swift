@@ -100,47 +100,39 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(updates[0].message?.text == nil)
   }
 
-  @Test func maps409ToConflict() async throws {
+  @Test(
+    arguments: [
+      (
+        status: 409,
+        json:
+          #"{"ok":false,"error_code":409,"description":"Conflict: terminated by other getUpdates request"}"#,
+        expected: TelegramError.conflict409(
+          description: "Conflict: terminated by other getUpdates request"
+        )
+      ),
+      (
+        status: 429,
+        json:
+          #"{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}"#,
+        expected: TelegramError.floodControl(retryAfter: 7)
+      ),
+      (
+        status: 400,
+        json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#,
+        expected: TelegramError.apiError(code: 400, description: "Bad Request")
+      ),
+    ] as [(status: Int, json: String, expected: TelegramError)]
+  )
+  func mapsHttpStatusToTelegramError(
+    status: Int,
+    json: String,
+    expected: TelegramError
+  ) async throws {
     // given
-    let telegram = client(
-      status: 409,
-      json:
-        #"{"ok":false,"error_code":409,"description":"Conflict: terminated by other getUpdates request"}"#
-    )
+    let telegram = client(status: status, json: json)
 
     // then
-    await #expect(
-      throws: TelegramError.conflict409(
-        description: "Conflict: terminated by other getUpdates request"
-      )
-    ) {
-      _ = try await telegram.getMe()
-    }
-  }
-
-  @Test func maps429ToFloodControlWithRetryAfter() async throws {
-    // given
-    let telegram = client(
-      status: 429,
-      json:
-        #"{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}"#
-    )
-
-    // then
-    await #expect(throws: TelegramError.floodControl(retryAfter: 7)) {
-      _ = try await telegram.getMe()
-    }
-  }
-
-  @Test func mapsOtherApiErrors() async throws {
-    // given
-    let telegram = client(
-      status: 400,
-      json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#
-    )
-
-    // then
-    await #expect(throws: TelegramError.apiError(code: 400, description: "Bad Request")) {
+    await #expect(throws: expected) {
       _ = try await telegram.getMe()
     }
   }
