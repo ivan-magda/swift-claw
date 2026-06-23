@@ -43,6 +43,12 @@ private func client(status: Int, json: String) -> TelegramClient {
 }
 
 @Suite struct TelegramClientTests {
+  struct HTTPErrorCase: Sendable {
+    let status: Int
+    let json: String
+    let expected: TelegramError
+  }
+
   @Test func decodesGetMe() async throws {
     // given
     let telegram = client(
@@ -74,10 +80,10 @@ private func client(status: Int, json: String) -> TelegramClient {
       try await telegram.getUpdates(offset: nil, timeout: 0, allowedUpdates: ["message"])
 
     // then
-    #expect(updates.count == 1)
-    #expect(updates[0].updateId == 12)
-    #expect(updates[0].message?.text == "hi")
-    #expect(updates[0].message?.fromUserId == 42)
+    let update = try #require(updates.first)
+    #expect(update.updateId == 12)
+    #expect(update.message?.text == "hi")
+    #expect(update.message?.fromUserId == 42)
   }
 
   @Test func mapsMediaToFriendlyKind() async throws {
@@ -96,13 +102,14 @@ private func client(status: Int, json: String) -> TelegramClient {
       try await telegram.getUpdates(offset: nil, timeout: 0, allowedUpdates: ["message"])
 
     // then
-    #expect(updates[0].message?.mediaKind == "voice messages")
-    #expect(updates[0].message?.text == nil)
+    let update = try #require(updates.first)
+    #expect(update.message?.mediaKind == "voice messages")
+    #expect(update.message?.text == nil)
   }
 
   @Test(
     arguments: [
-      (
+      HTTPErrorCase(
         status: 409,
         json:
           #"{"ok":false,"error_code":409,"description":"Conflict: terminated by other getUpdates request"}"#,
@@ -110,29 +117,25 @@ private func client(status: Int, json: String) -> TelegramClient {
           description: "Conflict: terminated by other getUpdates request"
         )
       ),
-      (
+      HTTPErrorCase(
         status: 429,
         json:
           #"{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}"#,
         expected: TelegramError.floodControl(retryAfter: 7)
       ),
-      (
+      HTTPErrorCase(
         status: 400,
         json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#,
         expected: TelegramError.apiError(code: 400, description: "Bad Request")
       ),
-    ] as [(status: Int, json: String, expected: TelegramError)]
+    ]
   )
-  func mapsHttpStatusToTelegramError(
-    status: Int,
-    json: String,
-    expected: TelegramError
-  ) async throws {
+  func mapsHttpStatusToTelegramError(_ errorCase: HTTPErrorCase) async throws {
     // given
-    let telegram = client(status: status, json: json)
+    let telegram = client(status: errorCase.status, json: errorCase.json)
 
     // then
-    await #expect(throws: expected) {
+    await #expect(throws: errorCase.expected) {
       _ = try await telegram.getMe()
     }
   }

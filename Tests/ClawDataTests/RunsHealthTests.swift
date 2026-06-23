@@ -5,8 +5,13 @@ import Testing
 @testable import ClawData
 
 @Suite struct RunsHealthTests {
-  private func makeQueue() throws -> (store: RunStoreGRDB, usage: UsageStoreGRDB, sessionId: Int64)
-  {
+  private struct Fixture {
+    let store: RunStoreGRDB
+    let usage: UsageStoreGRDB
+    let sessionId: Int64
+  }
+
+  private func makeFixture() throws -> Fixture {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     let sessions = SessionMessageStoreGRDB(writer: queue)
@@ -14,7 +19,33 @@ import Testing
       sessionKey: SessionKey.telegramDM(chatId: 1),
       now: Date()
     )
-    return (RunStoreGRDB(writer: queue), UsageStoreGRDB(writer: queue), sessionId)
+    return Fixture(
+      store: RunStoreGRDB(writer: queue),
+      usage: UsageStoreGRDB(writer: queue),
+      sessionId: sessionId
+    )
+  }
+
+  private func seedUsage(
+    _ usage: UsageStoreGRDB,
+    runId: Int64,
+    sessionId: Int64,
+    source: CostSource,
+    now: Date
+  ) throws {
+    try usage.recordUsage(
+      ProviderUsage(
+        runId: runId,
+        sessionId: sessionId,
+        model: "m",
+        promptTokens: 10,
+        completionTokens: 5,
+        costUSD: 0.001,
+        costSource: source,
+        isEstimated: false,
+        ts: now
+      )
+    )
   }
 
   private func commitDone(
@@ -50,7 +81,9 @@ import Testing
 
   @Test func reportsInFlightAndTrailingFailures() throws {
     // given — seed: 1 DONE, 2 FAILED, 1 RUNNING (insertion order = ascending id)
-    let (store, _, sid) = try makeQueue()
+    let fix = try makeFixture()
+    let store = fix.store
+    let sid = fix.sessionId
     let base = Date(timeIntervalSinceReferenceDate: 0)
 
     try commitDone(store: store, sessionId: sid, chatId: 2, now: base)
@@ -72,17 +105,22 @@ import Testing
     // then
     #expect(health.inFlight == 1)
     // RUNNING run created at base+6, now = base+10 → age = 4 s
-    #expect(health.oldestRunAgeSeconds == 4)
+    let age = try #require(health.oldestRunAgeSeconds)
+    #expect(age == 4)
     // DONE updated at base+1; last FAILED updated at base+5
-    #expect(health.lastSuccessAt == base.addingTimeInterval(1))
-    #expect(health.lastFailedAt == base.addingTimeInterval(5))
+    let successAt = try #require(health.lastSuccessAt)
+    #expect(successAt == base.addingTimeInterval(1))
+    let failedAt = try #require(health.lastFailedAt)
+    #expect(failedAt == base.addingTimeInterval(5))
     // Most-recent run (highest id) is RUNNING — streak is 0
     #expect(health.consecutiveFailures == 0)
   }
 
   @Test func consecutiveFailuresCountsLeadingFailedStreak() throws {
     // given — seed: 1 DONE then 3 FAILED (no newer run)
-    let (store, _, sid) = try makeQueue()
+    let fix = try makeFixture()
+    let store = fix.store
+    let sid = fix.sessionId
     let base = Date(timeIntervalSinceReferenceDate: 0)
 
     try commitDone(store: store, sessionId: sid, chatId: 3, now: base)
@@ -103,7 +141,9 @@ import Testing
   @Test func streakBreaksAtFirstNonFailedRun() throws {
     // given — insertion order: FAILED, FAILED, DONE, FAILED
     // newest-first: FAILED(4), DONE(3), FAILED(2), FAILED(1) → streak = 1
-    let (store, _, sid) = try makeQueue()
+    let fix = try makeFixture()
+    let store = fix.store
+    let sid = fix.sessionId
     let base = Date(timeIntervalSinceReferenceDate: 0)
 
     let run1 = try store.createRun(sessionId: sid, now: base)
@@ -143,37 +183,16 @@ import Testing
 
   @Test func costSourceMixCountsTodayRowsBySource() throws {
     // given
-    let (store, usage, sessionId) = try makeQueue()
+    let fix = try makeFixture()
+    let store = fix.store
+    let usage = fix.usage
+    let sessionId = fix.sessionId
     let now = Date()
 
     let runId1 = try store.createRun(sessionId: sessionId, now: now)
     let runId2 = try store.createRun(sessionId: sessionId, now: now)
-    try usage.recordUsage(
-      ProviderUsage(
-        runId: runId1,
-        sessionId: sessionId,
-        model: "m",
-        promptTokens: 10,
-        completionTokens: 5,
-        costUSD: 0.001,
-        costSource: .providerReturned,
-        isEstimated: false,
-        ts: now
-      )
-    )
-    try usage.recordUsage(
-      ProviderUsage(
-        runId: runId2,
-        sessionId: sessionId,
-        model: "m",
-        promptTokens: 10,
-        completionTokens: 5,
-        costUSD: 0.001,
-        costSource: .heuristic,
-        isEstimated: false,
-        ts: now
-      )
-    )
+    try seedUsage(usage, runId: runId1, sessionId: sessionId, source: .providerReturned, now: now)
+    try seedUsage(usage, runId: runId2, sessionId: sessionId, source: .heuristic, now: now)
 
     // when
     let mix = try usage.costSourceMix(now: now)

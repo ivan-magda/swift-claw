@@ -256,57 +256,7 @@ struct Doctor: AsyncParsableCommand {
       let offset: Int64? = try? stores.cursor.loadCursor()
       report.add(key: "poller.last_offset", value: offset.map(String.init) ?? "none")
 
-      let now = Date()
-      let health =
-        (try? stores.runs.runsHealth(now: now))
-        ?? RunsHealth(
-          inFlight: 0,
-          oldestRunAgeSeconds: nil,
-          lastFailedAt: nil,
-          lastSuccessAt: nil,
-          consecutiveFailures: 0
-        )
-      report.add(
-        key: "llm.last_success",
-        value: health.lastSuccessAt.map(String.init(describing:)) ?? "never"
-      )
-      report.add(key: "llm.consecutive_failures", value: "\(health.consecutiveFailures)")
-      report.add(key: "llm.retry_budget", value: "\(config.llm.retryBudget)")
-      report.add(key: "runs.in_flight", value: "\(health.inFlight)")
-      report.add(
-        key: "runs.oldest_age_s",
-        value: health.oldestRunAgeSeconds.map { String(format: "%.0f", $0) } ?? "none"
-      )
-      report.add(
-        key: "runs.last_FAILED",
-        value: health.lastFailedAt.map(String.init(describing:)) ?? "none"
-      )
-
-      let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
-      let mix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
-      report.add(key: "spend.today_usd", value: String(format: "%.4f", todayUSD))
-      report.add(key: "spend.today_tokens", value: "\(todayTokens)")
-      report.add(
-        key: "spend.remaining_day_usd",
-        value: String(format: "%.2f", max(0, config.budget.perDayUSD - todayUSD))
-      )
-      report.add(
-        key: "spend.per_run_cap_usd",
-        value: String(format: "%.2f", config.budget.perRunUSD)
-      )
-      let mixText = mix.map { "\($0.key.rawValue)=\($0.value)" }.sorted().joined(separator: " ")
-      report.add(key: "spend.cost_source_mix", value: mixText.isEmpty ? "none" : mixText)
-
-      let dbPath = config.stateRoot.appendingPathComponent(StateFile.database).path
-      let walBytes =
-        (try? FileManager.default.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int) ?? 0
-      report.add(key: "db.wal_size", value: "\(walBytes)")
-      let freeBytes =
-        (try? FileManager.default.attributesOfFileSystem(forPath: config.stateRoot.path)[
-          .systemFreeSize
-        ]
-          as? Int) ?? 0
-      report.add(key: "db.free_disk", value: "\(freeBytes)", ok: freeBytes > 0)
+      addHealthRows(to: &report, stores: stores, config: config)
     } catch {
       report.add(key: "db.writable", value: "false: \(error)", ok: false)
     }
@@ -333,5 +283,60 @@ struct Doctor: AsyncParsableCommand {
   private func emit(_ report: DoctorReport) {
     // swiftlint:disable:next no_print_in_production
     print(json ? report.renderJSON() : report.renderText())
+  }
+
+  private func addHealthRows(
+    to report: inout DoctorReport,
+    stores: ClawStores,
+    config: AppConfig
+  ) {
+    let now = Date()
+    let health =
+      (try? stores.runs.runsHealth(now: now))
+      ?? RunsHealth(
+        inFlight: 0,
+        oldestRunAgeSeconds: nil,
+        lastFailedAt: nil,
+        lastSuccessAt: nil,
+        consecutiveFailures: 0
+      )
+    report.add(
+      key: "llm.last_success",
+      value: health.lastSuccessAt.map(String.init(describing:)) ?? "never"
+    )
+    report.add(key: "llm.consecutive_failures", value: "\(health.consecutiveFailures)")
+    report.add(key: "llm.retry_budget", value: "\(config.llm.retryBudget)")
+    report.add(key: "runs.in_flight", value: "\(health.inFlight)")
+    report.add(
+      key: "runs.oldest_age_s",
+      value: health.oldestRunAgeSeconds.map { String(format: "%.0f", $0) } ?? "none"
+    )
+    report.add(
+      key: "runs.last_FAILED",
+      value: health.lastFailedAt.map(String.init(describing:)) ?? "none"
+    )
+
+    let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
+    let mix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
+    report.add(key: "spend.today_usd", value: String(format: "%.4f", todayUSD))
+    report.add(key: "spend.today_tokens", value: "\(todayTokens)")
+    report.add(
+      key: "spend.remaining_day_usd",
+      value: String(format: "%.2f", max(0, config.budget.perDayUSD - todayUSD))
+    )
+    report.add(key: "spend.per_run_cap_usd", value: String(format: "%.2f", config.budget.perRunUSD))
+    let mixText = mix.map { "\($0.key.rawValue)=\($0.value)" }.sorted().joined(separator: " ")
+    report.add(key: "spend.cost_source_mix", value: mixText.isEmpty ? "none" : mixText)
+
+    let dbPath = config.stateRoot.appendingPathComponent(StateFile.database).path
+    let walBytes =
+      (try? FileManager.default.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int) ?? 0
+    report.add(key: "db.wal_size", value: "\(walBytes)")
+    let freeBytes =
+      (try? FileManager.default.attributesOfFileSystem(forPath: config.stateRoot.path)[
+        .systemFreeSize
+      ]
+        as? Int) ?? 0
+    report.add(key: "db.free_disk", value: "\(freeBytes)", ok: freeBytes > 0)
   }
 }
