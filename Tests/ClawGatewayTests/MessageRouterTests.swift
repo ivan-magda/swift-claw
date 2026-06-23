@@ -91,7 +91,8 @@ struct FullSessions: SessionMessageStore {
     // then
     let sent = await harness.transport.sent
     #expect(sent.count == 1)
-    #expect(sent[0].text.contains("private bot"))
+    let reply = try #require(sent.first)
+    #expect(reply.text.contains("private bot"))
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -105,8 +106,9 @@ struct FullSessions: SessionMessageStore {
     // then — echoes THEIR id, never the allowlist
     let sent = await harness.transport.sent
     #expect(sent.count == 1)
-    #expect(sent[0].text.contains("7"))
-    #expect(sent[0].text.contains("42") == false)
+    let reply = try #require(sent.first)
+    #expect(reply.text.contains("7"))
+    #expect(reply.text.contains("42") == false)
   }
 
   @Test func allowlistedStartGetsWelcomeNotATurn() async throws {
@@ -119,7 +121,8 @@ struct FullSessions: SessionMessageStore {
     // then — a welcome reply, not a dispatched turn
     let sent = await harness.transport.sent
     #expect(sent.count == 1)
-    #expect(sent[0].text.contains("private bot") == false)
+    let reply = try #require(sent.first)
+    #expect(reply.text.contains("private bot") == false)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -144,7 +147,8 @@ struct FullSessions: SessionMessageStore {
 
     // then
     let sent = await harness.transport.sent
-    #expect(sent[0].text == "I can't read photos yet.")
+    let reply = try #require(sent.first)
+    #expect(reply.text == "I can't read photos yet.")
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
