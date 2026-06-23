@@ -109,30 +109,11 @@ struct Run: AsyncParsableCommand {
     logger: Logger
   ) -> Daemon {
     let transport = TelegramClient(token: config.botToken, http: executor)
-    let provider = OpenAICompatibleProvider(
-      config: config.llm,
-      http: executor,
-      sleep: { try await Task.sleep(for: .seconds($0)) },
-      jitter: { Double.random(in: 0...$0) }
-    )
-
-    let budget = config.budget
-    let costResolver = CostResolver(
-      priceTable: PriceFileLoader.load(),
-      referenceUSDPerToken: budget.referenceUSDPerToken
-    )
-    let agent = AgentRuntime(
-      provider: provider,
-      typingIndicator: TelegramTypingIndicator(transport: transport),
-      costResolver: costResolver,
-      budget: budget,
-      model: config.llm.model,
-      sleep: { try await Task.sleep(for: $0) }
-    )
+    let agent = makeAgent(config: config, executor: executor, transport: transport)
     // Created before the TurnRunner so its notifyOutbox closure can capture it: each commit pokes
     // the dispatcher to drain the rows it just enqueued.
     let outboxSignal = OutboxSignal()
-    let breaker = BudgetBreaker(budget: budget)
+    let breaker = BudgetBreaker(budget: config.budget)
     let turnRunner = TurnRunner(
       sessionMessages: stores.sessionMessages,
       runs: stores.runs,
@@ -140,7 +121,7 @@ struct Run: AsyncParsableCommand {
       outbox: stores.outbox,
       audit: stores.audit,
       agent: agent,
-      budget: budget,
+      budget: config.budget,
       systemPrompt: SystemPrompt.minimal,
       notifyOutbox: { outboxSignal.poke() },
       breaker: breaker,
@@ -168,7 +149,63 @@ struct Run: AsyncParsableCommand {
       signal: outboxSignal,
       logger: logger
     )
-    return Daemon(services: [poller, dispatcher], logger: logger)
+    return Daemon(
+      services: [poller, dispatcher],
+      bootReconcile: bootReconcile(stores: stores, logger: logger),
+      logger: logger
+    )
+  }
+
+  /// Assembles the LLM agent stack: the OpenAI-compatible provider, the offline-first cost resolver,
+  /// and the `AgentRuntime` that orchestrates one turn. Kept separate from the service wiring so the
+  /// composition root reads as "build the agent → feed the turn runner → register the services".
+  private func makeAgent(
+    config: AppConfig,
+    executor: AsyncHTTPExecutor,
+    transport: TelegramClient
+  ) -> AgentRuntime {
+    let provider = OpenAICompatibleProvider(
+      config: config.llm,
+      http: executor,
+      sleep: { try await Task.sleep(for: .seconds($0)) },
+      jitter: { Double.random(in: 0...$0) }
+    )
+    let costResolver = CostResolver(
+      priceTable: PriceFileLoader.load(),
+      referenceUSDPerToken: config.budget.referenceUSDPerToken
+    )
+    return AgentRuntime(
+      provider: provider,
+      typingIndicator: TelegramTypingIndicator(transport: transport),
+      costResolver: costResolver,
+      budget: config.budget,
+      model: config.llm.model,
+      sleep: { try await Task.sleep(for: $0) }
+    )
+  }
+
+  /// The one-shot boot hook: sweep any run left RUNNING by a crash to FAILED and enqueue a
+  /// degradation reply, so a turn interrupted mid-flight is never silent (F22). It runs before the
+  /// services serve, so the dispatcher's boot drain delivers whatever this enqueues.
+  private func bootReconcile(
+    stores: ClawStores,
+    logger: Logger
+  ) -> @Sendable () async -> Void {
+    {
+      do {
+        let replies = try stores.runs.reconcileRunsAtBoot(
+          now: Date(),
+          degradationText: Degradation.unfinished
+        )
+        if !replies.isEmpty {
+          logger.warning(
+            "boot reconcile: \(replies.count) unfinished run(s) → degradation enqueued"
+          )
+        }
+      } catch {
+        logger.error("boot reconcile failed: \(error)")
+      }
+    }
   }
 }
 

@@ -153,10 +153,20 @@ func textUpdate(id: Int64, from: Int64, chat: Int64? = nil, text: String) -> Raw
   )
 }
 
-/// Seeds an in-memory database with a session, an inbound message, and a run so that the
-/// `outbound_deliveries.run_id` FK is satisfied. Returns the outbox store, the seeded run ID,
-/// and the chat ID — ready for callers to claim outbound rows.
-func makeSeededFixture() throws -> (outbox: OutboxStoreGRDB, runId: Int64, chatId: Int64) {
+/// A seeded in-memory database: a session, an inbound message, and a RUNNING run with no outbox row.
+/// The outbox and runs stores share the same writer, so a row claimed through one is visible to the
+/// other. The RUNNING-with-no-outbox shape doubles as the crash-mid-turn state boot-reconcile tests
+/// need.
+struct SeededFixture {
+  let outbox: OutboxStoreGRDB
+  let runs: RunStoreGRDB
+  let runId: Int64
+  let chatId: Int64
+}
+
+/// Seeds the durable spine so that the `outbound_deliveries.run_id` FK is satisfied — ready for
+/// callers to claim outbound rows or run a boot-reconcile sweep against a RUNNING run.
+func makeSeededFixture() throws -> SeededFixture {
   let queue = try ClawDatabase.makeInMemoryQueue()
   try ClawDatabase.migrate(queue)
 
@@ -173,6 +183,12 @@ func makeSeededFixture() throws -> (outbox: OutboxStoreGRDB, runId: Int64, chatI
     )
   )
   let sessionId = try #require(claim.sessionId)
-  let runId = try RunStoreGRDB(writer: queue).createRun(sessionId: sessionId, now: Date())
-  return (outbox: OutboxStoreGRDB(writer: queue), runId: runId, chatId: chatId)
+  let runs = RunStoreGRDB(writer: queue)
+  let runId = try runs.createRun(sessionId: sessionId, now: Date())
+  return SeededFixture(
+    outbox: OutboxStoreGRDB(writer: queue),
+    runs: runs,
+    runId: runId,
+    chatId: chatId
+  )
 }
