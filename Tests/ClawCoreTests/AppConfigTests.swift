@@ -34,15 +34,52 @@ import Testing
     #expect(config.llm.model == "gpt-4o")
   }
 
-  @Test func missingTokenIsSecretError() {
+  @Test(arguments: [
+    (
+      "missingBotToken",
+      envWithLLM: true,
+      overrides: [:],
+      omitKeys: [EnvKey.botToken],
+      expectedError: ConfigError.missingBotToken
+    ),
+    (
+      "missingLLMBaseURL",
+      envWithLLM: false,
+      overrides: [EnvKey.llmModel: "gpt-4o"],
+      omitKeys: [],
+      expectedError: ConfigError.missingLLMBaseURL
+    ),
+    (
+      "invalidAllowlist",
+      envWithLLM: true,
+      overrides: [EnvKey.allowlist: "42, notanumber"],
+      omitKeys: [],
+      expectedError: ConfigError.invalidAllowlist("notanumber")
+    ),
+  ]) func missingOrInvalidConfigFieldThrows(
+    description: String,
+    envWithLLM: Bool,
+    overrides: [String: String],
+    omitKeys: [String],
+    expectedError: ConfigError
+  ) {
     // given
-    let env = [
-      EnvKey.allowlist: "42",
+    var env = [
+      EnvKey.botToken: "t",
       EnvKey.stateRoot: NSTemporaryDirectory(),
     ]
+    if envWithLLM {
+      env[EnvKey.llmBaseURL] = "http://localhost:1234/v1"
+      env[EnvKey.llmModel] = "gpt-4o"
+      env[EnvKey.llmApiKey] = "sk-test"
+    }
+    env.merge(overrides) { _, new in new }
+    for key in omitKeys {
+      env.removeValue(forKey: key)
+    }
 
     // then
-    #expect(throws: ConfigError.missingBotToken) {
+    #expect(throws: expectedError) {
       _ = try AppConfig.load(environment: env)
     }
   }
@@ -59,20 +96,6 @@ import Testing
 
     // then
     #expect(config.allowlist.isEmpty)
-  }
-
-  @Test func nonNumericAllowlistIsConfigError() {
-    // given
-    let env = [
-      EnvKey.botToken: "t",
-      EnvKey.allowlist: "42, notanumber",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ]
-
-    // then
-    #expect(throws: ConfigError.invalidAllowlist("notanumber")) {
-      _ = try AppConfig.load(environment: env)
-    }
   }
 
   @Test func defaultsPollTimeoutTo30() throws {
@@ -117,20 +140,6 @@ import Testing
     // then
     #expect(config.llm.maxTokensField == .maxCompletionTokens)
     #expect(config.llm.maxOutputTokens == 4096)
-  }
-
-  @Test func missingLLMBaseURLIsConfigError() {
-    // given — model present, base URL absent
-    let env = [
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-      EnvKey.llmModel: "gpt-4o",
-    ]
-
-    // then
-    #expect(throws: ConfigError.missingLLMBaseURL) {
-      _ = try AppConfig.load(environment: env)
-    }
   }
 
   @Test func maxTokensFieldOverrideParses() throws {
