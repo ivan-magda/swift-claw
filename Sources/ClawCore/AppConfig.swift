@@ -129,7 +129,10 @@ public struct AppConfig: Sendable, Equatable {
   /// The spend budget mirrors `RunBudget.default`, except the four USD/ceiling knobs are env
   /// overridable and `maxOutputTokens`/`retryBudget` mirror `llm` (the single source of truth for
   /// those). Any present override must parse to a positive value, else fail-closed.
-  private static func parseBudget(from env: [String: String], llm: LLMConfig) throws -> RunBudget {
+  private static func parseBudget(
+    from env: [String: String],
+    llm: LLMConfig
+  ) throws -> RunBudget {
     let base = RunBudget.default
     return RunBudget(
       maxInputTokens: base.maxInputTokens,
@@ -153,20 +156,28 @@ public struct AppConfig: Sendable, Equatable {
     default fallback: Double
   ) throws -> Double {
     let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
-    guard !trimmed.isEmpty else { return fallback }
+    guard !trimmed.isEmpty else {
+      return fallback
+    }
+
     guard let value = Double(trimmed), value > 0 else {
       throw ConfigError.invalidBudget(trimmed)
     }
+
     return value
   }
 
   /// An optional positive `Int` ceiling override; `nil` when absent so the budget derives it.
   private static func positiveBudgetIntOrNil(_ raw: String?) throws -> Int? {
     let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
-    guard !trimmed.isEmpty else { return nil }
+    guard !trimmed.isEmpty else {
+      return nil
+    }
+
     guard let value = Int(trimmed), value > 0 else {
       throw ConfigError.invalidBudget(trimmed)
     }
+
     return value
   }
 

@@ -194,17 +194,28 @@ public struct TurnRunner: TurnDispatching {
   /// the breaker whether to DM the owner — `shouldNotifyTrip` is idempotent per UTC day, so calling
   /// this from both the `.completed` and `.degraded` branches still yields at most one DM. The DM and
   /// its audit are best-effort (`try?`): a failed send is acceptable (D4), unlike a failed refusal.
-  private func notifyDailyCapIfTripped(chatId: Int64, runId: Int64, sessionId: Int64) async {
-    guard let breaker, let transport else { return }
-    // One clock for the read and the latch so they can't straddle a UTC-day boundary.
-    let when = Date()
-    guard let totals = try? usageStore.todayTokensAndCost(now: when) else { return }
+  private func notifyDailyCapIfTripped(
+    chatId: Int64,
+    runId: Int64,
+    sessionId: Int64
+  ) async {
+    guard let breaker, let transport else {
+      return
+    }
+
+    let now = Date()
+    guard let totals = try? usageStore.todayTokensAndCost(now: now) else {
+      return
+    }
+
     let shouldNotify = await breaker.shouldNotifyTrip(
       todayTokens: totals.tokens,
       todayUSD: totals.costUSD,
-      now: when
+      now: now
     )
-    guard shouldNotify else { return }
+    guard shouldNotify else {
+      return
+    }
 
     _ = try? await transport.sendMessage(chatId: chatId, text: Degradation.dailyCapTripped)
     try? audit.appendAudit(

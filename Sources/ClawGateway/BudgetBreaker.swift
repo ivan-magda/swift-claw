@@ -22,11 +22,11 @@ public actor BudgetBreaker {
       return false
     }
 
-    let day = now.startOfUTCDay
-    guard notifiedDay != day else {
+    let utcDayStart = now.startOfUTCDay
+    guard notifiedDay != utcDayStart else {
       return false
     }
-    notifiedDay = day
+    notifiedDay = utcDayStart
 
     return true
   }
