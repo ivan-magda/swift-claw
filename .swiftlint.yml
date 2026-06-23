@@ -13,6 +13,7 @@ disabled_rules:
   - trailing_comma # swift-format adds multi-element trailing commas;
   - trailing_whitespace
   - vertical_whitespace
+  - superfluous_disable_command
 
 opt_in_rules:
   # Safety
