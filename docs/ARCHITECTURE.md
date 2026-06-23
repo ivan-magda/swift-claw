@@ -77,9 +77,9 @@ clawd
 
 | Target | Kind | Responsibility | Key types |
 |---|---|---|---|
-| `ClawCore` | lib | Pure domain: value types, config model, **error taxonomy** (§19), **store protocols**, tool/provider/transport/sandbox protocols. No I/O. | `IncomingMessage`, `OutgoingReply`, `SessionKey`, `Principal`, `AppConfig`, `RunState`, `ApprovalState`, `RiskLevel`, `RunBudget`, error taxonomy types; protocols: `LLMProvider`, `TelegramTransport`, `SecretStore`, `ExecutionBackend`, `Tool`, `MessageStore`, `SessionStore`, `RunStore`, `AllowlistStore`, `UpdateCursorStore`, `OutboxStore`, `UsageStore`, `AuditLog`, `MemoryStore`, `ApprovalStore` |
+| `ClawCore` | lib | Pure domain: value types, config model, **error taxonomy** (§19), **store protocols**, tool/provider/transport/sandbox protocols, the shared **HTTP seam** (`HTTPExecuting`/`HTTPResult`, request + response headers — F16), and the 32 768-char `ReplySplitter`. No I/O. | `IncomingMessage`, `OutgoingReply`, `SessionKey`, `Principal`, `AppConfig`, `RunState`, `ApprovalState`, `RiskLevel`, `RunBudget`, `HTTPResult`, `ReplySplitter`, error taxonomy types; protocols: `LLMProvider`, `TelegramTransport`, `HTTPExecuting`, `SecretStore`, `ExecutionBackend`, `Tool`, `MessageStore`, `SessionStore`, `RunStore`, `AllowlistStore`, `UpdateCursorStore`, `OutboxStore`, `UsageStore`, `AuditLog`, `MemoryStore`, `ApprovalStore` |
 | `ClawData` | lib | GRDB persistence: schema, `DatabaseMigrator`, store implementations. WAL. **Thin `Sendable` wrappers over `any DatabaseWriter`** (not actors guarding the pool); relies on GRDB serialization. | `Database`, concrete `…Store` types conforming to the `ClawCore` protocols |
-| `ClawTelegram` | lib | Thin Bot API client over AsyncHTTPClient; long-poll loop; envelope normalization; MarkdownV2/HTML escaping; code-fence-safe splitter. | `TelegramClient`, `TelegramLongPoller`, `MessageEnvelope`, `MarkdownEscaper`, `ReplySplitter` |
+| `ClawTelegram` | lib | Thin Bot API client over AsyncHTTPClient; long-poll loop; envelope normalization; **`sendRichMessage` (markdown) + plain `sendMessage` fallback**; `sendChatAction`. (Escaping/splitter live in `ClawCore`.) | `TelegramClient`, `TelegramLongPoller`, `MessageEnvelope`, `InputRichMessage` |
 | `ClawLLM` | lib | OpenAI-compatible Chat Completions client + OpenAI-shaped message model; usage/cost; retries; **SSE streaming (v1)**. | `OpenAICompatibleProvider`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolCall`, `Usage`, `CostTable`, `SSEParser` |
 | `ClawWorkspace` | lib | Identity/memory files (`SOUL/AGENTS/USER/TOOLS/MEMORY.md`, `memory/*.md`, `skills/*`), Yams frontmatter, caps + untrusted-tier injection. | `WorkspaceStore`, `WorkspaceFile`, `MemoryDoc`, `FrontmatterParser` |
 | `ClawTools` | lib | Tool registry + read-only tools (v1); policy gate + approval orchestration arrive in the P-tools phase (Inc 5). | `ToolRegistry`, `ToolContext`; `WebSearchTool`, `WebFetchTool`, `FileReadTool` (v1); `PolicyGate`, `ApprovalCoordinator` [Inc5] |
@@ -146,8 +146,10 @@ Concrete, config-overridable defaults for a single-owner daily-driver. These are
 | `perDayUSD` | rolling daily spend cap (kill-switch + owner DM on trip) | $10.00 |
 | `retryBudget` | attempts per request (~10% retry ratio) | 3 |
 | `perToolOutputCap` | per-tool output (counted toward next-turn input) | 25000 tokens |
+| `referenceUSDPerToken` | pinned cost reference for the offline token breaker | $0.000015 |
+| `dayTokenCeiling` | derived hard offline failsafe = `perDayUSD ÷ referenceUSDPerToken` | ≈ 666 667 |
 
-All overridable in config; the USD caps + a bounded `max_tokens` are enforced in v1.
+All overridable in config. The **hard offline failsafe is `dayTokenCeiling`** (a per-day token breaker checked before each call, so it trips even when no price is known); the USD caps ($0.50/run, $10/day) are the user-facing limits, enforced best-effort when a price is known. A **run in Inc 1 is exactly one LLM round-trip** — `maxTurns`/`maxToolCalls` exist but stay inert until tools land in Inc 3.
 
 ## 6. Data flow
 
@@ -173,7 +175,9 @@ TelegramPollerService loop:
     (3a) RateLimiter (per-user + global token bucket; honor retry_after;
          fail CLOSED on store/lock error).
     (3b) Non-text intake: unsupported type → friendly "I can't read X yet";
-         media caption text IS processed; edited message → treated as /retry.
+         media caption text IS processed; edited message → flagged isEdited
+         and processed as a NEW turn (Inc 1); true /retry answer-replacement
+         is deferred to Inc 2 (FR-G6).
     (4) ONE db.write transaction:
           • persist inbound message (sessions/messages, FK-linked to runs later)
           • record side effects / dedup rows belonging to this update
@@ -191,6 +195,8 @@ TelegramPollerService loop:
          g. recordUsage + appendAudit (db.write)
 ```
 
+> **Inc 1 fusion (claim + persist in one write).** Steps (2) and (4) are a single synchronous `db.write` — `claimAndPersistInbound` performs the `INSERT OR IGNORE` dedup claim *and* the inbound-message persist in one transaction (the §7.4/§7.5 idempotency invariant), not two separate commits; the cursor (5) still advances last.
+>
 > **Why the order matters.** If the offset were persisted *first* (the old diagram), a crash before step 4 commits would resume from the advanced cursor and Telegram would never redeliver — silently dropping messages. Advancing last makes "no missed/dup updates" actually true: a crash before step 4 simply re-fetches and the synchronous `claimUpdate` dedups any duplicate.
 >
 > **Poison-update policy.** If normalization of one update throws, advance the offset *past* it (never wedge the poller on one bad update), log it, and increment a `dropped_updates` counter surfaced in doctor.
@@ -352,7 +358,7 @@ All write methods execute inside a single `db.write { }` closure so the dedup ke
 - **`LLMProvider` protocol** keeps a seam for a native adapter later (e.g. Anthropic Messages for prompt caching / extended thinking).
 - **Client:** thin, over AsyncHTTPClient. **SSE streaming is v1**: a small SSE parser → throttled `editMessageText` (coalesce, min-interval ~1–2s, first chunk ASAP). If streaming is unavailable, fall back to blocking + re-issue `sendChatAction` every ~4s for the turn duration. The metric is **perceived latency (time-to-first-token)**, not just first-reply latency. (URLSession can't stream SSE on Linux → AsyncHTTPClient is the portable choice.)
 - **Reliability:** retry only retryable errors (timeouts/429/5xx) with capped exponential backoff + full jitter + a retry budget (~3/req); honor `retry_after`. **Single-provider in v1** — automatic multi-provider/credential fallback is deferred (the `LLMProvider` protocol leaves room; an owner can retry or switch config). **Never silently fall back to a pricier tier.** Retries count against both budgets (§5.3).
-- **Cost:** `Usage` + a local `CostTable` → per-call USD, attributed in `provider_usage`; this feeds the USD breaker (§5.3). An unknown model's price is a **loud doctor warning, never a silent $0**. Per-call USD attribution dashboards are deferred; the USD breaker itself is v1.
+- **Cost (best-effort, layered — no hand-maintained table):** resolve per-call USD as **provider-returned cost → vendored MIT price file → conservative heuristic** (`totalTokens × referenceUSDPerToken`), attributed in `provider_usage` (every row records `cost_usd` + `cost_source` + `is_estimated`); this feeds the USD breaker (§5.3). **Never a silent $0** — a heuristic computing to 0 with tokens > 0 is floored at $0.000001, while a *confirmed* provider $0 is recorded as $0. An unknown model falls through to the heuristic, and doctor surfaces the price-source mix. Per-call USD dashboards are deferred; the USD breaker + the offline token ceiling are v1.
 
 ## 9. Memory & context architecture — SINGLE NORMATIVE SOURCE
 
@@ -489,7 +495,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 | Decision | Choice | Rationale | Alternative / escape hatch | Risk |
 |---|---|---|---|---|
 | Daemon framework | `swift-service-lifecycle` ServiceGroup / NIO | structured supervised lifecycle; no listen socket | Hummingbird 2 (if REST later) | Low |
-| Telegram client | **thin clean-room client** over AsyncHTTPClient (research **runner-up**; primary was `nerzh/swift-telegram-bot`) | deliberate clean-room provenance, zero bus-factor, full transport/escaping + offset-durability control; ~8–10 endpoints (getUpdates, sendMessage, editMessageText, sendChatAction, answerCallbackQuery, getMe, setMyCommands, getFile) | `nerzh/swift-telegram-bot` | Low–Med |
+| Telegram client | **thin clean-room client** over AsyncHTTPClient (research **runner-up**; primary was `nerzh/swift-telegram-bot`) | deliberate clean-room provenance, zero bus-factor, full transport + offset-durability control; ~8–10 endpoints (getUpdates, sendMessage, **sendRichMessage**, editMessageText, sendChatAction, answerCallbackQuery, getMe, setMyCommands, getFile) | `nerzh/swift-telegram-bot` | Low–Med |
 | Persistence | GRDB.swift v7 (WAL, FTS5, migrations); **pin GRDB**; vendor SQLite amalgamation (FTS5 + sqlite-vec init compiled in); Linux CI job exercises GRDB+FTS5 | Swift-6 concurrency-native, boring, full-featured | SQLite.swift / raw C | **Low (macOS) / Med (Linux until our own CI exists)** |
 | Vectors | deferred, behind protocol; **requires custom SQLite amalgamation + Linux re-validation** (§7.6) | `sqlite-vec` is alpha; stock migrator can't make a `vec0` table | FTS5/BM25 for v1 | High |
 | LLM provider | **OpenAI-compatible** contract + `LLMProvider` protocol; single-provider v1 | swap providers/models via config; pinned/allowlisted `base_url` | native Anthropic adapter later | Med |
@@ -553,25 +559,24 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 | Inc | Title | Done when |
 |---|---|---|
 | **0** | Supervised default-deny Telegram daemon (echo) | Bot echoes an allowlisted DM; un-allowlisted DM refused (default-deny); **startup flock** blocks a second clawd; **409 handled** as a typed loud error; onboarding self-ID echo works; non-text gets "I can't read X yet"; doctor skeleton runs; survives SIGTERM + restart. |
-| **1** | LLM turn (blocking) + persistence | Allowlisted DM gets a real OpenAI-compatible answer, persisted (sessions/messages/runs/usage/audit + **outbox** + **`claimUpdate` ordering**), multi-turn, surviving restart; escaper+splitter (no formatting 400s); **degradation UX**; **USD budget** breaker; context caps. |
-| **2** | Streaming + per-session lane | **SSE → throttled `editMessageText`**; per-session **Task-chaining** lane; a second message queues in order; `/stop` cancels; `/new` resets+detaints; `SecretStore` (no plaintext on disk). |
+| **1** | LLM turn (blocking) + persistence | Allowlisted DM gets a real OpenAI-compatible answer, persisted (sessions/messages/runs/usage/audit + **outbox** + **`claimUpdate` ordering**), multi-turn, surviving restart; **`sendRichMessage` (markdown) + plain `sendMessage` fallback** (no formatting errors); **degradation UX**; **USD budget** breaker; context caps. |
+| **2** | Streaming + per-session lane | **SSE → `sendRichMessageDraft` (streaming rich drafts, finalized via `sendRichMessage`)**; per-session **Task-chaining** lane; a second message queues in order; `/stop` cancels; `/new` resets+detaints; `SecretStore` (no plaintext on disk). |
 | **3** | Memory & workspace + read-only tools | Workspace files injected at the **untrusted tier** (budgeted, caps, flush-before-compact); durable facts on confirm; `memory_items` + **FTS5 recall** across restarts; `/memory`; `web_search`/`web_fetch` + file READ at **`safe`** tier with the **exfil gate**. |
 | **4** | Scheduler & proactive | "Every weekday 07:00 Europe/Berlin…" fires once per occurrence across restarts/DST; **confirm-before-arm**; reduced-privilege runs; clock-gap catch-up cap; delivery via outbox; opt-in heartbeat with quiet hours. |
 | **5** | Write/shell tools + policy + approvals + sandbox | A consequential tool requires explicit approval (**callback auth + ≥128-bit nonce + FSM**); a **forged or third-party callback cannot approve**; untrusted code runs in a per-exec disposable VM (no host FS/network by default); the **enforced lethal-trifecta gate** forces approval on a tainted privileged action. |
 | **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (static SDK, distroless, systemd); **CI Linux build incl. GRDB+FTS5 passes** (the one hard portability gate). |
 
-*(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards; **Telegram Bot API 10.1 rich messages** — `sendRichMessage` / `sendRichMessageDraft` + Markdown→`MessageEntity` converter in `ClawTelegram`, replacing `MarkdownEscaper`; pairs naturally with SSE streaming; see `docs/research/telegram-bot-api-10.1-rich-messages-2026-06-11.md`.)*
+*(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards.)*
 
 ## 21. Open architectural questions
 
 Genuinely-open (decided ones have moved into the body above):
 
-- **HTML vs MarkdownV2 default parse mode** (HTML less 400-prone) — own the splitter either way.
 - **Linux sandbox backend:** Podman+microVM vs gVisor `runsc` (decide before Inc 5).
 - MCP transport on Linux: custom AHC SSE transport vs Stdio-only.
 - Rolling summary vs aggressive compaction + just-in-time retrieval (treat rolling summary as one strategy; keep out-of-window references).
 
-*Resolved and moved into the spec:* supersede-vs-queue (= strict FIFO queue, only `/stop`/`/new` supersede — §5.1); error-on-overflow (= v1 contract — §9.3); memory char-counting (= grapheme `String.count` — §9.4); memory injection tier (= untrusted/labeled, never system — §9.3); confirm-on-write (= the default, with verbatim normalized preview — §9.3).
+*Resolved and moved into the spec:* supersede-vs-queue (= strict FIFO queue, only `/stop`/`/new` supersede — §5.1); error-on-overflow (= v1 contract — §9.3); memory char-counting (= grapheme `String.count` — §9.4); memory injection tier (= untrusted/labeled, never system — §9.3); confirm-on-write (= the default, with verbatim normalized preview — §9.3); HTML-vs-MarkdownV2 parse mode (= moot — the Inc 1 primary path is rich **markdown** via `InputRichMessage`, with plain `sendMessage` as the fallback — §6.4).
 
 ## 22. References
 
