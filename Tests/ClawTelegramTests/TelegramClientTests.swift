@@ -162,12 +162,18 @@ private func client(status: Int, json: String) -> TelegramClient {
     )
 
     // then
-    do {
+    var caught: TelegramError?
+    await #expect {
       _ = try await telegram.getMe()
-      Issue.record("expected a transport error")
-    } catch let TelegramError.transport(message) {
+    } throws: { error in
+      caught = error as? TelegramError
+      return caught != nil
+    }
+    if case .transport(let message) = caught {
       #expect(message.contains("SECRET-123:abc") == false)
       #expect(message.contains("<redacted-token>"))
+    } else {
+      Issue.record("expected .transport, got \(String(describing: caught))")
     }
   }
 }

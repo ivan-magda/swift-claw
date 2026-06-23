@@ -87,11 +87,11 @@ import Testing
     let provider = makeProvider(config: makeConfig(), http: exec)
 
     // then
-    do {
+    await #expect {
       _ = try await provider.complete(request: sampleRequest)
-      Issue.record("expected a terminal error")
-    } catch let ProviderError.terminal(status, _) {
-      #expect(status == 400)
+    } throws: { error in
+      guard case ProviderError.terminal(let status, _) = error else { return false }
+      return status == 400
     }
     let attempts = await exec.recorded.count
     #expect(attempts == 1)
@@ -124,11 +124,11 @@ import Testing
     let provider = makeProvider(config: makeConfig(retryBudget: 3), http: exec)
 
     // then
-    do {
+    await #expect {
       _ = try await provider.complete(request: sampleRequest)
-      Issue.record("expected a retryable error after exhausting the budget")
-    } catch let ProviderError.retryable(status, _) {
-      #expect(status == 500)
+    } throws: { error in
+      guard case ProviderError.retryable(let status, _) = error else { return false }
+      return status == 500
     }
     let attempts = await exec.recorded.count
     #expect(attempts == 3)
@@ -145,12 +145,18 @@ import Testing
     let provider = makeProvider(config: makeConfig(apiKey: apiKey, retryBudget: 3), http: exec)
 
     // then
-    do {
+    var caught: ProviderError?
+    await #expect {
       _ = try await provider.complete(request: sampleRequest)
-      Issue.record("expected a retryable transport error")
-    } catch let ProviderError.retryable(_, message) {
+    } throws: { error in
+      caught = error as? ProviderError
+      return caught != nil
+    }
+    if case .retryable(_, let message) = caught {
       #expect(message.contains(apiKey) == false)
       #expect(message.contains("<redacted-key>"))
+    } else {
+      Issue.record("expected .retryable, got \(String(describing: caught))")
     }
   }
 
