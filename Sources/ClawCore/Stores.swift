@@ -35,12 +35,17 @@ public protocol RunStore: Sendable {
   /// Boot sweep (F22): flip every `RUNNING` row → `FAILED`; for any that delivered nothing,
   /// enqueue a PENDING degradation outbox row and return it for logging.
   func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply]
+  /// Snapshot of run-table health: in-flight count, age of oldest running run, last
+  /// success/failure timestamps, and count of consecutive failures at the head of the table.
+  func runsHealth(now: Date) throws -> RunsHealth
 }
 
 public protocol UsageStore: Sendable {
   func recordUsage(_ usage: ProviderUsage) throws
   /// Running totals over `provider_usage` for the calendar-day-UTC window containing `now` (D4).
   func todayTokensAndCost(now: Date) throws -> (tokens: Int, costUSD: Double)
+  /// Count of `provider_usage` rows per `CostSource` in the calendar-day-UTC window (for doctor).
+  func costSourceMix(now: Date) throws -> [CostSource: Int]
 }
 
 public protocol OutboxStore: Sendable {

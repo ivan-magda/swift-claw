@@ -114,6 +114,55 @@ public struct RunStoreGRDB: RunStore {
     }
   }
 
+  public func runsHealth(now: Date) throws -> RunsHealth {
+    try writer.readMapping { db in
+      let inFlight =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM runs WHERE state = ?",
+          arguments: [RunState.running.rawValue]
+        ) ?? 0
+
+      let oldestRunAgeSeconds: Double? =
+        try Date.fetchOne(
+          db,
+          sql: "SELECT MIN(created_ts) FROM runs WHERE state = ?",
+          arguments: [RunState.running.rawValue]
+        ).map { now.timeIntervalSince($0) }
+
+      let lastFailedAt = try Date.fetchOne(
+        db,
+        sql: "SELECT MAX(updated_ts) FROM runs WHERE state = ?",
+        arguments: [RunState.failed.rawValue]
+      )
+
+      let lastSuccessAt = try Date.fetchOne(
+        db,
+        sql: "SELECT MAX(updated_ts) FROM runs WHERE state = ?",
+        arguments: [RunState.done.rawValue]
+      )
+
+      // Scan the 50 most-recent runs newest-first; count the leading streak of FAILED rows.
+      let recentStates = try String.fetchAll(
+        db,
+        sql: "SELECT state FROM runs ORDER BY id DESC LIMIT 50"
+      )
+      var consecutiveFailures = 0
+      for state in recentStates {
+        guard state == RunState.failed.rawValue else { break }
+        consecutiveFailures += 1
+      }
+
+      return RunsHealth(
+        inFlight: inFlight,
+        oldestRunAgeSeconds: oldestRunAgeSeconds,
+        lastFailedAt: lastFailedAt,
+        lastSuccessAt: lastSuccessAt,
+        consecutiveFailures: consecutiveFailures
+      )
+    }
+  }
+
   static func insertUsage(_ db: Database, _ usage: ProviderUsage) throws {
     try db.execute(
       sql: """

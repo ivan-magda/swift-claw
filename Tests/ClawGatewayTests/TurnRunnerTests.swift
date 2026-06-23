@@ -39,6 +39,15 @@ struct DiskFullRuns: RunStore {
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws {}
   func failRun(runId: Int64, now: Date) throws {}
   func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] { [] }
+  func runsHealth(now: Date) throws -> RunsHealth {
+    RunsHealth(
+      inFlight: 0,
+      oldestRunAgeSeconds: nil,
+      lastFailedAt: nil,
+      lastSuccessAt: nil,
+      consecutiveFailures: 0
+    )
+  }
 }
 
 @Suite struct TurnRunnerTests {

@@ -230,6 +230,28 @@ public struct AuditEvent: Sendable, Equatable {
   }
 }
 
+public struct RunsHealth: Sendable, Equatable {
+  public let inFlight: Int
+  public let oldestRunAgeSeconds: Double?
+  public let lastFailedAt: Date?
+  public let lastSuccessAt: Date?
+  public let consecutiveFailures: Int
+
+  public init(
+    inFlight: Int,
+    oldestRunAgeSeconds: Double?,
+    lastFailedAt: Date?,
+    lastSuccessAt: Date?,
+    consecutiveFailures: Int
+  ) {
+    self.inFlight = inFlight
+    self.oldestRunAgeSeconds = oldestRunAgeSeconds
+    self.lastFailedAt = lastFailedAt
+    self.lastSuccessAt = lastSuccessAt
+    self.consecutiveFailures = consecutiveFailures
+  }
+}
+
 public struct DegradationReply: Sendable, Equatable {
   public let chatId: Int64
   public let runId: Int64

@@ -37,4 +37,26 @@ public struct UsageStoreGRDB: UsageStore {
       return (row["tokens"], row["cost"])
     }
   }
+
+  public func costSourceMix(now: Date) throws -> [CostSource: Int] {
+    let dayStart = now.startOfUTCDay
+    return try writer.readMapping { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT cost_source, COUNT(*) AS n FROM provider_usage WHERE ts >= ?
+          GROUP BY cost_source
+          """,
+        arguments: [dayStart]
+      )
+      var result: [CostSource: Int] = [:]
+      for row in rows {
+        let raw: String = row["cost_source"]
+        if let source = CostSource(rawValue: raw) {
+          result[source] = row["n"]
+        }
+      }
+      return result
+    }
+  }
 }
