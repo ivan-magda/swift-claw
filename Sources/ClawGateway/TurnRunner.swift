@@ -157,6 +157,9 @@ public struct TurnRunner: TurnDispatching {
     decision: String,
     at committedAt: Date
   ) throws {
+    // The `newlyClaimed` result is ignored: the dedup key is `runId:stepIndex`, and each turn gets
+    // a fresh `runId`, so this first chunk always inserts — a `false` here would mean a duplicate
+    // delivery, which can't occur for a brand-new run.
     _ = try outbox.claimOutbound(
       runId: runId,
       stepIndex: 0,
