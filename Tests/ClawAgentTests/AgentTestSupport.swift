@@ -51,6 +51,62 @@ actor HangingProvider: LLMProvider {
   }
 }
 
+/// A one-shot release signal: `complete` blocks on `awaitRelease` until `release` is called once.
+/// Lets a test pin the provider-after-typing ordering that `withTypingAndDeadline` would otherwise
+/// leave to scheduler luck (the source of the historical `typing.calls` flake).
+actor TypingReleaseGate {
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var released = false
+
+  func awaitRelease() async {
+    if released { return }
+    await withCheckedContinuation { continuation in
+      waiters.append(continuation)
+    }
+  }
+
+  func release() {
+    guard !released else { return }
+    released = true
+    for waiter in waiters {
+      waiter.resume()
+    }
+    waiters.removeAll()
+  }
+}
+
+/// A typing indicator that releases `gate` on its first pulse, so a `GatedProvider` cannot answer
+/// before the user has seen "typing…" — making "typing was issued" deterministic.
+actor GatingTyping: TypingIndicator {
+  private(set) var calls = 0
+  private let gate: TypingReleaseGate
+
+  init(gate: TypingReleaseGate) {
+    self.gate = gate
+  }
+
+  func sendTyping(chatId: Int64) async {
+    calls += 1
+    await gate.release()
+  }
+}
+
+/// A provider whose `complete` blocks until `gate` is released (i.e. until typing has fired once).
+actor GatedProvider: LLMProvider {
+  private let gate: TypingReleaseGate
+  private let response: ChatResponse
+
+  init(gate: TypingReleaseGate, response: ChatResponse) {
+    self.gate = gate
+    self.response = response
+  }
+
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    await gate.awaitRelease()
+    return response
+  }
+}
+
 // MARK: - Builders
 
 /// A real sleep honoring the requested duration — the default so an instant provider wins the

@@ -156,4 +156,49 @@ import Testing
     // then
     #expect(config.llm.maxTokensField == .maxTokens)
   }
+
+  @Test func perDayUSDOverrideParses() throws {
+    // given
+    var env = envWithLLM([
+      EnvKey.botToken: "t",
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+    ])
+    env[EnvKey.perDayUSD] = "5"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.budget.perDayUSD == 5)
+  }
+
+  @Test func budgetDefaultsMirrorRunBudgetAndLLM() throws {
+    // given
+    let env = envWithLLM([
+      EnvKey.botToken: "t",
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+    ])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.budget.perDayUSD == RunBudget.default.perDayUSD)
+    #expect(config.budget.maxOutputTokens == config.llm.maxOutputTokens)
+    #expect(config.budget.dayTokenCeilingOverride == nil)
+  }
+
+  @Test func invalidBudgetValueThrows() {
+    // given
+    var env = envWithLLM([
+      EnvKey.botToken: "t",
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+    ])
+    env[EnvKey.perRunUSD] = "-1"
+
+    // when / then
+    #expect(throws: ConfigError.invalidBudget("-1")) {
+      try AppConfig.load(environment: env)
+    }
+  }
 }

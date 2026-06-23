@@ -11,6 +11,7 @@ public struct RunBudget: Sendable, Equatable {
   public let perRunUSD: Double
   public let perDayUSD: Double
   public let referenceUSDPerToken: Double
+  public let dayTokenCeilingOverride: Int?
 
   public init(
     maxInputTokens: Int,
@@ -19,7 +20,8 @@ public struct RunBudget: Sendable, Equatable {
     retryBudget: Int,
     perRunUSD: Double,
     perDayUSD: Double,
-    referenceUSDPerToken: Double
+    referenceUSDPerToken: Double,
+    dayTokenCeilingOverride: Int? = nil
   ) {
     self.maxInputTokens = maxInputTokens
     self.maxOutputTokens = maxOutputTokens
@@ -28,12 +30,16 @@ public struct RunBudget: Sendable, Equatable {
     self.perRunUSD = perRunUSD
     self.perDayUSD = perDayUSD
     self.referenceUSDPerToken = referenceUSDPerToken
+    self.dayTokenCeilingOverride = dayTokenCeilingOverride
   }
 
   /// Hard offline per-day failsafe. With the defaults this is 666_666 — two orders of magnitude
   /// above one run's bound (`maxInputTokens + maxOutputTokens`), so the two never contradict.
   public var dayTokenCeiling: Int {
-    Int((perDayUSD / referenceUSDPerToken).rounded(.down))
+    if let dayTokenCeilingOverride {
+      return dayTokenCeilingOverride
+    }
+    return Int((perDayUSD / referenceUSDPerToken).rounded(.down))
   }
 
   public static let `default` = RunBudget(
@@ -63,18 +69,26 @@ public struct BudgetGate: Sendable {
     self.budget = budget
   }
 
-  /// Deny if the daily USD cap is already met, or if today's tokens plus this run's estimate
-  /// would cross the hard token ceiling. (Task 8 adds the per-run USD gate as a defaulted arg.)
+  /// Deny when any spend bound is met. The offline-guaranteed token failsafe (D1) is checked
+  /// before the best-effort USD caps, so it still trips when no price is known (`estimatedCostUSD`
+  /// defaults to 0).
   public func preflight(
     todayTokens: Int,
     todayUSD: Double,
-    estimatedTotalTokens: Int
+    estimatedTotalTokens: Int,
+    estimatedCostUSD: Double = 0
   ) -> BudgetDecision {
     if todayUSD >= budget.perDayUSD {
-      return .deny(cap: "per-day USD cap")
+      return .deny(cap: "per-day spend")
     }
     if todayTokens + estimatedTotalTokens > budget.dayTokenCeiling {
-      return .deny(cap: "per-day token ceiling")
+      return .deny(cap: "per-day token")
+    }
+    if estimatedCostUSD > budget.perRunUSD {
+      return .deny(cap: "per-run spend")
+    }
+    if todayUSD + estimatedCostUSD > budget.perDayUSD {
+      return .deny(cap: "per-day spend")
     }
     return .allow
   }

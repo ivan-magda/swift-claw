@@ -193,6 +193,7 @@ public enum AuditAction: String, Sendable, Equatable {
   case turnCompleted = "turn_completed"
   case turnDegraded = "turn_degraded"
   case turnBudgetStopped = "turn_budget_stopped"
+  case budgetTripped = "budget_tripped"
 }
 
 public struct AuditEvent: Sendable, Equatable {

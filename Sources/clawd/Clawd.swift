@@ -116,7 +116,7 @@ struct Run: AsyncParsableCommand {
       jitter: { Double.random(in: 0...$0) }
     )
 
-    let budget = RunBudget.default
+    let budget = config.budget
     let costResolver = CostResolver(
       priceTable: PriceFileLoader.load(),
       referenceUSDPerToken: budget.referenceUSDPerToken
@@ -132,6 +132,7 @@ struct Run: AsyncParsableCommand {
     // Created before the TurnRunner so its notifyOutbox closure can capture it: each commit pokes
     // the dispatcher to drain the rows it just enqueued.
     let outboxSignal = OutboxSignal()
+    let breaker = BudgetBreaker(budget: budget)
     let turnRunner = TurnRunner(
       sessionMessages: stores.sessionMessages,
       runs: stores.runs,
@@ -142,6 +143,8 @@ struct Run: AsyncParsableCommand {
       budget: budget,
       systemPrompt: SystemPrompt.minimal,
       notifyOutbox: { outboxSignal.poke() },
+      breaker: breaker,
+      transport: transport,
       logger: logger
     )
     let router = MessageRouter(

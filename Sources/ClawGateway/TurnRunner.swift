@@ -23,6 +23,10 @@ public struct TurnRunner: TurnDispatching {
   private let systemPrompt: String
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until Task 6 wires the dispatcher.
   private let notifyOutbox: @Sendable () -> Void
+  /// Post-commit daily kill-switch + the transport for its owner DM. Both `nil` in tests that don't
+  /// exercise the breaker (the DM is best-effort and out-of-band from the durable outbox, D4).
+  private let breaker: BudgetBreaker?
+  private let transport: (any TelegramTransport)?
   private let logger: Logger
 
   /// Most-recent messages pulled for context; `ContextBuilder` then caps by grapheme budget (§9).
@@ -38,6 +42,8 @@ public struct TurnRunner: TurnDispatching {
     budget: RunBudget,
     systemPrompt: String,
     notifyOutbox: @escaping @Sendable () -> Void,
+    breaker: BudgetBreaker? = nil,
+    transport: (any TelegramTransport)? = nil,
     logger: Logger
   ) {
     self.sessionMessages = sessionMessages
@@ -49,6 +55,8 @@ public struct TurnRunner: TurnDispatching {
     self.budget = budget
     self.systemPrompt = systemPrompt
     self.notifyOutbox = notifyOutbox
+    self.breaker = breaker
+    self.transport = transport
     self.logger = logger
   }
 
@@ -77,7 +85,7 @@ public struct TurnRunner: TurnDispatching {
       todayUSD: todayUSD
     )
 
-    try commit(result, runId: runId, sessionId: sessionId, chatId: chatId)
+    try await commit(result, runId: runId, sessionId: sessionId, chatId: chatId)
   }
 
   // MARK: - Load-bearing
@@ -94,7 +102,7 @@ public struct TurnRunner: TurnDispatching {
     runId: Int64,
     sessionId: Int64,
     chatId: Int64
-  ) throws {
+  ) async throws {
     let committedAt = Date()
 
     switch result {
@@ -118,6 +126,7 @@ public struct TurnRunner: TurnDispatching {
         )
       )
       notifyOutbox()
+      await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
     case .degraded(let degradationKind, let usage):
       if let usage {
         try usageStore.recordUsage(usage)
@@ -132,6 +141,7 @@ public struct TurnRunner: TurnDispatching {
         decision: degradationKind.rawValue,
         at: committedAt
       )
+      await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
     case .budgetStopped(let cap):
       try degradeAndFail(
         runId: runId,
@@ -178,6 +188,35 @@ public struct TurnRunner: TurnDispatching {
       )
     )
     notifyOutbox()
+  }
+
+  /// Post-commit daily kill-switch. Reads today's totals (durable, from `provider_usage`) and asks
+  /// the breaker whether to DM the owner — `shouldNotifyTrip` is idempotent per UTC day, so calling
+  /// this from both the `.completed` and `.degraded` branches still yields at most one DM. The DM and
+  /// its audit are best-effort (`try?`): a failed send is acceptable (D4), unlike a failed refusal.
+  private func notifyDailyCapIfTripped(chatId: Int64, runId: Int64, sessionId: Int64) async {
+    guard let breaker, let transport else { return }
+    // One clock for the read and the latch so they can't straddle a UTC-day boundary.
+    let when = Date()
+    guard let totals = try? usageStore.todayTokensAndCost(now: when) else { return }
+    let shouldNotify = await breaker.shouldNotifyTrip(
+      todayTokens: totals.tokens,
+      todayUSD: totals.costUSD,
+      now: when
+    )
+    guard shouldNotify else { return }
+
+    _ = try? await transport.sendMessage(chatId: chatId, text: Degradation.dailyCapTripped)
+    try? audit.appendAudit(
+      AuditEvent(
+        actor: .system,
+        action: .budgetTripped,
+        decision: "daily_cap",
+        runId: runId,
+        sessionId: sessionId,
+        ts: Date()
+      )
+    )
   }
 
   /// Builds the audit row for a finished turn (actor = assistant, the turn's author).

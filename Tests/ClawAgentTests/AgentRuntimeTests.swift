@@ -39,7 +39,34 @@ struct AgentRuntimeTests {
     let provider = StubProvider(
       .respond(okResponse(content: "Hello there", costFromProvider: 0.0021))
     )
-    let typing = RecordingTyping()
+    let runtime = makeRuntime(provider: provider)
+
+    // when
+    let result = await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      context: [ChatMessage(role: .user, content: "hi")],
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — provider cost wins.
+    let (content, usage) = try requireCompleted(result)
+
+    #expect(content == "Hello there")
+    #expect(usage.costSource == .providerReturned)
+    #expect(usage.costUSD == 0.0021)
+    #expect(usage.isEstimated == false)
+  }
+
+  @Test("a turn issues a typing pulse before the provider answers")
+  func turnIssuesTypingPulseBeforeProviderAnswers() async throws {
+    // given — the provider can't answer until typing has fired at least once (gate-released on the
+    // first pulse), so the ordering is deterministic rather than a scheduler race.
+    let gate = TypingReleaseGate()
+    let typing = GatingTyping(gate: gate)
+    let provider = GatedProvider(gate: gate, response: okResponse())
     let runtime = makeRuntime(provider: provider, typing: typing)
 
     // when
@@ -52,13 +79,8 @@ struct AgentRuntimeTests {
       todayUSD: 0
     )
 
-    // then — provider cost wins; typing was issued at least once.
-    let (content, usage) = try requireCompleted(result)
-
-    #expect(content == "Hello there")
-    #expect(usage.costSource == .providerReturned)
-    #expect(usage.costUSD == 0.0021)
-    #expect(usage.isEstimated == false)
+    // then
+    _ = try requireCompleted(result)
     #expect(await typing.calls >= 1)
   }
 
@@ -111,7 +133,7 @@ struct AgentRuntimeTests {
     )
 
     // then
-    #expect(result == .budgetStopped(cap: "per-day token ceiling"))
+    #expect(result == .budgetStopped(cap: "per-day token"))
     #expect(await provider.calls == 0)
     #expect(await typing.calls == 0)
   }

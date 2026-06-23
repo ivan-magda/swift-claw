@@ -16,7 +16,7 @@ public struct UsageStoreGRDB: UsageStore {
   }
 
   public func todayTokensAndCost(now: Date) throws -> (tokens: Int, costUSD: Double) {
-    let dayStart = Self.startOfUTCDay(now)
+    let dayStart = now.startOfUTCDay
     return try writer.readMapping { db in
       // GRDB stores Date as a UTC "yyyy-MM-dd HH:mm:ss.SSS" string, so `ts >= ?` is a correct
       // chronological range scan over the calendar-day-UTC window.
@@ -36,11 +36,5 @@ public struct UsageStoreGRDB: UsageStore {
 
       return (row["tokens"], row["cost"])
     }
-  }
-
-  static func startOfUTCDay(_ now: Date) -> Date {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
-    return calendar.startOfDay(for: now)
   }
 }

@@ -15,6 +15,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case missingLLMModel
   case invalidMaxTokensField(String)
   case invalidMaxTokens(String)
+  case invalidBudget(String)
 
   public var exitCode: Int32 {
     switch self {
@@ -25,6 +26,7 @@ public enum ConfigError: Error, Sendable, Equatable {
     case .missingLLMModel: ClawExitCode.configInvalid.rawValue
     case .invalidMaxTokensField: ClawExitCode.configInvalid.rawValue
     case .invalidMaxTokens: ClawExitCode.configInvalid.rawValue
+    case .invalidBudget: ClawExitCode.configInvalid.rawValue
     }
   }
 }

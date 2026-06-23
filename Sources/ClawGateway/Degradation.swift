@@ -14,10 +14,14 @@ public enum Degradation {
   public static let storageFull =
     "Storage is full, so I can't save messages. Please free up disk space."
 
-  /// The spend-breaker reply; `cap` names the tripped limit (e.g. "per-run" / "daily").
+  /// The spend-breaker reply; `cap` names the tripped limit (e.g. "per-run spend" / "per-day token").
   public static func budget(cap: String) -> String {
     "I stopped because I hit the \(cap) cap."
   }
+
+  /// The once-per-UTC-day owner DM fired by the post-commit kill-switch (`BudgetBreaker`).
+  public static let dailyCapTripped =
+    "Heads up — the daily spend cap was reached, so I've paused new requests until the next UTC day."
 
   /// Maps a runtime degradation classification to its owner-facing reply. Exhaustive over
   /// `DegradationKind`, so a new failure mode forces a deliberate copy decision here.

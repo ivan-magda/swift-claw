@@ -28,13 +28,13 @@ struct RunBudgetTests {
       todayTokens: 666_000,
       todayUSD: 0,
       estimatedTotalTokens: 5_000,
-      expectedCap: "per-day token ceiling"
+      expectedCap: "per-day token"
     ),
     DenyCase(
       todayTokens: 0,
       todayUSD: 10.0,
       estimatedTotalTokens: 100,
-      expectedCap: "per-day USD cap"
+      expectedCap: "per-day spend"
     ),
   ]
 
@@ -52,6 +52,23 @@ struct RunBudgetTests {
 
     // then
     #expect(decision == .deny(cap: testCase.expectedCap))
+  }
+
+  @Test("preflight denies when this run's estimated cost exceeds the per-run cap")
+  func preflightDeniesWhenEstimatedRunCostExceedsPerRunCap() {
+    // given
+    let gate = BudgetGate(budget: .default)
+
+    // when
+    let decision = gate.preflight(
+      todayTokens: 0,
+      todayUSD: 0,
+      estimatedTotalTokens: 5_000,
+      estimatedCostUSD: 0.60
+    )
+
+    // then
+    #expect(decision == .deny(cap: "per-run spend"))
   }
 
   @Test("preflight allows a fresh day")
