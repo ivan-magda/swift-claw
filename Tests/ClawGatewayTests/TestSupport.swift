@@ -22,12 +22,17 @@ actor FakeTurnRunner: TurnDispatching {
 /// that resume exactly when an event lands — no polling or timeouts, so tests stay parallel-safe.
 actor RecordingTransport: TelegramTransport {
   private(set) var sent: [(chatId: Int64, text: String)] = []
+  private(set) var richSends: [(chatId: Int64, markdown: String)] = []
   private(set) var sendAttempts = 0
   private(set) var pollCount = 0
   private var batches: [[RawUpdate]]
   private let onExhausted: TelegramError?
   private let sendError: TelegramError?
+  private let richError: TelegramError?
+  /// Fails the rich send whose `sendAttempts` index equals this, and poisons that row's plain
+  /// fallback too — so the whole delivery fails, modeling a genuinely undeliverable row mid-batch.
   private let failSendAtAttempt: Int?
+  private var failPlainFallbackNext = false
 
   private enum Event { case sent, attempt, poll }
 
@@ -38,11 +43,13 @@ actor RecordingTransport: TelegramTransport {
     batches: [[RawUpdate]] = [],
     throwAfterExhaustion: TelegramError? = nil,
     sendError: TelegramError? = nil,
+    richError: TelegramError? = nil,
     failSendAtAttempt: Int? = nil
   ) {
     self.batches = batches
     self.onExhausted = throwAfterExhaustion
     self.sendError = sendError
+    self.richError = richError
     self.failSendAtAttempt = failSendAtAttempt
   }
 
@@ -69,15 +76,33 @@ actor RecordingTransport: TelegramTransport {
     sendAttempts += 1
     resumeWaiters(.attempt, reached: sendAttempts)
     if let sendError {
-      throw sendError  // simulate a transient send failure
+      throw sendError  // simulate a transient send failure (direct canned reply, or rich fallback)
     }
-    if sendAttempts == failSendAtAttempt {
-      throw TelegramError.transport("down")  // fail one send mid-batch, succeed on the rest
+    if failPlainFallbackNext {
+      failPlainFallbackNext = false
+      throw TelegramError.transport("plain fallback down")  // this row is undeliverable mid-batch
     }
     sent.append((chatId, text))
-    resumeWaiters(.sent, reached: sent.count)
+    resumeWaiters(.sent, reached: sent.count + richSends.count)
     return Int64(sendAttempts)
   }
+
+  func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 {
+    sendAttempts += 1
+    resumeWaiters(.attempt, reached: sendAttempts)
+    if let richError {
+      throw richError  // simulate a rich-send failure so the dispatcher falls back to plain
+    }
+    if sendAttempts == failSendAtAttempt {
+      failPlainFallbackNext = true  // the dispatcher's plain retry for THIS row must also fail
+      throw TelegramError.transport("rich down")
+    }
+    richSends.append((chatId, markdown))
+    resumeWaiters(.sent, reached: sent.count + richSends.count)
+    return Int64(sendAttempts)
+  }
+
+  func sendChatAction(chatId: Int64, action: String) async throws {}
 
   /// Suspends until at least `threshold` messages have been recorded as sent.
   func waitForSends(atLeast threshold: Int) async {

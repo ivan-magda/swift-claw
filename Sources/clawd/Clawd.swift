@@ -25,10 +25,6 @@ private enum StateFile {
   static let lock = "clawd.lock"
 }
 
-struct NoopTypingIndicator: TypingIndicator {
-  func sendTyping(chatId: Int64) async {}
-}
-
 /// Loads config from the process environment, printing a diagnostic and exiting with the
 /// error's distinct code so the supervisor backs off instead of hot-looping.
 private func loadConfigOrExit() throws -> AppConfig {
@@ -127,7 +123,7 @@ struct Run: AsyncParsableCommand {
     )
     let agent = AgentRuntime(
       provider: provider,
-      typingIndicator: NoopTypingIndicator(),
+      typingIndicator: TelegramTypingIndicator(transport: transport),
       costResolver: costResolver,
       budget: budget,
       model: config.llm.model,

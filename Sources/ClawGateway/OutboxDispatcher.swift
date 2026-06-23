@@ -32,8 +32,8 @@ public struct OutboxSignal: Sendable {
 /// Drains `PENDING` `outbound_deliveries` rows and delivers each at-least-once, recording the
 /// returned `telegram_message_id` on success (§6.4). It drains once on boot — recovering rows a
 /// prior run committed but never sent (a crash between commit and send) — then again on every poke
-/// the `TurnRunner` fires after a commit. Delivery is plain `sendMessage` for Inc 1; Task 7 upgrades
-/// `send(_:)` to `sendRichMessage` with a plain fallback.
+/// the `TurnRunner` fires after a commit. Delivery is `sendRichMessage` with a plain `sendMessage`
+/// fallback on any rich-send error (§6.4 / F8).
 public struct OutboxDispatcher: Service {
   private let outbox: any OutboxStore
   private let transport: any TelegramTransport
@@ -121,9 +121,19 @@ public struct OutboxDispatcher: Service {
     }
   }
 
-  /// Delivers one row. Plain `sendMessage` for Inc 1; Task 7 swaps in `sendRichMessage` + fallback.
-  /// Returns the Telegram `message_id` so the caller can record it via `markSent`.
+  /// Delivers one row, returning the Telegram `message_id` so the caller can record it via `markSent`.
+  ///
+  /// Sends the payload as rich markdown; on **any** rich-send error it re-sends the same payload as
+  /// plain `sendMessage` so a malformed-markdown reply still lands (F8, "no formatting errors"). A
+  /// failure of the plain fallback itself propagates — the row stays PENDING for the next drain.
   private func send(_ row: OutboxRow) async throws -> Int64 {
-    try await transport.sendMessage(chatId: row.chatId, text: row.payload)
+    do {
+      return try await transport.sendRichMessage(chatId: row.chatId, markdown: row.payload)
+    } catch {
+      logger.warning(
+        "rich send failed for run \(row.runId) step \(row.stepIndex), falling back to plain: \(error)"
+      )
+      return try await transport.sendMessage(chatId: row.chatId, text: row.payload)
+    }
   }
 }

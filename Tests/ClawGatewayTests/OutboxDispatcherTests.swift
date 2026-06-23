@@ -93,16 +93,19 @@ private struct MarkSentFailingOutbox: OutboxStore {
     // when
     await dispatcher.drainOnce()
 
-    // then — the row was delivered and is no longer PENDING
-    #expect(await transport.sent.first?.text == "hello")
+    // then — the row was delivered (via the rich path) and is no longer PENDING
+    #expect(await transport.richSends.first?.markdown == "hello")
     #expect(try fixture.outbox.pendingOutbound().isEmpty)
   }
 
   @Test func sendFailureLeavesRowPendingForRetry() async throws {
-    // given — the transport fails every send
+    // given — the transport fails every send: rich and the plain fallback both error out
     let fixture = try makeFixture()
     try seedPending(fixture, payload: "hello")
-    let transport = RecordingTransport(sendError: .transport("down"))
+    let transport = RecordingTransport(
+      sendError: .transport("down"),
+      richError: .transport("down")
+    )
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
       transport: transport,
@@ -138,7 +141,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
     task.cancel()
 
     // then
-    #expect(await transport.sent.contains { $0.text == "recovered" })
+    #expect(await transport.richSends.contains { $0.markdown == "recovered" })
   }
 
   @Test func midBatchSendFailureStopsAndLeavesLaterRowsPendingInOrder() async throws {
@@ -160,8 +163,8 @@ private struct MarkSentFailingOutbox: OutboxStore {
 
     // then — only the first chunk went out; the failed chunk and the one after it stay PENDING in
     // order, never sent ahead (the break preserves multi-chunk delivery order)
-    let sentTexts = await transport.sent.map { $0.text }
-    #expect(sentTexts == ["first"])
+    let deliveredMarkdown = await transport.richSends.map { $0.markdown }
+    #expect(deliveredMarkdown == ["first"])
     let pendingPayloads = try fixture.outbox.pendingOutbound().map(\.payload)
     #expect(pendingPayloads == ["second", "third"])
   }
@@ -183,8 +186,8 @@ private struct MarkSentFailingOutbox: OutboxStore {
 
     // then — it was delivered, but stays PENDING and re-sends next drain (accepted at-least-once
     // duplicate)
-    let sentTexts = await transport.sent.map { $0.text }
-    #expect(sentTexts == ["hello"])
+    let deliveredMarkdown = await transport.richSends.map { $0.markdown }
+    #expect(deliveredMarkdown == ["hello"])
     #expect(try fixture.outbox.pendingOutbound().count == 1)
   }
 }

@@ -62,6 +62,12 @@ struct TMessage: Decodable {
   }
 }
 
+/// The rich-content payload of `sendRichMessage` (Bot API 10.1). Telegram accepts exactly one of
+/// `markdown`/`html`; we only ever send `markdown` (rendered server-side, no escaper/converter).
+struct InputRichMessage: Encodable {
+  let markdown: String
+}
+
 struct TUpdate: Decodable {
   let update_id: Int64
   let message: TMessage?
