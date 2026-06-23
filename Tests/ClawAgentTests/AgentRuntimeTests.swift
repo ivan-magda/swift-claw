@@ -3,6 +3,34 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
+// MARK: - Unwrap helpers
+
+private func requireCompleted(
+  _ result: TurnResult
+) throws -> (content: String, usage: ProviderUsage) {
+  guard case .completed(let content, let usage) = result else {
+    struct Mismatch: Error, CustomStringConvertible {
+      let result: TurnResult
+      var description: String { "expected TurnResult.completed, got \(result)" }
+    }
+    throw Mismatch(result: result)
+  }
+  return (content, usage)
+}
+
+private func requireDegraded(
+  _ result: TurnResult
+) throws -> (kind: DegradationKind, usage: ProviderUsage?) {
+  guard case .degraded(let kind, let usage) = result else {
+    struct Mismatch: Error, CustomStringConvertible {
+      let result: TurnResult
+      var description: String { "expected TurnResult.degraded, got \(result)" }
+    }
+    throw Mismatch(result: result)
+  }
+  return (kind, usage)
+}
+
 @Suite("AgentRuntime")
 struct AgentRuntimeTests {
   @Test("a completed turn returns the content and the provider-reconciled usage")
@@ -25,10 +53,7 @@ struct AgentRuntimeTests {
     )
 
     // then — provider cost wins; typing was issued at least once.
-    guard case .completed(let content, let usage) = result else {
-      Issue.record("expected .completed, got \(result)")
-      return
-    }
+    let (content, usage) = try requireCompleted(result)
 
     #expect(content == "Hello there")
     #expect(usage.costSource == .providerReturned)
@@ -59,10 +84,7 @@ struct AgentRuntimeTests {
     )
 
     // then
-    guard case .degraded(let kind, let usage) = result else {
-      Issue.record("expected .degraded, got \(result)")
-      return
-    }
+    let (kind, usage) = try requireDegraded(result)
 
     #expect(kind == .outputTruncated)
     let recorded = try #require(usage)
@@ -131,10 +153,7 @@ struct AgentRuntimeTests {
     )
 
     // then — unlike a terminal error, a flapping provider is debited the pre-call estimate.
-    guard case .degraded(let kind, let usage) = result else {
-      Issue.record("expected .degraded, got \(result)")
-      return
-    }
+    let (kind, usage) = try requireDegraded(result)
 
     #expect(kind == .providerUnavailable)
     let recorded = try #require(usage)
@@ -159,10 +178,7 @@ struct AgentRuntimeTests {
     )
 
     // then — an estimated row: input estimate for "hello world" (4) + the reserved output cap.
-    guard case .degraded(let kind, let usage) = result else {
-      Issue.record("expected .degraded, got \(result)")
-      return
-    }
+    let (kind, usage) = try requireDegraded(result)
 
     #expect(kind == .providerUnavailable)
     let recorded = try #require(usage)
