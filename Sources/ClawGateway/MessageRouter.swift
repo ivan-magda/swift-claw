@@ -150,7 +150,7 @@ public struct MessageRouter: Sendable {
     }
 
     do {
-      try await transport.sendMessage(chatId: chatId, text: text)
+      _ = try await transport.sendMessage(chatId: chatId, text: text)
     } catch {
       logger.error("send failed for update \(rawUpdate.updateId): \(error)")
       return .transientFailure
@@ -163,7 +163,7 @@ public struct MessageRouter: Sendable {
   /// network) and the signal for the poller to back off without advancing the offset (F23).
   private func storageFull(chatId: Int64) async -> HandleOutcome {
     do {
-      try await transport.sendMessage(chatId: chatId, text: Degradation.storageFull)
+      _ = try await transport.sendMessage(chatId: chatId, text: Degradation.storageFull)
     } catch {
       logger.error("failed to send storage-full notice: \(error)")
     }

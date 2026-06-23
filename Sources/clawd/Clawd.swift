@@ -133,6 +133,9 @@ struct Run: AsyncParsableCommand {
       model: config.llm.model,
       sleep: { try await Task.sleep(for: $0) }
     )
+    // Created before the TurnRunner so its notifyOutbox closure can capture it: each commit pokes
+    // the dispatcher to drain the rows it just enqueued.
+    let outboxSignal = OutboxSignal()
     let turnRunner = TurnRunner(
       sessionMessages: stores.sessionMessages,
       runs: stores.runs,
@@ -142,7 +145,7 @@ struct Run: AsyncParsableCommand {
       agent: agent,
       budget: budget,
       systemPrompt: SystemPrompt.minimal,
-      notifyOutbox: {},
+      notifyOutbox: { outboxSignal.poke() },
       logger: logger
     )
     let router = MessageRouter(
@@ -160,7 +163,13 @@ struct Run: AsyncParsableCommand {
       pollTimeout: config.pollTimeoutSeconds,
       logger: logger
     )
-    return Daemon(services: [poller], logger: logger)
+    let dispatcher = OutboxDispatcher(
+      outbox: stores.outbox,
+      transport: transport,
+      signal: outboxSignal,
+      logger: logger
+    )
+    return Daemon(services: [poller, dispatcher], logger: logger)
   }
 }
 

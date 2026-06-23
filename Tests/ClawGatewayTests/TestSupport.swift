@@ -27,6 +27,7 @@ actor RecordingTransport: TelegramTransport {
   private var batches: [[RawUpdate]]
   private let onExhausted: TelegramError?
   private let sendError: TelegramError?
+  private let failSendAtAttempt: Int?
 
   private enum Event { case sent, attempt, poll }
 
@@ -36,11 +37,13 @@ actor RecordingTransport: TelegramTransport {
   init(
     batches: [[RawUpdate]] = [],
     throwAfterExhaustion: TelegramError? = nil,
-    sendError: TelegramError? = nil
+    sendError: TelegramError? = nil,
+    failSendAtAttempt: Int? = nil
   ) {
     self.batches = batches
     self.onExhausted = throwAfterExhaustion
     self.sendError = sendError
+    self.failSendAtAttempt = failSendAtAttempt
   }
 
   func getMe() async throws -> BotIdentity { BotIdentity(id: 1, username: "claw_bot") }
@@ -62,14 +65,18 @@ actor RecordingTransport: TelegramTransport {
     return batches.removeFirst()
   }
 
-  func sendMessage(chatId: Int64, text: String) async throws {
+  func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
     sendAttempts += 1
     resumeWaiters(.attempt, reached: sendAttempts)
     if let sendError {
       throw sendError  // simulate a transient send failure
     }
+    if sendAttempts == failSendAtAttempt {
+      throw TelegramError.transport("down")  // fail one send mid-batch, succeed on the rest
+    }
     sent.append((chatId, text))
     resumeWaiters(.sent, reached: sent.count)
+    return Int64(sendAttempts)
   }
 
   /// Suspends until at least `threshold` messages have been recorded as sent.

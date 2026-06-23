@@ -6,5 +6,7 @@ public protocol TelegramTransport: Sendable {
     timeout: Int,
     allowedUpdates: [String]
   ) async throws -> [RawUpdate]
-  func sendMessage(chatId: Int64, text: String) async throws
+  /// Returns the `message_id` Telegram assigned to the sent message — the outbox dispatcher records
+  /// it against the delivered row (§6.4) so a redelivered row maps back to a known sent message.
+  func sendMessage(chatId: Int64, text: String) async throws -> Int64
 }
