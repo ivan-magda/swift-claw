@@ -1,6 +1,22 @@
 import ClawCore
 import Foundation
 
+@testable import ClawGateway
+
+/// Records the turns the router dispatches (and optionally throws a scripted error) so router/poller
+/// tests stay decoupled from the real provider/persistence.
+actor FakeTurnRunner: TurnDispatching {
+  private(set) var calls: [(sessionId: Int64, chatId: Int64)] = []
+  private let error: (any Error)?
+
+  init(error: (any Error)? = nil) { self.error = error }
+
+  func run(sessionId: Int64, chatId: Int64) async throws {
+    calls.append((sessionId, chatId))
+    if let error { throw error }
+  }
+}
+
 /// Records outbound sends and scripts getUpdates batches/errors for poller tests. Exposes
 /// deterministic, continuation-based wait points (`waitForSends`/`waitForAttempts`/`waitForPolls`)
 /// that resume exactly when an event lands — no polling or timeouts, so tests stay parallel-safe.

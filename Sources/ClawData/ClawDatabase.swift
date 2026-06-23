@@ -98,7 +98,7 @@ public enum ClawDatabase {
         table.column("chat_id", .integer).notNull()
         // Deterministic dedup key = "run_id:step_index" (NOT a UUID/wall-clock).
         table.column("dedup_key", .text).notNull().unique()
-        // the markdown to (re-)send; outbox is self-contained
+        // the markdown to (re-)send
         table.column("payload", .text).notNull()
         table.column("payload_hash", .text).notNull()
         table.column("telegram_message_id", .integer)
@@ -122,9 +122,48 @@ public enum ClawDatabase {
     return migrator
   }
 
-  /// Maps a raw GRDB/SQLite error to `StoreError.diskFull` when the primary result code is
-  /// `SQLITE_FULL` — the gateway reacts to a full disk with a long backoff (F23).
-  public static func isDiskFullError(_ error: any Error) -> Bool {
-    (error as? DatabaseError)?.resultCode.primaryResultCode == .SQLITE_FULL
+  /// Translates a raw GRDB/SQLite failure into a domain `StoreError` at the persistence seam, or
+  /// returns it unchanged when it carries no domain meaning. This is the single place SQLite codes
+  /// become typed errors (F23): extend the `switch` to classify a new failure mode and every
+  /// `writeMapping`/`readMapping` call site picks it up with no call-site change. Matching on the
+  /// *primary* result code coarsely buckets the extended codes (`SQLITE_IOERR_*`, `SQLITE_BUSY_*`);
+  /// a `switch` (not a lookup table) keeps special-casing an extended code possible later.
+  public static func classifyError(_ error: any Error) -> any Error {
+    guard let databaseError = error as? DatabaseError else {
+      return error
+    }
+
+    switch databaseError.resultCode.primaryResultCode {
+    case .SQLITE_FULL:
+      return StoreError.diskFull
+    default:
+      return error
+    }
+  }
+}
+
+extension DatabaseReader {
+  /// A store read whose GRDB failures are translated to domain `StoreError`s at the seam, so a raw
+  /// `DatabaseError` never leaks past the store boundary. Drop-in for `read` — same call-site
+  /// shape, no nesting. `DatabaseWriter` refines `DatabaseReader`, so writers inherit this too.
+  func readMapping<Value>(_ value: (Database) throws -> Value) throws -> Value {
+    do {
+      return try read(value)
+    } catch {
+      throw ClawDatabase.classifyError(error)
+    }
+  }
+}
+
+extension DatabaseWriter {
+  /// A store write whose GRDB failures are translated to domain `StoreError`s at the seam (e.g. a
+  /// full disk → `StoreError.diskFull`, F23). Drop-in for `write` — same call-site shape, no
+  /// nesting; a new turn-path write gets domain-error handling just by choosing this method.
+  func writeMapping<Value>(_ updates: (Database) throws -> Value) throws -> Value {
+    do {
+      return try write(updates)
+    } catch {
+      throw ClawDatabase.classifyError(error)
+    }
   }
 }

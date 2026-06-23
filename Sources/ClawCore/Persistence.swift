@@ -176,9 +176,28 @@ public struct AssistantTurn: Sendable, Equatable {
   }
 }
 
+/// Who an audit event is attributed to. A small closed set so the audit trail can't record a
+/// typo'd actor; persisted via `rawValue` at the store seam.
+public enum AuditActor: String, Sendable, Equatable {
+  case owner
+  case assistant
+  case system
+}
+
+/// The category of an audit event (the specific tool/reason rides in `tool`/`decision`, not here).
+/// Closed by design: a controlled vocabulary makes the audit log queryable and typo-proof. Add a
+/// case when a new kind of event needs recording.
+public enum AuditAction: String, Sendable, Equatable {
+  case messageIn = "message_in"
+  case toolCall = "tool_call"
+  case turnCompleted = "turn_completed"
+  case turnDegraded = "turn_degraded"
+  case turnBudgetStopped = "turn_budget_stopped"
+}
+
 public struct AuditEvent: Sendable, Equatable {
-  public let actor: String
-  public let action: String
+  public let actor: AuditActor
+  public let action: AuditAction
   public let tool: String?
   public let argsRedacted: String
   public let resultSize: Int
@@ -188,8 +207,8 @@ public struct AuditEvent: Sendable, Equatable {
   public let ts: Date
 
   public init(
-    actor: String,
-    action: String,
+    actor: AuditActor,
+    action: AuditAction,
     tool: String? = nil,
     argsRedacted: String = "",
     resultSize: Int = 0,

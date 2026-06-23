@@ -10,7 +10,7 @@ public struct AuditLogGRDB: AuditLog {
   }
 
   public func appendAudit(_ event: AuditEvent) throws {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try db.execute(
         sql: """
           INSERT INTO audit_events(ts, actor, action, tool, args_redacted, result_size, decision, run_id, session_id)
@@ -18,8 +18,8 @@ public struct AuditLogGRDB: AuditLog {
           """,
         arguments: [
           event.ts,
-          event.actor,
-          event.action,
+          event.actor.rawValue,
+          event.action.rawValue,
           event.tool,
           event.argsRedacted,
           event.resultSize,

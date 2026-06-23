@@ -21,6 +21,7 @@ public struct TelegramPollerService: Service {
     static let transientFailure = Duration.seconds(2)
     static let conflict = Duration.seconds(10)
     static let otherError = Duration.seconds(3)
+    static let storageFull = Duration.seconds(60)
   }
 
   public init(
@@ -59,6 +60,14 @@ public struct TelegramPollerService: Service {
                 "transient failure on update \(rawUpdate.updateId); re-polling, not advancing"
               )
               try? await Task.sleep(for: Backoff.transientFailure)
+              break batch
+            case .storageFull:
+              // Disk full: the user already got the notice. Back off long and don't advance, so we
+              // re-poll once there's room rather than acking an update we couldn't durably handle.
+              logger.error(
+                "storage full on update \(rawUpdate.updateId); backing off, not advancing"
+              )
+              try? await Task.sleep(for: Backoff.storageFull)
               break batch
             }
           }

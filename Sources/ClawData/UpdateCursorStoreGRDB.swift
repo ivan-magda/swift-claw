@@ -10,7 +10,7 @@ public struct UpdateCursorStoreGRDB: UpdateCursorStore {
   }
 
   public func loadCursor() throws -> Int64? {
-    try writer.read { db in
+    try writer.readMapping { db in
       try Int64.fetchOne(
         db,
         sql: "SELECT last_update_id FROM update_cursor WHERE id = 0"
@@ -19,7 +19,7 @@ public struct UpdateCursorStoreGRDB: UpdateCursorStore {
   }
 
   public func advanceCursor(to updateId: Int64) throws {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try db.execute(
         sql: """
           INSERT INTO update_cursor(id, last_update_id) VALUES (0, ?)

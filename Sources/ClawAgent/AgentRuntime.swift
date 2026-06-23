@@ -1,8 +1,9 @@
 import ClawCore
 import Foundation
 
-/// Why a turn produced no usable answer. Maps to a plain-language degradation reply (§7).
-public enum DegradationKind: Sendable, Equatable {
+/// Why a turn produced no usable answer. Maps to a plain-language degradation reply (§7); the
+/// stable `rawValue` is what the audit log records, so it survives case renames.
+public enum DegradationKind: String, Sendable, Equatable {
   case providerUnavailable
   case outputTruncated
 }

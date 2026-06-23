@@ -11,6 +11,7 @@ import Testing
     let poller: TelegramPollerService
     let transport: RecordingTransport
     let cursor: UpdateCursorStoreGRDB
+    let dispatcher: FakeTurnRunner
   }
 
   private func makeStack(
@@ -30,10 +31,13 @@ import Testing
       throwAfterExhaustion: throwOnGetUpdates,
       sendError: sendError
     )
+    let dispatcher = FakeTurnRunner()
     let router = MessageRouter(
-      updateStore: ProcessedUpdateStoreGRDB(writer: queue),
+      processed: ProcessedUpdateStoreGRDB(writer: queue),
+      sessionMessages: SessionMessageStoreGRDB(writer: queue),
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
+      turnRunner: dispatcher,
       logger: Logger(label: "test")
     )
     let cursor = UpdateCursorStoreGRDB(writer: queue)
@@ -46,7 +50,7 @@ import Testing
       logger: Logger(label: "test")
     )
 
-    return Stack(poller: poller, transport: transport, cursor: cursor)
+    return Stack(poller: poller, transport: transport, cursor: cursor, dispatcher: dispatcher)
   }
 
   @Test func processesABatchAndAdvancesCursor() async throws {
@@ -56,15 +60,14 @@ import Testing
       allowed: [42]
     )
 
-    // when — once the echo is sent and the loop stops, the synchronous advance has already run
+    // when — the batch (turn dispatch + synchronous advance) completes before the next poll begins
     let task = Task { try await stack.poller.run() }
-    await stack.transport.waitForSends(atLeast: 1)
+    await stack.transport.waitForPolls(atLeast: 2)
     task.cancel()
     try await task.value
 
     // then
-    let sent = await stack.transport.sent
-    #expect(sent.first?.text == "You said: hi")
+    #expect(await stack.dispatcher.calls.count == 1)  // the turn was dispatched
     #expect(try stack.cursor.loadCursor() == 100)  // advanced LAST
   }
 
@@ -98,9 +101,10 @@ import Testing
 
   @Test func transientSendFailureDoesNotAdvanceCursor() async throws {
     // given — a transient send failure must not advance the offset, else the update is acked
-    // to Telegram and the owner's message is silently lost.
+    // to Telegram and the reply is silently lost. An unauthorized sender takes the canned-reply
+    // path, whose direct send is what fails here (the turn path has no direct send to fail).
     let stack = try makeStack(
-      batches: [[textUpdate(id: 100, from: 42, text: "hi")]],
+      batches: [[textUpdate(id: 100, from: 7, text: "hi")]],
       allowed: [42],
       sendError: .transport("network down")
     )

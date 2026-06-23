@@ -10,7 +10,7 @@ public struct ProcessedUpdateStoreGRDB: ProcessedUpdateStore {
   }
 
   public func claimUpdate(updateId: Int64) throws -> Bool {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try Self.claimUpdate(db: db, updateId: updateId, claimedAt: Date())
     }
   }

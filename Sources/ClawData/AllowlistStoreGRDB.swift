@@ -10,7 +10,7 @@ public struct AllowlistStoreGRDB: AllowlistStore {
   }
 
   public func seedAllowlist(userIds: [Int64]) throws {
-    try writer.write { db in
+    try writer.writeMapping { db in
       for userId in userIds {
         try db.execute(
           sql: "INSERT OR IGNORE INTO allowlist(user_id, added_at) VALUES (?, ?)",
@@ -21,7 +21,7 @@ public struct AllowlistStoreGRDB: AllowlistStore {
   }
 
   public func allowlistContains(userId: Int64) throws -> Bool {
-    try writer.read { db in
+    try writer.readMapping { db in
       try Bool.fetchOne(
         db,
         sql: "SELECT EXISTS(SELECT 1 FROM allowlist WHERE user_id = ?)",
@@ -31,7 +31,7 @@ public struct AllowlistStoreGRDB: AllowlistStore {
   }
 
   public func allowlistCount() throws -> Int {
-    try writer.read { db in
+    try writer.readMapping { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM allowlist") ?? 0
     }
   }

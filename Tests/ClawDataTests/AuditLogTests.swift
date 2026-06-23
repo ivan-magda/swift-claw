@@ -13,8 +13,8 @@ import Testing
     let log = AuditLogGRDB(writer: queue)
     let when = Date(timeIntervalSince1970: 1_700_000_000)
     let event = AuditEvent(
-      actor: "owner",
-      action: "tool_call",
+      actor: .owner,
+      action: .toolCall,
       tool: "web.fetch",
       argsRedacted: "{\"url\":\"<redacted>\"}",
       resultSize: 4096,
@@ -65,8 +65,8 @@ import Testing
     try ClawDatabase.migrate(queue)
     let log = AuditLogGRDB(writer: queue)
     let event = AuditEvent(
-      actor: "owner",
-      action: "message_in",
+      actor: .owner,
+      action: .messageIn,
       ts: Date(timeIntervalSince1970: 1_700_000_000)
     )
 

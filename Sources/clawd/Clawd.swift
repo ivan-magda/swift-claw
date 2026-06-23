@@ -1,8 +1,10 @@
 import ArgumentParser
 import AsyncHTTPClient
+import ClawAgent
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawLLM
 import ClawTelegram
 import Foundation
 import Logging
@@ -21,6 +23,10 @@ struct Clawd: AsyncParsableCommand {
 private enum StateFile {
   static let database = "claw.sqlite"
   static let lock = "clawd.lock"
+}
+
+struct NoopTypingIndicator: TypingIndicator {
+  func sendTyping(chatId: Int64) async {}
 }
 
 /// Loads config from the process environment, printing a diagnostic and exiting with the
@@ -71,29 +77,22 @@ struct Run: AsyncParsableCommand {
       logger.error("failed to seed allowlist: \(error)")
     }
 
-    let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-    let transport = TelegramClient(
-      token: config.botToken,
-      http: AsyncHTTPExecutor(client: httpClient)
-    )
+    // Shared HTTP client for both Telegram and the LLM; gzip decompression is a client-wide toggle
+    // (the executor only advertises `accept-encoding`), so it's configured here at the root.
+    var httpConfig = HTTPClient.Configuration()
+    httpConfig.decompression = .enabled(limit: .size(16 * 1024 * 1024))
+    let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: httpConfig)
+    let executor = AsyncHTTPExecutor(client: httpClient)
 
-    let daemon = Daemon(
-      transport: transport,
-      processed: stores.processed,
-      allowlist: stores.allowlist,
-      cursor: stores.cursor,
-      pollTimeout: config.pollTimeoutSeconds,
-      logger: logger
-    )
+    let daemon = makeDaemon(config: config, stores: stores, executor: executor, logger: logger)
 
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
     var runFailure: Error?
     do {
       try await daemon.run()
     } catch {
-      // A graceful shutdown returns without throwing; a thrown error means a service failed
-      // unexpectedly. Re-raise it after cleanup so the process exits non-zero and the
-      // supervisor restarts us (a clean stop still returns 0).
+      // A graceful shutdown returns without throwing; an error here means a service failed
+      // unexpectedly. Re-raise after cleanup so the supervisor restarts the process.
       runFailure = error
       logger.error("daemon exited with error: \(error)")
     }
@@ -103,6 +102,65 @@ struct Run: AsyncParsableCommand {
       throw runFailure
     }
     logger.info("clawd stopped")
+  }
+
+  /// Builds the service graph: the OpenAI-compatible provider + agent feed a `TurnRunner`, which
+  /// the router dispatches from the poller. Both Telegram and the LLM share the injected executor.
+  private func makeDaemon(
+    config: AppConfig,
+    stores: ClawStores,
+    executor: AsyncHTTPExecutor,
+    logger: Logger
+  ) -> Daemon {
+    let transport = TelegramClient(token: config.botToken, http: executor)
+    let provider = OpenAICompatibleProvider(
+      config: config.llm,
+      http: executor,
+      sleep: { try await Task.sleep(for: .seconds($0)) },
+      jitter: { Double.random(in: 0...$0) }
+    )
+
+    let budget = RunBudget.default
+    let costResolver = CostResolver(
+      priceTable: PriceFileLoader.load(),
+      referenceUSDPerToken: budget.referenceUSDPerToken
+    )
+    let agent = AgentRuntime(
+      provider: provider,
+      typingIndicator: NoopTypingIndicator(),
+      costResolver: costResolver,
+      budget: budget,
+      model: config.llm.model,
+      sleep: { try await Task.sleep(for: $0) }
+    )
+    let turnRunner = TurnRunner(
+      sessionMessages: stores.sessionMessages,
+      runs: stores.runs,
+      usageStore: stores.usage,
+      outbox: stores.outbox,
+      audit: stores.audit,
+      agent: agent,
+      budget: budget,
+      systemPrompt: SystemPrompt.minimal,
+      notifyOutbox: {},
+      logger: logger
+    )
+    let router = MessageRouter(
+      processed: stores.processed,
+      sessionMessages: stores.sessionMessages,
+      accessControl: AccessControl(allowlist: stores.allowlist),
+      transport: transport,
+      turnRunner: turnRunner,
+      logger: logger
+    )
+    let poller = TelegramPollerService(
+      transport: transport,
+      router: router,
+      cursor: stores.cursor,
+      pollTimeout: config.pollTimeoutSeconds,
+      logger: logger
+    )
+    return Daemon(services: [poller], logger: logger)
   }
 }
 

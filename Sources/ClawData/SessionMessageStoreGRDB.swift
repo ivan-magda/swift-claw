@@ -10,13 +10,13 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   public func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try Self.upsertSession(db, sessionKey: sessionKey, now: now)
     }
   }
 
   public func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
-    try writer.write { db in
+    try writer.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: inbound.updateId,
@@ -47,7 +47,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   public func loadRecentMessages(sessionId: Int64, limit: Int) throws -> [StoredMessage] {
-    try writer.read { db in
+    try writer.readMapping { db in
       // Most-recent `limit` by (ts, id) DESC, then reversed to oldest-first for context assembly.
       let rows = try Row.fetchAll(
         db,

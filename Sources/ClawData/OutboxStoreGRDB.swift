@@ -16,7 +16,7 @@ public struct OutboxStoreGRDB: OutboxStore {
     payload: String,
     payloadHash: String
   ) throws -> Bool {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try RunStoreGRDB.insertOutbox(
         db,
         runId: runId,
@@ -33,7 +33,7 @@ public struct OutboxStoreGRDB: OutboxStore {
   }
 
   public func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64, now: Date) throws {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try db.execute(
         sql: """
           UPDATE outbound_deliveries SET status = 'SENT', telegram_message_id = ?, sent_ts = ?
@@ -45,7 +45,7 @@ public struct OutboxStoreGRDB: OutboxStore {
   }
 
   public func pendingOutbound() throws -> [OutboxRow] {
-    try writer.read { db in
+    try writer.readMapping { db in
       try Row.fetchAll(
         db,
         sql: """

@@ -10,7 +10,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func createRun(sessionId: Int64, now: Date) throws -> Int64 {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try db.execute(
         sql: """
           INSERT INTO runs(session_id, state, created_ts, updated_ts) VALUES (?, ?, ?, ?)
@@ -22,7 +22,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws {
-    try writer.write { db in
+    try writer.writeMapping { db in
       let usage = turn.usage
       try db.execute(
         sql: """
@@ -58,7 +58,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func failRun(runId: Int64, now: Date) throws {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try db.execute(
         sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
         arguments: [RunState.failed.rawValue, now, runId]
@@ -67,7 +67,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] {
-    try writer.write { db in
+    try writer.writeMapping { db in
       let stale = try Row.fetchAll(
         db,
         sql: """
@@ -103,7 +103,7 @@ public struct RunStoreGRDB: RunStore {
           stepIndex: 0,
           chatId: chatId,
           payload: degradationText,
-          payloadHash: Self.hash(degradationText)
+          payloadHash: ContentHash.fnv1a(degradationText)
         )
         try Self.insertOutbox(db, runId: runId, chunk: chunk, now: now)
 
@@ -153,8 +153,4 @@ public struct RunStoreGRDB: RunStore {
       ]
     )
   }
-
-  // Deterministic-within-process content fingerprint; the UNIQUE `dedup_key` is what actually
-  // dedups. Replaced by `ContentHash.fnv1a` (stable across processes) in Task 5.
-  static func hash(_ text: String) -> String { String(text.hashValue) }
 }

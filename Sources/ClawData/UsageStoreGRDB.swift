@@ -10,14 +10,14 @@ public struct UsageStoreGRDB: UsageStore {
   }
 
   public func recordUsage(_ usage: ProviderUsage) throws {
-    try writer.write { db in
+    try writer.writeMapping { db in
       try RunStoreGRDB.insertUsage(db, usage)
     }
   }
 
   public func todayTokensAndCost(now: Date) throws -> (tokens: Int, costUSD: Double) {
     let dayStart = Self.startOfUTCDay(now)
-    return try writer.read { db in
+    return try writer.readMapping { db in
       // GRDB stores Date as a UTC "yyyy-MM-dd HH:mm:ss.SSS" string, so `ts >= ?` is a correct
       // chronological range scan over the calendar-day-UTC window.
       let row = try Row.fetchOne(
