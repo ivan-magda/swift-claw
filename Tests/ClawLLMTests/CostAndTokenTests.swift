@@ -79,7 +79,10 @@ import Testing
   @Test(arguments: resolveCases)
   func resolveWithNoProviderCost(_ testCase: ResolveCase) {
     // given
-    let resolved = resolver(testCase.prices).resolve(
+    let resolver = resolver(testCase.prices)
+
+    // when
+    let resolved = resolver.resolve(
       model: testCase.model,
       usage: testCase.usage,
       providerCost: nil
