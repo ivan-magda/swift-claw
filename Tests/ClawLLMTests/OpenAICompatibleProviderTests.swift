@@ -56,29 +56,37 @@ import Testing
     #expect(response.usage == .zero)
   }
 
-  @Test func parsesProviderCostFromUsageAndFromLiteLLMHeader() async throws {
-    // given — OpenRouter carries cost in usage.cost; LiteLLM carries it in a response header
-    let openRouterJSON = """
+  @Test func parsesProviderCostFromUsageField() async throws {
+    // given — OpenRouter carries cost in usage.cost
+    let json = """
       {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},
       "finish_reason":"stop"}],
       "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"cost":0.0012}}
       """
-    let openRouter = ScriptedHTTPExecutor([
-      .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(openRouterJSON.utf8)))
+    let exec = ScriptedHTTPExecutor([
+      .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8)))
     ])
-    let liteLLM = ScriptedHTTPExecutor([
+
+    // when
+    let response = try await makeProvider(config: makeConfig(), http: exec)
+      .complete(request: sampleRequest)
+
+    // then
+    #expect(response.costFromProvider == 0.0012)
+  }
+
+  @Test func parsesProviderCostFromLiteLLMHeader() async throws {
+    // given — LiteLLM carries cost in a response header
+    let exec = ScriptedHTTPExecutor([
       okStep(headers: ["x-litellm-response-cost": "0.0034"])
     ])
 
     // when
-    let fromUsage = try await makeProvider(config: makeConfig(), http: openRouter)
-      .complete(request: sampleRequest)
-    let fromHeader = try await makeProvider(config: makeConfig(), http: liteLLM)
+    let response = try await makeProvider(config: makeConfig(), http: exec)
       .complete(request: sampleRequest)
 
     // then
-    #expect(fromUsage.costFromProvider == 0.0012)
-    #expect(fromHeader.costFromProvider == 0.0034)
+    #expect(response.costFromProvider == 0.0034)
   }
 
   @Test func maps400ToTerminalWithoutRetry() async throws {
@@ -116,6 +124,8 @@ import Testing
     #expect(attempts == 3)
     #expect(delays.count == 2)
     #expect(delays.first == 2.0)
+    // second 503 has no Retry-After; exponential = 0.5 * 2^(2-1) = 1.0, jitter returns 0
+    #expect(delays[1] == 0.0)
   }
 
   @Test func exhaustedRetriesThrowRetryable() async throws {
