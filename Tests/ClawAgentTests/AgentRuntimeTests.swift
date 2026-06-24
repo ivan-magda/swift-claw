@@ -60,6 +60,37 @@ struct AgentRuntimeTests {
     #expect(usage.isEstimated == false)
   }
 
+  @Test("a completed turn whose provider omitted usage debits an estimated count, never zero")
+  func completedTurnWithoutProviderUsageDebitsEstimate() async throws {
+    // given — a provider (e.g. a local server) that returns content but no usage object.
+    let runtime = makeRuntime(
+      provider: StubProvider(
+        .respond(okResponse(content: "Hi!", usage: nil, costFromProvider: nil))
+      )
+    )
+
+    // when
+    let result = await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      context: [ChatMessage(role: .user, content: "hello world")],
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — usage is estimated: prompt from the sent context, completion from the reply. Never a
+    // zero row, so the hard daily token breaker can still account for it.
+    let (content, usage) = try requireCompleted(result)
+
+    #expect(content == "Hi!")
+    #expect(usage.promptTokens == 4)  // estimate for "hello world"
+    #expect(usage.completionTokens == 2)  // estimate for "Hi!"
+    #expect(usage.isEstimated == true)
+    #expect(usage.costSource == .heuristic)
+    #expect(usage.costUSD > 0)  // never a silent $0 (D1/F19)
+  }
+
   @Test("a turn issues a typing pulse before the provider answers")
   func turnIssuesTypingPulseBeforeProviderAnswers() async throws {
     // given — the provider can't answer until typing has fired at least once (gate-released on the

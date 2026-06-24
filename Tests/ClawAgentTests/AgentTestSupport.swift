@@ -147,7 +147,7 @@ func userMessage(_ content: String) -> StoredMessage {
 func okResponse(
   content: String = "Hello there",
   finishReason: String = "stop",
-  usage: ChatUsage = ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+  usage: ChatUsage? = ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
   costFromProvider: Double? = 0.0021
 ) -> ChatResponse {
   ChatResponse(

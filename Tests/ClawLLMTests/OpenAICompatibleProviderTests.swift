@@ -40,7 +40,7 @@ import Testing
     #expect(recorded.headers["Authorization"] == nil)
   }
 
-  @Test func nullContentBecomesEmptyAndAbsentUsageBecomesZero() async throws {
+  @Test func nullContentBecomesEmptyAndAbsentUsageBecomesNil() async throws {
     // given — Ollama-style: null content and no usage object
     let json = #"{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":null}}]}"#
     let exec = ScriptedHTTPExecutor([
@@ -51,9 +51,10 @@ import Testing
     // when
     let response = try await provider.complete(request: sampleRequest)
 
-    // then
+    // then — absent usage is nil (not a zero row), so the agent estimates it rather than
+    // recording zero tokens.
     #expect(response.content.isEmpty)
-    #expect(response.usage == .zero)
+    #expect(response.usage == nil)
   }
 
   @Test func parsesProviderCostFromUsageField() async throws {

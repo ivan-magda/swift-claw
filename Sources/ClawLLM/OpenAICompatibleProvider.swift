@@ -124,7 +124,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
           completionTokens: $0.completionTokens ?? 0,
           totalTokens: $0.totalTokens ?? 0
         )
-      } ?? .zero
+      }
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
     let providerCost =
       decoded.usage?.cost ?? result.getHeader(for: "x-litellm-response-cost").flatMap(Double.init)

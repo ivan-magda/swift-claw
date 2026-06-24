@@ -27,6 +27,7 @@ public struct AgentRuntime: Sendable {
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
   private let costResolver: CostResolver
+  private let usageResolver = UsageResolver()
   private let budget: RunBudget
   private let model: String
   /// Injected so tests can make the deadline fire instantly with a no-op sleep.
@@ -82,7 +83,7 @@ public struct AgentRuntime: Sendable {
 
     do {
       let response = try await withTypingAndDeadline(chatId: chatId, request: request)
-      return classify(response: response, runId: runId, sessionId: sessionId)
+      return classify(response: response, context: context, runId: runId, sessionId: sessionId)
     } catch let error as ProviderError {
       switch error {
       case .terminal:
@@ -151,29 +152,28 @@ public struct AgentRuntime: Sendable {
     }
   }
 
-  /// Maps a returned response to a result, debiting the real usage: non-empty content →
-  /// `.completed`; empty + `finishReason == "length"` → `.degraded(.outputTruncated)`; any other
-  /// empty → `.degraded(.providerUnavailable)`. Cost is resolved via `costResolver` (provider cost
-  /// wins) into the `ProviderUsage` row.
+  /// Maps a returned response to a result, debiting the reconciled usage (real, or estimated when
+  /// the provider omits it): non-empty content → `.completed`; empty + `finishReason == "length"` →
+  /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`. Cost is
+  /// resolved via `costResolver` (provider cost wins) into the `ProviderUsage` row.
   private func classify(
     response: ChatResponse,
+    context: [ChatMessage],
     runId: Int64,
     sessionId: Int64
   ) -> TurnResult {
+    let resolvedUsage = usageResolver.resolve(response: response, context: context)
     let resolvedCost = costResolver.resolve(
       model: model,
-      usage: response.usage,
+      usage: resolvedUsage.usage,
       providerCost: response.costFromProvider
     )
     let usage = ProviderUsage(
       runId: runId,
       sessionId: sessionId,
       model: model,
-      promptTokens: response.usage.promptTokens,
-      completionTokens: response.usage.completionTokens,
-      costUSD: resolvedCost.costUSD,
-      costSource: resolvedCost.source,
-      isEstimated: resolvedCost.isEstimated,
+      usage: resolvedUsage,
+      cost: resolvedCost,
       ts: Date()
     )
 
@@ -189,33 +189,29 @@ public struct AgentRuntime: Sendable {
   }
 
   /// The pre-call estimated `ProviderUsage` debited when no real usage exists (deadline /
-  /// exhausted retries): `promptTokens` = estimated input tokens, `completionTokens` =
-  /// `budget.maxOutputTokens`, cost via the heuristic tier, `isEstimated = true`.
+  /// exhausted retries): prompt from context, completion reserved at the output cap, cost via the
+  /// best-effort tier. No provider cost exists for a call that never returned, so the resolver's
+  /// heuristic tier carries USD (floored, never a silent $0 — D1/F19); the row is an estimate.
   private func estimatedDebit(
     context: [ChatMessage],
     runId: Int64,
     sessionId: Int64
   ) -> ProviderUsage {
-    let promptTokens = TokenEstimator.estimateInputTokens(context)
-    let completionTokens = budget.maxOutputTokens
-    let estimatedUsage = ChatUsage(
-      promptTokens: promptTokens,
-      completionTokens: completionTokens,
-      totalTokens: promptTokens + completionTokens
+    let resolvedUsage = usageResolver.estimate(
+      context: context,
+      maxOutputTokens: budget.maxOutputTokens
     )
-    // No provider cost exists for a call that never returned → the resolver's best-effort tier
-    // carries USD (floored, never a silent $0 — D1/F19). The row is an estimate regardless.
-    let resolvedCost = costResolver.resolve(model: model, usage: estimatedUsage, providerCost: nil)
-
+    let resolvedCost = costResolver.resolve(
+      model: model,
+      usage: resolvedUsage.usage,
+      providerCost: nil
+    )
     return ProviderUsage(
       runId: runId,
       sessionId: sessionId,
       model: model,
-      promptTokens: promptTokens,
-      completionTokens: completionTokens,
-      costUSD: resolvedCost.costUSD,
-      costSource: resolvedCost.source,
-      isEstimated: true,
+      usage: resolvedUsage,
+      cost: resolvedCost,
       ts: Date()
     )
   }

@@ -36,8 +36,8 @@ public struct ChatRequest: Sendable, Equatable {
   }
 }
 
-/// Token accounting returned by the provider. `.zero` is the defensive default when a
-/// provider omits `usage` (some local servers do).
+/// Token accounting returned by the provider. An omitted `usage` is a nil `ChatResponse.usage`,
+/// not this; `.zero` is a genuine zero count.
 public struct ChatUsage: Sendable, Equatable {
   public let promptTokens: Int
   public let completionTokens: Int
@@ -52,18 +52,19 @@ public struct ChatUsage: Sendable, Equatable {
   public static let zero = ChatUsage(promptTokens: 0, completionTokens: 0, totalTokens: 0)
 }
 
-/// A parsed assistant reply. `content` is never nil (null content → ""); `costFromProvider`
-/// is set only when the provider reports cost (OpenRouter `usage.cost` / LiteLLM header).
+/// A parsed assistant reply. `content` is never nil (null content → ""); `usage` is nil when the
+/// provider omits accounting (some local servers do); `costFromProvider` is set only when the
+/// provider reports cost (OpenRouter `usage.cost` / LiteLLM header).
 public struct ChatResponse: Sendable, Equatable {
   public let content: String
   public let finishReason: String?
-  public let usage: ChatUsage
+  public let usage: ChatUsage?
   public let costFromProvider: Double?
 
   public init(
     content: String,
     finishReason: String?,
-    usage: ChatUsage,
+    usage: ChatUsage?,
     costFromProvider: Double?
   ) {
     self.content = content
@@ -162,8 +163,14 @@ public enum TokenEstimator {
   /// Estimated input tokens, summed per message so each message's rounding adds headroom.
   public static func estimateInputTokens(_ messages: [ChatMessage]) -> Int {
     messages.reduce(0) { running, message in
-      running + inputTokens(forGraphemes: message.content.count)
+      running + estimateTokens(forText: message.content)
     }
+  }
+
+  /// Estimated tokens for a single text body — used to account for an assistant reply when the
+  /// provider returned no usage.
+  public static func estimateTokens(forText text: String) -> Int {
+    inputTokens(forGraphemes: text.count)
   }
 
   /// Estimated input tokens plus the reserved output cap.
@@ -231,5 +238,58 @@ public struct CostResolver: Sendable {
     let raw = Double(usage.totalTokens) * referenceUSDPerToken
     let cost = raw == 0 ? Self.heuristicFloorUSD : raw
     return ResolvedCost(costUSD: cost, source: .heuristic, isEstimated: true)
+  }
+}
+
+// MARK: - Usage resolution
+
+/// The token usage to record, plus whether those counts are an estimate. Peer to `ResolvedCost`:
+/// `isEstimated` here is the verdict on the *tokens* alone; cost estimation is `CostResolver`'s.
+public struct ResolvedUsage: Sendable, Equatable {
+  public let usage: ChatUsage
+  public let isEstimated: Bool
+
+  public init(usage: ChatUsage, isEstimated: Bool) {
+    self.usage = usage
+    self.isEstimated = isEstimated
+  }
+}
+
+/// Reconciles the token counts to record. Peer to `CostResolver` (counts vs. price): provider-
+/// returned usage is truth; a provider that omits it (some local servers do) is estimated rather
+/// than recorded as zero, so the hard daily token breaker (§5.3) can still account for the call.
+public struct UsageResolver: Sendable {
+  public init() {}
+
+  /// Provider-returned usage wins; when the response omits it, estimate prompt from the sent
+  /// `context` and completion from the returned `response.content`.
+  public func resolve(response: ChatResponse, context: [ChatMessage]) -> ResolvedUsage {
+    if let reported = response.usage {
+      return ResolvedUsage(usage: reported, isEstimated: false)
+    }
+    return estimated(
+      promptTokens: TokenEstimator.estimateInputTokens(context),
+      completionTokens: TokenEstimator.estimateTokens(forText: response.content)
+    )
+  }
+
+  /// The estimate for a call that produced no response (deadline / exhausted retries): prompt from
+  /// `context`, completion reserved at the output cap since no reply exists to measure.
+  public func estimate(context: [ChatMessage], maxOutputTokens: Int) -> ResolvedUsage {
+    estimated(
+      promptTokens: TokenEstimator.estimateInputTokens(context),
+      completionTokens: maxOutputTokens
+    )
+  }
+
+  private func estimated(promptTokens: Int, completionTokens: Int) -> ResolvedUsage {
+    ResolvedUsage(
+      usage: ChatUsage(
+        promptTokens: promptTokens,
+        completionTokens: completionTokens,
+        totalTokens: promptTokens + completionTokens
+      ),
+      isEstimated: true
+    )
   }
 }

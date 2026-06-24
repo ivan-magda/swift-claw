@@ -121,6 +121,30 @@ public struct ProviderUsage: Sendable, Equatable {
     self.isEstimated = isEstimated
     self.ts = ts
   }
+
+  /// Builds the row from its two independent provenances — resolved tokens and resolved cost. This
+  /// is the single place the row's `isEstimated` is derived: a row is an estimate iff either input
+  /// was guessed.
+  public init(
+    runId: Int64,
+    sessionId: Int64,
+    model: String,
+    usage: ResolvedUsage,
+    cost: ResolvedCost,
+    ts: Date
+  ) {
+    self.init(
+      runId: runId,
+      sessionId: sessionId,
+      model: model,
+      promptTokens: usage.usage.promptTokens,
+      completionTokens: usage.usage.completionTokens,
+      costUSD: cost.costUSD,
+      costSource: cost.source,
+      isEstimated: usage.isEstimated || cost.isEstimated,
+      ts: ts
+    )
+  }
 }
 
 public struct OutboxChunk: Sendable, Equatable {

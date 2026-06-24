@@ -122,9 +122,10 @@ public enum ClawDatabase {
     return migrator
   }
 
-  /// Translates a raw GRDB/SQLite failure into a domain `StoreError` at the persistence seam, or
-  /// returns it unchanged when it carries no domain meaning. This is the single place SQLite codes
-  /// become typed errors (F23): extend the `switch` to classify a new failure mode and every
+  /// Translates a raw GRDB/SQLite failure into a domain `StoreError` at the persistence seam (a
+  /// non-`DatabaseError` is already domain-typed and passes through). This is the single place
+  /// SQLite codes become typed errors (F23); the `default` arm keeps any raw `DatabaseError` from
+  /// leaking. Extend the `switch` to classify a new failure mode and every
   /// `writeMapping`/`readMapping` call site picks it up with no call-site change. Matching on the
   /// *primary* result code coarsely buckets the extended codes (`SQLITE_IOERR_*`, `SQLITE_BUSY_*`);
   /// a `switch` (not a lookup table) keeps special-casing an extended code possible later.
@@ -137,7 +138,7 @@ public enum ClawDatabase {
     case .SQLITE_FULL:
       return StoreError.diskFull
     default:
-      return error
+      return StoreError.unexpected("\(databaseError)")
     }
   }
 }
