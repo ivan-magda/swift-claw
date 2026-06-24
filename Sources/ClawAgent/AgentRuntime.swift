@@ -27,7 +27,7 @@ public struct AgentRuntime: Sendable {
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
   private let costResolver: CostResolver
-  private let usageResolver = UsageResolver()
+  private let usageResolver: UsageResolver
   private let budget: RunBudget
   private let model: String
   /// Injected so tests can make the deadline fire instantly with a no-op sleep.
@@ -37,6 +37,7 @@ public struct AgentRuntime: Sendable {
     provider: any LLMProvider,
     typingIndicator: any TypingIndicator,
     costResolver: CostResolver,
+    usageResolver: UsageResolver = UsageResolver(),
     budget: RunBudget,
     model: String,
     sleep: @escaping @Sendable (Duration) async throws -> Void
@@ -44,6 +45,7 @@ public struct AgentRuntime: Sendable {
     self.provider = provider
     self.typingIndicator = typingIndicator
     self.costResolver = costResolver
+    self.usageResolver = usageResolver
     self.budget = budget
     self.model = model
     self.sleep = sleep
