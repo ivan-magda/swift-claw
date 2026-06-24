@@ -1,3 +1,7 @@
+// swift-format-ignore-file: AlwaysUseLowerCamelCase
+
+// swiftlint:disable identifier_name discouraged_optional_boolean discouraged_optional_collection
+// Wire structs mirror Telegram's API: snake_case keys, and optionals model absent JSON fields.
 import ClawCore
 
 struct TResponse<R: Decodable>: Decodable {
@@ -58,6 +62,12 @@ struct TMessage: Decodable {
   }
 }
 
+/// The rich-content payload of `sendRichMessage` (Bot API 10.1). Telegram accepts exactly one of
+/// `markdown`/`html`; we only ever send `markdown` (rendered server-side, no escaper/converter).
+struct InputRichMessage: Encodable {
+  let markdown: String
+}
+
 struct TUpdate: Decodable {
   let update_id: Int64
   let message: TMessage?
@@ -71,3 +81,4 @@ struct TUpdate: Decodable {
     )
   }
 }
+// swiftlint:enable identifier_name discouraged_optional_boolean discouraged_optional_collection

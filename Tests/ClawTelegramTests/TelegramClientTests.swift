@@ -7,7 +7,12 @@ import Testing
 struct MockHTTPExecutor: HTTPExecuting {
   let result: HTTPResult
 
-  func post(url: String, jsonBody: Data, timeoutSeconds: Int) async throws -> HTTPResult { result }
+  func post(
+    url: String,
+    headers: [String: String],
+    jsonBody: Data,
+    timeoutSeconds: Int
+  ) async throws -> HTTPResult { result }
 }
 
 /// Simulates a transport error whose description echoes the request URL (which carries the token).
@@ -17,7 +22,12 @@ struct URLEchoingExecutor: HTTPExecuting {
     var description: String { "connection failed for \(url)" }
   }
 
-  func post(url: String, jsonBody: Data, timeoutSeconds: Int) async throws -> HTTPResult {
+  func post(
+    url: String,
+    headers: [String: String],
+    jsonBody: Data,
+    timeoutSeconds: Int
+  ) async throws -> HTTPResult {
     throw URLEchoError(url: url)
   }
 }
@@ -25,11 +35,20 @@ struct URLEchoingExecutor: HTTPExecuting {
 private func client(status: Int, json: String) -> TelegramClient {
   TelegramClient(
     token: "T",
-    http: MockHTTPExecutor(result: HTTPResult(statusCode: status, body: Data(json.utf8))),
-    baseURL: "https://example.test")
+    http: MockHTTPExecutor(
+      result: HTTPResult(statusCode: status, headers: [:], body: Data(json.utf8))
+    ),
+    baseURL: "https://example.test"
+  )
 }
 
 @Suite struct TelegramClientTests {
+  struct HTTPErrorCase: Sendable {
+    let status: Int
+    let json: String
+    let expected: TelegramError
+  }
+
   @Test func decodesGetMe() async throws {
     // given
     let telegram = client(
@@ -61,10 +80,10 @@ private func client(status: Int, json: String) -> TelegramClient {
       try await telegram.getUpdates(offset: nil, timeout: 0, allowedUpdates: ["message"])
 
     // then
-    #expect(updates.count == 1)
-    #expect(updates[0].updateId == 12)
-    #expect(updates[0].message?.text == "hi")
-    #expect(updates[0].message?.fromUserId == 42)
+    let update = try #require(updates.first)
+    #expect(update.updateId == 12)
+    #expect(update.message?.text == "hi")
+    #expect(update.message?.fromUserId == 42)
   }
 
   @Test func mapsMediaToFriendlyKind() async throws {
@@ -83,50 +102,40 @@ private func client(status: Int, json: String) -> TelegramClient {
       try await telegram.getUpdates(offset: nil, timeout: 0, allowedUpdates: ["message"])
 
     // then
-    #expect(updates[0].message?.mediaKind == "voice messages")
-    #expect(updates[0].message?.text == nil)
+    let update = try #require(updates.first)
+    #expect(update.message?.mediaKind == "voice messages")
+    #expect(update.message?.text == nil)
   }
 
-  @Test func maps409ToConflict() async throws {
+  @Test(
+    arguments: [
+      HTTPErrorCase(
+        status: 409,
+        json:
+          #"{"ok":false,"error_code":409,"description":"Conflict: terminated by other getUpdates request"}"#,
+        expected: TelegramError.conflict409(
+          description: "Conflict: terminated by other getUpdates request"
+        )
+      ),
+      HTTPErrorCase(
+        status: 429,
+        json:
+          #"{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}"#,
+        expected: TelegramError.floodControl(retryAfter: 7)
+      ),
+      HTTPErrorCase(
+        status: 400,
+        json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#,
+        expected: TelegramError.apiError(code: 400, description: "Bad Request")
+      ),
+    ]
+  )
+  func mapsHttpStatusToTelegramError(_ errorCase: HTTPErrorCase) async throws {
     // given
-    let telegram = client(
-      status: 409,
-      json:
-        #"{"ok":false,"error_code":409,"description":"Conflict: terminated by other getUpdates request"}"#
-    )
+    let telegram = client(status: errorCase.status, json: errorCase.json)
 
     // then
-    await #expect(
-      throws: TelegramError.conflict409(
-        description: "Conflict: terminated by other getUpdates request"
-      )
-    ) {
-      _ = try await telegram.getMe()
-    }
-  }
-
-  @Test func maps429ToFloodControlWithRetryAfter() async throws {
-    // given
-    let telegram = client(
-      status: 429,
-      json:
-        #"{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}"#
-    )
-
-    // then
-    await #expect(throws: TelegramError.floodControl(retryAfter: 7)) {
-      _ = try await telegram.getMe()
-    }
-  }
-
-  @Test func mapsOtherApiErrors() async throws {
-    // given
-    let telegram = client(
-      status: 400, json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#
-    )
-
-    // then
-    await #expect(throws: TelegramError.apiError(code: 400, description: "Bad Request")) {
+    await #expect(throws: errorCase.expected) {
       _ = try await telegram.getMe()
     }
   }
@@ -136,22 +145,36 @@ private func client(status: Int, json: String) -> TelegramClient {
     let telegram = client(status: 200, json: "not json")
 
     // then
-    await #expect(throws: TelegramError.self) { _ = try await telegram.getMe() }
+    await #expect {
+      _ = try await telegram.getMe()
+    } throws: { error in
+      guard let telegramErr = error as? TelegramError else { return false }
+      if case .decoding = telegramErr { return true }
+      return false
+    }
   }
 
   @Test func transportErrorRedactsTheBotToken() async throws {
     // given: the token is in the request URL; a transport error echoing the URL must NOT leak it
     let telegram = TelegramClient(
-      token: "SECRET-123:abc", http: URLEchoingExecutor(), baseURL: "https://example.test"
+      token: "SECRET-123:abc",
+      http: URLEchoingExecutor(),
+      baseURL: "https://example.test"
     )
 
-    // then
-    do {
+    // when
+    var thrownMessage: String?
+    await #expect {
       _ = try await telegram.getMe()
-      Issue.record("expected a transport error")
-    } catch let TelegramError.transport(message) {
-      #expect(message.contains("SECRET-123:abc") == false)
-      #expect(message.contains("<redacted-token>"))
+    } throws: { error in
+      guard case TelegramError.transport(let message) = error else { return false }
+      thrownMessage = message
+      return true
     }
+
+    // then
+    let message = try #require(thrownMessage)
+    #expect(message.contains("SECRET-123:abc") == false)
+    #expect(message.contains("<redacted-token>"))
   }
 }

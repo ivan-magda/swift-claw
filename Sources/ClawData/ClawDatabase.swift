@@ -47,6 +47,124 @@ public enum ClawDatabase {
         table.column("last_update_id", .integer).notNull()
       }
     }
+    migrator.registerMigration("v2") { db in
+      try db.create(table: "sessions") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("session_key", .text).notNull().unique()
+        table.column("created_ts", .datetime).notNull()
+        table.column("updated_ts", .datetime).notNull()
+        table.column("summary_ref", .text)
+        table.column("tainted", .boolean).notNull().defaults(to: false)
+      }
+      try db.create(table: "runs") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("session_id", .integer).notNull()
+          .references("sessions", onDelete: .cascade)
+        table.column("state", .text).notNull()
+        table.column("created_ts", .datetime).notNull()
+        table.column("updated_ts", .datetime).notNull()  // lease for the boot sweep
+        table.column("input_tokens", .integer)
+        table.column("output_tokens", .integer)
+        table.column("cost_usd", .double)
+      }
+      try db.create(table: "messages") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("session_id", .integer).notNull()
+          .references("sessions", onDelete: .cascade)
+        table.column("run_id", .integer).references("runs", onDelete: .setNull)
+        table.column("role", .text).notNull()
+        table.column("content", .text).notNull()
+        table.column("provenance", .text).notNull()
+        table.column("ts", .datetime).notNull()
+        table.column("prompt_tokens", .integer)
+        table.column("completion_tokens", .integer)
+      }
+      try db.create(table: "provider_usage") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("run_id", .integer).notNull().references("runs", onDelete: .cascade)
+        table.column("session_id", .integer).notNull()
+          .references("sessions", onDelete: .cascade)
+        table.column("model", .text).notNull()
+        table.column("prompt_tokens", .integer).notNull()
+        table.column("completion_tokens", .integer).notNull()
+        table.column("cost_usd", .double).notNull()
+        table.column("cost_source", .text).notNull()
+        table.column("is_estimated", .boolean).notNull()
+        table.column("ts", .datetime).notNull()
+      }
+      try db.create(table: "outbound_deliveries") { table in
+        table.column("run_id", .integer).notNull().references("runs", onDelete: .cascade)
+        table.column("step_index", .integer).notNull()
+        table.column("chat_id", .integer).notNull()
+        // Deterministic dedup key = "run_id:step_index" (NOT a UUID/wall-clock).
+        table.column("dedup_key", .text).notNull().unique()
+        // the markdown to (re-)send
+        table.column("payload", .text).notNull()
+        table.column("payload_hash", .text).notNull()
+        table.column("telegram_message_id", .integer)
+        table.column("status", .text).notNull()
+        table.column("created_ts", .datetime).notNull()
+        table.column("sent_ts", .datetime)
+      }
+      try db.create(table: "audit_events") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("ts", .datetime).notNull()
+        table.column("actor", .text).notNull()
+        table.column("action", .text).notNull()
+        table.column("tool", .text)  // nullable now → no Inc-3 migration (F9)
+        table.column("args_redacted", .text).notNull()
+        table.column("result_size", .integer).notNull()
+        table.column("decision", .text).notNull()
+        table.column("run_id", .integer)
+        table.column("session_id", .integer)
+      }
+    }
     return migrator
+  }
+
+  /// Translates a raw GRDB/SQLite failure into a domain `StoreError` at the persistence seam (a
+  /// non-`DatabaseError` is already domain-typed and passes through). This is the single place
+  /// SQLite codes become typed errors (F23); the `default` arm keeps any raw `DatabaseError` from
+  /// leaking. Extend the `switch` to classify a new failure mode and every
+  /// `writeMapping`/`readMapping` call site picks it up with no call-site change. Matching on the
+  /// *primary* result code coarsely buckets the extended codes (`SQLITE_IOERR_*`, `SQLITE_BUSY_*`);
+  /// a `switch` (not a lookup table) keeps special-casing an extended code possible later.
+  public static func classifyError(_ error: any Error) -> any Error {
+    guard let databaseError = error as? DatabaseError else {
+      return error
+    }
+
+    switch databaseError.resultCode.primaryResultCode {
+    case .SQLITE_FULL:
+      return StoreError.diskFull
+    default:
+      return StoreError.unexpected("\(databaseError)")
+    }
+  }
+}
+
+extension DatabaseReader {
+  /// A store read whose GRDB failures are translated to domain `StoreError`s at the seam, so a raw
+  /// `DatabaseError` never leaks past the store boundary. Drop-in for `read` — same call-site
+  /// shape, no nesting. `DatabaseWriter` refines `DatabaseReader`, so writers inherit this too.
+  func readMapping<Value>(_ value: (Database) throws -> Value) throws -> Value {
+    do {
+      return try read(value)
+    } catch {
+      throw ClawDatabase.classifyError(error)
+    }
+  }
+}
+
+extension DatabaseWriter {
+  /// A store write whose GRDB failures are translated to domain `StoreError`s at the seam (e.g. a
+  /// full disk → `StoreError.diskFull`, F23). Drop-in for `write` — same call-site shape, no
+  /// nesting; a new turn-path write gets domain-error handling just by choosing this method.
+  func writeMapping<Value>(_ updates: (Database) throws -> Value) throws -> Value {
+    do {
+      return try write(updates)
+    } catch {
+      throw ClawDatabase.classifyError(error)
+    }
   }
 }

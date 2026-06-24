@@ -25,9 +25,10 @@ public struct DoctorReport: Sendable {
   public func renderText() -> String {
     let keyWidth = checks.map(\.key.count).max() ?? 0
     return checks.map { check in
-      let marker = check.ok ? "ok" : "FAIL"
+      // [ok]   is 4 chars; [FAIL] is 6 — pad [ok] so all value columns align.
+      let marker = check.ok ? "[ok]  " : "[FAIL]"
       let paddedKey = check.key.padding(toLength: keyWidth, withPad: " ", startingAt: 0)
-      return "[\(marker)] \(paddedKey) \(check.value)"
+      return "\(marker) \(paddedKey) \(check.value)"
     }.joined(separator: "\n")
   }
 
@@ -36,7 +37,7 @@ public struct DoctorReport: Sendable {
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     let payload = DoctorReportPayload(ok: ok, checks: checks)
     let data = (try? encoder.encode(payload)) ?? Data("{}".utf8)
-    return String(decoding: data, as: UTF8.self)
+    return String(bytes: data, encoding: .utf8) ?? "{}"
   }
 }
 

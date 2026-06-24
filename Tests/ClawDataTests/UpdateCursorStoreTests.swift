@@ -5,20 +5,23 @@ import Testing
 @testable import ClawData
 
 @Suite struct UpdateCursorStoreTests {
-  @Test func cursorStartsNil() throws {
-    // given
+  private func freshStore() throws -> UpdateCursorStoreGRDB {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
+    return UpdateCursorStoreGRDB(writer: queue)
+  }
+
+  @Test func cursorStartsNil() throws {
+    // given
+    let store = try freshStore()
 
     // then
-    #expect(try UpdateCursorStoreGRDB(writer: queue).loadCursor() == nil)
+    #expect(try store.loadCursor() == nil)
   }
 
   @Test func advanceThenLoad() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let store = UpdateCursorStoreGRDB(writer: queue)
+    let store = try freshStore()
 
     // when
     try store.advanceCursor(to: 100)
@@ -29,9 +32,7 @@ import Testing
 
   @Test func cursorIsMonotonic() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let store = UpdateCursorStoreGRDB(writer: queue)
+    let store = try freshStore()
 
     // when
     try store.advanceCursor(to: 100)

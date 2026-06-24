@@ -28,12 +28,18 @@ import Testing
     let queue = try ClawDatabase.makeInMemoryQueue()
 
     // then
-    try queue.read { db in
-      let foreignKeys = try Int.fetchOne(db, sql: "PRAGMA foreign_keys")
-      #expect(foreignKeys == 1)
-      let busyTimeout = try Int.fetchOne(db, sql: "PRAGMA busy_timeout")
-      #expect((busyTimeout ?? 0) >= 5000)
-    }
+    let foreignKeys = try #require(
+      try queue.read { db in
+        try Int.fetchOne(db, sql: "PRAGMA foreign_keys")
+      }
+    )
+    #expect(foreignKeys == 1)
+    let busyTimeout = try #require(
+      try queue.read { db in
+        try Int.fetchOne(db, sql: "PRAGMA busy_timeout")
+      }
+    )
+    #expect(busyTimeout >= 5000)
   }
 
   @Test func migrationIsIdempotent() throws {

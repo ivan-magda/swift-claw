@@ -1,29 +1,59 @@
 import ClawCore
+import ClawData
 import Foundation
+import GRDB
+import Testing
+
+@testable import ClawGateway
+
+/// Records the turns the router dispatches (and optionally throws a scripted error) so router/poller
+/// tests stay decoupled from the real provider/persistence.
+actor FakeTurnRunner: TurnDispatching {
+  private(set) var calls: [(sessionId: Int64, chatId: Int64)] = []
+  private let error: (any Error)?
+
+  init(error: (any Error)? = nil) { self.error = error }
+
+  func run(sessionId: Int64, chatId: Int64) async throws {
+    calls.append((sessionId, chatId))
+    if let error { throw error }
+  }
+}
 
 /// Records outbound sends and scripts getUpdates batches/errors for poller tests. Exposes
 /// deterministic, continuation-based wait points (`waitForSends`/`waitForAttempts`/`waitForPolls`)
 /// that resume exactly when an event lands — no polling or timeouts, so tests stay parallel-safe.
 actor RecordingTransport: TelegramTransport {
   private(set) var sent: [(chatId: Int64, text: String)] = []
+  private(set) var richSends: [(chatId: Int64, markdown: String)] = []
   private(set) var sendAttempts = 0
   private(set) var pollCount = 0
   private var batches: [[RawUpdate]]
   private let onExhausted: TelegramError?
   private let sendError: TelegramError?
+  private let richError: TelegramError?
+  /// Fails the rich send whose `sendAttempts` index equals this, and poisons that row's plain
+  /// fallback too — so the whole delivery fails, modeling a genuinely undeliverable row mid-batch.
+  private let failSendAtAttempt: Int?
+  private var failPlainFallbackNext = false
 
   private enum Event { case sent, attempt, poll }
+
   private var waiters: [Event: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)]] =
     [:]
 
   init(
     batches: [[RawUpdate]] = [],
     throwAfterExhaustion: TelegramError? = nil,
-    sendError: TelegramError? = nil
+    sendError: TelegramError? = nil,
+    richError: TelegramError? = nil,
+    failSendAtAttempt: Int? = nil
   ) {
     self.batches = batches
     self.onExhausted = throwAfterExhaustion
     self.sendError = sendError
+    self.richError = richError
+    self.failSendAtAttempt = failSendAtAttempt
   }
 
   func getMe() async throws -> BotIdentity { BotIdentity(id: 1, username: "claw_bot") }
@@ -45,15 +75,37 @@ actor RecordingTransport: TelegramTransport {
     return batches.removeFirst()
   }
 
-  func sendMessage(chatId: Int64, text: String) async throws {
+  func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
     sendAttempts += 1
     resumeWaiters(.attempt, reached: sendAttempts)
     if let sendError {
-      throw sendError  // simulate a transient send failure
+      throw sendError  // simulate a transient send failure (direct canned reply, or rich fallback)
+    }
+    if failPlainFallbackNext {
+      failPlainFallbackNext = false
+      throw TelegramError.transport("plain fallback down")  // this row is undeliverable mid-batch
     }
     sent.append((chatId, text))
-    resumeWaiters(.sent, reached: sent.count)
+    resumeWaiters(.sent, reached: sent.count + richSends.count)
+    return Int64(sendAttempts)
   }
+
+  func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 {
+    sendAttempts += 1
+    resumeWaiters(.attempt, reached: sendAttempts)
+    if let richError {
+      throw richError  // simulate a rich-send failure so the dispatcher falls back to plain
+    }
+    if sendAttempts == failSendAtAttempt {
+      failPlainFallbackNext = true  // the dispatcher's plain retry for THIS row must also fail
+      throw TelegramError.transport("rich down")
+    }
+    richSends.append((chatId, markdown))
+    resumeWaiters(.sent, reached: sent.count + richSends.count)
+    return Int64(sendAttempts)
+  }
+
+  func sendChatAction(chatId: Int64, action: String) async throws {}
 
   /// Suspends until at least `threshold` messages have been recorded as sent.
   func waitForSends(atLeast threshold: Int) async {
@@ -98,5 +150,45 @@ func textUpdate(id: Int64, from: Int64, chat: Int64? = nil, text: String) -> Raw
       mediaKind: nil
     ),
     editedMessage: nil
+  )
+}
+
+/// A seeded in-memory database: a session, an inbound message, and a RUNNING run with no outbox row.
+/// The outbox and runs stores share the same writer, so a row claimed through one is visible to the
+/// other. The RUNNING-with-no-outbox shape doubles as the crash-mid-turn state boot-reconcile tests
+/// need.
+struct SeededFixture {
+  let outbox: OutboxStoreGRDB
+  let runs: RunStoreGRDB
+  let runId: Int64
+  let chatId: Int64
+}
+
+/// Seeds the durable spine so that the `outbound_deliveries.run_id` FK is satisfied — ready for
+/// callers to claim outbound rows or run a boot-reconcile sweep against a RUNNING run.
+func makeSeededFixture() throws -> SeededFixture {
+  let queue = try ClawDatabase.makeInMemoryQueue()
+  try ClawDatabase.migrate(queue)
+
+  let chatId: Int64 = 42
+  let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
+    InboundMessage(
+      updateId: 1,
+      sessionKey: SessionKey.telegramDM(chatId: chatId),
+      chatId: chatId,
+      userId: chatId,
+      text: "hi",
+      isEdited: false,
+      ts: Date()
+    )
+  )
+  let sessionId = try #require(claim.sessionId)
+  let runs = RunStoreGRDB(writer: queue)
+  let runId = try runs.createRun(sessionId: sessionId, now: Date())
+  return SeededFixture(
+    outbox: OutboxStoreGRDB(writer: queue),
+    runs: runs,
+    runId: runId,
+    chatId: chatId
   )
 }

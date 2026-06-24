@@ -22,33 +22,49 @@ let package = Package(
       dependencies: [
         "ClawCore",
         .product(name: "GRDB", package: "GRDB.swift"),
-      ]),
+      ]
+    ),
     .target(
       name: "ClawTelegram",
       dependencies: [
         "ClawCore",
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "NIOCore", package: "swift-nio"),
-      ]),
+      ]
+    ),
+    .target(
+      name: "ClawLLM",
+      dependencies: ["ClawCore"],
+      resources: [.copy("Prices.json")]
+    ),
+    .target(name: "ClawAgent", dependencies: ["ClawCore"]),
     .target(
       name: "ClawGateway",
       dependencies: [
         "ClawCore",
+        "ClawAgent",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "UnixSignals", package: "swift-service-lifecycle"),
         .product(name: "Logging", package: "swift-log"),
-      ]),
+      ]
+    ),
     .executableTarget(
       name: "clawd",
       dependencies: [
-        "ClawCore", "ClawData", "ClawTelegram", "ClawGateway",
+        "ClawCore", "ClawData", "ClawTelegram", "ClawGateway", "ClawLLM", "ClawAgent",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "Logging", package: "swift-log"),
-      ]),
+      ]
+    ),
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore"]),
     .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore"]),
     .testTarget(name: "ClawTelegramTests", dependencies: ["ClawTelegram", "ClawCore"]),
-    .testTarget(name: "ClawGatewayTests", dependencies: ["ClawGateway", "ClawCore", "ClawData"]),
+    .testTarget(name: "ClawLLMTests", dependencies: ["ClawLLM", "ClawCore"]),
+    .testTarget(name: "ClawAgentTests", dependencies: ["ClawAgent", "ClawCore"]),
+    .testTarget(
+      name: "ClawGatewayTests",
+      dependencies: ["ClawGateway", "ClawCore", "ClawData", "ClawAgent"]
+    ),
   ]
 )

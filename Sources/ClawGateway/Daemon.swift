@@ -1,58 +1,43 @@
-import ClawCore
 import Logging
 import ServiceLifecycle
 import UnixSignals
 
-/// Composes the service graph and runs it under a ServiceGroup. Depends only on ClawCore
-/// protocols — concrete stores are injected at the clawd composition root. The graceful-
-/// shutdown signal set is a parameter so tests can pass `[]` and cancel the task instead.
+/// Runs the injected service graph under a `ServiceGroup`, after a one-shot boot hook. The services
+/// (poller, outbox dispatcher, …) are built at the `clawd` composition root and handed in, so the
+/// daemon stays decoupled from concrete stores/transport. The graceful-shutdown signal set is a
+/// parameter so tests can pass `[]` and cancel the task instead of raising a real signal.
 public struct Daemon: Sendable {
-  private let transport: any TelegramTransport
-  private let processed: any ProcessedUpdateStore
-  private let allowlist: any AllowlistStore
-  private let cursor: any UpdateCursorStore
-  private let pollTimeout: Int
+  private let services: [any Service]
+  private let bootReconcile: @Sendable () async -> Void
   private let logger: Logger
   private let gracefulShutdownSignals: [UnixSignal]
+  private let gracefulShutdownSeconds: Int
 
   public init(
-    transport: any TelegramTransport,
-    processed: any ProcessedUpdateStore,
-    allowlist: any AllowlistStore,
-    cursor: any UpdateCursorStore,
-    pollTimeout: Int,
+    services: [any Service],
+    bootReconcile: @escaping @Sendable () async -> Void = {},
     logger: Logger,
-    gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint]
+    gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint],
+    gracefulShutdownSeconds: Int = 30
   ) {
-    self.transport = transport
-    self.processed = processed
-    self.allowlist = allowlist
-    self.cursor = cursor
-    self.pollTimeout = pollTimeout
+    self.services = services
+    self.bootReconcile = bootReconcile
     self.logger = logger
     self.gracefulShutdownSignals = gracefulShutdownSignals
+    self.gracefulShutdownSeconds = gracefulShutdownSeconds
   }
 
   public func run() async throws {
-    let access = AccessControl(allowlist: allowlist)
-    let router = MessageRouter(
-      updateStore: processed,
-      accessControl: access,
-      transport: transport,
-      logger: logger
-    )
-    let poller = TelegramPollerService(
-      transport: transport,
-      router: router,
-      cursor: cursor,
-      pollTimeout: pollTimeout,
-      logger: logger
-    )
-    let group = ServiceGroup(
-      services: [poller],
+    // Reconcile orphaned runs before serving (F22)
+    await bootReconcile()
+
+    var configuration = ServiceGroupConfiguration(
+      services: services,
       gracefulShutdownSignals: gracefulShutdownSignals,
       logger: logger
     )
-    try await group.run()
+    configuration.maximumGracefulShutdownDuration = .seconds(gracefulShutdownSeconds)
+
+    try await ServiceGroup(configuration: configuration).run()
   }
 }

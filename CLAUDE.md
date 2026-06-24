@@ -19,11 +19,13 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 - **Secure-by-default; enforce policy in code, not the prompt.** Untrusted inbound (messages/web/tool output/durable memory) is data, never instructions — see `docs/ARCHITECTURE.md` §12.
 - **LLM provider = one OpenAI-compatible Chat Completions contract** (swap model/provider via config, behind an `LLMProvider` protocol). **Telegram = a thin roll-your-own client** over AsyncHTTPClient, not a third-party lib.
 - **Persistence = GRDB + SQLite (WAL, FTS5)**; secrets via `SecretStore` (sops+age), **not** the macOS Keychain (a launchd daemon can't use it).
+- **Store errors are domain-typed at the seam.** GRDB stores use `writer.writeMapping`/`readMapping` (not raw `write`/`read`), routing SQLite failures through `ClawDatabase.classifyError` into `StoreError` (e.g. `SQLITE_FULL → .diskFull`) — a raw `DatabaseError` must never leak past a store.
 - **Concurrency trap:** a Swift actor does NOT serialize across `await`. The per-session lane chains a stored `Task` (`var currentTurn`), it does not rely on actor isolation alone — `docs/ARCHITECTURE.md` §5.
 
 ## Code style
 
-- **Formatting = `swift format`** using the repo's `.swift-format` (2-space indent, line length 100). Run `swift format -i -r Sources Tests Package.swift` before committing.
+- **Lint gate = `scripts/lint.sh`** — swift-format owns layout (`.swift-format`: 2-space, width 100, one-arg-per-line), SwiftLint owns correctness/idiom (`.swiftlint.yml`). Run `scripts/lint.sh --fix` to auto-apply both, then `scripts/lint.sh` to check; both must pass before committing (CI enforces it).
+- **Wrapped conditions:** `swiftlint --fix` and `swift format` disagree on the `{` of a multi-line `if let X, cond {` (the gate then fails) — use `guard … else {` (brace attaches to `else`) or keep the condition single-line.
 - **Tests follow Given-When-Then** — separate the body with `// given` / `// when` / `// then` sections (AAA equivalent).
 - **Variable names ≥ 3 chars** — no single/double-letter locals (`incoming`, not `m`).
 - **Comments: signal, not noise** — explain non-obvious *why*/contract; never restate what the code already says.

@@ -46,12 +46,35 @@ public struct TelegramClient: TelegramTransport {
     return updates.map { $0.toRawUpdate() }
   }
 
-  public func sendMessage(chatId: Int64, text: String) async throws {
+  public func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
     let request = SendMessageRequest(chatId: chatId, text: text)
-    let _: TMessage = try await callMethod(
+    let message: TMessage = try await callMethod(
       "sendMessage",
       body: request,
       httpTimeout: Timeout.sendMessageSeconds
+    )
+    return message.message_id
+  }
+
+  public func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 {
+    let request = SendRichMessageRequest(
+      chatId: chatId,
+      richMessage: InputRichMessage(markdown: markdown)
+    )
+    let message: TMessage = try await callMethod(
+      "sendRichMessage",
+      body: request,
+      httpTimeout: Timeout.sendMessageSeconds
+    )
+    return message.message_id
+  }
+
+  public func sendChatAction(chatId: Int64, action: String) async throws {
+    let request = SendChatActionRequest(chatId: chatId, action: action)
+    let _: Bool = try await callMethod(
+      "sendChatAction",
+      body: request,
+      httpTimeout: Timeout.shortRequestSeconds
     )
   }
 }
@@ -88,6 +111,7 @@ extension TelegramClient {
     do {
       result = try await http.post(
         url: "\(baseURL)/bot\(token)/\(methodName)",
+        headers: [:],
         jsonBody: payload,
         timeoutSeconds: httpTimeout
       )
@@ -144,4 +168,28 @@ private struct GetUpdatesRequest: Encodable {
 private struct SendMessageRequest: Encodable {
   let chatId: Int64
   let text: String
+}
+
+private struct SendRichMessageRequest: Encodable {
+  let chatId: Int64
+  let richMessage: InputRichMessage
+}
+
+private struct SendChatActionRequest: Encodable {
+  let chatId: Int64
+  let action: String
+}
+
+/// The Telegram-backed `TypingIndicator` the agent uses during a turn. Errors are swallowed: the
+/// "typing…" action is cosmetic, auto-expires (~5s), and must never fail a turn.
+public struct TelegramTypingIndicator: TypingIndicator {
+  private let transport: any TelegramTransport
+
+  public init(transport: any TelegramTransport) {
+    self.transport = transport
+  }
+
+  public func sendTyping(chatId: Int64) async {
+    try? await transport.sendChatAction(chatId: chatId, action: "typing")
+  }
 }
