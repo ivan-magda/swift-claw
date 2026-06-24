@@ -169,6 +169,69 @@ struct AgentRuntimeTests {
     #expect(await typing.calls == 0)
   }
 
+  @Test("preflight prices the reserved output at the output rate, tripping a dearer-output model")
+  func preflightPricesReservedOutputAtTheOutputRate() async {
+    // given — a model whose output token is far dearer than its input token. Folding the reserved
+    // output into the prompt (the old bug) estimates ~$0.004 at the input rate and clears the $0.50
+    // cap; pricing the 4096 reserved tokens at the output rate estimates ~$0.82 and must trip it.
+    let priceTable = PriceTable(prices: [
+      "dear-output": ModelPrice(inputUSDPerMTok: 1.0, outputUSDPerMTok: 200.0)
+    ])
+    let provider = StubProvider(.respond(okResponse()))
+    let typing = RecordingTyping()
+    let runtime = makeRuntime(
+      provider: provider,
+      typing: typing,
+      costResolver: makeCostResolver(priceTable: priceTable),
+      model: "dear-output"
+    )
+
+    // when
+    let result = await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      context: [ChatMessage(role: .user, content: "hi")],
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — denied on the per-run USD cap, before the provider or typing fire.
+    #expect(result == .budgetStopped(cap: "per-run spend"))
+    #expect(await provider.calls == 0)
+    #expect(await typing.calls == 0)
+  }
+
+  @Test("preflight does not over-charge reserved output when the output rate is the cheaper one")
+  func preflightDoesNotOverchargeReservedOutputAtTheInputRate() async throws {
+    // given — the mirror case: input is the dear token. Pricing all 4098 tokens at the input rate
+    // (the old bug) estimates ~$0.82 and would wrongly deny; pricing the 4096 reserved tokens at the
+    // cheaper output rate estimates ~$0.004 and must let the run proceed to the provider.
+    let priceTable = PriceTable(prices: [
+      "dear-input": ModelPrice(inputUSDPerMTok: 200.0, outputUSDPerMTok: 1.0)
+    ])
+    let provider = StubProvider(.respond(okResponse()))
+    let runtime = makeRuntime(
+      provider: provider,
+      costResolver: makeCostResolver(priceTable: priceTable),
+      model: "dear-input"
+    )
+
+    // when
+    let result = await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      context: [ChatMessage(role: .user, content: "hi")],
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the gate allowed it through; the provider answered.
+    _ = try requireCompleted(result)
+    #expect(await provider.calls == 1)
+  }
+
   @Test("a terminal provider error degrades without any debit")
   func terminalErrorDegradesWithoutDebit() async {
     // given

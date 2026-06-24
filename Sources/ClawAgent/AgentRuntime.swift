@@ -58,10 +58,15 @@ public struct AgentRuntime: Sendable {
     todayTokens: Int,
     todayUSD: Double
   ) async -> TurnResult {
-    let estimate = TokenEstimator.estimateTotalTokens(context, maxOutput: budget.maxOutputTokens)
+    let inputTokens = TokenEstimator.estimateInputTokens(context)
+    let estimate = inputTokens + budget.maxOutputTokens
     let estimatedCost = costResolver.resolve(
       model: model,
-      usage: ChatUsage(promptTokens: estimate, completionTokens: 0, totalTokens: estimate),
+      usage: ChatUsage(
+        promptTokens: inputTokens,
+        completionTokens: budget.maxOutputTokens,
+        totalTokens: estimate
+      ),
       providerCost: nil
     ).costUSD
     let gate = BudgetGate(budget: budget)
