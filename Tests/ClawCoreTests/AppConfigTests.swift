@@ -7,18 +7,17 @@ import Testing
   private typealias EnvKey = AppConfig.EnvKey
 
   /// Adds the LLM keys every successful `load` now requires, unless the base already sets them.
+  /// No secret keys here — the bot token / LLM key load via `SecretStore`, not `AppConfig`.
   private func envWithLLM(_ base: [String: String]) -> [String: String] {
     base.merging([
       EnvKey.llmBaseURL: "http://localhost:1234/v1",
       EnvKey.llmModel: "gpt-4o",
-      EnvKey.llmApiKey: "sk-test",
     ]) { existing, _ in existing }
   }
 
   @Test func loadsValidConfig() throws {
     // given
     let env = envWithLLM([
-      EnvKey.botToken: "123:abc",
       EnvKey.allowlist: "42, 99",
       EnvKey.stateRoot: NSTemporaryDirectory(),
       EnvKey.pollTimeout: "20",
@@ -28,55 +27,38 @@ import Testing
     let config = try AppConfig.load(environment: env)
 
     // then
-    #expect(config.botToken == "123:abc")
     #expect(config.allowlist == [42, 99])
     #expect(config.pollTimeoutSeconds == 20)
     #expect(config.llm.model == "gpt-4o")
+    #expect(config.llm.apiKey.isEmpty)  // the secret is injected at the root, not parsed here
   }
 
   @Test(arguments: [
     (
-      "missingBotToken",
-      envWithLLM: true,
-      overrides: [:],
-      omitKeys: [EnvKey.botToken],
-      expectedError: ConfigError.missingBotToken
-    ),
-    (
       "missingLLMBaseURL",
       envWithLLM: false,
       overrides: [EnvKey.llmModel: "gpt-4o"],
-      omitKeys: [],
       expectedError: ConfigError.missingLLMBaseURL
     ),
     (
       "invalidAllowlist",
       envWithLLM: true,
       overrides: [EnvKey.allowlist: "42, notanumber"],
-      omitKeys: [],
       expectedError: ConfigError.invalidAllowlist("notanumber")
     ),
   ]) func missingOrInvalidConfigFieldThrows(
     description: String,
     envWithLLM: Bool,
     overrides: [String: String],
-    omitKeys: [String],
     expectedError: ConfigError
   ) {
     // given
-    var env = [
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ]
+    var env = [EnvKey.stateRoot: NSTemporaryDirectory()]
     if envWithLLM {
       env[EnvKey.llmBaseURL] = "http://localhost:1234/v1"
       env[EnvKey.llmModel] = "gpt-4o"
-      env[EnvKey.llmApiKey] = "sk-test"
     }
     env.merge(overrides) { _, new in new }
-    for key in omitKeys {
-      env.removeValue(forKey: key)
-    }
 
     // then
     #expect(throws: expectedError) {
@@ -86,10 +68,7 @@ import Testing
 
   @Test func emptyAllowlistIsAllowed() throws {
     // given
-    let env = envWithLLM([
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ])
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
     // when
     let config = try AppConfig.load(environment: env)
@@ -100,10 +79,7 @@ import Testing
 
   @Test func defaultsPollTimeoutTo30() throws {
     // given
-    let env = envWithLLM([
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ])
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
     // when
     let config = try AppConfig.load(environment: env)
@@ -114,8 +90,8 @@ import Testing
 
   @Test func blankStateRootFallsBackToHomeDefaultNotCwd() throws {
     // given — copying .env.example verbatim leaves CLAW_STATE_ROOT blank
-    let blankEnv = envWithLLM([EnvKey.botToken: "t", EnvKey.stateRoot: "   "])
-    let omittedEnv = envWithLLM([EnvKey.botToken: "t"])
+    let blankEnv = envWithLLM([EnvKey.stateRoot: "   "])
+    let omittedEnv = envWithLLM([:])
 
     // when
     let fromBlank = try AppConfig.load(environment: blankEnv)
@@ -129,10 +105,7 @@ import Testing
 
   @Test func loadsLLMConfigWithDefaults() throws {
     // given — only the required LLM keys, no field/max-tokens overrides
-    let env = envWithLLM([
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ])
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
     // when
     let config = try AppConfig.load(environment: env)
@@ -144,10 +117,7 @@ import Testing
 
   @Test func maxTokensFieldOverrideParses() throws {
     // given
-    var env = envWithLLM([
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ])
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.llmMaxTokensField] = "max_tokens"
 
     // when
@@ -159,10 +129,7 @@ import Testing
 
   @Test func perDayUSDOverrideParses() throws {
     // given
-    var env = envWithLLM([
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ])
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.perDayUSD] = "5"
 
     // when
@@ -174,10 +141,7 @@ import Testing
 
   @Test func budgetDefaultsMirrorRunBudgetAndLLM() throws {
     // given
-    let env = envWithLLM([
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ])
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
     // when
     let config = try AppConfig.load(environment: env)
@@ -190,15 +154,26 @@ import Testing
 
   @Test func invalidBudgetValueThrows() {
     // given
-    var env = envWithLLM([
-      EnvKey.botToken: "t",
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-    ])
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.perRunUSD] = "-1"
 
     // when / then
     #expect(throws: ConfigError.invalidBudget("-1")) {
       try AppConfig.load(environment: env)
     }
+  }
+
+  @Test func withAPIKeyInjectsSecretWithoutMutatingTheRest() throws {
+    // given
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    let config = try AppConfig.load(environment: env)
+
+    // when
+    let withKey = config.llm.withAPIKey("sk-injected")
+
+    // then
+    #expect(withKey.apiKey == "sk-injected")
+    #expect(withKey.model == config.llm.model)
+    #expect(withKey.baseURL == config.llm.baseURL)
   }
 }

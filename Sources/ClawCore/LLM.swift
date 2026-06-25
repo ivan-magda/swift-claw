@@ -125,6 +125,22 @@ public struct LLMConfig: Sendable, Equatable {
   }
 }
 
+extension LLMConfig {
+  /// Returns a copy with the runtime secret injected. `AppConfig` carries no key (it's a secret);
+  /// the composition root combines the non-secret LLM config with `Secrets.llmApiKey`.
+  public func withAPIKey(_ apiKey: String) -> LLMConfig {
+    LLMConfig(
+      baseURL: baseURL,
+      model: model,
+      apiKey: apiKey,
+      maxTokensField: maxTokensField,
+      maxOutputTokens: maxOutputTokens,
+      retryBudget: retryBudget,
+      requestTimeoutSeconds: requestTimeoutSeconds
+    )
+  }
+}
+
 // MARK: - Pricing
 
 /// Per-million-token USD prices for one model — the normalized `Prices.json` schema.

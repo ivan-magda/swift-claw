@@ -3,11 +3,15 @@ import AsyncHTTPClient
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawSecrets
 import ClawTelegram
 import Foundation
 
 struct DoctorCommand: AsyncParsableCommand {
-  static let configuration = CommandConfiguration(abstract: "Run health self-checks.")
+  static let configuration = CommandConfiguration(
+    commandName: "doctor",
+    abstract: "Run health self-checks."
+  )
 
   @Flag(
     name: .customLong("check-config"),
@@ -33,11 +37,22 @@ struct DoctorCommand: AsyncParsableCommand {
     report.add(key: "config", value: "OK")
     report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)")
 
+    let secretsRow = SecretStoreResolver.doctorRow(
+      stateRoot: config.stateRoot,
+      environment: ProcessInfo.processInfo.environment
+    )
+    report.add(key: "secrets", value: secretsRow.value, ok: secretsRow.ok)
+
     if checkConfig {
       emit(report)
+
+      if !secretsRow.ok {
+        throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
+      }
       if !report.ok {
         throw ExitCode(ClawExitCode.configInvalid.rawValue)
       }
+
       return
     }
 
@@ -58,20 +73,32 @@ struct DoctorCommand: AsyncParsableCommand {
       report.add(key: "db.writable", value: "false: \(error)", ok: false)
     }
 
-    // Best-effort connectivity check.
-    let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-    let transport = TelegramClient(
-      token: config.botToken,
-      http: AsyncHTTPExecutor(client: httpClient)
-    )
-    if let identity = try? await transport.getMe() {
-      report.add(key: "telegram.bot", value: identity.username ?? "id:\(identity.id)")
-    } else {
-      report.add(key: "telegram.bot", value: "unreachable", ok: false)
+    // Best-effort connectivity check (only if a token is available).
+    let secretStore = SecretStoreResolver.resolve(
+      stateRoot: config.stateRoot,
+      environment: ProcessInfo.processInfo.environment
+    ).store
+    if let secrets = try? secretStore.loadSecrets() {
+      let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
+      let transport = TelegramClient(
+        token: secrets.telegramBotToken,
+        http: AsyncHTTPExecutor(client: httpClient)
+      )
+
+      if let identity = try? await transport.getMe() {
+        report.add(key: "telegram.bot", value: identity.username ?? "id:\(identity.id)")
+      } else {
+        report.add(key: "telegram.bot", value: "unreachable", ok: false)
+      }
+
+      try? await httpClient.shutdown()
     }
-    try? await httpClient.shutdown()
 
     emit(report)
+
+    if !secretsRow.ok {
+      throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
+    }
     if !report.ok {
       throw ExitCode.failure
     }
