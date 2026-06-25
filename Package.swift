@@ -9,6 +9,7 @@ let package = Package(
   ],
   dependencies: [
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.0"),
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
@@ -17,6 +18,13 @@ let package = Package(
   ],
   targets: [
     .target(name: "ClawCore"),
+    .target(
+      name: "ClawSecrets",
+      dependencies: [
+        "ClawCore",
+        .product(name: "Crypto", package: "swift-crypto"),
+      ]
+    ),
     .target(
       name: "ClawData",
       dependencies: [
@@ -51,13 +59,21 @@ let package = Package(
     .executableTarget(
       name: "clawd",
       dependencies: [
-        "ClawCore", "ClawData", "ClawTelegram", "ClawGateway", "ClawLLM", "ClawAgent",
+        "ClawCore", "ClawData", "ClawSecrets", "ClawTelegram", "ClawGateway", "ClawLLM",
+        "ClawAgent",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore"]),
+    .testTarget(
+      name: "ClawSecretsTests",
+      dependencies: [
+        "ClawSecrets", "ClawCore",
+        .product(name: "Crypto", package: "swift-crypto"),
+      ]
+    ),
     .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore"]),
     .testTarget(name: "ClawTelegramTests", dependencies: ["ClawTelegram", "ClawCore"]),
     .testTarget(name: "ClawLLMTests", dependencies: ["ClawLLM", "ClawCore"]),
