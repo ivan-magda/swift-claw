@@ -17,6 +17,8 @@ public struct EncryptedFileSecretStore: SecretStore {
   /// dispatches on it AND authenticates it.
   static let envelopeVersion: UInt8 = 1
   static let keyByteCount = 32  // 256-bit symmetric key
+  static let keyFilePermissions: UInt32 = 0o600  // owner read/write only
+  static let permissionBitsMask: UInt32 = 0o777  // strips file-type bits from st_mode
 
   private let keyURL: URL
   private let envelopeURL: URL
@@ -130,7 +132,7 @@ public struct EncryptedFileSecretStore: SecretStore {
 
     let key = SymmetricKey(size: .bits256)
     let keyData = key.withUnsafeBytes { Data($0) }
-    let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+    let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL, mode_t(keyFilePermissions))
 
     guard descriptor >= 0 else {
       throw SecretStoreError.keyFileInsecure(
@@ -148,11 +150,64 @@ public struct EncryptedFileSecretStore: SecretStore {
     return key
   }
 
-  /// Minimal open for Task 02; Task 03 hardens it (O_NOFOLLOW + regular-file + owner + 0600).
+  // MARK: - Key-file security policy
+
+  /// The fstat-derived facts the policy checks. Factored out so owner/file-type/mode rules are
+  /// table-testable with synthetic values — there is no portable way to chown to a foreign uid
+  /// unprivileged, so that case is covered by `validateKeyMetadata` rather than an integration test.
+  struct KeyFileMetadata: Sendable, Equatable {
+    let isRegularFile: Bool
+    let permissionBits: UInt32  // st_mode & permissionBitsMask
+    let ownerUID: uid_t
+  }
+
+  static func validateKeyMetadata(_ metadata: KeyFileMetadata, expectedUID: uid_t) throws {
+    guard metadata.isRegularFile else {
+      throw SecretStoreError.keyFileInsecure("\(SecretFile.key) is not a regular file")
+    }
+    guard metadata.permissionBits == keyFilePermissions else {
+      throw SecretStoreError.keyFileInsecure("\(SecretFile.key) must be mode 0600")
+    }
+    guard metadata.ownerUID == expectedUID else {
+      throw SecretStoreError.keyFileInsecure("\(SecretFile.key) not owned by the daemon uid")
+    }
+  }
+
   static func openKey(at url: URL) throws -> SymmetricKey {
-    guard let data = try? Data(contentsOf: url), data.count == keyByteCount else {
+    let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW)
+    guard descriptor >= 0 else {
+      throw SecretStoreError.keyFileInsecure(
+        "open \(SecretFile.key): \(String(cString: strerror(errno)))"
+      )
+    }
+    defer { close(descriptor) }
+
+    var status = stat()
+    guard fstat(descriptor, &status) == 0 else {
+      throw SecretStoreError.keyFileInsecure("fstat \(SecretFile.key)")
+    }
+
+    // `st_mode` is UInt16 on Darwin and UInt32 on Linux; normalize to UInt32 for both.
+    let mode = UInt32(status.st_mode)
+    try validateKeyMetadata(
+      KeyFileMetadata(
+        isRegularFile: (mode & UInt32(S_IFMT)) == UInt32(S_IFREG),
+        permissionBits: mode & permissionBitsMask,
+        ownerUID: status.st_uid
+      ),
+      expectedUID: getuid()
+    )
+
+    let data = FileHandle(
+      fileDescriptor: descriptor,
+      closeOnDealloc: false
+    )
+    .readDataToEndOfFile()
+
+    guard data.count == keyByteCount else {
       throw SecretStoreError.keyFileInsecure("key must be \(keyByteCount) bytes")
     }
+
     return SymmetricKey(data: data)
   }
 }
