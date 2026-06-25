@@ -11,7 +11,10 @@ import Foundation
 import Logging
 
 struct RunCommand: AsyncParsableCommand {
-  static let configuration = CommandConfiguration(abstract: "Start the daemon.")
+  static let configuration = CommandConfiguration(
+    commandName: "run",
+    abstract: "Start the daemon."
+  )
 
   func run() async throws {
     let logger = Logger(label: "clawd")

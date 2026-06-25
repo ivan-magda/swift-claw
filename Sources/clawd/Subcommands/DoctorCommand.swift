@@ -8,7 +8,10 @@ import ClawTelegram
 import Foundation
 
 struct DoctorCommand: AsyncParsableCommand {
-  static let configuration = CommandConfiguration(abstract: "Run health self-checks.")
+  static let configuration = CommandConfiguration(
+    commandName: "doctor",
+    abstract: "Run health self-checks."
+  )
 
   @Flag(
     name: .customLong("check-config"),
