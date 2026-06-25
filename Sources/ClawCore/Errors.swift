@@ -8,7 +8,6 @@ public enum ClawExitCode: Int32, Sendable {
 }
 
 public enum ConfigError: Error, Sendable, Equatable {
-  case missingBotToken
   case invalidAllowlist(String)
   case unwritableStateRoot(String)
   case missingLLMBaseURL
@@ -19,7 +18,6 @@ public enum ConfigError: Error, Sendable, Equatable {
 
   public var exitCode: Int32 {
     switch self {
-    case .missingBotToken: ClawExitCode.secretLoadFailed.rawValue
     case .invalidAllowlist: ClawExitCode.configInvalid.rawValue
     case .unwritableStateRoot: ClawExitCode.configInvalid.rawValue
     case .missingLLMBaseURL: ClawExitCode.configInvalid.rawValue

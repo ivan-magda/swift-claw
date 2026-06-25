@@ -5,6 +5,7 @@ import ClawCore
 import ClawData
 import ClawGateway
 import ClawLLM
+import ClawSecrets
 import ClawTelegram
 import Foundation
 import Logging
@@ -15,6 +16,7 @@ struct RunCommand: AsyncParsableCommand {
   func run() async throws {
     let logger = Logger(label: "clawd")
     let config = try Self.loadConfigOrExit()
+    let secrets = try Self.loadSecretsOrExit(config: config)
 
     // Single-instance guard — held until the process exits (defer covers the graceful path).
     let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
@@ -53,7 +55,13 @@ struct RunCommand: AsyncParsableCommand {
     let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: httpConfig)
     let executor = AsyncHTTPExecutor(client: httpClient)
 
-    let daemon = makeDaemon(config: config, stores: stores, executor: executor, logger: logger)
+    let daemon = makeDaemon(
+      config: config,
+      secrets: secrets,
+      stores: stores,
+      executor: executor,
+      logger: logger
+    )
 
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
     var runFailure: Error?
@@ -84,16 +92,36 @@ struct RunCommand: AsyncParsableCommand {
     }
   }
 
+  /// Loads secrets via the fail-closed resolver; a secret-load failure exits 11 (non-retryable).
+  private static func loadSecretsOrExit(config: AppConfig) throws -> Secrets {
+    let resolution = SecretStoreResolver.resolve(
+      stateRoot: config.stateRoot,
+      environment: ProcessInfo.processInfo.environment
+    )
+    do {
+      return try resolution.store.loadSecrets()
+    } catch let error as SecretStoreError {
+      FileHandle.standardError.write(Data("secret error: \(error)\n".utf8))
+      throw ExitCode(error.exitCode)
+    }
+  }
+
   /// Builds the service graph: the OpenAI-compatible provider + agent feed a `TurnRunner`, which
   /// the router dispatches from the poller. Both Telegram and the LLM share the injected executor.
   private func makeDaemon(
     config: AppConfig,
+    secrets: Secrets,
     stores: ClawStores,
     executor: AsyncHTTPExecutor,
     logger: Logger
   ) -> Daemon {
-    let transport = TelegramClient(token: config.botToken, http: executor)
-    let agent = makeAgent(config: config, executor: executor, transport: transport)
+    let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
+    let agent = makeAgent(
+      config: config,
+      secrets: secrets,
+      executor: executor,
+      transport: transport
+    )
     // Created before the TurnRunner so its notifyOutbox closure can capture it: each commit pokes
     // the dispatcher to drain the rows it just enqueued.
     let outboxSignal = OutboxSignal()
@@ -145,11 +173,12 @@ struct RunCommand: AsyncParsableCommand {
   /// composition root reads as "build the agent → feed the turn runner → register the services".
   private func makeAgent(
     config: AppConfig,
+    secrets: Secrets,
     executor: AsyncHTTPExecutor,
     transport: TelegramClient
   ) -> AgentRuntime {
     let provider = OpenAICompatibleProvider(
-      config: config.llm,
+      config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
       http: executor,
       sleep: { try await Task.sleep(for: .seconds($0)) },
       jitter: { Double.random(in: 0...$0) }

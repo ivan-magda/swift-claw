@@ -26,7 +26,6 @@ import Testing
 
   @Test func configErrorMapsToExitCode() {
     // then
-    #expect(ConfigError.missingBotToken.exitCode == ClawExitCode.secretLoadFailed.rawValue)
     #expect(ConfigError.invalidAllowlist("bad").exitCode == ClawExitCode.configInvalid.rawValue)
     #expect(ConfigError.unwritableStateRoot("/x").exitCode == ClawExitCode.configInvalid.rawValue)
   }
