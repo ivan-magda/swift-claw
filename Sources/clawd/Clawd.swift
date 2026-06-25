@@ -6,7 +6,7 @@ struct Clawd: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "clawd",
     abstract: "swift-claw — single-owner Telegram assistant daemon.",
-    subcommands: [RunCommand.self, DoctorCommand.self],
+    subcommands: [RunCommand.self, DoctorCommand.self, SecretsCommand.self],
     defaultSubcommand: RunCommand.self
   )
 }
