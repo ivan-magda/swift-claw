@@ -5,13 +5,16 @@ import Logging
 
 /// Injected behind a protocol so the router/poller tests stay decoupled from the real provider.
 public protocol TurnDispatching: Sendable {
-  func run(sessionId: Int64, chatId: Int64) async throws
+  func run(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    triggerMessageId: Int64
+  ) async throws
 }
 
-/// Orchestrates one inline turn at the gateway boundary: create the run, assemble context, hand it
-/// to the agent, then persist the outcome. The agent never throws (every failure is a `TurnResult`),
-/// so the only error `run` propagates is `StoreError.diskFull` — the router maps that to the
-/// storage-full path; every other failure is degraded in-band and enqueued (never silence).
+/// Picks up a durable PENDING run, assembles its trigger-bounded context, executes the agent, and
+/// persists the outcome.
 public struct TurnRunner: TurnDispatching {
   private let sessionMessages: any SessionMessageStore
   private let runs: any RunStore
@@ -60,12 +63,29 @@ public struct TurnRunner: TurnDispatching {
     self.logger = logger
   }
 
-  public func run(sessionId: Int64, chatId: Int64) async throws {
-    let now = Date()
-    let runId = try runs.createRun(sessionId: sessionId, now: now)
+  public func run(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    triggerMessageId: Int64
+  ) async throws {
+    guard !Task.isCancelled else {
+      return
+    }
 
-    let history = try sessionMessages.loadRecentMessages(
+    let now = Date()
+    guard try runs.pickUp(runId: runId, now: now) else {
+      logger.debug("run \(runId) was not pending at pickup; skipping turn")
+      return
+    }
+
+    guard !Task.isCancelled else {
+      return
+    }
+
+    let history = try sessionMessages.loadContext(
       sessionId: sessionId,
+      throughMessageId: triggerMessageId,
       limit: Self.historyLimit
     )
     let (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now)
@@ -167,16 +187,17 @@ public struct TurnRunner: TurnDispatching {
     decision: String,
     at committedAt: Date
   ) throws {
-    // The `newlyClaimed` result is ignored: the dedup key is `runId:stepIndex`, and each turn gets
-    // a fresh `runId`, so this first chunk always inserts — a `false` here would mean a duplicate
-    // delivery, which can't occur for a brand-new run.
-    _ = try outbox.claimOutbound(
+    let claimed = try outbox.claimOutboundIfRunActive(
       runId: runId,
       stepIndex: 0,
       chatId: chatId,
       payload: message,
       payloadHash: ContentHash.fnv1a(message)
     )
+    guard claimed else {
+      return
+    }
+
     try runs.failRun(runId: runId, now: committedAt)
     try audit.appendAudit(
       turnAudit(

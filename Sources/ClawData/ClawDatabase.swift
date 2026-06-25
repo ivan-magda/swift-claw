@@ -119,6 +119,14 @@ public enum ClawDatabase {
         table.column("session_id", .integer)
       }
     }
+    migrator.registerMigration("v3") { db in
+      try db.alter(table: "sessions") { table in
+        table.add(column: "window_start_message_id", .integer).notNull().defaults(to: 0)
+      }
+      try db.alter(table: "runs") { table in
+        table.add(column: "trigger_message_id", .integer)
+      }
+    }
     return migrator
   }
 

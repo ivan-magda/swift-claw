@@ -24,7 +24,13 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
       )
 
       guard newlyClaimed else {
-        return ClaimResult(newlyClaimed: false, sessionId: nil, messageId: nil)
+        return ClaimResult(
+          newlyClaimed: false,
+          sessionId: nil,
+          messageId: nil,
+          runId: nil,
+          triggerMessageId: nil
+        )
       }
 
       let sessionId = try Self.upsertSession(db, sessionKey: inbound.sessionKey, now: inbound.ts)
@@ -37,33 +43,86 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
           """,
         arguments: [sessionId, inbound.text, inbound.ts]
       )
+      let messageId = db.lastInsertedRowID
+
+      try db.execute(
+        sql: """
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id)
+          VALUES (?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          sessionId,
+          RunState.pending.rawValue,
+          inbound.ts,
+          inbound.ts,
+          messageId,
+        ]
+      )
+      let runId = db.lastInsertedRowID
 
       return ClaimResult(
         newlyClaimed: true,
         sessionId: sessionId,
-        messageId: db.lastInsertedRowID
+        messageId: messageId,
+        runId: runId,
+        triggerMessageId: messageId
       )
     }
   }
 
-  public func loadRecentMessages(sessionId: Int64, limit: Int) throws -> [StoredMessage] {
+  public func loadContext(
+    sessionId: Int64,
+    throughMessageId: Int64,
+    limit: Int
+  ) throws -> [StoredMessage] {
     try writer.readMapping { db in
-      // Most-recent `limit` by (ts, id) DESC, then reversed to oldest-first for context assembly.
+      // Limit the newest eligible rows first, then restore chronological order for the model.
       let rows = try Row.fetchAll(
         db,
         sql: """
-          SELECT role, content, provenance FROM messages
-          WHERE session_id = ? ORDER BY ts DESC, id DESC LIMIT ?
+          SELECT role, content, provenance FROM (
+            SELECT m.id, m.role, m.content, m.provenance
+            FROM messages m
+            JOIN sessions s ON s.id = m.session_id
+            WHERE m.session_id = ?
+              AND m.id > s.window_start_message_id
+              AND m.id <= ?
+            ORDER BY m.id DESC
+            LIMIT ?
+          )
+          ORDER BY id ASC
           """,
-        arguments: [sessionId, limit]
+        arguments: [sessionId, throughMessageId, limit]
       )
-      return rows.reversed().map { row in
+
+      return rows.map { row in
         StoredMessage(
           role: MessageRole(rawValue: row["role"]) ?? .user,
           content: row["content"],
           provenance: Provenance(rawValue: row["provenance"]) ?? .trusted
         )
       }
+    }
+  }
+
+  public func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {
+    try writer.writeMapping { db in
+      // The boundary and detaint must move atomically so `/new` cannot expose a mixed session state.
+      let boundary =
+        try Int64.fetchOne(
+          db,
+          sql: "SELECT COALESCE(MAX(id), 0) FROM messages WHERE session_id = ?",
+          arguments: [sessionId]
+        ) ?? 0
+
+      try db.execute(
+        sql: """
+          UPDATE sessions
+          SET window_start_message_id = ?, tainted = 0, updated_ts = ?
+          WHERE id = ?
+          """,
+        arguments: [boundary, now, sessionId]
+      )
     }
   }
 

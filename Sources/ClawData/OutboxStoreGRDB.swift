@@ -28,6 +28,39 @@ public struct OutboxStoreGRDB: OutboxStore {
         ),
         now: Date()
       )
+    }
+  }
+
+  public func claimOutboundIfRunActive(
+    runId: Int64,
+    stepIndex: Int,
+    chatId: Int64,
+    payload: String,
+    payloadHash: String
+  ) throws -> Bool {
+    try writer.writeMapping { db in
+      try db.execute(
+        sql: """
+          INSERT OR IGNORE INTO outbound_deliveries(
+            run_id, step_index, chat_id, dedup_key, payload, payload_hash, status, created_ts
+          )
+          SELECT ?, ?, ?, ?, ?, ?, 'PENDING', ?
+          WHERE EXISTS (
+            SELECT 1 FROM runs WHERE id = ? AND state = ?
+          )
+          """,
+        arguments: [
+          runId,
+          stepIndex,
+          chatId,
+          "\(runId):\(stepIndex)",
+          payload,
+          payloadHash,
+          Date(),
+          runId,
+          RunState.running.rawValue,
+        ]
+      )
       return db.changesCount > 0
     }
   }

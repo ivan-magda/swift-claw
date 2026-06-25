@@ -1,3 +1,4 @@
+import ClawAgent
 import ClawCore
 import ClawData
 import Foundation
@@ -14,7 +15,14 @@ struct FullSessions: SessionMessageStore {
   func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
     throw StoreError.diskFull
   }
-  func loadRecentMessages(sessionId: Int64, limit: Int) throws -> [StoredMessage] { [] }
+  func loadContext(
+    sessionId: Int64,
+    throughMessageId: Int64,
+    limit: Int
+  ) throws -> [StoredMessage] {
+    []
+  }
+  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {}
 }
 
 @Suite struct MessageRouterTests {
@@ -40,6 +48,7 @@ struct FullSessions: SessionMessageStore {
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
       turnRunner: dispatcher,
+      lanes: SessionLaneRegistry(),
       logger: Logger(label: "test")
     )
 
@@ -57,6 +66,7 @@ struct FullSessions: SessionMessageStore {
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "hello"))
+    await harness.dispatcher.waitForCalls(atLeast: 1)
 
     // then — a turn was dispatched, nothing was sent directly, and the user message was persisted
     #expect(outcome == .processed)
@@ -64,8 +74,12 @@ struct FullSessions: SessionMessageStore {
     #expect(calls.count == 1)
     let sent = await harness.transport.sent
     #expect(sent.isEmpty)
-    let sessionId = try #require(calls.first?.sessionId)
-    let history = try harness.sessionMessages.loadRecentMessages(sessionId: sessionId, limit: 50)
+    let firstCall = try #require(calls.first)
+    let history = try harness.sessionMessages.loadContext(
+      sessionId: firstCall.sessionId,
+      throughMessageId: firstCall.triggerMessageId,
+      limit: 50
+    )
     #expect(history.contains { $0.role == .user && $0.content == "hello" })
   }
 
@@ -75,6 +89,7 @@ struct FullSessions: SessionMessageStore {
 
     // when — the same update_id arrives twice
     await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "hi"))
+    await harness.dispatcher.waitForCalls(atLeast: 1)
     await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "hi"))
 
     // then — the fused claim dedups, so only one turn runs
@@ -165,6 +180,7 @@ struct FullSessions: SessionMessageStore {
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
       turnRunner: FakeTurnRunner(),
+      lanes: SessionLaneRegistry(),
       logger: Logger(label: "test")
     )
 

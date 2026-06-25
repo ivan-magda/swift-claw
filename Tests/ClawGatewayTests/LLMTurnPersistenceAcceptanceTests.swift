@@ -21,12 +21,32 @@ actor RecordingProvider: LLMProvider {
   }
 
   private let outcome: Outcome
-  private(set) var lastMessageCount = 0
+  private let blocksFirstCall: Bool
+  private(set) var requests: [[ChatMessage]] = []
+  private var requestContinuations: [CheckedContinuation<Void, Never>] = []
+  private var firstCallRelease: CheckedContinuation<Void, Never>?
 
-  init(_ outcome: Outcome) { self.outcome = outcome }
+  init(_ outcome: Outcome, blocksFirstCall: Bool = false) {
+    self.outcome = outcome
+    self.blocksFirstCall = blocksFirstCall
+  }
+
+  var lastMessageCount: Int {
+    requests.last?.count ?? 0
+  }
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
-    lastMessageCount = request.messages.count
+    requests.append(request.messages)
+    for continuation in requestContinuations {
+      continuation.resume()
+    }
+    requestContinuations.removeAll()
+    if blocksFirstCall && requests.count == 1 {
+      await withCheckedContinuation { continuation in
+        firstCallRelease = continuation
+      }
+    }
+
     switch outcome {
     case .respond(let answer):
       return ChatResponse(
@@ -39,13 +59,40 @@ actor RecordingProvider: LLMProvider {
       throw error
     }
   }
+
+  func waitForRequestCount(_ count: Int) async {
+    while requests.count < count {
+      await withCheckedContinuation { continuation in
+        requestContinuations.append(continuation)
+      }
+    }
+  }
+
+  func releaseFirstCall() {
+    firstCallRelease?.resume()
+    firstCallRelease = nil
+  }
+}
+
+actor Gate {
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func wait() async {
+    await withCheckedContinuation { continuation in
+      releaseContinuation = continuation
+    }
+  }
+
+  func release() {
+    releaseContinuation?.resume()
+    releaseContinuation = nil
+  }
 }
 
 // MARK: - Stack
 
-/// The full inline-turn wiring over one `DatabaseWriter`: `router.handle` runs a turn and commits
-/// (without sending); `dispatcher.drainOnce()` then delivers the PENDING outbox rows. Both the stores
-/// and the raw `writer` are exposed so tests can assert durable state directly.
+/// The full lane-dispatched wiring over one `DatabaseWriter`: `router.handle` persists and enqueues;
+/// the lane commits without sending, then `dispatcher.drainOnce()` delivers PENDING outbox rows.
 struct Stack {
   let router: MessageRouter
   let dispatcher: OutboxDispatcher
@@ -59,15 +106,16 @@ struct Stack {
   let outbox: OutboxStoreGRDB
   let cursor: UpdateCursorStoreGRDB
   let chatId: Int64
+  let lanes: SessionLaneRegistry
 }
 
-/// Assembles the production inline-turn stack over `writer`, seeding `chatId` onto the allowlist and
-/// scripting the provider with `outcome`. The caller owns `writer` (an in-memory queue for most tests,
-/// a file pool for the restart test) and must have migrated it first.
+/// Assembles the production lane stack over `writer`, seeding `chatId` onto the allowlist and
+/// scripting the provider with `outcome`.
 func makeStack(
   writer: any DatabaseWriter,
   allow chatId: Int64 = 42,
-  outcome: RecordingProvider.Outcome
+  outcome: RecordingProvider.Outcome,
+  blocksFirstProviderCall: Bool = false
 ) throws -> Stack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
   try allowlist.seedAllowlist(userIds: [chatId])
@@ -80,9 +128,10 @@ func makeStack(
   let outbox = OutboxStoreGRDB(writer: writer)
   let audit = AuditLogGRDB(writer: writer)
 
-  let provider = RecordingProvider(outcome)
+  let provider = RecordingProvider(outcome, blocksFirstCall: blocksFirstProviderCall)
   let transport = RecordingTransport()
   let signal = OutboxSignal()
+  let lanes = SessionLaneRegistry()
   let logger = Logger(label: "inc1-acceptance")
 
   let agent = AgentRuntime(
@@ -118,6 +167,7 @@ func makeStack(
     accessControl: AccessControl(allowlist: allowlist),
     transport: transport,
     turnRunner: turnRunner,
+    lanes: lanes,
     logger: logger
   )
 
@@ -140,7 +190,8 @@ func makeStack(
     usage: usage,
     outbox: outbox,
     cursor: cursor,
-    chatId: chatId
+    chatId: chatId,
+    lanes: lanes
   )
 }
 
@@ -161,6 +212,38 @@ func makeStack(
     }
   }
 
+  private func runStates(_ writer: any DatabaseWriter) throws -> [String] {
+    try writer.read { db in
+      try String.fetchAll(db, sql: "SELECT state FROM runs ORDER BY id ASC")
+    }
+  }
+
+  private func waitForRunStates(
+    _ writer: any DatabaseWriter,
+    expected: [String]
+  ) async throws {
+    for _ in 0..<100 {
+      if try runStates(writer) == expected {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(try runStates(writer) == expected)
+  }
+
+  private func waitForPendingOutboxCount(
+    _ outbox: OutboxStoreGRDB,
+    count: Int
+  ) async throws {
+    for _ in 0..<100 {
+      if try outbox.pendingOutbound().count == count {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(try outbox.pendingOutbound().count == count)
+  }
+
   // MARK: - Tests
 
   /// §1: a real answer is persisted across the whole spine and committed BEFORE any send — the turn
@@ -172,10 +255,11 @@ func makeStack(
     try ClawDatabase.migrate(queue)
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
 
-    // when — route one allowlisted message: the turn runs inline and commits, but sends nothing
+    // when — route one allowlisted message, then wait for the queued turn to commit
     let outcome = await stack.router.handle(
       rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello")
     )
+    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
 
     // then — everything is durable, nothing is on the wire yet
     #expect(outcome == .processed)
@@ -206,7 +290,13 @@ func makeStack(
 
     // when — two sequential turns from the same chat (distinct update ids)
     await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "first"))
+    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
     await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "second"))
+    await stack.provider.waitForRequestCount(2)
+    try await waitForRunStates(
+      queue,
+      expected: [RunState.done.rawValue, RunState.done.rawValue]
+    )
 
     // then — the second call's request carried the full prior history plus the system prompt
     #expect(await stack.provider.lastMessageCount == 4)
@@ -226,6 +316,8 @@ func makeStack(
 
     // when
     await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
+    try await waitForRunStates(queue, expected: [RunState.failed.rawValue])
+    try await waitForPendingOutboxCount(stack.outbox, count: 1)
     await stack.dispatcher.drainOnce()
 
     // then — the run failed but the owner was told, never left silent
@@ -255,7 +347,7 @@ func makeStack(
       )
     )
     let seedSession = try #require(seedClaim.sessionId)
-    let seedRun = try stack.runs.createRun(sessionId: seedSession, now: Date())
+    let seedRun = try #require(seedClaim.runId)
     try stack.usage.recordUsage(
       ProviderUsage(
         runId: seedRun,
@@ -269,9 +361,15 @@ func makeStack(
         ts: Date()
       )
     )
+    _ = try stack.runs.supersedeSessionRuns(sessionId: seedSession, now: Date())
 
     // when — an allowlisted turn arrives with the cap already met
     await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
+    try await waitForRunStates(
+      queue,
+      expected: [RunState.superseded.rawValue, RunState.failed.rawValue]
+    )
+    try await waitForPendingOutboxCount(stack.outbox, count: 1)
     await stack.dispatcher.drainOnce()
 
     // then — the gate refused pre-call (provider never invoked), the run failed, and the owner was told
@@ -298,6 +396,7 @@ func makeStack(
       try ClawDatabase.migrate(pool)
       let stack = try makeStack(writer: pool, outcome: .respond("stub answer"))
       await stack.router.handle(rawUpdate: textUpdate(id: 100, from: stack.chatId, text: "hello"))
+      try await waitForRunStates(pool, expected: [RunState.done.rawValue])
       try stack.cursor.advanceCursor(to: 100)
     }
 
@@ -309,9 +408,68 @@ func makeStack(
       sessionKey: sessionKey,
       now: Date()
     )
-    let history = try reopened.sessionMessages.loadRecentMessages(sessionId: sessionId, limit: 50)
+    let history = try reopened.sessionMessages.loadContext(
+      sessionId: sessionId,
+      throughMessageId: .max,
+      limit: 50
+    )
     #expect(history.contains { $0.role == .user && $0.content == "hello" })
     #expect(history.contains { $0.role == .assistant && $0.content == "stub answer" })
+  }
+
+  @Test func twoQuickMessagesRunFifoAndFirstContextExcludesSecond() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStack(
+      writer: queue,
+      outcome: .respond("stub answer"),
+      blocksFirstProviderCall: true
+    )
+    let sessionId = try stack.sessionMessages.loadOrCreateSession(
+      sessionKey: SessionKey.telegramDM(chatId: stack.chatId),
+      now: Date()
+    )
+    let lane = await stack.lanes.actor(for: sessionId)
+    let gate = Gate()
+    await lane.enqueue(runId: -1) {
+      await gate.wait()
+    }
+
+    // when
+    let firstOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "first")
+    )
+    let secondOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "second")
+    )
+    #expect(firstOutcome == .processed)
+    #expect(secondOutcome == .processed)
+    #expect(await stack.provider.requests.isEmpty)
+    await gate.release()
+    await stack.provider.waitForRequestCount(1)
+    #expect(await stack.provider.requests.count == 1)
+    await stack.provider.releaseFirstCall()
+    await stack.provider.waitForRequestCount(2)
+    try await waitForRunStates(
+      queue,
+      expected: [RunState.done.rawValue, RunState.done.rawValue]
+    )
+
+    // then
+    let requests = await stack.provider.requests
+    let firstContents = requests[0].map(\.content)
+    let secondContents = requests[1].map(\.content)
+    #expect(firstContents.contains("first"))
+    #expect(firstContents.contains("second") == false)
+    #expect(secondContents.contains("second"))
+    let assistantRunIds = try await queue.read { db in
+      try Int64.fetchAll(
+        db,
+        sql: "SELECT run_id FROM messages WHERE role = 'assistant' ORDER BY id ASC"
+      )
+    }
+    #expect(assistantRunIds == [1, 2])
   }
 }
 // swiftlint:enable function_body_length

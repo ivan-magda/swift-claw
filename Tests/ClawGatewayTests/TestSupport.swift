@@ -9,14 +9,46 @@ import Testing
 /// Records the turns the router dispatches (and optionally throws a scripted error) so router/poller
 /// tests stay decoupled from the real provider/persistence.
 actor FakeTurnRunner: TurnDispatching {
-  private(set) var calls: [(sessionId: Int64, chatId: Int64)] = []
+  struct Call: Sendable, Equatable {
+    let runId: Int64
+    let sessionId: Int64
+    let chatId: Int64
+    let triggerMessageId: Int64
+  }
+
+  private(set) var calls: [Call] = []
   private let error: (any Error)?
+  private var continuations: [CheckedContinuation<Void, Never>] = []
 
   init(error: (any Error)? = nil) { self.error = error }
 
-  func run(sessionId: Int64, chatId: Int64) async throws {
-    calls.append((sessionId, chatId))
+  func run(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    triggerMessageId: Int64
+  ) async throws {
+    calls.append(
+      Call(
+        runId: runId,
+        sessionId: sessionId,
+        chatId: chatId,
+        triggerMessageId: triggerMessageId
+      )
+    )
+    for continuation in continuations {
+      continuation.resume()
+    }
+    continuations.removeAll()
     if let error { throw error }
+  }
+
+  func waitForCalls(atLeast count: Int) async {
+    while calls.count < count {
+      await withCheckedContinuation { continuation in
+        continuations.append(continuation)
+      }
+    }
   }
 }
 
@@ -182,9 +214,9 @@ func makeSeededFixture() throws -> SeededFixture {
       ts: Date()
     )
   )
-  let sessionId = try #require(claim.sessionId)
+  let runId = try #require(claim.runId)
   let runs = RunStoreGRDB(writer: queue)
-  let runId = try runs.createRun(sessionId: sessionId, now: Date())
+  #expect(try runs.pickUp(runId: runId, now: Date()))
   return SeededFixture(
     outbox: OutboxStoreGRDB(writer: queue),
     runs: runs,

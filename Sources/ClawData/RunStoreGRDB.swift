@@ -9,20 +9,78 @@ public struct RunStoreGRDB: RunStore {
     self.writer = writer
   }
 
-  public func createRun(sessionId: Int64, now: Date) throws -> Int64 {
+  public func pickUp(runId: Int64, now: Date) throws -> Bool {
     try writer.writeMapping { db in
-      try db.execute(
+      try Self.transitionRun(db, runId: runId, event: .pickUp, now: now) != nil
+    }
+  }
+
+  public func cancelActiveRun(
+    sessionId: Int64,
+    reason: CancelReason,
+    now: Date
+  ) throws -> Int64? {
+    try writer.writeMapping { db in
+      let runId = try Int64.fetchOne(
+        db,
         sql: """
-          INSERT INTO runs(session_id, state, created_ts, updated_ts) VALUES (?, ?, ?, ?)
+          SELECT id FROM runs
+          WHERE session_id = ? AND state = ?
+          ORDER BY id DESC
+          LIMIT 1
           """,
-        arguments: [sessionId, RunState.running.rawValue, now, now]
+        arguments: [sessionId, RunState.running.rawValue]
       )
-      return db.lastInsertedRowID
+      guard let runId else {
+        return nil
+      }
+
+      let event: RunEvent = reason == .cancelled ? .cancel : .supersede
+      guard try Self.transitionRun(db, runId: runId, event: event, now: now) != nil else {
+        return nil
+      }
+
+      return runId
+    }
+  }
+
+  public func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] {
+    try writer.writeMapping { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT id FROM runs
+          WHERE session_id = ? AND state IN (?, ?)
+          ORDER BY id ASC
+          """,
+        arguments: [sessionId, RunState.pending.rawValue, RunState.running.rawValue]
+      )
+
+      var affected: [Int64] = []
+      for row in rows {
+        let runId: Int64 = row["id"]
+        if try Self.transitionRun(db, runId: runId, event: .supersede, now: now) != nil {
+          affected.append(runId)
+        }
+      }
+
+      return affected
     }
   }
 
   public func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws {
     try writer.writeMapping { db in
+      guard
+        let nextState = try Self.transitionRun(
+          db,
+          runId: turn.runId,
+          event: .complete,
+          now: now
+        )
+      else {
+        return
+      }
+
       let usage = turn.usage
       try db.execute(
         sql: """
@@ -42,7 +100,7 @@ public struct RunStoreGRDB: RunStore {
         sql:
           "UPDATE runs SET state = ?, updated_ts = ?, input_tokens = ?, output_tokens = ?, cost_usd = ? WHERE id = ?",
         arguments: [
-          RunState.done.rawValue,
+          nextState.rawValue,
           now,
           usage.promptTokens,
           usage.completionTokens,
@@ -59,10 +117,7 @@ public struct RunStoreGRDB: RunStore {
 
   public func failRun(runId: Int64, now: Date) throws {
     try writer.writeMapping { db in
-      try db.execute(
-        sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
-        arguments: [RunState.failed.rawValue, now, runId]
-      )
+      _ = try Self.transitionRun(db, runId: runId, event: .fail, now: now)
     }
   }
 
@@ -72,28 +127,31 @@ public struct RunStoreGRDB: RunStore {
         db,
         sql: """
           SELECT r.id AS run_id, s.session_key AS session_key FROM runs r
-          JOIN sessions s ON s.id = r.session_id WHERE r.state = ?
+          JOIN sessions s ON s.id = r.session_id
+          WHERE r.state IN (?, ?)
+          ORDER BY r.id ASC
           """,
-        arguments: [RunState.running.rawValue]
+        arguments: [RunState.pending.rawValue, RunState.running.rawValue]
       )
 
       var replies: [DegradationReply] = []
       for row in stale {
         let runId: Int64 = row["run_id"]
-        try db.execute(
-          sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
-          arguments: [RunState.failed.rawValue, now, runId]
-        )
-        let delivered =
+        guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
+          continue
+        }
+
+        let sentCount =
           try Int.fetchOne(
             db,
-            sql: "SELECT COUNT(*) FROM outbound_deliveries WHERE run_id = ?",
+            sql: """
+              SELECT COUNT(*) FROM outbound_deliveries
+              WHERE run_id = ? AND status = 'SENT'
+              """,
             arguments: [runId]
           ) ?? 0
-        // A delivered run committed its reply before the crash; the dispatcher resends it.
-        // An undelivered run left the owner in silence — enqueue the degradation reply.
         guard
-          delivered == 0,
+          sentCount == 0,
           let chatId = SessionKey.chatId(from: row["session_key"])
         else {
           continue
@@ -105,9 +163,9 @@ public struct RunStoreGRDB: RunStore {
           payload: degradationText,
           payloadHash: ContentHash.fnv1a(degradationText)
         )
-        try Self.insertOutbox(db, runId: runId, chunk: chunk, now: now)
-
-        replies.append(DegradationReply(chatId: chatId, runId: runId, text: degradationText))
+        if try Self.insertOutbox(db, runId: runId, chunk: chunk, now: now) {
+          replies.append(DegradationReply(chatId: chatId, runId: runId, text: degradationText))
+        }
       }
 
       return replies
@@ -116,18 +174,19 @@ public struct RunStoreGRDB: RunStore {
 
   public func runsHealth(now: Date) throws -> RunsHealth {
     try writer.readMapping { db in
+      let activeStates = [RunState.pending.rawValue, RunState.running.rawValue]
       let inFlight =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM runs WHERE state = ?",
-          arguments: [RunState.running.rawValue]
+          sql: "SELECT COUNT(*) FROM runs WHERE state IN (?, ?)",
+          arguments: StatementArguments(activeStates)
         ) ?? 0
 
       let oldestRunAgeSeconds: Double? =
         try Date.fetchOne(
           db,
-          sql: "SELECT MIN(created_ts) FROM runs WHERE state = ?",
-          arguments: [RunState.running.rawValue]
+          sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (?, ?)",
+          arguments: StatementArguments(activeStates)
         ).map { now.timeIntervalSince($0) }
 
       let lastFailedAt = try Date.fetchOne(
@@ -163,6 +222,35 @@ public struct RunStoreGRDB: RunStore {
     }
   }
 
+  @discardableResult
+  private static func transitionRun(
+    _ db: Database,
+    runId: Int64,
+    event: RunEvent,
+    now: Date
+  ) throws -> RunState? {
+    let rawState = try String.fetchOne(
+      db,
+      sql: "SELECT state FROM runs WHERE id = ?",
+      arguments: [runId]
+    )
+
+    guard
+      let rawState,
+      let state = RunState(rawValue: rawState),
+      let nextState = RunFSM.reduce(state: state, on: event)
+    else {
+      return nil
+    }
+
+    try db.execute(
+      sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
+      arguments: [nextState.rawValue, now, runId]
+    )
+
+    return nextState
+  }
+
   static func insertUsage(_ db: Database, _ usage: ProviderUsage) throws {
     try db.execute(
       sql: """
@@ -184,7 +272,13 @@ public struct RunStoreGRDB: RunStore {
     )
   }
 
-  static func insertOutbox(_ db: Database, runId: Int64, chunk: OutboxChunk, now: Date) throws {
+  @discardableResult
+  static func insertOutbox(
+    _ db: Database,
+    runId: Int64,
+    chunk: OutboxChunk,
+    now: Date
+  ) throws -> Bool {
     try db.execute(
       sql: """
         INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
@@ -201,5 +295,6 @@ public struct RunStoreGRDB: RunStore {
         now,
       ]
     )
+    return db.changesCount > 0
   }
 }

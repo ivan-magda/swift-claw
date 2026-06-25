@@ -10,11 +10,19 @@ import Testing
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     let sessions = SessionMessageStoreGRDB(writer: queue)
-    let sessionId = try sessions.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
-      now: Date()
+    let claim = try sessions.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 1,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "seed",
+        isEdited: false,
+        ts: Date()
+      )
     )
-    let runId = try RunStoreGRDB(writer: queue).createRun(sessionId: sessionId, now: Date())
+    let sessionId = try #require(claim.sessionId)
+    let runId = try #require(claim.runId)
     let usage = UsageStoreGRDB(writer: queue)
     let now = Date()
     try usage.recordUsage(

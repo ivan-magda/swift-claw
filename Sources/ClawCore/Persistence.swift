@@ -1,10 +1,27 @@
 import Foundation
 
 public enum RunState: String, Sendable, Equatable {
+  /// Persisted after the inbound message and run are created atomically, before lane execution.
   case pending = "PENDING"
+  /// Persisted when the session lane successfully picks up the turn.
   case running = "RUNNING"
+  /// Terminal success: the assistant reply and outbox rows committed atomically.
   case done = "DONE"
+  /// Terminal failure: the turn could not complete and should not be picked up again.
   case failed = "FAILED"
+  /// Terminal cancellation requested by `/stop`.
+  case cancelled = "CANCELLED"
+  /// Terminal cancellation requested by `/new`; queued turns are superseded too.
+  case superseded = "SUPERSEDED"
+}
+
+/// The two command-owned reasons for terminating a live run.
+///
+/// This is intentionally narrower than `RunState`: callers cannot accidentally request an
+/// unrelated terminal state such as `.done` or `.failed`.
+public enum CancelReason: Sendable, Equatable {
+  case cancelled
+  case superseded
 }
 
 public enum Provenance: String, Sendable, Equatable {
@@ -69,11 +86,21 @@ public struct ClaimResult: Sendable, Equatable {
   public let newlyClaimed: Bool
   public let sessionId: Int64?
   public let messageId: Int64?
+  public let runId: Int64?
+  public let triggerMessageId: Int64?
 
-  public init(newlyClaimed: Bool, sessionId: Int64?, messageId: Int64?) {
+  public init(
+    newlyClaimed: Bool,
+    sessionId: Int64?,
+    messageId: Int64?,
+    runId: Int64?,
+    triggerMessageId: Int64?
+  ) {
     self.newlyClaimed = newlyClaimed
     self.sessionId = sessionId
     self.messageId = messageId
+    self.runId = runId
+    self.triggerMessageId = triggerMessageId
   }
 }
 
