@@ -42,12 +42,14 @@ struct DoctorCommand: AsyncParsableCommand {
 
     if checkConfig {
       emit(report)
+
       if !secretsRow.ok {
         throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
       }
       if !report.ok {
         throw ExitCode(ClawExitCode.configInvalid.rawValue)
       }
+
       return
     }
 
@@ -69,24 +71,28 @@ struct DoctorCommand: AsyncParsableCommand {
     }
 
     // Best-effort connectivity check (only if a token is available).
-    if let secrets = try? SecretStoreResolver.resolve(
+    let secretStore = SecretStoreResolver.resolve(
       stateRoot: config.stateRoot,
       environment: ProcessInfo.processInfo.environment
-    ).store.loadSecrets() {
+    ).store
+    if let secrets = try? secretStore.loadSecrets() {
       let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
       let transport = TelegramClient(
         token: secrets.telegramBotToken,
         http: AsyncHTTPExecutor(client: httpClient)
       )
+
       if let identity = try? await transport.getMe() {
         report.add(key: "telegram.bot", value: identity.username ?? "id:\(identity.id)")
       } else {
         report.add(key: "telegram.bot", value: "unreachable", ok: false)
       }
+
       try? await httpClient.shutdown()
     }
 
     emit(report)
+
     if !secretsRow.ok {
       throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
     }

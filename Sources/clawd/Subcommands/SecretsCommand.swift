@@ -31,7 +31,10 @@ struct SecretsCommand: AsyncParsableCommand {
       let secrets: Secrets
       do {
         // Suppress the plaintext warning — reading plaintext to encrypt it is the intent here.
-        secrets = try EnvSecretStore(environment: environment, warn: { _ in }).loadSecrets()
+        secrets = try EnvSecretStore(
+          environment: environment,
+          warn: { _ in }
+        ).loadSecrets()
       } catch let error as SecretStoreError {
         FileHandle.standardError.write(Data("secrets seal: \(error)\n".utf8))
         throw ExitCode(error.exitCode)

@@ -77,12 +77,19 @@ extension SecretStoreResolver {
     stateRoot: URL,
     environment: [String: String]
   ) -> SecretsDoctorResult {
-    let resolution = resolve(stateRoot: stateRoot, environment: environment, warn: { _ in })
+    let resolution = resolve(
+      stateRoot: stateRoot,
+      environment: environment,
+      warn: { _ in }
+    )
+
     do {
       _ = try resolution.store.loadSecrets()
       switch resolution.backend {
-      case .encrypted: return SecretsDoctorResult(value: "backend=encrypted", ok: true)
-      case .env: return SecretsDoctorResult(value: "backend=env (WARN: plaintext)", ok: true)
+      case .encrypted:
+        return SecretsDoctorResult(value: "backend=encrypted", ok: true)
+      case .env:
+        return SecretsDoctorResult(value: "backend=env (WARN: plaintext)", ok: true)
       }
     } catch {
       return SecretsDoctorResult(value: "FAIL: \(error)", ok: false)

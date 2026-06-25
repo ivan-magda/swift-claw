@@ -18,6 +18,7 @@ import Testing
     // given
     let stateRoot = try makeStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
+
     try EncryptedFileSecretStore.seal(
       Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
       stateRoot: stateRoot
@@ -51,6 +52,7 @@ import Testing
     // given — secrets.enc present, key missing → decrypt fails.
     let stateRoot = try makeStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
+
     try EncryptedFileSecretStore.seal(
       Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
       stateRoot: stateRoot
