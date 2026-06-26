@@ -35,7 +35,11 @@ public struct RunStoreGRDB: RunStore {
         return nil
       }
 
-      let event: RunEvent = reason == .cancelled ? .cancel : .supersede
+      let event: RunEvent =
+        switch reason {
+        case .cancelled: .cancel
+        case .superseded: .supersede
+        }
       guard try Self.transitionRun(db, runId: runId, event: event, now: now) != nil else {
         return nil
       }
@@ -109,8 +113,9 @@ public struct RunStoreGRDB: RunStore {
         ]
       )
       try Self.insertUsage(db, usage)
+
       for chunk in turn.chunks {
-        try Self.insertOutbox(db, runId: turn.runId, chunk: chunk, now: now)
+        _ = try Self.insertOutbox(db, runId: turn.runId, chunk: chunk, now: now)
       }
     }
   }
@@ -121,7 +126,10 @@ public struct RunStoreGRDB: RunStore {
     }
   }
 
-  public func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] {
+  public func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String
+  ) throws -> [DegradationReply] {
     try writer.writeMapping { db in
       let stale = try Row.fetchAll(
         db,
@@ -222,7 +230,6 @@ public struct RunStoreGRDB: RunStore {
     }
   }
 
-  @discardableResult
   private static func transitionRun(
     _ db: Database,
     runId: Int64,
@@ -272,7 +279,6 @@ public struct RunStoreGRDB: RunStore {
     )
   }
 
-  @discardableResult
   static func insertOutbox(
     _ db: Database,
     runId: Int64,
