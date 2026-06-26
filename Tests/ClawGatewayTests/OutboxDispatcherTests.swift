@@ -27,6 +27,22 @@ private struct MarkSentFailingOutbox: OutboxStore {
     )
   }
 
+  func claimOutboundIfRunActive(
+    runId: Int64,
+    stepIndex: Int,
+    chatId: Int64,
+    payload: String,
+    payloadHash: String
+  ) throws -> Bool {
+    try base.claimOutboundIfRunActive(
+      runId: runId,
+      stepIndex: stepIndex,
+      chatId: chatId,
+      payload: payload,
+      payloadHash: payloadHash
+    )
+  }
+
   func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64, now: Date) throws {
     throw StoreError.diskFull
   }

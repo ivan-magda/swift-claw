@@ -1,3 +1,4 @@
+import ClawAgent
 import ClawCore
 import Foundation
 import Logging
@@ -21,6 +22,7 @@ public struct MessageRouter: Sendable {
   private let accessControl: AccessControl
   private let transport: any TelegramTransport
   private let turnRunner: any TurnDispatching
+  private let lanes: SessionLaneRegistry
   private let logger: Logger
 
   public init(
@@ -29,6 +31,7 @@ public struct MessageRouter: Sendable {
     accessControl: AccessControl,
     transport: any TelegramTransport,
     turnRunner: any TurnDispatching,
+    lanes: SessionLaneRegistry,
     logger: Logger
   ) {
     self.processed = processed
@@ -36,6 +39,7 @@ public struct MessageRouter: Sendable {
     self.accessControl = accessControl
     self.transport = transport
     self.turnRunner = turnRunner
+    self.lanes = lanes
     self.logger = logger
   }
 
@@ -81,10 +85,8 @@ public struct MessageRouter: Sendable {
     }
   }
 
-  /// The real §4 turn path: fuse claim+persist in one write, then dispatch the run. A full disk on
-  /// either the persist or the run's first write surfaces as the storage-full path; every other run
-  /// error is already degraded in-band (the reply is enqueued), so it's logged and swallowed — the
-  /// update is durably claimed, so re-polling it would only redeliver a duplicate.
+  /// Fuses claim + persistence, then enqueues the durable run and returns without awaiting it.
+  /// Persistence failure prevents cursor advancement; background turn failures are logged in-band.
   private func dispatchTurn(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
@@ -110,19 +112,30 @@ public struct MessageRouter: Sendable {
       return .transientFailure
     }
 
-    guard claim.newlyClaimed, let sessionId = claim.sessionId else {
+    guard
+      claim.newlyClaimed,
+      let sessionId = claim.sessionId,
+      let runId = claim.runId,
+      let triggerMessageId = claim.triggerMessageId
+    else {
       logger.debug("duplicate update \(rawUpdate.updateId), skipping")
       return .skipped
     }
 
-    do {
-      try await turnRunner.run(sessionId: sessionId, chatId: message.chatId)
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      // The run degrades every other failure in-band (reply already enqueued), so there's nothing
-      // to recover here; the claimed update should still advance.
-      logger.error("turn run error (handled in-band) for update \(rawUpdate.updateId): \(error)")
+    let lane = await lanes.actor(for: sessionId)
+    await lane.enqueue(runId: runId) { [turnRunner, logger] in
+      do {
+        try await turnRunner.run(
+          runId: runId,
+          sessionId: sessionId,
+          chatId: message.chatId,
+          triggerMessageId: triggerMessageId
+        )
+      } catch StoreError.diskFull {
+        logger.error("turn \(runId) stopped by storage full after enqueue")
+      } catch {
+        logger.error("turn run error (handled in-band) for update \(rawUpdate.updateId): \(error)")
+      }
     }
 
     return .processed

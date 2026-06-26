@@ -1,3 +1,4 @@
+import ClawAgent
 import ClawCore
 import ClawData
 import Foundation
@@ -5,6 +6,38 @@ import Logging
 import Testing
 
 @testable import ClawGateway
+
+private actor BlockingTurnRunner: TurnDispatching {
+  private(set) var callCount = 0
+  private var started: CheckedContinuation<Void, Never>?
+  private var release: CheckedContinuation<Void, Never>?
+
+  func run(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    triggerMessageId: Int64
+  ) async throws {
+    callCount += 1
+    started?.resume()
+    started = nil
+    await withCheckedContinuation { continuation in
+      release = continuation
+    }
+  }
+
+  func waitUntilStarted() async {
+    guard callCount == 0 else { return }
+    await withCheckedContinuation { continuation in
+      started = continuation
+    }
+  }
+
+  func finish() {
+    release?.resume()
+    release = nil
+  }
+}
 
 @Suite struct TelegramPollerServiceTests {
   private struct Stack {
@@ -38,6 +71,7 @@ import Testing
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
       turnRunner: dispatcher,
+      lanes: SessionLaneRegistry(),
       logger: Logger(label: "test")
     )
     let cursor = UpdateCursorStoreGRDB(writer: queue)
@@ -82,6 +116,44 @@ import Testing
 
     // then
     try await task.value  // returns promptly, no throw
+  }
+
+  @Test func cursorAdvancesAfterEnqueueWithoutWaitingForTurnCompletion() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let allowlist = AllowlistStoreGRDB(writer: queue)
+    try allowlist.seedAllowlist(userIds: [42])
+    let transport = RecordingTransport(batches: [[textUpdate(id: 100, from: 42, text: "hi")]])
+    let runner = BlockingTurnRunner()
+    let router = MessageRouter(
+      processed: ProcessedUpdateStoreGRDB(writer: queue),
+      sessionMessages: SessionMessageStoreGRDB(writer: queue),
+      accessControl: AccessControl(allowlist: allowlist),
+      transport: transport,
+      turnRunner: runner,
+      lanes: SessionLaneRegistry(),
+      logger: Logger(label: "test")
+    )
+    let cursor = UpdateCursorStoreGRDB(writer: queue)
+    let poller = TelegramPollerService(
+      transport: transport,
+      router: router,
+      cursor: cursor,
+      pollTimeout: 0,
+      logger: Logger(label: "test")
+    )
+
+    // when
+    let task = Task { try await poller.run() }
+    await runner.waitUntilStarted()
+    await transport.waitForPolls(atLeast: 2)
+
+    // then
+    #expect(try cursor.loadCursor() == 100)
+    await runner.finish()
+    task.cancel()
+    try await task.value
   }
 
   @Test func poisonUpdateAdvancesCursorPastIt() async throws {

@@ -5,18 +5,20 @@ import Logging
 
 /// Injected behind a protocol so the router/poller tests stay decoupled from the real provider.
 public protocol TurnDispatching: Sendable {
-  func run(sessionId: Int64, chatId: Int64) async throws
+  func run(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    triggerMessageId: Int64
+  ) async throws
 }
 
-/// Orchestrates one inline turn at the gateway boundary: create the run, assemble context, hand it
-/// to the agent, then persist the outcome. The agent never throws (every failure is a `TurnResult`),
-/// so the only error `run` propagates is `StoreError.diskFull` — the router maps that to the
-/// storage-full path; every other failure is degraded in-band and enqueued (never silence).
+/// Picks up a durable PENDING run, assembles its trigger-bounded context, executes the agent, and
+/// persists the outcome.
 public struct TurnRunner: TurnDispatching {
   private let sessionMessages: any SessionMessageStore
   private let runs: any RunStore
   private let usageStore: any UsageStore
-  private let outbox: any OutboxStore
   private let audit: any AuditLog
   private let agent: AgentRuntime
   private let budget: RunBudget
@@ -36,7 +38,6 @@ public struct TurnRunner: TurnDispatching {
     sessionMessages: any SessionMessageStore,
     runs: any RunStore,
     usageStore: any UsageStore,
-    outbox: any OutboxStore,
     audit: any AuditLog,
     agent: AgentRuntime,
     budget: RunBudget,
@@ -49,7 +50,6 @@ public struct TurnRunner: TurnDispatching {
     self.sessionMessages = sessionMessages
     self.runs = runs
     self.usageStore = usageStore
-    self.outbox = outbox
     self.audit = audit
     self.agent = agent
     self.budget = budget
@@ -60,12 +60,29 @@ public struct TurnRunner: TurnDispatching {
     self.logger = logger
   }
 
-  public func run(sessionId: Int64, chatId: Int64) async throws {
-    let now = Date()
-    let runId = try runs.createRun(sessionId: sessionId, now: now)
+  public func run(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    triggerMessageId: Int64
+  ) async throws {
+    guard !Task.isCancelled else {
+      return
+    }
 
-    let history = try sessionMessages.loadRecentMessages(
+    let now = Date()
+    guard try runs.pickUp(runId: runId, now: now) else {
+      logger.debug("run \(runId) was not pending at pickup; skipping turn")
+      return
+    }
+
+    guard !Task.isCancelled else {
+      return
+    }
+
+    let history = try sessionMessages.loadContext(
       sessionId: sessionId,
+      throughMessageId: triggerMessageId,
       limit: Self.historyLimit
     )
     let (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now)
@@ -115,38 +132,46 @@ public struct TurnRunner: TurnDispatching {
         usage: usage,
         chunks: outboxChunks(for: content, chatId: chatId)
       )
-      try runs.commitAssistantTurn(turn, now: committedAt)
-      try audit.appendAudit(
-        turnAudit(
-          action: .turnCompleted,
-          runId: runId,
-          sessionId: sessionId,
-          resultSize: content.utf8.count,
-          at: committedAt
-        )
-      )
-      notifyOutbox()
-      await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
-    case .degraded(let degradationKind, let usage):
-      if let usage {
-        try usageStore.recordUsage(usage)
-      }
 
-      try degradeAndFail(
+      let commitResult = try runs.commitAssistantTurn(turn, now: committedAt)
+      switch commitResult {
+      case .committed:
+        try audit.appendAudit(
+          turnAudit(
+            action: .turnCompleted,
+            runId: runId,
+            sessionId: sessionId,
+            resultSize: content.utf8.count,
+            at: committedAt
+          )
+        )
+        notifyOutbox()
+        await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
+      case .usageRecordedAfterTerminal:
+        await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
+      case .ignored:
+        return
+      }
+    case .degraded(let degradationKind, let usage):
+      let commitResult = try commitDegradation(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
+        usage: usage,
         message: Degradation.message(for: degradationKind),
         action: .turnDegraded,
         decision: degradationKind.rawValue,
         at: committedAt
       )
-      await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
+      if commitResult != .ignored {
+        await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
+      }
     case .budgetStopped(let cap):
-      try degradeAndFail(
+      _ = try commitDegradation(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
+        usage: nil,
         message: Degradation.budget(cap: cap),
         action: .turnBudgetStopped,
         decision: cap,
@@ -155,29 +180,39 @@ public struct TurnRunner: TurnDispatching {
     }
   }
 
-  /// The shared failure tail: enqueue the degradation reply, then fail the run, then audit. The
-  /// enqueue precedes `failRun` so a crash between them leaves a PENDING reply for boot reconcile
-  /// to deliver (F22) rather than losing it.
-  private func degradeAndFail(  // swiftlint:disable:this function_parameter_count
+  /// The shared failure tail. The store owns the run-state arbitration and writes usage, FAILED,
+  /// and the degradation outbox row in one transaction so `/stop`/`/new` cannot interleave.
+  private func commitDegradation(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
+    usage: ProviderUsage?,
     message: String,
     action: AuditAction,
     decision: String,
     at committedAt: Date
-  ) throws {
-    // The `newlyClaimed` result is ignored: the dedup key is `runId:stepIndex`, and each turn gets
-    // a fresh `runId`, so this first chunk always inserts — a `false` here would mean a duplicate
-    // delivery, which can't occur for a brand-new run.
-    _ = try outbox.claimOutbound(
-      runId: runId,
+  ) throws -> RunCommitResult {
+    let chunk = OutboxChunk(
       stepIndex: 0,
       chatId: chatId,
       payload: message,
       payloadHash: ContentHash.fnv1a(message)
     )
-    try runs.failRun(runId: runId, now: committedAt)
+
+    let commitResult = try runs.commitDegradedTurn(
+      DegradedTurn(
+        runId: runId,
+        sessionId: sessionId,
+        chatId: chatId,
+        usage: usage,
+        chunk: chunk
+      ),
+      now: committedAt
+    )
+    guard commitResult == .committed else {
+      return commitResult
+    }
+
     try audit.appendAudit(
       turnAudit(
         action: action,
@@ -188,6 +223,8 @@ public struct TurnRunner: TurnDispatching {
       )
     )
     notifyOutbox()
+
+    return commitResult
   }
 
   /// Post-commit daily kill-switch. Reads today's totals (durable, from `provider_usage`) and asks

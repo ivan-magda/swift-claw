@@ -129,11 +129,11 @@ struct RunCommand: AsyncParsableCommand {
     // the dispatcher to drain the rows it just enqueued.
     let outboxSignal = OutboxSignal()
     let breaker = BudgetBreaker(budget: config.budget)
+    let lanes = SessionLaneRegistry()
     let turnRunner = TurnRunner(
       sessionMessages: stores.sessionMessages,
       runs: stores.runs,
       usageStore: stores.usage,
-      outbox: stores.outbox,
       audit: stores.audit,
       agent: agent,
       budget: config.budget,
@@ -149,6 +149,7 @@ struct RunCommand: AsyncParsableCommand {
       accessControl: AccessControl(allowlist: stores.allowlist),
       transport: transport,
       turnRunner: turnRunner,
+      lanes: lanes,
       logger: logger
     )
     let poller = TelegramPollerService(
