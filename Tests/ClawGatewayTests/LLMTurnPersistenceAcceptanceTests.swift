@@ -74,6 +74,47 @@ actor RecordingProvider: LLMProvider {
   }
 }
 
+actor StopNewProvider: LLMProvider {
+  private(set) var requests: [[ChatMessage]] = []
+  private var requestContinuations: [(count: Int, continuation: CheckedContinuation<Void, Never>)] =
+    []
+
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    requests.append(request.messages)
+    resumeRequestContinuations()
+
+    if requests.count == 1 {
+      while !Task.isCancelled {
+        try await Task.sleep(for: .milliseconds(5))
+      }
+      throw CancellationError()
+    }
+
+    return ChatResponse(
+      content: "fresh reply",
+      finishReason: "stop",
+      usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+      costFromProvider: 0.0021
+    )
+  }
+
+  func waitForRequestCount(_ count: Int) async {
+    guard requests.count < count else { return }
+    await withCheckedContinuation { continuation in
+      requestContinuations.append((count: count, continuation: continuation))
+    }
+  }
+
+  private func resumeRequestContinuations() {
+    let currentCount = requests.count
+    let ready = requestContinuations.filter { $0.count <= currentCount }
+    requestContinuations.removeAll { $0.count <= currentCount }
+    for waiter in ready {
+      waiter.continuation.resume()
+    }
+  }
+}
+
 actor Gate {
   private var releaseContinuation: CheckedContinuation<Void, Never>?
 
@@ -107,6 +148,16 @@ struct Stack {
   let cursor: UpdateCursorStoreGRDB
   let chatId: Int64
   let lanes: SessionLaneRegistry
+}
+
+struct StopNewStack {
+  let router: MessageRouter
+  let transport: RecordingTransport
+  let provider: StopNewProvider
+  let signal: OutboxSignal
+  let writer: any DatabaseWriter
+  let outbox: OutboxStoreGRDB
+  let chatId: Int64
 }
 
 /// Assembles the production lane stack over `writer`, seeding `chatId` onto the allowlist and
@@ -197,6 +248,76 @@ func makeStack(
   )
 }
 
+func makeStopNewStack(
+  writer: any DatabaseWriter,
+  allow chatId: Int64 = 42
+) throws -> StopNewStack {
+  let allowlist = AllowlistStoreGRDB(writer: writer)
+  try allowlist.seedAllowlist(userIds: [chatId])
+
+  let processed = ProcessedUpdateStoreGRDB(writer: writer)
+  let sessionMessages = SessionMessageStoreGRDB(writer: writer)
+  let commands = CommandStoreGRDB(writer: writer)
+  let runs = RunStoreGRDB(writer: writer)
+  let usage = UsageStoreGRDB(writer: writer)
+  let outbox = OutboxStoreGRDB(writer: writer)
+  let audit = AuditLogGRDB(writer: writer)
+
+  let provider = StopNewProvider()
+  let transport = RecordingTransport()
+  let signal = OutboxSignal()
+  let lanes = SessionLaneRegistry()
+  let logger = Logger(label: "stop-new-acceptance")
+
+  let agent = AgentRuntime(
+    provider: provider,
+    typingIndicator: NoopTyping(),
+    costResolver: CostResolver(
+      priceTable: .empty,
+      referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
+    ),
+    budget: .default,
+    model: "gpt-4o",
+    sleep: { try await Task.sleep(for: $0) }
+  )
+
+  let turnRunner = TurnRunner(
+    sessionMessages: sessionMessages,
+    runs: runs,
+    usageStore: usage,
+    audit: audit,
+    agent: agent,
+    budget: .default,
+    systemPrompt: SystemPrompt.minimal,
+    notifyOutbox: { signal.poke() },
+    breaker: BudgetBreaker(budget: .default),
+    transport: transport,
+    logger: logger
+  )
+
+  let router = MessageRouter(
+    processed: processed,
+    sessionMessages: sessionMessages,
+    commands: commands,
+    botUsername: "claw_bot",
+    accessControl: AccessControl(allowlist: allowlist),
+    transport: transport,
+    turnRunner: turnRunner,
+    lanes: lanes,
+    logger: logger
+  )
+
+  return StopNewStack(
+    router: router,
+    transport: transport,
+    provider: provider,
+    signal: signal,
+    writer: writer,
+    outbox: outbox,
+    chatId: chatId
+  )
+}
+
 @Suite struct LLMTurnPersistenceAcceptanceTests {
   // MARK: - Durable-state probes
 
@@ -218,6 +339,11 @@ func makeStack(
     try writer.read { db in
       try String.fetchAll(db, sql: "SELECT state FROM runs ORDER BY id ASC")
     }
+  }
+
+  private func waitForOutboxPoke(_ signal: OutboxSignal) async {
+    var iterator = signal.notifications.makeAsyncIterator()
+    _ = await iterator.next()
   }
 
   private func waitForRunStates(
@@ -472,6 +598,86 @@ func makeStack(
       )
     }
     #expect(assistantRunIds == [1, 2])
+  }
+
+  @Test func stopMidTurnCancelsRunAndNextPlainMessageStillReplies() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStopNewStack(writer: queue)
+
+    // when
+    let firstOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "before stop")
+    )
+    await stack.provider.waitForRequestCount(1)
+    let stopOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "/stop")
+    )
+    let afterStopOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 3, from: stack.chatId, text: "after stop")
+    )
+    await stack.provider.waitForRequestCount(2)
+    await waitForOutboxPoke(stack.signal)
+
+    // then
+    #expect(firstOutcome == .processed)
+    #expect(stopOutcome == .processed)
+    #expect(afterStopOutcome == .processed)
+    #expect(
+      try runStates(queue) == [
+        RunState.cancelled.rawValue,
+        RunState.done.rawValue,
+      ]
+    )
+    #expect(await stack.transport.sent.contains { $0.text == CommandReplies.stopped })
+    #expect(try stack.outbox.pendingOutbound().map(\.payload) == ["fresh reply"])
+  }
+
+  @Test func newSupersedesRunningAndQueuedRunsAndClearsContextWindow() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStopNewStack(writer: queue)
+
+    // when
+    let firstOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "before one")
+    )
+    await stack.provider.waitForRequestCount(1)
+    let secondOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "before two")
+    )
+    let newOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 3, from: stack.chatId, text: "/new")
+    )
+    let afterNewOutcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 4, from: stack.chatId, text: "after new")
+    )
+    await stack.provider.waitForRequestCount(2)
+    await waitForOutboxPoke(stack.signal)
+
+    // then
+    #expect(firstOutcome == .processed)
+    #expect(secondOutcome == .processed)
+    #expect(newOutcome == .processed)
+    #expect(afterNewOutcome == .processed)
+    #expect(
+      try runStates(queue) == [
+        RunState.superseded.rawValue,
+        RunState.superseded.rawValue,
+        RunState.done.rawValue,
+      ]
+    )
+    #expect(await stack.transport.sent.contains { $0.text == CommandReplies.freshConversation })
+
+    let requests = await stack.provider.requests
+    #expect(requests.count == 2)
+    let secondRequestContent = requests[1].map(\.content)
+    #expect(secondRequestContent.contains("after new"))
+    #expect(secondRequestContent.contains("before one") == false)
+    #expect(secondRequestContent.contains("before two") == false)
+    #expect(try stack.outbox.pendingOutbound().map(\.payload) == ["fresh reply"])
   }
 }
 // swiftlint:enable function_body_length

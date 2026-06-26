@@ -275,6 +275,66 @@ struct FullSessions: SessionMessageStore {
     #expect(try runStates(queue)[runId] == RunState.cancelled.rawValue)
   }
 
+  @Test func failedNewAckDoesNotUndoCommittedEffect() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let allowlist = AllowlistStoreGRDB(writer: queue)
+    try allowlist.seedAllowlist(userIds: [42])
+    let sessionMessages = SessionMessageStoreGRDB(writer: queue)
+    let runs = RunStoreGRDB(writer: queue)
+    let firstClaim = try sessionMessages.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 60,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "running",
+        isEdited: false,
+        ts: Date(timeIntervalSince1970: 60)
+      )
+    )
+    let runningRunId = try #require(firstClaim.runId)
+    #expect(try runs.pickUp(runId: runningRunId, now: Date(timeIntervalSince1970: 61)))
+    let secondClaim = try sessionMessages.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 61,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "queued",
+        isEdited: false,
+        ts: Date(timeIntervalSince1970: 61)
+      )
+    )
+    let queuedRunId = try #require(secondClaim.runId)
+    let transport = RecordingTransport(sendError: .transport("ack down"))
+    let dispatcher = FakeTurnRunner()
+    let router = MessageRouter(
+      processed: ProcessedUpdateStoreGRDB(writer: queue),
+      sessionMessages: sessionMessages,
+      commands: CommandStoreGRDB(writer: queue),
+      botUsername: "claw_bot",
+      accessControl: AccessControl(allowlist: allowlist),
+      transport: transport,
+      turnRunner: dispatcher,
+      lanes: SessionLaneRegistry(),
+      logger: Logger(label: "test")
+    )
+
+    // when
+    let outcome = await router.handle(rawUpdate: textUpdate(id: 62, from: 42, text: "/new"))
+
+    // then
+    #expect(outcome == .processed)
+    #expect(await transport.sendAttempts == 1)
+    #expect(await dispatcher.calls.isEmpty)
+    #expect(try messageCount(queue, content: "/new") == 0)
+    let states = try runStates(queue)
+    #expect(states[runningRunId] == RunState.superseded.rawValue)
+    #expect(states[queuedRunId] == RunState.superseded.rawValue)
+  }
+
   @Test func unsupportedMediaGetsFriendlyReply() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
