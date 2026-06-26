@@ -42,13 +42,14 @@ public struct CommandStoreGRDB: CommandStore {
       )
       let runId = try RunStoreGRDB.fetchActiveRunId(db, sessionId: sessionId)
 
-      let cancelledRunId: Int64?
-      if let runId,
-        try RunStoreGRDB.transitionRun(db, runId: runId, event: .cancel, now: now) != nil {
-        cancelledRunId = runId
-      } else {
-        cancelledRunId = nil
-      }
+      // swift-format-ignore
+      let cancelledRunId: Int64? =
+        if let runId,
+          try RunStoreGRDB.transitionRun(db, runId: runId, event: .cancel, now: now) != nil {
+          runId
+        } else {
+          nil
+        }
 
       try AuditLogGRDB.insertAudit(
         db,
