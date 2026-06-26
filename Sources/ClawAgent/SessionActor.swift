@@ -1,36 +1,36 @@
 /// Per-session FIFO lane. Actor isolation protects bookkeeping; the stored Task chain serializes
 /// complete turn bodies across their suspension points.
 public actor SessionActor {
-  private var tail: Task<Void, Never>?
-  private var inFlight: [Int64: Task<Void, Never>] = [:]
+  private var lastEnqueuedTask: Task<Void, Never>?
+  private var inFlightTasks: [Int64: Task<Void, Never>] = [:]
 
   public init() {}
 
   public func enqueue(runId: Int64, _ work: @Sendable @escaping () async -> Void) {
-    let previous = tail
+    let previous = lastEnqueuedTask
     let task = Task {
       _ = await previous?.value
       await work()
       self.finish(runId: runId)
     }
-    tail = task
-    inFlight[runId] = task
+    lastEnqueuedTask = task
+    inFlightTasks[runId] = task
   }
 
   public func cancel(runId: Int64) {
-    inFlight[runId]?.cancel()
+    inFlightTasks[runId]?.cancel()
   }
 
   public func cancelAll() {
-    for task in inFlight.values {
+    for task in inFlightTasks.values {
       task.cancel()
     }
   }
 
   private func finish(runId: Int64) {
-    inFlight[runId] = nil
-    if inFlight.isEmpty {
-      tail = nil
+    inFlightTasks[runId] = nil
+    if inFlightTasks.isEmpty {
+      lastEnqueuedTask = nil
     }
   }
 }
