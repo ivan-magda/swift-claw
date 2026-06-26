@@ -123,6 +123,7 @@ func makeStack(
   let processed = ProcessedUpdateStoreGRDB(writer: writer)
   let cursor = UpdateCursorStoreGRDB(writer: writer)
   let sessionMessages = SessionMessageStoreGRDB(writer: writer)
+  let commands = CommandStoreGRDB(writer: writer)
   let runs = RunStoreGRDB(writer: writer)
   let usage = UsageStoreGRDB(writer: writer)
   let outbox = OutboxStoreGRDB(writer: writer)
@@ -163,6 +164,8 @@ func makeStack(
   let router = MessageRouter(
     processed: processed,
     sessionMessages: sessionMessages,
+    commands: commands,
+    botUsername: "claw_bot",
     accessControl: AccessControl(allowlist: allowlist),
     transport: transport,
     turnRunner: turnRunner,

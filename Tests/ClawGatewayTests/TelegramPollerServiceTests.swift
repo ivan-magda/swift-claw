@@ -68,6 +68,8 @@ private actor BlockingTurnRunner: TurnDispatching {
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: SessionMessageStoreGRDB(writer: queue),
+      commands: CommandStoreGRDB(writer: queue),
+      botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
       turnRunner: dispatcher,
@@ -129,6 +131,8 @@ private actor BlockingTurnRunner: TurnDispatching {
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: SessionMessageStoreGRDB(writer: queue),
+      commands: CommandStoreGRDB(writer: queue),
+      botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
       turnRunner: runner,
