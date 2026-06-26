@@ -40,18 +40,11 @@ public struct CommandStoreGRDB: CommandStore {
         sessionKey: sessionKey,
         now: now
       )
-      let runId = try Int64.fetchOne(
-        db,
-        sql: """
-          SELECT id FROM runs
-          WHERE session_id = ? AND state = ?
-          ORDER BY id DESC
-          LIMIT 1
-          """,
-        arguments: [sessionId, RunState.running.rawValue]
-      )
+      let runId = try RunStoreGRDB.fetchActiveRunId(db, sessionId: sessionId)
+
       let cancelledRunId: Int64?
-      if let runId, try Self.transitionRun(db, runId: runId, event: .cancel, now: now) != nil {
+      if let runId,
+        try RunStoreGRDB.transitionRun(db, runId: runId, event: .cancel, now: now) != nil {
         cancelledRunId = runId
       } else {
         cancelledRunId = nil
@@ -100,25 +93,9 @@ public struct CommandStoreGRDB: CommandStore {
         sessionKey: sessionKey,
         now: now
       )
-      let rows = try Row.fetchAll(
-        db,
-        sql: """
-          SELECT id FROM runs
-          WHERE session_id = ? AND state IN (?, ?)
-          ORDER BY id ASC
-          """,
-        arguments: [sessionId, RunState.pending.rawValue, RunState.running.rawValue]
-      )
+      let supersededRunIds = try RunStoreGRDB.supersedeRuns(db, sessionId: sessionId, now: now)
 
-      var supersededRunIds: [Int64] = []
-      for row in rows {
-        let runId: Int64 = row["id"]
-        if try Self.transitionRun(db, runId: runId, event: .supersede, now: now) != nil {
-          supersededRunIds.append(runId)
-        }
-      }
-
-      try Self.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
+      try SessionMessageStoreGRDB.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
       try Self.insertNewAudits(db, sessionId: sessionId, runIds: supersededRunIds, now: now)
 
       return NewCommandResult(
@@ -127,21 +104,6 @@ public struct CommandStoreGRDB: CommandStore {
         supersededRunIds: supersededRunIds
       )
     }
-  }
-
-  private static func resetWindowAndDetaint(_ db: Database, sessionId: Int64, now: Date) throws {
-    try db.execute(
-      sql: """
-        UPDATE sessions
-        SET window_start_message_id = (
-          SELECT COALESCE(MAX(messages.id), 0) FROM messages WHERE messages.session_id = ?
-        ),
-        tainted = 0,
-        updated_ts = ?
-        WHERE id = ?
-        """,
-      arguments: [sessionId, now, sessionId]
-    )
   }
 
   private static func insertNewAudits(
@@ -179,40 +141,5 @@ public struct CommandStoreGRDB: CommandStore {
         )
       )
     }
-  }
-
-  private static func transitionRun(
-    _ db: Database,
-    runId: Int64,
-    event: RunEvent,
-    now: Date
-  ) throws -> RunState? {
-    guard
-      let state = try currentRunState(db, runId: runId),
-      let nextState = RunFSM.reduce(state: state, on: event)
-    else {
-      return nil
-    }
-
-    try db.execute(
-      sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
-      arguments: [nextState.rawValue, now, runId]
-    )
-
-    return nextState
-  }
-
-  private static func currentRunState(_ db: Database, runId: Int64) throws -> RunState? {
-    let rawState = try String.fetchOne(
-      db,
-      sql: "SELECT state FROM runs WHERE id = ?",
-      arguments: [runId]
-    )
-
-    guard let rawState else {
-      return nil
-    }
-
-    return RunState(rawValue: rawState)
   }
 }
