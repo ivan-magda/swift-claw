@@ -9,13 +9,13 @@ public struct OpenAICompatibleProvider: LLMProvider {
   private static let maxBackoffSeconds = 30.0
 
   private let config: LLMConfig
-  private let http: any HTTPExecuting
+  private let http: any HTTPExecuting & HTTPStreaming
   private let sleep: @Sendable (Double) async throws -> Void
   private let jitter: @Sendable (Double) -> Double
 
   public init(
     config: LLMConfig,
-    http: any HTTPExecuting,
+    http: any HTTPExecuting & HTTPStreaming,
     sleep: @escaping @Sendable (Double) async throws -> Void,
     jitter: @escaping @Sendable (Double) -> Double
   ) {
@@ -67,6 +67,48 @@ public struct OpenAICompatibleProvider: LLMProvider {
     }
   }
 
+  public func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
+    AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let body = try encode(request: request, streaming: true)
+          let response = try await http.postStream(
+            url: chatCompletionsURL(),
+            headers: requestHeaders(),
+            jsonBody: body,
+            timeoutSeconds: config.requestTimeoutSeconds
+          )
+
+          guard (200..<300).contains(response.head.statusCode) else {
+            let message = sanitize(message: errorMessage(from: try await collect(response.body)))
+            if Self.isRetryableStatus(response.head.statusCode) {
+              throw ProviderError.retryable(status: response.head.statusCode, message: message)
+            }
+            throw ProviderError.terminal(status: response.head.statusCode, message: message)
+          }
+
+          var parser = SSEParser()
+          for try await chunk in response.body {
+            for event in try parser.push(chunk) {
+              continuation.yield(event)
+            }
+          }
+          if let finished = try parser.finish() {
+            continuation.yield(finished)
+          }
+          continuation.finish()
+        } catch let error as ProviderError {
+          continuation.finish(throwing: sanitize(providerError: error))
+        } catch {
+          continuation.finish(
+            throwing: ProviderError.retryable(status: nil, message: sanitize(message: "\(error)"))
+          )
+        }
+      }
+      continuation.onTermination = { _ in task.cancel() }
+    }
+  }
+
   static func isRetryableStatus(_ status: Int) -> Bool {
     status == 408 || status == 429 || (500..<600).contains(status)
   }
@@ -92,13 +134,15 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return headers
   }
 
-  private func encode(request: ChatRequest) throws -> Data {
+  private func encode(request: ChatRequest, streaming: Bool = false) throws -> Data {
     let payload = RequestBody(
       model: request.model,
       messages: request.messages.map { WireMessage(role: $0.role.rawValue, content: $0.content) },
       maxTokensKey: config.maxTokensField.rawValue,
       maxOutputTokens: request.maxOutputTokens,
-      stop: request.stop
+      stop: request.stop,
+      stream: streaming,
+      streamOptions: streaming ? StreamOptions(includeUsage: true) : nil
     )
     return try JSONEncoder().encode(payload)
   }
@@ -147,6 +191,17 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return message
   }
 
+  private func collect(_ body: AsyncThrowingStream<Data, Error>) async throws -> Data {
+    var collected = Data()
+    for try await chunk in body {
+      collected.append(chunk)
+      if collected.count > 64 * 1024 {
+        break
+      }
+    }
+    return collected
+  }
+
   // MARK: - Retry
 
   private func retryAfterSeconds(from result: HTTPResult) -> Double? {
@@ -172,6 +227,17 @@ public struct OpenAICompatibleProvider: LLMProvider {
       return message
     }
     return message.replacingOccurrences(of: config.apiKey, with: "<redacted-key>")
+  }
+
+  private func sanitize(providerError: ProviderError) -> ProviderError {
+    switch providerError {
+    case .connectFailed(let message):
+      return .connectFailed(message: sanitize(message: message))
+    case .retryable(let status, let message):
+      return .retryable(status: status, message: sanitize(message: message))
+    case .terminal(let status, let message):
+      return .terminal(status: status, message: sanitize(message: message))
+    }
   }
 }
 
@@ -206,14 +272,25 @@ private struct RequestBody: Encodable {
   let maxOutputTokens: Int
   // swiftlint:disable:next discouraged_optional_collection
   let stop: [String]?
+  let stream: Bool
+  let streamOptions: StreamOptions?
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: DynamicKey.self)
     try container.encode(model, forKey: DynamicKey("model"))
     try container.encode(messages, forKey: DynamicKey("messages"))
     try container.encode(maxOutputTokens, forKey: DynamicKey(maxTokensKey))
-    try container.encode(false, forKey: DynamicKey("stream"))
+    try container.encode(stream, forKey: DynamicKey("stream"))
+    try container.encodeIfPresent(streamOptions, forKey: DynamicKey("stream_options"))
     try container.encodeIfPresent(stop, forKey: DynamicKey("stop"))
+  }
+}
+
+private struct StreamOptions: Encodable {
+  let includeUsage: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case includeUsage = "include_usage"
   }
 }
 

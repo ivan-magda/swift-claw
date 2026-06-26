@@ -14,10 +14,13 @@ struct TransportFailure: Error, CustomStringConvertible, Sendable {
 
 /// Plays back a scripted queue of HTTP outcomes and records every request it received,
 /// so retry counts, request shaping, and header handling can be asserted.
-actor ScriptedHTTPExecutor: HTTPExecuting {
+actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   enum Step: Sendable {
     case ok(HTTPResult)
     case fail(TransportFailure)
+    case stream(HTTPStreamHead, [Data])
+    case streamFailure(HTTPStreamHead, [Data], TransportFailure)
+    case connectFailure(TransportFailure)
   }
 
   struct Recorded: Sendable {
@@ -51,6 +54,51 @@ actor ScriptedHTTPExecutor: HTTPExecuting {
     switch steps.removeFirst() {
     case .ok(let result): return result
     case .fail(let error): throw error
+    case .connectFailure(let error): throw error
+    case .stream, .streamFailure:
+      throw TransportFailure(message: "expected buffered step, got streaming step")
+    }
+  }
+
+  func postStream(
+    url: String,
+    headers: [String: String],
+    jsonBody: Data,
+    timeoutSeconds: Int
+  ) async throws -> (head: HTTPStreamHead, body: AsyncThrowingStream<Data, Error>) {
+    recorded.append(
+      Recorded(url: url, headers: headers, body: jsonBody, timeoutSeconds: timeoutSeconds)
+    )
+
+    guard !steps.isEmpty else {
+      throw ProviderError.connectFailed(message: "scripted executor exhausted")
+    }
+
+    switch steps.removeFirst() {
+    case .connectFailure(let error):
+      throw ProviderError.connectFailed(message: error.message)
+    case .stream(let head, let chunks):
+      return (head, stream(chunks: chunks, failure: nil))
+    case .streamFailure(let head, let chunks, let failure):
+      return (head, stream(chunks: chunks, failure: failure))
+    case .ok, .fail:
+      throw ProviderError.connectFailed(message: "expected streaming step, got buffered step")
+    }
+  }
+
+  private func stream(
+    chunks: [Data],
+    failure: TransportFailure?
+  ) -> AsyncThrowingStream<Data, Error> {
+    AsyncThrowingStream { continuation in
+      for chunk in chunks {
+        continuation.yield(chunk)
+      }
+      if let failure {
+        continuation.finish(throwing: failure)
+      } else {
+        continuation.finish()
+      }
     }
   }
 }
@@ -86,7 +134,7 @@ func makeConfig(
 
 func makeProvider(
   config: LLMConfig,
-  http: any HTTPExecuting,
+  http: any HTTPExecuting & HTTPStreaming,
   recorder: SleepRecorder = SleepRecorder(),
   jitter: @escaping @Sendable (Double) -> Double = { _ in 0 }
 ) -> OpenAICompatibleProvider {
