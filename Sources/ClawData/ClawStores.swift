@@ -5,6 +5,7 @@ import ClawCore
 public struct ClawStores: Sendable {
   public let allowlist: any AllowlistStore
   public let processed: any ProcessedUpdateStore
+  public let commands: any CommandStore
   public let cursor: any UpdateCursorStore
   public let sessionMessages: any SessionMessageStore
   public let runs: any RunStore
@@ -15,6 +16,7 @@ public struct ClawStores: Sendable {
   public init(
     allowlist: any AllowlistStore,
     processed: any ProcessedUpdateStore,
+    commands: any CommandStore,
     cursor: any UpdateCursorStore,
     sessionMessages: any SessionMessageStore,
     runs: any RunStore,
@@ -24,6 +26,7 @@ public struct ClawStores: Sendable {
   ) {
     self.allowlist = allowlist
     self.processed = processed
+    self.commands = commands
     self.cursor = cursor
     self.sessionMessages = sessionMessages
     self.runs = runs
@@ -41,6 +44,7 @@ extension ClawDatabase {
     return ClawStores(
       allowlist: AllowlistStoreGRDB(writer: pool),
       processed: ProcessedUpdateStoreGRDB(writer: pool),
+      commands: CommandStoreGRDB(writer: pool),
       cursor: UpdateCursorStoreGRDB(writer: pool),
       sessionMessages: SessionMessageStoreGRDB(writer: pool),
       runs: RunStoreGRDB(writer: pool),
