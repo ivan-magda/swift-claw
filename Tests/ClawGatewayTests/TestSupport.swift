@@ -56,8 +56,15 @@ actor FakeTurnRunner: TurnDispatching {
 /// deterministic, continuation-based wait points (`waitForSends`/`waitForAttempts`/`waitForPolls`)
 /// that resume exactly when an event lands — no polling or timeouts, so tests stay parallel-safe.
 actor RecordingTransport: TelegramTransport {
+  struct DraftRecord: Sendable, Equatable {
+    let chatId: Int64
+    let draftId: Int64
+    let markdown: String
+  }
+
   private(set) var sent: [(chatId: Int64, text: String)] = []
   private(set) var richSends: [(chatId: Int64, markdown: String)] = []
+  private(set) var drafts: [DraftRecord] = []
   private(set) var sendAttempts = 0
   private(set) var pollCount = 0
   private var batches: [[RawUpdate]]
@@ -135,6 +142,11 @@ actor RecordingTransport: TelegramTransport {
     richSends.append((chatId, markdown))
     resumeWaiters(.sent, reached: sent.count + richSends.count)
     return Int64(sendAttempts)
+  }
+
+  func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool {
+    drafts.append(DraftRecord(chatId: chatId, draftId: draftId, markdown: markdown))
+    return true
   }
 
   func sendChatAction(chatId: Int64, action: String) async throws {}
