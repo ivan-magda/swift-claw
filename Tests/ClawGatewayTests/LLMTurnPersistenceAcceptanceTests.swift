@@ -150,7 +150,6 @@ func makeStack(
     sessionMessages: sessionMessages,
     runs: runs,
     usageStore: usage,
-    outbox: outbox,
     audit: audit,
     agent: agent,
     budget: .default,
