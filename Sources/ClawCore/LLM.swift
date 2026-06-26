@@ -74,14 +74,31 @@ public struct ChatResponse: Sendable, Equatable {
   }
 }
 
-/// The single provider seam: one blocking round-trip. The concrete impl lives in `ClawLLM`.
+public enum StreamEvent: Sendable, Equatable {
+  case delta(String)
+  case finished(finishReason: String?, usage: ChatUsage?, providerCost: Double?)
+}
+
+/// The single provider seam. The concrete impl lives in `ClawLLM`.
 public protocol LLMProvider: Sendable {
   func complete(request: ChatRequest) async throws -> ChatResponse
+  func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error>
+}
+
+extension LLMProvider {
+  public func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
+    AsyncThrowingStream { continuation in
+      continuation.finish(
+        throwing: ProviderError.terminal(status: nil, message: "streaming not implemented")
+      )
+    }
+  }
 }
 
 /// Provider failures tagged for the retry classifier and the degradation UX.
 /// retryable = 408 / 429 / 5xx (incl. 529) / transport; terminal = 400 / 401 / 403 / 404 / 413 / 422.
 public enum ProviderError: Error, Sendable, Equatable {
+  case connectFailed(message: String)
   case retryable(status: Int?, message: String)
   case terminal(status: Int?, message: String)
 }
@@ -105,6 +122,7 @@ public struct LLMConfig: Sendable, Equatable {
   public let maxOutputTokens: Int
   public let retryBudget: Int
   public let requestTimeoutSeconds: Int
+  public let streamingEnabled: Bool
 
   public init(
     baseURL: String,
@@ -113,7 +131,8 @@ public struct LLMConfig: Sendable, Equatable {
     maxTokensField: MaxTokensField,
     maxOutputTokens: Int,
     retryBudget: Int,
-    requestTimeoutSeconds: Int
+    requestTimeoutSeconds: Int,
+    streamingEnabled: Bool = true
   ) {
     self.baseURL = baseURL
     self.model = model
@@ -122,6 +141,7 @@ public struct LLMConfig: Sendable, Equatable {
     self.maxOutputTokens = maxOutputTokens
     self.retryBudget = retryBudget
     self.requestTimeoutSeconds = requestTimeoutSeconds
+    self.streamingEnabled = streamingEnabled
   }
 }
 
@@ -136,7 +156,8 @@ extension LLMConfig {
       maxTokensField: maxTokensField,
       maxOutputTokens: maxOutputTokens,
       retryBudget: retryBudget,
-      requestTimeoutSeconds: requestTimeoutSeconds
+      requestTimeoutSeconds: requestTimeoutSeconds,
+      streamingEnabled: streamingEnabled
     )
   }
 }

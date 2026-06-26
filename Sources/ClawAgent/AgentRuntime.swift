@@ -96,8 +96,8 @@ public struct AgentRuntime: Sendable {
       case .terminal:
         // No retries burned, no usage produced → degrade without a debit.
         return .degraded(.providerUnavailable, usage: nil)
-      case .retryable:
-        // Retries were exhausted (F28): debit the pre-call estimate so a flapper can't run free.
+      case .connectFailed, .retryable:
+        // No real usage was returned: debit the pre-call estimate so a flapper can't run free.
         return .degraded(
           .providerUnavailable,
           usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
