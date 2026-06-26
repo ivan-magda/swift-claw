@@ -147,7 +147,7 @@ import Testing
     #expect(try env.runs.pickUp(runId: queuedRunId, now: Date()) == false)
   }
 
-  @Test func commitAndFailNoOpWhenRunIsTerminal() throws {
+  @Test func assistantCommitAfterSupersedeRecordsUsageOnly() throws {
     // given
     let env = try fixture()
     _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
@@ -161,7 +161,7 @@ import Testing
     )
 
     // when
-    try env.runs.commitAssistantTurn(turn, now: Date())
+    let result = try env.runs.commitAssistantTurn(turn, now: Date())
     try env.runs.failRun(runId: env.seedRunId, now: Date())
 
     // then
@@ -186,7 +186,8 @@ import Testing
         try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE role = 'assistant'")
       }
     )
-    #expect(usageCount == 0)
+    #expect(result == .usageRecordedAfterTerminal)
+    #expect(usageCount == 1)
     #expect(assistantCount == 0)
   }
 
@@ -205,7 +206,7 @@ import Testing
     )
 
     // when
-    try env.runs.commitAssistantTurn(turn, now: Date())
+    let result = try env.runs.commitAssistantTurn(turn, now: Date())
 
     // then
     let assistantCount = try #require(
@@ -224,6 +225,7 @@ import Testing
       }
     )
     #expect(state == RunState.done.rawValue)
+    #expect(result == .committed)
     #expect(try env.outbox.pendingOutbound().count == 1)
     let (tokens, _) = try env.usage.todayTokensAndCost(now: Date())
     #expect(tokens == 30)
@@ -308,7 +310,9 @@ import Testing
 
     // when / then — the commit throws and writes NOTHING: no assistant message, run still RUNNING,
     // no provider_usage (F6 atomicity — all four side effects share one transaction)
-    #expect(throws: (any Error).self) { try env.runs.commitAssistantTurn(turn, now: Date()) }
+    #expect(throws: (any Error).self) {
+      _ = try env.runs.commitAssistantTurn(turn, now: Date())
+    }
     let assistantCount = try #require(
       try env.queue.read { db in
         try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE role = 'assistant'")

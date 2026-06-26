@@ -72,17 +72,29 @@ public struct RunStoreGRDB: RunStore {
     }
   }
 
-  public func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws {
+  public func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
     try writer.writeMapping { db in
-      guard
-        let nextState = try Self.transitionRun(
+      guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
+        return .ignored
+      }
+
+      guard currentState == .running else {
+        return try Self.recordTerminalUsageIfNeeded(
           db,
-          runId: turn.runId,
-          event: .complete,
+          usage: turn.usage,
+          state: currentState,
           now: now
         )
-      else {
-        return
+      }
+
+      let nextState = try Self.transitionRun(
+        db,
+        runId: turn.runId,
+        event: .complete,
+        now: now
+      )
+      guard let nextState else {
+        return .ignored
       }
 
       let usage = turn.usage
@@ -117,6 +129,41 @@ public struct RunStoreGRDB: RunStore {
       for chunk in turn.chunks {
         _ = try Self.insertOutbox(db, runId: turn.runId, chunk: chunk, now: now)
       }
+
+      return .committed
+    }
+  }
+
+  public func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult {
+    try writer.writeMapping { db in
+      guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
+        return .ignored
+      }
+
+      guard currentState == .running else {
+        if let usage = turn.usage {
+          return try Self.recordTerminalUsageIfNeeded(
+            db,
+            usage: usage,
+            state: currentState,
+            now: now
+          )
+        }
+        return .ignored
+      }
+
+      guard try Self.transitionRun(db, runId: turn.runId, event: .fail, now: now) != nil else {
+        return .ignored
+      }
+
+      if let usage = turn.usage {
+        try Self.insertUsage(db, usage)
+        try Self.updateRunUsage(db, usage: usage, now: now)
+      }
+
+      _ = try Self.insertOutbox(db, runId: turn.runId, chunk: turn.chunk, now: now)
+
+      return .committed
     }
   }
 
@@ -236,15 +283,8 @@ public struct RunStoreGRDB: RunStore {
     event: RunEvent,
     now: Date
   ) throws -> RunState? {
-    let rawState = try String.fetchOne(
-      db,
-      sql: "SELECT state FROM runs WHERE id = ?",
-      arguments: [runId]
-    )
-
     guard
-      let rawState,
-      let state = RunState(rawValue: rawState),
+      let state = try currentRunState(db, runId: runId),
       let nextState = RunFSM.reduce(state: state, on: event)
     else {
       return nil
@@ -256,6 +296,20 @@ public struct RunStoreGRDB: RunStore {
     )
 
     return nextState
+  }
+
+  private static func currentRunState(_ db: Database, runId: Int64) throws -> RunState? {
+    let rawState = try String.fetchOne(
+      db,
+      sql: "SELECT state FROM runs WHERE id = ?",
+      arguments: [runId]
+    )
+
+    guard let rawState else {
+      return nil
+    }
+
+    return RunState(rawValue: rawState)
   }
 
   static func insertUsage(_ db: Database, _ usage: ProviderUsage) throws {
@@ -275,6 +329,48 @@ public struct RunStoreGRDB: RunStore {
         usage.costSource.rawValue,
         usage.isEstimated,
         usage.ts,
+      ]
+    )
+  }
+
+  private static func recordTerminalUsageIfNeeded(
+    _ db: Database,
+    usage: ProviderUsage,
+    state: RunState,
+    now: Date
+  ) throws -> RunCommitResult {
+    guard state == .cancelled || state == .superseded else {
+      return .ignored
+    }
+
+    let existingRows =
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM provider_usage WHERE run_id = ?",
+        arguments: [usage.runId]
+      ) ?? 0
+    guard existingRows == 0 else {
+      return .ignored
+    }
+
+    try insertUsage(db, usage)
+    try updateRunUsage(db, usage: usage, now: now)
+
+    return .usageRecordedAfterTerminal
+  }
+
+  private static func updateRunUsage(_ db: Database, usage: ProviderUsage, now: Date) throws {
+    try db.execute(
+      sql: """
+        UPDATE runs SET updated_ts = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?
+        WHERE id = ?
+        """,
+      arguments: [
+        now,
+        usage.promptTokens,
+        usage.completionTokens,
+        usage.costUSD,
+        usage.runId,
       ]
     )
   }

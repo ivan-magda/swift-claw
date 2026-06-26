@@ -24,6 +24,16 @@ public enum CancelReason: Sendable, Equatable {
   case superseded
 }
 
+/// Outcome of a commit attempt at the run-store seam.
+public enum RunCommitResult: Sendable, Equatable {
+  /// The run was still RUNNING and the terminal state plus owner-visible side effects committed.
+  case committed
+  /// Cancellation/supersede had already won; provider usage was still durably recorded.
+  case usageRecordedAfterTerminal
+  /// The run was not in a state where this commit owns any side effect.
+  case ignored
+}
+
 public enum Provenance: String, Sendable, Equatable {
   case trusted
   case untrusted
@@ -224,6 +234,28 @@ public struct AssistantTurn: Sendable, Equatable {
     self.content = content
     self.usage = usage
     self.chunks = chunks
+  }
+}
+
+public struct DegradedTurn: Sendable, Equatable {
+  public let runId: Int64
+  public let sessionId: Int64
+  public let chatId: Int64
+  public let usage: ProviderUsage?
+  public let chunk: OutboxChunk
+
+  public init(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    usage: ProviderUsage?,
+    chunk: OutboxChunk
+  ) {
+    self.runId = runId
+    self.sessionId = sessionId
+    self.chatId = chatId
+    self.usage = usage
+    self.chunk = chunk
   }
 }
 

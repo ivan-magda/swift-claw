@@ -94,7 +94,7 @@ import Testing
       isEstimated: false,
       ts: now
     )
-    try fixture.store.commitAssistantTurn(
+    _ = try fixture.store.commitAssistantTurn(
       AssistantTurn(
         runId: runId,
         sessionId: fixture.sessionId,

@@ -134,7 +134,6 @@ struct RunCommand: AsyncParsableCommand {
       sessionMessages: stores.sessionMessages,
       runs: stores.runs,
       usageStore: stores.usage,
-      outbox: stores.outbox,
       audit: stores.audit,
       agent: agent,
       budget: config.budget,

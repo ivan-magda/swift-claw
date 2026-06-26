@@ -36,8 +36,11 @@ public protocol RunStore: Sendable {
   /// PENDING → RUNNING through `RunFSM`; false means the run is absent or no longer pending.
   func pickUp(runId: Int64, now: Date) throws -> Bool
   /// F6 atomicity: assistant message + run→DONE + provider_usage + outbox chunk(s) in ONE txn,
-  /// committed before any send. No-ops unless the run is RUNNING.
-  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws
+  /// committed before any send. If cancellation/supersede already won, records usage only.
+  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult
+  /// Failure/degradation commit: provider_usage + run→FAILED + degradation outbox in ONE txn.
+  /// If cancellation/supersede already won, records usage when present but writes no reply.
+  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult
   /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING.
   func failRun(runId: Int64, now: Date) throws
   /// Terminates the current RUNNING turn for `/stop`; returns the affected run, if any.
