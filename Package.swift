@@ -75,7 +75,17 @@ let package = Package(
       ]
     ),
     .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore"]),
-    .testTarget(name: "ClawTelegramTests", dependencies: ["ClawTelegram", "ClawCore"]),
+    .testTarget(
+      name: "ClawTelegramTests",
+      dependencies: [
+        "ClawTelegram",
+        "ClawCore",
+        .product(name: "AsyncHTTPClient", package: "async-http-client"),
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOHTTP1", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
+      ]
+    ),
     .testTarget(name: "ClawLLMTests", dependencies: ["ClawLLM", "ClawCore"]),
     .testTarget(name: "ClawAgentTests", dependencies: ["ClawAgent", "ClawCore"]),
     .testTarget(
