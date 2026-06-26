@@ -195,7 +195,6 @@ struct DiskFullRuns: RunStore {
       sessionMessages: sessionMessages,
       runs: runsFactory?(queue, sessionId) ?? runs ?? RunStoreGRDB(writer: queue),
       usageStore: usage,
-      outbox: outbox,
       audit: audit,
       agent: agent,
       budget: .default,
