@@ -20,12 +20,325 @@ public enum TurnResult: Sendable, Equatable {
   case budgetStopped(cap: String)
 }
 
+private actor StreamingDraftBuffer {
+  enum Item: Sendable, Equatable {
+    case update(String)
+    case final(String)
+  }
+
+  private var latest: String?
+  private var final: String?
+  private var closed = false
+  private var finalSent = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func publish(_ markdown: String) {
+    guard !closed, final == nil else { return }
+    latest = markdown
+    wakeWaiters()
+  }
+
+  func publishFinal(_ markdown: String) {
+    guard !closed else { return }
+    latest = nil
+    final = markdown
+    wakeWaiters()
+  }
+
+  func close() {
+    closed = true
+    wakeWaiters()
+  }
+
+  func next() async -> Item? {
+    while latest == nil && final == nil && !closed {
+      await withCheckedContinuation { continuation in
+        waiters.append(continuation)
+      }
+    }
+
+    if let markdown = latest {
+      latest = nil
+      return .update(markdown)
+    }
+    if let markdown = final {
+      final = nil
+      return .final(markdown)
+    }
+    return nil
+  }
+
+  func takeFinal() -> String? {
+    guard let markdown = final else { return nil }
+    final = nil
+    return markdown
+  }
+
+  func markFinalSent() {
+    finalSent = true
+  }
+
+  func didSendFinal() -> Bool {
+    finalSent
+  }
+
+  private func wakeWaiters() {
+    for waiter in waiters {
+      waiter.resume()
+    }
+    waiters.removeAll()
+  }
+}
+
+private struct StreamingTurnRuntime: Sendable {
+  private struct FinishedResponse: Sendable {
+    let content: String
+    let finishReason: String?
+    let usage: ChatUsage?
+    let providerCost: Double?
+  }
+
+  private static let draftThrottleProbeInterval: Duration = .milliseconds(10)
+  private static let draftThrottleProbeAttempts = 120
+  private static let finalDraftDrainAttempts = 25
+  private static let finalDraftDrainInterval: Duration = .milliseconds(10)
+
+  private let provider: any LLMProvider
+  private let typingIndicator: any TypingIndicator
+  private let draftStreamer: any RichDraftStreaming
+  private let wallClockDeadlineSeconds: Int
+  private let sleep: @Sendable (Duration) async throws -> Void
+
+  init(
+    provider: any LLMProvider,
+    typingIndicator: any TypingIndicator,
+    draftStreamer: any RichDraftStreaming,
+    wallClockDeadlineSeconds: Int,
+    sleep: @escaping @Sendable (Duration) async throws -> Void
+  ) {
+    self.provider = provider
+    self.typingIndicator = typingIndicator
+    self.draftStreamer = draftStreamer
+    self.wallClockDeadlineSeconds = wallClockDeadlineSeconds
+    self.sleep = sleep
+  }
+
+  func run(
+    chatId: Int64,
+    draftId: Int64,
+    request: ChatRequest
+  ) async throws -> ChatResponse {
+    let draftBuffer = StreamingDraftBuffer()
+    let responseStream = makeStreamingResponseStream(
+      request: request,
+      chatId: chatId,
+      draftBuffer: draftBuffer
+    )
+    let draftTask = makeDraftSenderTask(chatId: chatId, draftId: draftId, draftBuffer: draftBuffer)
+
+    defer {
+      draftTask.cancel()
+      Task { await draftBuffer.close() }
+    }
+
+    return try await withThrowingTaskGroup(of: ChatResponse.self) { group in
+      defer { group.cancelAll() }
+
+      group.addTask {
+        var iterator = responseStream.makeAsyncIterator()
+        guard let response = try await iterator.next() else {
+          throw AgentRuntime.DeadlineExceeded()
+        }
+        return response
+      }
+      group.addTask {
+        try await sleep(.seconds(wallClockDeadlineSeconds))
+        throw AgentRuntime.DeadlineExceeded()
+      }
+
+      guard let response = try await group.next() else {
+        throw AgentRuntime.DeadlineExceeded()
+      }
+      if !response.content.isEmpty {
+        await drainFinalDraftIfPossible(draftBuffer)
+      }
+      return response
+    }
+  }
+
+  private func makeStreamingResponseStream(
+    request: ChatRequest,
+    chatId: Int64,
+    draftBuffer: StreamingDraftBuffer
+  ) -> AsyncThrowingStream<ChatResponse, Error> {
+    AsyncThrowingStream { continuation in
+      let responseTask = Task {
+        await consumeStream(
+          request: request,
+          chatId: chatId,
+          draftBuffer: draftBuffer,
+          continuation
+        )
+      }
+      continuation.onTermination = { _ in
+        responseTask.cancel()
+        Task { await draftBuffer.close() }
+      }
+    }
+  }
+
+  private func consumeStream(
+    request: ChatRequest,
+    chatId: Int64,
+    draftBuffer: StreamingDraftBuffer,
+    _ continuation: AsyncThrowingStream<ChatResponse, Error>.Continuation
+  ) async {
+    await typingIndicator.sendTyping(chatId: chatId)
+    var content = ""
+
+    do {
+      for try await event in provider.stream(request: request) {
+        try Task.checkCancellation()
+        switch event {
+        case .delta(let delta):
+          content.append(delta)
+          await draftBuffer.publish(content)
+        case .finished(let finishReason, let usage, let providerCost):
+          await finishStreamingResponse(
+            FinishedResponse(
+              content: content,
+              finishReason: finishReason,
+              usage: usage,
+              providerCost: providerCost
+            ),
+            draftBuffer: draftBuffer,
+            continuation
+          )
+          return
+        }
+      }
+
+      await finishStreamingResponse(
+        FinishedResponse(
+          content: content,
+          finishReason: nil,
+          usage: nil,
+          providerCost: nil
+        ),
+        draftBuffer: draftBuffer,
+        continuation
+      )
+    } catch {
+      await draftBuffer.close()
+      continuation.finish(throwing: error)
+    }
+  }
+
+  private func finishStreamingResponse(
+    _ response: FinishedResponse,
+    draftBuffer: StreamingDraftBuffer,
+    _ continuation: AsyncThrowingStream<ChatResponse, Error>.Continuation
+  ) async {
+    if !response.content.isEmpty {
+      await draftBuffer.publishFinal(response.content)
+    } else {
+      await draftBuffer.close()
+    }
+    continuation.yield(
+      ChatResponse(
+        content: response.content,
+        finishReason: response.finishReason,
+        usage: response.usage,
+        costFromProvider: response.providerCost
+      )
+    )
+    continuation.finish()
+  }
+
+  private func makeDraftSenderTask(
+    chatId: Int64,
+    draftId: Int64,
+    draftBuffer: StreamingDraftBuffer
+  ) -> Task<Void, Never> {
+    Task {
+      var sentOnce = false
+      while !Task.isCancelled {
+        guard let item = await draftBuffer.next() else {
+          return
+        }
+
+        switch item {
+        case .update(let markdown):
+          if sentOnce {
+            if let finalMarkdown = await draftBuffer.takeFinal() {
+              await sendFinalDraft(finalMarkdown, chatId: chatId, draftId: draftId, draftBuffer)
+              return
+            }
+            if let finalMarkdown = await waitForFinalDuringDraftThrottle(draftBuffer) {
+              await sendFinalDraft(finalMarkdown, chatId: chatId, draftId: draftId, draftBuffer)
+              return
+            }
+          }
+          guard !Task.isCancelled else { return }
+          await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)
+          sentOnce = true
+        case .final(let markdown):
+          await sendFinalDraft(markdown, chatId: chatId, draftId: draftId, draftBuffer)
+          return
+        }
+      }
+    }
+  }
+
+  private func waitForFinalDuringDraftThrottle(
+    _ draftBuffer: StreamingDraftBuffer
+  ) async -> String? {
+    for _ in 0..<Self.draftThrottleProbeAttempts {
+      do {
+        try await sleep(Self.draftThrottleProbeInterval)
+      } catch {
+        return nil
+      }
+      if let finalMarkdown = await draftBuffer.takeFinal() {
+        return finalMarkdown
+      }
+    }
+    return nil
+  }
+
+  private func sendFinalDraft(
+    _ markdown: String,
+    chatId: Int64,
+    draftId: Int64,
+    _ draftBuffer: StreamingDraftBuffer
+  ) async {
+    guard !Task.isCancelled else { return }
+    await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)
+    await draftBuffer.markFinalSent()
+  }
+
+  private func drainFinalDraftIfPossible(_ draftBuffer: StreamingDraftBuffer) async {
+    for _ in 0..<Self.finalDraftDrainAttempts {
+      if await draftBuffer.didSendFinal() {
+        return
+      }
+      do {
+        try await sleep(Self.finalDraftDrainInterval)
+      } catch {
+        return
+      }
+    }
+  }
+}
+
 /// The pure orchestration of one blocking turn: preflight → typing + wall-clock deadline →
 /// provider call → classify. No persistence or sending (the gateway owns that in Task 5); all
 /// collaborators are injected `ClawCore` protocols so tests drive it with mocks.
 public struct AgentRuntime: Sendable {
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
+  private let draftStreamer: any RichDraftStreaming
+  private let streamingEnabled: Bool
   private let costResolver: CostResolver
   private let usageResolver: UsageResolver
   private let budget: RunBudget
@@ -36,6 +349,8 @@ public struct AgentRuntime: Sendable {
   public init(
     provider: any LLMProvider,
     typingIndicator: any TypingIndicator,
+    draftStreamer: any RichDraftStreaming = NoopRichDraftStreaming(),
+    streamingEnabled: Bool = false,
     costResolver: CostResolver,
     usageResolver: UsageResolver = UsageResolver(),
     budget: RunBudget,
@@ -44,6 +359,8 @@ public struct AgentRuntime: Sendable {
   ) {
     self.provider = provider
     self.typingIndicator = typingIndicator
+    self.draftStreamer = draftStreamer
+    self.streamingEnabled = streamingEnabled
     self.costResolver = costResolver
     self.usageResolver = usageResolver
     self.budget = budget
@@ -88,27 +405,36 @@ public struct AgentRuntime: Sendable {
       maxOutputTokens: budget.maxOutputTokens
     )
 
+    if streamingEnabled {
+      do {
+        let response = try await withStreamingAndDeadline(
+          chatId: chatId,
+          draftId: runId,
+          request: request
+        )
+        return classify(response: response, context: context, runId: runId, sessionId: sessionId)
+      } catch ProviderError.connectFailed(_) {
+        do {
+          let response = try await withTypingAndDeadline(chatId: chatId, request: request)
+          return classify(response: response, context: context, runId: runId, sessionId: sessionId)
+        } catch {
+          return degradedForCaughtError(error, context: context, runId: runId, sessionId: sessionId)
+        }
+      } catch {
+        return degradedForStreamingError(
+          error,
+          context: context,
+          runId: runId,
+          sessionId: sessionId
+        )
+      }
+    }
+
     do {
       let response = try await withTypingAndDeadline(chatId: chatId, request: request)
       return classify(response: response, context: context, runId: runId, sessionId: sessionId)
-    } catch let error as ProviderError {
-      switch error {
-      case .terminal:
-        // No retries burned, no usage produced → degrade without a debit.
-        return .degraded(.providerUnavailable, usage: nil)
-      case .connectFailed, .retryable:
-        // No real usage was returned: debit the pre-call estimate so a flapper can't run free.
-        return .degraded(
-          .providerUnavailable,
-          usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
-        )
-      }
     } catch {
-      // DeadlineExceeded / cancellation: the call never produced usage → debit the estimate.
-      return .degraded(
-        .providerUnavailable,
-        usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
-      )
+      return degradedForCaughtError(error, context: context, runId: runId, sessionId: sessionId)
     }
   }
 
@@ -121,6 +447,25 @@ public struct AgentRuntime: Sendable {
   /// How often the typing child re-issues the chat-action. Telegram's "typing…" auto-expires
   /// after ~5s with no clear API (F5), so we refresh just under that window.
   private static let typingReissueInterval: Duration = .seconds(4)
+
+  private func withStreamingAndDeadline(
+    chatId: Int64,
+    draftId: Int64,
+    request: ChatRequest
+  ) async throws -> ChatResponse {
+    let runtime = StreamingTurnRuntime(
+      provider: provider,
+      typingIndicator: typingIndicator,
+      draftStreamer: draftStreamer,
+      wallClockDeadlineSeconds: budget.wallClockDeadlineSeconds,
+      sleep: sleep
+    )
+    return try await runtime.run(
+      chatId: chatId,
+      draftId: draftId,
+      request: request
+    )
+  }
 
   /// Races three children: the provider call, a typing loop re-issued every 4s, and a deadline
   /// (`sleep(.seconds(budget.wallClockDeadlineSeconds))` then `throw DeadlineExceeded`). Returns
@@ -157,6 +502,52 @@ public struct AgentRuntime: Sendable {
 
       throw DeadlineExceeded()
     }
+  }
+
+  private func degradedForCaughtError(
+    _ error: any Error,
+    context: [ChatMessage],
+    runId: Int64,
+    sessionId: Int64
+  ) -> TurnResult {
+    if let providerError = error as? ProviderError {
+      switch providerError {
+      case .connectFailed, .retryable:
+        return .degraded(
+          .providerUnavailable,
+          usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+        )
+      case .terminal:
+        return .degraded(.providerUnavailable, usage: nil)
+      }
+    }
+
+    return .degraded(
+      .providerUnavailable,
+      usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+    )
+  }
+
+  private func degradedForStreamingError(
+    _ error: any Error,
+    context: [ChatMessage],
+    runId: Int64,
+    sessionId: Int64
+  ) -> TurnResult {
+    if let providerError = error as? ProviderError {
+      switch providerError {
+      case .connectFailed, .retryable, .terminal:
+        return .degraded(
+          .providerUnavailable,
+          usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+        )
+      }
+    }
+
+    return .degraded(
+      .providerUnavailable,
+      usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+    )
   }
 
   /// Maps a returned response to a result, debiting the reconciled usage (real, or estimated when
