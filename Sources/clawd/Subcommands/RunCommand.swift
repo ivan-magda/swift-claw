@@ -58,7 +58,7 @@ struct RunCommand: AsyncParsableCommand {
     let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: httpConfig)
     let executor = AsyncHTTPExecutor(client: httpClient)
 
-    let daemon = makeDaemon(
+    let daemon = await makeDaemon(
       config: config,
       secrets: secrets,
       stores: stores,
@@ -117,8 +117,9 @@ struct RunCommand: AsyncParsableCommand {
     stores: ClawStores,
     executor: AsyncHTTPExecutor,
     logger: Logger
-  ) -> Daemon {
+  ) async -> Daemon {
     let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
+    let botUsername = await fetchBotUsername(transport: transport, logger: logger)
     let agent = makeAgent(
       config: config,
       secrets: secrets,
@@ -146,6 +147,8 @@ struct RunCommand: AsyncParsableCommand {
     let router = MessageRouter(
       processed: stores.processed,
       sessionMessages: stores.sessionMessages,
+      commands: stores.commands,
+      botUsername: botUsername,
       accessControl: AccessControl(allowlist: stores.allowlist),
       transport: transport,
       turnRunner: turnRunner,
@@ -170,6 +173,17 @@ struct RunCommand: AsyncParsableCommand {
       bootReconcile: bootReconcile(stores: stores, logger: logger),
       logger: logger
     )
+  }
+
+  private func fetchBotUsername(transport: TelegramClient, logger: Logger) async -> String? {
+    do {
+      return try await transport.getMe().username
+    } catch {
+      logger.warning(
+        "failed to fetch bot identity; command mentions will require bare commands: \(error)"
+      )
+      return nil
+    }
   }
 
   /// Assembles the LLM agent stack: the OpenAI-compatible provider, the offline-first cost resolver,

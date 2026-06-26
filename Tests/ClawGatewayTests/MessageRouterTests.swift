@@ -2,6 +2,7 @@ import ClawAgent
 import ClawCore
 import ClawData
 import Foundation
+import GRDB
 import Logging
 import Testing
 
@@ -31,6 +32,14 @@ struct FullSessions: SessionMessageStore {
     let transport: RecordingTransport
     let dispatcher: FakeTurnRunner
     let sessionMessages: SessionMessageStoreGRDB
+    let runs: RunStoreGRDB
+    let queue: DatabaseQueue
+  }
+
+  private struct SeededRun {
+    let sessionId: Int64
+    let runId: Int64
+    let messageId: Int64
   }
 
   private func makeHarness(allowed: [Int64]) throws -> Harness {
@@ -42,9 +51,12 @@ struct FullSessions: SessionMessageStore {
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
+    let runs = RunStoreGRDB(writer: queue)
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: sessionMessages,
+      commands: CommandStoreGRDB(writer: queue),
+      botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
       turnRunner: dispatcher,
@@ -56,7 +68,9 @@ struct FullSessions: SessionMessageStore {
       router: router,
       transport: transport,
       dispatcher: dispatcher,
-      sessionMessages: sessionMessages
+      sessionMessages: sessionMessages,
+      runs: runs,
+      queue: queue
     )
   }
 
@@ -141,6 +155,186 @@ struct FullSessions: SessionMessageStore {
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
+  @Test func allowlistedStopCancelsActiveRunAndSendsStopped() async throws {
+    // given
+    let harness = try makeHarness(allowed: [42])
+    let seeded = try seedPendingRun(harness, updateId: 10, text: "working")
+    #expect(try harness.runs.pickUp(runId: seeded.runId, now: Date(timeIntervalSince1970: 10)))
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 11, from: 42, text: "/stop")
+    )
+
+    // then
+    #expect(outcome == .processed)
+    let sent = await harness.transport.sent
+    #expect(sent.map(\.text) == [CommandReplies.stopped])
+    #expect(await harness.dispatcher.calls.isEmpty)
+    #expect(try messageCount(harness.queue, content: "/stop") == 0)
+    #expect(try runStates(harness.queue)[seeded.runId] == RunState.cancelled.rawValue)
+  }
+
+  @Test func allowlistedStopWithNoActiveRunSendsNothingToStop() async throws {
+    // given
+    let harness = try makeHarness(allowed: [42])
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 20, from: 42, text: "/stop")
+    )
+
+    // then
+    #expect(outcome == .processed)
+    let sent = await harness.transport.sent
+    #expect(sent.map(\.text) == [CommandReplies.nothingToStop])
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func allowlistedNewForThisBotSendsFreshAckAndDoesNotDispatch() async throws {
+    // given
+    let harness = try makeHarness(allowed: [42])
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 30, from: 42, text: "/new@claw_bot")
+    )
+
+    // then
+    #expect(outcome == .processed)
+    let sent = await harness.transport.sent
+    #expect(sent.map(\.text) == [CommandReplies.freshConversation])
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func newForSomeOtherBotIsPlainTextAndDispatchesTurn() async throws {
+    // given
+    let harness = try makeHarness(allowed: [42])
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 40, from: 42, text: "/new@some_other_bot")
+    )
+    await harness.dispatcher.waitForCalls(atLeast: 1)
+
+    // then
+    #expect(outcome == .processed)
+    #expect(await harness.transport.sent.isEmpty)
+    let calls = await harness.dispatcher.calls
+    let firstCall = try #require(calls.first)
+    let history = try harness.sessionMessages.loadContext(
+      sessionId: firstCall.sessionId,
+      throughMessageId: firstCall.triggerMessageId,
+      limit: 50
+    )
+    #expect(history.contains { $0.role == .user && $0.content == "/new@some_other_bot" })
+  }
+
+  @Test func commandAckFailureStillProcessesAndKeepsDurableStopEffect() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let allowlist = AllowlistStoreGRDB(writer: queue)
+    try allowlist.seedAllowlist(userIds: [42])
+    let sessionMessages = SessionMessageStoreGRDB(writer: queue)
+    let runs = RunStoreGRDB(writer: queue)
+    let claim = try sessionMessages.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 50,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "working",
+        isEdited: false,
+        ts: Date(timeIntervalSince1970: 50)
+      )
+    )
+    let runId = try #require(claim.runId)
+    #expect(try runs.pickUp(runId: runId, now: Date(timeIntervalSince1970: 51)))
+    let transport = RecordingTransport(sendError: .transport("ack down"))
+    let dispatcher = FakeTurnRunner()
+    let router = MessageRouter(
+      processed: ProcessedUpdateStoreGRDB(writer: queue),
+      sessionMessages: sessionMessages,
+      commands: CommandStoreGRDB(writer: queue),
+      botUsername: "claw_bot",
+      accessControl: AccessControl(allowlist: allowlist),
+      transport: transport,
+      turnRunner: dispatcher,
+      lanes: SessionLaneRegistry(),
+      logger: Logger(label: "test")
+    )
+
+    // when
+    let outcome = await router.handle(rawUpdate: textUpdate(id: 52, from: 42, text: "/stop"))
+
+    // then
+    #expect(outcome == .processed)
+    #expect(await transport.sendAttempts == 1)
+    #expect(await dispatcher.calls.isEmpty)
+    #expect(try runStates(queue)[runId] == RunState.cancelled.rawValue)
+  }
+
+  @Test func failedNewAckDoesNotUndoCommittedEffect() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let allowlist = AllowlistStoreGRDB(writer: queue)
+    try allowlist.seedAllowlist(userIds: [42])
+    let sessionMessages = SessionMessageStoreGRDB(writer: queue)
+    let runs = RunStoreGRDB(writer: queue)
+    let firstClaim = try sessionMessages.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 60,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "running",
+        isEdited: false,
+        ts: Date(timeIntervalSince1970: 60)
+      )
+    )
+    let runningRunId = try #require(firstClaim.runId)
+    #expect(try runs.pickUp(runId: runningRunId, now: Date(timeIntervalSince1970: 61)))
+    let secondClaim = try sessionMessages.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 61,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "queued",
+        isEdited: false,
+        ts: Date(timeIntervalSince1970: 61)
+      )
+    )
+    let queuedRunId = try #require(secondClaim.runId)
+    let transport = RecordingTransport(sendError: .transport("ack down"))
+    let dispatcher = FakeTurnRunner()
+    let router = MessageRouter(
+      processed: ProcessedUpdateStoreGRDB(writer: queue),
+      sessionMessages: sessionMessages,
+      commands: CommandStoreGRDB(writer: queue),
+      botUsername: "claw_bot",
+      accessControl: AccessControl(allowlist: allowlist),
+      transport: transport,
+      turnRunner: dispatcher,
+      lanes: SessionLaneRegistry(),
+      logger: Logger(label: "test")
+    )
+
+    // when
+    let outcome = await router.handle(rawUpdate: textUpdate(id: 62, from: 42, text: "/new"))
+
+    // then
+    #expect(outcome == .processed)
+    #expect(await transport.sendAttempts == 1)
+    #expect(await dispatcher.calls.isEmpty)
+    #expect(try messageCount(queue, content: "/new") == 0)
+    let states = try runStates(queue)
+    #expect(states[runningRunId] == RunState.superseded.rawValue)
+    #expect(states[queuedRunId] == RunState.superseded.rawValue)
+  }
+
   @Test func unsupportedMediaGetsFriendlyReply() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
@@ -177,6 +371,8 @@ struct FullSessions: SessionMessageStore {
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: FullSessions(),
+      commands: CommandStoreGRDB(writer: queue),
+      botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
       turnRunner: FakeTurnRunner(),
@@ -191,5 +387,47 @@ struct FullSessions: SessionMessageStore {
     #expect(outcome == .storageFull)
     let sent = await transport.sent
     #expect(sent.contains { $0.text == Degradation.storageFull })
+  }
+
+  private func seedPendingRun(
+    _ harness: Harness,
+    updateId: Int64,
+    text: String
+  ) throws -> SeededRun {
+    let claim = try harness.sessionMessages.claimAndPersistInbound(
+      InboundMessage(
+        updateId: updateId,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: text,
+        isEdited: false,
+        ts: Date(timeIntervalSince1970: Double(updateId))
+      )
+    )
+    return SeededRun(
+      sessionId: try #require(claim.sessionId),
+      runId: try #require(claim.runId),
+      messageId: try #require(claim.triggerMessageId)
+    )
+  }
+
+  private func runStates(_ queue: DatabaseQueue) throws -> [Int64: String] {
+    try queue.read { db in
+      let rows = try Row.fetchAll(db, sql: "SELECT id, state FROM runs")
+      return Dictionary(
+        uniqueKeysWithValues: rows.map { row in (row["id"] as Int64, row["state"] as String) }
+      )
+    }
+  }
+
+  private func messageCount(_ queue: DatabaseQueue, content: String) throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM messages WHERE content = ?",
+        arguments: [content]
+      ) ?? 0
+    }
   }
 }

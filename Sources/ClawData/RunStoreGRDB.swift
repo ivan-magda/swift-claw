@@ -21,17 +21,7 @@ public struct RunStoreGRDB: RunStore {
     now: Date
   ) throws -> Int64? {
     try writer.writeMapping { db in
-      let runId = try Int64.fetchOne(
-        db,
-        sql: """
-          SELECT id FROM runs
-          WHERE session_id = ? AND state = ?
-          ORDER BY id DESC
-          LIMIT 1
-          """,
-        arguments: [sessionId, RunState.running.rawValue]
-      )
-      guard let runId else {
+      guard let runId = try Self.fetchActiveRunId(db, sessionId: sessionId) else {
         return nil
       }
 
@@ -50,25 +40,7 @@ public struct RunStoreGRDB: RunStore {
 
   public func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] {
     try writer.writeMapping { db in
-      let rows = try Row.fetchAll(
-        db,
-        sql: """
-          SELECT id FROM runs
-          WHERE session_id = ? AND state IN (?, ?)
-          ORDER BY id ASC
-          """,
-        arguments: [sessionId, RunState.pending.rawValue, RunState.running.rawValue]
-      )
-
-      var affected: [Int64] = []
-      for row in rows {
-        let runId: Int64 = row["id"]
-        if try Self.transitionRun(db, runId: runId, event: .supersede, now: now) != nil {
-          affected.append(runId)
-        }
-      }
-
-      return affected
+      try Self.supersedeRuns(db, sessionId: sessionId, now: now)
     }
   }
 
@@ -277,7 +249,42 @@ public struct RunStoreGRDB: RunStore {
     }
   }
 
-  private static func transitionRun(
+  static func fetchActiveRunId(_ db: Database, sessionId: Int64) throws -> Int64? {
+    try Int64.fetchOne(
+      db,
+      sql: """
+        SELECT id FROM runs
+        WHERE session_id = ? AND state = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+      arguments: [sessionId, RunState.running.rawValue]
+    )
+  }
+
+  static func supersedeRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
+    let rows = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT id FROM runs
+        WHERE session_id = ? AND state IN (?, ?)
+        ORDER BY id ASC
+        """,
+      arguments: [sessionId, RunState.pending.rawValue, RunState.running.rawValue]
+    )
+
+    var affected: [Int64] = []
+    for row in rows {
+      let runId: Int64 = row["id"]
+      if try transitionRun(db, runId: runId, event: .supersede, now: now) != nil {
+        affected.append(runId)
+      }
+    }
+
+    return affected
+  }
+
+  static func transitionRun(
     _ db: Database,
     runId: Int64,
     event: RunEvent,

@@ -107,23 +107,29 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
 
   public func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {
     try writer.writeMapping { db in
-      // The boundary and detaint must move atomically so `/new` cannot expose a mixed session state.
-      let boundary =
-        try Int64.fetchOne(
-          db,
-          sql: "SELECT COALESCE(MAX(id), 0) FROM messages WHERE session_id = ?",
-          arguments: [sessionId]
-        ) ?? 0
-
-      try db.execute(
-        sql: """
-          UPDATE sessions
-          SET window_start_message_id = ?, tainted = 0, updated_ts = ?
-          WHERE id = ?
-          """,
-        arguments: [boundary, now, sessionId]
-      )
+      try Self.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
     }
+  }
+
+  /// Resets the context window boundary to the current message high-water mark and clears the
+  /// taint flag atomically. Reused inside existing transactions (e.g. `CommandStoreGRDB`).
+  static func resetWindowAndDetaint(_ db: Database, sessionId: Int64, now: Date) throws {
+    // The boundary and detaint must move atomically so `/new` cannot expose a mixed session state.
+    let boundary =
+      try Int64.fetchOne(
+        db,
+        sql: "SELECT COALESCE(MAX(id), 0) FROM messages WHERE session_id = ?",
+        arguments: [sessionId]
+      ) ?? 0
+
+    try db.execute(
+      sql: """
+        UPDATE sessions
+        SET window_start_message_id = ?, tainted = 0, updated_ts = ?
+        WHERE id = ?
+        """,
+      arguments: [boundary, now, sessionId]
+    )
   }
 
   /// Upsert keyed on `session_key`; returns the row id. Reused inside `claimAndPersistInbound`'s

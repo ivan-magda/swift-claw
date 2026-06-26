@@ -12,6 +12,39 @@ public protocol ProcessedUpdateStore: Sendable {
   func claimUpdate(updateId: Int64) throws -> Bool
 }
 
+public struct StopCommandResult: Sendable, Equatable {
+  public let newlyClaimed: Bool
+  public let sessionId: Int64?
+  public let cancelledRunId: Int64?
+
+  public init(newlyClaimed: Bool, sessionId: Int64?, cancelledRunId: Int64?) {
+    self.newlyClaimed = newlyClaimed
+    self.sessionId = sessionId
+    self.cancelledRunId = cancelledRunId
+  }
+}
+
+public struct NewCommandResult: Sendable, Equatable {
+  public let newlyClaimed: Bool
+  public let sessionId: Int64?
+  public let supersededRunIds: [Int64]
+
+  public init(newlyClaimed: Bool, sessionId: Int64?, supersededRunIds: [Int64]) {
+    self.newlyClaimed = newlyClaimed
+    self.sessionId = sessionId
+    self.supersededRunIds = supersededRunIds
+  }
+}
+
+public protocol CommandStore: Sendable {
+  /// Atomic `/stop`: claim update + resolve session + RUNNING→CANCELLED + audit in one write.
+  func applyStop(updateId: Int64, sessionKey: String, now: Date) throws -> StopCommandResult
+
+  /// Atomic `/new`: claim update + resolve session + RUNNING/PENDING→SUPERSEDED +
+  /// resetWindowAndDetaint + audit in one write.
+  func applyNew(updateId: Int64, sessionKey: String, now: Date) throws -> NewCommandResult
+}
+
 public protocol UpdateCursorStore: Sendable {
   func loadCursor() throws -> Int64?
   func advanceCursor(to updateId: Int64) throws
