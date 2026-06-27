@@ -91,6 +91,8 @@ private actor StreamingDraftBuffer {
 }
 
 private struct StreamingTurnRuntime: Sendable {
+  private struct AccumulatedStreamContentTooLarge: Error {}
+
   private struct FinishedResponse: Sendable {
     let content: String
     let finishReason: String?
@@ -195,13 +197,14 @@ private struct StreamingTurnRuntime: Sendable {
   ) async {
     await typingIndicator.sendTyping(chatId: chatId)
     var content = ""
+    var contentBytes = 0
 
     do {
       for try await event in provider.stream(request: request) {
         try Task.checkCancellation()
         switch event {
         case .delta(let delta):
-          content.append(delta)
+          try append(delta: delta, to: &content, contentBytes: &contentBytes)
           await draftBuffer.publish(content)
         case .finished(let finishReason, let usage, let providerCost):
           await finishStreamingResponse(
@@ -232,6 +235,19 @@ private struct StreamingTurnRuntime: Sendable {
       await draftBuffer.close()
       continuation.finish(throwing: error)
     }
+  }
+
+  private func append(
+    delta: String,
+    to content: inout String,
+    contentBytes: inout Int
+  ) throws {
+    let deltaBytes = delta.utf8.count
+    guard deltaBytes <= LLMStreamLimits.maxAccumulatedContentBytes - contentBytes else {
+      throw AccumulatedStreamContentTooLarge()
+    }
+    contentBytes += deltaBytes
+    content.append(delta)
   }
 
   private func finishStreamingResponse(

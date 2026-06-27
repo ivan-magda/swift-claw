@@ -79,6 +79,10 @@ public enum StreamEvent: Sendable, Equatable {
   case finished(finishReason: String?, usage: ChatUsage?, providerCost: Double?)
 }
 
+public enum LLMStreamLimits {
+  public static let maxAccumulatedContentBytes = 4 * 1024 * 1024
+}
+
 /// The single provider seam. The concrete impl lives in `ClawLLM`.
 public protocol LLMProvider: Sendable {
   func complete(request: ChatRequest) async throws -> ChatResponse

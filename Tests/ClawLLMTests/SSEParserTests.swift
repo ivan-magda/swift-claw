@@ -187,4 +187,23 @@ import Testing
       _ = try parser.push(Data("data: 123".utf8))
     }
   }
+
+  @Test func boundsAccumulatedContentAcrossManySmallValidDeltas() throws {
+    // given
+    var parser = SSEParser(
+      maxEventBytes: 128,
+      maxBufferedBytes: LLMStreamLimits.maxAccumulatedContentBytes,
+      maxAccumulatedContentBytes: 5
+    )
+    let event = Data("data: {\"choices\":[{\"delta\":{\"content\":\"ab\"}}]}\n\n".utf8)
+
+    // when
+    _ = try parser.push(event)
+    _ = try parser.push(event)
+
+    // then
+    #expect(throws: SSEParserError.accumulatedContentTooLarge) {
+      _ = try parser.push(event)
+    }
+  }
 }

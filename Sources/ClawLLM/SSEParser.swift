@@ -4,6 +4,7 @@ import Foundation
 public enum SSEParserError: Error, Sendable, Equatable {
   case eventTooLarge
   case bufferedStreamTooLarge
+  case accumulatedContentTooLarge
   case truncatedEvent
   case malformedJSON(String)
 }
@@ -11,16 +12,23 @@ public enum SSEParserError: Error, Sendable, Equatable {
 public struct SSEParser: Sendable {
   private let maxEventBytes: Int
   private let maxBufferedBytes: Int
+  private let maxAccumulatedContentBytes: Int
   private var buffer = Data()
+  private var accumulatedContentBytes = 0
   private var sawEvent = false
   private var finished = false
   private var finishReason: String?
   private var usage: ChatUsage?
   private var providerCost: Double?
 
-  public init(maxEventBytes: Int = 256 * 1024, maxBufferedBytes: Int = 4 * 1024 * 1024) {
+  public init(
+    maxEventBytes: Int = 256 * 1024,
+    maxBufferedBytes: Int = 4 * 1024 * 1024,
+    maxAccumulatedContentBytes: Int = LLMStreamLimits.maxAccumulatedContentBytes
+  ) {
     self.maxEventBytes = maxEventBytes
     self.maxBufferedBytes = maxBufferedBytes
+    self.maxAccumulatedContentBytes = maxAccumulatedContentBytes
   }
 
   public mutating func push(_ data: Data) throws -> [StreamEvent] {
@@ -122,9 +130,17 @@ public struct SSEParser: Sendable {
       finishReason = reason
     }
     if let content = choice.delta?.content {
+      try appendContentBytes(content.utf8.count)
       events.append(.delta(content))
     }
     return events
+  }
+
+  private mutating func appendContentBytes(_ byteCount: Int) throws {
+    guard byteCount <= maxAccumulatedContentBytes - accumulatedContentBytes else {
+      throw SSEParserError.accumulatedContentTooLarge
+    }
+    accumulatedContentBytes += byteCount
   }
 
   private func decodeChunk(_ payload: String) throws -> Chunk {

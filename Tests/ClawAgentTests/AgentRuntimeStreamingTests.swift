@@ -418,6 +418,31 @@ func waitForTurnResult(
     #expect(await provider.streamCalls == 1)
   }
 
+  @Test func oversizedAccumulatedStreamContentDegradesWithoutBlockingFallback() async throws {
+    for events in oversizedStreamCases() {
+      // given
+      let provider = StreamingProvider(streamScript: .events(events))
+      let runtime = makeRuntime(provider: provider, streamingEnabled: true)
+
+      // when
+      let result = await runtime.runTurn(
+        runId: 1,
+        sessionId: 2,
+        chatId: 3,
+        context: [ChatMessage(role: .user, content: "hello world")],
+        todayTokens: 0,
+        todayUSD: 0
+      )
+
+      // then
+      let (kind, usage) = try requireDegraded(result)
+      #expect(kind == .providerUnavailable)
+      #expect(try #require(usage).isEstimated)
+      #expect(await provider.completeCalls == 0)
+      #expect(await provider.streamCalls == 1)
+    }
+  }
+
   @Test func streamingDeadlineTerminatesNeverEndingStream() async throws {
     // given
     let provider = StreamingProvider(streamScript: .neverFinishes)
@@ -464,5 +489,19 @@ func waitForTurnResult(
     let (kind, usage) = try requireDegraded(try #require(result))
     #expect(kind == .providerUnavailable)
     #expect(try #require(usage).isEstimated)
+  }
+
+  private func oversizedStreamCases() -> [[StreamEvent]] {
+    let chunk = String(repeating: "a", count: 1024)
+    let manySmallDeltas = Array(
+      repeating: StreamEvent.delta(chunk),
+      count: (LLMStreamLimits.maxAccumulatedContentBytes / chunk.utf8.count) + 1
+    )
+    let singleOversizedDelta = [
+      StreamEvent.delta(
+        String(repeating: "a", count: LLMStreamLimits.maxAccumulatedContentBytes + 1)
+      )
+    ]
+    return [manySmallDeltas, singleOversizedDelta]
   }
 }
