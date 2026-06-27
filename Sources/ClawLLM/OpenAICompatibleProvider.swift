@@ -8,6 +8,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
   private static let baseBackoffSeconds = 0.5
   private static let maxBackoffSeconds = 30.0
 
+  private static let liteLLMResponseCostHeader = "x-litellm-response-cost"
+
   private let config: LLMConfig
   private let http: any HTTPExecuting & HTTPStreaming
   private let sleep: @Sendable (Double) async throws -> Void
@@ -63,6 +65,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
       guard attempt < config.retryBudget else {
         throw ProviderError.retryable(status: result.statusCode, message: message)
       }
+
       try await backoff(attempt: attempt, retryAfterSeconds: retryAfterSeconds(from: result))
     }
   }
@@ -80,10 +83,13 @@ public struct OpenAICompatibleProvider: LLMProvider {
           )
 
           guard (200..<300).contains(response.head.statusCode) else {
-            let message = sanitize(message: errorMessage(from: try await collect(response.body)))
+            let responseBody = try await collect(response.body)
+            let message = sanitize(message: errorMessage(from: responseBody))
+
             if Self.isRetryableStatus(response.head.statusCode) {
               throw ProviderError.retryable(status: response.head.statusCode, message: message)
             }
+
             throw ProviderError.terminal(status: response.head.statusCode, message: message)
           }
 
@@ -93,6 +99,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
               continuation.yield(event)
             }
           }
+
           if let finished = try parser.finish() {
             continuation.yield(finished)
           }
@@ -170,8 +177,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
         )
       }
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
-    let providerCost =
-      decoded.usage?.cost ?? result.getHeader(for: "x-litellm-response-cost").flatMap(Double.init)
+    let providerCost = decoded.usage?.cost ?? providerCost(from: result)
 
     return ChatResponse(
       content: choice?.message.content ?? "",
@@ -203,7 +209,11 @@ public struct OpenAICompatibleProvider: LLMProvider {
   }
 
   private func providerCost(from head: HTTPStreamHead) -> Double? {
-    head.getHeader(for: "x-litellm-response-cost").flatMap(Double.init)
+    head.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
+  }
+
+  private func providerCost(from result: HTTPResult) -> Double? {
+    result.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
   }
 
   // MARK: - Retry
