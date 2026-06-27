@@ -76,7 +76,7 @@ actor RecordingTransport: TelegramTransport {
   private let failSendAtAttempt: Int?
   private var failPlainFallbackNext = false
 
-  private enum Event { case sent, attempt, poll }
+  private enum Event { case sent, attempt, poll, draft }
 
   private var waiters: [Event: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)]] =
     [:]
@@ -146,6 +146,7 @@ actor RecordingTransport: TelegramTransport {
 
   func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool {
     drafts.append(DraftRecord(chatId: chatId, draftId: draftId, markdown: markdown))
+    resumeWaiters(.draft, reached: drafts.count)
     return true
   }
 
@@ -164,6 +165,11 @@ actor RecordingTransport: TelegramTransport {
   /// Suspends until `getUpdates` has been called at least `threshold` times.
   func waitForPolls(atLeast threshold: Int) async {
     await wait(.poll, current: pollCount, threshold: threshold)
+  }
+
+  /// Suspends until at least `threshold` draft updates have been recorded.
+  func waitForDrafts(atLeast threshold: Int) async {
+    await wait(.draft, current: drafts.count, threshold: threshold)
   }
 
   private func wait(_ event: Event, current: Int, threshold: Int) async {

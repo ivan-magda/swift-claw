@@ -90,7 +90,7 @@ let package = Package(
     .testTarget(name: "ClawAgentTests", dependencies: ["ClawAgent", "ClawCore"]),
     .testTarget(
       name: "ClawGatewayTests",
-      dependencies: ["ClawGateway", "ClawCore", "ClawData", "ClawAgent"]
+      dependencies: ["ClawGateway", "ClawCore", "ClawData", "ClawAgent", "ClawTelegram"]
     ),
   ]
 )
