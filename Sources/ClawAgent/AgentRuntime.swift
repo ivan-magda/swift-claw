@@ -117,13 +117,13 @@ public struct AgentRuntime: Sendable {
           sessionId: sessionId
         )
       }
-    }
-
-    do {
-      let response = try await withTypingAndDeadline(chatId: chatId, request: request)
-      return classify(response: response, context: context, runId: runId, sessionId: sessionId)
-    } catch {
-      return degradedForCaughtError(error, context: context, runId: runId, sessionId: sessionId)
+    } else {
+      do {
+        let response = try await withTypingAndDeadline(chatId: chatId, request: request)
+        return classify(response: response, context: context, runId: runId, sessionId: sessionId)
+      } catch {
+        return degradedForCaughtError(error, context: context, runId: runId, sessionId: sessionId)
+      }
     }
   }
 
