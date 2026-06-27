@@ -19,7 +19,9 @@ public struct TelegramRichDraftStreamer: RichDraftStreaming {
   }
 
   public func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
-    guard chatId > 0 else { return }
+    guard chatId > 0 else {
+      return
+    }
 
     let capped = String(markdown.prefix(Self.maxMarkdownCharacters))
 
