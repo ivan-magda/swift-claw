@@ -183,6 +183,7 @@ struct DiskFullRuns: RunStore {
       provider: provider,
       typingIndicator: NoopTyping(),
       draftStreamer: NoopRichDraftStreaming(),
+      streamingEnabled: false,
       costResolver: CostResolver(
         priceTable: .empty,
         referenceUSDPerToken: RunBudget.default.referenceUSDPerToken

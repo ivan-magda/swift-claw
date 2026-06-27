@@ -306,6 +306,7 @@ func makeStack(
     provider: provider,
     typingIndicator: NoopTyping(),
     draftStreamer: NoopRichDraftStreaming(),
+    streamingEnabled: false,
     costResolver: CostResolver(
       priceTable: .empty,
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
@@ -466,6 +467,7 @@ func makeStopNewStack(
     provider: provider,
     typingIndicator: NoopTyping(),
     draftStreamer: NoopRichDraftStreaming(),
+    streamingEnabled: false,
     costResolver: CostResolver(
       priceTable: .empty,
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
