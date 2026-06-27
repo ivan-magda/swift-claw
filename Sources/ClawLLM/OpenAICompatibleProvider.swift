@@ -8,6 +8,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
   private static let baseBackoffSeconds = 0.5
   private static let maxBackoffSeconds = 30.0
 
+  private static let maxStreamingErrorBodyBytes = 64 * 1024
   private static let liteLLMResponseCostHeader = "x-litellm-response-cost"
 
   private let config: LLMConfig
@@ -83,8 +84,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
           )
 
           guard (200..<300).contains(response.head.statusCode) else {
-            let responseBody = try await collect(response.body)
-            let message = sanitize(message: errorMessage(from: responseBody))
+            let errorBody = try await collectStreamingErrorBody(response.body)
+            let message = sanitize(message: errorMessage(from: errorBody))
 
             if Self.isRetryableStatus(response.head.statusCode) {
               throw ProviderError.retryable(status: response.head.statusCode, message: message)
@@ -197,14 +198,18 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return message
   }
 
-  private func collect(_ body: AsyncThrowingStream<Data, Error>) async throws -> Data {
+  private func collectStreamingErrorBody(
+    _ body: AsyncThrowingStream<Data, Error>
+  ) async throws -> Data {
     var collected = Data()
+
     for try await chunk in body {
       collected.append(chunk)
-      if collected.count > 64 * 1024 {
+      if collected.count > Self.maxStreamingErrorBodyBytes {
         break
       }
     }
+
     return collected
   }
 
