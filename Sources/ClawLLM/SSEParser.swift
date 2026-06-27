@@ -13,22 +13,27 @@ public struct SSEParser: Sendable {
   private let maxEventBytes: Int
   private let maxBufferedBytes: Int
   private let maxAccumulatedContentBytes: Int
+
   private var buffer = Data()
   private var accumulatedContentBytes = 0
+
   private var sawEvent = false
   private var finished = false
   private var finishReason: String?
+
   private var usage: ChatUsage?
   private var providerCost: Double?
 
   public init(
-    maxEventBytes: Int = 256 * 1024,
-    maxBufferedBytes: Int = 4 * 1024 * 1024,
-    maxAccumulatedContentBytes: Int = LLMStreamLimits.maxAccumulatedContentBytes
+    maxEventBytes: Int = LLMStreamLimits.maxEventBytes,
+    maxBufferedBytes: Int = LLMStreamLimits.maxBufferedBytes,
+    maxAccumulatedContentBytes: Int = LLMStreamLimits.maxAccumulatedContentBytes,
+    fallbackProviderCost: Double? = nil
   ) {
     self.maxEventBytes = maxEventBytes
     self.maxBufferedBytes = maxBufferedBytes
     self.maxAccumulatedContentBytes = maxAccumulatedContentBytes
+    self.providerCost = fallbackProviderCost
   }
 
   public mutating func push(_ data: Data) throws -> [StreamEvent] {
@@ -45,10 +50,12 @@ public struct SSEParser: Sendable {
     while let delimiter = delimiterRange(in: buffer) {
       let eventData = Data(buffer[..<delimiter.lowerBound])
       buffer.removeSubrange(..<delimiter.upperBound)
+
       guard eventData.count <= maxEventBytes else {
         throw SSEParserError.eventTooLarge
       }
       events.append(contentsOf: try parseEvent(eventData))
+
       if finished {
         buffer.removeAll(keepingCapacity: false)
         return events
@@ -58,6 +65,7 @@ public struct SSEParser: Sendable {
     guard buffer.count <= maxEventBytes else {
       throw SSEParserError.eventTooLarge
     }
+
     return events
   }
 
@@ -71,6 +79,7 @@ public struct SSEParser: Sendable {
     guard sawEvent else {
       return nil
     }
+
     finished = true
     return .finished(finishReason: finishReason, usage: usage, providerCost: providerCost)
   }
@@ -79,23 +88,29 @@ public struct SSEParser: Sendable {
     guard let text = String(bytes: data, encoding: .utf8) else {
       throw SSEParserError.malformedJSON("invalid UTF-8")
     }
+
     let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
     let payloadLines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
       .compactMap { rawLine -> String? in
         var line = String(rawLine)
+
         if line.last == "\r" {
           line.removeLast()
         }
+
         if line.hasPrefix(":") {
           return nil
         }
+
         guard line.hasPrefix("data:") else {
           return nil
         }
         var value = String(line.dropFirst(5))
+
         if value.first == " " {
           value.removeFirst()
         }
+
         return value
       }
 
@@ -126,13 +141,16 @@ public struct SSEParser: Sendable {
     guard let choice = chunk.choices.first else {
       return events
     }
+
     if let reason = choice.finishReason {
       finishReason = reason
     }
+
     if let content = choice.delta?.content {
       try appendContentBytes(content.utf8.count)
       events.append(.delta(content))
     }
+
     return events
   }
 
@@ -152,8 +170,8 @@ public struct SSEParser: Sendable {
   }
 
   private func delimiterRange(in data: Data) -> Range<Data.Index>? {
-    let lineFeed = Data([0x0A, 0x0A])
-    let crlf = Data([0x0D, 0x0A, 0x0D, 0x0A])
+    let lineFeed = Data([0x0A, 0x0A])  // \n\n
+    let crlf = Data([0x0D, 0x0A, 0x0D, 0x0A])  // \r\n\r\n
     let lfRange = data.range(of: lineFeed)
     let crlfRange = data.range(of: crlf)
 

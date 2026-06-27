@@ -219,6 +219,43 @@ import Testing
     )
   }
 
+  @Test func streamUsesLiteLLMCostHeaderWhenUsageCostIsAbsent() async throws {
+    // given
+    let chunks = [
+      Data(#"data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}"#.utf8),
+      Data("\n\n".utf8),
+      Data(
+        #"data: {"choices":[],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}"#
+          .utf8
+      ),
+      Data("\n\n".utf8),
+      Data("data: [DONE]\n\n".utf8),
+    ]
+    let exec = ScriptedHTTPExecutor([
+      .stream(
+        HTTPStreamHead(statusCode: 200, headers: ["x-litellm-response-cost": "0.0034"]),
+        chunks
+      )
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // when
+    var events: [StreamEvent] = []
+    for try await event in provider.stream(request: sampleRequest) {
+      events.append(event)
+    }
+
+    // then
+    #expect(
+      events.last
+        == .finished(
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
+          providerCost: 0.0034
+        )
+    )
+  }
+
   @Test func streamNon2xxMapsWithoutRetrying() async throws {
     // given
     let errorBody = Data(#"{"error":{"message":"bad auth"}}"#.utf8)
@@ -235,6 +272,26 @@ import Testing
         return false
       }
       return status == 401 && message == "bad auth"
+    }
+    #expect(await exec.recorded.count == 1)
+  }
+
+  @Test func streamRetryableNon2xxMapsWithoutRetrying() async throws {
+    // given
+    let errorBody = Data(#"{"error":{"message":"rate limited"}}"#.utf8)
+    let exec = ScriptedHTTPExecutor([
+      .stream(HTTPStreamHead(statusCode: 429, headers: ["Retry-After": "2"]), [errorBody])
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // then
+    await #expect {
+      for try await _ in provider.stream(request: sampleRequest) {}
+    } throws: { error in
+      guard case ProviderError.retryable(let status, let message) = error else {
+        return false
+      }
+      return status == 429 && message == "rate limited"
     }
     #expect(await exec.recorded.count == 1)
   }

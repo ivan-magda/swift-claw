@@ -80,6 +80,8 @@ public enum StreamEvent: Sendable, Equatable {
 }
 
 public enum LLMStreamLimits {
+  public static let maxEventBytes = 256 * 1024
+  public static let maxBufferedBytes = 4 * 1024 * 1024
   public static let maxAccumulatedContentBytes = 4 * 1024 * 1024
 }
 

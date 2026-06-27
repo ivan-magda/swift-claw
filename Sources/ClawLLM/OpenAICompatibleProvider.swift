@@ -87,7 +87,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
             throw ProviderError.terminal(status: response.head.statusCode, message: message)
           }
 
-          var parser = SSEParser()
+          var parser = SSEParser(fallbackProviderCost: providerCost(from: response.head))
           for try await chunk in response.body {
             for event in try parser.push(chunk) {
               continuation.yield(event)
@@ -200,6 +200,10 @@ public struct OpenAICompatibleProvider: LLMProvider {
       }
     }
     return collected
+  }
+
+  private func providerCost(from head: HTTPStreamHead) -> Double? {
+    head.getHeader(for: "x-litellm-response-cost").flatMap(Double.init)
   }
 
   // MARK: - Retry

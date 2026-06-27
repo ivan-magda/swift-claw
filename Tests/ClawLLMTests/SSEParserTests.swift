@@ -95,6 +95,56 @@ import Testing
     )
   }
 
+  @Test func usesFallbackProviderCostWhenUsageOmitsCost() throws {
+    // given
+    var parser = SSEParser(fallbackProviderCost: 0.0034)
+
+    // when
+    _ = try parser.push(
+      Data(
+        "data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}\n\n"
+          .utf8
+      )
+    )
+    let finished = try parser.push(Data("data: [DONE]\n\n".utf8))
+
+    // then
+    #expect(
+      finished == [
+        .finished(
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
+          providerCost: 0.0034
+        )
+      ]
+    )
+  }
+
+  @Test func usageCostOverridesFallbackProviderCost() throws {
+    // given
+    var parser = SSEParser(fallbackProviderCost: 0.0034)
+
+    // when
+    _ = try parser.push(
+      Data(
+        "data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10,\"cost\":0.0042}}\n\n"
+          .utf8
+      )
+    )
+    let finished = try parser.push(Data("data: [DONE]\n\n".utf8))
+
+    // then
+    #expect(
+      finished == [
+        .finished(
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
+          providerCost: 0.0042
+        )
+      ]
+    )
+  }
+
   @Test func preservesLatchedProviderCostWhenLaterUsageOmitsCost() throws {
     // given
     var parser = SSEParser()
