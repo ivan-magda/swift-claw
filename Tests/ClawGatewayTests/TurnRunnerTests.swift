@@ -182,6 +182,7 @@ struct DiskFullRuns: RunStore {
     let agent = AgentRuntime(
       provider: provider,
       typingIndicator: NoopTyping(),
+      draftStreamer: NoopRichDraftStreaming(),
       costResolver: CostResolver(
         priceTable: .empty,
         referenceUSDPerToken: RunBudget.default.referenceUSDPerToken

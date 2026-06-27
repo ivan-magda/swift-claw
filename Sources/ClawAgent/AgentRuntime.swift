@@ -38,7 +38,7 @@ public struct AgentRuntime: Sendable {
   public init(
     provider: any LLMProvider,
     typingIndicator: any TypingIndicator,
-    draftStreamer: any RichDraftStreaming = NoopRichDraftStreaming(),
+    draftStreamer: any RichDraftStreaming,
     streamingEnabled: Bool = false,
     costResolver: CostResolver,
     usageResolver: UsageResolver = UsageResolver(),

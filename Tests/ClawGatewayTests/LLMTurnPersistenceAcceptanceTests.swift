@@ -305,6 +305,7 @@ func makeStack(
   let agent = AgentRuntime(
     provider: provider,
     typingIndicator: NoopTyping(),
+    draftStreamer: NoopRichDraftStreaming(),
     costResolver: CostResolver(
       priceTable: .empty,
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
@@ -464,6 +465,7 @@ func makeStopNewStack(
   let agent = AgentRuntime(
     provider: provider,
     typingIndicator: NoopTyping(),
+    draftStreamer: NoopRichDraftStreaming(),
     costResolver: CostResolver(
       priceTable: .empty,
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
