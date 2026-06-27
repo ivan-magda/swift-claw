@@ -96,15 +96,15 @@ public struct AgentRuntime: Sendable {
 
     if streamingEnabled {
       do {
-        let response = try await withStreamingAndDeadline(
+        let response = try await runStreamingTurn(
           chatId: chatId,
           draftId: runId,
           request: request
         )
         return classify(response: response, context: context, runId: runId, sessionId: sessionId)
-      } catch ProviderError.connectFailed(_) {
+      } catch ProviderError.connectFailed {
         do {
-          let response = try await withTypingAndDeadline(chatId: chatId, request: request)
+          let response = try await runTypingTurn(chatId: chatId, request: request)
           return classify(response: response, context: context, runId: runId, sessionId: sessionId)
         } catch {
           return degradedForCaughtError(error, context: context, runId: runId, sessionId: sessionId)
@@ -119,7 +119,7 @@ public struct AgentRuntime: Sendable {
       }
     } else {
       do {
-        let response = try await withTypingAndDeadline(chatId: chatId, request: request)
+        let response = try await runTypingTurn(chatId: chatId, request: request)
         return classify(response: response, context: context, runId: runId, sessionId: sessionId)
       } catch {
         return degradedForCaughtError(error, context: context, runId: runId, sessionId: sessionId)
@@ -129,15 +129,11 @@ public struct AgentRuntime: Sendable {
 
   // MARK: - Load-bearing
 
-  /// Marker error thrown by the deadline child of `withTypingAndDeadline` when the wall-clock
-  /// window elapses; the `runTurn` shell maps it to the estimated-debit degradation path.
+  /// Marker error thrown by turn-runtime deadline children when the wall-clock window elapses; the
+  /// `runTurn` shell maps it to the estimated-debit degradation path.
   struct DeadlineExceeded: Error {}
 
-  /// How often the typing child re-issues the chat-action. Telegram's "typing…" auto-expires
-  /// after ~5s with no clear API (F5), so we refresh just under that window.
-  private static let typingReissueInterval: Duration = .seconds(4)
-
-  private func withStreamingAndDeadline(
+  private func runStreamingTurn(
     chatId: Int64,
     draftId: Int64,
     request: ChatRequest
@@ -156,41 +152,17 @@ public struct AgentRuntime: Sendable {
     )
   }
 
-  /// Races three children: the provider call, a typing loop re-issued every 4s, and a deadline
-  /// (`sleep(.seconds(budget.wallClockDeadlineSeconds))` then `throw DeadlineExceeded`). Returns
-  /// the provider response if it wins; rethrows its `ProviderError`; throws `DeadlineExceeded` if
-  /// the deadline wins. `defer { cancelAll }` must stop typing on every exit (F5). The typing loop
-  /// observes `Task.isCancelled` after `sendTyping` to avoid tight-spinning under a no-op sleep.
-  private func withTypingAndDeadline(
+  private func runTypingTurn(
     chatId: Int64,
     request: ChatRequest
   ) async throws -> ChatResponse {
-    try await withThrowingTaskGroup(of: ChatResponse?.self) { group in
-      defer { group.cancelAll() }
-
-      group.addTask {
-        try await provider.complete(request: request)
-      }
-      group.addTask {
-        try await sleep(.seconds(budget.wallClockDeadlineSeconds))
-        throw DeadlineExceeded()
-      }
-      group.addTask {
-        while !Task.isCancelled {
-          await typingIndicator.sendTyping(chatId: chatId)
-          try await sleep(Self.typingReissueInterval)
-        }
-        return nil
-      }
-
-      for try await outcome in group {
-        if let response = outcome {
-          return response
-        }
-      }
-
-      throw DeadlineExceeded()
-    }
+    let runtime = TypingTurnRuntime(
+      provider: provider,
+      typingIndicator: typingIndicator,
+      wallClockDeadlineSeconds: budget.wallClockDeadlineSeconds,
+      sleep: sleep
+    )
+    return try await runtime.run(chatId: chatId, request: request)
   }
 
   private func degradedForCaughtError(
