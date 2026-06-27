@@ -43,7 +43,7 @@ let package = Package(
     .target(
       name: "ClawLLM",
       dependencies: ["ClawCore"],
-      resources: [.copy("Prices.json")]
+      resources: [.copy("Pricing/Prices.json")]
     ),
     .target(name: "ClawAgent", dependencies: ["ClawCore"]),
     .target(
