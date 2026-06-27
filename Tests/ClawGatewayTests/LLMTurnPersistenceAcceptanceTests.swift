@@ -2,6 +2,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTelegram
 import Foundation
 import GRDB
 import Logging
@@ -71,6 +72,111 @@ actor RecordingProvider: LLMProvider {
   func releaseFirstCall() {
     firstCallRelease?.resume()
     firstCallRelease = nil
+  }
+}
+
+actor StreamingAcceptanceProvider: LLMProvider {
+  enum StreamScript: Sendable {
+    case success
+    case beforeDelta(ProviderError)
+    case afterDraft(ProviderError)
+  }
+
+  private(set) var completeCalls = 0
+  private(set) var streamCalls = 0
+  private var requestWaiters: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)] =
+    []
+  private var script: StreamScript = .success
+  private var postDeltaRelease: CheckedContinuation<Void, Never>?
+  private var postDeltaReleased = false
+
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    completeCalls += 1
+    return ChatResponse(
+      content: "blocking fallback",
+      finishReason: "stop",
+      usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+      costFromProvider: 0.0021
+    )
+  }
+
+  nonisolated func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
+    AsyncThrowingStream { continuation in
+      Task {
+        await self.recordStreamCall()
+        switch await self.currentScript() {
+        case .beforeDelta(let failure):
+          continuation.finish(throwing: failure)
+          return
+        case .success:
+          continuation.yield(.delta("stream "))
+          await self.waitForPostDeltaRelease()
+          continuation.yield(.delta("answer"))
+          continuation.yield(
+            .finished(
+              finishReason: "stop",
+              usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+              providerCost: 0.0021
+            )
+          )
+          continuation.finish()
+        case .afterDraft(let failure):
+          continuation.yield(.delta("stream "))
+          await self.waitForPostDeltaRelease()
+          continuation.finish(throwing: failure)
+        }
+      }
+    }
+  }
+
+  func waitForStreamCalls(_ count: Int) async {
+    guard streamCalls < count else { return }
+    await withCheckedContinuation { continuation in
+      requestWaiters.append((threshold: count, continuation: continuation))
+    }
+  }
+
+  func setStreamFailure(_ failure: ProviderError?) {
+    script =
+      if let failure {
+        .beforeDelta(failure)
+      } else {
+        .success
+      }
+    postDeltaReleased = false
+    postDeltaRelease = nil
+  }
+
+  func setPostDraftFailure(_ failure: ProviderError) {
+    script = .afterDraft(failure)
+    postDeltaReleased = false
+    postDeltaRelease = nil
+  }
+
+  func releasePostDelta() {
+    postDeltaReleased = true
+    postDeltaRelease?.resume()
+    postDeltaRelease = nil
+  }
+
+  private func recordStreamCall() {
+    streamCalls += 1
+    let pending = requestWaiters
+    requestWaiters = pending.filter { $0.threshold > streamCalls }
+    for waiter in pending where waiter.threshold <= streamCalls {
+      waiter.continuation.resume()
+    }
+  }
+
+  private func currentScript() -> StreamScript {
+    script
+  }
+
+  private func waitForPostDeltaRelease() async {
+    guard !postDeltaReleased else { return }
+    await withCheckedContinuation { continuation in
+      postDeltaRelease = continuation
+    }
   }
 }
 
@@ -160,6 +266,16 @@ struct StopNewStack {
   let chatId: Int64
 }
 
+struct StreamingStack {
+  let router: MessageRouter
+  let dispatcher: OutboxDispatcher
+  let transport: RecordingTransport
+  let provider: StreamingAcceptanceProvider
+  let signal: OutboxSignal
+  let outbox: OutboxStoreGRDB
+  let chatId: Int64
+}
+
 /// Assembles the production lane stack over `writer`, seeding `chatId` onto the allowlist and
 /// scripting the provider with `outcome`.
 func makeStack(
@@ -189,6 +305,8 @@ func makeStack(
   let agent = AgentRuntime(
     provider: provider,
     typingIndicator: NoopTyping(),
+    draftStreamer: NoopRichDraftStreaming(),
+    streamingEnabled: false,
     costResolver: CostResolver(
       priceTable: .empty,
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
@@ -248,6 +366,82 @@ func makeStack(
   )
 }
 
+func makeStreamingStack(
+  writer: any DatabaseWriter,
+  allow chatId: Int64 = 42
+) throws -> StreamingStack {
+  let allowlist = AllowlistStoreGRDB(writer: writer)
+  try allowlist.seedAllowlist(userIds: [chatId])
+  let processed = ProcessedUpdateStoreGRDB(writer: writer)
+  let sessionMessages = SessionMessageStoreGRDB(writer: writer)
+  let commands = CommandStoreGRDB(writer: writer)
+  let runs = RunStoreGRDB(writer: writer)
+  let usage = UsageStoreGRDB(writer: writer)
+  let outbox = OutboxStoreGRDB(writer: writer)
+  let audit = AuditLogGRDB(writer: writer)
+  let provider = StreamingAcceptanceProvider()
+  let transport = RecordingTransport()
+  let signal = OutboxSignal()
+  let lanes = SessionLaneRegistry()
+  let logger = Logger(label: "streaming-acceptance")
+  let draftStreamer = TelegramRichDraftStreamer(
+    transport: transport,
+    sleep: { try await Task.sleep(for: $0) }
+  )
+  let agent = AgentRuntime(
+    provider: provider,
+    typingIndicator: NoopTyping(),
+    draftStreamer: draftStreamer,
+    streamingEnabled: true,
+    costResolver: CostResolver(
+      priceTable: .empty,
+      referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
+    ),
+    budget: .default,
+    model: "gpt-4o",
+    sleep: { try await Task.sleep(for: $0) }
+  )
+  let turnRunner = TurnRunner(
+    sessionMessages: sessionMessages,
+    runs: runs,
+    usageStore: usage,
+    audit: audit,
+    agent: agent,
+    budget: .default,
+    systemPrompt: SystemPrompt.minimal,
+    notifyOutbox: { signal.poke() },
+    breaker: BudgetBreaker(budget: .default),
+    transport: transport,
+    logger: logger
+  )
+  let router = MessageRouter(
+    processed: processed,
+    sessionMessages: sessionMessages,
+    commands: commands,
+    botUsername: "claw_bot",
+    accessControl: AccessControl(allowlist: allowlist),
+    transport: transport,
+    turnRunner: turnRunner,
+    lanes: lanes,
+    logger: logger
+  )
+  let dispatcher = OutboxDispatcher(
+    outbox: outbox,
+    transport: transport,
+    signal: signal,
+    logger: logger
+  )
+  return StreamingStack(
+    router: router,
+    dispatcher: dispatcher,
+    transport: transport,
+    provider: provider,
+    signal: signal,
+    outbox: outbox,
+    chatId: chatId
+  )
+}
+
 func makeStopNewStack(
   writer: any DatabaseWriter,
   allow chatId: Int64 = 42
@@ -272,6 +466,8 @@ func makeStopNewStack(
   let agent = AgentRuntime(
     provider: provider,
     typingIndicator: NoopTyping(),
+    draftStreamer: NoopRichDraftStreaming(),
+    streamingEnabled: false,
     costResolver: CostResolver(
       priceTable: .empty,
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
@@ -373,6 +569,82 @@ func makeStopNewStack(
   }
 
   // MARK: - Tests
+
+  @Test func streamedTurnPublishesDraftsThenFinalizesViaOutbox() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStreamingStack(writer: queue)
+
+    // when
+    let outcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 501, from: stack.chatId, text: "stream please")
+    )
+    await stack.provider.waitForStreamCalls(1)
+    await stack.transport.waitForDrafts(atLeast: 1)
+    await stack.provider.releasePostDelta()
+    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+
+    // then
+    #expect(outcome == .processed)
+    let drafts = await stack.transport.drafts
+    #expect(drafts.count >= 2)
+    #expect(Set(drafts.map(\.draftId)).count == 1)
+    #expect(drafts.last?.markdown == "stream answer")
+    #expect(await stack.transport.richSends.isEmpty)
+    #expect(try stack.outbox.pendingOutbound().count == 1)
+
+    // when
+    await stack.dispatcher.drainOnce()
+
+    // then
+    #expect(await stack.transport.richSends.first?.markdown == "stream answer")
+    #expect(try stack.outbox.pendingOutbound().isEmpty)
+  }
+
+  @Test func streamingConnectFailureFallsBackToBlockingPath() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStreamingStack(writer: queue)
+    await stack.provider.setStreamFailure(.connectFailed(message: "refused"))
+
+    // when
+    let outcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 502, from: stack.chatId, text: "fallback")
+    )
+    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+    await stack.dispatcher.drainOnce()
+
+    // then
+    #expect(outcome == .processed)
+    #expect(await stack.provider.streamCalls == 1)
+    #expect(await stack.provider.completeCalls == 1)
+    #expect(await stack.transport.richSends.first?.markdown == "blocking fallback")
+  }
+
+  @Test func postSendStreamingFailureDoesNotIssueBlockingFallback() async throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStreamingStack(writer: queue)
+    await stack.provider.setPostDraftFailure(.retryable(status: nil, message: "drop"))
+
+    // when
+    let outcome = await stack.router.handle(
+      rawUpdate: textUpdate(id: 503, from: stack.chatId, text: "drop")
+    )
+    await stack.provider.waitForStreamCalls(1)
+    await stack.transport.waitForDrafts(atLeast: 1)
+    await stack.provider.releasePostDelta()
+    try await waitForRunStates(queue, expected: [RunState.failed.rawValue])
+
+    // then
+    #expect(outcome == .processed)
+    #expect(await stack.transport.drafts.isEmpty == false)
+    #expect(await stack.provider.streamCalls == 1)
+    #expect(await stack.provider.completeCalls == 0)
+  }
 
   /// §1: a real answer is persisted across the whole spine and committed BEFORE any send — the turn
   /// leaves a DONE run, one usage row, an audit trail, and a single PENDING outbox row, while the

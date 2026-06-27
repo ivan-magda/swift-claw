@@ -15,6 +15,35 @@ struct MockHTTPExecutor: HTTPExecuting {
   ) async throws -> HTTPResult { result }
 }
 
+struct RecordingHTTPExecutor: HTTPExecuting {
+  struct Call: Sendable {
+    let url: String
+    let body: Data
+    let timeout: Int
+  }
+
+  actor Recorder {
+    private(set) var calls: [Call] = []
+
+    func append(url: String, body: Data, timeout: Int) {
+      calls.append(Call(url: url, body: body, timeout: timeout))
+    }
+  }
+
+  let recorder: Recorder
+  let result: HTTPResult
+
+  func post(
+    url: String,
+    headers: [String: String],
+    jsonBody: Data,
+    timeoutSeconds: Int
+  ) async throws -> HTTPResult {
+    await recorder.append(url: url, body: jsonBody, timeout: timeoutSeconds)
+    return result
+  }
+}
+
 /// Simulates a transport error whose description echoes the request URL (which carries the token).
 struct URLEchoingExecutor: HTTPExecuting {
   struct URLEchoError: Error, CustomStringConvertible {
@@ -176,5 +205,33 @@ private func client(status: Int, json: String) -> TelegramClient {
     let message = try #require(thrownMessage)
     #expect(message.contains("SECRET-123:abc") == false)
     #expect(message.contains("<redacted-token>"))
+  }
+
+  @Test func sendsRichMessageDraftWithDraftIdAndMarkdown() async throws {
+    // given
+    let recorder = RecordingHTTPExecutor.Recorder()
+    let http = RecordingHTTPExecutor(
+      recorder: recorder,
+      result: HTTPResult(
+        statusCode: 200,
+        headers: [:],
+        body: Data(#"{"ok":true,"result":true}"#.utf8)
+      )
+    )
+    let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
+
+    // when
+    let sent = try await telegram.sendRichMessageDraft(chatId: 42, draftId: 99, markdown: "**hi**")
+
+    // then
+    #expect(sent)
+    let call = try #require(await recorder.calls.first)
+    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    let richMessage = try #require(body["rich_message"] as? [String: Any])
+    #expect(call.url == "https://example.test/botT/sendRichMessageDraft")
+    #expect(call.timeout == 15)
+    #expect(body["chat_id"] as? Int == 42)
+    #expect(body["draft_id"] as? Int == 99)
+    #expect(richMessage["markdown"] as? String == "**hi**")
   }
 }

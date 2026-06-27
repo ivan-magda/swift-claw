@@ -69,6 +69,23 @@ public struct TelegramClient: TelegramTransport {
     return message.message_id
   }
 
+  public func sendRichMessageDraft(
+    chatId: Int64,
+    draftId: Int64,
+    markdown: String
+  ) async throws -> Bool {
+    let request = SendRichMessageDraftRequest(
+      chatId: chatId,
+      draftId: draftId,
+      richMessage: InputRichMessage(markdown: markdown)
+    )
+    return try await callMethod(
+      "sendRichMessageDraft",
+      body: request,
+      httpTimeout: Timeout.shortRequestSeconds
+    )
+  }
+
   public func sendChatAction(chatId: Int64, action: String) async throws {
     let request = SendChatActionRequest(chatId: chatId, action: action)
     let _: Bool = try await callMethod(

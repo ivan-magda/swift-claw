@@ -173,6 +173,170 @@ import Testing
     #expect(attempts == 3)
   }
 
+  @Test func streamRequestEnablesStreamOptionsAndYieldsEvents() async throws {
+    // given
+    let chunks = [
+      Data(#"data: {"choices":[{"delta":{"content":"he"}}]}"#.utf8),
+      Data("\n\n".utf8),
+      Data(
+        #"data: {"choices":[{"delta":{"content":"llo"},"finish_reason":"stop"}]}"#.utf8
+      ),
+      Data("\n\n".utf8),
+      Data(
+        #"data: {"choices":[],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}"#
+          .utf8
+      ),
+      Data("\n\n".utf8),
+      Data("data: [DONE]\n\n".utf8),
+    ]
+    let exec = ScriptedHTTPExecutor([
+      .stream(HTTPStreamHead(statusCode: 200, headers: [:]), chunks)
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // when
+    var events: [StreamEvent] = []
+    for try await event in provider.stream(request: sampleRequest) {
+      events.append(event)
+    }
+
+    // then
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    let streamOptions = try #require(body["stream_options"] as? [String: Any])
+    #expect(body["stream"] as? Bool == true)
+    #expect(streamOptions["include_usage"] as? Bool == true)
+    #expect(
+      events == [
+        .delta("he"),
+        .delta("llo"),
+        .finished(
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
+          providerCost: nil
+        ),
+      ]
+    )
+  }
+
+  @Test func streamUsesLiteLLMCostHeaderWhenUsageCostIsAbsent() async throws {
+    // given
+    let chunks = [
+      Data(#"data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}"#.utf8),
+      Data("\n\n".utf8),
+      Data(
+        #"data: {"choices":[],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}"#
+          .utf8
+      ),
+      Data("\n\n".utf8),
+      Data("data: [DONE]\n\n".utf8),
+    ]
+    let exec = ScriptedHTTPExecutor([
+      .stream(
+        HTTPStreamHead(statusCode: 200, headers: ["x-litellm-response-cost": "0.0034"]),
+        chunks
+      )
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // when
+    var events: [StreamEvent] = []
+    for try await event in provider.stream(request: sampleRequest) {
+      events.append(event)
+    }
+
+    // then
+    #expect(
+      events.last
+        == .finished(
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
+          providerCost: 0.0034
+        )
+    )
+  }
+
+  @Test func streamNon2xxMapsWithoutRetrying() async throws {
+    // given
+    let errorBody = Data(#"{"error":{"message":"bad auth"}}"#.utf8)
+    let exec = ScriptedHTTPExecutor([
+      .stream(HTTPStreamHead(statusCode: 401, headers: [:]), [errorBody])
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // then
+    await #expect {
+      for try await _ in provider.stream(request: sampleRequest) {}
+    } throws: { error in
+      guard case ProviderError.terminal(let status, let message) = error else {
+        return false
+      }
+      return status == 401 && message == "bad auth"
+    }
+    #expect(await exec.recorded.count == 1)
+  }
+
+  @Test func streamRetryableNon2xxMapsWithoutRetrying() async throws {
+    // given
+    let errorBody = Data(#"{"error":{"message":"rate limited"}}"#.utf8)
+    let exec = ScriptedHTTPExecutor([
+      .stream(HTTPStreamHead(statusCode: 429, headers: ["Retry-After": "2"]), [errorBody])
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // then
+    await #expect {
+      for try await _ in provider.stream(request: sampleRequest) {}
+    } throws: { error in
+      guard case ProviderError.retryable(let status, let message) = error else {
+        return false
+      }
+      return status == 429 && message == "rate limited"
+    }
+    #expect(await exec.recorded.count == 1)
+  }
+
+  @Test func streamPostSendFailureDoesNotRetryOrFallbackInsideProvider() async throws {
+    // given
+    let exec = ScriptedHTTPExecutor([
+      .streamFailure(
+        HTTPStreamHead(statusCode: 200, headers: [:]),
+        [],
+        TransportFailure(message: "dropped after request")
+      )
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // then
+    await #expect {
+      for try await _ in provider.stream(request: sampleRequest) {}
+    } throws: { error in
+      guard case ProviderError.retryable(let status, let message) = error else {
+        return false
+      }
+      return status == nil && message.contains("dropped after request")
+    }
+    #expect(await exec.recorded.count == 1)
+  }
+
+  @Test func streamConnectFailureIsTypedForRuntimeFallback() async throws {
+    // given
+    let exec = ScriptedHTTPExecutor([
+      .connectFailure(TransportFailure(message: "connection refused sk-test"))
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // then
+    await #expect {
+      for try await _ in provider.stream(request: sampleRequest) {}
+    } throws: { error in
+      guard case ProviderError.connectFailed(let message) = error else {
+        return false
+      }
+      return message.contains("sk-test") == false && message.contains("<redacted-key>")
+    }
+  }
+
   @Test func isReasoningModelDetectsKnownPrefixes() {
     // then
     #expect(OpenAICompatibleProvider.isReasoningModel("o3-mini"))

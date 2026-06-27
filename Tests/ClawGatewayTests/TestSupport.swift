@@ -56,8 +56,15 @@ actor FakeTurnRunner: TurnDispatching {
 /// deterministic, continuation-based wait points (`waitForSends`/`waitForAttempts`/`waitForPolls`)
 /// that resume exactly when an event lands — no polling or timeouts, so tests stay parallel-safe.
 actor RecordingTransport: TelegramTransport {
+  struct DraftRecord: Sendable, Equatable {
+    let chatId: Int64
+    let draftId: Int64
+    let markdown: String
+  }
+
   private(set) var sent: [(chatId: Int64, text: String)] = []
   private(set) var richSends: [(chatId: Int64, markdown: String)] = []
+  private(set) var drafts: [DraftRecord] = []
   private(set) var sendAttempts = 0
   private(set) var pollCount = 0
   private var batches: [[RawUpdate]]
@@ -69,7 +76,7 @@ actor RecordingTransport: TelegramTransport {
   private let failSendAtAttempt: Int?
   private var failPlainFallbackNext = false
 
-  private enum Event { case sent, attempt, poll }
+  private enum Event { case sent, attempt, poll, draft }
 
   private var waiters: [Event: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)]] =
     [:]
@@ -137,6 +144,12 @@ actor RecordingTransport: TelegramTransport {
     return Int64(sendAttempts)
   }
 
+  func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool {
+    drafts.append(DraftRecord(chatId: chatId, draftId: draftId, markdown: markdown))
+    resumeWaiters(.draft, reached: drafts.count)
+    return true
+  }
+
   func sendChatAction(chatId: Int64, action: String) async throws {}
 
   /// Suspends until at least `threshold` messages have been recorded as sent.
@@ -152,6 +165,11 @@ actor RecordingTransport: TelegramTransport {
   /// Suspends until `getUpdates` has been called at least `threshold` times.
   func waitForPolls(atLeast threshold: Int) async {
     await wait(.poll, current: pollCount, threshold: threshold)
+  }
+
+  /// Suspends until at least `threshold` draft updates have been recorded.
+  func waitForDrafts(atLeast threshold: Int) async {
+    await wait(.draft, current: drafts.count, threshold: threshold)
   }
 
   private func wait(_ event: Event, current: Int, threshold: Int) async {

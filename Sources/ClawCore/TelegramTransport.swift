@@ -14,7 +14,28 @@ public protocol TelegramTransport: Sendable {
   /// Returns the assigned `message_id` like `sendMessage`. On any rich-send error the dispatcher
   /// re-sends the chunk as plain `sendMessage` (F8), so this never has to succeed for a reply to land.
   func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64
+  func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool
   /// Emits a Telegram chat action (e.g. `"typing"`). Fire-and-forget: the action auto-expires (~5s),
   /// so callers re-issue it on an interval and ignore failures — a missing indicator is never fatal.
   func sendChatAction(chatId: Int64, action: String) async throws
+}
+
+extension TelegramTransport {
+  public func sendRichMessageDraft(
+    chatId: Int64,
+    draftId: Int64,
+    markdown: String
+  ) async throws -> Bool {
+    throw TelegramError.transport("sendRichMessageDraft not implemented")
+  }
+}
+
+public protocol RichDraftStreaming: Sendable {
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async
+}
+
+public struct NoopRichDraftStreaming: RichDraftStreaming {
+  public init() {}
+
+  public func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {}
 }

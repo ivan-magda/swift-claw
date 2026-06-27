@@ -9,6 +9,7 @@ public struct AppConfig: Sendable, Equatable {
     static let llmModel = "CLAW_LLM_MODEL"
     static let llmMaxTokensField = "CLAW_LLM_MAX_TOKENS_FIELD"
     static let llmMaxTokens = "CLAW_LLM_MAX_TOKENS"
+    static let llmStreaming = "CLAW_LLM_STREAMING"
     static let perRunUSD = "CLAW_PER_RUN_USD"
     static let perDayUSD = "CLAW_PER_DAY_USD"
     static let referenceUSDPerToken = "CLAW_REFERENCE_USD_PER_TOKEN"
@@ -109,7 +110,12 @@ public struct AppConfig: Sendable, Equatable {
       maxTokensField: maxTokensField,
       maxOutputTokens: maxOutputTokens,
       retryBudget: EnvDefaults.retryBudget,
-      requestTimeoutSeconds: EnvDefaults.requestTimeoutSeconds
+      requestTimeoutSeconds: EnvDefaults.requestTimeoutSeconds,
+      streamingEnabled: try boolValue(
+        env[EnvKey.llmStreaming],
+        key: EnvKey.llmStreaming,
+        default: true
+      )
     )
   }
 
@@ -166,6 +172,26 @@ public struct AppConfig: Sendable, Equatable {
     }
 
     return value
+  }
+
+  private static func boolValue(
+    _ raw: String?,
+    key: String,
+    default fallback: Bool
+  ) throws -> Bool {
+    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmed.isEmpty else {
+      return fallback
+    }
+
+    switch trimmed.lowercased() {
+    case "1", "true", "yes", "on":
+      return true
+    case "0", "false", "no", "off":
+      return false
+    default:
+      throw ConfigError.invalidBool(key: key, value: trimmed)
+    }
   }
 
   private static func parseAllowlist(from environmentValue: String?) throws -> Set<Int64> {

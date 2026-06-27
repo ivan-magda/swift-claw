@@ -15,6 +15,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidMaxTokensField(String)
   case invalidMaxTokens(String)
   case invalidBudget(String)
+  case invalidBool(key: String, value: String)
 
   public var exitCode: Int32 {
     switch self {
@@ -25,6 +26,7 @@ public enum ConfigError: Error, Sendable, Equatable {
     case .invalidMaxTokensField: ClawExitCode.configInvalid.rawValue
     case .invalidMaxTokens: ClawExitCode.configInvalid.rawValue
     case .invalidBudget: ClawExitCode.configInvalid.rawValue
+    case .invalidBool: ClawExitCode.configInvalid.rawValue
     }
   }
 }

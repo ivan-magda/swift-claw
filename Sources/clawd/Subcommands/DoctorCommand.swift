@@ -36,6 +36,9 @@ struct DoctorCommand: AsyncParsableCommand {
     }
     report.add(key: "config", value: "OK")
     report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)")
+    if checkConfig {
+      report.add(key: "llm.streaming", value: config.llm.streamingEnabled ? "on" : "off")
+    }
 
     let secretsRow = SecretStoreResolver.doctorRow(
       stateRoot: config.stateRoot,
@@ -129,6 +132,7 @@ struct DoctorCommand: AsyncParsableCommand {
     )
     report.add(key: "llm.consecutive_failures", value: "\(health.consecutiveFailures)")
     report.add(key: "llm.retry_budget", value: "\(config.llm.retryBudget)")
+    report.add(key: "llm.streaming", value: config.llm.streamingEnabled ? "on" : "off")
     report.add(key: "runs.in_flight", value: "\(health.inFlight)")
     report.add(
       key: "runs.oldest_age_s",

@@ -125,19 +125,49 @@ func makeCostResolver(
 func makeRuntime(
   provider: any LLMProvider,
   typing: any TypingIndicator = RecordingTyping(),
+  drafts: any RichDraftStreaming = NoopRichDraftStreaming(),
   costResolver: CostResolver = makeCostResolver(),
   budget: RunBudget = .default,
   model: String = "gpt-4o",
+  streamingEnabled: Bool = false,
   sleep: @escaping @Sendable (Duration) async throws -> Void = realSleep
 ) -> AgentRuntime {
   AgentRuntime(
     provider: provider,
     typingIndicator: typing,
+    draftStreamer: drafts,
+    streamingEnabled: streamingEnabled,
     costResolver: costResolver,
     budget: budget,
     model: model,
     sleep: sleep
   )
+}
+
+func requireCompleted(
+  _ result: TurnResult
+) throws -> (content: String, usage: ProviderUsage) {
+  guard case .completed(let content, let usage) = result else {
+    struct Mismatch: Error, CustomStringConvertible {
+      let result: TurnResult
+      var description: String { "expected TurnResult.completed, got \(result)" }
+    }
+    throw Mismatch(result: result)
+  }
+  return (content, usage)
+}
+
+func requireDegraded(
+  _ result: TurnResult
+) throws -> (kind: DegradationKind, usage: ProviderUsage?) {
+  guard case .degraded(let kind, let usage) = result else {
+    struct Mismatch: Error, CustomStringConvertible {
+      let result: TurnResult
+      var description: String { "expected TurnResult.degraded, got \(result)" }
+    }
+    throw Mismatch(result: result)
+  }
+  return (kind, usage)
 }
 
 func userMessage(_ content: String) -> StoredMessage {

@@ -176,4 +176,52 @@ import Testing
     #expect(withKey.model == config.llm.model)
     #expect(withKey.baseURL == config.llm.baseURL)
   }
+
+  @Test func streamingDefaultsToOn() throws {
+    // given
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.llm.streamingEnabled)
+  }
+
+  @Test(arguments: ["false", "FALSE", "0", "no", "off"])
+  func streamingCanBeDisabled(rawValue: String) throws {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.llmStreaming] = rawValue
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.llm.streamingEnabled == false)
+  }
+
+  @Test(arguments: ["true", "TRUE", "1", "yes", "on"])
+  func streamingCanBeEnabledExplicitly(rawValue: String) throws {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.llmStreaming] = rawValue
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.llm.streamingEnabled)
+  }
+
+  @Test func invalidStreamingFlagFailsClosed() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.llmStreaming] = "sometimes"
+
+    // then
+    #expect(throws: ConfigError.invalidBool(key: EnvKey.llmStreaming, value: "sometimes")) {
+      try AppConfig.load(environment: env)
+    }
+  }
 }

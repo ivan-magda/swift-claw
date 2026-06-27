@@ -3,34 +3,6 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
-// MARK: - Unwrap helpers
-
-private func requireCompleted(
-  _ result: TurnResult
-) throws -> (content: String, usage: ProviderUsage) {
-  guard case .completed(let content, let usage) = result else {
-    struct Mismatch: Error, CustomStringConvertible {
-      let result: TurnResult
-      var description: String { "expected TurnResult.completed, got \(result)" }
-    }
-    throw Mismatch(result: result)
-  }
-  return (content, usage)
-}
-
-private func requireDegraded(
-  _ result: TurnResult
-) throws -> (kind: DegradationKind, usage: ProviderUsage?) {
-  guard case .degraded(let kind, let usage) = result else {
-    struct Mismatch: Error, CustomStringConvertible {
-      let result: TurnResult
-      var description: String { "expected TurnResult.degraded, got \(result)" }
-    }
-    throw Mismatch(result: result)
-  }
-  return (kind, usage)
-}
-
 @Suite("AgentRuntime")
 struct AgentRuntimeTests {
   @Test("a completed turn returns the content and the provider-reconciled usage")

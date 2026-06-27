@@ -26,6 +26,8 @@ public enum TurnResult: Sendable, Equatable {
 public struct AgentRuntime: Sendable {
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
+  private let draftStreamer: any RichDraftStreaming
+  private let streamingEnabled: Bool
   private let costResolver: CostResolver
   private let usageResolver: UsageResolver
   private let budget: RunBudget
@@ -36,6 +38,8 @@ public struct AgentRuntime: Sendable {
   public init(
     provider: any LLMProvider,
     typingIndicator: any TypingIndicator,
+    draftStreamer: any RichDraftStreaming,
+    streamingEnabled: Bool,
     costResolver: CostResolver,
     usageResolver: UsageResolver = UsageResolver(),
     budget: RunBudget,
@@ -44,6 +48,8 @@ public struct AgentRuntime: Sendable {
   ) {
     self.provider = provider
     self.typingIndicator = typingIndicator
+    self.draftStreamer = draftStreamer
+    self.streamingEnabled = streamingEnabled
     self.costResolver = costResolver
     self.usageResolver = usageResolver
     self.budget = budget
@@ -88,75 +94,121 @@ public struct AgentRuntime: Sendable {
       maxOutputTokens: budget.maxOutputTokens
     )
 
-    do {
-      let response = try await withTypingAndDeadline(chatId: chatId, request: request)
-      return classify(response: response, context: context, runId: runId, sessionId: sessionId)
-    } catch let error as ProviderError {
-      switch error {
-      case .terminal:
-        // No retries burned, no usage produced → degrade without a debit.
-        return .degraded(.providerUnavailable, usage: nil)
-      case .retryable:
-        // Retries were exhausted (F28): debit the pre-call estimate so a flapper can't run free.
-        return .degraded(
-          .providerUnavailable,
-          usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+    if streamingEnabled {
+      do {
+        let response = try await runStreamingTurn(
+          chatId: chatId,
+          draftId: runId,
+          request: request
+        )
+        return classify(response: response, context: context, runId: runId, sessionId: sessionId)
+      } catch ProviderError.connectFailed {
+        do {
+          let response = try await runTypingTurn(chatId: chatId, request: request)
+          return classify(response: response, context: context, runId: runId, sessionId: sessionId)
+        } catch {
+          return degradedForCaughtError(error, context: context, runId: runId, sessionId: sessionId)
+        }
+      } catch {
+        return degradedForStreamingError(
+          error,
+          context: context,
+          runId: runId,
+          sessionId: sessionId
         )
       }
-    } catch {
-      // DeadlineExceeded / cancellation: the call never produced usage → debit the estimate.
-      return .degraded(
-        .providerUnavailable,
-        usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
-      )
+    } else {
+      do {
+        let response = try await runTypingTurn(chatId: chatId, request: request)
+        return classify(response: response, context: context, runId: runId, sessionId: sessionId)
+      } catch {
+        return degradedForCaughtError(error, context: context, runId: runId, sessionId: sessionId)
+      }
     }
   }
 
   // MARK: - Load-bearing
 
-  /// Marker error thrown by the deadline child of `withTypingAndDeadline` when the wall-clock
-  /// window elapses; the `runTurn` shell maps it to the estimated-debit degradation path.
+  /// Marker error thrown by turn-runtime deadline children when the wall-clock window elapses; the
+  /// `runTurn` shell maps it to the estimated-debit degradation path.
   struct DeadlineExceeded: Error {}
 
-  /// How often the typing child re-issues the chat-action. Telegram's "typing…" auto-expires
-  /// after ~5s with no clear API (F5), so we refresh just under that window.
-  private static let typingReissueInterval: Duration = .seconds(4)
+  private func runStreamingTurn(
+    chatId: Int64,
+    draftId: Int64,
+    request: ChatRequest
+  ) async throws -> ChatResponse {
+    let runtime = StreamingTurnRuntime(
+      provider: provider,
+      typingIndicator: typingIndicator,
+      draftStreamer: draftStreamer,
+      wallClockDeadlineSeconds: budget.wallClockDeadlineSeconds,
+      sleep: sleep
+    )
+    return try await runtime.run(
+      chatId: chatId,
+      draftId: draftId,
+      request: request
+    )
+  }
 
-  /// Races three children: the provider call, a typing loop re-issued every 4s, and a deadline
-  /// (`sleep(.seconds(budget.wallClockDeadlineSeconds))` then `throw DeadlineExceeded`). Returns
-  /// the provider response if it wins; rethrows its `ProviderError`; throws `DeadlineExceeded` if
-  /// the deadline wins. `defer { cancelAll }` must stop typing on every exit (F5). The typing loop
-  /// observes `Task.isCancelled` after `sendTyping` to avoid tight-spinning under a no-op sleep.
-  private func withTypingAndDeadline(
+  private func runTypingTurn(
     chatId: Int64,
     request: ChatRequest
   ) async throws -> ChatResponse {
-    try await withThrowingTaskGroup(of: ChatResponse?.self) { group in
-      defer { group.cancelAll() }
+    let runtime = TypingTurnRuntime(
+      provider: provider,
+      typingIndicator: typingIndicator,
+      wallClockDeadlineSeconds: budget.wallClockDeadlineSeconds,
+      sleep: sleep
+    )
+    return try await runtime.run(chatId: chatId, request: request)
+  }
 
-      group.addTask {
-        try await provider.complete(request: request)
+  private func degradedForCaughtError(
+    _ error: any Error,
+    context: [ChatMessage],
+    runId: Int64,
+    sessionId: Int64
+  ) -> TurnResult {
+    if let providerError = error as? ProviderError {
+      switch providerError {
+      case .connectFailed, .retryable:
+        return .degraded(
+          .providerUnavailable,
+          usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+        )
+      case .terminal:
+        return .degraded(.providerUnavailable, usage: nil)
       }
-      group.addTask {
-        try await sleep(.seconds(budget.wallClockDeadlineSeconds))
-        throw DeadlineExceeded()
-      }
-      group.addTask {
-        while !Task.isCancelled {
-          await typingIndicator.sendTyping(chatId: chatId)
-          try await sleep(Self.typingReissueInterval)
-        }
-        return nil
-      }
-
-      for try await outcome in group {
-        if let response = outcome {
-          return response
-        }
-      }
-
-      throw DeadlineExceeded()
     }
+
+    return .degraded(
+      .providerUnavailable,
+      usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+    )
+  }
+
+  private func degradedForStreamingError(
+    _ error: any Error,
+    context: [ChatMessage],
+    runId: Int64,
+    sessionId: Int64
+  ) -> TurnResult {
+    if let providerError = error as? ProviderError {
+      switch providerError {
+      case .connectFailed, .retryable, .terminal:
+        return .degraded(
+          .providerUnavailable,
+          usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+        )
+      }
+    }
+
+    return .degraded(
+      .providerUnavailable,
+      usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+    )
   }
 
   /// Maps a returned response to a result, debiting the reconciled usage (real, or estimated when

@@ -8,14 +8,17 @@ public struct OpenAICompatibleProvider: LLMProvider {
   private static let baseBackoffSeconds = 0.5
   private static let maxBackoffSeconds = 30.0
 
+  private static let maxStreamingErrorBodyBytes = 64 * 1024
+  private static let liteLLMResponseCostHeader = "x-litellm-response-cost"
+
   private let config: LLMConfig
-  private let http: any HTTPExecuting
+  private let http: any HTTPExecuting & HTTPStreaming
   private let sleep: @Sendable (Double) async throws -> Void
   private let jitter: @Sendable (Double) -> Double
 
   public init(
     config: LLMConfig,
-    http: any HTTPExecuting,
+    http: any HTTPExecuting & HTTPStreaming,
     sleep: @escaping @Sendable (Double) async throws -> Void,
     jitter: @escaping @Sendable (Double) -> Double
   ) {
@@ -63,7 +66,54 @@ public struct OpenAICompatibleProvider: LLMProvider {
       guard attempt < config.retryBudget else {
         throw ProviderError.retryable(status: result.statusCode, message: message)
       }
+
       try await backoff(attempt: attempt, retryAfterSeconds: retryAfterSeconds(from: result))
+    }
+  }
+
+  public func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
+    AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let body = try encode(request: request, streaming: true)
+          let response = try await http.postStream(
+            url: chatCompletionsURL(),
+            headers: requestHeaders(),
+            jsonBody: body,
+            timeoutSeconds: config.requestTimeoutSeconds
+          )
+
+          guard (200..<300).contains(response.head.statusCode) else {
+            let errorBody = try await collectStreamingErrorBody(response.body)
+            let message = sanitize(message: errorMessage(from: errorBody))
+
+            if Self.isRetryableStatus(response.head.statusCode) {
+              throw ProviderError.retryable(status: response.head.statusCode, message: message)
+            }
+
+            throw ProviderError.terminal(status: response.head.statusCode, message: message)
+          }
+
+          var parser = SSEParser(fallbackProviderCost: providerCost(from: response.head))
+          for try await chunk in response.body {
+            for event in try parser.push(chunk) {
+              continuation.yield(event)
+            }
+          }
+
+          if let finished = try parser.finish() {
+            continuation.yield(finished)
+          }
+          continuation.finish()
+        } catch let error as ProviderError {
+          continuation.finish(throwing: sanitize(providerError: error))
+        } catch {
+          continuation.finish(
+            throwing: ProviderError.retryable(status: nil, message: sanitize(message: "\(error)"))
+          )
+        }
+      }
+      continuation.onTermination = { _ in task.cancel() }
     }
   }
 
@@ -92,13 +142,15 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return headers
   }
 
-  private func encode(request: ChatRequest) throws -> Data {
+  private func encode(request: ChatRequest, streaming: Bool = false) throws -> Data {
     let payload = RequestBody(
       model: request.model,
       messages: request.messages.map { WireMessage(role: $0.role.rawValue, content: $0.content) },
       maxTokensKey: config.maxTokensField.rawValue,
       maxOutputTokens: request.maxOutputTokens,
-      stop: request.stop
+      stop: request.stop,
+      stream: streaming,
+      streamOptions: streaming ? StreamOptions(includeUsage: true) : nil
     )
     return try JSONEncoder().encode(payload)
   }
@@ -126,8 +178,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
         )
       }
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
-    let providerCost =
-      decoded.usage?.cost ?? result.getHeader(for: "x-litellm-response-cost").flatMap(Double.init)
+    let providerCost = decoded.usage?.cost ?? providerCost(from: result)
 
     return ChatResponse(
       content: choice?.message.content ?? "",
@@ -145,6 +196,29 @@ public struct OpenAICompatibleProvider: LLMProvider {
       return String(data: body, encoding: .utf8) ?? "unknown error"
     }
     return message
+  }
+
+  private func collectStreamingErrorBody(
+    _ body: AsyncThrowingStream<Data, Error>
+  ) async throws -> Data {
+    var collected = Data()
+
+    for try await chunk in body {
+      collected.append(chunk)
+      if collected.count > Self.maxStreamingErrorBodyBytes {
+        break
+      }
+    }
+
+    return collected
+  }
+
+  private func providerCost(from head: HTTPStreamHead) -> Double? {
+    head.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
+  }
+
+  private func providerCost(from result: HTTPResult) -> Double? {
+    result.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
   }
 
   // MARK: - Retry
@@ -172,6 +246,17 @@ public struct OpenAICompatibleProvider: LLMProvider {
       return message
     }
     return message.replacingOccurrences(of: config.apiKey, with: "<redacted-key>")
+  }
+
+  private func sanitize(providerError: ProviderError) -> ProviderError {
+    switch providerError {
+    case .connectFailed(let message):
+      return .connectFailed(message: sanitize(message: message))
+    case .retryable(let status, let message):
+      return .retryable(status: status, message: sanitize(message: message))
+    case .terminal(let status, let message):
+      return .terminal(status: status, message: sanitize(message: message))
+    }
   }
 }
 
@@ -206,14 +291,25 @@ private struct RequestBody: Encodable {
   let maxOutputTokens: Int
   // swiftlint:disable:next discouraged_optional_collection
   let stop: [String]?
+  let stream: Bool
+  let streamOptions: StreamOptions?
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: DynamicKey.self)
     try container.encode(model, forKey: DynamicKey("model"))
     try container.encode(messages, forKey: DynamicKey("messages"))
     try container.encode(maxOutputTokens, forKey: DynamicKey(maxTokensKey))
-    try container.encode(false, forKey: DynamicKey("stream"))
+    try container.encode(stream, forKey: DynamicKey("stream"))
+    try container.encodeIfPresent(streamOptions, forKey: DynamicKey("stream_options"))
     try container.encodeIfPresent(stop, forKey: DynamicKey("stop"))
+  }
+}
+
+private struct StreamOptions: Encodable {
+  let includeUsage: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case includeUsage = "include_usage"
   }
 }
 

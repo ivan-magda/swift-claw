@@ -68,6 +68,12 @@ struct InputRichMessage: Encodable {
   let markdown: String
 }
 
+struct SendRichMessageDraftRequest: Encodable {
+  let chatId: Int64
+  let draftId: Int64
+  let richMessage: InputRichMessage
+}
+
 struct TUpdate: Decodable {
   let update_id: Int64
   let message: TMessage?
