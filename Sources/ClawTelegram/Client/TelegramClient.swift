@@ -94,6 +94,15 @@ public struct TelegramClient: TelegramTransport {
       httpTimeout: Timeout.shortRequestSeconds
     )
   }
+
+  public func setMyCommands(_ commands: [BotMenuCommand]) async throws {
+    let request = SetMyCommandsRequest(commands: commands)
+    let _: Bool = try await callMethod(
+      "setMyCommands",
+      body: request,
+      httpTimeout: Timeout.shortRequestSeconds
+    )
+  }
 }
 
 // MARK: - Bot API transport
@@ -195,6 +204,10 @@ private struct SendRichMessageRequest: Encodable {
 private struct SendChatActionRequest: Encodable {
   let chatId: Int64
   let action: String
+}
+
+private struct SetMyCommandsRequest: Encodable {
+  let commands: [BotMenuCommand]
 }
 
 /// The Telegram-backed `TypingIndicator` the agent uses during a turn. Errors are swallowed: the
