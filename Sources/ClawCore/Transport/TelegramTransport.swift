@@ -18,6 +18,8 @@ public protocol TelegramTransport: Sendable {
   /// Emits a Telegram chat action (e.g. `"typing"`). Fire-and-forget: the action auto-expires (~5s),
   /// so callers re-issue it on an interval and ignore failures — a missing indicator is never fatal.
   func sendChatAction(chatId: Int64, action: String) async throws
+  /// Registers the bot's command list with Telegram so the picker appears when a user types `/`.
+  func setMyCommands(_ commands: [BotMenuCommand]) async throws
 }
 
 extension TelegramTransport {
@@ -28,6 +30,8 @@ extension TelegramTransport {
   ) async throws -> Bool {
     throw TelegramError.transport("sendRichMessageDraft not implemented")
   }
+
+  public func setMyCommands(_ commands: [BotMenuCommand]) async throws {}
 }
 
 public protocol RichDraftStreaming: Sendable {
