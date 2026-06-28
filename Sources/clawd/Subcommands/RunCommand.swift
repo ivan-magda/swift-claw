@@ -58,11 +58,16 @@ struct RunCommand: AsyncParsableCommand {
     let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: httpConfig)
     let executor = AsyncHTTPExecutor(client: httpClient)
 
-    let daemon = await makeDaemon(
+    let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
+    let botUsername = await fetchBotUsername(transport: transport, logger: logger)
+
+    let daemon = makeDaemon(
       config: config,
       secrets: secrets,
       stores: stores,
       executor: executor,
+      transport: transport,
+      botUsername: botUsername,
       logger: logger
     )
 
@@ -116,10 +121,10 @@ struct RunCommand: AsyncParsableCommand {
     secrets: Secrets,
     stores: ClawStores,
     executor: AsyncHTTPExecutor,
+    transport: TelegramClient,
+    botUsername: String?,
     logger: Logger
-  ) async -> Daemon {
-    let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
-    let botUsername = await fetchBotUsername(transport: transport, logger: logger)
+  ) -> Daemon {
     let agent = makeAgent(
       config: config,
       secrets: secrets,
@@ -170,7 +175,7 @@ struct RunCommand: AsyncParsableCommand {
     )
     return Daemon(
       services: [poller, dispatcher],
-      bootReconcile: bootReconcile(stores: stores, logger: logger),
+      boot: bootSequence(transport: transport, stores: stores, logger: logger),
       logger: logger
     )
   }
@@ -220,9 +225,48 @@ struct RunCommand: AsyncParsableCommand {
     )
   }
 
-  /// The one-shot boot hook: sweep any run left RUNNING by a crash to FAILED and enqueue a
-  /// degradation reply, so a turn interrupted mid-flight is never silent (F22). It runs before the
-  /// services serve, so the dispatcher's boot drain delivers whatever this enqueues.
+  /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram,
+  /// then sweep crash-orphaned runs (F22). The steps are independent and best-effort, so the order
+  /// is cosmetic; both run before any update is served.
+  private func bootSequence(
+    transport: any TelegramTransport,
+    stores: ClawStores,
+    logger: Logger
+  ) -> @Sendable () async -> Void {
+    let registerMenu = registerMenuCommands(transport: transport, logger: logger)
+    let reconcileRuns = bootReconcile(stores: stores, logger: logger)
+    return {
+      await registerMenu()
+      await reconcileRuns()
+    }
+  }
+
+  /// Builds the boot step that registers the command menu with Telegram. This is a reconciliation:
+  /// `setMyCommands` writes persistent server-side state, so re-declaring on every boot keeps the
+  /// registered picker in sync with this build's `botMenuCommands`. Best-effort — a failure only
+  /// means the picker is stale, never that the bot can't serve.
+  private func registerMenuCommands(
+    transport: any TelegramTransport,
+    logger: Logger
+  ) -> @Sendable () async -> Void {
+    {
+      do {
+        try await transport.setMyCommands(
+          [
+            BotMenuCommand(command: "start", description: "Start the bot."),
+            BotMenuCommand(command: "new", description: "Start a new session."),
+            BotMenuCommand(command: "stop", description: "Stop the current run."),
+          ]
+        )
+      } catch {
+        logger.warning("setMyCommands failed: \(error)")
+      }
+    }
+  }
+
+  /// The boot step that sweeps any run left RUNNING by a crash to FAILED and enqueues a degradation
+  /// reply, so a turn interrupted mid-flight is never silent (F22). It runs before the services
+  /// serve, so the dispatcher's boot drain delivers whatever this enqueues.
   private func bootReconcile(
     stores: ClawStores,
     logger: Logger

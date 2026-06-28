@@ -8,28 +8,29 @@ import UnixSignals
 /// parameter so tests can pass `[]` and cancel the task instead of raising a real signal.
 public struct Daemon: Sendable {
   private let services: [any Service]
-  private let bootReconcile: @Sendable () async -> Void
+  private let boot: @Sendable () async -> Void
   private let logger: Logger
   private let gracefulShutdownSignals: [UnixSignal]
   private let gracefulShutdownSeconds: Int
 
   public init(
     services: [any Service],
-    bootReconcile: @escaping @Sendable () async -> Void = {},
+    boot: @escaping @Sendable () async -> Void = {},
     logger: Logger,
     gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint],
     gracefulShutdownSeconds: Int = 30
   ) {
     self.services = services
-    self.bootReconcile = bootReconcile
+    self.boot = boot
     self.logger = logger
     self.gracefulShutdownSignals = gracefulShutdownSignals
     self.gracefulShutdownSeconds = gracefulShutdownSeconds
   }
 
   public func run() async throws {
-    // Reconcile orphaned runs before serving (F22)
-    await bootReconcile()
+    // One-shot boot reconciliation before serving: register the command menu and sweep orphaned
+    // runs (F22), so Telegram's state and the run table match this process before any update lands.
+    await boot()
 
     var configuration = ServiceGroupConfiguration(
       services: services,
