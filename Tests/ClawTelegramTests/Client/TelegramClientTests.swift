@@ -207,6 +207,38 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(message.contains("<redacted-token>"))
   }
 
+  @Test func setMyCommandsPostsCorrectPayload() async throws {
+    // given
+    let recorder = RecordingHTTPExecutor.Recorder()
+    let http = RecordingHTTPExecutor(
+      recorder: recorder,
+      result: HTTPResult(
+        statusCode: 200,
+        headers: [:],
+        body: Data(#"{"ok":true,"result":true}"#.utf8)
+      )
+    )
+    let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
+
+    // when
+    try await telegram.setMyCommands([
+      BotMenuCommand(command: "start", description: "Start the bot."),
+      BotMenuCommand(command: "new", description: "Start a new session."),
+      BotMenuCommand(command: "stop", description: "Stop the current run."),
+    ])
+
+    // then
+    let call = try #require(await recorder.calls.first)
+    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    let commands = try #require(body["commands"] as? [[String: Any]])
+    #expect(call.url == "https://example.test/botT/setMyCommands")
+    #expect(commands.count == 3)
+    #expect(commands[0]["command"] as? String == "start")
+    #expect(commands[0]["description"] as? String == "Start the bot.")
+    #expect(commands[1]["command"] as? String == "new")
+    #expect(commands[2]["command"] as? String == "stop")
+  }
+
   @Test func sendsRichMessageDraftWithDraftIdAndMarkdown() async throws {
     // given
     let recorder = RecordingHTTPExecutor.Recorder()
