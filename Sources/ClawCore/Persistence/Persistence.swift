@@ -273,6 +273,8 @@ public enum AuditActor: String, Sendable, Equatable {
 public enum AuditAction: String, Sendable, Equatable {
   case messageIn = "message_in"
   case toolCall = "tool_call"
+  case memoryWrite = "memory_write"
+  case memoryDelete = "memory_delete"
   case turnCompleted = "turn_completed"
   case turnDegraded = "turn_degraded"
   case turnBudgetStopped = "turn_budget_stopped"
