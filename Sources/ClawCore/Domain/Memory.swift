@@ -68,10 +68,10 @@ public struct NewMemoryItem: Sendable, Equatable {
   public init(
     text: String,
     kind: MemoryKind,
-    sessionId: Int64?,
     sensitivity: Sensitivity = .normal,
     importance: Importance = .normal,
-    source: MemorySource = .owner
+    source: MemorySource = .owner,
+    sessionId: Int64?
   ) {
     self.text = text
     self.kind = kind

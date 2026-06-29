@@ -38,6 +38,26 @@ import Testing
     #expect(item.sessionId == 42)
   }
 
+  @Test func newMemoryItemAcceptsFullInitializerOrder() {
+    // given
+    let item = NewMemoryItem(
+      text: "prefer concise replies",
+      kind: .feedback,
+      sensitivity: .high,
+      importance: .low,
+      source: .owner,
+      sessionId: 99
+    )
+
+    // then
+    #expect(item.text == "prefer concise replies")
+    #expect(item.kind == .feedback)
+    #expect(item.sensitivity == .high)
+    #expect(item.importance == .low)
+    #expect(item.source == .owner)
+    #expect(item.sessionId == 99)
+  }
+
   @Test func storedMemoryItemCarriesProvenanceAndDate() {
     // given
     let createdAt = Date(timeIntervalSince1970: 100)
