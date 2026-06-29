@@ -58,6 +58,7 @@ import Testing
     #expect(item.id == 7)
     #expect(item.text == "likes terse plans")
     #expect(item.kind == .feedback)
+    #expect(item.sensitivity == .normal)
     #expect(item.importance == .high)
     #expect(item.source == .owner)
     #expect(item.sessionId == nil)
