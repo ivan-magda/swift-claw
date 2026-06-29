@@ -85,15 +85,13 @@ public enum MemoryWriteBuilder {
     let loweredText = text.lowercased()
     var warnings: [MemoryWriteWarning] = []
 
-    let hasSecretShape =
-      loweredText.contains("sk-")
-      || loweredText.contains("api_key")
-      || loweredText.contains("token")
-    if hasSecretShape {
+    let secretWarningPatterns: Set<String> = ["sk-", "api_key", "token"]
+    if secretWarningPatterns.contains(where: { loweredText.contains($0) }) {
       warnings.append(.possibleSecret)
     }
 
-    if loweredText.contains("ignore previous") || loweredText.contains("system prompt") {
+    let instructionWarningPatterns: Set<String> = ["ignore previous", "system prompt"]
+    if instructionWarningPatterns.contains(where: { loweredText.contains($0) }) {
       warnings.append(.possibleInstruction)
     }
 
