@@ -38,6 +38,25 @@ import Testing
     #expect(request.confirmationText.contains("<U+202E>"))
   }
 
+  @Test func stripsAdditionalBidiAndZeroWidthControlsButShowsThemForConfirm() throws {
+    // given
+    let rawText = "alpha\u{061C}beta\u{200E}gamma\u{200F}delta\u{2060}omega"
+
+    // when
+    let request = try MemoryWriteBuilder.build(
+      rawText: rawText,
+      kind: .project,
+      sessionId: nil
+    )
+
+    // then
+    #expect(request.item.text == "alphabetagammadeltaomega")
+    #expect(request.confirmationText.contains("<U+061C>"))
+    #expect(request.confirmationText.contains("<U+200E>"))
+    #expect(request.confirmationText.contains("<U+200F>"))
+    #expect(request.confirmationText.contains("<U+2060>"))
+  }
+
   @Test func emptyAfterNormalizationIsRejected() {
     // given
     let rawText = "\u{200B}\u{202E}   "

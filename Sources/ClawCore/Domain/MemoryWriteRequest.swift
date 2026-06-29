@@ -85,10 +85,11 @@ public enum MemoryWriteBuilder {
     let loweredText = text.lowercased()
     var warnings: [MemoryWriteWarning] = []
 
-    if loweredText.contains("sk-")
+    let hasSecretShape =
+      loweredText.contains("sk-")
       || loweredText.contains("api_key")
       || loweredText.contains("token")
-    {
+    if hasSecretShape {
       warnings.append(.possibleSecret)
     }
 
@@ -125,7 +126,16 @@ public enum MemoryWriteBuilder {
   }
 
   private static let blockedControls: Set<UInt32> = {
-    var scalars: Set<UInt32> = [0x200B, 0x200C, 0x200D, 0xFEFF]
+    var scalars: Set<UInt32> = [
+      0x061C,
+      0x200B,
+      0x200C,
+      0x200D,
+      0x200E,
+      0x200F,
+      0x2060,
+      0xFEFF,
+    ]
 
     for value in 0x202A...0x202E {
       scalars.insert(UInt32(value))
