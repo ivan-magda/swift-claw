@@ -8,6 +8,10 @@ public protocol WorkspaceReading: Sendable {
   /// undecodable file `.unreadable`, an over-cap file `.overCap` (no consumable text), and never
   /// throws. `maxGraphemes` nil means no cap.
   func load(_ file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile
+
+  /// Loads a dated daily log `memory/<day>.md`, where `day` is a `YYYY-MM-DD` stem. A stem that is
+  /// not `YYYY-MM-DD`, or a missing file, returns `.missing`. Same outcome rules as `load`.
+  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile
 }
 
 public struct FileSystemWorkspace: WorkspaceReading {
@@ -19,6 +23,34 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   public func load(_ file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
     loadFile(at: root.appendingPathComponent(file.relativePath), maxGraphemes: maxGraphemes)
+  }
+
+  public func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
+    guard Self.isDayStem(day) else {
+      return .missing
+    }
+
+    let fileURL =
+      root
+      .appendingPathComponent("memory", isDirectory: true)
+      .appendingPathComponent("\(day).md")
+    return loadFile(at: fileURL, maxGraphemes: maxGraphemes)
+  }
+
+  /// True only for a `YYYY-MM-DD` stem (four digits, two, two). Rejects path separators and `..`.
+  private static func isDayStem(_ day: String) -> Bool {
+    let parts = day.split(separator: "-", omittingEmptySubsequences: false)
+    let expectedLengths = [4, 2, 2]
+    guard parts.count == expectedLengths.count else {
+      return false
+    }
+
+    for (part, length) in zip(parts, expectedLengths) {
+      guard part.count == length, part.allSatisfy({ ("0"..."9").contains($0) }) else {
+        return false
+      }
+    }
+    return true
   }
 
   /// Shared read + outcome classification for any single file path.
