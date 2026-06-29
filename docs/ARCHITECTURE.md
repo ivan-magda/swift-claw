@@ -291,12 +291,12 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `processed_updates` | 0 | claimed Telegram `update_id`s (dedup; synchronous claim) | — |
 | `update_cursor` | 0 | last *confirmed* `lastUpdateId` (advanced last, §6.1) | — |
 | `sessions` | 1 | session key, created/updated, rolling-summary ref, `tainted` | — |
-| `messages` | 1 | role, content (un-redacted by design), session, ts, token counts; provenance marker (trusted/untrusted); FTS5 external-content index | `messages.run_id → runs.id`, `messages.session_id → sessions.id` |
+| `messages` | 1 | role, content (un-redacted by design), session, ts, token counts; provenance marker (trusted/untrusted); **FTS5 external-content index added Inc 3a (not Inc 1)** | `messages.run_id → runs.id`, `messages.session_id → sessions.id` |
 | `runs` | 1 | RunState FSM, budgets used, `updated_ts` lease | `runs.session_id → sessions.id` |
 | `provider_usage` | 1 | model, tokens (incl. cached/uncached where reported), computed USD | `run_id → runs.id`, `session_id → sessions.id` |
 | `outbound_deliveries` | 1 | transactional outbox (§6.4) | `run_id → runs.id` |
 | `audit_events` | 1 | **ordinary append-only** audit (actor, action, tool, args-redacted, result-size, decision, ts) | carries `run_id`, `session_id` |
-| `memory_items` | 3 | type, content, source/provenance, ts, confidence, visibility (durable facts) | `session_id → sessions.id` (nullable) |
+| `memory_items` | 3 | type, content, source/provenance, ts, importance, sensitivity (durable facts; `confidence` deferred, `visibility`→`sensitivity` — Inc 3a) | `session_id → sessions.id` (nullable) |
 | `scheduled_jobs` | 4 | owner, recurrence, tz, prompt, status, `last_fired_at`, next-occurrence | — |
 | `approvals` | 5 | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, ownerUserId, random callback nonce**, expiry | `approvals.run_id → runs.id` |
 
@@ -308,7 +308,7 @@ The audit table is an **ordinary append-only** record — genuinely useful for "
 
 ### 7.3 FTS5 + data lifecycle
 
-- **External-content FTS5 over `messages`** (avoids duplicating sensitive text; keeps the owner-delete path a single source of truth). The vtable + sync triggers live in migrations.
+- **External-content FTS5 over `messages`** (avoids duplicating sensitive text; keeps the owner-delete path a single source of truth). The vtable + sync triggers live in migrations — **built in Inc 3a via GRDB's FTS5 builder (`synchronize(withTable:)`, `content_rowid='id'`, `unicode61 remove_diacritics 2`), not Inc 1**.
 - Content is stored **un-redacted by design**; at-rest file encryption (sops+age state root, §15) is the compensating control.
 - The owner **data-deletion path also deletes/rebuilds FTS rows**, so deleted content is not recoverable via the index. A `messages` redesign requires an FTS rebuild migration.
 - **Export + delete** covers conversation history (not just memory items); a retention/compaction policy bounds the message archive (see PRD FR for export/delete).
@@ -378,8 +378,9 @@ One canonical ordered assembly. Each section carries a **priority** and a **trun
 | 2 | Identity files (SOUL/AGENTS) | system (trusted) | high | no |
 | 3 | Developer config / tool policy (TOOLS) | system (trusted) | high | no |
 | 4 | Current date/time | system (trusted) | high | no |
-| 5 | Owner profile (USER.md) | **untrusted/labeled wrapper** | med-high | yes (per-file cap) |
-| 6 | Durable memory (MEMORY.md / memory_items) | **untrusted/labeled wrapper** | med | yes (per-file cap; recency+relevance+importance) |
+| 5 | Owner profile (USER.md) | **untrusted/labeled wrapper** | med-high | no — hard cap 1375; overflow → omit + owner error (not silent truncation) |
+| 6a | Durable memory file (MEMORY.md) | **untrusted/labeled wrapper** | med | no — hard cap 2200; overflow → omit + owner error |
+| 6b | Durable memory items (`memory_items`) | **untrusted/labeled wrapper** | med | yes (budget cap; recency + importance — relevance deferred, Inc 3a) |
 | 7 | Session history / rolling summary | mixed; **provenance preserved** | med | yes |
 | 8 | Retrieved (FTS5 recall) + tool observations | **untrusted/labeled wrapper** | low | yes |
 | 9 | Skills | untrusted/labeled | low | yes |
@@ -389,13 +390,13 @@ One canonical ordered assembly. Each section carries a **priority** and a **trun
 ### 9.3 Memory tier, caps, and trust
 
 - **Untrusted tier.** `MEMORY.md`/`USER.md` are injected inside the **SAME untrusted/labeled wrapper** as other data — **never the system tier** — so poisoned memory cannot claim system authority.
-- **Caps (grapheme `String.count`):** `MEMORY.md` = **2200**, `USER.md` = **1375**. **On overflow → ERROR + force consolidation** (Hermes-style), never silent truncation. **This is the v1 contract** (it resolves the former §21 open question; it is not also listed as open).
+- **Caps (grapheme `String.count`):** `MEMORY.md` = **2200**, `USER.md` = **1375**. **On overflow → ERROR, never silent truncation.** For these **hand-curated** files, "force consolidation" means the runtime **omits the over-cap file for the turn and delivers an owner-facing consolidation notice** — it never auto-rewrites the file (Inc 3a). **This is the v1 contract** (it resolves the former §21 open question; it is not also listed as open).
 - **Flush-before-compact:** durable facts are written to disk *before* any history summarization.
 - **Compaction preserves provenance:** never fold an UNTRUSTED `tool_result` into the trusted rolling summary; retain an `untrusted` marker (§12).
 - **High-sensitivity memory is NOT auto-injected** into a turn that already ingested untrusted content (§12).
 - **Confirm-on-write** shows the **EXACT verbatim text** post-Unicode-normalization, with invisible/zero-width/bidi chars **made visible/stripped**. The pattern scan is **defense-in-depth only** (not an acceptance gate — it must not block the owner's own notes).
 - `/memory review` + `/memory delete` (confirm-gated) with provenance.
-- **Recall:** FTS5/BM25 over the message archive; durable facts by recency + relevance + importance, subject to the budget above.
+- **Recall:** FTS5/BM25 over the message archive; durable facts (`memory_items`) by recency + importance, subject to the budget above. **Item-lane *relevance* is deferred** until item-FTS / `sqlite-vec` lands (Inc 3a); message recall uses BM25.
 
 ### 9.4 Counting unit
 
@@ -433,7 +434,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 - **Boundary:** numeric Telegram user ID, default-deny, enforced before any LLM/tool/expensive work; fail-closed on internal error. No username path anywhere (identity-rebinding CVE class).
 - **Instruction hierarchy (in code):** system/security policy > developer config > identity files (SOUL/AGENTS/TOOLS) > user task > tool observations > retrieved/inbound content > durable memory (MEMORY.md/USER.md — untrusted tier). Durable memory never sits at the system tier.
-- **Lethal trifecta = ENFORCED GATE, not a flag.** Taint is a **sticky, persisted session property**: `session.tainted = true` once ANY untrusted content is ingested. When `tainted` **and** a privileged/egress action is proposed → the runtime **FORCES the approval path** (or requires `/new`), **in code**, independent of the tool's own risk tier. Compaction/rolling-summary **preserves the untrusted provenance marker**.
+- **Lethal trifecta = ENFORCED GATE, not a flag.** Taint is a **sticky, persisted session property**: `session.tainted = true` once ANY untrusted content is ingested — meaning **external/tool/retrieved content** (web/file/tool output, Inc 3b+). **Durable memory (MEMORY/USER/`memory_items`) is untrusted-*labeled* data that sets `hasPrivateDataAccess` but does NOT itself taint the session** (Inc 3a). When `tainted` **and** a privileged/egress action is proposed → the runtime **FORCES the approval path** (or requires `/new`), **in code**, independent of the tool's own risk tier. Compaction/rolling-summary **preserves the untrusted provenance marker**.
 - **Exfiltration.** `canExfiltrate` covers **every** outbound network sink — the **LLM provider endpoint** AND `http_fetch` — not just "a different chat." Once `hasIngestedUntrusted && hasPrivateDataAccess`: a subsequent `http_fetch` **requires approval** showing the full resolved URL (incl. query/body); fetch args containing substrings of `MEMORY.md`/`USER.md` or secret-shaped tokens are **blocked by `redact()` before dispatch**; `base_url` is pinned/allowlisted (documented trust dependency); high-sensitivity memory is **not auto-injected** into a turn that already ingested untrusted content. There is **no** "reply to owner DM ⇒ exfil-free" exemption.
 - **`/new`** = fresh conversation window AND **detaint** ("clears anything the bot read from web/files this session"). **Durable memory PERSISTS by design**; forgetting facts is a separate confirm-gated `/memory delete`.
 - **Prompt injection:** assume no reliable model-level fix; mitigate by least-privilege + approvals + blast-radius caps + the taint gate, not a classifier. Delimit/spotlight untrusted content; strip invisible/zero-width/bidi chars; tool output can never change system instructions.
