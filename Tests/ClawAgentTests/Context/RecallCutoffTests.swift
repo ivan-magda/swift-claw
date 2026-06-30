@@ -14,7 +14,7 @@ import Testing
     let medium = hit(id: 4, sqliteBM25: -5)
 
     // when
-    let selected = cutoff.select([weak, zero, strong, medium], limit: 3)
+    let selected = cutoff.select(hits: [weak, zero, strong, medium], limit: 3)
 
     // then
     #expect(selected.map(\.id) == [3, 4, 1])
@@ -30,7 +30,7 @@ import Testing
     ]
 
     // when
-    let selected = cutoff.select(hits, limit: 2)
+    let selected = cutoff.select(hits: hits, limit: 2)
 
     // then
     #expect(selected.map(\.id) == [3, 2])
@@ -41,7 +41,7 @@ import Testing
     let cutoff = CandidateCapRecallCutoff()
 
     // when
-    let selected = cutoff.select([hit(id: 1, sqliteBM25: -1)], limit: 0)
+    let selected = cutoff.select(hits: [hit(id: 1, sqliteBM25: -1)], limit: 0)
 
     // then
     #expect(selected.isEmpty)

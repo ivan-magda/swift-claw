@@ -2,26 +2,28 @@ import ClawCore
 import Foundation
 
 public protocol RecallCutoff: Sendable {
-  func select(_ hits: [RecallHit], limit: Int) -> [RecallHit]
+  func select(hits: [RecallHit], limit: Int) -> [RecallHit]
 }
 
 public struct CandidateCapRecallCutoff: RecallCutoff {
   public init() {}
 
-  public func select(_ hits: [RecallHit], limit: Int) -> [RecallHit] {
-    guard limit > 0 else { return [] }
+  public func select(hits: [RecallHit], limit: Int) -> [RecallHit] {
+    guard limit > 0 else {
+      return []
+    }
 
     return Array(
       hits
-        .filter { hit in hit.score.value > 0 }
-        .sorted { first, second in
-          if first.score != second.score {
-            return first.score > second.score
+        .filter { $0.score.value > 0 }
+        .sorted { lhs, rhs in
+          if lhs.score != rhs.score {
+            return lhs.score > rhs.score
           }
-          if first.createdAt != second.createdAt {
-            return first.createdAt > second.createdAt
+          if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt > rhs.createdAt
           }
-          return first.id < second.id
+          return lhs.id < rhs.id
         }
         .prefix(limit)
     )
