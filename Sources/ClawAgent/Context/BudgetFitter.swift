@@ -114,7 +114,9 @@ public enum BudgetFitter {
   }
 
   private static func fittedRow(for section: FittableSection, maxCount: Int) -> FittedRow? {
-    guard maxCount > 0 else { return nil }
+    guard maxCount > 0 else {
+      return nil
+    }
 
     var kept = [String]()
     var used = 0
@@ -129,10 +131,14 @@ public enum BudgetFitter {
         continue
       }
 
-      guard unit.canTruncate else { continue }
+      guard unit.canTruncate else {
+        continue
+      }
 
       let available = maxCount - used - separatorCount
-      guard available >= truncationMarker.count + 1 else { continue }
+      guard available >= truncationMarker.count + 1 else {
+        continue
+      }
 
       let prefixCount = available - truncationMarker.count
       let prefix = String(unit.content.prefix(prefixCount))
@@ -140,7 +146,10 @@ public enum BudgetFitter {
       break
     }
 
-    guard !kept.isEmpty else { return nil }
+    guard !kept.isEmpty else {
+      return nil
+    }
+
     return FittedRow(source: section, content: kept.joined(separator: "\n"))
   }
 
