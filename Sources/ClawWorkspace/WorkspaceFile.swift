@@ -1,6 +1,6 @@
 import Foundation
 
-/// The fixed workspace files Increment 3a loads by name (spec §6). Dated daily logs
+/// The fixed workspace files load by name (spec §6). Dated daily logs
 /// (`memory/YYYY-MM-DD.md`) have dynamic names and load via `WorkspaceReading.loadDailyLog`, so they
 /// are deliberately not cases here. `HEARTBEAT.md` is out of 3a scope (Inc 4).
 public enum WorkspaceFile: String, Sendable, Equatable, CaseIterable {
