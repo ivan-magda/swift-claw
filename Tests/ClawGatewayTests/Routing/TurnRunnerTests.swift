@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawWorkspace
 import Foundation
 import GRDB
 import Logging
@@ -135,6 +136,58 @@ struct DiskFullRuns: RunStore {
   }
 }
 
+struct TurnRunnerWorkspace: WorkspaceReading {
+  let memoryFile: LoadedFile
+
+  init(memoryFile: LoadedFile = .missing) {
+    self.memoryFile = memoryFile
+  }
+
+  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+    file == .memory ? memoryFile : .missing
+  }
+
+  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
+
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
+}
+
+struct SnapshotFailingSessionMessages: SessionMessageStore {
+  func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 { 0 }
+
+  func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
+    ClaimResult(
+      newlyClaimed: false,
+      sessionId: nil,
+      messageId: nil,
+      runId: nil,
+      triggerMessageId: nil
+    )
+  }
+
+  func loadContext(
+    sessionId: Int64,
+    throughMessageId: Int64,
+    limit: Int
+  ) throws -> [StoredMessage] {
+    []
+  }
+
+  func loadContextSnapshot(
+    sessionId: Int64,
+    throughMessageId: Int64,
+    limit: Int
+  ) throws -> SessionContextSnapshot {
+    throw StoreError.unexpected("snapshot read failed")
+  }
+
+  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {}
+}
+
 @Suite struct TurnRunnerTests {
   private struct Env {
     let runner: TurnRunner
@@ -148,10 +201,31 @@ struct DiskFullRuns: RunStore {
     let provider: StubLLMProvider
   }
 
+  private func makeContextBuilder(
+    workspace: TurnRunnerWorkspace = TurnRunnerWorkspace(),
+    budget: ContextBudget = .default
+  ) throws -> ContextBuilder {
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let memory = MemoryStoreGRDB(writer: queue)
+    let retriever = RetrieverGRDB(writer: queue)
+    return ContextBuilder(
+      systemPrompt: SystemPrompt.minimal,
+      workspace: workspace,
+      memoryStore: memory,
+      retriever: retriever,
+      budget: budget,
+      now: { Date(timeIntervalSince1970: 0) }
+    )
+  }
+
   private func makeEnv(
     agentOutcome: StubLLMProvider.Outcome,
     runs: (any RunStore)? = nil,
-    runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil
+    runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
+    contextBuilder: ContextBuilder? = nil,
+    sessionMessagesForRunner: (any SessionMessageStore)? = nil,
+    budget: RunBudget = .default
   ) throws -> Env {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -178,6 +252,13 @@ struct DiskFullRuns: RunStore {
     let runId = try #require(claim.runId)
     let triggerMessageId = try #require(claim.triggerMessageId)
 
+    let builder: ContextBuilder
+    if let contextBuilder {
+      builder = contextBuilder
+    } else {
+      builder = try makeContextBuilder()
+    }
+
     let provider = StubLLMProvider(agentOutcome)
     let agent = AgentRuntime(
       provider: provider,
@@ -188,19 +269,19 @@ struct DiskFullRuns: RunStore {
         priceTable: .empty,
         referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
       ),
-      budget: .default,
+      budget: budget,
       model: "gpt-4o",
       sleep: { try await Task.sleep(for: $0) }
     )
 
     let runner = TurnRunner(
-      sessionMessages: sessionMessages,
+      sessionMessages: sessionMessagesForRunner ?? sessionMessages,
       runs: runsFactory?(queue, sessionId) ?? runs ?? RunStoreGRDB(writer: queue),
       usageStore: usage,
       audit: audit,
       agent: agent,
-      budget: .default,
-      systemPrompt: SystemPrompt.minimal,
+      budget: budget,
+      contextBuilder: builder,
       notifyOutbox: {},
       logger: Logger(label: "test")
     )
@@ -395,5 +476,160 @@ struct DiskFullRuns: RunStore {
     // then
     #expect(try latestRunState(raced.queue) == RunState.cancelled.rawValue)
     #expect(try raced.outbox.pendingOutbound().isEmpty)
+  }
+
+  @Test func ownerNoticesArePrefixedToSuccessfulOutboxPayload() async throws {
+    // given
+    let noticeFile = LoadedFile(outcome: .overCap, text: "", graphemeCount: 2_201)
+    let contextBuilder = try makeContextBuilder(
+      workspace: TurnRunnerWorkspace(memoryFile: noticeFile)
+    )
+    let env = try makeEnv(
+      agentOutcome: .respond(okResponse(content: "Hello there")),
+      contextBuilder: contextBuilder
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    let pending = try env.outbox.pendingOutbound()
+    let firstPending = try #require(pending.first)
+    #expect(firstPending.payload.contains("`MEMORY.md` is 2201/2200"))
+    #expect(firstPending.payload.contains("Hello there"))
+    let storedAssistant = try #require(
+      try await env.queue.read { db in
+        try String.fetchOne(
+          db,
+          sql: "SELECT content FROM messages WHERE run_id = ? AND role = 'assistant'",
+          arguments: [env.runId]
+        )
+      }
+    )
+    #expect(storedAssistant == "Hello there")
+  }
+
+  @Test func contextBuildFailureFailsRunAndEnqueuesContextDegradation() async throws {
+    // given
+    let tinyBudget = ContextBudget(
+      inputCapGraphemes: 1,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 1,
+      recallCap: 1,
+      skillsCap: 1,
+      recallHitCap: 1
+    )
+    let contextBuilder = try makeContextBuilder(budget: tinyBudget)
+    let env = try makeEnv(
+      agentOutcome: .respond(okResponse(content: "must not call provider")),
+      contextBuilder: contextBuilder
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    #expect(await env.provider.callCount == 0)
+    #expect(try latestRunState(env.queue) == RunState.failed.rawValue)
+    let pending = try env.outbox.pendingOutbound()
+    #expect(pending.map(\.payload) == [Degradation.contextUnavailable])
+  }
+
+  @Test func snapshotFailureAfterPickupFailsRunAndEnqueuesContextDegradation() async throws {
+    // given
+    let env = try makeEnv(
+      agentOutcome: .respond(okResponse(content: "must not call provider")),
+      sessionMessagesForRunner: SnapshotFailingSessionMessages()
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    #expect(await env.provider.callCount == 0)
+    #expect(try latestRunState(env.queue) == RunState.failed.rawValue)
+    let pending = try env.outbox.pendingOutbound()
+    #expect(pending.map(\.payload) == [Degradation.contextUnavailable])
+  }
+
+  @Test func ownerNoticesArePrefixedToDegradedOutboxPayload() async throws {
+    // given
+    let noticeFile = LoadedFile(outcome: .overCap, text: "", graphemeCount: 2_201)
+    let contextBuilder = try makeContextBuilder(
+      workspace: TurnRunnerWorkspace(memoryFile: noticeFile)
+    )
+    let env = try makeEnv(
+      agentOutcome: .fail(.terminal(status: 400, message: "bad request")),
+      contextBuilder: contextBuilder
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    let pending = try env.outbox.pendingOutbound()
+    let firstPending = try #require(pending.first)
+    #expect(firstPending.payload.contains("`MEMORY.md` is 2201/2200"))
+    #expect(firstPending.payload.contains(Degradation.providerUnavailable))
+  }
+
+  @Test func ownerNoticesArePrefixedToBudgetStoppedOutboxPayload() async throws {
+    // given
+    let stoppingBudget = RunBudget(
+      maxInputTokens: RunBudget.default.maxInputTokens,
+      maxOutputTokens: RunBudget.default.maxOutputTokens,
+      wallClockDeadlineSeconds: RunBudget.default.wallClockDeadlineSeconds,
+      retryBudget: RunBudget.default.retryBudget,
+      perRunUSD: RunBudget.default.perRunUSD,
+      perDayUSD: RunBudget.default.perDayUSD,
+      referenceUSDPerToken: RunBudget.default.referenceUSDPerToken,
+      dayTokenCeilingOverride: 1
+    )
+    let noticeFile = LoadedFile(outcome: .overCap, text: "", graphemeCount: 2_201)
+    let contextBuilder = try makeContextBuilder(
+      workspace: TurnRunnerWorkspace(memoryFile: noticeFile)
+    )
+    let env = try makeEnv(
+      agentOutcome: .respond(okResponse(content: "must not call provider")),
+      contextBuilder: contextBuilder,
+      budget: stoppingBudget
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    #expect(await env.provider.callCount == 0)
+    let pending = try env.outbox.pendingOutbound()
+    let firstPending = try #require(pending.first)
+    #expect(firstPending.payload.contains("`MEMORY.md` is 2201/2200"))
+    #expect(firstPending.payload.contains(Degradation.budget(cap: "per-day token")))
   }
 }

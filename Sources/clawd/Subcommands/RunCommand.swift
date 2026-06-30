@@ -7,6 +7,7 @@ import ClawGateway
 import ClawLLM
 import ClawSecrets
 import ClawTelegram
+import ClawWorkspace
 import Foundation
 import Logging
 
@@ -136,6 +137,14 @@ struct RunCommand: AsyncParsableCommand {
     let outboxSignal = OutboxSignal()
     let breaker = BudgetBreaker(budget: config.budget)
     let lanes = SessionLaneRegistry()
+    let workspaceRoot = config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
+    let contextBuilder = ContextBuilder(
+      systemPrompt: SystemPrompt.minimal,
+      workspace: FileSystemWorkspace(root: workspaceRoot),
+      memoryStore: stores.memory,
+      retriever: stores.retriever,
+      budget: .default
+    )
     let turnRunner = TurnRunner(
       sessionMessages: stores.sessionMessages,
       runs: stores.runs,
@@ -143,7 +152,7 @@ struct RunCommand: AsyncParsableCommand {
       audit: stores.audit,
       agent: agent,
       budget: config.budget,
-      systemPrompt: SystemPrompt.minimal,
+      contextBuilder: contextBuilder,
       notifyOutbox: { outboxSignal.poke() },
       breaker: breaker,
       transport: transport,

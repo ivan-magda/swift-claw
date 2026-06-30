@@ -36,40 +36,6 @@ public struct ContextBuilder: Sendable {
     self.warn = warn
   }
 
-  public static func assemble(
-    systemPrompt: String,
-    history: [StoredMessage],
-    inputCapGraphemes: Int
-  ) -> [ChatMessage] {
-    var inputCappedMessages = [StoredMessage]()
-    inputCappedMessages.reserveCapacity(history.count)
-
-    var isBudgetExhausted = false
-    var budget = inputCapGraphemes - systemPrompt.count
-
-    for (index, message) in history.reversed().enumerated() {
-      budget -= message.content.count
-
-      if budget < 0 && index > 0 {
-        isBudgetExhausted = true
-        break
-      }
-
-      inputCappedMessages.append(message)
-    }
-
-    let budgetExhaustedMarker = "\n\n[…earlier conversation truncated]"
-    let systemMessage = ChatMessage(
-      role: .system,
-      content: isBudgetExhausted ? systemPrompt + budgetExhaustedMarker : systemPrompt
-    )
-
-    return [systemMessage]
-      + inputCappedMessages.reversed().map { message in
-        ChatMessage(role: message.role, content: message.content)
-      }
-  }
-
   public func assemble(
     snapshot: SessionContextSnapshot,
     sessionId: Int64

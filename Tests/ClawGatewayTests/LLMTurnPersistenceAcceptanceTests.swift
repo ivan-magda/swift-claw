@@ -3,6 +3,7 @@ import ClawAgent
 import ClawCore
 import ClawData
 import ClawTelegram
+import ClawWorkspace
 import Foundation
 import GRDB
 import Logging
@@ -276,6 +277,30 @@ struct StreamingStack {
   let chatId: Int64
 }
 
+struct AcceptanceWorkspace: WorkspaceReading {
+  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
+
+  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
+
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
+}
+
+func makeAcceptanceContextBuilder(writer: any DatabaseWriter) -> ContextBuilder {
+  ContextBuilder(
+    systemPrompt: SystemPrompt.minimal,
+    workspace: AcceptanceWorkspace(),
+    memoryStore: MemoryStoreGRDB(writer: writer),
+    retriever: RetrieverGRDB(writer: writer),
+    budget: .default
+  )
+}
+
 /// Assembles the production lane stack over `writer`, seeding `chatId` onto the allowlist and
 /// scripting the provider with `outcome`.
 func makeStack(
@@ -323,7 +348,7 @@ func makeStack(
     audit: audit,
     agent: agent,
     budget: .default,
-    systemPrompt: SystemPrompt.minimal,
+    contextBuilder: makeAcceptanceContextBuilder(writer: writer),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     transport: transport,
@@ -408,7 +433,7 @@ func makeStreamingStack(
     audit: audit,
     agent: agent,
     budget: .default,
-    systemPrompt: SystemPrompt.minimal,
+    contextBuilder: makeAcceptanceContextBuilder(writer: writer),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     transport: transport,
@@ -484,7 +509,7 @@ func makeStopNewStack(
     audit: audit,
     agent: agent,
     budget: .default,
-    systemPrompt: SystemPrompt.minimal,
+    contextBuilder: makeAcceptanceContextBuilder(writer: writer),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     transport: transport,

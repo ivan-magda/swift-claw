@@ -6,6 +6,7 @@ import Foundation
 public enum DegradationKind: String, Sendable, Equatable {
   case providerUnavailable
   case outputTruncated
+  case contextUnavailable
 }
 
 /// The outcome of one orchestrated turn. `runTurn` never throws — every failure becomes one of

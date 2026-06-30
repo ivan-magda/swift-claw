@@ -22,7 +22,7 @@ public struct TurnRunner: TurnDispatching {
   private let audit: any AuditLog
   private let agent: AgentRuntime
   private let budget: RunBudget
-  private let systemPrompt: String
+  private let contextBuilder: ContextBuilder
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until Task 6 wires the dispatcher.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the transport for its owner DM. Both `nil` in tests that don't
@@ -41,7 +41,7 @@ public struct TurnRunner: TurnDispatching {
     audit: any AuditLog,
     agent: AgentRuntime,
     budget: RunBudget,
-    systemPrompt: String,
+    contextBuilder: ContextBuilder,
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     transport: (any TelegramTransport)? = nil,
@@ -53,7 +53,7 @@ public struct TurnRunner: TurnDispatching {
     self.audit = audit
     self.agent = agent
     self.budget = budget
-    self.systemPrompt = systemPrompt
+    self.contextBuilder = contextBuilder
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.transport = transport
@@ -80,29 +80,55 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let history = try sessionMessages.loadContext(
-      sessionId: sessionId,
-      throughMessageId: triggerMessageId,
-      limit: Self.historyLimit
-    )
-    let (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now)
-
-    let context = ContextBuilder.assemble(
-      systemPrompt: systemPrompt,
-      history: history,
-      inputCapGraphemes: TokenEstimator.graphemeBudget(forInputTokens: budget.maxInputTokens)
-    )
+    let buildResult: BuildResult
+    let todayTokens: Int
+    let todayUSD: Double
+    do {
+      let snapshot = try sessionMessages.loadContextSnapshot(
+        sessionId: sessionId,
+        throughMessageId: triggerMessageId,
+        limit: Self.historyLimit
+      )
+      let totals = try usageStore.todayTokensAndCost(now: now)
+      todayTokens = totals.tokens
+      todayUSD = totals.costUSD
+      buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
+    } catch StoreError.diskFull {
+      throw StoreError.diskFull
+    } catch {
+      logger.error("context build failed for run \(runId): \(error)")
+      _ = try commitDegradation(
+        runId: runId,
+        sessionId: sessionId,
+        chatId: chatId,
+        usage: nil,
+        message: ownerVisiblePayload(
+          reply: Degradation.contextUnavailable,
+          ownerNotices: []
+        ),
+        action: .turnDegraded,
+        decision: DegradationKind.contextUnavailable.rawValue,
+        at: Date()
+      )
+      return
+    }
 
     let result = await agent.runTurn(
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
-      context: context,
+      context: buildResult.messages,
       todayTokens: todayTokens,
       todayUSD: todayUSD
     )
 
-    try await commit(result, runId: runId, sessionId: sessionId, chatId: chatId)
+    try await commit(
+      result,
+      runId: runId,
+      sessionId: sessionId,
+      chatId: chatId,
+      ownerNotices: buildResult.ownerNotices
+    )
   }
 
   // MARK: - Load-bearing
@@ -118,7 +144,8 @@ public struct TurnRunner: TurnDispatching {
     _ result: TurnResult,
     runId: Int64,
     sessionId: Int64,
-    chatId: Int64
+    chatId: Int64,
+    ownerNotices: [String]
   ) async throws {
     let committedAt = Date()
 
@@ -130,7 +157,10 @@ public struct TurnRunner: TurnDispatching {
         chatId: chatId,
         content: content,
         usage: usage,
-        chunks: outboxChunks(for: content, chatId: chatId)
+        chunks: outboxChunks(
+          for: ownerVisiblePayload(reply: content, ownerNotices: ownerNotices),
+          chatId: chatId
+        )
       )
 
       let commitResult = try runs.commitAssistantTurn(turn, now: committedAt)
@@ -158,7 +188,10 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         chatId: chatId,
         usage: usage,
-        message: Degradation.message(for: degradationKind),
+        message: ownerVisiblePayload(
+          reply: Degradation.message(for: degradationKind),
+          ownerNotices: ownerNotices
+        ),
         action: .turnDegraded,
         decision: degradationKind.rawValue,
         at: committedAt
@@ -172,7 +205,10 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         chatId: chatId,
         usage: nil,
-        message: Degradation.budget(cap: cap),
+        message: ownerVisiblePayload(
+          reply: Degradation.budget(cap: cap),
+          ownerNotices: ownerNotices
+        ),
         action: .turnBudgetStopped,
         decision: cap,
         at: committedAt
@@ -285,6 +321,13 @@ public struct TurnRunner: TurnDispatching {
       sessionId: sessionId,
       ts: ts
     )
+  }
+
+  private func ownerVisiblePayload(reply: String, ownerNotices: [String]) -> String {
+    guard ownerNotices.isEmpty == false else {
+      return reply
+    }
+    return (ownerNotices + [reply]).joined(separator: "\n\n")
   }
 
   /// Splits an assistant reply into deterministic outbox chunks (grapheme-capped, FNV-1a hashed).
