@@ -12,6 +12,9 @@ public struct ClawStores: Sendable {
   public let usage: any UsageStore
   public let outbox: any OutboxStore
   public let audit: any AuditLog
+  public let memory: any MemoryStore
+  public let memoryCommands: any MemoryCommandStore
+  public let retriever: any Retriever
 
   public init(
     allowlist: any AllowlistStore,
@@ -22,7 +25,10 @@ public struct ClawStores: Sendable {
     runs: any RunStore,
     usage: any UsageStore,
     outbox: any OutboxStore,
-    audit: any AuditLog
+    audit: any AuditLog,
+    memory: any MemoryStore,
+    memoryCommands: any MemoryCommandStore,
+    retriever: any Retriever
   ) {
     self.allowlist = allowlist
     self.processed = processed
@@ -33,6 +39,9 @@ public struct ClawStores: Sendable {
     self.usage = usage
     self.outbox = outbox
     self.audit = audit
+    self.memory = memory
+    self.memoryCommands = memoryCommands
+    self.retriever = retriever
   }
 }
 
@@ -50,7 +59,10 @@ extension ClawDatabase {
       runs: RunStoreGRDB(writer: pool),
       usage: UsageStoreGRDB(writer: pool),
       outbox: OutboxStoreGRDB(writer: pool),
-      audit: AuditLogGRDB(writer: pool)
+      audit: AuditLogGRDB(writer: pool),
+      memory: MemoryStoreGRDB(writer: pool),
+      memoryCommands: MemoryCommandStoreGRDB(writer: pool),
+      retriever: RetrieverGRDB(writer: pool)
     )
   }
 }

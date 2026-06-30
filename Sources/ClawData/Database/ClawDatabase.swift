@@ -127,6 +127,33 @@ public enum ClawDatabase {
         table.add(column: "trigger_message_id", .integer)
       }
     }
+    migrator.registerMigration("v4") { db in
+      try db.create(table: "memory_items") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("text", .text).notNull()
+        table.column("kind", .text).notNull()
+        table.column("sensitivity", .text).notNull()
+        table.column("importance", .integer).notNull()
+        table.column("source", .text).notNull()
+        table.column("session_id", .integer)
+          .references("sessions", onDelete: .setNull)
+        table.column("created_at", .datetime).notNull()
+      }
+      try db.create(
+        index: "index_memory_items_created_at",
+        on: "memory_items",
+        columns: ["created_at"]
+      )
+      try db.create(index: "index_memory_items_kind", on: "memory_items", columns: ["kind"])
+      // messages FTS5 index. GRDB's FTS5 builder - never raw SQL.
+      // `synchronize` wires external content (content_rowid = messages.id), the ordered
+      // AFTER INSERT/UPDATE/DELETE sync triggers, and the initial backfill of existing rows.
+      try db.create(virtualTable: "messages_fts", using: FTS5()) { table in
+        table.synchronize(withTable: "messages")
+        table.tokenizer = .unicode61(diacritics: .remove)
+        table.column("content")
+      }
+    }
     return migrator
   }
 
