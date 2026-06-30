@@ -7,28 +7,33 @@ public enum MemoryRanker {
     excludeSensitive: Bool,
     cap: Int
   ) -> [MemoryItem] {
-    guard cap > 0 else { return [] }
+    guard cap > 0 else {
+      return []
+    }
 
     let sorted =
       items
       .filter { item in
         !excludeSensitive || item.sensitivity != .high
       }
-      .sorted { first, second in
-        if first.importance != second.importance {
-          return first.importance > second.importance
+      .sorted { lhs, rhs in
+        if lhs.importance != rhs.importance {
+          return lhs.importance > rhs.importance
         }
-        if first.createdAt != second.createdAt {
-          return first.createdAt > second.createdAt
+        if lhs.createdAt != rhs.createdAt {
+          return lhs.createdAt > rhs.createdAt
         }
-        return first.id > second.id
+        return lhs.id > rhs.id
       }
 
     var remaining = cap
     var selected = [MemoryItem]()
 
     for item in sorted {
-      guard item.text.count <= remaining else { continue }
+      guard item.text.count <= remaining else {
+        continue
+      }
+
       selected.append(item)
       remaining -= item.text.count
     }
