@@ -50,10 +50,14 @@ public enum ContextRowCap: Sendable, Equatable {
     budget: ContextBudget,
     residualGraphemes: Int?
   ) -> Int {
-    guard let residualGraphemes else { return absolute }
+    guard let residualGraphemes else {
+      return absolute
+    }
 
     let total = budget.itemsCap + budget.historyCap + budget.recallCap + budget.skillsCap
-    guard total > 0, residualGraphemes > 0 else { return 0 }
+    guard total > 0, residualGraphemes > 0 else {
+      return 0
+    }
 
     let scaled = Int((Double(absolute) / Double(total) * Double(residualGraphemes)).rounded(.down))
     return min(absolute, scaled)
