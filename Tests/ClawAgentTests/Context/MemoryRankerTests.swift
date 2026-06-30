@@ -29,7 +29,11 @@ import Testing
     let third = try memory(id: 3, text: "third", importance: .normal, dayOffset: 0)
 
     // when
-    let ranked = MemoryRanker.rank(items: [first, third, second], excludeSensitive: false, cap: 1_000)
+    let ranked = MemoryRanker.rank(
+      items: [first, third, second],
+      excludeSensitive: false,
+      cap: 1_000
+    )
 
     // then
     #expect(ranked.map(\.id) == [3, 2, 1])
