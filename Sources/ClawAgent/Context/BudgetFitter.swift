@@ -2,10 +2,12 @@ import ClawCore
 import Foundation
 
 public struct SectionUnit: Sendable, Equatable {
+  public let id: String
   public let content: String
   public let canTruncate: Bool
 
-  public init(content: String, canTruncate: Bool) {
+  public init(id: String = "", content: String, canTruncate: Bool) {
+    self.id = id
     self.content = content
     self.canTruncate = canTruncate
   }
@@ -36,6 +38,43 @@ public struct FittableSection: Sendable, Equatable, Identifiable {
   }
 }
 
+public struct FittedSection: Sendable, Equatable, Identifiable {
+  public let id: ContextRowID
+  public let tier: ContextTier
+  public let priority: ContextPriority
+  public let truncatable: Bool
+  public let cap: Int?
+  public let units: [SectionUnit]
+
+  public var content: String {
+    Self.render(units: units)
+  }
+
+  public var section: Section {
+    Section(
+      id: id,
+      tier: tier,
+      priority: priority,
+      truncatable: truncatable,
+      cap: cap,
+      content: content
+    )
+  }
+
+  fileprivate init(source: FittableSection, units: [SectionUnit]) {
+    id = source.id
+    tier = source.tier
+    priority = source.priority
+    truncatable = source.truncatable
+    cap = source.cap
+    self.units = units
+  }
+
+  private static func render(units: [SectionUnit]) -> String {
+    units.map(\.content).joined(separator: "\n")
+  }
+}
+
 public enum BudgetFitterError: Error, Equatable {
   case nonTruncatableRowsExceedInputCap(required: Int, cap: Int)
 }
@@ -47,6 +86,13 @@ public enum BudgetFitter {
     _ sections: [FittableSection],
     budget: ContextBudget
   ) throws -> [Section] {
+    try fitWithUnits(sections, budget: budget).map(\.section)
+  }
+
+  public static func fitWithUnits(
+    _ sections: [FittableSection],
+    budget: ContextBudget
+  ) throws -> [FittedSection] {
     let ordered = sections.sorted { first, second in
       first.priority < second.priority
     }
@@ -88,24 +134,10 @@ public enum BudgetFitter {
     }
 
     let fixedSections = nonTruncatable.map { section in
-      Section(
-        id: section.id,
-        tier: section.tier,
-        priority: section.priority,
-        truncatable: section.truncatable,
-        cap: section.cap,
-        content: render(units: section.units)
-      )
+      FittedSection(source: section, units: section.units)
     }
     let fittedSections = fittedRows.map { row in
-      Section(
-        id: row.source.id,
-        tier: row.source.tier,
-        priority: row.source.priority,
-        truncatable: row.source.truncatable,
-        cap: row.source.cap,
-        content: row.content
-      )
+      FittedSection(source: row.source, units: row.units)
     }
 
     return (fixedSections + fittedSections).sorted { first, second in
@@ -118,7 +150,7 @@ public enum BudgetFitter {
       return nil
     }
 
-    var kept = [String]()
+    var kept: [SectionUnit] = []
     var used = 0
 
     for unit in section.units {
@@ -126,12 +158,15 @@ public enum BudgetFitter {
       let wholeCount = separatorCount + unit.content.count
 
       if used + wholeCount <= maxCount {
-        kept.append(unit.content)
+        kept.append(unit)
         used += wholeCount
         continue
       }
 
       guard unit.canTruncate else {
+        if section.id == .history {
+          break
+        }
         continue
       }
 
@@ -142,7 +177,9 @@ public enum BudgetFitter {
 
       let prefixCount = available - truncationMarker.count
       let prefix = String(unit.content.prefix(prefixCount))
-      kept.append(prefix + truncationMarker)
+      kept.append(
+        SectionUnit(id: unit.id, content: prefix + truncationMarker, canTruncate: unit.canTruncate)
+      )
       break
     }
 
@@ -150,7 +187,7 @@ public enum BudgetFitter {
       return nil
     }
 
-    return FittedRow(source: section, content: kept.joined(separator: "\n"))
+    return FittedRow(source: section, units: kept)
   }
 
   private static func renderedCount(_ section: FittableSection) -> Int {
@@ -164,5 +201,9 @@ public enum BudgetFitter {
 
 private struct FittedRow: Equatable {
   let source: FittableSection
-  let content: String
+  let units: [SectionUnit]
+
+  var content: String {
+    units.map(\.content).joined(separator: "\n")
+  }
 }

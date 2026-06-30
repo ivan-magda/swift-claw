@@ -53,7 +53,7 @@ let package = Package(
       dependencies: ["ClawCore"],
       resources: [.copy("Pricing/Prices.json")]
     ),
-    .target(name: "ClawAgent", dependencies: ["ClawCore"]),
+    .target(name: "ClawAgent", dependencies: ["ClawCore", "ClawWorkspace"]),
     .target(
       name: "ClawGateway",
       dependencies: [
@@ -68,7 +68,7 @@ let package = Package(
       name: "clawd",
       dependencies: [
         "ClawCore", "ClawData", "ClawSecrets", "ClawTelegram", "ClawGateway", "ClawLLM",
-        "ClawAgent",
+        "ClawAgent", "ClawWorkspace",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "Logging", package: "swift-log"),
@@ -96,10 +96,12 @@ let package = Package(
       ]
     ),
     .testTarget(name: "ClawLLMTests", dependencies: ["ClawLLM", "ClawCore"]),
-    .testTarget(name: "ClawAgentTests", dependencies: ["ClawAgent", "ClawCore"]),
+    .testTarget(name: "ClawAgentTests", dependencies: ["ClawAgent", "ClawCore", "ClawWorkspace"]),
     .testTarget(
       name: "ClawGatewayTests",
-      dependencies: ["ClawGateway", "ClawCore", "ClawData", "ClawAgent", "ClawTelegram"]
+      dependencies: [
+        "ClawGateway", "ClawCore", "ClawData", "ClawAgent", "ClawTelegram", "ClawWorkspace",
+      ]
     ),
   ]
 )
