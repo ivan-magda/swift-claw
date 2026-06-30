@@ -101,6 +101,13 @@ public protocol SessionMessageStore: Sendable {
     throughMessageId: Int64,
     limit: Int
   ) throws -> [StoredMessage]
+  /// Context snapshot returned oldest-first and bounded to the message this run is answering.
+  /// Includes the durable session metadata the assembler needs for recall dedup and taint reads.
+  func loadContextSnapshot(
+    sessionId: Int64,
+    throughMessageId: Int64,
+    limit: Int
+  ) throws -> SessionContextSnapshot
   /// Advances the `/new` context boundary to the latest message and clears session taint.
   func resetWindowAndDetaint(sessionId: Int64, now: Date) throws
 }

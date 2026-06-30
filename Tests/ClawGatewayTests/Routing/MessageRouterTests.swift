@@ -23,6 +23,18 @@ struct FullSessions: SessionMessageStore {
   ) throws -> [StoredMessage] {
     []
   }
+  func loadContextSnapshot(
+    sessionId: Int64,
+    throughMessageId: Int64,
+    limit: Int
+  ) throws -> SessionContextSnapshot {
+    SessionContextSnapshot(
+      history: [],
+      historyMessageIds: [],
+      windowStartMessageId: nil,
+      isTainted: false
+    )
+  }
   func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {}
 }
 

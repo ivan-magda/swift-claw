@@ -165,6 +165,38 @@ import Testing
     #expect(sessions == 0)
   }
 
+  @Test func loadContextSnapshotIncludesHistoryIdsWindowStartAndTaint() throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let store = SessionMessageStoreGRDB(writer: queue)
+    let first = try store.claimAndPersistInbound(inbound(updateId: 1, text: "before"))
+    let second = try store.claimAndPersistInbound(inbound(updateId: 2, text: "after"))
+    let sessionId = try #require(second.sessionId)
+    let firstMessageId = try #require(first.messageId)
+    let secondMessageId = try #require(second.messageId)
+    let triggerMessageId = try #require(second.triggerMessageId)
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE sessions SET window_start_message_id = ?, tainted = 1 WHERE id = ?",
+        arguments: [firstMessageId, sessionId]
+      )
+    }
+
+    // when
+    let snapshot = try store.loadContextSnapshot(
+      sessionId: sessionId,
+      throughMessageId: triggerMessageId,
+      limit: 10
+    )
+
+    // then
+    #expect(snapshot.history.map(\.content) == ["after"])
+    #expect(snapshot.historyMessageIds == [secondMessageId])
+    #expect(snapshot.windowStartMessageId == firstMessageId)
+    #expect(snapshot.isTainted)
+  }
+
   @Test func claimAndPersistRollsBackEntirelyWhenTheRunInsertAborts() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
