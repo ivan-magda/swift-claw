@@ -144,6 +144,37 @@ import Testing
     #expect(hits.map(\.id) == [oldId])
   }
 
+  @Test func includesOtherSessionMessagesAtOrAboveWindowStart() throws {
+    // given - one in-window current-session message sets the windowStart; a second
+    // message belongs to a DIFFERENT session and has id >= windowStart.
+    let corpus = try makeCorpus()
+    let windowAnchorId = try insertMessage(
+      corpus,
+      sessionId: corpus.sessionTwo,
+      content: "swift in-window current session",
+      at: 10
+    )
+    let otherSessionMsgId = try insertMessage(
+      corpus,
+      sessionId: corpus.sessionOne,
+      content: "swift other session note",
+      at: 20
+    )
+
+    // when - the exclusion clause is `session_id = sessionTwo AND id >= windowAnchorId`.
+    let hits = try corpus.retriever.searchRelevantMessages(
+      query: "swift",
+      currentSessionId: corpus.sessionTwo,
+      windowStartMessageId: windowAnchorId,
+      excludedMessageIds: [],
+      limit: 10
+    )
+
+    // then - the other-session message survives: its id >= windowStart but its
+    // session_id != currentSessionId, so the session-scoped guard does not exclude it.
+    #expect(hits.map(\.id) == [otherSessionMsgId])
+  }
+
   @Test func honorsExplicitlyExcludedMessageIds() throws {
     // given
     let corpus = try makeCorpus()

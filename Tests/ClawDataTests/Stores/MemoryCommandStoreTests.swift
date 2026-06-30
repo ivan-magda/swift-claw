@@ -154,4 +154,39 @@ import Testing
     #expect(retry.newlyClaimed)
     #expect(try processedCount(queue, updateId: 40) == 1)
   }
+
+  @Test func crashAfterClaimInForgetRollsBackClaimAndAllowsRetry() throws {
+    // given - seed one item so there is a row for applyForget to delete.
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let reads = MemoryStoreGRDB(writer: queue)
+    let stored = try reads.append(
+      NewMemoryItem(text: "to be forgotten", kind: .user, sessionId: nil),
+      now: Date(timeIntervalSince1970: 1)
+    )
+    let crashing = MemoryCommandStoreGRDB(
+      writer: queue,
+      afterClaimForTesting: { throw InjectedCrash() }
+    )
+    let updateId: Int64 = 50
+    let now = Date(timeIntervalSince1970: 2)
+
+    // when
+    #expect(throws: InjectedCrash.self) {
+      try crashing.applyForget(updateId: updateId, itemId: stored.id, now: now)
+    }
+
+    // then - the crash fires inside the transaction: both the processed_updates claim
+    // and the DELETE rolled back, so the item is still present and the claim is gone.
+    #expect(try processedCount(queue, updateId: updateId) == 0)
+    #expect(try reads.get(id: stored.id) != nil)
+
+    // A retry with a non-crashing store completes successfully: claim recorded,
+    // item now deleted.
+    let retry = try MemoryCommandStoreGRDB(writer: queue)
+      .applyForget(updateId: updateId, itemId: stored.id, now: now)
+    #expect(retry.newlyClaimed)
+    #expect(try reads.get(id: stored.id) == nil)
+    #expect(try processedCount(queue, updateId: updateId) == 1)
+  }
 }
