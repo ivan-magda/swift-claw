@@ -11,7 +11,7 @@ import Testing
     let workspace = FileSystemWorkspace(root: root)
 
     // when
-    let loaded = workspace.load(.memory, maxGraphemes: 2_200)
+    let loaded = workspace.load(file: .memory, maxGraphemes: 2_200)
 
     // then
     #expect(loaded == .missing)
@@ -25,7 +25,7 @@ import Testing
     let workspace = FileSystemWorkspace(root: root)
 
     // when
-    let loaded = workspace.load(.user, maxGraphemes: 1_375)
+    let loaded = workspace.load(file: .user, maxGraphemes: 1_375)
 
     // then
     #expect(loaded.outcome == .present)
@@ -42,7 +42,7 @@ import Testing
     let workspace = FileSystemWorkspace(root: root)
 
     // when
-    let loaded = workspace.load(.memory, maxGraphemes: 4)
+    let loaded = workspace.load(file: .memory, maxGraphemes: 4)
 
     // then
     #expect(loaded.outcome == .overCap)
@@ -59,7 +59,7 @@ import Testing
     let workspace = FileSystemWorkspace(root: root)
 
     // when - cap 5 exceeds the 4 grapheme clusters but is below the 8 scalars.
-    let loaded = workspace.load(.memory, maxGraphemes: 5)
+    let loaded = workspace.load(file: .memory, maxGraphemes: 5)
 
     // then - grapheme counting keeps it present; scalar counting would have tripped .overCap.
     #expect(loaded.outcome == .present)
@@ -76,7 +76,7 @@ import Testing
     let workspace = FileSystemWorkspace(root: root)
 
     // when
-    let loaded = workspace.load(.soul, maxGraphemes: nil)
+    let loaded = workspace.load(file: .soul, maxGraphemes: nil)
 
     // then
     #expect(loaded.outcome == .present)
@@ -91,7 +91,7 @@ import Testing
     let workspace = FileSystemWorkspace(root: root)
 
     // when
-    let loaded = workspace.load(.memory, maxGraphemes: 2_200)
+    let loaded = workspace.load(file: .memory, maxGraphemes: 2_200)
 
     // then - distinct from .missing so Plan 5 can log it (§12), not treat it as a normal empty.
     #expect(loaded.outcome == .unreadable)

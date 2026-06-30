@@ -8,7 +8,7 @@ public protocol WorkspaceReading: Sendable {
   /// Loads a fixed workspace file in the grapheme domain. A missing file returns `.missing`, an
   /// undecodable file `.unreadable`, an over-cap file `.overCap` (no consumable text), and never
   /// throws. `maxGraphemes` nil means no cap.
-  func load(_ file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile
+  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile
 
   /// Loads a dated daily log `memory/<day>.md`, where `day` is a `YYYY-MM-DD` stem. A stem that is
   /// not `YYYY-MM-DD`, or a missing file, returns `.missing`. Same outcome rules as `load`.
@@ -30,7 +30,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
     self.root = root
   }
 
-  public func load(_ file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+  public func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
     loadFile(at: root.appendingPathComponent(file.relativePath), maxGraphemes: maxGraphemes)
   }
 
