@@ -42,7 +42,7 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
         AuditEvent(
           actor: .owner,
           action: .memoryWrite,
-          argsRedacted: "/remember",  // the fact text may be sensitive; never audited verbatim
+          argsRedacted: "/remember",
           decision: "remembered",
           sessionId: item.sessionId,
           ts: now
