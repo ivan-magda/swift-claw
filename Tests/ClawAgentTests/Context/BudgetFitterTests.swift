@@ -236,6 +236,39 @@ import Testing
     #expect(fitted.first?.content == "a…[truncated]")
     #expect(fitted.first?.content.count == 13)
   }
+
+  @Test func historyNewestUnitSurvivesWhenItAloneExceedsBudget() throws {
+    // given
+    let section = FittableSection(
+      id: .history,
+      tier: .mixed,
+      priority: ContextPriority(70),
+      truncatable: true,
+      cap: 4,
+      units: [
+        SectionUnit(id: "history-1", content: "answer this please", canTruncate: false),
+        SectionUnit(id: "history-0", content: "older", canTruncate: false),
+      ]
+    )
+    let budget = ContextBudget(
+      inputCapGraphemes: 5,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 4,
+      recallCap: 1,
+      skillsCap: 1,
+      recallHitCap: 1
+    )
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
+
+    // then
+    let history = try #require(fitted.first { row in row.id == .history })
+    #expect(history.units.map(\.id) == ["history-1"])
+    #expect(history.content == "answer this please")
+  }
 }
 
 private func testBudget(inputCap: Int) -> ContextBudget {

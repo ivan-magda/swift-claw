@@ -247,6 +247,36 @@ struct ContextBuilderTests {
     #expect(result.messages.suffix(1).map(\.content) == ["newest"])
     #expect(result.messages.contains(where: { message in message.content == "o" }) == false)
   }
+
+  @Test func triggerMessageSurvivesWhenBudgetCannotFitIt() throws {
+    // given
+    let budget = ContextBudget(
+      inputCapGraphemes: 60,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 4,
+      recallCap: 1,
+      skillsCap: 1,
+      recallHitCap: 1
+    )
+    let builder = makeBuilder(budget: budget)
+    let snapshot = SessionContextSnapshot(
+      history: [
+        StoredMessage(role: .user, content: "what is the meaning of this", provenance: .trusted)
+      ],
+      historyMessageIds: [7],
+      windowStartMessageId: 0,
+      isTainted: false
+    )
+
+    // when
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+
+    // then
+    #expect(result.messages.last?.role == .user)
+    #expect(result.messages.last?.content == "what is the meaning of this")
+  }
 }
 
 private func makeBuilder(

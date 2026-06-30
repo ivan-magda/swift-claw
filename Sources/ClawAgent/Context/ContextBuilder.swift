@@ -188,9 +188,10 @@ public struct ContextBuilder: Sendable {
   }
 
   private func historySection(snapshot: SessionContextSnapshot, residual: Int) -> FittableSection? {
+    // No `cap > 0` early-return: even when fixed sections leave a zero residual, the newest
+    // history unit (the current turn) must reach the fitter, which keeps it as a non-droppable
+    // floor so the model always sees the message it is answering.
     let cap = cap(for: .history, residual: residual)
-    guard cap > 0 else { return nil }
-
     let units = snapshot.history.enumerated().reversed().map { index, message in
       SectionUnit(id: "history-\(index)", content: message.content, canTruncate: false)
     }

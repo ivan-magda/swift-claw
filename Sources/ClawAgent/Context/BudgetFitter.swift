@@ -108,6 +108,10 @@ public enum BudgetFitter {
     }
 
     let residual = budget.inputCapGraphemes - required
+    // The newest history unit is kept even when it alone exceeds the residual (see `fittedRow`),
+    // so the squeezed total can legitimately overshoot the residual by this floor.
+    let historyFloorCount =
+      ordered.first { section in section.id == .history }?.units.first?.content.count ?? 0
     let cappedRows = truncatable.compactMap { section -> FittedRow? in
       let maxCount = min(section.cap ?? Int.max, renderedCount(section))
       return fittedRow(for: section, maxCount: maxCount)
@@ -130,7 +134,7 @@ public enum BudgetFitter {
         }
       }
       cappedTotal = fittedRows.map(\.content.count).reduce(0, +)
-      precondition(cappedTotal <= residual)
+      precondition(cappedTotal <= max(residual, historyFloorCount))
     }
 
     let fixedSections = nonTruncatable.map { section in
@@ -146,7 +150,13 @@ public enum BudgetFitter {
   }
 
   private static func fittedRow(for section: FittableSection, maxCount: Int) -> FittedRow? {
-    guard maxCount > 0 else {
+    // The newest history unit is the current turn; it is non-droppable even when it alone
+    // exceeds the budget, so the model always sees the message it is answering. Flooring the
+    // budget at its size means it is admitted whole on the first iteration; later units still
+    // obey the contiguous newest-first stop rule.
+    let historyFloor = section.id == .history ? (section.units.first?.content.count ?? 0) : 0
+    let effectiveMax = max(maxCount, historyFloor)
+    guard effectiveMax > 0 else {
       return nil
     }
 
@@ -157,7 +167,7 @@ public enum BudgetFitter {
       let separatorCount = kept.isEmpty ? 0 : 1
       let wholeCount = separatorCount + unit.content.count
 
-      if used + wholeCount <= maxCount {
+      if used + wholeCount <= effectiveMax {
         kept.append(unit)
         used += wholeCount
         continue
@@ -170,7 +180,7 @@ public enum BudgetFitter {
         continue
       }
 
-      let available = maxCount - used - separatorCount
+      let available = effectiveMax - used - separatorCount
       guard available >= truncationMarker.count + 1 else {
         continue
       }
