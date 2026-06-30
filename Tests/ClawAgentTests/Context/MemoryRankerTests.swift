@@ -13,7 +13,7 @@ import Testing
 
     // when
     let ranked = MemoryRanker.rank(
-      [newerNormal, olderHigh, newerHigh],
+      items: [newerNormal, olderHigh, newerHigh],
       excludeSensitive: false,
       cap: 1_000
     )
@@ -29,7 +29,7 @@ import Testing
     let third = try memory(id: 3, text: "third", importance: .normal, dayOffset: 0)
 
     // when
-    let ranked = MemoryRanker.rank([first, third, second], excludeSensitive: false, cap: 1_000)
+    let ranked = MemoryRanker.rank(items: [first, third, second], excludeSensitive: false, cap: 1_000)
 
     // then
     #expect(ranked.map(\.id) == [3, 2, 1])
@@ -42,7 +42,7 @@ import Testing
     let third = try memory(id: 3, text: "charlie", importance: .low, dayOffset: 0)
 
     // when
-    let ranked = MemoryRanker.rank([third, second, first], excludeSensitive: false, cap: 11)
+    let ranked = MemoryRanker.rank(items: [third, second, first], excludeSensitive: false, cap: 11)
 
     // then
     #expect(ranked.map(\.text) == ["alpha", "bravo"])
@@ -59,7 +59,7 @@ import Testing
     let fitting = try memory(id: 2, text: "fits", importance: .normal, dayOffset: 0)
 
     // when
-    let ranked = MemoryRanker.rank([oversized, fitting], excludeSensitive: false, cap: 4)
+    let ranked = MemoryRanker.rank(items: [oversized, fitting], excludeSensitive: false, cap: 4)
 
     // then
     #expect(ranked.map(\.id) == [2])
@@ -83,7 +83,7 @@ import Testing
     )
 
     // when
-    let ranked = MemoryRanker.rank([high, normal], excludeSensitive: true, cap: 1_000)
+    let ranked = MemoryRanker.rank(items: [high, normal], excludeSensitive: true, cap: 1_000)
 
     // then
     #expect(ranked.map(\.id) == [1])

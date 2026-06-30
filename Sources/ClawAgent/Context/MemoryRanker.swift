@@ -3,7 +3,7 @@ import Foundation
 
 public enum MemoryRanker {
   public static func rank(
-    _ items: [MemoryItem],
+    items: [MemoryItem],
     excludeSensitive: Bool,
     cap: Int
   ) -> [MemoryItem] {
