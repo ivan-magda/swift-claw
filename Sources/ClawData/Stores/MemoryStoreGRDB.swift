@@ -116,6 +116,7 @@ public struct MemoryStoreGRDB: MemoryStore {
   /// at the assembler boundary (Plan 5), not by inventing a value here.
   static func decodeItem(_ row: Row) throws -> MemoryItem {
     let rowId: Int64 = row["id"]
+
     guard
       let kind = MemoryKind(rawValue: row["kind"]),
       let sensitivity = Sensitivity(rawValue: row["sensitivity"]),
@@ -124,6 +125,7 @@ public struct MemoryStoreGRDB: MemoryStore {
     else {
       throw StoreError.unexpected("memory_items row \(rowId) has an unrecognized enum value")
     }
+
     return MemoryItem(
       id: rowId,
       text: row["text"],
