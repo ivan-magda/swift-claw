@@ -11,6 +11,7 @@ let package = Package(
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
     .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.0"),
+    .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.2"),
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
@@ -30,6 +31,13 @@ let package = Package(
       dependencies: [
         "ClawCore",
         .product(name: "GRDB", package: "GRDB.swift"),
+      ]
+    ),
+    .target(
+      name: "ClawWorkspace",
+      dependencies: [
+        "ClawCore",
+        .product(name: "Yams", package: "Yams"),
       ]
     ),
     .target(
@@ -75,6 +83,7 @@ let package = Package(
       ]
     ),
     .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore"]),
+    .testTarget(name: "ClawWorkspaceTests", dependencies: ["ClawWorkspace", "ClawCore"]),
     .testTarget(
       name: "ClawTelegramTests",
       dependencies: [
