@@ -137,13 +137,28 @@ struct RunCommand: AsyncParsableCommand {
     let outboxSignal = OutboxSignal()
     let breaker = BudgetBreaker(budget: config.budget)
     let lanes = SessionLaneRegistry()
-    let workspaceRoot = config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
+    let workspace = FileSystemWorkspace(
+      root: config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
+    )
+    let contextBudget = ContextBudget(
+      inputCapGraphemes: TokenEstimator.graphemeBudget(
+        forInputTokens: config.budget.maxInputTokens
+      ),
+      userFileCap: ContextBudget.default.userFileCap,
+      memoryFileCap: ContextBudget.default.memoryFileCap,
+      itemsCap: ContextBudget.default.itemsCap,
+      historyCap: ContextBudget.default.historyCap,
+      recallCap: ContextBudget.default.recallCap,
+      skillsCap: ContextBudget.default.skillsCap,
+      recallHitCap: ContextBudget.default.recallHitCap
+    )
     let contextBuilder = ContextBuilder(
       systemPrompt: SystemPrompt.minimal,
-      workspace: FileSystemWorkspace(root: workspaceRoot),
+      workspace: workspace,
       memoryStore: stores.memory,
       retriever: stores.retriever,
-      budget: .default
+      budget: contextBudget,
+      warn: { warning in logger.warning("\(warning)") }
     )
     let turnRunner = TurnRunner(
       sessionMessages: stores.sessionMessages,
