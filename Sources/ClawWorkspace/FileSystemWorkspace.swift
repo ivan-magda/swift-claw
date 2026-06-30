@@ -24,6 +24,9 @@ public protocol WorkspaceReading: Sendable {
 }
 
 public struct FileSystemWorkspace: WorkspaceReading {
+  private static let skillsDirectoryName = "skills"
+  private static let skillManifestName = "SKILL.md"
+
   public let root: URL
 
   public init(root: URL) {
@@ -90,9 +93,6 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
     return SkillScanResult(descriptors: descriptors, warnings: warnings)
   }
-
-  private static let skillsDirectoryName = "skills"
-  private static let skillManifestName = "SKILL.md"
 
   /// Extracts the leading `---`-fenced YAML block, keeping only string-valued keys. Returns nil when
   /// there is no opening/closing fence or the block is not a parseable string map.
