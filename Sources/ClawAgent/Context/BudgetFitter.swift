@@ -47,7 +47,7 @@ public struct FittedSection: Sendable, Equatable, Identifiable {
   public let units: [SectionUnit]
 
   public var content: String {
-    Self.render(units: units)
+    renderUnits(units)
   }
 
   public var section: Section {
@@ -62,16 +62,12 @@ public struct FittedSection: Sendable, Equatable, Identifiable {
   }
 
   fileprivate init(source: FittableSection, units: [SectionUnit]) {
-    id = source.id
-    tier = source.tier
-    priority = source.priority
-    truncatable = source.truncatable
-    cap = source.cap
+    self.id = source.id
+    self.tier = source.tier
+    self.priority = source.priority
+    self.truncatable = source.truncatable
+    self.cap = source.cap
     self.units = units
-  }
-
-  private static func render(units: [SectionUnit]) -> String {
-    units.map(\.content).joined(separator: "\n")
   }
 }
 
@@ -201,11 +197,7 @@ public enum BudgetFitter {
   }
 
   private static func renderedCount(_ section: FittableSection) -> Int {
-    render(units: section.units).count
-  }
-
-  private static func render(units: [SectionUnit]) -> String {
-    units.map(\.content).joined(separator: "\n")
+    renderUnits(section.units).count
   }
 }
 
@@ -214,6 +206,10 @@ private struct FittedRow: Equatable {
   let units: [SectionUnit]
 
   var content: String {
-    units.map(\.content).joined(separator: "\n")
+    renderUnits(units)
   }
+}
+
+private func renderUnits(_ units: [SectionUnit]) -> String {
+  units.map(\.content).joined(separator: "\n")
 }
