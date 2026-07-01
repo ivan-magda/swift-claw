@@ -81,8 +81,7 @@ struct ContextBuilderTests {
   }
 
   @Test func taintedSnapshotExcludesHighSensitivityMemoryAndSetsPrivateAccessForInjectedItems()
-    throws
-  {
+    throws {
     // given
     let high = memory(id: 1, text: "secret", sensitivity: .high, importance: .high)
     let normal = memory(id: 2, text: "normal fact", sensitivity: .normal, importance: .normal)
