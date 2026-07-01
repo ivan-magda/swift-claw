@@ -93,6 +93,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         sql: "SELECT window_start_message_id, tainted FROM sessions WHERE id = ?",
         arguments: [sessionId]
       )
+
       let windowStartMessageId: Int64?
       let isTainted: Bool
       if let session {
@@ -129,7 +130,9 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
           provenance: Provenance(rawValue: row["provenance"]) ?? .trusted
         )
       }
-      let messageIds = rows.map { row in row["id"] as Int64 }
+      let messageIds = rows.map { row in
+        row["id"] as Int64
+      }
 
       return SessionContextSnapshot(
         history: history,
