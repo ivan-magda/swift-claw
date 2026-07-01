@@ -8,11 +8,13 @@ public struct ContextBuilder: Sendable {
   public static let recallInjectionLimit = 5
 
   private let systemPrompt: String
+
   private let workspace: any WorkspaceReading
   private let memoryStore: any MemoryStore
   private let retriever: any Retriever
   private let recallCutoff: any RecallCutoff
   private let budget: ContextBudget
+
   private let now: @Sendable () -> Date
   private let warn: @Sendable (String) -> Void
 
@@ -41,6 +43,7 @@ public struct ContextBuilder: Sendable {
     sessionId: Int64
   ) throws -> BuildResult {
     var ownerNotices: [String] = []
+
     let fixedSections = buildFixedSections(ownerNotices: &ownerNotices)
     let residual = residualAfterFixedSections(fixedSections)
     let truncatableSections = buildTruncatableSections(
@@ -129,7 +132,9 @@ public struct ContextBuilder: Sendable {
       let loaded = workspace.load(file: file, maxGraphemes: cap)
       switch loaded.outcome {
       case .present:
-        guard loaded.text.isEmpty == false else { return nil }
+        guard loaded.text.isEmpty == false else {
+          return nil
+        }
         return SectionUnit(
           id: file.relativePath,
           content: "## \(file.relativePath)\n\(loaded.text)",
@@ -137,9 +142,10 @@ public struct ContextBuilder: Sendable {
         )
       case .overCap:
         if let cap {
-          let notice =
-            "⚠ `\(file.relativePath)` is \(loaded.graphemeCount)/\(cap) "
-            + "— edit it to trim; left out this turn."
+          let notice = """
+            ⚠ `\(file.relativePath)` is \(loaded.graphemeCount)/\(cap) \
+            — edit it to trim; left out this turn.
+            """
           ownerNotices.append(notice)
         } else {
           warn("Workspace file \(file.relativePath) exceeded an uncapped load")
@@ -153,7 +159,10 @@ public struct ContextBuilder: Sendable {
       }
     }
 
-    guard units.isEmpty == false else { return nil }
+    guard units.isEmpty == false else {
+      return nil
+    }
+
     return section(id: id, units: units)
   }
 
@@ -162,7 +171,9 @@ public struct ContextBuilder: Sendable {
     residual: Int
   ) -> FittableSection? {
     let cap = cap(for: .memoryItems, residual: residual)
-    guard cap > 0 else { return nil }
+    guard cap > 0 else {
+      return nil
+    }
 
     let fetched: [MemoryItem]
     do {
@@ -183,7 +194,11 @@ public struct ContextBuilder: Sendable {
     let units = ranked.map { item in
       SectionUnit(id: "memory-\(item.id)", content: item.text, canTruncate: false)
     }
-    guard units.isEmpty == false else { return nil }
+
+    guard units.isEmpty == false else {
+      return nil
+    }
+
     return section(id: .memoryItems, cap: cap, units: units)
   }
 
@@ -195,7 +210,11 @@ public struct ContextBuilder: Sendable {
     let units = snapshot.history.enumerated().reversed().map { index, message in
       SectionUnit(id: "history-\(index)", content: message.content, canTruncate: false)
     }
-    guard units.isEmpty == false else { return nil }
+
+    guard units.isEmpty == false else {
+      return nil
+    }
+
     return section(id: .history, cap: cap, units: units)
   }
 
@@ -205,7 +224,11 @@ public struct ContextBuilder: Sendable {
     residual: Int
   ) -> FittableSection? {
     let cap = cap(for: .recall, residual: residual)
-    guard cap > 0, let query = latestUserMessage(in: snapshot.history) else { return nil }
+    guard cap > 0,
+      let query = latestUserMessage(in: snapshot.history)
+    else {
+      return nil
+    }
 
     let hits: [RecallHit]
     do {
@@ -224,16 +247,24 @@ public struct ContextBuilder: Sendable {
     let selected = recallCutoff.select(hits: hits, limit: Self.recallInjectionLimit)
     let units = selected.compactMap { hit -> SectionUnit? in
       let content = cappedRecallContent(hit.content)
-      guard content.isEmpty == false else { return nil }
+      guard content.isEmpty == false else {
+        return nil
+      }
       return SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
     }
-    guard units.isEmpty == false else { return nil }
+
+    guard units.isEmpty == false else {
+      return nil
+    }
+
     return section(id: .recall, cap: cap, units: units)
   }
 
   private func skillsSection(residual: Int) -> FittableSection? {
     let cap = cap(for: .skills, residual: residual)
-    guard cap > 0 else { return nil }
+    guard cap > 0 else {
+      return nil
+    }
 
     let scan = workspace.scanSkills()
     for warning in scan.warnings {
@@ -247,7 +278,10 @@ public struct ContextBuilder: Sendable {
         canTruncate: false
       )
     }
-    guard units.isEmpty == false else { return nil }
+    guard units.isEmpty == false else {
+      return nil
+    }
+
     return section(id: .skills, cap: cap, units: units)
   }
 
@@ -295,7 +329,10 @@ public struct ContextBuilder: Sendable {
       fitted
       .filter { section in section.tier == .untrustedLabeled }
       .map { section in
-        LabeledContextFactory.make(label: label(for: section.id), content: section.content).render()
+        LabeledContextFactory.make(
+          label: label(for: section.id),
+          content: section.content
+        ).render()
       }
       .joined(separator: "\n\n")
     if untrusted.isEmpty == false {
@@ -316,7 +353,9 @@ public struct ContextBuilder: Sendable {
 
     let keptIDs = Set(historySection.units.map(\.id))
     return snapshot.history.enumerated().compactMap { index, message in
-      guard keptIDs.contains("history-\(index)") else { return nil }
+      guard keptIDs.contains("history-\(index)") else {
+        return nil
+      }
       return ChatMessage(role: message.role, content: message.content)
     }
   }
@@ -335,11 +374,14 @@ public struct ContextBuilder: Sendable {
     guard content.count > budget.recallHitCap else {
       return content
     }
+
     let marker = BudgetFitter.truncationMarker
     guard budget.recallHitCap > marker.count else {
       return ""
     }
+
     let prefixCount = budget.recallHitCap - marker.count
+
     return String(content.prefix(prefixCount)) + marker
   }
 
