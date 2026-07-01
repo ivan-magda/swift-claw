@@ -83,15 +83,18 @@ public struct TurnRunner: TurnDispatching {
     let buildResult: BuildResult
     let todayTokens: Int
     let todayUSD: Double
+
     do {
       let snapshot = try sessionMessages.loadContextSnapshot(
         sessionId: sessionId,
         throughMessageId: triggerMessageId,
         limit: Self.historyLimit
       )
+
       let totals = try usageStore.todayTokensAndCost(now: now)
       todayTokens = totals.tokens
       todayUSD = totals.costUSD
+
       buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
     } catch StoreError.diskFull {
       throw StoreError.diskFull
