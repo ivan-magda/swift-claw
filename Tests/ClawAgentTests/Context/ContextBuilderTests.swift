@@ -42,6 +42,7 @@ struct ContextBuilderTests {
     #expect(system.contains("tool policy"))
     #expect(system.contains("1970-01-01T00:00:00Z"))
     #expect(system.contains("owner profile") == false)
+    #expect(system.contains("truncated") == false)
 
     let untrusted = result.messages[1].content
     #expect(untrusted.contains("label=\"USER.md\""))
@@ -80,8 +81,8 @@ struct ContextBuilderTests {
     #expect(result.hasPrivateDataAccess == false)
   }
 
-  @Test func taintedSnapshotExcludesHighSensitivityMemoryAndSetsPrivateAccessForInjectedItems()
-    throws {
+  @Test
+  func taintedSnapshotExcludesHighSensitivityMemoryAndSetsPrivateAccessForInjectedItems() throws {
     // given
     let high = memory(id: 1, text: "secret", sensitivity: .high, importance: .high)
     let normal = memory(id: 2, text: "normal fact", sensitivity: .normal, importance: .normal)
@@ -245,6 +246,7 @@ struct ContextBuilderTests {
     // then
     #expect(result.messages.suffix(1).map(\.content) == ["newest"])
     #expect(result.messages.contains(where: { message in message.content == "o" }) == false)
+    #expect(result.messages[0].content.contains("[…earlier conversation truncated]"))
   }
 
   @Test func triggerMessageSurvivesWhenBudgetCannotFitIt() throws {

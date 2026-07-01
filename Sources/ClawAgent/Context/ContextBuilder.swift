@@ -7,6 +7,8 @@ public struct ContextBuilder: Sendable {
   public static let recallCandidateLimit = 20
   public static let recallInjectionLimit = 5
 
+  private static let historyTruncatedMarker = "\n\n[…earlier conversation truncated]"
+
   private let systemPrompt: String
 
   private let workspace: any WorkspaceReading
@@ -318,11 +320,15 @@ public struct ContextBuilder: Sendable {
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
   ) -> [ChatMessage] {
+    let historyMessages = fittedHistoryMessages(fitted: fitted, snapshot: snapshot)
+    let historyWasTruncated = historyMessages.count < snapshot.history.count
+
     let systemContent =
       fitted
       .filter { section in section.tier == .system }
       .map(\.content)
       .joined(separator: "\n\n")
+      + (historyWasTruncated ? Self.historyTruncatedMarker : "")
     var messages = [ChatMessage(role: .system, content: systemContent)]
 
     let untrusted =
@@ -339,7 +345,7 @@ public struct ContextBuilder: Sendable {
       messages.append(ChatMessage(role: .user, content: untrusted))
     }
 
-    messages.append(contentsOf: fittedHistoryMessages(fitted: fitted, snapshot: snapshot))
+    messages.append(contentsOf: historyMessages)
     return messages
   }
 
