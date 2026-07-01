@@ -8,6 +8,8 @@ public enum Degradation {
     "I couldn't reach the model. Please try again in a moment."
   public static let outputTruncated =
     "The model hit its output limit before answering. Try a shorter prompt."
+  public static let contextUnavailable =
+    "I couldn't build the context for this turn. Please trim workspace memory or try again."
   /// Used by boot reconciliation (F22) for a run that crashed mid-turn without delivering anything.
   public static let unfinished = "I didn't finish your last request. Please resend it."
   /// Used on the `SQLITE_FULL` path (F23) when the message can't even be persisted.
@@ -31,6 +33,8 @@ public enum Degradation {
       return providerUnavailable
     case .outputTruncated:
       return outputTruncated
+    case .contextUnavailable:
+      return contextUnavailable
     }
   }
 }

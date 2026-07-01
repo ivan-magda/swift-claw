@@ -2,10 +2,12 @@ import ClawCore
 import Foundation
 
 public struct SectionUnit: Sendable, Equatable {
+  public let id: String
   public let content: String
   public let canTruncate: Bool
 
-  public init(content: String, canTruncate: Bool) {
+  public init(id: String = "", content: String, canTruncate: Bool) {
+    self.id = id
     self.content = content
     self.canTruncate = canTruncate
   }
@@ -36,6 +38,39 @@ public struct FittableSection: Sendable, Equatable, Identifiable {
   }
 }
 
+public struct FittedSection: Sendable, Equatable, Identifiable {
+  public let id: ContextRowID
+  public let tier: ContextTier
+  public let priority: ContextPriority
+  public let truncatable: Bool
+  public let cap: Int?
+  public let units: [SectionUnit]
+
+  public var content: String {
+    renderUnits(units)
+  }
+
+  public var section: Section {
+    Section(
+      id: id,
+      tier: tier,
+      priority: priority,
+      truncatable: truncatable,
+      cap: cap,
+      content: content
+    )
+  }
+
+  fileprivate init(source: FittableSection, units: [SectionUnit]) {
+    self.id = source.id
+    self.tier = source.tier
+    self.priority = source.priority
+    self.truncatable = source.truncatable
+    self.cap = source.cap
+    self.units = units
+  }
+}
+
 public enum BudgetFitterError: Error, Equatable {
   case nonTruncatableRowsExceedInputCap(required: Int, cap: Int)
 }
@@ -47,6 +82,13 @@ public enum BudgetFitter {
     _ sections: [FittableSection],
     budget: ContextBudget
   ) throws -> [Section] {
+    try fitWithUnits(sections, budget: budget).map(\.section)
+  }
+
+  public static func fitWithUnits(
+    _ sections: [FittableSection],
+    budget: ContextBudget
+  ) throws -> [FittedSection] {
     let ordered = sections.sorted { first, second in
       first.priority < second.priority
     }
@@ -62,6 +104,10 @@ public enum BudgetFitter {
     }
 
     let residual = budget.inputCapGraphemes - required
+    // The newest history unit is kept even when it alone exceeds the residual (see `fittedRow`),
+    // so the squeezed total can legitimately overshoot the residual by this floor.
+    let historyFloorCount =
+      ordered.first { section in section.id == .history }?.units.first?.content.count ?? 0
     let cappedRows = truncatable.compactMap { section -> FittedRow? in
       let maxCount = min(section.cap ?? Int.max, renderedCount(section))
       return fittedRow(for: section, maxCount: maxCount)
@@ -84,28 +130,14 @@ public enum BudgetFitter {
         }
       }
       cappedTotal = fittedRows.map(\.content.count).reduce(0, +)
-      precondition(cappedTotal <= residual)
+      precondition(cappedTotal <= max(residual, historyFloorCount))
     }
 
     let fixedSections = nonTruncatable.map { section in
-      Section(
-        id: section.id,
-        tier: section.tier,
-        priority: section.priority,
-        truncatable: section.truncatable,
-        cap: section.cap,
-        content: render(units: section.units)
-      )
+      FittedSection(source: section, units: section.units)
     }
     let fittedSections = fittedRows.map { row in
-      Section(
-        id: row.source.id,
-        tier: row.source.tier,
-        priority: row.source.priority,
-        truncatable: row.source.truncatable,
-        cap: row.source.cap,
-        content: row.content
-      )
+      FittedSection(source: row.source, units: row.units)
     }
 
     return (fixedSections + fittedSections).sorted { first, second in
@@ -114,35 +146,46 @@ public enum BudgetFitter {
   }
 
   private static func fittedRow(for section: FittableSection, maxCount: Int) -> FittedRow? {
-    guard maxCount > 0 else {
+    // The newest history unit is the current turn; it is non-droppable even when it alone
+    // exceeds the budget, so the model always sees the message it is answering. Flooring the
+    // budget at its size means it is admitted whole on the first iteration; later units still
+    // obey the contiguous newest-first stop rule.
+    let historyFloor = section.id == .history ? (section.units.first?.content.count ?? 0) : 0
+    let effectiveMax = max(maxCount, historyFloor)
+    guard effectiveMax > 0 else {
       return nil
     }
 
-    var kept = [String]()
+    var kept: [SectionUnit] = []
     var used = 0
 
     for unit in section.units {
       let separatorCount = kept.isEmpty ? 0 : 1
       let wholeCount = separatorCount + unit.content.count
 
-      if used + wholeCount <= maxCount {
-        kept.append(unit.content)
+      if used + wholeCount <= effectiveMax {
+        kept.append(unit)
         used += wholeCount
         continue
       }
 
       guard unit.canTruncate else {
+        if section.id == .history {
+          break
+        }
         continue
       }
 
-      let available = maxCount - used - separatorCount
+      let available = effectiveMax - used - separatorCount
       guard available >= truncationMarker.count + 1 else {
         continue
       }
 
       let prefixCount = available - truncationMarker.count
       let prefix = String(unit.content.prefix(prefixCount))
-      kept.append(prefix + truncationMarker)
+      kept.append(
+        SectionUnit(id: unit.id, content: prefix + truncationMarker, canTruncate: unit.canTruncate)
+      )
       break
     }
 
@@ -150,19 +193,23 @@ public enum BudgetFitter {
       return nil
     }
 
-    return FittedRow(source: section, content: kept.joined(separator: "\n"))
+    return FittedRow(source: section, units: kept)
   }
 
   private static func renderedCount(_ section: FittableSection) -> Int {
-    render(units: section.units).count
-  }
-
-  private static func render(units: [SectionUnit]) -> String {
-    units.map(\.content).joined(separator: "\n")
+    renderUnits(section.units).count
   }
 }
 
 private struct FittedRow: Equatable {
   let source: FittableSection
-  let content: String
+  let units: [SectionUnit]
+
+  var content: String {
+    renderUnits(units)
+  }
+}
+
+private func renderUnits(_ units: [SectionUnit]) -> String {
+  units.map(\.content).joined(separator: "\n")
 }

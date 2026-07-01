@@ -126,6 +126,25 @@ public struct StoredMessage: Sendable, Equatable {
   }
 }
 
+public struct SessionContextSnapshot: Sendable, Equatable {
+  public let history: [StoredMessage]
+  public let historyMessageIds: [Int64]
+  public let windowStartMessageId: Int64?
+  public let isTainted: Bool
+
+  public init(
+    history: [StoredMessage],
+    historyMessageIds: [Int64],
+    windowStartMessageId: Int64?,
+    isTainted: Bool
+  ) {
+    self.history = history
+    self.historyMessageIds = historyMessageIds
+    self.windowStartMessageId = windowStartMessageId
+    self.isTainted = isTainted
+  }
+}
+
 public struct ProviderUsage: Sendable, Equatable {
   public let runId: Int64
   public let sessionId: Int64

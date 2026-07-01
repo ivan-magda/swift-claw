@@ -139,6 +139,82 @@ import Testing
     #expect(fitted.first?.content == "small")
   }
 
+  @Test func historyFitStopsAtFirstNonFittingMessageToPreserveContiguousWindow() throws {
+    // given
+    let section = FittableSection(
+      id: .history,
+      tier: .mixed,
+      priority: ContextPriority(70),
+      truncatable: true,
+      cap: 10,
+      units: [
+        SectionUnit(id: "history-2", content: "newest", canTruncate: false),
+        SectionUnit(id: "history-1", content: "oversized middle", canTruncate: false),
+        SectionUnit(id: "history-0", content: "o", canTruncate: false),
+      ]
+    )
+    let budget = ContextBudget(
+      inputCapGraphemes: 10,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 10,
+      recallCap: 1,
+      skillsCap: 1,
+      recallHitCap: 1
+    )
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
+
+    // then
+    let history = try #require(fitted.first { row in row.id == .history })
+    #expect(history.units.map(\.id) == ["history-2"])
+    #expect(history.content == "newest")
+  }
+
+  @Test func existingFitStillReturnsSectionsWithSameContent() throws {
+    // given
+    let section = FittableSection(
+      id: .memoryItems,
+      tier: .untrustedLabeled,
+      priority: ContextPriority(60),
+      truncatable: true,
+      cap: 20,
+      units: [
+        SectionUnit(id: "memory-1", content: "alpha", canTruncate: false),
+        SectionUnit(id: "memory-2", content: "bravo", canTruncate: false),
+      ]
+    )
+    let budget = ContextBudget(
+      inputCapGraphemes: 20,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 20,
+      historyCap: 1,
+      recallCap: 1,
+      skillsCap: 1,
+      recallHitCap: 1
+    )
+
+    // when
+    let sections = try BudgetFitter.fit([section], budget: budget)
+
+    // then
+    #expect(
+      sections == [
+        Section(
+          id: .memoryItems,
+          tier: .untrustedLabeled,
+          priority: ContextPriority(60),
+          truncatable: true,
+          cap: 20,
+          content: "alpha\nbravo"
+        )
+      ]
+    )
+  }
+
   @Test func truncatesUnitWithMarkerWhenUnitAllowsCharacterTruncation() throws {
     // given
     let sections = [
@@ -159,6 +235,39 @@ import Testing
     // then
     #expect(fitted.first?.content == "a…[truncated]")
     #expect(fitted.first?.content.count == 13)
+  }
+
+  @Test func historyNewestUnitSurvivesWhenItAloneExceedsBudget() throws {
+    // given
+    let section = FittableSection(
+      id: .history,
+      tier: .mixed,
+      priority: ContextPriority(70),
+      truncatable: true,
+      cap: 4,
+      units: [
+        SectionUnit(id: "history-1", content: "answer this please", canTruncate: false),
+        SectionUnit(id: "history-0", content: "older", canTruncate: false),
+      ]
+    )
+    let budget = ContextBudget(
+      inputCapGraphemes: 5,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 4,
+      recallCap: 1,
+      skillsCap: 1,
+      recallHitCap: 1
+    )
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
+
+    // then
+    let history = try #require(fitted.first { row in row.id == .history })
+    #expect(history.units.map(\.id) == ["history-1"])
+    #expect(history.content == "answer this please")
   }
 }
 

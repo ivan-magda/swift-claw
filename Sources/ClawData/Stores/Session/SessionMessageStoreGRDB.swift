@@ -75,12 +75,40 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     throughMessageId: Int64,
     limit: Int
   ) throws -> [StoredMessage] {
+    try loadContextSnapshot(
+      sessionId: sessionId,
+      throughMessageId: throughMessageId,
+      limit: limit
+    ).history
+  }
+
+  public func loadContextSnapshot(
+    sessionId: Int64,
+    throughMessageId: Int64,
+    limit: Int
+  ) throws -> SessionContextSnapshot {
     try writer.readMapping { db in
+      let session = try Row.fetchOne(
+        db,
+        sql: "SELECT window_start_message_id, tainted FROM sessions WHERE id = ?",
+        arguments: [sessionId]
+      )
+
+      let windowStartMessageId: Int64?
+      let isTainted: Bool
+      if let session {
+        windowStartMessageId = session["window_start_message_id"]
+        isTainted = session["tainted"]
+      } else {
+        windowStartMessageId = nil
+        isTainted = false
+      }
+
       // Limit the newest eligible rows first, then restore chronological order for the model.
       let rows = try Row.fetchAll(
         db,
         sql: """
-          SELECT role, content, provenance FROM (
+          SELECT id, role, content, provenance FROM (
             SELECT m.id, m.role, m.content, m.provenance
             FROM messages m
             JOIN sessions s ON s.id = m.session_id
@@ -95,13 +123,23 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         arguments: [sessionId, throughMessageId, limit]
       )
 
-      return rows.map { row in
+      let history = rows.map { row in
         StoredMessage(
           role: MessageRole(rawValue: row["role"]) ?? .user,
           content: row["content"],
           provenance: Provenance(rawValue: row["provenance"]) ?? .trusted
         )
       }
+      let messageIds = rows.map { row in
+        row["id"] as Int64
+      }
+
+      return SessionContextSnapshot(
+        history: history,
+        historyMessageIds: messageIds,
+        windowStartMessageId: windowStartMessageId,
+        isTainted: isTainted
+      )
     }
   }
 
