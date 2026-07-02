@@ -171,5 +171,50 @@ import Testing
     let messagesWithFact = turnRequest.filter { message in message.content.contains("hunter2") }
     #expect(messagesWithFact == [labeledMessage])
   }
+
+  /// H2 (spec §6.1, §14): an over-cap MEMORY.md is omitted from the model context AND the owner
+  /// receives the consolidation notice through the real outbox delivery path — and recovery
+  /// commands keep working while the file is over cap.
+  @Test func overCapMemoryFileIsOmittedAndTheConsolidationNoticeIsDelivered() async throws {
+    // given — a real on-disk workspace whose MEMORY.md exceeds the 2200-grapheme hard cap
+    let workspaceRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("claw-workspace-\(UInt64.random(in: 0..<(.max)))", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: workspaceRoot) }
+    let overCapBody = String(repeating: "OVERFLOW-CANARY ", count: 138)  // 2208 graphemes > 2200
+    try overCapBody.write(
+      to: workspaceRoot.appendingPathComponent("MEMORY.md"),
+      atomically: true,
+      encoding: .utf8
+    )
+
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStack(
+      writer: queue,
+      outcome: .respond("stub answer"),
+      workspace: FileSystemWorkspace(root: workspaceRoot)
+    )
+
+    // when — a normal turn commits, then the dispatcher drains the outbox
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
+    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+    await stack.dispatcher.drainOnce()
+
+    // then — the file never reached the model, and the owner received notice + reply together
+    let turnRequest = try #require(await stack.provider.requests.first)
+    #expect(
+      turnRequest.allSatisfy { message in message.content.contains("OVERFLOW-CANARY") == false }
+    )
+    let delivered = try #require(await stack.transport.richSends.first?.markdown)
+    #expect(delivered.contains("`MEMORY.md` is 2208/2200"))
+    #expect(delivered.contains("stub answer"))
+
+    // when — the owner runs a recovery command while the file is still over cap
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "/memory"))
+
+    // then — command handling is independent of context assembly (spec §6.1)
+    #expect(await stack.transport.sent.last?.text == MemoryReplies.emptyReview(kind: nil))
+  }
 }
 // swiftlint:enable function_body_length

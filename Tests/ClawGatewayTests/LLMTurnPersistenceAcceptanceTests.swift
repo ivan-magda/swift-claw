@@ -291,10 +291,13 @@ struct AcceptanceWorkspace: WorkspaceReading {
   }
 }
 
-func makeAcceptanceContextBuilder(writer: any DatabaseWriter) -> ContextBuilder {
+func makeAcceptanceContextBuilder(
+  writer: any DatabaseWriter,
+  workspace: any WorkspaceReading = AcceptanceWorkspace()
+) -> ContextBuilder {
   ContextBuilder(
     systemPrompt: SystemPrompt.minimal,
-    workspace: AcceptanceWorkspace(),
+    workspace: workspace,
     memoryStore: MemoryStoreGRDB(writer: writer),
     retriever: RetrieverGRDB(writer: writer),
     budget: .default
@@ -307,7 +310,8 @@ func makeStack(
   writer: any DatabaseWriter,
   allow chatId: Int64 = 42,
   outcome: RecordingProvider.Outcome,
-  blocksFirstProviderCall: Bool = false
+  blocksFirstProviderCall: Bool = false,
+  workspace: any WorkspaceReading = AcceptanceWorkspace()
 ) throws -> Stack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
   try allowlist.seedAllowlist(userIds: [chatId])
@@ -348,7 +352,7 @@ func makeStack(
     audit: audit,
     agent: agent,
     budget: .default,
-    contextBuilder: makeAcceptanceContextBuilder(writer: writer),
+    contextBuilder: makeAcceptanceContextBuilder(writer: writer, workspace: workspace),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     transport: transport,
