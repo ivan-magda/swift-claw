@@ -216,5 +216,97 @@ import Testing
     // then — command handling is independent of context assembly (spec §6.1)
     #expect(await stack.transport.sent.last?.text == MemoryReplies.emptyReview(kind: nil))
   }
+
+  /// ③ (spec §2, §7.5): the taint-read guard is wired but dormant. Untainted turns inject
+  /// high-sensitivity items; once `sessions.tainted` is set (3b's job — forced here via SQL),
+  /// the real snapshot → fetchRanked seam excludes them.
+  @Test func taintReadGuardExcludesHighSensitivityItemsThroughTheRealStores() async throws {
+    // given — one normal and one high-sensitivity fact in the real GRDB store
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
+    let memoryStore = MemoryStoreGRDB(writer: queue)
+    _ = try memoryStore.append(
+      NewMemoryItem(text: "normal fact", kind: .user, sessionId: nil),
+      now: Date(timeIntervalSince1970: 86_400)
+    )
+    _ = try memoryStore.append(
+      NewMemoryItem(text: "secret omega", kind: .user, sensitivity: .high, sessionId: nil),
+      now: Date(timeIntervalSince1970: 172_800)
+    )
+
+    // when — an untainted turn runs
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hi"))
+    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+
+    // then — the guard is dormant: both items inject while the session is untainted
+    let untaintedRequest = try #require(await stack.provider.requests.first)
+    let untaintedLabeled = try #require(
+      untaintedRequest.first { message in message.content.contains("label=\"memory_items\"") }
+    )
+    #expect(untaintedLabeled.content.contains("normal fact"))
+    #expect(untaintedLabeled.content.contains("secret omega"))
+
+    // when — the session is marked tainted (3a only READS this flag; 3b sets it)
+    let sessionId = try stack.sessionMessages.loadOrCreateSession(
+      sessionKey: SessionKey.telegramDM(chatId: stack.chatId),
+      now: Date()
+    )
+    try await queue.write { db in
+      try db.execute(sql: "UPDATE sessions SET tainted = 1 WHERE id = ?", arguments: [sessionId])
+    }
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "again"))
+    try await waitForRunStates(queue, expected: [RunState.done.rawValue, RunState.done.rawValue])
+
+    // then — the tainted read excludes the high-sensitivity item and keeps the normal one
+    let taintedRequest = try #require(await stack.provider.requests.last)
+    let taintedLabeled = try #require(
+      taintedRequest.first { message in message.content.contains("label=\"memory_items\"") }
+    )
+    #expect(taintedLabeled.content.contains("normal fact"))
+    #expect(taintedLabeled.content.contains("secret omega") == false)
+  }
+
+  /// ② (spec §7.5): `hasPrivateDataAccess` over the REAL GRDB store — false with nothing durable,
+  /// true the moment any memory_item is injected, false again after it is deleted.
+  @Test func hasPrivateDataAccessTracksMemoryInjectionOverTheRealStores() throws {
+    // given — a builder over the real stores and an empty workspace
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let memoryStore = MemoryStoreGRDB(writer: queue)
+    let builder = makeAcceptanceContextBuilder(writer: queue)
+    let snapshot = SessionContextSnapshot(
+      history: [StoredMessage(role: .user, content: "hello", provenance: .trusted)],
+      historyMessageIds: [1],
+      windowStartMessageId: 0,
+      isTainted: false
+    )
+
+    // when — nothing private exists yet
+    let emptyResult = try builder.assemble(snapshot: snapshot, sessionId: 1)
+
+    // then
+    #expect(emptyResult.hasPrivateDataAccess == false)
+
+    // when — one durable fact is appended
+    let appended = try memoryStore.append(
+      NewMemoryItem(text: "durable fact", kind: .user, sessionId: nil),
+      now: Date(timeIntervalSince1970: 86_400)
+    )
+    let injectedResult = try builder.assemble(snapshot: snapshot, sessionId: 1)
+
+    // then
+    #expect(injectedResult.hasPrivateDataAccess)
+    #expect(
+      injectedResult.messages.contains { message in message.content.contains("durable fact") }
+    )
+
+    // when — the fact is deleted again
+    #expect(try memoryStore.delete(id: appended.id))
+    let deletedResult = try builder.assemble(snapshot: snapshot, sessionId: 1)
+
+    // then
+    #expect(deletedResult.hasPrivateDataAccess == false)
+  }
 }
 // swiftlint:enable function_body_length
