@@ -104,6 +104,15 @@ public struct MessageRouter: Sendable {
           message: message,
           command: rememberCommand
         )
+      case .memory(let memoryCommand):
+        guard isAllowed else {
+          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+        }
+        return await handleMemory(
+          rawUpdate: rawUpdate,
+          message: message,
+          command: memoryCommand
+        )
       case .plain(let plainText):
         guard isAllowed else {
           return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
@@ -128,6 +137,14 @@ public struct MessageRouter: Sendable {
     }
   }
 
+  private static func unauthorizedStartText(userId: Int64) -> String {
+    """
+    This is a private bot. Your Telegram user ID is \(userId). Ask the owner to add it to the allowlist.
+    """
+  }
+}
+
+extension MessageRouter {
   private func handleStop(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
     let result: StopCommandResult
     do {
@@ -240,6 +257,117 @@ public struct MessageRouter: Sendable {
       rawUpdate: rawUpdate,
       chatId: message.chatId,
       text: request.confirmationText
+    )
+  }
+
+  private func handleMemory(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    command: MemoryCommand
+  ) async -> HandleOutcome {
+    switch command {
+    case .review:
+      return await handleMemoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: nil)
+    case .filter(let kind):
+      return await handleMemoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: kind)
+    case .show(let id):
+      return await handleMemoryShow(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
+    case .delete(let id):
+      return await handleMemoryDelete(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
+    case .invalid:
+      return await sendCanned(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: MemoryReplies.memoryUsage
+      )
+    }
+  }
+
+  private func handleMemoryReview(
+    rawUpdate: RawUpdate,
+    chatId: Int64,
+    kind: MemoryKind?
+  ) async -> HandleOutcome {
+    let items: [MemoryItem]
+    do {
+      items = try memory.list(kind: kind, limit: MemoryReplies.reviewListLimit)
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: chatId)
+    } catch {
+      logger.error("memory review failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    let text =
+      items.isEmpty ? MemoryReplies.emptyReview(kind: kind) : MemoryReplies.reviewList(items: items)
+    return await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: text)
+  }
+
+  private func handleMemoryShow(
+    rawUpdate: RawUpdate,
+    chatId: Int64,
+    id: Int64
+  ) async -> HandleOutcome {
+    let item: MemoryItem?
+    do {
+      item = try memory.get(id: id)
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: chatId)
+    } catch {
+      logger.error("memory show failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    let text = item.map(MemoryReplies.showItem) ?? MemoryReplies.notFound(id: id)
+    return await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: text)
+  }
+
+  private func handleMemoryDelete(
+    rawUpdate: RawUpdate,
+    chatId: Int64,
+    id: Int64
+  ) async -> HandleOutcome {
+    let item: MemoryItem
+    do {
+      guard let existing = try memory.get(id: id) else {
+        return await sendCanned(
+          rawUpdate: rawUpdate,
+          chatId: chatId,
+          text: MemoryReplies.notFound(id: id)
+        )
+      }
+      item = existing
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: chatId)
+    } catch {
+      logger.error("memory delete lookup failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    let claim: CommandClaim
+    do {
+      claim = try sessionMessages.claimCommandUpdate(
+        updateId: rawUpdate.updateId,
+        sessionKey: SessionKey.telegramDM(chatId: chatId),
+        now: Date()
+      )
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: chatId)
+    } catch {
+      logger.error("memory delete claim failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard case .claimed(let sessionId) = claim else {
+      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
+      return .skipped
+    }
+
+    await pendingConfirmations.park(.deleteItem(id: id), sessionId: sessionId)
+    return await sendCommandAck(
+      rawUpdate: rawUpdate,
+      chatId: chatId,
+      text: MemoryReplies.deleteConfirmPrompt(item: item)
     )
   }
 
@@ -516,11 +644,5 @@ public struct MessageRouter: Sendable {
       logger.error("failed to send storage-full notice: \(error)")
     }
     return .storageFull
-  }
-
-  private static func unauthorizedStartText(userId: Int64) -> String {
-    """
-    This is a private bot. Your Telegram user ID is \(userId). Ask the owner to add it to the allowlist.
-    """
   }
 }

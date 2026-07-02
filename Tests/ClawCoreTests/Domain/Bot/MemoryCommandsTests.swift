@@ -44,3 +44,54 @@ import Testing
     #expect(command == .invalid)
   }
 }
+
+@Suite struct MemoryCommandParseTests {
+  @Test(arguments: [
+    ("", MemoryCommand.review),
+    ("   ", .review),
+    ("review", .review),
+    ("  review  ", .review),
+    ("project", .filter(kind: .project)),
+    ("PROJECT", .filter(kind: .project)),
+    ("show 3", .show(id: 3)),
+    ("  SHOW   42  ", .show(id: 42)),
+    ("delete 7", .delete(id: 7)),
+    (" DELETE 9 ", .delete(id: 9)),
+  ])
+  func parsesExpectedForms(arguments: String, expected: MemoryCommand) {
+    // given
+    let input = Substring(arguments)
+
+    // when
+    let command = MemoryCommand.parse(arguments: input)
+
+    // then
+    #expect(command == expected)
+  }
+
+  @Test(arguments: [
+    "unknown",
+    "show",
+    "show abc",
+    "show 0",
+    "show -1",
+    "show 1 extra",
+    "delete",
+    "delete abc",
+    "delete 0",
+    "delete -1",
+    "delete 1 extra",
+    "project extra",
+    "review now",
+  ])
+  func rejectsInvalidForms(arguments: String) {
+    // given
+    let input = Substring(arguments)
+
+    // when
+    let command = MemoryCommand.parse(arguments: input)
+
+    // then
+    #expect(command == .invalid)
+  }
+}

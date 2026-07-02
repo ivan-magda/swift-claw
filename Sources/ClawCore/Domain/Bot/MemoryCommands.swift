@@ -26,3 +26,51 @@ public enum RememberCommand: Sendable, Equatable {
     return .save(kind: kind, text: text)
   }
 }
+
+/// Parsed `/memory` arguments (spec §9). Bare `/memory` defaults to review; direct read commands
+/// stay typed so routing never has to recover intent from raw strings.
+public enum MemoryCommand: Sendable, Equatable {
+  case review
+  case filter(kind: MemoryKind)
+  case show(id: Int64)
+  case delete(id: Int64)
+  case invalid
+
+  public static func parse(arguments: Substring) -> MemoryCommand {
+    let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.isEmpty == false else { return .review }
+
+    let tokens = trimmed.split(whereSeparator: \.isWhitespace)
+    guard let firstToken = tokens.first else { return .review }
+    let first = String(firstToken).lowercased()
+
+    if tokens.count == 1 {
+      if first == "review" {
+        return .review
+      }
+
+      if let kind = MemoryKind(rawValue: first) {
+        return .filter(kind: kind)
+      }
+
+      return .invalid
+    }
+
+    guard tokens.count == 2 else { return .invalid }
+    guard let id = positiveId(tokens[1]) else { return .invalid }
+
+    switch first {
+    case "show":
+      return .show(id: id)
+    case "delete":
+      return .delete(id: id)
+    default:
+      return .invalid
+    }
+  }
+
+  private static func positiveId(_ token: Substring) -> Int64? {
+    guard let id = Int64(token), id > 0 else { return nil }
+    return id
+  }
+}

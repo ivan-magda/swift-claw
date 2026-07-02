@@ -7,6 +7,7 @@ public enum Command: Sendable, Equatable {
   case stop
   case new
   case remember(RememberCommand)
+  case memory(MemoryCommand)
   case plain(String)
 
   public static func parse(_ text: String, botUsername: String?) -> Command {
@@ -51,6 +52,8 @@ public enum Command: Sendable, Equatable {
       return .new
     case "remember":
       return .remember(RememberCommand.parse(arguments: arguments))
+    case "memory":
+      return .memory(MemoryCommand.parse(arguments: arguments))
     default:
       return .plain(text)
     }
