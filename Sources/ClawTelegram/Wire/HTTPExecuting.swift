@@ -9,21 +9,11 @@ import NIOCore
   import Darwin
 #endif
 
-private struct HTTPStreamBufferOverflowError: Error, CustomStringConvertible {
-  let maxBufferedChunks: Int
-
-  var description: String {
-    "HTTP stream buffer overflow after \(maxBufferedChunks) queued chunks"
-  }
-}
-
 /// AHC-backed executor injected at the `clawd` root into both Telegram and LLM clients. Opts into
 /// gzip (decompression is enabled on the shared `HTTPClient` configuration — see `clawd`) and caps
 /// the collected body. Response headers are collected case-as-received; `HTTPResult.header` matches
 /// case-insensitively.
 public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
-  private static let maxStreamBufferedChunks = 16
-
   private let client: HTTPClient
   private let maxResponseBytes: Int
 
@@ -64,32 +54,17 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
       throw classifyPreHeadError(error)
     }
 
-    let body = AsyncThrowingStream<Data, Error>(
-      bufferingPolicy: .bufferingOldest(Self.maxStreamBufferedChunks)
-    ) { continuation in
+    // Unbounded buffering: a briefly stalled consumer must never kill the stream. Memory is
+    // bounded by consumer liveness, not by parser limits — the sole consumer
+    // (`OpenAICompatibleProvider.stream`) never blocks between chunks, and the turn's wall-clock
+    // deadline cancels the whole chain, so the worst case is link-rate × deadline from a hostile
+    // provider (an accepted owner-configured risk). A consumer that can stall indefinitely must
+    // not use this seam without restoring backpressure.
+    let body = AsyncThrowingStream<Data, Error> { continuation in
       let task = Task {
         do {
           for try await buffer in response.body {
-            switch continuation.yield(Data(buffer: buffer)) {
-            case .enqueued:
-              break
-            case .dropped:
-              continuation.finish(
-                throwing: HTTPStreamBufferOverflowError(
-                  maxBufferedChunks: Self.maxStreamBufferedChunks
-                )
-              )
-              return
-            case .terminated:
-              return
-            @unknown default:
-              continuation.finish(
-                throwing: HTTPStreamBufferOverflowError(
-                  maxBufferedChunks: Self.maxStreamBufferedChunks
-                )
-              )
-              return
-            }
+            continuation.yield(Data(buffer: buffer))
           }
           continuation.finish()
         } catch {

@@ -241,10 +241,7 @@ struct RunCommand: AsyncParsableCommand {
     return AgentRuntime(
       provider: provider,
       typingIndicator: TelegramTypingIndicator(transport: transport),
-      draftStreamer: TelegramRichDraftStreamer(
-        transport: transport,
-        sleep: { try await Task.sleep(for: $0) }
-      ),
+      draftStreamer: TelegramRichDraftStreamer(transport: transport),
       streamingEnabled: config.llm.streamingEnabled,
       costResolver: costResolver,
       budget: config.budget,
