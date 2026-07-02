@@ -4,9 +4,16 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
+struct TimedStreamEvent: Sendable {
+  let pauseBefore: Duration
+  let event: StreamEvent
+}
+
 actor StreamingProvider: LLMProvider {
   enum StreamScript: Sendable {
     case events([StreamEvent])
+    case timed([TimedStreamEvent])
+    case gated(TypingReleaseGate, [StreamEvent])
     case fail(ProviderError)
     case neverFinishes
     case ignoresCancellation(NonCooperativeStreamGate)
@@ -44,6 +51,20 @@ actor StreamingProvider: LLMProvider {
         await self.recordStreamCall()
         switch await self.streamScriptValue() {
         case .events(let events):
+          for event in events {
+            continuation.yield(event)
+          }
+          continuation.finish()
+        case .timed(let steps):
+          for step in steps {
+            if step.pauseBefore > .zero {
+              try? await Task.sleep(for: step.pauseBefore)
+            }
+            continuation.yield(step.event)
+          }
+          continuation.finish()
+        case .gated(let gate, let events):
+          await gate.awaitRelease()
           for event in events {
             continuation.yield(event)
           }
@@ -92,6 +113,101 @@ actor RecordingDrafts: RichDraftStreaming {
 
   func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
     drafts.append((chatId, draftId, markdown))
+  }
+}
+
+/// Releases `gate` once typing has been issued `releaseAfter` times, so a test can hold the
+/// provider's first token back until the runtime has proven it keeps the indicator alive.
+actor CountingReleaseTyping: TypingIndicator {
+  private(set) var calls = 0
+  private let releaseAfter: Int
+  private let gate: TypingReleaseGate
+
+  init(releaseAfter: Int, gate: TypingReleaseGate) {
+    self.releaseAfter = releaseAfter
+    self.gate = gate
+  }
+
+  func sendTyping(chatId: Int64) async {
+    calls += 1
+    if calls >= releaseAfter {
+      await gate.release()
+    }
+  }
+}
+
+/// Blocks the send whose markdown equals the full reply until released, so a test can observe
+/// whether the turn awaits its final draft or abandons it.
+actor BlockingFinalDrafts: RichDraftStreaming {
+  private(set) var drafts: [String] = []
+  private let finalMarkdown: String
+  private var released = false
+  private var finalBlocked = false
+  private var blockWaiters: [CheckedContinuation<Void, Never>] = []
+  private var observeWaiters: [CheckedContinuation<Void, Never>] = []
+
+  init(finalMarkdown: String) {
+    self.finalMarkdown = finalMarkdown
+  }
+
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
+    drafts.append(markdown)
+    guard markdown == finalMarkdown, !released else {
+      return
+    }
+    finalBlocked = true
+    for waiter in observeWaiters {
+      waiter.resume()
+    }
+    observeWaiters.removeAll()
+    await withCheckedContinuation { continuation in
+      blockWaiters.append(continuation)
+    }
+  }
+
+  func waitUntilFinalBlocked() async {
+    guard !finalBlocked else { return }
+    await withCheckedContinuation { continuation in
+      observeWaiters.append(continuation)
+    }
+  }
+
+  func release() {
+    released = true
+    for waiter in blockWaiters {
+      waiter.resume()
+    }
+    blockWaiters.removeAll()
+  }
+}
+
+/// Marks when an async operation has finished, so a test can assert it is still in flight.
+actor CompletionFlag {
+  private(set) var done = false
+
+  func markDone() {
+    done = true
+  }
+}
+
+/// Compresses every runtime sleep except the wall-clock deadline (180s default) to ~1ms, so
+/// throttle ticks and send deadlines elapse instantly while the deadline child stays parked.
+let compressedSleep: @Sendable (Duration) async throws -> Void = { duration in
+  if duration >= .seconds(10) {
+    try await Task.sleep(for: .seconds(3600))
+  } else {
+    try await Task.sleep(for: .milliseconds(1))
+  }
+}
+
+/// Parks the per-send draft deadline (3s) and the wall-clock deadline while probe ticks run real,
+/// so "the turn awaits the final draft" is asserted time-independently instead of racing the
+/// abandon deadline under CI load.
+let draftDeadlineParkingSleep: @Sendable (Duration) async throws -> Void = { duration in
+  if duration >= .seconds(3) {
+    try await Task.sleep(for: .seconds(3600))
+  } else {
+    try await Task.sleep(for: duration)
   }
 }
 
@@ -265,6 +381,156 @@ func waitForTurnResult(
     #expect(await provider.streamCalls == 1)
   }
 
+  @Test func typingIsReissuedWhileWaitingForTheFirstToken() async throws {
+    // given
+    let gate = TypingReleaseGate()
+    let typing = CountingReleaseTyping(releaseAfter: 3, gate: gate)
+    let provider = StreamingProvider(
+      streamScript: .gated(
+        gate,
+        [
+          .delta("hi"),
+          .finished(finishReason: "stop", usage: nil, providerCost: nil),
+        ]
+      )
+    )
+    let runtime = makeRuntime(
+      provider: provider,
+      typing: typing,
+      streamingEnabled: true,
+      sleep: compressedSleep
+    )
+
+    // when
+    let turnResult = startTurn {
+      await runtime.runTurn(
+        runId: 1,
+        sessionId: 2,
+        chatId: 3,
+        context: [ChatMessage(role: .user, content: "hi")],
+        todayTokens: 0,
+        todayUSD: 0
+      )
+    }
+    let result = await waitForTurnResult(turnResult, milliseconds: 2_000)
+
+    // then
+    let (content, _) = try requireCompleted(try #require(result))
+    #expect(content == "hi")
+    #expect(await typing.calls >= 3)
+  }
+
+  @Test func emptyFirstDeltaNeverProducesABlankDraft() async throws {
+    // given
+    let provider = StreamingProvider(
+      streamScript: .timed([
+        TimedStreamEvent(pauseBefore: .zero, event: .delta("")),
+        TimedStreamEvent(pauseBefore: .milliseconds(80), event: .delta("hello")),
+        TimedStreamEvent(
+          pauseBefore: .zero,
+          event: .finished(finishReason: "stop", usage: nil, providerCost: nil)
+        ),
+      ])
+    )
+    let drafts = RecordingDrafts()
+    let runtime = makeRuntime(provider: provider, drafts: drafts, streamingEnabled: true)
+
+    // when
+    let result = await runtime.runTurn(
+      runId: 11,
+      sessionId: 22,
+      chatId: 33,
+      context: [ChatMessage(role: .user, content: "hi")],
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    let (content, _) = try requireCompleted(result)
+    #expect(content == "hello")
+    let sentDrafts = await drafts.drafts
+    #expect(!sentDrafts.isEmpty)
+    #expect(sentDrafts.allSatisfy { !$0.markdown.isEmpty })
+  }
+
+  @Test func turnAwaitsTheFinalDraftSend() async throws {
+    // given
+    let provider = StreamingProvider(
+      streamScript: .events([
+        .delta("hel"),
+        .delta("lo"),
+        .finished(finishReason: "stop", usage: nil, providerCost: nil),
+      ])
+    )
+    let drafts = BlockingFinalDrafts(finalMarkdown: "hello")
+    let runtime = makeRuntime(
+      provider: provider,
+      drafts: drafts,
+      streamingEnabled: true,
+      sleep: draftDeadlineParkingSleep
+    )
+    let flag = CompletionFlag()
+
+    // when
+    let turnTask = Task {
+      let result = await runtime.runTurn(
+        runId: 1,
+        sessionId: 2,
+        chatId: 3,
+        context: [ChatMessage(role: .user, content: "hi")],
+        todayTokens: 0,
+        todayUSD: 0
+      )
+      await flag.markDone()
+      return result
+    }
+    await drafts.waitUntilFinalBlocked()
+    try await Task.sleep(for: .milliseconds(700))
+    let doneWhileFinalSendBlocked = await flag.done
+    await drafts.release()
+    let result = await turnTask.value
+
+    // then
+    #expect(doneWhileFinalSendBlocked == false)
+    let (content, _) = try requireCompleted(result)
+    #expect(content == "hello")
+    #expect(await drafts.drafts.contains("hello"))
+  }
+
+  @Test func externalCancellationNeverCompletesWithPartialContent() async throws {
+    // A /stop-style cancel mid-stream must degrade the turn, never surface the partial
+    // accumulation as a completed reply. AsyncThrowingStream ends iteration with nil on consumer
+    // cancellation (it does not throw), so the EOF path must re-check cancellation. The outcome
+    // races the deadline child's CancellationError, so one run can mask the bug — loop it.
+    for _ in 0..<20 {
+      // given
+      let gate = NonCooperativeStreamGate()
+      let provider = StreamingProvider(streamScript: .ignoresCancellation(gate))
+      let runtime = makeRuntime(provider: provider, streamingEnabled: true)
+
+      // when
+      let turnTask = Task {
+        await runtime.runTurn(
+          runId: 1,
+          sessionId: 2,
+          chatId: 3,
+          context: [ChatMessage(role: .user, content: "hi")],
+          todayTokens: 0,
+          todayUSD: 0
+        )
+      }
+      await gate.waitUntilStarted()
+      try await Task.sleep(for: .milliseconds(10))
+      turnTask.cancel()
+      let result = await turnTask.value
+      await gate.release()
+
+      // then
+      let (kind, _) = try requireDegraded(result)
+      #expect(kind == .providerUnavailable)
+    }
+  }
+
   @Test func streamingDisabledUsesBlockingCompletePath() async throws {
     // given
     let provider = StreamingProvider(streamScript: .events([.delta("ignored")]))
@@ -349,7 +615,14 @@ func waitForTurnResult(
       ])
     )
     let drafts = BlockingDrafts()
-    let runtime = makeRuntime(provider: provider, drafts: drafts, streamingEnabled: true)
+    // Compressed sleep so the per-send abandon deadline elapses instantly: the invariant under
+    // test is that a sink which never returns still cannot block turn completion.
+    let runtime = makeRuntime(
+      provider: provider,
+      drafts: drafts,
+      streamingEnabled: true,
+      sleep: compressedSleep
+    )
 
     // when
     let turnResult = startTurn {

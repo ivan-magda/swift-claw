@@ -1,99 +1,43 @@
 import ClawCore
 import Foundation
 
-private actor StreamingDraftBuffer {
-  enum Item: Sendable, Equatable {
-    case update(String)
-    case final(String)
-  }
-
-  private var latest: String?
-  private var final: String?
-  private var closed = false
-  private var finalSent = false
-  private var waiters: [CheckedContinuation<Void, Never>] = []
+/// Latest-value slot between the SSE consumer and the draft/typing child. Overwrites coalesce —
+/// a slow sender only ever sees the newest accumulation — and the version lets it skip ticks
+/// with nothing new.
+private actor DraftSnapshot {
+  private var content = ""
+  private var version = 0
 
   func publish(_ markdown: String) {
-    guard !closed, final == nil else {
-      return
-    }
-    latest = markdown
-    wakeWaiters()
+    content = markdown
+    version += 1
   }
 
-  func publishFinal(_ markdown: String) {
-    guard !closed else {
-      return
-    }
-
-    latest = nil
-    final = markdown
-
-    wakeWaiters()
-  }
-
-  func close() {
-    closed = true
-    wakeWaiters()
-  }
-
-  func next() async -> Item? {
-    while latest == nil && final == nil && !closed {
-      await withCheckedContinuation { continuation in
-        waiters.append(continuation)
-      }
-    }
-
-    if let markdown = latest {
-      latest = nil
-      return .update(markdown)
-    }
-    if let markdown = final {
-      final = nil
-      return .final(markdown)
-    }
-
-    return nil
-  }
-
-  func takeFinal() -> String? {
-    guard let markdown = final else {
+  func newer(than seenVersion: Int) -> (content: String, version: Int)? {
+    guard version > seenVersion else {
       return nil
     }
-    final = nil
-    return markdown
-  }
-
-  func markFinalSent() {
-    finalSent = true
-  }
-
-  func didSendFinal() -> Bool {
-    finalSent
-  }
-
-  private func wakeWaiters() {
-    for waiter in waiters {
-      waiter.resume()
-    }
-    waiters.removeAll()
+    return (content, version)
   }
 }
 
+/// Races three children: the SSE consumer (accumulates deltas, returns the response), a
+/// draft/typing loop (throttled rich-draft frames once content exists, "typing…" re-issued
+/// while waiting for the first token), and the wall-clock deadline. The winning response is
+/// finalized with one awaited, deadline-bounded full-content draft.
 struct StreamingTurnRuntime: Sendable {
   private struct AccumulatedStreamContentTooLarge: Error {}
 
-  private struct FinishedResponse: Sendable {
-    let content: String
-    let finishReason: String?
-    let usage: ChatUsage?
-    let providerCost: Double?
-  }
-
-  private static let draftThrottleProbeInterval: Duration = .milliseconds(10)
-  private static let draftThrottleProbeAttempts = 120
-  private static let finalDraftDrainAttempts = 25
-  private static let finalDraftDrainInterval: Duration = .milliseconds(10)
+  /// Probe cadence for the draft/typing child. Sends are rate-limited in ticks so the wire
+  /// cadence stays near the spec's ~1.2s min-interval while the first frame still goes out on
+  /// the next probe after content appears.
+  private static let probeInterval: Duration = .milliseconds(250)
+  private static let minTicksBetweenDrafts = 5
+  /// Telegram's typing action auto-expires after ~5s; re-issue just under that window,
+  /// mirroring `TypingTurnRuntime`.
+  private static let ticksBetweenTyping = 16
+  /// Hard bound on any one draft send: a hung sink is abandoned, never blocking the lane.
+  private static let draftSendDeadline: Duration = .seconds(3)
 
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
@@ -120,112 +64,71 @@ struct StreamingTurnRuntime: Sendable {
     draftId: Int64,
     request: ChatRequest
   ) async throws -> ChatResponse {
-    let draftBuffer = StreamingDraftBuffer()
-    let responseStream = makeStreamingResponseStream(
-      request: request,
-      chatId: chatId,
-      draftBuffer: draftBuffer
-    )
-    let draftTask = makeDraftSenderTask(chatId: chatId, draftId: draftId, draftBuffer: draftBuffer)
+    let snapshot = DraftSnapshot()
 
-    defer {
-      draftTask.cancel()
-      Task { await draftBuffer.close() }
-    }
-
-    return try await withThrowingTaskGroup(of: ChatResponse.self) { group in
+    return try await withThrowingTaskGroup(of: ChatResponse?.self) { group in
       defer { group.cancelAll() }
 
       group.addTask {
-        var iterator = responseStream.makeAsyncIterator()
-        guard let response = try await iterator.next() else {
-          throw AgentRuntime.DeadlineExceeded()
-        }
-        return response
+        try await consumeStream(request: request, snapshot: snapshot)
+      }
+      group.addTask {
+        await runDraftAndTypingLoop(chatId: chatId, draftId: draftId, snapshot: snapshot)
+        return nil
       }
       group.addTask {
         try await sleep(.seconds(wallClockDeadlineSeconds))
         throw AgentRuntime.DeadlineExceeded()
       }
 
-      guard let response = try await group.next() else {
-        throw AgentRuntime.DeadlineExceeded()
-      }
-      if !response.content.isEmpty {
-        await drainFinalDraftIfPossible(draftBuffer)
+      for try await outcome in group {
+        guard let response = outcome else {
+          continue
+        }
+        group.cancelAll()
+        await sendFinalDraft(response.content, chatId: chatId, draftId: draftId)
+        return response
       }
 
-      return response
+      throw AgentRuntime.DeadlineExceeded()
     }
   }
 
-  private func makeStreamingResponseStream(
-    request: ChatRequest,
-    chatId: Int64,
-    draftBuffer: StreamingDraftBuffer
-  ) -> AsyncThrowingStream<ChatResponse, Error> {
-    AsyncThrowingStream { continuation in
-      let responseTask = Task {
-        await consumeStream(
-          request: request,
-          chatId: chatId,
-          draftBuffer: draftBuffer,
-          continuation
-        )
-      }
-      continuation.onTermination = { _ in
-        responseTask.cancel()
-        Task { await draftBuffer.close() }
-      }
-    }
-  }
+  // MARK: - Load-bearing
 
   private func consumeStream(
     request: ChatRequest,
-    chatId: Int64,
-    draftBuffer: StreamingDraftBuffer,
-    _ continuation: AsyncThrowingStream<ChatResponse, Error>.Continuation
-  ) async {
-    await typingIndicator.sendTyping(chatId: chatId)
+    snapshot: DraftSnapshot
+  ) async throws -> ChatResponse {
     var content = ""
     var contentBytes = 0
 
-    do {
-      for try await event in provider.stream(request: request) {
-        try Task.checkCancellation()
-        switch event {
-        case .delta(let delta):
-          try append(delta: delta, to: &content, contentBytes: &contentBytes)
-          await draftBuffer.publish(content)
-        case .finished(let finishReason, let usage, let providerCost):
-          await finishStreamingResponse(
-            FinishedResponse(
-              content: content,
-              finishReason: finishReason,
-              usage: usage,
-              providerCost: providerCost
-            ),
-            draftBuffer: draftBuffer,
-            continuation
-          )
-          return
+    for try await event in provider.stream(request: request) {
+      try Task.checkCancellation()
+      switch event {
+      case .delta(let delta):
+        try append(delta: delta, to: &content, contentBytes: &contentBytes)
+        // An empty accumulation (providers commonly open with an empty role-only delta) must
+        // never surface as a blank draft bubble.
+        if !content.isEmpty {
+          await snapshot.publish(content)
         }
-      }
-
-      await finishStreamingResponse(
-        FinishedResponse(
+      case .finished(let finishReason, let usage, let providerCost):
+        return ChatResponse(
           content: content,
-          finishReason: nil,
-          usage: nil,
-          providerCost: nil
-        ),
-        draftBuffer: draftBuffer,
-        continuation
-      )
-    } catch {
-      await draftBuffer.close()
-      continuation.finish(throwing: error)
+          finishReason: finishReason,
+          usage: usage,
+          costFromProvider: providerCost
+        )
+      }
     }
+
+    // A cancelled consumer ends iteration with nil instead of throwing, so re-check here or a
+    // /stop-style cancel would surface the partial accumulation as a completed reply.
+    try Task.checkCancellation()
+
+    // EOF without a `.finished` event after valid deltas — treat as a complete reply.
+    return ChatResponse(content: content, finishReason: nil, usage: nil, costFromProvider: nil)
   }
 
   private func append(
@@ -242,105 +145,75 @@ struct StreamingTurnRuntime: Sendable {
     content.append(delta)
   }
 
-  private func finishStreamingResponse(
-    _ response: FinishedResponse,
-    draftBuffer: StreamingDraftBuffer,
-    _ continuation: AsyncThrowingStream<ChatResponse, Error>.Continuation
-  ) async {
-    if !response.content.isEmpty {
-      await draftBuffer.publishFinal(response.content)
-    } else {
-      await draftBuffer.close()
-    }
-    continuation.yield(
-      ChatResponse(
-        content: response.content,
-        finishReason: response.finishReason,
-        usage: response.usage,
-        costFromProvider: response.providerCost
-      )
-    )
-    continuation.finish()
-  }
-
-  private func makeDraftSenderTask(
+  private func runDraftAndTypingLoop(
     chatId: Int64,
     draftId: Int64,
-    draftBuffer: StreamingDraftBuffer
-  ) -> Task<Void, Never> {
-    Task {
-      var sentOnce = false
-      while !Task.isCancelled {
-        guard let item = await draftBuffer.next() else {
-          return
-        }
+    snapshot: DraftSnapshot
+  ) async {
+    var lastSeenVersion = 0
+    var sentAnyDraft = false
+    // Start both counters at their thresholds: typing fires on the first tick, and the first
+    // draft goes out on the first tick that sees content.
+    var ticksSinceDraft = Self.minTicksBetweenDrafts
+    var ticksSinceTyping = Self.ticksBetweenTyping
 
-        switch item {
-        case .update(let markdown):
-          if sentOnce {
-            if let finalMarkdown = await draftBuffer.takeFinal() {
-              await sendFinalDraft(finalMarkdown, chatId: chatId, draftId: draftId, draftBuffer)
-              return
-            }
-            if let finalMarkdown = await waitForFinalDuringDraftThrottle(draftBuffer) {
-              await sendFinalDraft(finalMarkdown, chatId: chatId, draftId: draftId, draftBuffer)
-              return
-            }
-          }
+    while !Task.isCancelled {
+      let latest = await snapshot.newer(than: lastSeenVersion)
+      let mayDraft = !sentAnyDraft || ticksSinceDraft >= Self.minTicksBetweenDrafts
 
-          guard !Task.isCancelled else {
-            return
-          }
-
-          await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)
-          sentOnce = true
-        case .final(let markdown):
-          await sendFinalDraft(markdown, chatId: chatId, draftId: draftId, draftBuffer)
-          return
-        }
+      if let latest, mayDraft {
+        lastSeenVersion = latest.version
+        await sendDraftBounded(latest.content, chatId: chatId, draftId: draftId)
+        sentAnyDraft = true
+        ticksSinceDraft = 0
+      } else if !sentAnyDraft, ticksSinceTyping >= Self.ticksBetweenTyping {
+        // Before the first visible frame the draft bubble doesn't exist yet, so the typing
+        // action is the only progress signal; once a draft is out it takes over (~30s TTL).
+        await typingIndicator.sendTyping(chatId: chatId)
+        ticksSinceTyping = 0
       }
-    }
-  }
 
-  private func waitForFinalDuringDraftThrottle(
-    _ draftBuffer: StreamingDraftBuffer
-  ) async -> String? {
-    for _ in 0..<Self.draftThrottleProbeAttempts {
       do {
-        try await sleep(Self.draftThrottleProbeInterval)
+        try await sleep(Self.probeInterval)
       } catch {
-        return nil
+        return
       }
-      if let finalMarkdown = await draftBuffer.takeFinal() {
-        return finalMarkdown
-      }
+      ticksSinceDraft += 1
+      ticksSinceTyping += 1
     }
-    return nil
   }
 
-  private func sendFinalDraft(
-    _ markdown: String,
-    chatId: Int64,
-    draftId: Int64,
-    _ draftBuffer: StreamingDraftBuffer
-  ) async {
-    guard !Task.isCancelled else {
+  private func sendFinalDraft(_ content: String, chatId: Int64, draftId: Int64) async {
+    guard !content.isEmpty, !Task.isCancelled else {
       return
     }
-    await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)
-    await draftBuffer.markFinalSent()
+    await sendDraftBounded(content, chatId: chatId, draftId: draftId)
   }
 
-  private func drainFinalDraftIfPossible(_ draftBuffer: StreamingDraftBuffer) async {
-    for _ in 0..<Self.finalDraftDrainAttempts {
-      if await draftBuffer.didSendFinal() {
-        return
+  /// Awaits the sink but abandons it at `draftSendDeadline`: turn completion must never wedge on
+  /// a stalled draft POST (spec §12 #14). Task groups always await their children, so the
+  /// send/deadline pair is deliberately unstructured — first to finish wins, termination cancels
+  /// both, and an abandoned send is harmless (the draft is ephemeral, best-effort UX).
+  private func sendDraftBounded(_ markdown: String, chatId: Int64, draftId: Int64) async {
+    let firstDone = AsyncStream<Void> { continuation in
+      let sendTask = Task {
+        await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)
+        continuation.yield()
+        continuation.finish()
       }
-      do {
-        try await sleep(Self.finalDraftDrainInterval)
-      } catch {
-        return
+      let deadlineTask = Task {
+        try? await sleep(Self.draftSendDeadline)
+        continuation.yield()
+        continuation.finish()
       }
+      continuation.onTermination = { @Sendable _ in
+        sendTask.cancel()
+        deadlineTask.cancel()
+      }
+    }
+
+    for await _ in firstDone {
+      break
     }
   }
 }
