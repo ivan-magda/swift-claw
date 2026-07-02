@@ -13,6 +13,12 @@ struct FullSessions: SessionMessageStore {
   func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 {
     throw StoreError.diskFull
   }
+  func claimCommandUpdate(updateId: Int64, sessionKey: String, now: Date) throws -> CommandClaim {
+    throw StoreError.diskFull
+  }
+  func findSession(sessionKey: String) throws -> Int64? {
+    throw StoreError.diskFull
+  }
   func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
     throw StoreError.diskFull
   }
@@ -68,6 +74,9 @@ struct FullSessions: SessionMessageStore {
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: sessionMessages,
       commands: CommandStoreGRDB(writer: queue),
+      memory: MemoryStoreGRDB(writer: queue),
+      memoryCommands: MemoryCommandStoreGRDB(writer: queue),
+      pendingConfirmations: PendingConfirmationRegistry(),
       botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
@@ -269,6 +278,9 @@ struct FullSessions: SessionMessageStore {
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: sessionMessages,
       commands: CommandStoreGRDB(writer: queue),
+      memory: MemoryStoreGRDB(writer: queue),
+      memoryCommands: MemoryCommandStoreGRDB(writer: queue),
+      pendingConfirmations: PendingConfirmationRegistry(),
       botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
@@ -326,6 +338,9 @@ struct FullSessions: SessionMessageStore {
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: sessionMessages,
       commands: CommandStoreGRDB(writer: queue),
+      memory: MemoryStoreGRDB(writer: queue),
+      memoryCommands: MemoryCommandStoreGRDB(writer: queue),
+      pendingConfirmations: PendingConfirmationRegistry(),
       botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
@@ -384,6 +399,9 @@ struct FullSessions: SessionMessageStore {
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       sessionMessages: FullSessions(),
       commands: CommandStoreGRDB(writer: queue),
+      memory: MemoryStoreGRDB(writer: queue),
+      memoryCommands: MemoryCommandStoreGRDB(writer: queue),
+      pendingConfirmations: PendingConfirmationRegistry(),
       botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
       transport: transport,
