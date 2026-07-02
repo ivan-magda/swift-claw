@@ -9,7 +9,9 @@ public enum RememberCommand: Sendable, Equatable {
 
   public static func parse(arguments: Substring) -> RememberCommand {
     let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.isEmpty == false else { return .invalid }
+    guard trimmed.isEmpty == false else {
+      return .invalid
+    }
 
     guard let colonIndex = trimmed.firstIndex(of: ":") else {
       return .save(kind: .user, text: trimmed)
@@ -22,7 +24,10 @@ public enum RememberCommand: Sendable, Equatable {
 
     let textStart = trimmed.index(after: colonIndex)
     let text = trimmed[textStart...].trimmingCharacters(in: .whitespacesAndNewlines)
-    guard text.isEmpty == false else { return .invalid }
+    guard text.isEmpty == false else {
+      return .invalid
+    }
+
     return .save(kind: kind, text: text)
   }
 }
@@ -38,10 +43,14 @@ public enum MemoryCommand: Sendable, Equatable {
 
   public static func parse(arguments: Substring) -> MemoryCommand {
     let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.isEmpty == false else { return .review }
+    guard trimmed.isEmpty == false else {
+      return .review
+    }
 
     let tokens = trimmed.split(whereSeparator: \.isWhitespace)
-    guard let firstToken = tokens.first else { return .review }
+    guard let firstToken = tokens.first else {
+      return .review
+    }
     let first = String(firstToken).lowercased()
 
     if tokens.count == 1 {
@@ -56,8 +65,12 @@ public enum MemoryCommand: Sendable, Equatable {
       return .invalid
     }
 
-    guard tokens.count == 2 else { return .invalid }
-    guard let id = positiveId(tokens[1]) else { return .invalid }
+    guard tokens.count == 2 else {
+      return .invalid
+    }
+    guard let id = positiveId(tokens[1]) else {
+      return .invalid
+    }
 
     switch first {
     case "show":
@@ -70,7 +83,9 @@ public enum MemoryCommand: Sendable, Equatable {
   }
 
   private static func positiveId(_ token: Substring) -> Int64? {
-    guard let id = Int64(token), id > 0 else { return nil }
-    return id
+    if let id = Int64(token), id > 0 {
+      return id
+    }
+    return nil
   }
 }

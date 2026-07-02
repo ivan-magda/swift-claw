@@ -253,6 +253,7 @@ extension MessageRouter {
     }
 
     await pendingConfirmations.park(.rememberWrite(request), sessionId: sessionId)
+
     return await sendCommandAck(
       rawUpdate: rawUpdate,
       chatId: message.chatId,
@@ -364,6 +365,7 @@ extension MessageRouter {
     }
 
     await pendingConfirmations.park(.deleteItem(id: id), sessionId: sessionId)
+
     return await sendCommandAck(
       rawUpdate: rawUpdate,
       chatId: chatId,
@@ -465,6 +467,7 @@ extension MessageRouter {
     }
 
     await pendingConfirmations.clear(sessionId: sessionId)
+
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: ackText)
   }
 
@@ -492,6 +495,7 @@ extension MessageRouter {
     }
 
     await pendingConfirmations.clear(sessionId: sessionId)
+
     let errorText: String
     switch entry {
     case .rememberWrite:
@@ -499,6 +503,7 @@ extension MessageRouter {
     case .deleteItem:
       errorText = MemoryReplies.deleteFailed
     }
+
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: errorText)
   }
 
@@ -524,6 +529,7 @@ extension MessageRouter {
     }
 
     await pendingConfirmations.clear(sessionId: sessionId)
+
     return await sendCommandAck(
       rawUpdate: rawUpdate,
       chatId: message.chatId,
