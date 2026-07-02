@@ -91,7 +91,7 @@ import Testing
     // then
     #expect(
       rendered == """
-        Memory 9 — project
+        Memory 9: project
         source: owner · session: 4
         created: 1970-01-02 · sensitivity: normal
 
@@ -131,15 +131,15 @@ import Testing
       MemoryReplies.memoryUsage
         == "Usage: /memory [user|feedback|project|reference] | /memory show <id> | /memory delete <id>"
     )
-    #expect(MemoryReplies.nothingToSave == "Nothing to save after normalization.")
+    #expect(MemoryReplies.nothingToSave == "No savable text.")
     #expect(MemoryReplies.cancelled == "Cancelled.")
     #expect(
       MemoryReplies.saveFailed
-        == "Couldn't save that — nothing was written. Please try /remember again."
+        == "Couldn't save it. Nothing was written. Run /remember again."
     )
     #expect(
       MemoryReplies.deleteFailed
-        == "Couldn't delete that — nothing was changed. Please try /memory delete again."
+        == "Couldn't delete it. Nothing changed. Run /memory delete <id> again."
     )
     #expect(MemoryReplies.saved(id: 12) == "Saved memory 12.")
     #expect(MemoryReplies.saved(id: nil) == "Saved.")

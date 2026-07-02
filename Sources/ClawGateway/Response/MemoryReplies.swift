@@ -17,14 +17,14 @@ public enum MemoryReplies {
     "Usage: /memory [\(kindNames)] | /memory show <id> | /memory delete <id>"
   }
 
-  public static let nothingToSave = "Nothing to save after normalization."
+  public static let nothingToSave = "No savable text."
   public static let cancelled = "Cancelled."
 
   /// Terminal owner-write failure copy (spec §12): the pending intent was cleared; re-issue.
   public static let saveFailed =
-    "Couldn't save that — nothing was written. Please try /remember again."
+    "Couldn't save it. Nothing was written. Run /remember again."
   public static let deleteFailed =
-    "Couldn't delete that — nothing was changed. Please try /memory delete again."
+    "Couldn't delete it. Nothing changed. Run /memory delete <id> again."
 
   /// `id` is nil only if a `MemoryCommandStore` violates its newlyClaimed-implies-item contract;
   /// the ack degrades instead of crashing the router.
@@ -75,7 +75,7 @@ public enum MemoryReplies {
   public static func showItem(_ item: MemoryItem) -> String {
     let sessionText = item.sessionId.map(String.init) ?? "none"
     let lines = [
-      "Memory \(item.id) — \(item.kind.rawValue)",
+      "Memory \(item.id): \(item.kind.rawValue)",
       "source: \(item.source.rawValue) · session: \(sessionText)",
       "created: \(formattedDayString(item.createdAt)) · sensitivity: \(item.sensitivity.rawValue)",
       "",

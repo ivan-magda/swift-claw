@@ -284,7 +284,7 @@ struct RunCommand: AsyncParsableCommand {
             BotMenuCommand(command: "start", description: "Start the bot."),
             BotMenuCommand(command: "new", description: "Start a new session."),
             BotMenuCommand(command: "stop", description: "Stop the current run."),
-            BotMenuCommand(command: "remember", description: "Save a fact (asks to confirm)."),
+            BotMenuCommand(command: "remember", description: "Save a memory."),
             BotMenuCommand(command: "memory", description: "Review saved memories."),
           ]
         )
