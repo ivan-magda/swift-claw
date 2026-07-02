@@ -29,8 +29,10 @@ public enum MemoryReplies {
   /// `id` is nil only if a `MemoryCommandStore` violates its newlyClaimed-implies-item contract;
   /// the ack degrades instead of crashing the router.
   public static func saved(id: Int64?) -> String {
-    guard let id else { return "Saved." }
-    return "Saved memory \(id)."
+    if let id {
+      return "Saved memory \(id)."
+    }
+    return "Saved."
   }
 
   public static func deleted(id: Int64) -> String {
@@ -42,8 +44,10 @@ public enum MemoryReplies {
   }
 
   public static func emptyReview(kind: MemoryKind?) -> String {
-    guard let kind else { return "No memories yet. Use /remember to save one." }
-    return "No \(kind.rawValue) memories yet."
+    if let kind {
+      return "No \(kind.rawValue) memories yet."
+    }
+    return "No memories yet. Use /remember to save one."
   }
 
   /// Grouped by kind (declaration order), each line `id · «short text» · source · date · ⚠`
@@ -54,7 +58,9 @@ public enum MemoryReplies {
 
     for kind in MemoryKind.allCases {
       let groupedItems = limitedItems.filter { $0.kind == kind }
-      guard groupedItems.isEmpty == false else { continue }
+      guard groupedItems.isEmpty == false else {
+        continue
+      }
 
       lines.append("\(kind.rawValue):")
       for item in groupedItems {
@@ -71,7 +77,7 @@ public enum MemoryReplies {
     let lines = [
       "Memory \(item.id) — \(item.kind.rawValue)",
       "source: \(item.source.rawValue) · session: \(sessionText)",
-      "created: \(dayString(item.createdAt)) · sensitivity: \(item.sensitivity.rawValue)",
+      "created: \(formattedDayString(item.createdAt)) · sensitivity: \(item.sensitivity.rawValue)",
       "",
       item.text,
     ]
@@ -93,17 +99,23 @@ public enum MemoryReplies {
 
   private static func reviewLine(_ item: MemoryItem) -> String {
     let base = "\(item.id) · «\(snippet(item.text))» · \(item.source.rawValue)"
-    let dated = "\(base) · \(dayString(item.createdAt))"
-    guard item.sensitivity == .high else { return dated }
+    let dated = "\(base) · \(formattedDayString(item.createdAt))"
+
+    guard item.sensitivity == .high else {
+      return dated
+    }
+
     return "\(dated) · ⚠"
   }
 
   private static func snippet(_ text: String) -> String {
-    guard text.count > snippetCapGraphemes else { return text }
+    guard text.count > snippetCapGraphemes else {
+      return text
+    }
     return String(text.prefix(snippetCapGraphemes)) + "…"
   }
 
-  private static func dayString(_ date: Date) -> String {
+  private static func formattedDayString(_ date: Date) -> String {
     date.formatted(dayFormat)
   }
 
