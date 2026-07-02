@@ -78,6 +78,64 @@ import Testing
     #expect(again.sessionId == nil)
   }
 
+  @Test func claimCommandUpdateResolvesTheSessionInOneWriteAndDedups() throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let store = SessionMessageStoreGRDB(writer: queue)
+    let sessionKey = SessionKey.telegramDM(chatId: 42)
+
+    // when
+    let first = try store.claimCommandUpdate(
+      updateId: 10,
+      sessionKey: sessionKey,
+      now: Date(timeIntervalSince1970: 100)
+    )
+    guard case .claimed(let sessionId) = first else {
+      #expect(Bool(false), "expected the first claim to create a session")
+      return
+    }
+    let foundSessionId = try #require(try store.findSession(sessionKey: sessionKey))
+    let duplicate = try store.claimCommandUpdate(
+      updateId: 10,
+      sessionKey: sessionKey,
+      now: Date(timeIntervalSince1970: 200)
+    )
+
+    // then
+    #expect(foundSessionId == sessionId)
+    #expect(duplicate == .duplicate)
+    let updatedTs = try #require(
+      try queue.read { db in
+        try Date.fetchOne(
+          db,
+          sql: "SELECT updated_ts FROM sessions WHERE id = ?",
+          arguments: [sessionId]
+        )
+      }
+    )
+    #expect(updatedTs == Date(timeIntervalSince1970: 100))
+  }
+
+  @Test func findSessionIsReadOnlyAndNilForAnUnknownChat() throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let store = SessionMessageStoreGRDB(writer: queue)
+
+    // when
+    let found = try store.findSession(sessionKey: SessionKey.telegramDM(chatId: 7))
+
+    // then
+    #expect(found == nil)
+    let sessionCount = try #require(
+      try queue.read { db in
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sessions")
+      }
+    )
+    #expect(sessionCount == 0)
+  }
+
   @Test func loadContextIsOldestFirstWithinLimitAndTriggerBound() throws {
     // given
     let store = try freshStore()
