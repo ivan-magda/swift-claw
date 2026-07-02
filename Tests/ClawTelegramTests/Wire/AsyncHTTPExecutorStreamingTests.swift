@@ -305,9 +305,11 @@ private func withTimeout<Result: Sendable>(
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func slowStreamConsumerFailsOnBufferOverflow() async throws {
+  func slowStreamConsumerStillReceivesEveryChunk() async throws {
     // given
-    try await withStreamingHTTPServer(chunkCount: 128) { server in
+    let chunkCount = 128
+    let expected = Data((0..<chunkCount).map { "data: {\"index\":\($0)}\n\n" }.joined().utf8)
+    try await withStreamingHTTPServer(chunkCount: chunkCount) { server in
       try await withHTTPClient { client in
         let executor = AsyncHTTPExecutor(client: client)
         let response = try await executor.postStream(
@@ -317,24 +319,22 @@ private func withTimeout<Result: Sendable>(
           timeoutSeconds: 30
         )
 
-        // when
+        // when — let the producer race far ahead before the consumer reads a single chunk
         await server.probe.waitStarted()
         try await Task.sleep(nanoseconds: 100_000_000)
-        let overflowTask = Task<String?, Never> {
-          var iterator = response.body.makeAsyncIterator()
-          do {
-            while try await iterator.next() != nil {}
-            return nil
-          } catch {
-            return String(describing: error)
+        let received = try await withTimeout(seconds: 5) {
+          var collected = Data()
+          for try await chunk in response.body {
+            collected.append(chunk)
+            if collected.count >= expected.count {
+              break
+            }
           }
-        }
-        let overflowError = try await withTimeout(seconds: 2) {
-          await overflowTask.value
+          return collected
         }
 
         // then
-        #expect(overflowError?.contains("buffer overflow") == true)
+        #expect(received == expected)
       }
     }
   }
