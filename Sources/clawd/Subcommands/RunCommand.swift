@@ -137,6 +137,7 @@ struct RunCommand: AsyncParsableCommand {
     let outboxSignal = OutboxSignal()
     let breaker = BudgetBreaker(budget: config.budget)
     let lanes = SessionLaneRegistry()
+    let pendingConfirmations = PendingConfirmationRegistry()
     let workspace = FileSystemWorkspace(
       root: config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
     )
@@ -177,6 +178,9 @@ struct RunCommand: AsyncParsableCommand {
       processed: stores.processed,
       sessionMessages: stores.sessionMessages,
       commands: stores.commands,
+      memory: stores.memory,
+      memoryCommands: stores.memoryCommands,
+      pendingConfirmations: pendingConfirmations,
       botUsername: botUsername,
       accessControl: AccessControl(allowlist: stores.allowlist),
       transport: transport,

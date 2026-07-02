@@ -13,13 +13,16 @@ public enum HandleOutcome: Sendable, Equatable {
 
 /// Routes one inbound update. Allowlisted plain text becomes a real LLM turn (persisted via the
 /// fused `claimAndPersistInbound`, then dispatched to the `TurnRunner`); everything else —
-/// `/start`, unauthorized senders, unsupported media — gets a direct canned reply deduped via
-/// `claimUpdate`. The two dedup paths share the `processed_updates` key space, and each update
-/// takes exactly one path, so an update is claimed once.
+/// `/start`, `/remember`, unauthorized senders, unsupported media — gets a direct canned reply or
+/// command ack. The two dedup paths share the `processed_updates` key space, and each update takes
+/// exactly one path, so an update is claimed once.
 public struct MessageRouter: Sendable {
   private let processed: any ProcessedUpdateStore
   private let sessionMessages: any SessionMessageStore
   private let commands: any CommandStore
+  private let memory: any MemoryStore
+  private let memoryCommands: any MemoryCommandStore
+  private let pendingConfirmations: PendingConfirmationRegistry
   private let botUsername: String?
   private let accessControl: AccessControl
   private let transport: any TelegramTransport
@@ -31,6 +34,9 @@ public struct MessageRouter: Sendable {
     processed: any ProcessedUpdateStore,
     sessionMessages: any SessionMessageStore,
     commands: any CommandStore,
+    memory: any MemoryStore,
+    memoryCommands: any MemoryCommandStore,
+    pendingConfirmations: PendingConfirmationRegistry,
     botUsername: String?,
     accessControl: AccessControl,
     transport: any TelegramTransport,
@@ -41,6 +47,9 @@ public struct MessageRouter: Sendable {
     self.processed = processed
     self.sessionMessages = sessionMessages
     self.commands = commands
+    self.memory = memory
+    self.memoryCommands = memoryCommands
+    self.pendingConfirmations = pendingConfirmations
     self.botUsername = botUsername
     self.accessControl = accessControl
     self.transport = transport
@@ -92,6 +101,19 @@ public struct MessageRouter: Sendable {
           )
         }
         return await handleNew(rawUpdate: rawUpdate, message: message)
+      case .remember(let rememberCommand):
+        guard isAllowed else {
+          return await sendCanned(
+            rawUpdate: rawUpdate,
+            chatId: message.chatId,
+            text: Self.privateBotText
+          )
+        }
+        return await handleRemember(
+          rawUpdate: rawUpdate,
+          message: message,
+          command: rememberCommand
+        )
       case .plain(let plainText):
         guard isAllowed else {
           return await sendCanned(
@@ -171,6 +193,60 @@ public struct MessageRouter: Sendable {
       rawUpdate: rawUpdate,
       chatId: message.chatId,
       text: CommandReplies.freshConversation
+    )
+  }
+
+  /// `/remember` is handled directly: claim the update, resolve the session, build the pure write
+  /// request, park it, and send the confirm prompt. No durable memory row is written until the
+  /// owner confirms.
+  private func handleRemember(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    command: RememberCommand
+  ) async -> HandleOutcome {
+    guard case .save(let kind, let text) = command else {
+      return await sendCanned(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: MemoryReplies.rememberUsage
+      )
+    }
+
+    let claim: CommandClaim
+    do {
+      claim = try sessionMessages.claimCommandUpdate(
+        updateId: rawUpdate.updateId,
+        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+        now: Date()
+      )
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("remember claim failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard case .claimed(let sessionId) = claim else {
+      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
+      return .skipped
+    }
+
+    let request: MemoryWriteRequest
+    do {
+      request = try MemoryWriteBuilder.build(rawText: text, kind: kind, sessionId: sessionId)
+    } catch {
+      return await sendCommandAck(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: MemoryReplies.nothingToSave
+      )
+    }
+
+    await pendingConfirmations.park(.rememberWrite(request), sessionId: sessionId)
+    return await sendCommandAck(
+      rawUpdate: rawUpdate,
+      chatId: message.chatId,
+      text: request.confirmationText
     )
   }
 

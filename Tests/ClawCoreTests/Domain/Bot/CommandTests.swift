@@ -12,6 +12,9 @@ import Testing
     ("/new fresh please", .new),
     ("/stop@claw_bot", .stop),
     ("/STOP@CLAW_BOT now", .stop),
+    ("/remember buy milk", .remember(.save(kind: .user, text: "buy milk"))),
+    ("/REMEMBER@CLAW_BOT project: x", .remember(.save(kind: .project, text: "x"))),
+    ("/remember", .remember(.invalid)),
   ])
   func leadingSlashCommandsParse(text: String, expected: Command) {
     // given
@@ -28,6 +31,7 @@ import Testing
     "tell me about /stop",
     " /stop",
     "/stop@some_other_bot",
+    "/remember@some_other_bot x",
     "/stop@",
     "/unknown",
     "/",
