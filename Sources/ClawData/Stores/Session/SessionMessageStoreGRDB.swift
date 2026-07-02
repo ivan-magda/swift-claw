@@ -15,6 +15,37 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
+  public func claimCommandUpdate(
+    updateId: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws -> CommandClaim {
+    try writer.writeMapping { db in
+      let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
+        db: db,
+        updateId: updateId,
+        claimedAt: now
+      )
+
+      guard newlyClaimed else {
+        return .duplicate
+      }
+
+      let sessionId = try Self.upsertSession(db, sessionKey: sessionKey, now: now)
+      return .claimed(sessionId: sessionId)
+    }
+  }
+
+  public func findSession(sessionKey: String) throws -> Int64? {
+    try writer.readMapping { db in
+      try Int64.fetchOne(
+        db,
+        sql: "SELECT id FROM sessions WHERE session_key = ?",
+        arguments: [sessionKey]
+      )
+    }
+  }
+
   public func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
     try writer.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(

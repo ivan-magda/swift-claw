@@ -12,6 +12,11 @@ public protocol ProcessedUpdateStore: Sendable {
   func claimUpdate(updateId: Int64) throws -> Bool
 }
 
+public enum CommandClaim: Sendable, Equatable {
+  case duplicate
+  case claimed(sessionId: Int64)
+}
+
 public struct StopCommandResult: Sendable, Equatable {
   public let newlyClaimed: Bool
   public let sessionId: Int64?
@@ -92,6 +97,8 @@ public protocol UpdateCursorStore: Sendable {
 
 public protocol SessionMessageStore: Sendable {
   func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64
+  func claimCommandUpdate(updateId: Int64, sessionKey: String, now: Date) throws -> CommandClaim
+  func findSession(sessionKey: String) throws -> Int64?
   /// Fused transaction: claim the update, upsert the session, insert the user message, create the
   /// PENDING run, and stamp its trigger message in one write. Duplicates create nothing.
   func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult

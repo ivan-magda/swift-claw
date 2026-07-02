@@ -159,6 +159,14 @@ struct TurnRunnerWorkspace: WorkspaceReading {
 struct SnapshotFailingSessionMessages: SessionMessageStore {
   func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 { 0 }
 
+  func claimCommandUpdate(updateId: Int64, sessionKey: String, now: Date) throws -> CommandClaim {
+    .duplicate
+  }
+
+  func findSession(sessionKey: String) throws -> Int64? {
+    nil
+  }
+
   func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
     ClaimResult(
       newlyClaimed: false,
