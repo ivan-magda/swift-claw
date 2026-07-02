@@ -131,5 +131,45 @@ import Testing
       finalRequest.allSatisfy { message in message.content.contains("ship 3a") == false }
     )
   }
+
+  /// R2 (spec §10.2): a plain message from before a restart is found via FTS5/BM25 in a fresh
+  /// conversation window and injected as an untrusted-labeled recall row — not as history.
+  @Test func factMentionedBeforeRestartIsRecalledAfterNewConversation() async throws {
+    // given — a file-backed database so the FTS index must survive a real reopen
+    let path = makeTempDatabasePath()
+    defer { try? FileManager.default.removeItem(atPath: path) }
+
+    // when — first process: a normal turn mentions the fact, then the process "exits"
+    do {
+      let firstPool = try ClawDatabase.makePool(path: path)
+      try ClawDatabase.migrate(firstPool)
+      let firstStack = try makeStack(writer: firstPool, outcome: .respond("noted"))
+      _ = await firstStack.router.handle(
+        rawUpdate: textUpdate(id: 1, from: firstStack.chatId, text: "the wifi password is hunter2")
+      )
+      try await waitForRunStates(firstPool, expected: [RunState.done.rawValue])
+    }
+
+    // when — restart: /new opens a fresh conversation window, then the owner asks again
+    let pool = try ClawDatabase.makePool(path: path)
+    try ClawDatabase.migrate(pool)
+    let stack = try makeStack(writer: pool, outcome: .respond("stub answer"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "/new"))
+    _ = await stack.router.handle(
+      rawUpdate: textUpdate(id: 3, from: stack.chatId, text: "what is the wifi password?")
+    )
+    try await waitForRunStates(pool, expected: [RunState.done.rawValue, RunState.done.rawValue])
+
+    // then — the pre-restart message reaches the model ONLY inside the labeled recall row
+    let turnRequest = try #require(await stack.provider.requests.first)
+    let labeledMessage = try #require(
+      turnRequest.first { message in
+        message.role == .user && message.content.contains("label=\"recall\"")
+      }
+    )
+    #expect(labeledMessage.content.contains("the wifi password is hunter2"))
+    let messagesWithFact = turnRequest.filter { message in message.content.contains("hunter2") }
+    #expect(messagesWithFact == [labeledMessage])
+  }
 }
 // swiftlint:enable function_body_length
