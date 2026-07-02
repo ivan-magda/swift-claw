@@ -11,7 +11,6 @@ actor DraftTransport: TelegramTransport {
   }
 
   private(set) var drafts: [DraftRecord] = []
-  var hangDraft = false
   var throwDraft = false
 
   func getMe() async throws -> BotIdentity { BotIdentity(id: 1, username: "claw_bot") }
@@ -27,9 +26,6 @@ actor DraftTransport: TelegramTransport {
   func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 { 1 }
 
   func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool {
-    if hangDraft {
-      try await Task.sleep(for: .seconds(3_600))
-    }
     if throwDraft {
       throw TelegramError.transport("draft down")
     }
@@ -44,10 +40,7 @@ actor DraftTransport: TelegramTransport {
   @Test func capsDraftMarkdownAtRichMessageLimit() async throws {
     // given
     let transport = DraftTransport()
-    let streamer = TelegramRichDraftStreamer(
-      transport: transport,
-      sleep: { _ in try await Task.sleep(for: .seconds(3_600)) }
-    )
+    let streamer = TelegramRichDraftStreamer(transport: transport)
     let long = String(repeating: "x", count: TelegramRichDraftStreamer.maxMarkdownCharacters + 10)
 
     // when
@@ -63,7 +56,7 @@ actor DraftTransport: TelegramTransport {
   @Test func skipsDraftsForNonPrivateChats() async {
     // given
     let transport = DraftTransport()
-    let streamer = TelegramRichDraftStreamer(transport: transport, sleep: { _ in })
+    let streamer = TelegramRichDraftStreamer(transport: transport)
 
     // when
     await streamer.sendDraft(chatId: -100_123, draftId: 9, markdown: "group draft")
@@ -76,20 +69,7 @@ actor DraftTransport: TelegramTransport {
     // given
     let transport = DraftTransport()
     await transport.setThrowDraft(true)
-    let streamer = TelegramRichDraftStreamer(transport: transport, sleep: { _ in })
-
-    // when
-    await streamer.sendDraft(chatId: 42, draftId: 9, markdown: "partial")
-
-    // then
-    #expect(await transport.drafts.isEmpty)
-  }
-
-  @Test func deadlinePreventsHungTransportFromBlockingCaller() async {
-    // given
-    let transport = DraftTransport()
-    await transport.setHangDraft(true)
-    let streamer = TelegramRichDraftStreamer(transport: transport, sleep: { _ in })
+    let streamer = TelegramRichDraftStreamer(transport: transport)
 
     // when
     await streamer.sendDraft(chatId: 42, draftId: 9, markdown: "partial")
@@ -100,10 +80,6 @@ actor DraftTransport: TelegramTransport {
 }
 
 extension DraftTransport {
-  func setHangDraft(_ value: Bool) {
-    hangDraft = value
-  }
-
   func setThrowDraft(_ value: Bool) {
     throwDraft = value
   }

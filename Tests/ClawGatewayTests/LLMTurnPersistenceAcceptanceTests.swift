@@ -409,10 +409,7 @@ func makeStreamingStack(
   let signal = OutboxSignal()
   let lanes = SessionLaneRegistry()
   let logger = Logger(label: "streaming-acceptance")
-  let draftStreamer = TelegramRichDraftStreamer(
-    transport: transport,
-    sleep: { try await Task.sleep(for: $0) }
-  )
+  let draftStreamer = TelegramRichDraftStreamer(transport: transport)
   let agent = AgentRuntime(
     provider: provider,
     typingIndicator: NoopTyping(),
