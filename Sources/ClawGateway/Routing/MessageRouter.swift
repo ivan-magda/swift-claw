@@ -14,7 +14,9 @@ public enum HandleOutcome: Sendable, Equatable {
 /// Routes one inbound update. Allowlisted plain text becomes a real LLM turn (persisted via the
 /// fused `claimAndPersistInbound`, then dispatched to the `TurnRunner`); everything else —
 /// `/start`, `/remember`, unauthorized senders, unsupported media — gets a direct canned reply or
-/// command ack. The two dedup paths share the `processed_updates` key space, and each update takes
+/// command ack. Memory commands (`/remember`, `/memory`) are handled directly too, and while a
+/// confirmation is parked for a session, the next plain text resolves it here before any turn is
+/// dispatched. The two dedup paths share the `processed_updates` key space, and each update takes
 /// exactly one path, so an update is claimed once.
 public struct MessageRouter: Sendable {
   private let processed: any ProcessedUpdateStore
@@ -85,29 +87,17 @@ public struct MessageRouter: Sendable {
         )
       case .stop:
         guard isAllowed else {
-          return await sendCanned(
-            rawUpdate: rawUpdate,
-            chatId: message.chatId,
-            text: Self.privateBotText
-          )
+          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
         }
         return await handleStop(rawUpdate: rawUpdate, message: message)
       case .new:
         guard isAllowed else {
-          return await sendCanned(
-            rawUpdate: rawUpdate,
-            chatId: message.chatId,
-            text: Self.privateBotText
-          )
+          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
         }
         return await handleNew(rawUpdate: rawUpdate, message: message)
       case .remember(let rememberCommand):
         guard isAllowed else {
-          return await sendCanned(
-            rawUpdate: rawUpdate,
-            chatId: message.chatId,
-            text: Self.privateBotText
-          )
+          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
         }
         return await handleRemember(
           rawUpdate: rawUpdate,
@@ -116,11 +106,14 @@ public struct MessageRouter: Sendable {
         )
       case .plain(let plainText):
         guard isAllowed else {
-          return await sendCanned(
-            rawUpdate: rawUpdate,
-            chatId: message.chatId,
-            text: Self.privateBotText
-          )
+          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+        }
+        if let resolved = await resolvePendingConfirmation(
+          rawUpdate: rawUpdate,
+          message: message,
+          text: plainText
+        ) {
+          return resolved
         }
         return await dispatchTurn(
           rawUpdate: rawUpdate,
@@ -250,6 +243,166 @@ public struct MessageRouter: Sendable {
     )
   }
 
+  /// Intercepts plain text while a confirmation is parked for the session. Returns nil when there
+  /// is nothing to resolve, so the caller falls through to normal turn dispatch. The session lookup
+  /// is read-only and fails closed: with the lookup down we cannot prove whether a parked "yes"
+  /// should be intercepted, so nothing is claimed and the update is retried instead.
+  private func resolvePendingConfirmation(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    text: String
+  ) async -> HandleOutcome? {
+    let sessionId: Int64
+    do {
+      guard
+        let existing = try sessionMessages.findSession(
+          sessionKey: SessionKey.telegramDM(chatId: message.chatId)
+        )
+      else {
+        return nil
+      }
+      sessionId = existing
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("pending lookup failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard let entry = await pendingConfirmations.pending(sessionId: sessionId) else {
+      return nil
+    }
+
+    switch ConfirmationReply.parse(text) {
+    case .confirm:
+      return await commitPending(
+        entry,
+        sessionId: sessionId,
+        rawUpdate: rawUpdate,
+        message: message
+      )
+    case .cancel:
+      return await cancelPending(
+        sessionId: sessionId,
+        rawUpdate: rawUpdate,
+        message: message
+      )
+    case .other:
+      await pendingConfirmations.clear(sessionId: sessionId)
+      return nil
+    }
+  }
+
+  /// Confirms a parked memory effect through the atomic MemoryCommandStore seam.
+  private func commitPending(
+    _ entry: PendingConfirmation,
+    sessionId: Int64,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async -> HandleOutcome {
+    let result: MemoryCommandResult
+    let ackText: String
+    do {
+      switch entry {
+      case .rememberWrite(let request):
+        result = try memoryCommands.applyRemember(
+          updateId: rawUpdate.updateId,
+          item: request.item,
+          now: Date()
+        )
+        ackText = MemoryReplies.saved(id: result.item?.id)
+      case .deleteItem(let itemId):
+        result = try memoryCommands.applyForget(
+          updateId: rawUpdate.updateId,
+          itemId: itemId,
+          now: Date()
+        )
+        ackText = MemoryReplies.deleted(id: itemId)
+      }
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("confirmation commit failed for update \(rawUpdate.updateId): \(error)")
+      return await failPendingCommit(
+        entry,
+        sessionId: sessionId,
+        rawUpdate: rawUpdate,
+        message: message
+      )
+    }
+
+    guard result.newlyClaimed else {
+      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
+      return .skipped
+    }
+
+    await pendingConfirmations.clear(sessionId: sessionId)
+    return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: ackText)
+  }
+
+  /// A non-disk commit failure is terminal for the parked entry: claim the update, clear the
+  /// ephemeral pending state, and tell the owner nothing changed so they can re-issue the command.
+  private func failPendingCommit(
+    _ entry: PendingConfirmation,
+    sessionId: Int64,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async -> HandleOutcome {
+    let claimed: Bool
+    do {
+      claimed = try processed.claimUpdate(updateId: rawUpdate.updateId)
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("failure-claim failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard claimed else {
+      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
+      return .skipped
+    }
+
+    await pendingConfirmations.clear(sessionId: sessionId)
+    let errorText: String
+    switch entry {
+    case .rememberWrite:
+      errorText = MemoryReplies.saveFailed
+    case .deleteItem:
+      errorText = MemoryReplies.deleteFailed
+    }
+    return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: errorText)
+  }
+
+  /// A negative confirmation claims the update, clears the parked entry, and sends a cancel ack.
+  private func cancelPending(
+    sessionId: Int64,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async -> HandleOutcome {
+    let claimed: Bool
+    do {
+      claimed = try processed.claimUpdate(updateId: rawUpdate.updateId)
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("cancel claim failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard claimed else {
+      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
+      return .skipped
+    }
+
+    await pendingConfirmations.clear(sessionId: sessionId)
+    return await sendCommandAck(
+      rawUpdate: rawUpdate,
+      chatId: message.chatId,
+      text: MemoryReplies.cancelled
+    )
+  }
+
   /// Fuses claim + persistence, then enqueues the durable run and returns without awaiting it.
   /// Persistence failure prevents cursor advancement; background turn failures are logged in-band.
   private func dispatchTurn(
@@ -317,6 +470,10 @@ public struct MessageRouter: Sendable {
       logger.error("command ack send failed for update \(rawUpdate.updateId): \(error)")
     }
     return .processed
+  }
+
+  private func sendPrivateBotReply(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
+    await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: Self.privateBotText)
   }
 
   /// A direct canned reply, deduped via `claimUpdate` so a redelivery doesn't double-send it.
