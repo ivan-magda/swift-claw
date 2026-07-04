@@ -292,6 +292,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       agent: agent,
       budget: budget,
       contextBuilder: builder,
+      pendingConfirmations: PendingConfirmationRegistry(),
       notifyOutbox: {},
       logger: Logger(label: "test")
     )

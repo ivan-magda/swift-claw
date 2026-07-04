@@ -170,6 +170,7 @@ struct RunCommand: AsyncParsableCommand {
       agent: agent,
       budget: config.budget,
       contextBuilder: contextBuilder,
+      pendingConfirmations: pendingConfirmations,
       notifyOutbox: { outboxSignal.poke() },
       breaker: breaker,
       transport: transport,
