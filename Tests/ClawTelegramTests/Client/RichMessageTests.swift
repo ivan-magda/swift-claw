@@ -21,6 +21,16 @@ private actor CapturingExecutor: HTTPExecuting {
     capturedBody = jsonBody
     return result
   }
+
+  func get(
+    url: String,
+    headers: [String: String],
+    timeoutSeconds: Int,
+    maxBodyBytes: Int
+  ) async throws -> HTTPResult {
+    struct GetUnsupported: Error {}
+    throw GetUnsupported()
+  }
 }
 
 @Suite struct RichMessageTests {

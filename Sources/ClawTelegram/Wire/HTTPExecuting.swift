@@ -39,6 +39,29 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
     )
   }
 
+  public func get(
+    url: String,
+    headers: [String: String],
+    timeoutSeconds: Int,
+    maxBodyBytes: Int
+  ) async throws -> HTTPResult {
+    var request = HTTPClientRequest(url: url)
+    request.method = .GET
+    request.headers.add(name: "accept-encoding", value: "gzip")
+    for (name, value) in headers {
+      request.headers.add(name: name, value: value)
+    }
+
+    let response = try await client.execute(request, timeout: .seconds(Int64(timeoutSeconds)))
+    let buffer = try await response.body.collect(upTo: maxBodyBytes)
+
+    return HTTPResult(
+      statusCode: Int(response.status.code),
+      headers: responseHeaders(response),
+      body: Data(buffer: buffer)
+    )
+  }
+
   public func postStream(
     url: String,
     headers: [String: String],

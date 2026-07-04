@@ -39,6 +39,16 @@ public protocol HTTPExecuting: Sendable {
     jsonBody: Data,
     timeoutSeconds: Int
   ) async throws -> HTTPResult
+
+  /// Plain GET for tool fetches. The production client is configured with
+  /// `RedirectConfiguration.disallow`, so a 3xx comes back as an ordinary `HTTPResult`; the body
+  /// is collected up to `maxBodyBytes` and an over-cap response throws.
+  func get(
+    url: String,
+    headers: [String: String],
+    timeoutSeconds: Int,
+    maxBodyBytes: Int
+  ) async throws -> HTTPResult
 }
 
 public protocol HTTPStreaming: Sendable {

@@ -13,6 +13,16 @@ struct MockHTTPExecutor: HTTPExecuting {
     jsonBody: Data,
     timeoutSeconds: Int
   ) async throws -> HTTPResult { result }
+
+  func get(
+    url: String,
+    headers: [String: String],
+    timeoutSeconds: Int,
+    maxBodyBytes: Int
+  ) async throws -> HTTPResult {
+    struct GetUnsupported: Error {}
+    throw GetUnsupported()
+  }
 }
 
 struct RecordingHTTPExecutor: HTTPExecuting {
@@ -42,6 +52,16 @@ struct RecordingHTTPExecutor: HTTPExecuting {
     await recorder.append(url: url, body: jsonBody, timeout: timeoutSeconds)
     return result
   }
+
+  func get(
+    url: String,
+    headers: [String: String],
+    timeoutSeconds: Int,
+    maxBodyBytes: Int
+  ) async throws -> HTTPResult {
+    struct GetUnsupported: Error {}
+    throw GetUnsupported()
+  }
 }
 
 /// Simulates a transport error whose description echoes the request URL (which carries the token).
@@ -58,6 +78,16 @@ struct URLEchoingExecutor: HTTPExecuting {
     timeoutSeconds: Int
   ) async throws -> HTTPResult {
     throw URLEchoError(url: url)
+  }
+
+  func get(
+    url: String,
+    headers: [String: String],
+    timeoutSeconds: Int,
+    maxBodyBytes: Int
+  ) async throws -> HTTPResult {
+    struct GetUnsupported: Error {}
+    throw GetUnsupported()
   }
 }
 
