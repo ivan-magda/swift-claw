@@ -80,6 +80,7 @@ public struct WebFetchTool: Tool {
       } catch {
         return errorPayload("Could not resolve \(host).")
       }
+
       guard addresses.isEmpty == false,
         addresses.allSatisfy({ address in SSRFGuard.isPublic(address) })
       else {
@@ -115,6 +116,7 @@ public struct WebFetchTool: Tool {
           return errorPayload("Too many redirects (more than \(maxHops)).")
         }
         hopsRemaining -= 1
+
         guard let location = result.getHeader(for: "Location") else {
           return errorPayload("Redirect (HTTP \(result.statusCode)) without a Location header.")
         }
@@ -141,10 +143,12 @@ public struct WebFetchTool: Tool {
   private func successPayload(_ result: HTTPResult) -> ToolPayload {
     let contentType = (result.getHeader(for: "Content-Type") ?? "").lowercased()
     let mediaType = contentType.split(separator: ";").first.map(String.init) ?? ""
+
     let allowed =
       Self.contentTypeAllowlistPrefixes.contains { prefix in mediaType.hasPrefix(prefix) }
       || Self.contentTypeAllowlistExact.contains(mediaType)
       || mediaType.hasSuffix("+xml") || mediaType.hasSuffix("+json")
+
     guard allowed else {
       return errorPayload("Refused content type \(mediaType.isEmpty ? "unknown" : mediaType).")
     }
@@ -169,10 +173,14 @@ public struct WebFetchTool: Tool {
     if location.lowercased().hasPrefix("http://") || location.lowercased().hasPrefix("https://") {
       return location
     }
-    guard let base = URL(string: current), let resolved = URL(string: location, relativeTo: base)
+
+    guard
+      let base = URL(string: current),
+      let resolved = URL(string: location, relativeTo: base)
     else {
       return location
     }
+
     return resolved.absoluteString
   }
 
