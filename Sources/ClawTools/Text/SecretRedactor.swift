@@ -8,14 +8,18 @@ public struct SecretRedactor: Sendable {
   private let secretValues: [String]
 
   public init(secretValues: [String]) {
-    self.secretValues = secretValues.filter { value in value.isEmpty == false }
+    self.secretValues = secretValues.filter { value in
+      value.isEmpty == false
+    }
   }
 
   public func redact(_ text: String) -> String {
     var redacted = text
+
     for secret in secretValues {
       redacted = redacted.replacingOccurrences(of: secret, with: Self.replacement)
     }
+
     return redacted
   }
 }
