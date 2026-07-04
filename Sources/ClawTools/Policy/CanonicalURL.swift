@@ -32,6 +32,7 @@ public enum CanonicalURL {
     guard let rawHost = components.host, rawHost.isEmpty == false else {
       return .failure(.unparseable)
     }
+
     let host = rawHost.lowercased()
     let isASCII = host.allSatisfy(\.isASCII)
     let hasPunycodeLabel = host.split(separator: ".").contains { label in
@@ -68,9 +69,12 @@ public enum CanonicalURL {
   static func normalizeEscapeHex(_ text: String) -> String {
     var output = String.UnicodeScalarView()
     let scalars = Array(text.unicodeScalars)
+
     var index = 0
+
     while index < scalars.count {
       let scalar = scalars[index]
+
       guard scalar == "%", index + 2 < scalars.count,
         isHexDigit(scalars[index + 1]), isHexDigit(scalars[index + 2])
       else {
@@ -78,11 +82,14 @@ public enum CanonicalURL {
         index += 1
         continue
       }
+
       output.append(scalar)
       output.append(uppercased(scalars[index + 1]))
       output.append(uppercased(scalars[index + 2]))
+
       index += 3
     }
+
     return String(output)
   }
 
