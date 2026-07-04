@@ -14,6 +14,7 @@ actor FakeTurnRunner: TurnDispatching {
     let sessionId: Int64
     let chatId: Int64
     let triggerMessageId: Int64
+    let fetchGrant: OneTurnFetchGrant?
   }
 
   private(set) var calls: [Call] = []
@@ -26,14 +27,16 @@ actor FakeTurnRunner: TurnDispatching {
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64
+    triggerMessageId: Int64,
+    fetchGrant: OneTurnFetchGrant?
   ) async throws {
     calls.append(
       Call(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
-        triggerMessageId: triggerMessageId
+        triggerMessageId: triggerMessageId,
+        fetchGrant: fetchGrant
       )
     )
     for continuation in continuations {

@@ -5,11 +5,13 @@ import Logging
 
 /// Injected behind a protocol so the router/poller tests stay decoupled from the real provider.
 public protocol TurnDispatching: Sendable {
+  // swiftlint:disable:next function_parameter_count
   func run(
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64
+    triggerMessageId: Int64,
+    fetchGrant: OneTurnFetchGrant?
   ) async throws
 }
 
@@ -64,7 +66,8 @@ public struct TurnRunner: TurnDispatching {
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64
+    triggerMessageId: Int64,
+    fetchGrant: OneTurnFetchGrant?
   ) async throws {
     guard !Task.isCancelled else {
       return
@@ -116,15 +119,15 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    // sessionTainted/fetchGrant plumbing lands in Task 24; the loop's tool dispatch is a no-op
-    // (toolDispatcher: nil, wired in Task 25) so these placeholders don't change today's behavior.
+    // sessionTainted plumbing lands in Task 24; the loop's tool dispatch is a no-op
+    // (toolDispatcher: nil, wired in Task 25) so that placeholder doesn't change today's behavior.
     let outcome = try await agent.runTurn(
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
       buildResult: buildResult,
       sessionTainted: false,
-      fetchGrant: nil,
+      fetchGrant: fetchGrant,
       todayTokens: todayTokens,
       todayUSD: todayUSD
     )
