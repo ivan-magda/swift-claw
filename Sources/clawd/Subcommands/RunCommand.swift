@@ -7,6 +7,7 @@ import ClawGateway
 import ClawLLM
 import ClawSecrets
 import ClawTelegram
+import ClawTools
 import ClawWorkspace
 import Foundation
 import Logging
@@ -59,6 +60,17 @@ struct RunCommand: AsyncParsableCommand {
     let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: httpConfig)
     let executor = AsyncHTTPExecutor(client: httpClient)
 
+    // Tool fetches get a DEDICATED client with redirects disabled (§7.2/§20-3): AsyncHTTPClient
+    // configures redirect behavior per client, and the Telegram/LLM client must keep its defaults.
+    var toolHTTPConfig = HTTPClient.Configuration()
+    toolHTTPConfig.redirectConfiguration = .disallow
+    toolHTTPConfig.decompression = .enabled(limit: .size(16 * 1024 * 1024))
+    let toolHTTPClient = HTTPClient(
+      eventLoopGroupProvider: .singleton,
+      configuration: toolHTTPConfig
+    )
+    let toolExecutor = AsyncHTTPExecutor(client: toolHTTPClient)
+
     let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
     let botUsername = await fetchBotUsername(transport: transport, logger: logger)
 
@@ -67,6 +79,7 @@ struct RunCommand: AsyncParsableCommand {
       secrets: secrets,
       stores: stores,
       executor: executor,
+      toolExecutor: toolExecutor,
       transport: transport,
       botUsername: botUsername,
       logger: logger
@@ -84,6 +97,7 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     try? await httpClient.shutdown()
+    try? await toolHTTPClient.shutdown()
     if let runFailure {
       throw runFailure
     }
@@ -122,17 +136,11 @@ struct RunCommand: AsyncParsableCommand {
     secrets: Secrets,
     stores: ClawStores,
     executor: AsyncHTTPExecutor,
+    toolExecutor: AsyncHTTPExecutor,
     transport: TelegramClient,
     botUsername: String?,
     logger: Logger
   ) -> Daemon {
-    let agent = makeAgent(
-      config: config,
-      secrets: secrets,
-      executor: executor,
-      transport: transport,
-      stores: stores
-    )
     // Created before the TurnRunner so its notifyOutbox closure can capture it: each commit pokes
     // the dispatcher to drain the rows it just enqueued.
     let outboxSignal = OutboxSignal()
@@ -141,6 +149,19 @@ struct RunCommand: AsyncParsableCommand {
     let pendingConfirmations = PendingConfirmationRegistry()
     let workspace = FileSystemWorkspace(
       root: config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
+    )
+    let toolDispatcher = makeToolDispatcher(
+      secrets: secrets,
+      workspace: workspace,
+      toolExecutor: toolExecutor
+    )
+    let agent = makeAgent(
+      config: config,
+      secrets: secrets,
+      executor: executor,
+      transport: transport,
+      stores: stores,
+      toolDispatcher: toolDispatcher
     )
     let contextBudget = ContextBudget(
       inputCapGraphemes: TokenEstimator.graphemeBudget(
@@ -221,6 +242,46 @@ struct RunCommand: AsyncParsableCommand {
     }
   }
 
+  /// Assembles the v1 tool catalog behind its policy gate (§7/§9). Tool fetches use the dedicated
+  /// no-redirect `toolExecutor` (§7.2); no `searchApiKey` ⇒ `web_search` is never constructed
+  /// (unconfigured ⇒ absent, §7.3). Tier-3 private texts load from DISK at gate-evaluation time
+  /// (rev.1 H1), not the assembly snapshot, so the loader closure re-reads the workspace each call.
+  private func makeToolDispatcher(
+    secrets: Secrets,
+    workspace: FileSystemWorkspace,
+    toolExecutor: AsyncHTTPExecutor
+  ) -> GatedToolDispatcher {
+    let secretValues = [secrets.telegramBotToken, secrets.llmApiKey, secrets.searchApiKey]
+      .compactMap { value in value }
+    let redactor = SecretRedactor(secretValues: secretValues)
+
+    var tools: [any Tool] = [
+      FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
+      WebFetchTool(http: toolExecutor, resolver: SystemAddressResolver(), redactor: redactor),
+    ]
+    if let searchApiKey = secrets.searchApiKey {
+      tools.append(
+        WebSearchTool(search: ExaSearchProvider(apiKey: searchApiKey, http: toolExecutor))
+      )
+    }
+
+    let privateFileLoader: @Sendable () -> [String] = {
+      [WorkspaceFile.memory, WorkspaceFile.user].compactMap { file in
+        try? String(
+          contentsOf: workspace.root.appendingPathComponent(file.relativePath),
+          encoding: .utf8
+        )
+      }
+    }
+    return GatedToolDispatcher(
+      registry: ToolRegistry(tools: tools),
+      gate: ToolPolicyGate(
+        argGuard: ExfilArgGuard(secretValues: secretValues),
+        privateFileLoader: privateFileLoader
+      )
+    )
+  }
+
   /// Assembles the LLM agent stack: the OpenAI-compatible provider, the offline-first cost resolver,
   /// and the `AgentRuntime` that orchestrates one turn. Kept separate from the service wiring so the
   /// composition root reads as "build the agent → feed the turn runner → register the services".
@@ -229,7 +290,8 @@ struct RunCommand: AsyncParsableCommand {
     secrets: Secrets,
     executor: AsyncHTTPExecutor,
     transport: TelegramClient,
-    stores: ClawStores
+    stores: ClawStores,
+    toolDispatcher: GatedToolDispatcher
   ) -> AgentRuntime {
     let provider = OpenAICompatibleProvider(
       config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
@@ -249,8 +311,7 @@ struct RunCommand: AsyncParsableCommand {
       costResolver: costResolver,
       budget: config.budget,
       model: config.llm.model,
-      // Task 25 wires the real dispatcher; the loop degenerates to one round-trip until then.
-      toolDispatcher: nil,
+      toolDispatcher: toolDispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,
       sleep: { try await Task.sleep(for: $0) }

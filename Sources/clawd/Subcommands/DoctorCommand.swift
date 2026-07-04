@@ -82,6 +82,13 @@ struct DoctorCommand: AsyncParsableCommand {
       environment: ProcessInfo.processInfo.environment
     ).store
     if let secrets = try? secretStore.loadSecrets() {
+      // Info, never a failed check: unconfigured search just means the tool is absent (§7.3).
+      report.add(
+        key: "web_search",
+        value: secrets.searchApiKey != nil
+          ? "configured" : "not configured (web_search tool absent)"
+      )
+
       let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
       let transport = TelegramClient(
         token: secrets.telegramBotToken,
