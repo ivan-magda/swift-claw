@@ -23,7 +23,11 @@ import Testing
     // reserved / documentation
     "192.0.2.1", "198.51.100.7", "203.0.113.9", "198.18.0.1", "240.0.0.1", "2001:db8::1",
     // IPv4-mapped IPv6 wrapping a private address (unwrapped and re-checked)
-    "::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:192.168.0.1",
+    "::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:192.168.0.1", "::ffff:169.254.169.254",
+    // NAT64 (64:ff9b::/96) wrapping loopback / the cloud-metadata endpoint
+    "64:ff9b::7f00:1", "64:ff9b::a9fe:a9fe",
+    // IPv4-compatible ::a.b.c.d (deprecated) wrapping loopback / a private address
+    "::127.0.0.1", "::10.0.0.1",
   ]
 
   private static let publicAddresses: [String] = [
@@ -38,6 +42,7 @@ import Testing
     "11.0.0.0",  // just above it
     "2606:2800:220:1:248:1893:25c8:1946",  // example.com v6
     "::ffff:8.8.8.8",  // mapped PUBLIC v4 is fine
+    "64:ff9b::808:808",  // NAT64 wrapping a PUBLIC v4 (8.8.8.8) must still be allowed
   ]
 
   @Test(arguments: blockedAddresses)

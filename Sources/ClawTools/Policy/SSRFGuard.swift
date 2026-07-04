@@ -80,6 +80,11 @@ public enum SSRFGuard {
     prefixLength == 0 ? 0 : ~UInt32(0) << (32 - prefixLength)
   }
 
+  /// The IPv4 address embedded in the final four bytes of an IPv6 address (mapped/NAT64/compatible).
+  private static func embeddedV4(_ bytes: [UInt8]) -> UInt32 {
+    v4(UInt32(bytes[12]), UInt32(bytes[13]), UInt32(bytes[14]), UInt32(bytes[15]))
+  }
+
   // MARK: - IPv6
 
   private static func isPublicV6(_ bytes: [UInt8]) -> Bool {
@@ -89,12 +94,20 @@ public enum SSRFGuard {
 
     // IPv4-mapped (::ffff:a.b.c.d): unwrap and re-check the embedded v4.
     if bytes[0...9].allSatisfy({ byte in byte == 0 }), bytes[10] == 0xFF, bytes[11] == 0xFF {
-      let embedded = v4(UInt32(bytes[12]), UInt32(bytes[13]), UInt32(bytes[14]), UInt32(bytes[15]))
-      return isPublicV4(embedded)
+      return isPublicV4(embeddedV4(bytes))
     }
-    // unspecified :: and loopback ::1
-    if bytes[0...14].allSatisfy({ byte in byte == 0 }), bytes[15] == 0 || bytes[15] == 1 {
-      return false
+    // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052): a DNS64/NAT64 translator forwards to the
+    // embedded v4, so classify by that v4 — else 64:ff9b::7f00:1 reaches 127.0.0.1 on such a network.
+    let isNAT64 =
+      bytes[0] == 0x00 && bytes[1] == 0x64 && bytes[2] == 0xFF && bytes[3] == 0x9B
+      && bytes[4...11].allSatisfy { byte in byte == 0 }
+    if isNAT64 {
+      return isPublicV4(embeddedV4(bytes))
+    }
+    // IPv4-compatible ::a.b.c.d (::/96, deprecated): unwrap the embedded v4. This also subsumes the
+    // unspecified :: (→ 0.0.0.0) and loopback ::1 (→ 0.0.0.1), both refused by the v4 blocklist.
+    if bytes[0...11].allSatisfy({ byte in byte == 0 }) {
+      return isPublicV4(embeddedV4(bytes))
     }
     // link-local fe80::/10
     if bytes[0] == 0xFE, bytes[1] & 0xC0 == 0x80 {
