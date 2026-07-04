@@ -122,6 +122,40 @@ import Testing
     #expect(toolMessage.content.contains("raw page text"))
   }
 
+  @Test func duplicateToolCallIdsInAnchorDoNotTrapRendering() throws {
+    // given — a provider-authored anchor that (malformedly) declares the same call id twice;
+    // rendering must tolerate it rather than trap building the id→name lookup (§12 contract).
+    let calls = [
+      ToolCall(id: "c1", name: "web_fetch", argumentsJSON: "{}"),
+      ToolCall(id: "c1", name: "web_search", argumentsJSON: "{}"),
+    ]
+    let history = [
+      StoredMessage(role: .user, content: "read it", provenance: .trusted),
+      StoredMessage(
+        role: .assistant,
+        content: "checking",
+        provenance: .trusted,
+        toolCallsJSON: ToolCallCoding.encode(calls)
+      ),
+      StoredMessage(
+        role: .tool,
+        content: "raw page text",
+        provenance: .untrusted,
+        toolCallId: "c1"
+      ),
+    ]
+
+    // when
+    let result = try makeBuilder().assemble(snapshot: makeSnapshot(history), sessionId: 1)
+
+    // then — assembly completes and the tool row's fence label resolves to one of the duplicate
+    // names (the first one wins) rather than crashing
+    let toolMessage = try #require(result.messages.first { message in message.role == .tool })
+    #expect(toolMessage.toolCallId == "c1")
+    #expect(toolMessage.content.contains("<claw-untrusted"))
+    #expect(toolMessage.content.contains("label=\"web_fetch\""))
+  }
+
   @Test func exchangeIsOneAtomicDroppableUnit() throws {
     // given — a tight history budget forcing oldest-first drops; the exchange must vanish WHOLE
     let calls = [ToolCall(id: "c1", name: "web_fetch", argumentsJSON: "{}")]

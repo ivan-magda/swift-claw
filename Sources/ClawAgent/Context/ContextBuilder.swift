@@ -411,10 +411,12 @@ public struct ContextBuilder: Sendable {
     let groups = historyGroups(from: snapshot.history)
     var rendered: [ChatMessage] = []
     for group in groups where keptIDs.contains(group.id) {
-      // The anchor's id→name map labels each tool row's fence.
+      // The anchor's id→name map labels each tool row's fence. A provider-authored response could
+      // duplicate a tool_call id; keep the first name rather than trapping on malformed history.
       let anchorCalls = group.messages.first?.toolCallsJSON.map(ToolCallCoding.decode) ?? []
       let namesByCallId = Dictionary(
-        uniqueKeysWithValues: anchorCalls.map { call in (call.id, call.name) }
+        anchorCalls.map { call in (call.id, call.name) },
+        uniquingKeysWith: { first, _ in first }
       )
       for message in group.messages {
         switch message.role {
