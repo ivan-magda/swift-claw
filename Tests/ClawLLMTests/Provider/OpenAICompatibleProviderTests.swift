@@ -213,7 +213,8 @@ import Testing
         .finished(
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
-          providerCost: nil
+          providerCost: nil,
+          toolCalls: []
         ),
       ]
     )
@@ -251,7 +252,8 @@ import Testing
         == .finished(
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
-          providerCost: 0.0034
+          providerCost: 0.0034,
+          toolCalls: []
         )
     )
   }

@@ -117,7 +117,8 @@ actor StreamingAcceptanceProvider: LLMProvider {
             .finished(
               finishReason: "stop",
               usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
-              providerCost: 0.0021
+              providerCost: 0.0021,
+              toolCalls: []
             )
           )
           continuation.finish()

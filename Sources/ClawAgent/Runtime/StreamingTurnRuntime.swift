@@ -113,7 +113,7 @@ struct StreamingTurnRuntime: Sendable {
         if !content.isEmpty {
           await snapshot.publish(content)
         }
-      case .finished(let finishReason, let usage, let providerCost):
+      case .finished(let finishReason, let usage, let providerCost, _):
         return ChatResponse(
           content: content,
           finishReason: finishReason,

@@ -2,15 +2,25 @@ import Foundation
 
 // MARK: - Chat contract
 
-/// One message in an OpenAI-compatible chat exchange. Reuses `MessageRole`
-/// (system/user/assistant) so the persisted role and the wire role share one vocabulary.
+/// One message in an OpenAI-compatible chat exchange. `toolCalls` carries assistant proposals
+/// ([] otherwise); `toolCallId` is set iff `role == .tool`. Both default so every pre-3b call
+/// site compiles unchanged.
 public struct ChatMessage: Sendable, Equatable {
   public let role: MessageRole
   public let content: String
+  public let toolCalls: [ToolCall]
+  public let toolCallId: String?
 
-  public init(role: MessageRole, content: String) {
+  public init(
+    role: MessageRole,
+    content: String,
+    toolCalls: [ToolCall] = [],
+    toolCallId: String? = nil
+  ) {
     self.role = role
     self.content = content
+    self.toolCalls = toolCalls
+    self.toolCallId = toolCallId
   }
 }
 
@@ -21,18 +31,21 @@ public struct ChatRequest: Sendable, Equatable {
   public let maxOutputTokens: Int
   // swiftlint:disable:next discouraged_optional_collection
   public let stop: [String]?
+  public let tools: [ToolDefinition]
 
   public init(
     model: String,
     messages: [ChatMessage],
     maxOutputTokens: Int,
     // swiftlint:disable:next discouraged_optional_collection
-    stop: [String]? = nil
+    stop: [String]? = nil,
+    tools: [ToolDefinition] = []
   ) {
     self.model = model
     self.messages = messages
     self.maxOutputTokens = maxOutputTokens
     self.stop = stop
+    self.tools = tools
   }
 }
 
@@ -60,23 +73,31 @@ public struct ChatResponse: Sendable, Equatable {
   public let finishReason: String?
   public let usage: ChatUsage?
   public let costFromProvider: Double?
+  public let toolCalls: [ToolCall]
 
   public init(
     content: String,
     finishReason: String?,
     usage: ChatUsage?,
-    costFromProvider: Double?
+    costFromProvider: Double?,
+    toolCalls: [ToolCall] = []
   ) {
     self.content = content
     self.finishReason = finishReason
     self.usage = usage
     self.costFromProvider = costFromProvider
+    self.toolCalls = toolCalls
   }
 }
 
 public enum StreamEvent: Sendable, Equatable {
   case delta(String)
-  case finished(finishReason: String?, usage: ChatUsage?, providerCost: Double?)
+  case finished(
+    finishReason: String?,
+    usage: ChatUsage?,
+    providerCost: Double?,
+    toolCalls: [ToolCall]
+  )
 }
 
 public enum LLMStreamLimits {
@@ -204,9 +225,16 @@ public struct PriceTable: Sendable, Equatable {
 /// up at each step; `graphemeBudget` is its inverse (rounds down) for the §9 assembly cap.
 public enum TokenEstimator {
   /// Estimated input tokens, summed per message so each message's rounding adds headroom.
+  /// Re-sent assistant `tool_calls` (name + arguments JSON) are counted too (rev.1 L3).
   public static func estimateInputTokens(_ messages: [ChatMessage]) -> Int {
     messages.reduce(0) { running, message in
-      running + estimateTokens(forText: message.content)
+      running + estimateTokens(forText: message.content) + toolCallTokens(for: message)
+    }
+  }
+
+  private static func toolCallTokens(for message: ChatMessage) -> Int {
+    message.toolCalls.reduce(0) { running, call in
+      running + estimateTokens(forText: call.name) + estimateTokens(forText: call.argumentsJSON)
     }
   }
 

@@ -81,7 +81,12 @@ public struct SSEParser: Sendable {
     }
 
     finished = true
-    return .finished(finishReason: finishReason, usage: usage, providerCost: providerCost)
+    return .finished(
+      finishReason: finishReason,
+      usage: usage,
+      providerCost: providerCost,
+      toolCalls: []
+    )
   }
 
   private mutating func parseEvent(_ data: Data) throws -> [StreamEvent] {
@@ -121,7 +126,14 @@ public struct SSEParser: Sendable {
     let payload = payloadLines.joined(separator: "\n")
     if payload == "[DONE]" {
       finished = true
-      return [.finished(finishReason: finishReason, usage: usage, providerCost: providerCost)]
+      return [
+        .finished(
+          finishReason: finishReason,
+          usage: usage,
+          providerCost: providerCost,
+          toolCalls: []
+        )
+      ]
     }
 
     let chunk = try decodeChunk(payload)

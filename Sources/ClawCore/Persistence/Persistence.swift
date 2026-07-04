@@ -43,6 +43,7 @@ public enum MessageRole: String, Sendable, Equatable {
   case system
   case user
   case assistant
+  case tool
 }
 
 public enum CostSource: String, Sendable, Equatable {
