@@ -83,18 +83,20 @@ public struct ExaSearchProvider: SearchProviding {
   private func classify(status: Int, body: Data) -> SearchError {
     let raw = String(data: body, encoding: .utf8) ?? ""
     let message = redact(raw.isEmpty ? "HTTP \(status)" : raw)
+
     if status == 402 {
       return .terminal(status: 402, message: "search credits exhausted — \(message)")
     }
     if Self.terminalStatuses.contains(status) {
       return .terminal(status: status, message: message)
     }
+
     return .retryable(status: status, message: message)
   }
 
   /// The search key joins the exact-value redaction set of its own client (§5).
   private func redact(_ message: String) -> String {
-    guard apiKey.isEmpty == false else {
+    if apiKey.isEmpty {
       return message
     }
     return message.replacingOccurrences(of: apiKey, with: "[REDACTED:secret-value]")
