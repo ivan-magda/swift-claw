@@ -24,6 +24,8 @@ public struct SSEParser: Sendable {
   private var usage: ChatUsage?
   private var providerCost: Double?
 
+  private var toolCallAccumulators: [Int: ToolCallAccumulator] = [:]
+
   public init(
     maxEventBytes: Int = LLMStreamLimits.maxEventBytes,
     maxBufferedBytes: Int = LLMStreamLimits.maxBufferedBytes,
@@ -85,7 +87,7 @@ public struct SSEParser: Sendable {
       finishReason: finishReason,
       usage: usage,
       providerCost: providerCost,
-      toolCalls: []
+      toolCalls: assembledToolCalls
     )
   }
 
@@ -131,7 +133,7 @@ public struct SSEParser: Sendable {
           finishReason: finishReason,
           usage: usage,
           providerCost: providerCost,
-          toolCalls: []
+          toolCalls: assembledToolCalls
         )
       ]
     }
@@ -158,12 +160,47 @@ public struct SSEParser: Sendable {
       finishReason = reason
     }
 
+    if let fragments = choice.delta?.toolCalls {
+      try accumulate(fragments)
+      sawEvent = true
+    }
+
     if let content = choice.delta?.content {
       try appendContentBytes(content.utf8.count)
       events.append(.delta(content))
     }
 
     return events
+  }
+
+  /// Fragments assembled in index order — emitted only on `.finished` (D5).
+  private var assembledToolCalls: [ToolCall] {
+    toolCallAccumulators.keys.sorted().map { index in
+      let accumulator = toolCallAccumulators[index] ?? ToolCallAccumulator()
+      return ToolCall(
+        id: accumulator.id,
+        name: accumulator.name,
+        argumentsJSON: accumulator.arguments
+      )
+    }
+  }
+
+  private mutating func accumulate(_ fragments: [DeltaToolCall]) throws {
+    for fragment in fragments {
+      let index = fragment.index ?? 0
+      var accumulator = toolCallAccumulators[index] ?? ToolCallAccumulator()
+      if let fragmentId = fragment.id, !fragmentId.isEmpty {
+        accumulator.id = fragmentId
+      }
+      if let name = fragment.function?.name, !name.isEmpty {
+        accumulator.name = name
+      }
+      if let arguments = fragment.function?.arguments {
+        try appendContentBytes(arguments.utf8.count)
+        accumulator.arguments += arguments
+      }
+      toolCallAccumulators[index] = accumulator
+    }
   }
 
   private mutating func appendContentBytes(_ byteCount: Int) throws {
@@ -217,6 +254,30 @@ private struct Choice: Decodable {
 
 private struct Delta: Decodable {
   let content: String?
+  // swiftlint:disable:next discouraged_optional_collection
+  let toolCalls: [DeltaToolCall]?
+
+  enum CodingKeys: String, CodingKey {
+    case content
+    case toolCalls = "tool_calls"
+  }
+}
+
+private struct DeltaToolCall: Decodable {
+  struct Function: Decodable {
+    let name: String?
+    let arguments: String?
+  }
+
+  let index: Int?
+  let id: String?
+  let function: Function?
+}
+
+private struct ToolCallAccumulator {
+  var id = ""
+  var name = ""
+  var arguments = ""
 }
 
 private struct Usage: Decodable {
