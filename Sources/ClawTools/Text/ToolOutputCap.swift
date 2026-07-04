@@ -11,9 +11,11 @@ public enum ToolOutputCap {
     guard text.count > maxGraphemes else {
       return text
     }
+
     guard maxGraphemes > truncationMarker.count else {
       return String(truncationMarker.prefix(maxGraphemes))
     }
+
     return String(text.prefix(maxGraphemes - truncationMarker.count)) + truncationMarker
   }
 }
