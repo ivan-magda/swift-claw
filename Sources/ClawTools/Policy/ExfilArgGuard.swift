@@ -183,18 +183,21 @@ public struct ExfilArgGuard: Sendable {
       && token.contains(where: \.isLowercase)
   }
 
-  /// Replaces each span found in the RAW string; a span only present in a decoded candidate can't
-  /// be located in the raw bytes, so the whole args string is redacted instead — the audit row
-  /// must never re-contain the matched material.
+  /// Runs a full redaction sweep over the RAW string so a span only present in a decoded candidate
+  /// can't be located in the raw bytes, so the whole args string is redacted instead — the audit
+  /// row must never re-contain the matched material.
   private func blockedVerdict(rule: String, raw: String, spans: [String]) -> Verdict {
-    var rendered = raw
-    var replacedAny = false
+    // Full sweep first so a SECOND loaded secret or shaped token in the same args can never
+    // survive into the audit row (§9.1 — the row must never re-contain matched material).
+    var rendered = renderRedacted(argsJSON: raw)
     for span in spans where rendered.contains(span) {
+      // Tier-3 private-file windows aren't covered by renderRedacted; redact them explicitly.
       rendered = rendered.replacingOccurrences(of: span, with: "[REDACTED:\(rule)]")
-      replacedAny = true
     }
-    if replacedAny == false {
-      rendered = "[REDACTED:\(rule)]"
+    // A span present only in a decoded candidate isn't in `raw`, so neither the sweep nor the
+    // loop above could remove its still-one-decode-away encoded form — nuke the whole string.
+    if spans.contains(where: { span in raw.contains(span) == false }) {
+      return Verdict(blockedRule: rule, redactedArgs: "[REDACTED:\(rule)]")
     }
     return Verdict(blockedRule: rule, redactedArgs: rendered)
   }

