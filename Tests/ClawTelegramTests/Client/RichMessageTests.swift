@@ -54,5 +54,9 @@ private actor CapturingExecutor: HTTPExecuting {
     let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     let richMessage = try #require(json["rich_message"] as? [String: Any])
     #expect(richMessage["markdown"] as? String == "**hi**")
+
+    // then — link previews are disabled unconditionally (ARCHITECTURE §12)
+    let linkPreviewOptions = try #require(json["link_preview_options"] as? [String: Any])
+    #expect(linkPreviewOptions["is_disabled"] as? Bool == true)
   }
 }
