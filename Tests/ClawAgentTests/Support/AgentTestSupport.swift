@@ -1,3 +1,4 @@
+import ClawWorkspace
 import Foundation
 import Testing
 
@@ -215,6 +216,46 @@ final class RecordingAuditLog: AuditLog, @unchecked Sendable {
     }
     _events.append(event)
   }
+}
+
+/// A workspace with nothing on disk: every file load is `.missing`, no skills. Stands in for
+/// `ContextBuilder` collaborators in tests that only care about history rendering.
+struct EmptyWorkspace: WorkspaceReading {
+  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+    LoadedFile(outcome: .missing, text: "", graphemeCount: 0)
+  }
+
+  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
+    LoadedFile(outcome: .missing, text: "", graphemeCount: 0)
+  }
+
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
+}
+
+/// A memory store with nothing stored: `fetchRanked` always returns empty, other members are
+/// unused by history-rendering tests.
+struct EmptyMemoryStore: MemoryStore {
+  func append(_ newItem: NewMemoryItem, now: Date) throws -> MemoryItem {
+    throw StoreError.unexpected("not used")
+  }
+
+  func list(kind: MemoryKind?, limit: Int) throws -> [MemoryItem] { [] }
+  func get(id: Int64) throws -> MemoryItem? { nil }
+  func delete(id: Int64) throws -> Bool { false }
+  func fetchRanked(excludeSensitive: Bool, limit: Int) throws -> [MemoryItem] { [] }
+}
+
+/// A retriever with no recall corpus: always returns no hits.
+struct EmptyRetriever: Retriever {
+  func searchRelevantMessages(
+    query: String,
+    currentSessionId: Int64,
+    windowStartMessageId: Int64?,
+    excludedMessageIds: [Int64],
+    limit: Int
+  ) throws -> [RecallHit] { [] }
 }
 
 // MARK: - Builders

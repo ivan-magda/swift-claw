@@ -2,6 +2,14 @@ import ClawCore
 import ClawWorkspace
 import Foundation
 
+/// One exchange-grouping unit: an assistant anchor (`tool_calls`) plus its tool rows, or a single
+/// plain conversational message. §12's atomic droppable unit — never a partial exchange on the
+/// wire.
+private struct HistoryGroup {
+  let id: String
+  let messages: [StoredMessage]
+}
+
 public struct ContextBuilder: Sendable {
   public static let memoryFetchLimit = 100
   public static let recallCandidateLimit = 20
@@ -209,8 +217,15 @@ public struct ContextBuilder: Sendable {
     // history unit (the current turn) must reach the fitter, which keeps it as a non-droppable
     // floor so the model always sees the message it is answering.
     let cap = cap(for: .history, residual: residual)
-    let units = snapshot.history.enumerated().reversed().map { index, message in
-      SectionUnit(id: "history-\(index)", content: message.content, canTruncate: false)
+    let groups = historyGroups(from: snapshot.history)
+    let units = groups.reversed().map { group in
+      SectionUnit(
+        id: group.id,
+        content: group.messages.map { message in
+          message.content + (message.toolCallsJSON ?? "")
+        }.joined(separator: "\n"),
+        canTruncate: false
+      )
     }
 
     guard units.isEmpty == false else {
@@ -218,6 +233,33 @@ public struct ContextBuilder: Sendable {
     }
 
     return section(id: .history, cap: cap, units: units)
+  }
+
+  /// Groups sanitized history so each exchange is ONE unit (§12 atomic droppable units). Group
+  /// ids are stable per assembly ("history-<index of the group's first row>").
+  private func historyGroups(from history: [StoredMessage]) -> [HistoryGroup] {
+    let sanitized = HistoryHygiene.sanitize(history)
+    var groups: [HistoryGroup] = []
+    var index = 0
+    while index < sanitized.count {
+      let message = sanitized[index]
+      let anchorCalls = message.toolCallsJSON.map(ToolCallCoding.decode) ?? []
+      guard message.role == .assistant, anchorCalls.isEmpty == false else {
+        groups.append(HistoryGroup(id: "history-\(index)", messages: [message]))
+        index += 1
+        continue
+      }
+
+      var grouped = [message]
+      var cursor = index + 1
+      while cursor < sanitized.count, sanitized[cursor].role == .tool {
+        grouped.append(sanitized[cursor])
+        cursor += 1
+      }
+      groups.append(HistoryGroup(id: "history-\(index)", messages: grouped))
+      index = cursor
+    }
+    return groups
   }
 
   private func recallSection(
@@ -321,7 +363,12 @@ public struct ContextBuilder: Sendable {
     snapshot: SessionContextSnapshot
   ) -> [ChatMessage] {
     let historyMessages = fittedHistoryMessages(fitted: fitted, snapshot: snapshot)
-    let historyWasTruncated = historyMessages.count < snapshot.history.count
+    // Compare GROUPS, not raw rows: one unit per group by construction, so a kept-unit-count
+    // shortfall against the full group count means an exchange (or plain row) was dropped.
+    let keptHistoryGroupCount = Set(
+      fitted.first { section in section.id == .history }?.units.map(\.id) ?? []
+    ).count
+    let historyWasTruncated = keptHistoryGroupCount < historyGroups(from: snapshot.history).count
 
     let systemContent =
       fitted
@@ -349,6 +396,9 @@ public struct ContextBuilder: Sendable {
     return messages
   }
 
+  /// The one render seam for both native assistant anchors (with decoded `toolCalls`) and fenced
+  /// tool rows (labeled by the owning anchor's tool name, §12). Kept groups come from the fitter
+  /// verbatim — one `SectionUnit` per group — so this only re-expands each surviving group's rows.
   private func fittedHistoryMessages(
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
@@ -358,12 +408,39 @@ public struct ContextBuilder: Sendable {
     }
 
     let keptIDs = Set(historySection.units.map(\.id))
-    return snapshot.history.enumerated().compactMap { index, message in
-      guard keptIDs.contains("history-\(index)") else {
-        return nil
+    let groups = historyGroups(from: snapshot.history)
+    var rendered: [ChatMessage] = []
+    for group in groups where keptIDs.contains(group.id) {
+      // The anchor's id→name map labels each tool row's fence.
+      let anchorCalls = group.messages.first?.toolCallsJSON.map(ToolCallCoding.decode) ?? []
+      let namesByCallId = Dictionary(
+        uniqueKeysWithValues: anchorCalls.map { call in (call.id, call.name) }
+      )
+      for message in group.messages {
+        switch message.role {
+        case .tool:
+          let label = message.toolCallId.flatMap { callId in namesByCallId[callId] } ?? "tool"
+          rendered.append(
+            ChatMessage(
+              role: .tool,
+              content: LabeledContextFactory.make(label: label, content: message.content).render(),
+              toolCallId: message.toolCallId
+            )
+          )
+        case .assistant:
+          rendered.append(
+            ChatMessage(
+              role: .assistant,
+              content: message.content,
+              toolCalls: message.toolCallsJSON.map(ToolCallCoding.decode) ?? []
+            )
+          )
+        case .user, .system:
+          rendered.append(ChatMessage(role: message.role, content: message.content))
+        }
       }
-      return ChatMessage(role: message.role, content: message.content)
     }
+    return rendered
   }
 
   private func hasPrivateDataAccess(_ fitted: [FittedSection]) -> Bool {
