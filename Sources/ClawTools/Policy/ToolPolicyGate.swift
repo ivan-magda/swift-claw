@@ -67,6 +67,7 @@ public struct ToolPolicyGate: Sendable {
         pendingApproval: nil
       )
     }
+
     let canonical: String
     switch CanonicalURL.canonicalize(rawURL) {
     case .success(let value):
@@ -184,6 +185,7 @@ public struct GatedToolDispatcher: ToolDispatching {
           ingestedUntrusted: false
         )
       }
+
       let winner =
         await group.next()
         ?? ToolPayload(
@@ -192,6 +194,7 @@ public struct GatedToolDispatcher: ToolDispatching {
           ingestedUntrusted: false
         )
       group.cancelAll()
+
       return winner
     }
   }
