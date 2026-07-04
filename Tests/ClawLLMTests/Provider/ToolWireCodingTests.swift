@@ -181,4 +181,88 @@ import Testing
     #expect(response.content == "hi")
     #expect(response.toolCalls.isEmpty)
   }
+
+  @Test func toolCallMissingIdIsDropped() throws {
+    // given — a tool_calls entry that omits id (malformed provider response)
+    let fixture = #"""
+      {
+        "choices": [{
+          "message": {
+            "content": null,
+            "tool_calls": [{
+              "type": "function",
+              "function": {"name": "web_search", "arguments": "{}"}
+            }]
+          },
+          "finish_reason": "tool_calls"
+        }]
+      }
+      """#
+
+    // when
+    let response = try makeProvider().parse(
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+    )
+
+    // then — dropped, not crashed
+    #expect(response.toolCalls.isEmpty)
+  }
+
+  @Test func toolCallMissingFunctionNameIsDropped() throws {
+    // given — a tool_calls entry that omits function.name
+    let fixture = #"""
+      {
+        "choices": [{
+          "message": {
+            "content": null,
+            "tool_calls": [{
+              "id": "call_1",
+              "type": "function",
+              "function": {"arguments": "{}"}
+            }]
+          },
+          "finish_reason": "tool_calls"
+        }]
+      }
+      """#
+
+    // when
+    let response = try makeProvider().parse(
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+    )
+
+    // then
+    #expect(response.toolCalls.isEmpty)
+  }
+
+  @Test func toolCallMissingArgumentsDefaultsToEmptyObject() throws {
+    // given — id and name present but the arguments field is absent
+    let fixture = #"""
+      {
+        "choices": [{
+          "message": {
+            "content": null,
+            "tool_calls": [{
+              "id": "call_9",
+              "type": "function",
+              "function": {"name": "web_search"}
+            }]
+          },
+          "finish_reason": "tool_calls"
+        }]
+      }
+      """#
+
+    // when
+    let response = try makeProvider().parse(
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+    )
+
+    // then
+    #expect(
+      response.toolCalls == [
+        ToolCall(id: "call_9", name: "web_search", argumentsJSON: "{}")
+      ]
+    )
+  }
 }

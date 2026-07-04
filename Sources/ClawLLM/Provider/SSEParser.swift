@@ -173,14 +173,19 @@ public struct SSEParser: Sendable {
     return events
   }
 
-  /// Fragments assembled in index order — emitted only on `.finished` (D5).
+  /// Fragments assembled in index order — emitted only on `.finished` (D5). Drops any
+  /// accumulator that never received an id/name (malformed stream) and defaults empty
+  /// arguments to `"{}"`, mirroring the blocking path's `parse(result:)` (same rule, two seams).
   private var assembledToolCalls: [ToolCall] {
-    toolCallAccumulators.keys.sorted().map { index in
+    toolCallAccumulators.keys.sorted().compactMap { index in
       let accumulator = toolCallAccumulators[index] ?? ToolCallAccumulator()
+      guard !accumulator.id.isEmpty, !accumulator.name.isEmpty else {
+        return nil
+      }
       return ToolCall(
         id: accumulator.id,
         name: accumulator.name,
-        argumentsJSON: accumulator.arguments
+        argumentsJSON: accumulator.arguments.isEmpty ? "{}" : accumulator.arguments
       )
     }
   }

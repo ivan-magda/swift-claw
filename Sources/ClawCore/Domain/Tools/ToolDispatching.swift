@@ -54,5 +54,6 @@ public struct ToolDispatchOutcome: Sendable, Equatable {
 /// in loop tests). Keeps the module DAG intact — ClawAgent never imports ClawTools.
 public protocol ToolDispatching: Sendable {
   var definitions: [ToolDefinition] { get }
+
   func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome
 }

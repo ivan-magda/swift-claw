@@ -202,6 +202,7 @@ public struct ToolObservation: Sendable, Equatable {
 public protocol Tool: Sendable {
   var definition: ToolDefinition { get }
   var timeout: Duration { get }
+
   func execute(arguments: JSONValue) async -> ToolPayload
 }
 

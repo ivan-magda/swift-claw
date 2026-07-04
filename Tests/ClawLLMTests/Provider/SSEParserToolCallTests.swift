@@ -110,4 +110,37 @@ import Testing
       Issue.record("expected a finished event")
     }
   }
+
+  @Test func fragmentMissingIdAndNameIsDropped() throws {
+    // given — an arguments fragment arrives but the header carrying id/name never does
+    // (a malformed stream) — this must drop the same way the blocking path does
+    var parser = SSEParser()
+    let events = try pushAll(
+      &parser,
+      [
+        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"url\":\"x\"}"}}]}}]}"#,
+        "[DONE]",
+      ]
+    )
+
+    // then — the accumulator never got an id/name, so it is dropped, not emitted empty
+    let toolCalls = finishedToolCalls(events)
+    #expect(toolCalls == [])
+  }
+
+  @Test func missingArgumentsFragmentAssemblesToEmptyObject() throws {
+    // given — id/name arrive but no arguments fragment is ever sent
+    var parser = SSEParser()
+    let events = try pushAll(
+      &parser,
+      [
+        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_2","function":{"name":"web_fetch"}}]}}]}"#,
+        "[DONE]",
+      ]
+    )
+
+    // then — empty accumulated arguments normalize to "{}", matching the blocking path's default
+    let toolCalls = finishedToolCalls(events)
+    #expect(toolCalls == [ToolCall(id: "call_2", name: "web_fetch", argumentsJSON: "{}")])
+  }
 }
