@@ -54,6 +54,7 @@ let package = Package(
       resources: [.copy("Pricing/Prices.json")]
     ),
     .target(name: "ClawAgent", dependencies: ["ClawCore", "ClawWorkspace"]),
+    .target(name: "ClawTools", dependencies: ["ClawCore"]),
     .target(
       name: "ClawGateway",
       dependencies: [
@@ -97,6 +98,7 @@ let package = Package(
     ),
     .testTarget(name: "ClawLLMTests", dependencies: ["ClawLLM", "ClawCore"]),
     .testTarget(name: "ClawAgentTests", dependencies: ["ClawAgent", "ClawCore", "ClawWorkspace"]),
+    .testTarget(name: "ClawToolsTests", dependencies: ["ClawTools", "ClawCore"]),
     .testTarget(
       name: "ClawGatewayTests",
       dependencies: [
