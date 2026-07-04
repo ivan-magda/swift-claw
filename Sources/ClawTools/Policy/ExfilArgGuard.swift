@@ -40,6 +40,7 @@ public struct ExfilArgGuard: Sendable {
         return blockedVerdict(rule: "secret-value", raw: argsJSON, spans: [secret])
       }
     }
+
     for candidate in candidates {
       for (rule, pattern) in Self.shapePatterns {
         let matches = Self.regexMatches(pattern, in: candidate).filter { match in
@@ -50,6 +51,7 @@ public struct ExfilArgGuard: Sendable {
         }
       }
     }
+
     return Verdict(blockedRule: nil, redactedArgs: renderRedacted(argsJSON: argsJSON))
   }
 
@@ -64,9 +66,11 @@ public struct ExfilArgGuard: Sendable {
     for candidate in Self.matchCandidates(argsJSON) {
       let normalizedCandidate = candidate.precomposedStringWithCanonicalMapping
       let graphemes = Array(normalizedCandidate)
+
       guard graphemes.count >= threshold else {
         continue
       }
+
       for start in 0...(graphemes.count - threshold) {
         let window = String(graphemes[start..<(start + threshold)])
         if normalizedFiles.contains(where: { fileText in fileText.contains(window) }) {
@@ -74,6 +78,7 @@ public struct ExfilArgGuard: Sendable {
         }
       }
     }
+
     return Verdict(blockedRule: nil, redactedArgs: renderRedacted(argsJSON: argsJSON))
   }
 
@@ -83,15 +88,18 @@ public struct ExfilArgGuard: Sendable {
   /// can never re-contain a secret whatever the verdict.
   public func renderRedacted(argsJSON: String) -> String {
     var rendered = argsJSON
+
     for secret in secretValues {
       rendered = rendered.replacingOccurrences(of: secret, with: "[REDACTED:secret-value]")
     }
+
     for (rule, pattern) in Self.shapePatterns {
       for match in Self.regexMatches(pattern, in: rendered)
       where rule != "high-entropy" || Self.looksHighEntropy(match) {
         rendered = rendered.replacingOccurrences(of: match, with: "[REDACTED:\(rule)]")
       }
     }
+
     return rendered
   }
 
@@ -104,16 +112,20 @@ public struct ExfilArgGuard: Sendable {
   static func matchCandidates(_ argsJSON: String) -> [String] {
     var candidates = [argsJSON]
     var current = argsJSON.precomposedStringWithCanonicalMapping
+
     if current != argsJSON {
       candidates.append(current)
     }
+
     for _ in 0..<maxPercentDecodePasses {
       guard let decoded = Self.bestEffortPercentDecode(current), decoded != current else {
         break
       }
+
       candidates.append(decoded)
       current = decoded
     }
+
     return candidates
   }
 
@@ -127,8 +139,10 @@ public struct ExfilArgGuard: Sendable {
     var bytes: [UInt8] = []
     var index = 0
     var decodedAny = false
+
     while index < scalars.count {
       let scalar = scalars[index]
+
       guard scalar == "%", index + 2 < scalars.count,
         let high = Self.hexNibble(scalars[index + 1]),
         let low = Self.hexNibble(scalars[index + 2])
@@ -137,13 +151,16 @@ public struct ExfilArgGuard: Sendable {
         index += 1
         continue
       }
+
       bytes.append((high << 4) | low)
       index += 3
       decodedAny = true
     }
+
     guard decodedAny else {
       return nil
     }
+
     return String(decoding: bytes, as: UTF8.self)
   }
 
@@ -166,13 +183,17 @@ public struct ExfilArgGuard: Sendable {
   static func regexMatches(_ pattern: String, in text: String) -> [String] {
     var matches: [String] = []
     var searchRange = text.startIndex..<text.endIndex
+
     while let found = text.range(of: pattern, options: .regularExpression, range: searchRange) {
       matches.append(String(text[found]))
+
       guard found.upperBound < text.endIndex else {
         break
       }
+
       searchRange = found.upperBound..<text.endIndex
     }
+
     return matches
   }
 
