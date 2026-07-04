@@ -36,7 +36,7 @@ public struct WebSearchTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(15) }  // rev.1 L2
+  public var timeout: Duration { .seconds(15) }
 
   public func execute(arguments: JSONValue) async -> ToolPayload {
     guard
@@ -49,6 +49,7 @@ public struct WebSearchTool: Tool {
         ingestedUntrusted: false
       )
     }
+
     let requestedCount =
       arguments.objectValue?["count"]?.numberValue
       .map { requested in
@@ -59,7 +60,10 @@ public struct WebSearchTool: Tool {
           )
         )
       } ?? Self.defaultCount
-    let count = min(max(requestedCount, Self.countRange.lowerBound), Self.countRange.upperBound)
+    let count = min(
+      max(requestedCount, Self.countRange.lowerBound),
+      Self.countRange.upperBound
+    )
 
     let results: [SearchResult]
     do {
