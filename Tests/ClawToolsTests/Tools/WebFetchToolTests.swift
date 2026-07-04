@@ -133,6 +133,19 @@ struct ScriptedResolver: AddressResolving {
     #expect((await fetch(tool, url: "https://dual.example/")).status == .blockedSSRF)
   }
 
+  @Test func emptyResolutionIsBlockedBeforeAnyRequest() async throws {
+    // given — a resolver that returns ZERO addresses must NOT vacuously pass the SSRF check
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(http: http, resolver: ScriptedResolver(table: ["empty.example": []]))
+
+    // when
+    let payload = await fetch(tool, url: "https://empty.example/")
+
+    // then — refused as SSRF, and the stub saw NOTHING
+    #expect(payload.status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+  }
+
   @Test func redirectIntoPrivateRangeIsBlockedMidChain() async throws {
     // given — public host 301s to a private-resolving host (the blocklist re-runs per hop)
     let http = ScriptedHTTP(responses: [

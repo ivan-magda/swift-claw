@@ -80,7 +80,9 @@ public struct WebFetchTool: Tool {
       } catch {
         return errorPayload("Could not resolve \(host).")
       }
-      guard addresses.allSatisfy({ address in SSRFGuard.isPublic(address) }) else {
+      guard addresses.isEmpty == false,
+        addresses.allSatisfy({ address in SSRFGuard.isPublic(address) })
+      else {
         return ToolPayload(
           content: "Refused: \(host) resolves to a private or reserved address.",
           status: .blockedSSRF,
