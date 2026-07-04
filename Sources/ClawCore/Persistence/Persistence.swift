@@ -119,11 +119,21 @@ public struct StoredMessage: Sendable, Equatable {
   public let role: MessageRole
   public let content: String
   public let provenance: Provenance
+  public let toolCallsJSON: String?
+  public let toolCallId: String?
 
-  public init(role: MessageRole, content: String, provenance: Provenance) {
+  public init(
+    role: MessageRole,
+    content: String,
+    provenance: Provenance,
+    toolCallsJSON: String? = nil,
+    toolCallId: String? = nil
+  ) {
     self.role = role
     self.content = content
     self.provenance = provenance
+    self.toolCallsJSON = toolCallsJSON
+    self.toolCallId = toolCallId
   }
 }
 
