@@ -5,6 +5,7 @@ import Foundation
 public enum HTMLTextExtractor {
   public static func extractText(fromHTML html: String) -> String {
     var text = html
+
     for pattern in [
       "<script[^>]*>[\\s\\S]*?</script>",
       "<style[^>]*>[\\s\\S]*?</style>",
@@ -28,6 +29,7 @@ public enum HTMLTextExtractor {
 
     text = text.replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
     text = text.replacingOccurrences(of: "\\s*\\n\\s*", with: "\n", options: .regularExpression)
+
     return text.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }
