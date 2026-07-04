@@ -154,6 +154,12 @@ public enum ClawDatabase {
         table.column("content")
       }
     }
+    migrator.registerMigration("v5") { db in
+      try db.alter(table: "messages") { table in
+        table.add(column: "tool_calls", .text)  // JSON [ToolCall]; NULL for non-proposing rows
+        table.add(column: "tool_call_id", .text)  // set iff role='tool'
+      }
+    }
     return migrator
   }
 
