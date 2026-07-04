@@ -103,6 +103,7 @@ let package = Package(
       name: "ClawGatewayTests",
       dependencies: [
         "ClawGateway", "ClawCore", "ClawData", "ClawAgent", "ClawTelegram", "ClawWorkspace",
+        "ClawTools",
       ]
     ),
   ]
