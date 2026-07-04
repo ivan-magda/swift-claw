@@ -142,22 +142,50 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return headers
   }
 
-  private func encode(request: ChatRequest, streaming: Bool = false) throws -> Data {
+  func encode(request: ChatRequest, streaming: Bool = false) throws -> Data {
+    let wireMessages = request.messages.map { message -> WireMessage in
+      let wireCalls = message.toolCalls.map { call in
+        WireToolCall(
+          id: call.id,
+          type: "function",
+          function: WireToolCallFunction(name: call.name, arguments: call.argumentsJSON)
+        )
+      }
+      // An empty-content assistant proposal omits `content` (some providers reject "" + tool_calls).
+      let omitContent = message.role == .assistant && message.content.isEmpty && !wireCalls.isEmpty
+      return WireMessage(
+        role: message.role.rawValue,
+        content: omitContent ? nil : message.content,
+        toolCalls: wireCalls.isEmpty ? nil : wireCalls,
+        toolCallId: message.toolCallId
+      )
+    }
+    let wireTools = request.tools.map { definition in
+      WireToolDefinition(
+        type: "function",
+        function: WireToolDefinition.Function(
+          name: definition.name,
+          description: definition.description,
+          parameters: definition.parameters
+        )
+      )
+    }
     let payload = RequestBody(
       model: request.model,
-      messages: request.messages.map { WireMessage(role: $0.role.rawValue, content: $0.content) },
+      messages: wireMessages,
       maxTokensKey: config.maxTokensField.rawValue,
       maxOutputTokens: request.maxOutputTokens,
       stop: request.stop,
       stream: streaming,
-      streamOptions: streaming ? StreamOptions(includeUsage: true) : nil
+      streamOptions: streaming ? StreamOptions(includeUsage: true) : nil,
+      tools: wireTools.isEmpty ? nil : wireTools
     )
     return try JSONEncoder().encode(payload)
   }
 
   // MARK: - Response
 
-  private func parse(result: HTTPResult) throws -> ChatResponse {
+  func parse(result: HTTPResult) throws -> ChatResponse {
     let decoded: ResponseBody
     do {
       decoded = try JSONDecoder().decode(ResponseBody.self, from: result.body)
@@ -180,11 +208,19 @@ public struct OpenAICompatibleProvider: LLMProvider {
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
     let providerCost = decoded.usage?.cost ?? providerCost(from: result)
 
+    let toolCalls = (choice?.message.toolCalls ?? []).compactMap { decoded -> ToolCall? in
+      guard let callId = decoded.id, let name = decoded.function?.name else {
+        return nil
+      }
+      return ToolCall(id: callId, name: name, argumentsJSON: decoded.function?.arguments ?? "{}")
+    }
+
     return ChatResponse(
       content: choice?.message.content ?? "",
       finishReason: choice?.finishReason,
       usage: usage,
-      costFromProvider: providerCost
+      costFromProvider: providerCost,
+      toolCalls: toolCalls
     )
   }
 
@@ -279,9 +315,41 @@ private struct DynamicKey: CodingKey {
   }
 }
 
+private struct WireToolCallFunction: Codable {
+  let name: String
+  let arguments: String
+}
+
+private struct WireToolCall: Codable {
+  let id: String
+  let type: String
+  let function: WireToolCallFunction
+}
+
+private struct WireToolDefinition: Encodable {
+  struct Function: Encodable {
+    let name: String
+    let description: String
+    let parameters: JSONValue
+  }
+
+  let type: String
+  let function: Function
+}
+
 private struct WireMessage: Encodable {
   let role: String
-  let content: String
+  let content: String?
+  // swiftlint:disable:next discouraged_optional_collection
+  let toolCalls: [WireToolCall]?
+  let toolCallId: String?
+
+  enum CodingKeys: String, CodingKey {
+    case role
+    case content
+    case toolCalls = "tool_calls"
+    case toolCallId = "tool_call_id"
+  }
 }
 
 private struct RequestBody: Encodable {
@@ -293,6 +361,8 @@ private struct RequestBody: Encodable {
   let stop: [String]?
   let stream: Bool
   let streamOptions: StreamOptions?
+  // swiftlint:disable:next discouraged_optional_collection
+  let tools: [WireToolDefinition]?
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: DynamicKey.self)
@@ -302,6 +372,7 @@ private struct RequestBody: Encodable {
     try container.encode(stream, forKey: DynamicKey("stream"))
     try container.encodeIfPresent(streamOptions, forKey: DynamicKey("stream_options"))
     try container.encodeIfPresent(stop, forKey: DynamicKey("stop"))
+    try container.encodeIfPresent(tools, forKey: DynamicKey("tools"))
   }
 }
 
@@ -313,10 +384,27 @@ private struct StreamOptions: Encodable {
   }
 }
 
+private struct DecodedToolCall: Decodable {
+  struct Function: Decodable {
+    let name: String?
+    let arguments: String?
+  }
+
+  let id: String?
+  let function: Function?
+}
+
 private struct ResponseBody: Decodable {
   struct Choice: Decodable {
     struct Message: Decodable {
       let content: String?
+      // swiftlint:disable:next discouraged_optional_collection
+      let toolCalls: [DecodedToolCall]?
+
+      enum CodingKeys: String, CodingKey {
+        case content
+        case toolCalls = "tool_calls"
+      }
     }
 
     let message: Message
