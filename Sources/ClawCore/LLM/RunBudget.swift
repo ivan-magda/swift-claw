@@ -11,6 +11,8 @@ public struct RunBudget: Sendable, Equatable {
   public let perRunUSD: Double
   public let perDayUSD: Double
   public let referenceUSDPerToken: Double
+  public let maxTurns: Int
+  public let maxToolCalls: Int
   public let dayTokenCeilingOverride: Int?
 
   public init(
@@ -21,6 +23,8 @@ public struct RunBudget: Sendable, Equatable {
     perRunUSD: Double,
     perDayUSD: Double,
     referenceUSDPerToken: Double,
+    maxTurns: Int = 12,
+    maxToolCalls: Int = 20,
     dayTokenCeilingOverride: Int? = nil
   ) {
     self.maxInputTokens = maxInputTokens
@@ -30,6 +34,8 @@ public struct RunBudget: Sendable, Equatable {
     self.perRunUSD = perRunUSD
     self.perDayUSD = perDayUSD
     self.referenceUSDPerToken = referenceUSDPerToken
+    self.maxTurns = maxTurns
+    self.maxToolCalls = maxToolCalls
     self.dayTokenCeilingOverride = dayTokenCeilingOverride
   }
 
@@ -49,7 +55,9 @@ public struct RunBudget: Sendable, Equatable {
     retryBudget: 3,
     perRunUSD: 0.50,
     perDayUSD: 10.00,
-    referenceUSDPerToken: 0.000_015
+    referenceUSDPerToken: 0.000_015,
+    maxTurns: 12,
+    maxToolCalls: 20
   )
 }
 

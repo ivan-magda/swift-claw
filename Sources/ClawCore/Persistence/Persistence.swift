@@ -43,6 +43,7 @@ public enum MessageRole: String, Sendable, Equatable {
   case system
   case user
   case assistant
+  case tool
 }
 
 public enum CostSource: String, Sendable, Equatable {
@@ -118,11 +119,21 @@ public struct StoredMessage: Sendable, Equatable {
   public let role: MessageRole
   public let content: String
   public let provenance: Provenance
+  public let toolCallsJSON: String?
+  public let toolCallId: String?
 
-  public init(role: MessageRole, content: String, provenance: Provenance) {
+  public init(
+    role: MessageRole,
+    content: String,
+    provenance: Provenance,
+    toolCallsJSON: String? = nil,
+    toolCallId: String? = nil
+  ) {
     self.role = role
     self.content = content
     self.provenance = provenance
+    self.toolCallsJSON = toolCallsJSON
+    self.toolCallId = toolCallId
   }
 }
 
@@ -238,6 +249,8 @@ public struct AssistantTurn: Sendable, Equatable {
   public let content: String
   public let usage: ProviderUsage
   public let chunks: [OutboxChunk]
+  public let exchanges: [ToolExchange]
+  public let setTainted: Bool
 
   public init(
     runId: Int64,
@@ -245,7 +258,9 @@ public struct AssistantTurn: Sendable, Equatable {
     chatId: Int64,
     content: String,
     usage: ProviderUsage,
-    chunks: [OutboxChunk]
+    chunks: [OutboxChunk],
+    exchanges: [ToolExchange] = [],
+    setTainted: Bool = false
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -253,6 +268,8 @@ public struct AssistantTurn: Sendable, Equatable {
     self.content = content
     self.usage = usage
     self.chunks = chunks
+    self.exchanges = exchanges
+    self.setTainted = setTainted
   }
 }
 
@@ -262,19 +279,22 @@ public struct DegradedTurn: Sendable, Equatable {
   public let chatId: Int64
   public let usage: ProviderUsage?
   public let chunk: OutboxChunk
+  public let setTainted: Bool
 
   public init(
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
     usage: ProviderUsage?,
-    chunk: OutboxChunk
+    chunk: OutboxChunk,
+    setTainted: Bool = false
   ) {
     self.runId = runId
     self.sessionId = sessionId
     self.chatId = chatId
     self.usage = usage
     self.chunk = chunk
+    self.setTainted = setTainted
   }
 }
 

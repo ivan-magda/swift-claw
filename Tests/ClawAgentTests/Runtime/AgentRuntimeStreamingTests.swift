@@ -350,7 +350,8 @@ func waitForTurnResult(
         .finished(
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
-          providerCost: 0.001
+          providerCost: 0.001,
+          toolCalls: []
         ),
       ])
     )
@@ -390,7 +391,7 @@ func waitForTurnResult(
         gate,
         [
           .delta("hi"),
-          .finished(finishReason: "stop", usage: nil, providerCost: nil),
+          .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: []),
         ]
       )
     )
@@ -428,7 +429,7 @@ func waitForTurnResult(
         TimedStreamEvent(pauseBefore: .milliseconds(80), event: .delta("hello")),
         TimedStreamEvent(
           pauseBefore: .zero,
-          event: .finished(finishReason: "stop", usage: nil, providerCost: nil)
+          event: .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: [])
         ),
       ])
     )
@@ -459,7 +460,7 @@ func waitForTurnResult(
       streamScript: .events([
         .delta("hel"),
         .delta("lo"),
-        .finished(finishReason: "stop", usage: nil, providerCost: nil),
+        .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: []),
       ])
     )
     let drafts = BlockingFinalDrafts(finalMarkdown: "hello")
@@ -610,7 +611,8 @@ func waitForTurnResult(
         .finished(
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
-          providerCost: 0.001
+          providerCost: 0.001,
+          toolCalls: []
         ),
       ])
     )

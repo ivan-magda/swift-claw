@@ -135,32 +135,45 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         isTainted = false
       }
 
-      // Limit the newest eligible rows first, then restore chronological order for the model.
+      // The window is bounded by CONVERSATIONAL rows (rev.1 H2): find the id of the `limit`-th
+      // newest user/assistant row, then load ALL rows from it through the trigger. Tool rows ride
+      // along; the boundary is a conversational row by construction, so an exchange is always
+      // included or excluded whole, and tool-row inflation can never evict conversation.
+      let windowStart = windowStartMessageId ?? 0
+      let boundaryId =
+        try Int64.fetchOne(
+          db,
+          sql: """
+            SELECT id FROM messages
+            WHERE session_id = ? AND id > ? AND id <= ? AND role IN ('user', 'assistant')
+            ORDER BY id DESC
+            LIMIT 1 OFFSET ?
+            """,
+          arguments: [sessionId, windowStart, throughMessageId, max(0, limit - 1)]
+        ) ?? 0
+
       let rows = try Row.fetchAll(
         db,
         sql: """
-          SELECT id, role, content, provenance FROM (
-            SELECT m.id, m.role, m.content, m.provenance
-            FROM messages m
-            JOIN sessions s ON s.id = m.session_id
-            WHERE m.session_id = ?
-              AND m.id > s.window_start_message_id
-              AND m.id <= ?
-            ORDER BY m.id DESC
-            LIMIT ?
-          )
+          SELECT id, role, content, provenance, tool_calls, tool_call_id
+          FROM messages
+          WHERE session_id = ? AND id > ? AND id <= ? AND id >= ?
           ORDER BY id ASC
           """,
-        arguments: [sessionId, throughMessageId, limit]
+        arguments: [sessionId, windowStart, throughMessageId, boundaryId]
       )
 
       let history = rows.map { row in
         StoredMessage(
           role: MessageRole(rawValue: row["role"]) ?? .user,
           content: row["content"],
-          provenance: Provenance(rawValue: row["provenance"]) ?? .trusted
+          provenance: Provenance(rawValue: row["provenance"]) ?? .trusted,
+          toolCallsJSON: row["tool_calls"],
+          toolCallId: row["tool_call_id"]
         )
       }
+
+      // The new SELECT already returns `id`, so the id remap stays valid.
       let messageIds = rows.map { row in
         row["id"] as Int64
       }

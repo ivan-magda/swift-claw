@@ -51,6 +51,9 @@ public struct RunStoreGRDB: RunStore {
       }
 
       guard currentState == .running else {
+        if turn.setTainted, currentState == .cancelled {
+          try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+        }
         return try Self.recordTerminalUsageIfNeeded(
           db,
           usage: turn.usage,
@@ -67,6 +70,16 @@ public struct RunStoreGRDB: RunStore {
       )
       guard let nextState else {
         return .ignored
+      }
+
+      for exchange in turn.exchanges {
+        try Self.insertExchangeRows(
+          db,
+          sessionId: turn.sessionId,
+          runId: turn.runId,
+          exchange: exchange,
+          now: now
+        )
       }
 
       let usage = turn.usage
@@ -102,6 +115,10 @@ public struct RunStoreGRDB: RunStore {
         _ = try Self.insertOutbox(db, runId: turn.runId, chunk: chunk, now: now)
       }
 
+      if turn.setTainted {
+        try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+      }
+
       return .committed
     }
   }
@@ -113,6 +130,9 @@ public struct RunStoreGRDB: RunStore {
       }
 
       guard currentState == .running else {
+        if turn.setTainted, currentState == .cancelled {
+          try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+        }
         if let usage = turn.usage {
           return try Self.recordTerminalUsageIfNeeded(
             db,
@@ -134,6 +154,10 @@ public struct RunStoreGRDB: RunStore {
       }
 
       _ = try Self.insertOutbox(db, runId: turn.runId, chunk: turn.chunk, now: now)
+
+      if turn.setTainted {
+        try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+      }
 
       return .committed
     }
@@ -380,6 +404,42 @@ public struct RunStoreGRDB: RunStore {
         usage.runId,
       ]
     )
+  }
+
+  private static func setSessionTainted(_ db: Database, sessionId: Int64, now: Date) throws {
+    try db.execute(
+      sql: "UPDATE sessions SET tainted = 1, updated_ts = ? WHERE id = ?",
+      arguments: [now, sessionId]
+    )
+  }
+
+  /// Writes one exchange as rows: the assistant anchor (tool_calls JSON, trusted) then each
+  /// observation (raw content, untrusted, tool_call_id) — spec §11 row shapes.
+  private static func insertExchangeRows(
+    _ db: Database,
+    sessionId: Int64,
+    runId: Int64,
+    exchange: ToolExchange,
+    now: Date
+  ) throws {
+    try db.execute(
+      sql: """
+        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
+        VALUES (?, ?, 'assistant', ?, 'trusted', ?, ?)
+        """,
+      arguments: [
+        sessionId, runId, exchange.assistantContent, now, ToolCallCoding.encode(exchange.toolCalls),
+      ]
+    )
+    for observation in exchange.observations {
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, ?)
+          """,
+        arguments: [sessionId, runId, observation.content, now, observation.callId]
+      )
+    }
   }
 
   static func insertOutbox(

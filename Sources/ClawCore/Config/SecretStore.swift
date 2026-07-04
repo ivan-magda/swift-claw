@@ -6,15 +6,18 @@ public protocol SecretStore: Sendable {
   func loadSecrets() throws -> Secrets
 }
 
-/// The loaded secrets. These values feed the **existing** exact-value redactors in `TelegramClient`
-/// (the bot token) and `OpenAICompatibleProvider` (the API key) — no new redaction mechanism.
+/// The loaded secrets. These values feed the exact-value redactors: `TelegramClient` (bot token),
+/// `OpenAICompatibleProvider` (LLM key), and — from 3b — the ClawTools `SecretRedactor` and the
+/// search client (`searchApiKey`).
 public struct Secrets: Sendable, Equatable {
   public let telegramBotToken: String
   public let llmApiKey: String?
+  public let searchApiKey: String?
 
-  public init(telegramBotToken: String, llmApiKey: String?) {
+  public init(telegramBotToken: String, llmApiKey: String?, searchApiKey: String? = nil) {
     self.telegramBotToken = telegramBotToken
     self.llmApiKey = llmApiKey
+    self.searchApiKey = searchApiKey
   }
 }
 

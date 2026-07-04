@@ -24,7 +24,9 @@ import Testing
     // then
     #expect(first.isEmpty)
     #expect(second == [.delta("he"), .delta("llo")])
-    #expect(third == [.finished(finishReason: "stop", usage: nil, providerCost: nil)])
+    #expect(
+      third == [.finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: [])]
+    )
     #expect(try parser.finish() == nil)
   }
 
@@ -44,7 +46,7 @@ import Testing
     )
 
     // then
-    #expect(events == [.finished(finishReason: nil, usage: nil, providerCost: nil)])
+    #expect(events == [.finished(finishReason: nil, usage: nil, providerCost: nil, toolCalls: [])])
     #expect(later.isEmpty)
     #expect(try parser.finish() == nil)
   }
@@ -89,7 +91,8 @@ import Testing
         .finished(
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
-          providerCost: 0.0042
+          providerCost: 0.0042,
+          toolCalls: []
         )
       ]
     )
@@ -114,7 +117,8 @@ import Testing
         .finished(
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
-          providerCost: 0.0034
+          providerCost: 0.0034,
+          toolCalls: []
         )
       ]
     )
@@ -139,7 +143,8 @@ import Testing
         .finished(
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
-          providerCost: 0.0042
+          providerCost: 0.0042,
+          toolCalls: []
         )
       ]
     )
@@ -170,7 +175,8 @@ import Testing
         .finished(
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 8, completionTokens: 4, totalTokens: 12),
-          providerCost: 0.0042
+          providerCost: 0.0042,
+          toolCalls: []
         )
       ]
     )
@@ -190,7 +196,9 @@ import Testing
 
     // then
     #expect(events == [.delta("hi")])
-    #expect(finished == .finished(finishReason: "stop", usage: nil, providerCost: nil))
+    #expect(
+      finished == .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: [])
+    )
   }
 
   @Test func eofMidEventThrowsTruncated() throws {
@@ -215,7 +223,9 @@ import Testing
     let finished = try parser.push(Data("data: [DONE]\n\n".utf8))
 
     // then
-    #expect(finished == [.finished(finishReason: "stop", usage: nil, providerCost: nil)])
+    #expect(
+      finished == [.finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: [])]
+    )
   }
 
   @Test func boundsSingleEventAndBufferedStream() throws {

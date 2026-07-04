@@ -54,7 +54,8 @@ struct SecretsCommand: AsyncParsableCommand {
         """
         Sealed secrets → \(envelopePath)
         Key → \(keyPath) (mode 0600 — keep this OUTSIDE your state-root backup boundary)
-        You may now remove the plaintext CLAW_TELEGRAM_BOT_TOKEN / CLAW_LLM_API_KEY from the env.
+        You may now remove the plaintext CLAW_TELEGRAM_BOT_TOKEN / CLAW_LLM_API_KEY /
+        CLAW_SEARCH_API_KEY from the env.
         """
       )
     }

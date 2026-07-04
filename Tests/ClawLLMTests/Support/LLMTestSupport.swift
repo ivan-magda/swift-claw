@@ -60,6 +60,16 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
     }
   }
 
+  func get(
+    url: String,
+    headers: [String: String],
+    timeoutSeconds: Int,
+    maxBodyBytes: Int
+  ) async throws -> HTTPResult {
+    struct GetUnsupported: Error {}
+    throw GetUnsupported()
+  }
+
   func postStream(
     url: String,
     headers: [String: String],

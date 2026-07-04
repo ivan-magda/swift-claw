@@ -92,17 +92,20 @@ public struct EncryptedFileSecretStore: SecretStore {
   private struct Payload: Codable {
     let telegramBotToken: String
     let llmApiKey: String?
+    let searchApiKey: String?
 
     enum CodingKeys: String, CodingKey {
       case telegramBotToken = "telegram_bot_token"
       case llmApiKey = "llm_api_key"
+      case searchApiKey = "search_api_key"
     }
   }
 
   static func encode(_ secrets: Secrets) throws -> Data {
     let payload = Payload(
       telegramBotToken: secrets.telegramBotToken,
-      llmApiKey: secrets.llmApiKey
+      llmApiKey: secrets.llmApiKey,
+      searchApiKey: secrets.searchApiKey
     )
     return try JSONEncoder().encode(payload)
   }
@@ -116,10 +119,12 @@ public struct EncryptedFileSecretStore: SecretStore {
       throw SecretStoreError.missingTelegramToken
     }
     let apiKey = payload.llmApiKey.flatMap { $0.isEmpty ? nil : $0 }
+    let searchKey = payload.searchApiKey.flatMap { $0.isEmpty ? nil : $0 }
 
     return Secrets(
       telegramBotToken: payload.telegramBotToken,
-      llmApiKey: apiKey
+      llmApiKey: apiKey,
+      searchApiKey: searchKey
     )
   }
 
