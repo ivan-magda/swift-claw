@@ -73,6 +73,33 @@ struct ScriptedSearch: SearchProviding {
     #expect(box.counts == [5, 10, 1])
   }
 
+  @Test func hugeCountClampsWithoutTrapping() async {
+    // given — recordedCount fires synchronously inside the awaited execute, so a lock-guarded
+    // box captures the count without racing (no detached Tasks)
+    final class CountBox: @unchecked Sendable {
+      private let lock = NSLock()
+      private(set) var counts: [Int] = []
+      func record(_ value: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        counts.append(value)
+      }
+    }
+    let box = CountBox()
+    let tool = WebSearchTool(
+      search: ScriptedSearch(recordedCount: { value in box.record(value) })
+    )
+
+    // when
+    let payload = await tool.execute(
+      arguments: .object(["query": .string("q"), "count": .number(1e300)])
+    )
+
+    // then — the out-of-range Double clamps to the max instead of trapping on Int(Double)
+    #expect(payload.status == .ok)
+    #expect(box.counts == [10])
+  }
+
   @Test func backendFailureIsAPlainErrorObservation() async throws {
     // given — v1 tools do not retry internally (§7.4)
     let tool = WebSearchTool(

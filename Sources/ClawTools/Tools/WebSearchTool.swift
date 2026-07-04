@@ -50,7 +50,15 @@ public struct WebSearchTool: Tool {
       )
     }
     let requestedCount =
-      arguments.objectValue?["count"]?.numberValue.map(Int.init) ?? Self.defaultCount
+      arguments.objectValue?["count"]?.numberValue
+      .map { requested in
+        Int(
+          min(
+            max(requested, Double(Self.countRange.lowerBound)),
+            Double(Self.countRange.upperBound)
+          )
+        )
+      } ?? Self.defaultCount
     let count = min(max(requestedCount, Self.countRange.lowerBound), Self.countRange.upperBound)
 
     let results: [SearchResult]
