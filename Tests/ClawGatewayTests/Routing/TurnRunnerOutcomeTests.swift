@@ -155,8 +155,8 @@ import Testing
     #expect(payload.contains("Reply yes to allow this one fetch"))
 
     // and the entry is parked; the blocked exchange is persisted history (§9.2 re-proposal
-    // substrate). Decode the `tool_calls` column rather than substring-match it: the persisted JSON
-    // escapes slashes (`https:\/\/…`), so the exact canonical URL only surfaces after a round-trip.
+    // substrate). Decode the `tool_calls` column and match the canonical URL against the decoded
+    // arguments — decode-based matching stays robust regardless of the encoder's escaping policy.
     #expect(await fixture.registry.pending(sessionId: fixture.sessionId) == .exfilFetch(approval))
     let snapshot = try fixture.stores.sessionMessages.loadContextSnapshot(
       sessionId: fixture.sessionId,

@@ -161,7 +161,8 @@ struct RunCommand: AsyncParsableCommand {
       executor: executor,
       transport: transport,
       stores: stores,
-      toolDispatcher: toolDispatcher
+      toolDispatcher: toolDispatcher,
+      logger: logger
     )
     let contextBudget = ContextBudget(
       inputCapGraphemes: TokenEstimator.graphemeBudget(
@@ -291,7 +292,8 @@ struct RunCommand: AsyncParsableCommand {
     executor: AsyncHTTPExecutor,
     transport: TelegramClient,
     stores: ClawStores,
-    toolDispatcher: GatedToolDispatcher
+    toolDispatcher: GatedToolDispatcher,
+    logger: Logger
   ) -> AgentRuntime {
     let provider = OpenAICompatibleProvider(
       config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
@@ -314,6 +316,7 @@ struct RunCommand: AsyncParsableCommand {
       toolDispatcher: toolDispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,
+      warn: { warning in logger.warning("\(warning)") },
       sleep: { try await Task.sleep(for: $0) }
     )
   }
