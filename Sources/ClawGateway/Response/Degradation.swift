@@ -15,6 +15,10 @@ public enum Degradation {
   /// Used on the `SQLITE_FULL` path (F23) when the message can't even be persisted.
   public static let storageFull =
     "Storage is full, so I can't save messages. Please free up disk space."
+  /// Used when a mid-run usage/audit write fails non-fatally (§6); the run halts rather than spend
+  /// further without a durable record.
+  public static let accountingFailed =
+    "I hit an internal storage problem and stopped to be safe. Please try again."
 
   /// The spend-breaker reply; `cap` names the tripped limit (e.g. "per-run spend" / "per-day token").
   public static func budget(cap: String) -> String {
@@ -35,6 +39,8 @@ public enum Degradation {
       return outputTruncated
     case .contextUnavailable:
       return contextUnavailable
+    case .accountingFailed:
+      return accountingFailed
     }
   }
 }

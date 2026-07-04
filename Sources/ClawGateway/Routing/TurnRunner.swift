@@ -116,17 +116,21 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let result = await agent.runTurn(
+    // sessionTainted/fetchGrant plumbing lands in Task 24; the loop's tool dispatch is a no-op
+    // (toolDispatcher: nil, wired in Task 25) so these placeholders don't change today's behavior.
+    let outcome = try await agent.runTurn(
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
-      context: buildResult.messages,
+      buildResult: buildResult,
+      sessionTainted: false,
+      fetchGrant: nil,
       todayTokens: todayTokens,
       todayUSD: todayUSD
     )
 
     try await commit(
-      result,
+      outcome.result,
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,

@@ -130,7 +130,8 @@ struct RunCommand: AsyncParsableCommand {
       config: config,
       secrets: secrets,
       executor: executor,
-      transport: transport
+      transport: transport,
+      stores: stores
     )
     // Created before the TurnRunner so its notifyOutbox closure can capture it: each commit pokes
     // the dispatcher to drain the rows it just enqueued.
@@ -226,7 +227,8 @@ struct RunCommand: AsyncParsableCommand {
     config: AppConfig,
     secrets: Secrets,
     executor: AsyncHTTPExecutor,
-    transport: TelegramClient
+    transport: TelegramClient,
+    stores: ClawStores
   ) -> AgentRuntime {
     let provider = OpenAICompatibleProvider(
       config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
@@ -246,6 +248,10 @@ struct RunCommand: AsyncParsableCommand {
       costResolver: costResolver,
       budget: config.budget,
       model: config.llm.model,
+      // Task 25 wires the real dispatcher; the loop degenerates to one round-trip until then.
+      toolDispatcher: nil,
+      usageStore: stores.usage,
+      auditLog: stores.audit,
       sleep: { try await Task.sleep(for: $0) }
     )
   }

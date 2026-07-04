@@ -279,6 +279,8 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       ),
       budget: budget,
       model: "gpt-4o",
+      usageStore: usage,
+      auditLog: audit,
       sleep: { try await Task.sleep(for: $0) }
     )
 
