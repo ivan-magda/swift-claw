@@ -103,6 +103,13 @@ public struct ToolPolicyGate: Sendable {
     )
   }
 
+  /// The §9.1 audit rendering, exposed so the dispatcher's pre-gate error paths (unknown tool,
+  /// malformed args) can redact their args too — the `argsRedacted` seam field must never carry a
+  /// raw secret, whatever the outcome.
+  public func renderRedacted(argsJSON: String) -> String {
+    argGuard.renderRedacted(argsJSON: argsJSON)
+  }
+
   private func blockedArgs(rule: String, argsRedacted: String) -> Verdict {
     .block(
       payload: ToolPayload(
@@ -198,7 +205,7 @@ public struct GatedToolDispatcher: ToolDispatching {
         status: .error,
         ingestedUntrusted: false
       ),
-      argsRedacted: call.argumentsJSON
+      argsRedacted: gate.renderRedacted(argsJSON: call.argumentsJSON)
     )
   }
 }

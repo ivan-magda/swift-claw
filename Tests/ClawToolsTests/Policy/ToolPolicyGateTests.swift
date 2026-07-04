@@ -256,6 +256,26 @@ import Testing
     #expect(outcome.observation.ingestedUntrusted == false)
   }
 
+  @Test func errorPathArgsAreRedactedNotRaw() async {
+    // given — an unknown tool called with a secret-SHAPED token in its args: even though the call
+    // never reaches the gate, the audit rendering must not re-contain it (seam contract)
+    let dispatcher = makeDispatcher(tools: [StubTool(name: "file_read")])
+
+    // when
+    let outcome = await dispatcher.dispatch(
+      call: ToolCall(
+        id: "c1",
+        name: "shell_exec",
+        argumentsJSON: #"{"cmd":"sk-abcdefghijklmnop1234"}"#
+      ),
+      context: openContext
+    )
+
+    // then — error observation, and the shaped token is redacted out of the audit args
+    #expect(outcome.observation.status == .error)
+    #expect(outcome.argsRedacted.contains("sk-abcdefghijklmnop1234") == false)
+  }
+
   @Test func malformedArgumentsAreAnErrorObservation() async {
     // given
     let dispatcher = makeDispatcher(tools: [StubTool(name: "file_read")])
