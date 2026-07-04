@@ -141,10 +141,10 @@ public struct ExfilArgGuard: Sendable {
       index += 3
       decodedAny = true
     }
-    guard decodedAny, let decoded = String(bytes: bytes, encoding: .utf8) else {
+    guard decodedAny else {
       return nil
     }
-    return decoded
+    return String(decoding: bytes, as: UTF8.self)
   }
 
   /// The numeric value 0...15 of a single hex digit, or nil for any non-hex scalar.
