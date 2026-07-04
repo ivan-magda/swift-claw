@@ -14,6 +14,8 @@ public struct AppConfig: Sendable, Equatable {
     static let perDayUSD = "CLAW_PER_DAY_USD"
     static let referenceUSDPerToken = "CLAW_REFERENCE_USD_PER_TOKEN"
     static let dayTokenCeiling = "CLAW_DAY_TOKEN_CEILING"
+    static let maxTurns = "CLAW_MAX_TURNS"
+    static let maxToolCalls = "CLAW_MAX_TOOL_CALLS"
   }
 
   private enum EnvDefaults {
@@ -138,6 +140,8 @@ public struct AppConfig: Sendable, Equatable {
         env[EnvKey.referenceUSDPerToken],
         default: base.referenceUSDPerToken
       ),
+      maxTurns: try positiveBudgetInt(env[EnvKey.maxTurns], default: base.maxTurns),
+      maxToolCalls: try positiveBudgetInt(env[EnvKey.maxToolCalls], default: base.maxToolCalls),
       dayTokenCeilingOverride: try positiveBudgetIntOrNil(env[EnvKey.dayTokenCeiling])
     )
   }
@@ -154,6 +158,21 @@ public struct AppConfig: Sendable, Equatable {
     }
 
     guard let value = Double(trimmed), value > 0 else {
+      throw ConfigError.invalidBudget(trimmed)
+    }
+
+    return value
+  }
+
+  /// A positive `Int` override: `fallback` when absent/blank, else `invalidBudget` on a
+  /// non-numeric or non-positive value.
+  private static func positiveBudgetInt(_ raw: String?, default fallback: Int) throws -> Int {
+    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
+    guard !trimmed.isEmpty else {
+      return fallback
+    }
+
+    guard let value = Int(trimmed), value > 0 else {
       throw ConfigError.invalidBudget(trimmed)
     }
 
