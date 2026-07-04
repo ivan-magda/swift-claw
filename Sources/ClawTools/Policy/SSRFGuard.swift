@@ -17,11 +17,13 @@ public enum ResolvedAddress: Sendable, Equatable {
     if inet_pton(AF_INET, text, &v4Address) == 1 {
       return .v4(UInt32(bigEndian: v4Address.s_addr))
     }
+
     var v6Address = in6_addr()
     if inet_pton(AF_INET6, text, &v6Address) == 1 {
       let bytes = withUnsafeBytes(of: &v6Address) { raw in Array(raw) }
       return .v6(bytes)
     }
+
     return nil
   }
 }
@@ -33,9 +35,9 @@ public enum SSRFGuard {
   public static func isPublic(_ address: ResolvedAddress) -> Bool {
     switch address {
     case .v4(let value):
-      return isPublicV4(value)
+      isPublicV4(value)
     case .v6(let bytes):
-      return isPublicV6(bytes)
+      isPublicV6(bytes)
     }
   }
 
@@ -60,7 +62,9 @@ public enum SSRFGuard {
   ]
 
   private static func isPublicV4(_ value: UInt32) -> Bool {
-    !blockedV4Ranges.contains { range in value & range.mask == range.network }
+    !blockedV4Ranges.contains { range in
+      value & range.mask == range.network
+    }
   }
 
   private static func v4(
@@ -108,6 +112,7 @@ public enum SSRFGuard {
     if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0D, bytes[3] == 0xB8 {
       return false
     }
+
     return true
   }
 }
@@ -139,6 +144,7 @@ public struct SystemAddressResolver: AddressResolving {
     #else
       hints.ai_socktype = SOCK_STREAM  // Darwin already types SOCK_STREAM as Int32.
     #endif
+
     var results: UnsafeMutablePointer<addrinfo>?
     let status = getaddrinfo(host, nil, &hints, &results)
     defer {
@@ -152,6 +158,7 @@ public struct SystemAddressResolver: AddressResolving {
 
     var addresses: [ResolvedAddress] = []
     var cursor = results
+
     while let info = cursor {
       if info.pointee.ai_family == AF_INET, let rawAddress = info.pointee.ai_addr {
         rawAddress.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { pointer in
@@ -170,6 +177,7 @@ public struct SystemAddressResolver: AddressResolving {
     guard addresses.isEmpty == false else {
       throw AddressResolutionError.unresolvable(host: host)
     }
+
     return addresses
   }
 }
