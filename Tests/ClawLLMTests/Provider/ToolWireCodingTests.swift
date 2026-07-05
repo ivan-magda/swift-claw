@@ -23,19 +23,30 @@ import Testing
   }
 
   private struct UnusedHTTP: HTTPExecuting, HTTPStreaming {
-    func post(url: String, headers: [String: String], jsonBody: Data, timeoutSeconds: Int)
-      async throws -> HTTPResult
-    {
+    func post(
+      url: String,
+      headers: [String: String],
+      jsonBody: Data,
+      timeoutSeconds: Int
+    ) async throws -> HTTPResult {
       HTTPResult(statusCode: 500, headers: [:], body: Data())
     }
-    func get(url: String, headers: [String: String], timeoutSeconds: Int, maxBodyBytes: Int)
-      async throws -> HTTPResult
-    {
+
+    func get(
+      url: String,
+      headers: [String: String],
+      timeoutSeconds: Int,
+      maxBodyBytes: Int
+    ) async throws -> HTTPResult {
       HTTPResult(statusCode: 500, headers: [:], body: Data())
     }
-    func postStream(url: String, headers: [String: String], jsonBody: Data, timeoutSeconds: Int)
-      async throws -> (head: HTTPStreamHead, body: AsyncThrowingStream<Data, Error>)
-    {
+
+    func postStream(
+      url: String,
+      headers: [String: String],
+      jsonBody: Data,
+      timeoutSeconds: Int
+    ) async throws -> (head: HTTPStreamHead, body: AsyncThrowingStream<Data, Error>) {
       (HTTPStreamHead(statusCode: 500, headers: [:]), AsyncThrowingStream { $0.finish() })
     }
   }
