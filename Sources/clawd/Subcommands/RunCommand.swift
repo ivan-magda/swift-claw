@@ -98,6 +98,7 @@ struct RunCommand: AsyncParsableCommand {
 
     try? await httpClient.shutdown()
     try? await toolHTTPClient.shutdown()
+
     if let runFailure {
       throw runFailure
     }
@@ -121,6 +122,7 @@ struct RunCommand: AsyncParsableCommand {
       stateRoot: config.stateRoot,
       environment: ProcessInfo.processInfo.environment
     )
+
     do {
       return try resolution.store.loadSecrets()
     } catch let error as SecretStoreError {
@@ -147,6 +149,7 @@ struct RunCommand: AsyncParsableCommand {
     let breaker = BudgetBreaker(budget: config.budget)
     let lanes = SessionLaneRegistry()
     let pendingConfirmations = PendingConfirmationRegistry()
+
     let workspace = FileSystemWorkspace(
       root: config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
     )
@@ -164,6 +167,7 @@ struct RunCommand: AsyncParsableCommand {
       toolDispatcher: toolDispatcher,
       logger: logger
     )
+
     let contextBudget = ContextBudget(
       inputCapGraphemes: TokenEstimator.graphemeBudget(
         forInputTokens: config.budget.maxInputTokens
@@ -184,6 +188,7 @@ struct RunCommand: AsyncParsableCommand {
       budget: contextBudget,
       warn: { warning in logger.warning("\(warning)") }
     )
+
     let turnRunner = TurnRunner(
       sessionMessages: stores.sessionMessages,
       runs: stores.runs,
@@ -219,12 +224,14 @@ struct RunCommand: AsyncParsableCommand {
       pollTimeout: config.pollTimeoutSeconds,
       logger: logger
     )
+
     let dispatcher = OutboxDispatcher(
       outbox: stores.outbox,
       transport: transport,
       signal: outboxSignal,
       logger: logger
     )
+
     return Daemon(
       services: [poller, dispatcher],
       boot: bootSequence(transport: transport, stores: stores, logger: logger),
@@ -260,6 +267,7 @@ struct RunCommand: AsyncParsableCommand {
       FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
       WebFetchTool(http: toolExecutor, resolver: SystemAddressResolver(), redactor: redactor),
     ]
+
     if let searchApiKey = secrets.searchApiKey {
       tools.append(
         WebSearchTool(search: ExaSearchProvider(apiKey: searchApiKey, http: toolExecutor))
@@ -274,6 +282,7 @@ struct RunCommand: AsyncParsableCommand {
         )
       }
     }
+
     return GatedToolDispatcher(
       registry: ToolRegistry(tools: tools),
       gate: ToolPolicyGate(
@@ -301,10 +310,12 @@ struct RunCommand: AsyncParsableCommand {
       sleep: { try await Task.sleep(for: .seconds($0)) },
       jitter: { Double.random(in: 0...$0) }
     )
+
     let costResolver = CostResolver(
       priceTable: PriceFileLoader.load(),
       referenceUSDPerToken: config.budget.referenceUSDPerToken
     )
+
     return AgentRuntime(
       provider: provider,
       typingIndicator: TelegramTypingIndicator(transport: transport),
