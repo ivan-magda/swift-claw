@@ -117,10 +117,13 @@ public struct AgentRuntime: Sendable {
 
     var wire = buildResult.messages
     var exchanges: [ToolExchange] = []
+
     var ingestedUntrusted = false
     var runPrivateData = false
+
     var pendingApproval: ToolApprovalRequest?
     var remainingGrant = grant
+
     var proposedToolCalls = 0
     var recordedRunTokens = 0
     var recordedRunUSD = 0.0
@@ -163,6 +166,7 @@ public struct AgentRuntime: Sendable {
       guard Task.isCancelled == false else {
         return outcome(.degraded(.providerUnavailable, usage: nil))
       }
+
       let remaining = deadline - ContinuousClock.now
       guard remaining > .zero else {
         return outcome(
@@ -239,6 +243,7 @@ public struct AgentRuntime: Sendable {
           // the taint flag still persists.
           return outcome(.budgetStopped(cap: "per-run tool-call"))
         }
+
         guard deadline > ContinuousClock.now else {
           return outcome(
             .degraded(
@@ -256,6 +261,7 @@ public struct AgentRuntime: Sendable {
           grant: remainingGrant,
           approvalAlreadyPending: pendingApproval != nil
         )
+
         guard let toolDispatcher else {
           observations.append(
             ToolObservation(
@@ -268,6 +274,7 @@ public struct AgentRuntime: Sendable {
           )
           continue
         }
+
         let dispatched = await toolDispatcher.dispatch(call: call, context: context)
         try recordToolAudit(for: call, outcome: dispatched, runId: runId, sessionId: sessionId)
 
@@ -302,6 +309,7 @@ public struct AgentRuntime: Sendable {
           )
         )
       }
+
       exchanges.append(
         ToolExchange(
           assistantContent: response.content,
@@ -339,6 +347,7 @@ public struct AgentRuntime: Sendable {
       sessionId: sessionId,
       ts: Date()
     )
+
     do {
       try auditLog.appendAudit(event)
     } catch StoreError.diskFull {
@@ -362,6 +371,7 @@ public struct AgentRuntime: Sendable {
       usage: resolvedUsage.usage,
       providerCost: response.costFromProvider
     )
+
     return ProviderUsage(
       runId: runId,
       sessionId: sessionId,
@@ -388,6 +398,7 @@ public struct AgentRuntime: Sendable {
         deadlineSeconds: deadlineSeconds
       )
     }
+
     do {
       return try await runStreamingTurn(
         chatId: chatId,
@@ -534,6 +545,7 @@ public struct AgentRuntime: Sendable {
       usage: resolvedUsage.usage,
       providerCost: nil
     )
+
     return ProviderUsage(
       runId: runId,
       sessionId: sessionId,
