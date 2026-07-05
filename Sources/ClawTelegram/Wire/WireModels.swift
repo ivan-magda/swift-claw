@@ -68,10 +68,18 @@ struct InputRichMessage: Encodable {
   let markdown: String
 }
 
+/// Bot API 7.0+ `link_preview_options` (ARCHITECTURE §12: outbound controls strip auto-fetching
+/// link elements). Sent unconditionally disabled so Telegram's servers never fetch a URL embedded
+/// in outbound text — including attacker-chosen URLs quoted back in a tool-approval prompt.
+struct LinkPreviewOptions: Encodable {
+  let isDisabled: Bool
+}
+
 struct SendRichMessageDraftRequest: Encodable {
   let chatId: Int64
   let draftId: Int64
   let richMessage: InputRichMessage
+  let linkPreviewOptions: LinkPreviewOptions
 }
 
 struct TUpdate: Decodable {

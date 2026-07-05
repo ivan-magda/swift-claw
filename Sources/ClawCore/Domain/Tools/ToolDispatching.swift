@@ -7,7 +7,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
   public let runIngestedUntrusted: Bool
   public let assemblyPrivateData: Bool
   public let runPrivateData: Bool
-  public let grant: OneTurnFetchGrant?
+  public let grant: OneTurnGrant?
   public let approvalAlreadyPending: Bool
 
   public init(
@@ -15,7 +15,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     runIngestedUntrusted: Bool,
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
-    grant: OneTurnFetchGrant?,
+    grant: OneTurnGrant?,
     approvalAlreadyPending: Bool
   ) {
     self.sessionTainted = sessionTainted
@@ -33,13 +33,13 @@ public struct ToolDispatchContext: Sendable, Equatable {
 public struct ToolDispatchOutcome: Sendable, Equatable {
   public let observation: ToolObservation
   public let argsRedacted: String
-  public let pendingApproval: ExfilApprovalRequest?
+  public let pendingApproval: ToolApprovalRequest?
   public let consumedGrant: Bool
 
   public init(
     observation: ToolObservation,
     argsRedacted: String,
-    pendingApproval: ExfilApprovalRequest? = nil,
+    pendingApproval: ToolApprovalRequest? = nil,
     consumedGrant: Bool = false
   ) {
     self.observation = observation

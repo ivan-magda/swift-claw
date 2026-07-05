@@ -47,7 +47,11 @@ public struct TelegramClient: TelegramTransport {
   }
 
   public func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
-    let request = SendMessageRequest(chatId: chatId, text: text)
+    let request = SendMessageRequest(
+      chatId: chatId,
+      text: text,
+      linkPreviewOptions: LinkPreviewOptions(isDisabled: true)
+    )
     let message: TMessage = try await callMethod(
       "sendMessage",
       body: request,
@@ -59,7 +63,8 @@ public struct TelegramClient: TelegramTransport {
   public func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 {
     let request = SendRichMessageRequest(
       chatId: chatId,
-      richMessage: InputRichMessage(markdown: markdown)
+      richMessage: InputRichMessage(markdown: markdown),
+      linkPreviewOptions: LinkPreviewOptions(isDisabled: true)
     )
     let message: TMessage = try await callMethod(
       "sendRichMessage",
@@ -77,7 +82,8 @@ public struct TelegramClient: TelegramTransport {
     let request = SendRichMessageDraftRequest(
       chatId: chatId,
       draftId: draftId,
-      richMessage: InputRichMessage(markdown: markdown)
+      richMessage: InputRichMessage(markdown: markdown),
+      linkPreviewOptions: LinkPreviewOptions(isDisabled: true)
     )
     return try await callMethod(
       "sendRichMessageDraft",
@@ -194,11 +200,13 @@ private struct GetUpdatesRequest: Encodable {
 private struct SendMessageRequest: Encodable {
   let chatId: Int64
   let text: String
+  let linkPreviewOptions: LinkPreviewOptions
 }
 
 private struct SendRichMessageRequest: Encodable {
   let chatId: Int64
   let richMessage: InputRichMessage
+  let linkPreviewOptions: LinkPreviewOptions
 }
 
 private struct SendChatActionRequest: Encodable {

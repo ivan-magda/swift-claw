@@ -343,6 +343,8 @@ func makeStack(
     ),
     budget: .default,
     model: "gpt-4o",
+    usageStore: usage,
+    auditLog: audit,
     sleep: { try await Task.sleep(for: $0) }
   )
 
@@ -354,6 +356,7 @@ func makeStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer, workspace: workspace),
+    pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     transport: transport,
@@ -429,6 +432,8 @@ func makeStreamingStack(
     ),
     budget: .default,
     model: "gpt-4o",
+    usageStore: usage,
+    auditLog: audit,
     sleep: { try await Task.sleep(for: $0) }
   )
   let turnRunner = TurnRunner(
@@ -439,6 +444,7 @@ func makeStreamingStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer),
+    pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     transport: transport,
@@ -507,6 +513,8 @@ func makeStopNewStack(
     ),
     budget: .default,
     model: "gpt-4o",
+    usageStore: usage,
+    auditLog: audit,
     sleep: { try await Task.sleep(for: $0) }
   )
 
@@ -518,6 +526,7 @@ func makeStopNewStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer),
+    pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     transport: transport,

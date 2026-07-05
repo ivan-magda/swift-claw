@@ -14,17 +14,23 @@ struct AgentRuntimeTests {
     let runtime = makeRuntime(provider: provider)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hi")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then — provider cost wins.
-    let (content, usage) = try requireCompleted(result)
+    let (content, usage) = try requireCompleted(outcome.result)
 
     #expect(content == "Hello there")
     #expect(usage.costSource == .providerReturned)
@@ -42,18 +48,24 @@ struct AgentRuntimeTests {
     )
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hello world")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hello world")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then — usage is estimated: prompt from the sent context, completion from the reply. Never a
     // zero row, so the hard daily token breaker can still account for it.
-    let (content, usage) = try requireCompleted(result)
+    let (content, usage) = try requireCompleted(outcome.result)
 
     #expect(content == "Hi!")
     #expect(usage.promptTokens == 4)  // estimate for "hello world"
@@ -73,17 +85,23 @@ struct AgentRuntimeTests {
     let runtime = makeRuntime(provider: provider, typing: typing)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hi")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    _ = try requireCompleted(result)
+    _ = try requireCompleted(outcome.result)
     #expect(await typing.calls >= 1)
   }
 
@@ -99,17 +117,23 @@ struct AgentRuntimeTests {
     let runtime = makeRuntime(provider: StubProvider(.respond(response)))
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hi")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (kind, usage) = try requireDegraded(result)
+    let (kind, usage) = try requireDegraded(outcome.result)
 
     #expect(kind == .outputTruncated)
     let recorded = try #require(usage)
@@ -119,30 +143,36 @@ struct AgentRuntimeTests {
   }
 
   @Test("the budget preflight stops before any provider call or typing")
-  func budgetPreflightStopsBeforeAnyCall() async {
+  func budgetPreflightStopsBeforeAnyCall() async throws {
     // given — today's tokens already near the ceiling, so any estimate trips it.
     let provider = StubProvider(.respond(okResponse()))
     let typing = RecordingTyping()
     let runtime = makeRuntime(provider: provider, typing: typing)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hi")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 999_999,
       todayUSD: 0
     )
 
     // then
-    #expect(result == .budgetStopped(cap: "per-day token"))
+    #expect(outcome.result == .budgetStopped(cap: "per-day token"))
     #expect(await provider.calls == 0)
     #expect(await typing.calls == 0)
   }
 
   @Test("preflight prices the reserved output at the output rate, tripping a dearer-output model")
-  func preflightPricesReservedOutputAtTheOutputRate() async {
+  func preflightPricesReservedOutputAtTheOutputRate() async throws {
     // given — a model whose output token is far dearer than its input token. Folding the reserved
     // output into the prompt (the old bug) estimates ~$0.004 at the input rate and clears the $0.50
     // cap; pricing the 4096 reserved tokens at the output rate estimates ~$0.82 and must trip it.
@@ -159,17 +189,23 @@ struct AgentRuntimeTests {
     )
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hi")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then — denied on the per-run USD cap, before the provider or typing fire.
-    #expect(result == .budgetStopped(cap: "per-run spend"))
+    #expect(outcome.result == .budgetStopped(cap: "per-run spend"))
     #expect(await provider.calls == 0)
     #expect(await typing.calls == 0)
   }
@@ -190,37 +226,49 @@ struct AgentRuntimeTests {
     )
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hi")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then — the gate allowed it through; the provider answered.
-    _ = try requireCompleted(result)
+    _ = try requireCompleted(outcome.result)
     #expect(await provider.calls == 1)
   }
 
   @Test("a terminal provider error degrades without any debit")
-  func terminalErrorDegradesWithoutDebit() async {
+  func terminalErrorDegradesWithoutDebit() async throws {
     // given
     let runtime = makeRuntime(provider: StubProvider(.fail(.terminal(status: 400, message: "bad"))))
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hi")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    #expect(result == .degraded(.providerUnavailable, usage: nil))
+    #expect(outcome.result == .degraded(.providerUnavailable, usage: nil))
   }
 
   @Test("exhausted retries degrade and debit the estimate (F28)")
@@ -231,17 +279,23 @@ struct AgentRuntimeTests {
     )
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hello world")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hello world")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then — unlike a terminal error, a flapping provider is debited the pre-call estimate.
-    let (kind, usage) = try requireDegraded(result)
+    let (kind, usage) = try requireDegraded(outcome.result)
 
     #expect(kind == .providerUnavailable)
     let recorded = try #require(usage)
@@ -256,17 +310,23 @@ struct AgentRuntimeTests {
     let runtime = makeRuntime(provider: HangingProvider(), sleep: { _ in })
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hello world")],
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hello world")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then — an estimated row: input estimate for "hello world" (4) + the reserved output cap.
-    let (kind, usage) = try requireDegraded(result)
+    let (kind, usage) = try requireDegraded(outcome.result)
 
     #expect(kind == .providerUnavailable)
     let recorded = try #require(usage)

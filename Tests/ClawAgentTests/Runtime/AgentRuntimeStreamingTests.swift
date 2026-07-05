@@ -285,7 +285,7 @@ actor NonCooperativeStreamGate {
 }
 
 enum TimedTurnResult: Sendable {
-  case result(TurnResult)
+  case result(TurnOutcome)
   case timeout
 }
 
@@ -312,20 +312,28 @@ actor TurnResultBox {
   }
 }
 
+/// `runTurn` now throws (`StoreError.diskFull` only); none of these scripted races configure a
+/// failing usage/audit store, so a throw here is a test-harness bug, not a scenario under test —
+/// recorded as a failure rather than silently swallowed.
 func startTurn(
-  operation: @escaping @Sendable () async -> TurnResult
+  operation: @escaping @Sendable () async throws -> TurnOutcome
 ) -> TurnResultBox {
-  let result = TurnResultBox()
+  let box = TurnResultBox()
   Task {
-    await result.resolve(.result(await operation()))
+    do {
+      await box.resolve(.result(try await operation()))
+    } catch {
+      Issue.record("unexpected runTurn throw in test harness: \(error)")
+      await box.resolve(.timeout)
+    }
   }
-  return result
+  return box
 }
 
 func waitForTurnResult(
   _ result: TurnResultBox,
   milliseconds: Int
-) async -> TurnResult? {
+) async -> TurnOutcome? {
   let timeout = Task {
     try? await Task.sleep(for: .milliseconds(milliseconds))
     await result.resolve(.timeout)
@@ -341,6 +349,14 @@ func waitForTurnResult(
 }
 
 @Suite struct AgentRuntimeStreamingTests {
+  private func singleUserBuildResult(_ content: String) -> BuildResult {
+    BuildResult(
+      messages: [ChatMessage(role: .user, content: content)],
+      ownerNotices: [],
+      hasPrivateDataAccess: false
+    )
+  }
+
   @Test func streamingTurnPublishesDraftsAndCompletesWithAccumulatedContent() async throws {
     // given
     let provider = StreamingProvider(
@@ -359,17 +375,19 @@ func waitForTurnResult(
     let runtime = makeRuntime(provider: provider, drafts: drafts, streamingEnabled: true)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 11,
       sessionId: 22,
       chatId: 33,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (content, usage) = try requireCompleted(result)
+    let (content, usage) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     #expect(usage.promptTokens == 3)
     #expect(usage.completionTokens == 2)
@@ -404,19 +422,21 @@ func waitForTurnResult(
 
     // when
     let turnResult = startTurn {
-      await runtime.runTurn(
+      try await runtime.runTurn(
         runId: 1,
         sessionId: 2,
         chatId: 3,
-        context: [ChatMessage(role: .user, content: "hi")],
+        buildResult: self.singleUserBuildResult("hi"),
+        sessionTainted: false,
+        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
     }
-    let result = await waitForTurnResult(turnResult, milliseconds: 2_000)
+    let outcome = await waitForTurnResult(turnResult, milliseconds: 2_000)
 
     // then
-    let (content, _) = try requireCompleted(try #require(result))
+    let (content, _) = try requireCompleted(try #require(outcome).result)
     #expect(content == "hi")
     #expect(await typing.calls >= 3)
   }
@@ -437,17 +457,19 @@ func waitForTurnResult(
     let runtime = makeRuntime(provider: provider, drafts: drafts, streamingEnabled: true)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 11,
       sessionId: 22,
       chatId: 33,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (content, _) = try requireCompleted(result)
+    let (content, _) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     let sentDrafts = await drafts.drafts
     #expect(!sentDrafts.isEmpty)
@@ -474,26 +496,28 @@ func waitForTurnResult(
 
     // when
     let turnTask = Task {
-      let result = await runtime.runTurn(
+      let outcome = try await runtime.runTurn(
         runId: 1,
         sessionId: 2,
         chatId: 3,
-        context: [ChatMessage(role: .user, content: "hi")],
+        buildResult: singleUserBuildResult("hi"),
+        sessionTainted: false,
+        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
       await flag.markDone()
-      return result
+      return outcome
     }
     await drafts.waitUntilFinalBlocked()
     try await Task.sleep(for: .milliseconds(700))
     let doneWhileFinalSendBlocked = await flag.done
     await drafts.release()
-    let result = await turnTask.value
+    let outcome = try await turnTask.value
 
     // then
     #expect(doneWhileFinalSendBlocked == false)
-    let (content, _) = try requireCompleted(result)
+    let (content, _) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     #expect(await drafts.drafts.contains("hello"))
   }
@@ -511,11 +535,13 @@ func waitForTurnResult(
 
       // when
       let turnTask = Task {
-        await runtime.runTurn(
+        try await runtime.runTurn(
           runId: 1,
           sessionId: 2,
           chatId: 3,
-          context: [ChatMessage(role: .user, content: "hi")],
+          buildResult: singleUserBuildResult("hi"),
+          sessionTainted: false,
+          grant: nil,
           todayTokens: 0,
           todayUSD: 0
         )
@@ -523,11 +549,11 @@ func waitForTurnResult(
       await gate.waitUntilStarted()
       try await Task.sleep(for: .milliseconds(10))
       turnTask.cancel()
-      let result = await turnTask.value
+      let outcome = try await turnTask.value
       await gate.release()
 
       // then
-      let (kind, _) = try requireDegraded(result)
+      let (kind, _) = try requireDegraded(outcome.result)
       #expect(kind == .providerUnavailable)
     }
   }
@@ -538,17 +564,19 @@ func waitForTurnResult(
     let runtime = makeRuntime(provider: provider, streamingEnabled: false)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (content, _) = try requireCompleted(result)
+    let (content, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
     #expect(await provider.completeCalls == 1)
     #expect(await provider.streamCalls == 0)
@@ -563,17 +591,19 @@ func waitForTurnResult(
     let runtime = makeRuntime(provider: provider, streamingEnabled: false)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (kind, usage) = try requireDegraded(result)
+    let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
     #expect(try #require(usage).isEstimated)
     #expect(await provider.completeCalls == 1)
@@ -586,17 +616,19 @@ func waitForTurnResult(
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hi")],
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (content, _) = try requireCompleted(result)
+    let (content, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)
@@ -628,21 +660,23 @@ func waitForTurnResult(
 
     // when
     let turnResult = startTurn {
-      await runtime.runTurn(
+      try await runtime.runTurn(
         runId: 11,
         sessionId: 22,
         chatId: 33,
-        context: [ChatMessage(role: .user, content: "hi")],
+        buildResult: self.singleUserBuildResult("hi"),
+        sessionTainted: false,
+        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
     }
     await drafts.waitUntilFirstSendBlocked()
-    let result = await waitForTurnResult(turnResult, milliseconds: 1_000)
+    let outcome = await waitForTurnResult(turnResult, milliseconds: 1_000)
 
     // then
     await drafts.release()
-    let completed = try requireCompleted(try #require(result))
+    let completed = try requireCompleted(try #require(outcome).result)
     #expect(completed.content == "hello")
     #expect(await provider.completeCalls == 0)
     #expect(await provider.streamCalls == 1)
@@ -654,17 +688,19 @@ func waitForTurnResult(
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hello world")],
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (kind, usage) = try requireDegraded(result)
+    let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
     #expect(try #require(usage).isEstimated)
     #expect(await provider.completeCalls == 0)
@@ -676,17 +712,19 @@ func waitForTurnResult(
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hello world")],
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (kind, usage) = try requireDegraded(result)
+    let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
     #expect(try #require(usage).isEstimated)
     #expect(await provider.completeCalls == 0)
@@ -700,17 +738,19 @@ func waitForTurnResult(
       let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
       // when
-      let result = await runtime.runTurn(
+      let outcome = try await runtime.runTurn(
         runId: 1,
         sessionId: 2,
         chatId: 3,
-        context: [ChatMessage(role: .user, content: "hello world")],
+        buildResult: singleUserBuildResult("hello world"),
+        sessionTainted: false,
+        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
 
       // then
-      let (kind, usage) = try requireDegraded(result)
+      let (kind, usage) = try requireDegraded(outcome.result)
       #expect(kind == .providerUnavailable)
       #expect(try #require(usage).isEstimated)
       #expect(await provider.completeCalls == 0)
@@ -724,17 +764,19 @@ func waitForTurnResult(
     let runtime = makeRuntime(provider: provider, streamingEnabled: true, sleep: { _ in })
 
     // when
-    let result = await runtime.runTurn(
+    let outcome = try await runtime.runTurn(
       runId: 1,
       sessionId: 2,
       chatId: 3,
-      context: [ChatMessage(role: .user, content: "hello world")],
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
 
     // then
-    let (kind, usage) = try requireDegraded(result)
+    let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
     #expect(try #require(usage).isEstimated)
   }
@@ -747,21 +789,23 @@ func waitForTurnResult(
 
     // when
     let turnResult = startTurn {
-      await runtime.runTurn(
+      try await runtime.runTurn(
         runId: 1,
         sessionId: 2,
         chatId: 3,
-        context: [ChatMessage(role: .user, content: "hello world")],
+        buildResult: self.singleUserBuildResult("hello world"),
+        sessionTainted: false,
+        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
     }
     await gate.waitUntilStarted()
-    let result = await waitForTurnResult(turnResult, milliseconds: 250)
+    let outcome = await waitForTurnResult(turnResult, milliseconds: 250)
 
     // then
     await gate.release()
-    let (kind, usage) = try requireDegraded(try #require(result))
+    let (kind, usage) = try requireDegraded(try #require(outcome).result)
     #expect(kind == .providerUnavailable)
     #expect(try #require(usage).isEstimated)
   }

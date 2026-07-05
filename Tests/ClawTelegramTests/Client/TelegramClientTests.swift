@@ -295,5 +295,35 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(body["chat_id"] as? Int == 42)
     #expect(body["draft_id"] as? Int == 99)
     #expect(richMessage["markdown"] as? String == "**hi**")
+    let linkPreviewOptions = try #require(body["link_preview_options"] as? [String: Any])
+    #expect(linkPreviewOptions["is_disabled"] as? Bool == true)
+  }
+
+  @Test func sendMessageDisablesLinkPreviews() async throws {
+    // given: an exfil-approval prompt embeds an attacker-chosen URL in outbound text; Telegram
+    // must never auto-fetch it to build a preview (ARCHITECTURE §12), regardless of the owner's
+    // eventual answer.
+    let recorder = RecordingHTTPExecutor.Recorder()
+    let http = RecordingHTTPExecutor(
+      recorder: recorder,
+      result: HTTPResult(
+        statusCode: 200,
+        headers: [:],
+        body: Data(#"{"ok":true,"result":{"message_id":7,"chat":{"id":42}}}"#.utf8)
+      )
+    )
+    let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
+
+    // when
+    let messageId = try await telegram.sendMessage(chatId: 42, text: "https://evil.example/exfil")
+
+    // then
+    #expect(messageId == 7)
+    let call = try #require(await recorder.calls.first)
+    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    #expect(body["chat_id"] as? Int == 42)
+    #expect(body["text"] as? String == "https://evil.example/exfil")
+    let linkPreviewOptions = try #require(body["link_preview_options"] as? [String: Any])
+    #expect(linkPreviewOptions["is_disabled"] as? Bool == true)
   }
 }

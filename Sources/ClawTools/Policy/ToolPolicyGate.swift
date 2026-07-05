@@ -11,7 +11,7 @@ public struct ToolPolicyGate: Sendable {
 
   public enum Verdict: Sendable, Equatable {
     case allow(argsRedacted: String, consumedGrant: Bool)
-    case block(payload: ToolPayload, argsRedacted: String, pendingApproval: ExfilApprovalRequest?)
+    case block(payload: ToolPayload, argsRedacted: String, pendingApproval: ToolApprovalRequest?)
   }
 
   private let argGuard: ExfilArgGuard
@@ -86,7 +86,8 @@ public struct ToolPolicyGate: Sendable {
       )
     }
 
-    if context.grant?.canonicalURL == canonical {
+    let action = ToolAction(tool: call.name, target: canonical)
+    if context.grant?.action == action {
       return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: true)
     }
 
@@ -100,7 +101,7 @@ public struct ToolPolicyGate: Sendable {
       argsRedacted: conditional.redactedArgs,
       pendingApproval: context.approvalAlreadyPending
         ? nil
-        : ExfilApprovalRequest(canonicalURL: canonical)
+        : ToolApprovalRequest(action: action, reason: .exfilTrifecta)
     )
   }
 

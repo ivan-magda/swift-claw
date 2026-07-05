@@ -5,11 +5,13 @@ import Logging
 
 /// Injected behind a protocol so the router/poller tests stay decoupled from the real provider.
 public protocol TurnDispatching: Sendable {
+  // swiftlint:disable:next function_parameter_count
   func run(
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64
+    triggerMessageId: Int64,
+    grant: OneTurnGrant?
   ) async throws
 }
 
@@ -23,6 +25,9 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
+  /// One approval slot per session; a `.completed` run that tripped an approval gate parks its
+  /// request here (only after its commit wins arbitration) so a later `yes` can arm the grant.
+  private let pendingConfirmations: PendingConfirmationRegistry
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until Task 6 wires the dispatcher.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the transport for its owner DM. Both `nil` in tests that don't
@@ -42,6 +47,7 @@ public struct TurnRunner: TurnDispatching {
     agent: AgentRuntime,
     budget: RunBudget,
     contextBuilder: ContextBuilder,
+    pendingConfirmations: PendingConfirmationRegistry,
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     transport: (any TelegramTransport)? = nil,
@@ -54,6 +60,7 @@ public struct TurnRunner: TurnDispatching {
     self.agent = agent
     self.budget = budget
     self.contextBuilder = contextBuilder
+    self.pendingConfirmations = pendingConfirmations
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.transport = transport
@@ -64,7 +71,8 @@ public struct TurnRunner: TurnDispatching {
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64
+    triggerMessageId: Int64,
+    grant: OneTurnGrant?
   ) async throws {
     guard !Task.isCancelled else {
       return
@@ -80,12 +88,13 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
+    let snapshot: SessionContextSnapshot
     let buildResult: BuildResult
     let todayTokens: Int
     let todayUSD: Double
 
     do {
-      let snapshot = try sessionMessages.loadContextSnapshot(
+      snapshot = try sessionMessages.loadContextSnapshot(
         sessionId: sessionId,
         throughMessageId: triggerMessageId,
         limit: Self.historyLimit
@@ -105,6 +114,7 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         chatId: chatId,
         usage: nil,
+        setTainted: false,
         message: ownerVisiblePayload(
           reply: Degradation.contextUnavailable,
           ownerNotices: []
@@ -116,17 +126,21 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let result = await agent.runTurn(
+    // Real session taint (§10): the gate reads `(session ∪ run)`, so a session already tainted by a
+    // prior turn keeps the exfil gate armed from this run's very first tool call.
+    let outcome = try await agent.runTurn(
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
-      context: buildResult.messages,
+      buildResult: buildResult,
+      sessionTainted: snapshot.isTainted,
+      grant: grant,
       todayTokens: todayTokens,
       todayUSD: todayUSD
     )
 
     try await commit(
-      result,
+      outcome,
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
@@ -144,7 +158,7 @@ public struct TurnRunner: TurnDispatching {
   ///  - `.budgetStopped`: the shared failure tail with the budget reply.
   /// Only `StoreError.diskFull` may propagate; every other failure is handled in-band here.
   private func commit(
-    _ result: TurnResult,
+    _ outcome: TurnOutcome,
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
@@ -152,8 +166,14 @@ public struct TurnRunner: TurnDispatching {
   ) async throws {
     let committedAt = Date()
 
-    switch result {
+    switch outcome.result {
     case .completed(let content, let usage):
+      // The deterministic approval prompt (D7) is APPENDED after the model's reply; overflow owner
+      // notices keep their PREPEND slot (rev.1 L1). Delivery-only — never stored as history.
+      let appendedNotices =
+        outcome.pendingApproval.map { approval in
+          [ToolApprovalPrompt.text(for: approval)]
+        } ?? []
       let turn = AssistantTurn(
         runId: runId,
         sessionId: sessionId,
@@ -161,14 +181,25 @@ public struct TurnRunner: TurnDispatching {
         content: content,
         usage: usage,
         chunks: outboxChunks(
-          for: ownerVisiblePayload(reply: content, ownerNotices: ownerNotices),
+          for: ownerVisiblePayload(
+            reply: content,
+            ownerNotices: ownerNotices,
+            appendedNotices: appendedNotices
+          ),
           chatId: chatId
-        )
+        ),
+        exchanges: outcome.exchanges,
+        setTainted: outcome.ingestedUntrusted
       )
 
       let commitResult = try runs.commitAssistantTurn(turn, now: committedAt)
       switch commitResult {
       case .committed:
+        // Park ONLY after the commit won arbitration — a superseded run must not leave a live
+        // approval behind. One slot per session: parking replaces (deny-by-default holds).
+        if let approval = outcome.pendingApproval {
+          await pendingConfirmations.park(.toolApproval(approval), sessionId: sessionId)
+        }
         try audit.appendAudit(
           turnAudit(
             action: .turnCompleted,
@@ -186,11 +217,15 @@ public struct TurnRunner: TurnDispatching {
         return
       }
     case .degraded(let degradationKind, let usage):
+      // Exchanges are lost by design on the failure path (§10); the taint from any ingesting call
+      // this run still persists so the next turn's gate stays armed. No approval is parked — the
+      // model's explanation never reached the owner, so the gate simply re-trips next time.
       let commitResult = try commitDegradation(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
         usage: usage,
+        setTainted: outcome.ingestedUntrusted,
         message: ownerVisiblePayload(
           reply: Degradation.message(for: degradationKind),
           ownerNotices: ownerNotices
@@ -208,6 +243,7 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         chatId: chatId,
         usage: nil,
+        setTainted: outcome.ingestedUntrusted,
         message: ownerVisiblePayload(
           reply: Degradation.budget(cap: cap),
           ownerNotices: ownerNotices
@@ -226,6 +262,7 @@ public struct TurnRunner: TurnDispatching {
     sessionId: Int64,
     chatId: Int64,
     usage: ProviderUsage?,
+    setTainted: Bool,
     message: String,
     action: AuditAction,
     decision: String,
@@ -244,7 +281,8 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         chatId: chatId,
         usage: usage,
-        chunk: chunk
+        chunk: chunk,
+        setTainted: setTainted
       ),
       now: committedAt
     )
@@ -326,11 +364,18 @@ public struct TurnRunner: TurnDispatching {
     )
   }
 
-  private func ownerVisiblePayload(reply: String, ownerNotices: [String]) -> String {
-    guard ownerNotices.isEmpty == false else {
+  /// Assembles the owner-visible payload: overflow notices PREPEND (rev.1 L1), the approval
+  /// prompt APPENDS. Single-part payloads (the common case) pass through unchanged.
+  private func ownerVisiblePayload(
+    reply: String,
+    ownerNotices: [String],
+    appendedNotices: [String] = []
+  ) -> String {
+    let parts = ownerNotices + [reply] + appendedNotices
+    guard parts.count > 1 else {
       return reply
     }
-    return (ownerNotices + [reply]).joined(separator: "\n\n")
+    return parts.joined(separator: "\n\n")
   }
 
   /// Splits an assistant reply into deterministic outbox chunks (grapheme-capped, FNV-1a hashed).

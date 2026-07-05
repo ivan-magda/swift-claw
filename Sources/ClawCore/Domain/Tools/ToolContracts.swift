@@ -25,7 +25,11 @@ public struct ToolCall: Sendable, Equatable, Codable {
 /// history must never crash rendering — the renderer's orphan guard handles the fallout).
 public enum ToolCallCoding {
   public static func encode(_ calls: [ToolCall]) -> String? {
-    guard let data = try? JSONEncoder().encode(calls) else {
+    let encoder = JSONEncoder()
+    // Persist URLs/paths in their natural form (`/`, not `\/`) so the stored anchor reads as the
+    // model proposed it — decode is symmetric either way, but the escaped form is gratuitous.
+    encoder.outputFormatting = [.withoutEscapingSlashes]
+    guard let data = try? encoder.encode(calls) else {
       return nil
     }
     return String(data: data, encoding: .utf8)

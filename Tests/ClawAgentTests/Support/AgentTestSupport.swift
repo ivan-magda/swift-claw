@@ -1,3 +1,4 @@
+import ClawWorkspace
 import Foundation
 import Testing
 
@@ -107,6 +108,156 @@ actor GatedProvider: LLMProvider {
   }
 }
 
+/// Scripted multi-round-trip provider: returns responses in order; records every request.
+actor SequenceProvider: LLMProvider {
+  private var responses: [ChatResponse]
+  private(set) var requests: [ChatRequest] = []
+
+  init(_ responses: [ChatResponse]) {
+    self.responses = responses
+  }
+
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    requests.append(request)
+    guard responses.isEmpty == false else {
+      throw ProviderError.terminal(status: nil, message: "unscripted round-trip")
+    }
+    return responses.removeFirst()
+  }
+}
+
+/// Scripted tool dispatcher: name → outcome factory; records every dispatched call+context.
+actor ScriptedDispatcher: ToolDispatching {
+  struct Record: Sendable {
+    let call: ToolCall
+    let context: ToolDispatchContext
+  }
+
+  nonisolated let definitions: [ToolDefinition]
+  private let respond: @Sendable (ToolCall, ToolDispatchContext) -> ToolDispatchOutcome
+  private(set) var records: [Record] = []
+
+  init(
+    definitions: [ToolDefinition] = [],
+    respond: @escaping @Sendable (ToolCall, ToolDispatchContext) -> ToolDispatchOutcome
+  ) {
+    self.definitions = definitions
+    self.respond = respond
+  }
+
+  func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
+    records.append(Record(call: call, context: context))
+    return respond(call, context)
+  }
+}
+
+/// Usage store recording rows; can throw a scripted error on the Nth write. A lock-guarded class,
+/// not an actor: `UsageStore` is a synchronous (non-`async`) protocol, mirroring production
+/// `UsageStoreGRDB` — a `Sendable` value type whose thread safety comes from GRDB's writer, not
+/// actor isolation. An actor cannot satisfy a synchronous protocol requirement without crossing
+/// into isolated state, which Swift 6 strict concurrency now flags at the conformance itself.
+final class RecordingUsageStore: UsageStore, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _recorded: [ProviderUsage] = []
+  private let failOnWrite: Int?
+  private let thrown: any Error
+
+  var recorded: [ProviderUsage] {
+    lock.lock()
+    defer { lock.unlock() }
+    return _recorded
+  }
+
+  init(failOnWrite: Int? = nil, thrown: any Error = StoreError.unexpected("scripted")) {
+    self.failOnWrite = failOnWrite
+    self.thrown = thrown
+  }
+
+  func recordUsage(_ usage: ProviderUsage) throws {
+    lock.lock()
+    defer { lock.unlock() }
+    if let failOnWrite, _recorded.count + 1 == failOnWrite {
+      throw thrown
+    }
+    _recorded.append(usage)
+  }
+
+  func todayTokensAndCost(now: Date) throws -> (tokens: Int, costUSD: Double) {
+    (0, 0)
+  }
+
+  func costSourceMix(now: Date) throws -> [CostSource: Int] {
+    [:]
+  }
+}
+
+/// Audit log recording events; can throw a scripted error on every write. Lock-guarded, not an
+/// actor, for the same reason as `RecordingUsageStore`.
+final class RecordingAuditLog: AuditLog, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _events: [AuditEvent] = []
+  private let thrown: (any Error)?
+
+  var events: [AuditEvent] {
+    lock.lock()
+    defer { lock.unlock() }
+    return _events
+  }
+
+  init(thrown: (any Error)? = nil) {
+    self.thrown = thrown
+  }
+
+  func appendAudit(_ event: AuditEvent) throws {
+    lock.lock()
+    defer { lock.unlock() }
+    if let thrown {
+      throw thrown
+    }
+    _events.append(event)
+  }
+}
+
+/// A workspace with nothing on disk: every file load is `.missing`, no skills. Stands in for
+/// `ContextBuilder` collaborators in tests that only care about history rendering.
+struct EmptyWorkspace: WorkspaceReading {
+  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+    LoadedFile(outcome: .missing, text: "", graphemeCount: 0)
+  }
+
+  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
+    LoadedFile(outcome: .missing, text: "", graphemeCount: 0)
+  }
+
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
+}
+
+/// A memory store with nothing stored: `fetchRanked` always returns empty, other members are
+/// unused by history-rendering tests.
+struct EmptyMemoryStore: MemoryStore {
+  func append(_ newItem: NewMemoryItem, now: Date) throws -> MemoryItem {
+    throw StoreError.unexpected("not used")
+  }
+
+  func list(kind: MemoryKind?, limit: Int) throws -> [MemoryItem] { [] }
+  func get(id: Int64) throws -> MemoryItem? { nil }
+  func delete(id: Int64) throws -> Bool { false }
+  func fetchRanked(excludeSensitive: Bool, limit: Int) throws -> [MemoryItem] { [] }
+}
+
+/// A retriever with no recall corpus: always returns no hits.
+struct EmptyRetriever: Retriever {
+  func searchRelevantMessages(
+    query: String,
+    currentSessionId: Int64,
+    windowStartMessageId: Int64?,
+    excludedMessageIds: [Int64],
+    limit: Int
+  ) throws -> [RecallHit] { [] }
+}
+
 // MARK: - Builders
 
 /// A real sleep honoring the requested duration — the default so an instant provider wins the
@@ -130,6 +281,9 @@ func makeRuntime(
   budget: RunBudget = .default,
   model: String = "gpt-4o",
   streamingEnabled: Bool = false,
+  toolDispatcher: (any ToolDispatching)? = nil,
+  usageStore: any UsageStore = RecordingUsageStore(),
+  auditLog: any AuditLog = RecordingAuditLog(),
   sleep: @escaping @Sendable (Duration) async throws -> Void = realSleep
 ) -> AgentRuntime {
   AgentRuntime(
@@ -140,6 +294,9 @@ func makeRuntime(
     costResolver: costResolver,
     budget: budget,
     model: model,
+    toolDispatcher: toolDispatcher,
+    usageStore: usageStore,
+    auditLog: auditLog,
     sleep: sleep
   )
 }
@@ -185,5 +342,47 @@ func okResponse(
     finishReason: finishReason,
     usage: usage,
     costFromProvider: costFromProvider
+  )
+}
+
+func okOutcome(
+  content: String = "ok",
+  ingestedUntrusted: Bool = true,
+  readPrivateData: Bool = false
+) -> @Sendable (ToolCall, ToolDispatchContext) -> ToolDispatchOutcome {
+  { call, _ in
+    ToolDispatchOutcome(
+      observation: ToolObservation(
+        callId: call.id,
+        toolName: call.name,
+        content: content,
+        status: .ok,
+        ingestedUntrusted: ingestedUntrusted,
+        readPrivateData: readPrivateData
+      ),
+      argsRedacted: call.argumentsJSON
+    )
+  }
+}
+
+func toolCallResponse(_ calls: [ToolCall], content: String = "") -> ChatResponse {
+  ChatResponse(
+    content: content,
+    finishReason: "tool_calls",
+    usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+    costFromProvider: nil,
+    toolCalls: calls
+  )
+}
+
+func fetchProposal(id: String = "c1", url: String = "https://example.com/a") -> ToolCall {
+  ToolCall(id: id, name: "web_fetch", argumentsJSON: "{\"url\":\"\(url)\"}")
+}
+
+func makeBuildResult(hasPrivateDataAccess: Bool = false) -> BuildResult {
+  BuildResult(
+    messages: [ChatMessage(role: .user, content: "go")],
+    ownerNotices: [],
+    hasPrivateDataAccess: hasPrivateDataAccess
   )
 }
