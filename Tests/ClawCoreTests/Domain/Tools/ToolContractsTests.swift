@@ -96,7 +96,9 @@ import Testing
 
   @Test func dispatchContextAndGrantAreValueTypes() {
     // given
-    let grant = OneTurnFetchGrant(canonicalURL: "https://example.com/a?q=1")
+    let grant = OneTurnGrant(
+      action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1")
+    )
 
     // when
     let context = ToolDispatchContext(
@@ -110,8 +112,11 @@ import Testing
 
     // then
     #expect(context.grant == grant)
-    #expect(
-      ExfilApprovalRequest(canonicalURL: "https://x.example/").canonicalURL == "https://x.example/"
+    let request = ToolApprovalRequest(
+      action: ToolAction(tool: "web_fetch", target: "https://x.example/"),
+      reason: .exfilTrifecta
     )
+    #expect(request.action.target == "https://x.example/")
+    #expect(request.reason.rawValue == "exfil_trifecta")
   }
 }

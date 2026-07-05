@@ -349,8 +349,8 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     let promptPayload = try #require(afterTrip.last)
     #expect(promptPayload.contains("evil.example/x?q=1"))
     #expect(promptPayload.contains("Reply yes to allow this one fetch"))
-    if case .exfilFetch(let request) = try await harness.pending() {
-      #expect(request.canonicalURL.contains("evil.example/x?q=1"))
+    if case .toolApproval(let request) = try await harness.pending() {
+      #expect(request.action.target.contains("evil.example/x?q=1"))
     } else {
       Issue.record("expected a parked exfil approval after the trip")
     }
@@ -401,8 +401,8 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     #expect(
       await harness.http.requestedURLs.contains { url in url.contains("evil.example") } == false
     )
-    if case .exfilFetch(let request) = try await harness.pending() {
-      #expect(request.canonicalURL.contains("q=2"))
+    if case .toolApproval(let request) = try await harness.pending() {
+      #expect(request.action.target.contains("q=2"))
     } else {
       Issue.record("expected a re-parked exfil approval for the new URL")
     }

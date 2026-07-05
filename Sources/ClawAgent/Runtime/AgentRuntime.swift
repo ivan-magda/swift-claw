@@ -31,13 +31,13 @@ public struct TurnOutcome: Sendable {
   /// Taint signal: any executed observation ingested untrusted content this run (§10).
   public let ingestedUntrusted: Bool
   /// A gate trip awaiting the owner's approval, if this run tripped one (§9).
-  public let pendingApproval: ExfilApprovalRequest?
+  public let pendingApproval: ToolApprovalRequest?
 
   public init(
     result: TurnResult,
     exchanges: [ToolExchange] = [],
     ingestedUntrusted: Bool = false,
-    pendingApproval: ExfilApprovalRequest? = nil
+    pendingApproval: ToolApprovalRequest? = nil
   ) {
     self.result = result
     self.exchanges = exchanges
@@ -107,7 +107,7 @@ public struct AgentRuntime: Sendable {
     chatId: Int64,
     buildResult: BuildResult,
     sessionTainted: Bool,
-    fetchGrant: OneTurnFetchGrant?,
+    grant: OneTurnGrant?,
     todayTokens: Int,
     todayUSD: Double
   ) async throws -> TurnOutcome {
@@ -119,8 +119,8 @@ public struct AgentRuntime: Sendable {
     var exchanges: [ToolExchange] = []
     var ingestedUntrusted = false
     var runPrivateData = false
-    var pendingApproval: ExfilApprovalRequest?
-    var grant = fetchGrant
+    var pendingApproval: ToolApprovalRequest?
+    var remainingGrant = grant
     var proposedToolCalls = 0
     var recordedRunTokens = 0
     var recordedRunUSD = 0.0
@@ -253,7 +253,7 @@ public struct AgentRuntime: Sendable {
           runIngestedUntrusted: ingestedUntrusted,
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
-          grant: grant,
+          grant: remainingGrant,
           approvalAlreadyPending: pendingApproval != nil
         )
         guard let toolDispatcher else {
@@ -279,7 +279,7 @@ public struct AgentRuntime: Sendable {
           runPrivateData = true  // rev.1 H1
         }
         if dispatched.consumedGrant {
-          grant = nil  // single-use
+          remainingGrant = nil  // single-use
         }
         if pendingApproval == nil, let request = dispatched.pendingApproval {
           pendingApproval = request  // first trip parks; later trips are observation-only

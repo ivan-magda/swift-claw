@@ -11,7 +11,7 @@ public protocol TurnDispatching: Sendable {
     sessionId: Int64,
     chatId: Int64,
     triggerMessageId: Int64,
-    fetchGrant: OneTurnFetchGrant?
+    grant: OneTurnGrant?
   ) async throws
 }
 
@@ -25,8 +25,8 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  /// One approval slot per session; a `.completed` run that tripped the exfil gate parks its request
-  /// here (only after its commit wins arbitration) so a later `yes` can arm the one-turn grant.
+  /// One approval slot per session; a `.completed` run that tripped an approval gate parks its
+  /// request here (only after its commit wins arbitration) so a later `yes` can arm the grant.
   private let pendingConfirmations: PendingConfirmationRegistry
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until Task 6 wires the dispatcher.
   private let notifyOutbox: @Sendable () -> Void
@@ -72,7 +72,7 @@ public struct TurnRunner: TurnDispatching {
     sessionId: Int64,
     chatId: Int64,
     triggerMessageId: Int64,
-    fetchGrant: OneTurnFetchGrant?
+    grant: OneTurnGrant?
   ) async throws {
     guard !Task.isCancelled else {
       return
@@ -134,7 +134,7 @@ public struct TurnRunner: TurnDispatching {
       chatId: chatId,
       buildResult: buildResult,
       sessionTainted: snapshot.isTainted,
-      fetchGrant: fetchGrant,
+      grant: grant,
       todayTokens: todayTokens,
       todayUSD: todayUSD
     )
@@ -168,11 +168,11 @@ public struct TurnRunner: TurnDispatching {
 
     switch outcome.result {
     case .completed(let content, let usage):
-      // The deterministic exfil prompt (D7) is APPENDED after the model's reply; overflow owner
+      // The deterministic approval prompt (D7) is APPENDED after the model's reply; overflow owner
       // notices keep their PREPEND slot (rev.1 L1). Delivery-only — never stored as history.
       let appendedNotices =
         outcome.pendingApproval.map { approval in
-          [ExfilApprovalPrompt.text(canonicalURL: approval.canonicalURL)]
+          [ToolApprovalPrompt.text(for: approval)]
         } ?? []
       let turn = AssistantTurn(
         runId: runId,
@@ -198,7 +198,7 @@ public struct TurnRunner: TurnDispatching {
         // Park ONLY after the commit won arbitration — a superseded run must not leave a live
         // approval behind. One slot per session: parking replaces (deny-by-default holds).
         if let approval = outcome.pendingApproval {
-          await pendingConfirmations.park(.exfilFetch(approval), sessionId: sessionId)
+          await pendingConfirmations.park(.toolApproval(approval), sessionId: sessionId)
         }
         try audit.appendAudit(
           turnAudit(
@@ -364,7 +364,7 @@ public struct TurnRunner: TurnDispatching {
     )
   }
 
-  /// Assembles the owner-visible payload: overflow notices PREPEND (rev.1 L1), the exfil approval
+  /// Assembles the owner-visible payload: overflow notices PREPEND (rev.1 L1), the approval
   /// prompt APPENDS. Single-part payloads (the common case) pass through unchanged.
   private func ownerVisiblePayload(
     reply: String,

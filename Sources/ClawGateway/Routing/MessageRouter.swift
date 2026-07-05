@@ -404,20 +404,20 @@ extension MessageRouter {
       return nil
     }
 
-    // The exfil approval differs from the memory-confirm flow: BOTH a confirm and a non-confirm
+    // A tool approval differs from the memory-confirm flow: BOTH a confirm and a non-confirm
     // reply become an ordinary persisted turn (never a command ack, §14), so it resolves here,
     // before the memory-only commit/cancel switch below ever sees the entry.
-    if case .exfilFetch(let request) = entry {
+    if case .toolApproval(let request) = entry {
       await pendingConfirmations.clear(sessionId: sessionId)
-      let grant: OneTurnFetchGrant? =
+      let grant: OneTurnGrant? =
         ConfirmationReply.parse(text) == .confirm
-        ? OneTurnFetchGrant(canonicalURL: request.canonicalURL)
+        ? OneTurnGrant(action: request.action)
         : nil
       return await dispatchTurn(
         rawUpdate: rawUpdate,
         message: message,
         text: text,
-        fetchGrant: grant
+        grant: grant
       )
     }
 
@@ -466,8 +466,8 @@ extension MessageRouter {
           now: Date()
         )
         ackText = MemoryReplies.deleted(id: itemId)
-      case .exfilFetch:
-        preconditionFailure("exfil resolves in resolvePendingConfirmation before commitPending")
+      case .toolApproval:
+        preconditionFailure("approvals resolve in resolvePendingConfirmation before commitPending")
       }
     } catch StoreError.diskFull {
       return await storageFull(chatId: message.chatId)
@@ -522,8 +522,8 @@ extension MessageRouter {
       errorText = MemoryReplies.saveFailed
     case .deleteItem:
       errorText = MemoryReplies.deleteFailed
-    case .exfilFetch:
-      preconditionFailure("exfil resolves in resolvePendingConfirmation before commitPending")
+    case .toolApproval:
+      preconditionFailure("approvals resolve in resolvePendingConfirmation before commitPending")
     }
 
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: errorText)
@@ -565,7 +565,7 @@ extension MessageRouter {
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     text: String,
-    fetchGrant: OneTurnFetchGrant? = nil
+    grant: OneTurnGrant? = nil
   ) async -> HandleOutcome {
     let inbound = InboundMessage(
       updateId: rawUpdate.updateId,
@@ -605,7 +605,7 @@ extension MessageRouter {
           sessionId: sessionId,
           chatId: message.chatId,
           triggerMessageId: triggerMessageId,
-          fetchGrant: fetchGrant
+          grant: grant
         )
       } catch StoreError.diskFull {
         logger.error("turn \(runId) stopped by storage full after enqueue")

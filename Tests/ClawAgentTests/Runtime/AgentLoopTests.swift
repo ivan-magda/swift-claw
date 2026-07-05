@@ -9,7 +9,7 @@ import Testing
     _ runtime: AgentRuntime,
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
-    fetchGrant: OneTurnFetchGrant? = nil
+    grant: OneTurnGrant? = nil
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
       runId: 1,
@@ -17,7 +17,7 @@ import Testing
       chatId: 1,
       buildResult: buildResult,
       sessionTainted: sessionTainted,
-      fetchGrant: fetchGrant,
+      grant: grant,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -213,7 +213,9 @@ import Testing
 
   @Test func grantThreadsIntoContextAndConsumesOnce() async throws {
     // given
-    let grant = OneTurnFetchGrant(canonicalURL: "https://example.com/a")
+    let grant = OneTurnGrant(
+      action: ToolAction(tool: "web_fetch", target: "https://example.com/a")
+    )
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2")]),
       okResponse(),
@@ -232,7 +234,7 @@ import Testing
     let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
 
     // when
-    _ = try await run(runtime, fetchGrant: grant)
+    _ = try await run(runtime, grant: grant)
 
     // then — single-use: the second dispatch no longer sees the grant
     let records = await dispatcher.records
@@ -242,7 +244,10 @@ import Testing
 
   @Test func firstApprovalTripParksLaterTripsAreObservationOnly() async throws {
     // given
-    let firstRequest = ExfilApprovalRequest(canonicalURL: "https://example.com/a")
+    let firstRequest = ToolApprovalRequest(
+      action: ToolAction(tool: "web_fetch", target: "https://example.com/a"),
+      reason: .exfilTrifecta
+    )
     let provider = SequenceProvider([
       toolCallResponse([
         fetchProposal(id: "c1"), fetchProposal(id: "c2", url: "https://example.com/b"),
@@ -261,7 +266,10 @@ import Testing
         argsRedacted: call.argumentsJSON,
         pendingApproval: context.approvalAlreadyPending
           ? nil
-          : ExfilApprovalRequest(canonicalURL: "https://example.com/a")
+          : ToolApprovalRequest(
+            action: ToolAction(tool: "web_fetch", target: "https://example.com/a"),
+            reason: .exfilTrifecta
+          )
       )
     }
     let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)

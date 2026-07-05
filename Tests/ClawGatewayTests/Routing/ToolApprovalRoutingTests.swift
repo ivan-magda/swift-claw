@@ -8,7 +8,7 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ExfilApprovalRoutingTests {
+@Suite struct ToolApprovalRoutingTests {
   private struct Fixture {
     let router: MessageRouter
     let runner: FakeTurnRunner
@@ -49,16 +49,19 @@ import Testing
     )
   }
 
-  private let approval = ExfilApprovalRequest(canonicalURL: "https://example.com/a?q=1")
+  private let approval = ToolApprovalRequest(
+    action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1"),
+    reason: .exfilTrifecta
+  )
 
   @Test func yesDispatchesTheTurnWithTheGrantAndClears() async throws {
-    // given — a parked exfil approval
+    // given — a parked tool approval (the exfil-trifecta kind)
     let fixture = try makeFixture()
     let sessionId = try fixture.sessions.loadOrCreateSession(
       sessionKey: SessionKey.telegramDM(chatId: 7),
       now: Date()
     )
-    await fixture.registry.park(.exfilFetch(approval), sessionId: sessionId)
+    await fixture.registry.park(.toolApproval(approval), sessionId: sessionId)
 
     // when
     let outcome = await fixture.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "yes"))
@@ -67,7 +70,10 @@ import Testing
     #expect(outcome == .processed)
     await fixture.runner.waitForCalls(atLeast: 1)
     let call = await fixture.runner.calls[0]
-    #expect(call.fetchGrant == OneTurnFetchGrant(canonicalURL: "https://example.com/a?q=1"))
+    let expectedGrant = OneTurnGrant(
+      action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1")
+    )
+    #expect(call.grant == expectedGrant)
     #expect(await fixture.registry.pending(sessionId: sessionId) == nil)
   }
 
@@ -78,7 +84,7 @@ import Testing
       sessionKey: SessionKey.telegramDM(chatId: 7),
       now: Date()
     )
-    await fixture.registry.park(.exfilFetch(approval), sessionId: sessionId)
+    await fixture.registry.park(.toolApproval(approval), sessionId: sessionId)
 
     // when — a "no" is a normal turn, so the model can respond naturally (§14)
     let outcome = await fixture.router.handle(
@@ -88,7 +94,7 @@ import Testing
     // then
     #expect(outcome == .processed)
     await fixture.runner.waitForCalls(atLeast: 1)
-    #expect(await fixture.runner.calls[0].fetchGrant == nil)
+    #expect(await fixture.runner.calls[0].grant == nil)
     #expect(await fixture.registry.pending(sessionId: sessionId) == nil)
   }
 
@@ -101,7 +107,7 @@ import Testing
 
     // then
     await fixture.runner.waitForCalls(atLeast: 1)
-    #expect(await fixture.runner.calls[0].fetchGrant == nil)
+    #expect(await fixture.runner.calls[0].grant == nil)
   }
 
   @Test func newClearsThePendingEntry() async throws {
@@ -111,7 +117,7 @@ import Testing
       sessionKey: SessionKey.telegramDM(chatId: 7),
       now: Date()
     )
-    await fixture.registry.park(.exfilFetch(approval), sessionId: sessionId)
+    await fixture.registry.park(.toolApproval(approval), sessionId: sessionId)
 
     // when
     _ = await fixture.router.handle(rawUpdate: textUpdate(id: 4, from: 7, text: "/new"))

@@ -335,7 +335,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -365,7 +365,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -390,7 +390,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
         sessionId: env.sessionId,
         chatId: env.chatId,
         triggerMessageId: env.triggerMessageId,
-        fetchGrant: nil
+        grant: nil
       )
     }
   }
@@ -409,7 +409,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -436,7 +436,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -487,7 +487,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: raced.sessionId,
       chatId: raced.chatId,
       triggerMessageId: raced.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -512,7 +512,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -556,7 +556,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -579,7 +579,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -606,7 +606,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then
@@ -644,7 +644,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       sessionId: env.sessionId,
       chatId: env.chatId,
       triggerMessageId: env.triggerMessageId,
-      fetchGrant: nil
+      grant: nil
     )
 
     // then

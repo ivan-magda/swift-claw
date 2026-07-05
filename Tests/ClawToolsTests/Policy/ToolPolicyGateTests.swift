@@ -21,7 +21,7 @@ import Testing
     runIngested: Bool = false,
     assemblyPrivate: Bool = false,
     runPrivate: Bool = false,
-    grant: OneTurnFetchGrant? = nil,
+    grant: OneTurnGrant? = nil,
     approvalPending: Bool = false
   ) -> ToolDispatchContext {
     ToolDispatchContext(
@@ -165,7 +165,11 @@ import Testing
       Issue.record("expected block")
       return
     }
-    #expect(firstApproval == ExfilApprovalRequest(canonicalURL: "https://example.com/a?q=1"))
+    let expectedRequest = ToolApprovalRequest(
+      action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1"),
+      reason: .exfilTrifecta
+    )
+    #expect(firstApproval == expectedRequest)
     guard case .block(let laterPayload, _, nil) = later else {
       Issue.record("expected observation-only block")
       return
@@ -176,7 +180,9 @@ import Testing
   @Test func matchingGrantIsConsumedAndMismatchedGrantIsNot() {
     // given
     let gate = makeGate()
-    let grant = OneTurnFetchGrant(canonicalURL: "https://example.com/a?q=1")
+    let grant = OneTurnGrant(
+      action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1")
+    )
 
     // when — exact canonical match executes; any query-byte difference re-trips
     let matching = gate.evaluate(
@@ -196,6 +202,26 @@ import Testing
     #expect(consumedGrant)
     guard case .block(let payload, _, _) = differing else {
       Issue.record("expected re-trip, got \(differing)")
+      return
+    }
+    #expect(payload.status == .blockedPendingApproval)
+  }
+
+  @Test func grantForAnotherToolDoesNotAuthorizeTheFetch() {
+    // given — same canonical target, but the approved action belongs to a DIFFERENT tool
+    let grant = OneTurnGrant(
+      action: ToolAction(tool: "file_read", target: "https://example.com/a?q=1")
+    )
+
+    // when
+    let verdict = makeGate().evaluate(
+      call: fetchCall("https://example.com/a?q=1"),
+      context: makeContext(tainted: true, assemblyPrivate: true, grant: grant)
+    )
+
+    // then — a grant is bound to the WHOLE action (tool + target); the fetch re-trips
+    guard case .block(let payload, _, _) = verdict else {
+      Issue.record("expected re-trip, got \(verdict)")
       return
     }
     #expect(payload.status == .blockedPendingApproval)

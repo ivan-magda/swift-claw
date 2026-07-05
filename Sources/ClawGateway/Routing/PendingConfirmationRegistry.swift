@@ -4,7 +4,7 @@ import Foundation
 public enum PendingConfirmation: Sendable, Equatable {
   case rememberWrite(MemoryWriteRequest)
   case deleteItem(id: Int64)
-  case exfilFetch(ExfilApprovalRequest)
+  case toolApproval(ToolApprovalRequest)
 }
 
 public actor PendingConfirmationRegistry {
