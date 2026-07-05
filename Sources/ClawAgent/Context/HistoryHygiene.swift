@@ -9,6 +9,7 @@ public enum HistoryHygiene {
   public static func sanitize(_ history: [StoredMessage]) -> [StoredMessage] {
     var sanitized: [StoredMessage] = []
     var index = 0
+
     while index < history.count {
       let message = history[index]
 
@@ -41,6 +42,7 @@ public enum HistoryHygiene {
       // else: drop the anchor AND its partial rows — the exchange is incomplete.
       index = cursor
     }
+
     return sanitized
   }
 }
