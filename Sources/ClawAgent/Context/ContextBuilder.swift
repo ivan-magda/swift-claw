@@ -140,16 +140,17 @@ public struct ContextBuilder: Sendable {
   ) -> FittableSection? {
     let units = files.compactMap { file -> SectionUnit? in
       let loaded = workspace.load(file: file, maxGraphemes: cap)
+
       switch loaded.outcome {
       case .present:
-        guard loaded.text.isEmpty == false else {
-          return nil
+        if !loaded.text.isEmpty {
+          return SectionUnit(
+            id: file.relativePath,
+            content: "## \(file.relativePath)\n\(loaded.text)",
+            canTruncate: false
+          )
         }
-        return SectionUnit(
-          id: file.relativePath,
-          content: "## \(file.relativePath)\n\(loaded.text)",
-          canTruncate: false
-        )
+        return nil
       case .overCap:
         if let cap {
           let notice = """
@@ -218,6 +219,7 @@ public struct ContextBuilder: Sendable {
     // floor so the model always sees the message it is answering.
     let cap = cap(for: .history, residual: residual)
     let groups = historyGroups(from: snapshot.history)
+
     let units = groups.reversed().map { group in
       SectionUnit(
         id: group.id,
@@ -241,9 +243,11 @@ public struct ContextBuilder: Sendable {
     let sanitized = HistoryHygiene.sanitize(history)
     var groups: [HistoryGroup] = []
     var index = 0
+
     while index < sanitized.count {
       let message = sanitized[index]
       let anchorCalls = message.toolCallsJSON.map(ToolCallCoding.decode) ?? []
+
       guard message.role == .assistant, anchorCalls.isEmpty == false else {
         groups.append(HistoryGroup(id: "history-\(index)", messages: [message]))
         index += 1
@@ -252,13 +256,16 @@ public struct ContextBuilder: Sendable {
 
       var grouped = [message]
       var cursor = index + 1
+
       while cursor < sanitized.count, sanitized[cursor].role == .tool {
         grouped.append(sanitized[cursor])
         cursor += 1
       }
+
       groups.append(HistoryGroup(id: "history-\(index)", messages: grouped))
       index = cursor
     }
+
     return groups
   }
 
@@ -291,10 +298,8 @@ public struct ContextBuilder: Sendable {
     let selected = recallCutoff.select(hits: hits, limit: Self.recallInjectionLimit)
     let units = selected.compactMap { hit -> SectionUnit? in
       let content = cappedRecallContent(hit.content)
-      guard content.isEmpty == false else {
-        return nil
-      }
-      return SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
+      return content.isEmpty
+        ? nil : SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
     }
 
     guard units.isEmpty == false else {
@@ -410,6 +415,7 @@ public struct ContextBuilder: Sendable {
     let keptIDs = Set(historySection.units.map(\.id))
     let groups = historyGroups(from: snapshot.history)
     var rendered: [ChatMessage] = []
+
     for group in groups where keptIDs.contains(group.id) {
       // The anchor's id→name map labels each tool row's fence. A provider-authored response could
       // duplicate a tool_call id; keep the first name rather than trapping on malformed history.
@@ -418,6 +424,7 @@ public struct ContextBuilder: Sendable {
         anchorCalls.map { call in (call.id, call.name) },
         uniquingKeysWith: { first, _ in first }
       )
+
       for message in group.messages {
         switch message.role {
         case .tool:
@@ -442,6 +449,7 @@ public struct ContextBuilder: Sendable {
         }
       }
     }
+
     return rendered
   }
 
