@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## What this is
 
 swift-claw — a persistent, always-on, **single-owner personal AI assistant** controlled via **Telegram**, written in **pure Swift**. Clean-room, OpenClaw-inspired.
@@ -12,6 +10,7 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 - Before implementing or changing the design → **`docs/ARCHITECTURE.md` is the NORMATIVE technical spec**; where it and anything else disagree, it wins.
 - Product scope, phasing, success criteria → `docs/PRD.md`.
 - Cited background research → `docs/research/`.
+- Building, running, or operating `clawd` locally → `docs/LOCAL_DEV.md`.
 
 ## Non-negotiable conventions
 
