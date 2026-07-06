@@ -188,6 +188,32 @@ struct DoctorCommand: AsyncParsableCommand {
     )
     let freeBytes = (fileSystemAttributes?[.systemFreeSize] as? Int) ?? 0
     report.add(key: "db.free_disk", value: "\(freeBytes)", ok: freeBytes > 0)
+
+    let schedulerState =
+      (try? stores.scheduledJobs.schedulerState())
+      ?? SchedulerState(
+        lastTickAt: nil,
+        lastMisfireAt: nil,
+        lastMisfireSkippedCount: 0,
+        lastHeartbeatAt: nil,
+        heartbeatCountDay: nil,
+        heartbeatCount: 0
+      )
+    let dueCount = try? stores.scheduledJobs.dueJobs(now: now).count
+    let proactiveTodayUSD =
+      (try? stores.usage.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: now))?.costUSD
+    for row in SchedulerHealth.rows(
+      state: schedulerState,
+      dueCount: dueCount,
+      proactiveTodayUSD: proactiveTodayUSD,
+      proactivePerDayUSD: config.budget.proactivePerDayUSD,
+      heartbeatEnabled: config.heartbeatEnabled,
+      heartbeatMaxPerDay: config.heartbeatMaxPerDay,
+      timezone: config.timezone,
+      now: now
+    ) {
+      report.add(key: row.key, value: row.value)
+    }
   }
 
   private func emit(_ report: DoctorReport) {
