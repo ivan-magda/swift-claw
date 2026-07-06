@@ -63,6 +63,10 @@ public struct MessageRouter: Sendable {
   static let welcomeText = "Hi! I'm online. Send me a message and I'll do my best to help."
   static let privateBotText = "Sorry, this is a private bot."
 
+  static func unsupportedMediaText(kind: String) -> String {
+    "I can't read \(kind) yet."
+  }
+
   @discardableResult
   public func handle(rawUpdate: RawUpdate) async -> HandleOutcome {
     guard let message = IncomingMessage.normalize(from: rawUpdate) else {
@@ -132,7 +136,7 @@ public struct MessageRouter: Sendable {
       }
     case .unsupported(let kind):
       // Never reveal capabilities to a stranger; the owner gets a specific "can't read X yet".
-      let reply = isAllowed ? "I can't read \(kind) yet." : Self.privateBotText
+      let reply = isAllowed ? Self.unsupportedMediaText(kind: kind) : Self.privateBotText
       return await sendCanned(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
     }
   }
