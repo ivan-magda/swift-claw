@@ -2,8 +2,11 @@ import ClawCore
 import Foundation
 
 public struct TelegramClient: TelegramTransport {
-  /// Default slack added on top of the long-poll timeout so the socket outlives the poll.
-  public static let defaultHTTPTimeoutSlackSeconds = 15
+  /// §18-A3 (ARCHITECTURE §14): the getUpdates socket read timeout is the long-poll timeout
+  /// + 10 s — enough for the server to flush a full batch after the poll window, small enough
+  /// that a dead connection is detected within seconds, not minutes; the poller's backoff then
+  /// reconnects. Scheduler-side gap recovery is lateness-based (spec §5.3), no wake detection.
+  public static let defaultHTTPTimeoutSlackSeconds = 10
 
   private let token: String
   private let http: any HTTPExecuting
