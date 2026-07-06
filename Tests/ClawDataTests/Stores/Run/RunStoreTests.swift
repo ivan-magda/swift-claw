@@ -95,7 +95,7 @@ import Testing
         now: Date()
       ) == nil
     )
-    #expect(try env.runs.pickUp(runId: env.seedRunId, now: Date()) != nil)
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
 
     // when
     let cancelled = try env.runs.cancelActiveRun(
@@ -121,7 +121,7 @@ import Testing
   @Test func supersedeSessionRunsTerminatesRunningAndQueuedRuns() throws {
     // given
     let env = try fixture()
-    #expect(try env.runs.pickUp(runId: env.seedRunId, now: Date()) != nil)
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
     let queued = try env.sessions.claimAndPersistInbound(
       InboundMessage(
         updateId: 2,
@@ -199,7 +199,7 @@ import Testing
     // given
     let env = try fixture()
     let runId = env.seedRunId
-    #expect(try env.runs.pickUp(runId: runId, now: Date()) != nil)
+    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
     let turn = AssistantTurn(
       runId: runId,
       sessionId: env.sessionId,
@@ -251,7 +251,7 @@ import Testing
       )
     )
     let runningRunId = try #require(runningClaim.runId)
-    #expect(try env.runs.pickUp(runId: runningRunId, now: Date()) != nil)
+    _ = try #require(try env.runs.pickUp(runId: runningRunId, now: Date()))
 
     // when
     let replies = try env.runs.reconcileRunsAtBoot(now: Date(), degradationText: "didn't finish")
@@ -269,7 +269,7 @@ import Testing
     // given
     let env = try fixture()
     let runId = env.seedRunId
-    #expect(try env.runs.pickUp(runId: runId, now: Date()) != nil)
+    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
     _ = try env.outbox.claimOutbound(
       runId: runId,
       stepIndex: 0,
@@ -296,7 +296,7 @@ import Testing
     // given
     let env = try fixture()
     let runId = env.seedRunId
-    #expect(try env.runs.pickUp(runId: runId, now: Date()) != nil)
+    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
     try env.queue.write { db in
       try db.execute(
         sql:

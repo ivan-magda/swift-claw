@@ -101,7 +101,7 @@ import Testing
         payloadHash: "p"
       ) == false
     )
-    #expect(try env.runs.pickUp(runId: env.runId, now: Date()) != nil)
+    _ = try #require(try env.runs.pickUp(runId: env.runId, now: Date()))
     #expect(
       try env.outbox.claimOutboundIfRunActive(
         runId: env.runId,
