@@ -188,20 +188,25 @@ public struct TurnRunner: TurnDispatching {
         outcome.pendingApproval.map { approval in
           [ToolApprovalPrompt.text(for: approval)]
         } ?? []
+      // Spec §12 ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
+      // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
+      let suppressHeartbeatAck = origin == .heartbeat && HeartbeatAck.isAck(content)
       let turn = AssistantTurn(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
         content: content,
         usage: usage,
-        chunks: outboxChunks(
-          for: ownerVisiblePayload(
-            reply: content,
-            ownerNotices: ownerNotices,
-            appendedNotices: appendedNotices
+        chunks: suppressHeartbeatAck
+          ? []
+          : outboxChunks(
+            for: ownerVisiblePayload(
+              reply: content,
+              ownerNotices: ownerNotices,
+              appendedNotices: appendedNotices
+            ),
+            chatId: chatId
           ),
-          chatId: chatId
-        ),
         exchanges: outcome.exchanges,
         setTainted: outcome.ingestedUntrusted
       )
@@ -223,6 +228,22 @@ public struct TurnRunner: TurnDispatching {
             at: committedAt
           )
         )
+        if origin == .heartbeat {
+          // The heartbeat outcome marker rides the same commit path and clock as turnCompleted
+          // (the durable side effect — zero vs. N outbox rows — is already inside the store
+          // transaction via `chunks`).
+          try audit.appendAudit(
+            AuditEvent(
+              actor: .assistant,
+              action: suppressHeartbeatAck ? .heartbeatSuppressed : .heartbeatFired,
+              resultSize: content.utf8.count,
+              decision: suppressHeartbeatAck ? "ack" : "delivered",
+              runId: runId,
+              sessionId: sessionId,
+              ts: committedAt
+            )
+          )
+        }
         notifyOutbox()
         await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
       case .usageRecordedAfterTerminal:

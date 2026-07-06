@@ -787,4 +787,99 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(firstPending.payload.contains("`MEMORY.md` is 2201/2200"))
     #expect(firstPending.payload.contains(Degradation.budget(cap: "per-day token")))
   }
+
+  @Test func heartbeatAckCommitsWithNoOutboxRowsAndAuditsSuppressed() async throws {
+    // given — a heartbeat-origin run whose whole result is the ack token
+    let env = try makeEnv(agentOutcome: .respond(okResponse(content: "HEARTBEAT_OK")))
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET origin = 'heartbeat' WHERE id = ?",
+        arguments: [env.runId]
+      )
+    }
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId,
+      grant: nil
+    )
+
+    // then — DONE with ZERO outbox rows; suppressed audited on the same commit path
+    #expect(try latestRunState(env.queue) == "DONE")
+    #expect(try env.outbox.pendingOutbound().isEmpty)
+    let counts = try heartbeatAuditCounts(env.queue)
+    #expect(counts.suppressed == 1)
+    #expect(counts.fired == 0)
+  }
+
+  @Test func substantiveHeartbeatResultDeliversAndAuditsFired() async throws {
+    // given — the token plus a 400-char report: remainder > 300 ⇒ deliver
+    let report = "HEARTBEAT_OK\n" + String(repeating: "a", count: 400)
+    let env = try makeEnv(agentOutcome: .respond(okResponse(content: report)))
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET origin = 'heartbeat' WHERE id = ?",
+        arguments: [env.runId]
+      )
+    }
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId,
+      grant: nil
+    )
+
+    // then — delivered like any run, plus the heartbeatFired marker
+    #expect(try latestRunState(env.queue) == "DONE")
+    let pending = try env.outbox.pendingOutbound()
+    #expect(pending.count == 1)
+    #expect(pending.first?.payload.contains("HEARTBEAT_OK") == true)
+    let counts = try heartbeatAuditCounts(env.queue)
+    #expect(counts.suppressed == 0)
+    #expect(counts.fired == 1)
+  }
+
+  @Test func interactiveRunsAreNeverSuppressedEvenForTheToken() async throws {
+    // given — the same token content on the DEFAULT interactive origin
+    let env = try makeEnv(agentOutcome: .respond(okResponse(content: "HEARTBEAT_OK")))
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId,
+      grant: nil
+    )
+
+    // then — delivered; no heartbeat audit rows of either kind
+    #expect(try env.outbox.pendingOutbound().count == 1)
+    let counts = try heartbeatAuditCounts(env.queue)
+    #expect(counts.suppressed == 0)
+    #expect(counts.fired == 0)
+  }
+
+  private func heartbeatAuditCounts(
+    _ queue: DatabaseQueue
+  ) throws -> (suppressed: Int, fired: Int) {
+    try queue.read { db in
+      let suppressed =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM audit_events WHERE action = 'heartbeat_suppressed'"
+        ) ?? 0
+      let fired =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM audit_events WHERE action = 'heartbeat_fired'"
+        ) ?? 0
+      return (suppressed, fired)
+    }
+  }
 }
