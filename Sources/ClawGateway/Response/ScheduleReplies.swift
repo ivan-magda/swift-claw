@@ -36,10 +36,12 @@ public enum ScheduleReplies {
       "timezone: \(schedule.timezone)",
       nextFires.count == 1 ? "next fire:" : "next \(nextFires.count) fires:",
     ]
+
     for fire in nextFires {
       lines.append("  \(fireTime(fire, timezoneId: schedule.timezone))")
     }
     lines.append("Reply yes to arm, no to cancel.")
+
     return lines.joined(separator: "\n")
   }
 
@@ -49,10 +51,12 @@ public enum ScheduleReplies {
     guard let job else {
       return "Armed."
     }
+
     var text = "Armed schedule \(job.id) · «\(job.label)»"
     if let next = job.nextOccurrence {
       text += " · next fire \(fireTime(next, timezoneId: job.timezone))"
     }
+
     return text + "."
   }
 
