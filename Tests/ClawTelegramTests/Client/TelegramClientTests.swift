@@ -326,4 +326,30 @@ private func client(status: Int, json: String) -> TelegramClient {
     let linkPreviewOptions = try #require(body["link_preview_options"] as? [String: Any])
     #expect(linkPreviewOptions["is_disabled"] as? Bool == true)
   }
+
+  @Test func getUpdatesSocketTimeoutIsLongPollTimeoutPlusTenSeconds() async throws {
+    // given (§18-A3): the socket read timeout must outlive the long poll by exactly 10 s, so a
+    // stalled poll is cut and re-issued instead of hanging the loop across a network gap
+    let recorder = RecordingHTTPExecutor.Recorder()
+    let telegram = TelegramClient(
+      token: "T",
+      http: RecordingHTTPExecutor(
+        recorder: recorder,
+        result: HTTPResult(
+          statusCode: 200,
+          headers: [:],
+          body: Data(#"{"ok":true,"result":[]}"#.utf8)
+        )
+      ),
+      baseURL: "https://example.test"
+    )
+
+    // when
+    _ = try await telegram.getUpdates(offset: nil, timeout: 30, allowedUpdates: ["message"])
+
+    // then
+    let call = try #require(await recorder.calls.first)
+    #expect(call.timeout == 40)
+    #expect(TelegramClient.defaultHTTPTimeoutSlackSeconds == 10)
+  }
 }

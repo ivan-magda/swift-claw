@@ -232,8 +232,19 @@ struct RunCommand: AsyncParsableCommand {
       logger: logger
     )
 
+    let scheduler = SchedulerService(
+      jobs: stores.scheduledJobs,
+      lanes: lanes,
+      turns: turnRunner,
+      calculator: OccurrenceCalculator(),
+      catchUpMaxAge: .seconds(Int64(config.schedCatchUpMaxAgeMinutes) * 60),
+      now: { Date() },
+      sleep: { try await Task.sleep(for: $0) },
+      logger: logger
+    )
+
     return Daemon(
-      services: [poller, dispatcher],
+      services: [poller, dispatcher, scheduler],
       boot: bootSequence(transport: transport, stores: stores, logger: logger),
       logger: logger
     )

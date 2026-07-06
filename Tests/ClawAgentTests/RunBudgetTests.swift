@@ -82,4 +82,95 @@ struct RunBudgetTests {
     // then
     #expect(decision == .allow)
   }
+
+  @Test("a proactive run is denied at the proactive cap while the global caps still pass")
+  func proactivePreflightDeniesAtTheProactiveCap() {
+    // given — default budget: proactive cap 2.00 nested inside the 10.00 global cap
+    let gate = BudgetGate(budget: .default)
+
+    // when — 2.00 of proactive spend today; the global pool is far from its cap
+    let scheduled = gate.preflight(
+      todayTokens: 0,
+      todayUSD: 2.0,
+      estimatedTotalTokens: 1_000,
+      estimatedCostUSD: 0.01,
+      origin: .scheduled,
+      proactiveTodayUSD: 2.0
+    )
+    let heartbeat = gate.preflight(
+      todayTokens: 0,
+      todayUSD: 2.0,
+      estimatedTotalTokens: 1_000,
+      estimatedCostUSD: 0.01,
+      origin: .heartbeat,
+      proactiveTodayUSD: 2.0
+    )
+    let interactive = gate.preflight(
+      todayTokens: 0,
+      todayUSD: 2.0,
+      estimatedTotalTokens: 1_000,
+      estimatedCostUSD: 0.01
+    )
+
+    // then — both proactive origins deny on the nested cap; interactive is untouched (S3)
+    #expect(scheduled == .deny(cap: BudgetGate.proactivePerDayCap))
+    #expect(heartbeat == .deny(cap: "proactive per-day spend"))
+    #expect(interactive == .allow)
+  }
+
+  @Test("a proactive run whose estimate would cross the proactive cap is denied")
+  func proactivePreflightDeniesWhenTheEstimateWouldCrossTheCap() {
+    // given
+    let gate = BudgetGate(budget: .default)
+
+    // when — 1.99 spent, 0.02 estimated: 2.01 > 2.00
+    let decision = gate.preflight(
+      todayTokens: 0,
+      todayUSD: 1.99,
+      estimatedTotalTokens: 1_000,
+      estimatedCostUSD: 0.02,
+      origin: .scheduled,
+      proactiveTodayUSD: 1.99
+    )
+
+    // then
+    #expect(decision == .deny(cap: "proactive per-day spend"))
+  }
+
+  @Test("global checks run first, unchanged order — the household kill-switch wins")
+  func globalChecksRunBeforeTheProactiveCheck() {
+    // given — the global per-day cap is met AND the proactive pool is over its cap
+    let gate = BudgetGate(budget: .default)
+
+    // when
+    let decision = gate.preflight(
+      todayTokens: 0,
+      todayUSD: 10.0,
+      estimatedTotalTokens: 100,
+      origin: .scheduled,
+      proactiveTodayUSD: 5.0
+    )
+
+    // then — the GLOBAL cap is named, proving check order
+    #expect(decision == .deny(cap: "per-day spend"))
+  }
+
+  @Test("a proactive run under the proactive cap is allowed")
+  func proactivePreflightAllowsUnderTheCap() {
+    // given
+    let gate = BudgetGate(budget: .default)
+
+    // when
+    let decision = gate.preflight(
+      todayTokens: 0,
+      todayUSD: 0.50,
+      estimatedTotalTokens: 1_000,
+      estimatedCostUSD: 0.01,
+      origin: .heartbeat,
+      proactiveTodayUSD: 0.50
+    )
+
+    // then
+    #expect(decision == .allow)
+  }
 }

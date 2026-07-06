@@ -8,6 +8,9 @@ public actor BudgetBreaker {
   private let budget: RunBudget
   /// The UTC day whose trip has already been DMed; resets implicitly when `now` rolls to a new day.
   private var notifiedDay: Date?
+  /// The UTC day whose PROACTIVE-cap trip has already been DMed (spec §11) — a second latch
+  /// beside the global one, so a proactive trip and a global trip each notify at most once/day.
+  private var notifiedProactiveDay: Date?
 
   public init(budget: RunBudget) {
     self.budget = budget
@@ -27,6 +30,19 @@ public actor BudgetBreaker {
       return false
     }
     notifiedDay = utcDayStart
+
+    return true
+  }
+
+  /// The once-per-UTC-day signal for the proactive-cap owner DM. Unlike `shouldNotifyTrip`, the
+  /// trip is already established by the caller (preflight denied on the proactive cap), so this
+  /// is latch-only — no cap re-check against durable totals.
+  public func shouldNotifyProactiveTrip(now: Date) -> Bool {
+    let utcDayStart = now.startOfUTCDay
+    guard notifiedProactiveDay != utcDayStart else {
+      return false
+    }
+    notifiedProactiveDay = utcDayStart
 
     return true
   }

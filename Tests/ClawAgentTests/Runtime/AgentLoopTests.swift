@@ -9,7 +9,9 @@ import Testing
     _ runtime: AgentRuntime,
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
-    grant: OneTurnGrant? = nil
+    grant: OneTurnGrant? = nil,
+    origin: RunOrigin = .interactive,
+    proactiveTodayUSD: Double = 0
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
       runId: 1,
@@ -19,8 +21,36 @@ import Testing
       sessionTainted: sessionTainted,
       grant: grant,
       todayTokens: 0,
-      todayUSD: 0
+      todayUSD: 0,
+      origin: origin,
+      proactiveTodayUSD: proactiveTodayUSD
     )
+  }
+
+  @Test func proactiveRunStopsAtTheProactiveCapBeforeAnyProviderCall() async throws {
+    // given — the proactive pool is exhausted; the global pool is not
+    let provider = SequenceProvider([okResponse()])
+    let runtime = makeRuntime(provider: provider)
+
+    // when
+    let outcome = try await run(runtime, origin: .scheduled, proactiveTodayUSD: 2.0)
+
+    // then — denied offline, before the provider is reached
+    #expect(outcome.result == .budgetStopped(cap: "proactive per-day spend"))
+    #expect(await provider.requests.isEmpty)
+  }
+
+  @Test func interactiveRunIgnoresProactiveSpend() async throws {
+    // given — the same exhausted proactive pool
+    let provider = SequenceProvider([okResponse(content: "still on")])
+    let runtime = makeRuntime(provider: provider)
+
+    // when
+    let outcome = try await run(runtime, origin: .interactive, proactiveTodayUSD: 2.0)
+
+    // then — interactive runs never consult the nested pool (S3)
+    let completed = try requireCompleted(outcome.result)
+    #expect(completed.content == "still on")
   }
 
   @Test func toollessTurnIsOneRoundTripCompleted() async throws {
@@ -103,6 +133,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 10,
       perDayUSD: 100,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015,
       maxTurns: 2,
       maxToolCalls: 20
@@ -134,6 +165,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 10,
       perDayUSD: 100,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015,
       maxTurns: 12,
       maxToolCalls: 2
@@ -162,6 +194,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 10,
       perDayUSD: 100,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015,
       maxTurns: 12,
       maxToolCalls: 2
@@ -307,6 +340,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 0.50,
       perDayUSD: 1_000,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_000_1
     )
     let runtime = makeRuntime(
@@ -340,6 +374,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 10,
       perDayUSD: 100,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015
     )
     let runtime = makeRuntime(provider: provider, budget: budget, toolDispatcher: dispatcher)
@@ -380,5 +415,41 @@ import Testing
     // then — the run recovers with the error observation in history
     #expect(try requireCompleted(outcome.result).content == "recovered")
     #expect(outcome.exchanges[0].observations[0].status == .error)
+  }
+
+  @Test func scheduledOriginThreadsNonInteractiveIntoTheDispatchContext() async throws {
+    // given
+    let provider = SequenceProvider([
+      toolCallResponse([fetchProposal()]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    _ = try await run(runtime, origin: .scheduled)
+
+    // then — the single dispatched call saw the reduced-privilege flag
+    let records = await dispatcher.records
+    #expect(records.count == 1)
+    #expect(records[0].context.nonInteractive)
+  }
+
+  @Test func interactiveOriginThreadsNonInteractiveFalse() async throws {
+    // given
+    let provider = SequenceProvider([
+      toolCallResponse([fetchProposal()]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when — the default origin
+    _ = try await run(runtime)
+
+    // then
+    let records = await dispatcher.records
+    #expect(records.count == 1)
+    #expect(records[0].context.nonInteractive == false)
   }
 }

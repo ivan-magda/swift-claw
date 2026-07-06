@@ -186,6 +186,13 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
     (0, 0)
   }
 
+  func todayTokensAndCost(
+    origins: [RunOrigin],
+    now: Date
+  ) throws -> (tokens: Int, costUSD: Double) {
+    (0, 0)
+  }
+
   func costSourceMix(now: Date) throws -> [CostSource: Int] {
     [:]
   }

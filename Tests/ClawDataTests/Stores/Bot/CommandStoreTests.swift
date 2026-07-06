@@ -56,7 +56,9 @@ import Testing
   @Test func stopCancelsOnlyRunningRunAndAuditsCancellation() throws {
     // given
     let env = try fixture()
-    #expect(try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10)))
+    _ = try #require(
+      try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10))
+    )
     let queued = try env.sessions.claimAndPersistInbound(
       inbound(updateId: 2, sessionKey: env.sessionKey, text: "queued")
     )
@@ -95,7 +97,9 @@ import Testing
   @Test func newSupersedesActiveRunsResetsWindowDetaintsAndAudits() throws {
     // given
     let env = try fixture()
-    #expect(try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10)))
+    _ = try #require(
+      try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10))
+    )
     let queued = try env.sessions.claimAndPersistInbound(
       inbound(updateId: 2, sessionKey: env.sessionKey, text: "queued")
     )
@@ -161,7 +165,9 @@ import Testing
   @Test func duplicateCommandDoesNotRepeatEffects() throws {
     // given
     let env = try fixture()
-    #expect(try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10)))
+    _ = try #require(
+      try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10))
+    )
     let now = Date(timeIntervalSince1970: 300)
     let first = try env.commands.applyStop(updateId: 300, sessionKey: env.sessionKey, now: now)
 
@@ -182,7 +188,9 @@ import Testing
   @Test func crashAfterClaimRollsBackClaimAndAllowsRetry() throws {
     // given
     let env = try fixture()
-    #expect(try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10)))
+    _ = try #require(
+      try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10))
+    )
     let crashingStore = CommandStoreGRDB(
       writer: env.queue,
       afterClaimForTesting: { throw InjectedCrash() }

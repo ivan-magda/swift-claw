@@ -218,4 +218,21 @@ private actor BlockingTurnRunner: TurnDispatching {
     // then
     try await task.value  // returns cleanly, no throw/crash
   }
+
+  @Test func readTimeoutOnGetUpdatesBacksOffAndTheLoopSurvives() async throws {
+    // given — a socket read timeout surfaces from the client as TelegramError.transport (A3)
+    let stack = try makeStack(
+      batches: [],
+      allowed: [42],
+      throwOnGetUpdates: .transport("getUpdates: read timed out")
+    )
+
+    // when — the first poll throws; react() logs + backs off; cancel mid-backoff
+    let task = Task { try await stack.poller.run() }
+    await stack.transport.waitForPolls(atLeast: 1)
+    task.cancel()
+
+    // then — the loop absorbed the network error and exits cleanly, never crashing the daemon
+    try await task.value
+  }
 }

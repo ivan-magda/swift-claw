@@ -62,4 +62,35 @@ import Testing
     // then
     #expect(shouldNotify)
   }
+
+  @Test("the proactive trip DM latches once per UTC day and resets on rollover")
+  func proactiveTripNotifiesOncePerUTCDay() async {
+    // given
+    let breaker = BudgetBreaker(budget: .default)
+    let nextDay = now.addingTimeInterval(24 * 60 * 60)
+
+    // when
+    let first = await breaker.shouldNotifyProactiveTrip(now: now)
+    let second = await breaker.shouldNotifyProactiveTrip(now: now)
+    let tomorrow = await breaker.shouldNotifyProactiveTrip(now: nextDay)
+
+    // then
+    #expect(first)
+    #expect(!second)
+    #expect(tomorrow)
+  }
+
+  @Test("the proactive latch is independent of the global daily latch")
+  func proactiveLatchIsIndependentOfTheGlobalOne() async {
+    // given
+    let breaker = BudgetBreaker(budget: .default)
+
+    // when — the global cap trips and DMs first; the proactive trip must still DM the same day
+    let globalNotify = await breaker.shouldNotifyTrip(todayTokens: 0, todayUSD: 10.0, now: now)
+    let proactiveNotify = await breaker.shouldNotifyProactiveTrip(now: now)
+
+    // then
+    #expect(globalNotify)
+    #expect(proactiveNotify)
+  }
 }

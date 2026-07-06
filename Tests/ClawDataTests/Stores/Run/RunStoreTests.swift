@@ -58,7 +58,7 @@ import Testing
     )
   }
 
-  @Test func pickUpMovesPendingRunToRunningOnce() throws {
+  @Test func pickUpMovesPendingRunToRunningOnceAndReturnsTheOrigin() throws {
     // given
     let env = try fixture()
 
@@ -66,19 +66,23 @@ import Testing
     let first = try env.runs.pickUp(runId: env.seedRunId, now: Date())
     let second = try env.runs.pickUp(runId: env.seedRunId, now: Date())
 
-    // then
-    #expect(first)
-    #expect(second == false)
-    let state = try #require(
-      try env.queue.read { db in
-        try String.fetchOne(
-          db,
-          sql: "SELECT state FROM runs WHERE id = ?",
-          arguments: [env.seedRunId]
-        )
-      }
-    )
-    #expect(state == RunState.running.rawValue)
+    // then — the origin rides the pickup read; the not-PENDING guard is nil (preamble dev. 3)
+    #expect(first == .interactive)  // v6 default backfill
+    #expect(second == nil)
+  }
+
+  @Test func pickUpReturnsTheScheduledOrigin() throws {
+    // given
+    let env = try fixture()
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
+        arguments: [env.seedRunId]
+      )
+    }
+
+    // when / then
+    #expect(try env.runs.pickUp(runId: env.seedRunId, now: Date()) == .scheduled)
   }
 
   @Test func cancelActiveRunOnlyCancelsRunningRun() throws {
@@ -91,7 +95,7 @@ import Testing
         now: Date()
       ) == nil
     )
-    #expect(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
 
     // when
     let cancelled = try env.runs.cancelActiveRun(
@@ -117,7 +121,7 @@ import Testing
   @Test func supersedeSessionRunsTerminatesRunningAndQueuedRuns() throws {
     // given
     let env = try fixture()
-    #expect(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
     let queued = try env.sessions.claimAndPersistInbound(
       InboundMessage(
         updateId: 2,
@@ -144,7 +148,7 @@ import Testing
       )
     }
     #expect(states == [RunState.superseded.rawValue, RunState.superseded.rawValue])
-    #expect(try env.runs.pickUp(runId: queuedRunId, now: Date()) == false)
+    #expect(try env.runs.pickUp(runId: queuedRunId, now: Date()) == nil)
   }
 
   @Test func assistantCommitAfterSupersedeRecordsUsageOnly() throws {
@@ -195,7 +199,7 @@ import Testing
     // given
     let env = try fixture()
     let runId = env.seedRunId
-    #expect(try env.runs.pickUp(runId: runId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
     let turn = AssistantTurn(
       runId: runId,
       sessionId: env.sessionId,
@@ -247,7 +251,7 @@ import Testing
       )
     )
     let runningRunId = try #require(runningClaim.runId)
-    #expect(try env.runs.pickUp(runId: runningRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runId: runningRunId, now: Date()))
 
     // when
     let replies = try env.runs.reconcileRunsAtBoot(now: Date(), degradationText: "didn't finish")
@@ -265,7 +269,7 @@ import Testing
     // given
     let env = try fixture()
     let runId = env.seedRunId
-    #expect(try env.runs.pickUp(runId: runId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
     _ = try env.outbox.claimOutbound(
       runId: runId,
       stepIndex: 0,
@@ -292,7 +296,7 @@ import Testing
     // given
     let env = try fixture()
     let runId = env.seedRunId
-    #expect(try env.runs.pickUp(runId: runId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
     try env.queue.write { db in
       try db.execute(
         sql:

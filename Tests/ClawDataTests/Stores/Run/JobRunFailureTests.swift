@@ -1,0 +1,168 @@
+import ClawCore
+import Foundation
+import GRDB
+import Testing
+
+@testable import ClawData
+
+@Suite struct JobRunFailureTests {
+  private struct JobFixture {
+    let queue: DatabaseQueue
+    let runs: RunStoreGRDB
+    let runId: Int64
+    let sessionId: Int64
+  }
+
+  /// Seeds job 7 (owner chat 4242), its synthetic session, the trusted trigger message, and a
+  /// PENDING scheduled run — the exact §5.2 fused-claim output shape, by hand.
+  private func makeJobRunFixture() throws -> JobFixture {
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let now = Date()
+    let seeded: (runId: Int64, sessionId: Int64) = try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO scheduled_jobs(id, owner_chat_id, label, prompt, recurrence, timezone,
+            next_occurrence, last_fired_at, status, session_id, created_ts, updated_ts)
+          VALUES (7, 4242, 'digest', 'Summarize my unread items', NULL, 'Europe/Berlin',
+            NULL, NULL, 'ACTIVE', NULL, ?, ?)
+          """,
+        arguments: [now, now]
+      )
+      try db.execute(
+        sql: "INSERT INTO sessions(session_key, created_ts, updated_ts) VALUES (?, ?, ?)",
+        arguments: [SessionKey.scheduledJob(id: 7), now, now]
+      )
+      let sessionId = db.lastInsertedRowID
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'user', 'Summarize my unread items', 'trusted', ?)
+          """,
+        arguments: [sessionId, now]
+      )
+      let messageId = db.lastInsertedRowID
+      try db.execute(
+        sql: """
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
+            origin, job_id)
+          VALUES (?, 'PENDING', ?, ?, ?, 'scheduled', 7)
+          """,
+        arguments: [sessionId, now, now, messageId]
+      )
+      return (db.lastInsertedRowID, sessionId)
+    }
+    return JobFixture(
+      queue: queue,
+      runs: RunStoreGRDB(writer: queue),
+      runId: seeded.runId,
+      sessionId: seeded.sessionId
+    )
+  }
+
+  private func jobFailedCount(_ queue: DatabaseQueue, runId: Int64) throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: """
+          SELECT COUNT(*) FROM audit_events
+          WHERE action = 'job_failed' AND decision = 'job:7' AND run_id = ?
+          """,
+        arguments: [runId]
+      ) ?? 0
+    }
+  }
+
+  @Test func degradedCommitOfAJobRunAppendsJobFailedInTheSameTransaction() throws {
+    // given
+    let fixture = try makeJobRunFixture()
+    #expect(try fixture.runs.pickUp(runId: fixture.runId, now: Date()) == .scheduled)
+
+    // when
+    let commit = try fixture.runs.commitDegradedTurn(
+      DegradedTurn(
+        runId: fixture.runId,
+        sessionId: fixture.sessionId,
+        chatId: 4242,
+        usage: nil,
+        chunk: OutboxChunk(
+          stepIndex: 0,
+          chatId: 4242,
+          payload: "degraded",
+          payloadHash: ContentHash.fnv1a("degraded")
+        )
+      ),
+      now: Date()
+    )
+
+    // then
+    #expect(commit == .committed)
+    #expect(try jobFailedCount(fixture.queue, runId: fixture.runId) == 1)
+  }
+
+  @Test func failRunOnAJobRunAppendsJobFailed() throws {
+    // given
+    let fixture = try makeJobRunFixture()
+    #expect(try fixture.runs.pickUp(runId: fixture.runId, now: Date()) == .scheduled)
+
+    // when
+    try fixture.runs.failRun(runId: fixture.runId, now: Date())
+
+    // then
+    #expect(try jobFailedCount(fixture.queue, runId: fixture.runId) == 1)
+  }
+
+  @Test func bootReconcileResolvesTheJobRunNoticeViaOwnerChatIdAndAuditsJobFailed() throws {
+    // given — a job run left RUNNING by a crash; its sched:job:7 session key has no chat id
+    let fixture = try makeJobRunFixture()
+    #expect(try fixture.runs.pickUp(runId: fixture.runId, now: Date()) == .scheduled)
+
+    // when
+    let replies = try fixture.runs.reconcileRunsAtBoot(
+      now: Date(),
+      degradationText: "unfinished"
+    )
+
+    // then — the notice targets scheduled_jobs.owner_chat_id, no longer silently skipped (A6)
+    #expect(replies == [DegradationReply(chatId: 4242, runId: fixture.runId, text: "unfinished")])
+    #expect(try jobFailedCount(fixture.queue, runId: fixture.runId) == 1)
+    let state = try fixture.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT state FROM runs WHERE id = ?",
+        arguments: [fixture.runId]
+      )
+    }
+    #expect(state == "FAILED")
+  }
+
+  @Test func nonJobRunsNeverEmitJobFailed() throws {
+    // given — an ordinary interactive run (no job_id), failed the same way
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
+      InboundMessage(
+        updateId: 1,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "hi",
+        isEdited: false,
+        ts: Date()
+      )
+    )
+    let runId = try #require(claim.runId)
+    let runs = RunStoreGRDB(writer: queue)
+    #expect(try runs.pickUp(runId: runId, now: Date()) == .interactive)
+
+    // when
+    try runs.failRun(runId: runId, now: Date())
+
+    // then
+    let count = try queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM audit_events WHERE action = 'job_failed'")
+        ?? 0
+    }
+    #expect(count == 0)
+  }
+}

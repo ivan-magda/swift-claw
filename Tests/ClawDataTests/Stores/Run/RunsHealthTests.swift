@@ -82,7 +82,7 @@ import Testing
       chatId: chatId,
       ts: now
     )
-    #expect(try fixture.store.pickUp(runId: runId, now: now))
+    _ = try #require(try fixture.store.pickUp(runId: runId, now: now))
     let usage = ProviderUsage(
       runId: runId,
       sessionId: fixture.sessionId,
@@ -125,7 +125,7 @@ import Testing
       updateId: 2,
       ts: base.addingTimeInterval(2)
     )
-    #expect(try store.pickUp(runId: failed1, now: base.addingTimeInterval(2)))
+    _ = try #require(try store.pickUp(runId: failed1, now: base.addingTimeInterval(2)))
     try store.failRun(runId: failed1, now: base.addingTimeInterval(3))
 
     let failed2 = try seedPendingRun(
@@ -133,7 +133,7 @@ import Testing
       updateId: 3,
       ts: base.addingTimeInterval(4)
     )
-    #expect(try store.pickUp(runId: failed2, now: base.addingTimeInterval(4)))
+    _ = try #require(try store.pickUp(runId: failed2, now: base.addingTimeInterval(4)))
     try store.failRun(runId: failed2, now: base.addingTimeInterval(5))
 
     _ = try seedPendingRun(
@@ -180,7 +180,7 @@ import Testing
         updateId: Int64(index + 2),
         ts: base.addingTimeInterval(offset)
       )
-      #expect(try store.pickUp(runId: runId, now: base.addingTimeInterval(offset)))
+      _ = try #require(try store.pickUp(runId: runId, now: base.addingTimeInterval(offset)))
       try store.failRun(runId: runId, now: base.addingTimeInterval(offset + 1))
     }
 
@@ -200,7 +200,7 @@ import Testing
     let base = Date(timeIntervalSinceReferenceDate: 0)
 
     let run1 = try seedPendingRun(sessions: fix.sessions, updateId: 1, ts: base)
-    #expect(try store.pickUp(runId: run1, now: base))
+    _ = try #require(try store.pickUp(runId: run1, now: base))
     try store.failRun(runId: run1, now: base.addingTimeInterval(1))
 
     let run2 = try seedPendingRun(
@@ -208,7 +208,7 @@ import Testing
       updateId: 2,
       ts: base.addingTimeInterval(2)
     )
-    #expect(try store.pickUp(runId: run2, now: base.addingTimeInterval(2)))
+    _ = try #require(try store.pickUp(runId: run2, now: base.addingTimeInterval(2)))
     try store.failRun(runId: run2, now: base.addingTimeInterval(3))
 
     try commitDone(
@@ -223,7 +223,7 @@ import Testing
       updateId: 4,
       ts: base.addingTimeInterval(6)
     )
-    #expect(try store.pickUp(runId: run4, now: base.addingTimeInterval(6)))
+    _ = try #require(try store.pickUp(runId: run4, now: base.addingTimeInterval(6)))
     try store.failRun(runId: run4, now: base.addingTimeInterval(7))
 
     // when

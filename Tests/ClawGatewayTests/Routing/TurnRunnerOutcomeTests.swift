@@ -190,6 +190,7 @@ import Testing
       retryBudget: 3,
       perRunUSD: 0.50,
       perDayUSD: 10,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015,
       maxTurns: 12,
       maxToolCalls: 1

@@ -319,4 +319,19 @@ import Testing
       try AppConfig.load(environment: env)
     }
   }
+
+  @Test func budgetMirrorsTheProactivePerDayCap() throws {
+    // given — the env key Phase 1 already parses onto AppConfig.proactivePerDayUSD
+    let env = envWithLLM([
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+      "CLAW_PROACTIVE_PER_DAY_USD": "1.25",
+    ])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — one value, two views: the AppConfig field (Phase 1) and the RunBudget mirror (here)
+    #expect(config.budget.proactivePerDayUSD == 1.25)
+    #expect(config.proactivePerDayUSD == 1.25)
+  }
 }

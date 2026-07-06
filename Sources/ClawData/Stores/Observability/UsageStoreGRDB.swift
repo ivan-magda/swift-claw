@@ -38,6 +38,41 @@ public struct UsageStoreGRDB: UsageStore {
     }
   }
 
+  public func todayTokensAndCost(
+    origins: [RunOrigin],
+    now: Date
+  ) throws -> (tokens: Int, costUSD: Double) {
+    guard origins.isEmpty == false else {
+      return (0, 0)
+    }
+
+    let dayStart = now.startOfUTCDay
+
+    return try writer.readMapping { db in
+      // databaseQuestionMarks is GRDB's public helper (GRDB/Utils/Utils.swift), not a
+      // project symbol — it renders "?,?,?" for the IN clause.
+      let placeholders = databaseQuestionMarks(count: origins.count)
+      let arguments = StatementArguments(origins.map(\.rawValue)) + [dayStart]
+      let row = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT COALESCE(SUM(u.prompt_tokens + u.completion_tokens), 0) AS tokens,
+                 COALESCE(SUM(u.cost_usd), 0) AS cost
+          FROM provider_usage u
+          JOIN runs r ON r.id = u.run_id
+          WHERE r.origin IN (\(placeholders)) AND u.ts >= ?
+          """,
+        arguments: arguments
+      )
+
+      guard let row else {
+        return (0, 0)
+      }
+
+      return (row["tokens"], row["cost"])
+    }
+  }
+
   public func costSourceMix(now: Date) throws -> [CostSource: Int] {
     let dayStart = now.startOfUTCDay
     return try writer.readMapping { db in
