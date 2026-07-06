@@ -38,6 +38,7 @@ import Testing
       transport: transport,
       turnRunner: runner,
       lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
       logger: TestLog.silent
     )
     return Fixture(

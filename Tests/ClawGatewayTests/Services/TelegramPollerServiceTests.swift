@@ -78,6 +78,7 @@ private actor BlockingTurnRunner: TurnDispatching {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
       logger: TestLog.silent
     )
     let cursor = UpdateCursorStoreGRDB(writer: queue)
@@ -144,6 +145,7 @@ private actor BlockingTurnRunner: TurnDispatching {
       transport: transport,
       turnRunner: runner,
       lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
       logger: TestLog.silent
     )
     let cursor = UpdateCursorStoreGRDB(writer: queue)

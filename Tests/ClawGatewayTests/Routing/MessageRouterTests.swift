@@ -82,6 +82,7 @@ struct FullSessions: SessionMessageStore {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
       logger: TestLog.silent
     )
 
@@ -301,6 +302,7 @@ struct FullSessions: SessionMessageStore {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
       logger: TestLog.silent
     )
 
@@ -361,6 +363,7 @@ struct FullSessions: SessionMessageStore {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
       logger: TestLog.silent
     )
 
@@ -422,6 +425,7 @@ struct FullSessions: SessionMessageStore {
       transport: transport,
       turnRunner: FakeTurnRunner(),
       lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
       logger: TestLog.silent
     )
 

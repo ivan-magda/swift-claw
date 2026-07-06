@@ -8,6 +8,7 @@ public enum Command: Sendable, Equatable {
   case new
   case remember(RememberCommand)
   case memory(MemoryCommand)
+  case schedule(ScheduleCommand)
   case plain(String)
 
   public static func parse(_ text: String, botUsername: String?) -> Command {
@@ -54,8 +55,25 @@ public enum Command: Sendable, Equatable {
       return .remember(RememberCommand.parse(arguments: arguments))
     case "memory":
       return .memory(MemoryCommand.parse(arguments: arguments))
+    case "schedule":
+      return .schedule(ScheduleCommand.parse(arguments: arguments))
     default:
       return .plain(text)
     }
+  }
+}
+
+/// Parsed `/schedule` arguments (spec §9). Bare `/schedule` and `/schedule list` both list;
+/// anything else is the NL create text, passed verbatim to the parse call.
+public enum ScheduleCommand: Sendable, Equatable {
+  case list
+  case create(text: String)
+
+  public static func parse(arguments: Substring) -> ScheduleCommand {
+    let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty || trimmed.lowercased() == "list" {
+      return .list
+    }
+    return .create(text: trimmed)
   }
 }

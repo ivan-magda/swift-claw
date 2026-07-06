@@ -78,6 +78,22 @@ public protocol MemoryCommandStore: Sendable {
   func applyForget(updateId: Int64, itemId: Int64, now: Date) throws -> MemoryCommandResult
 }
 
+public struct ScheduleArmResult: Sendable, Equatable {
+  public let newlyClaimed: Bool
+  public let job: ScheduledJob?
+
+  public init(newlyClaimed: Bool, job: ScheduledJob?) {
+    self.newlyClaimed = newlyClaimed
+    self.job = job
+  }
+}
+
+public protocol ScheduleCommandStore: Sendable {
+  /// Atomic confirmed arm (spec §8): claim update + insert job + jobCreated audit in one write.
+  /// The inserted job is the exact parked draft — the caller never re-parses (TOCTOU kill).
+  func applyArm(updateId: Int64, job: NewScheduledJob, now: Date) throws -> ScheduleArmResult
+}
+
 public protocol Retriever: Sendable {
   func searchRelevantMessages(
     query: String,

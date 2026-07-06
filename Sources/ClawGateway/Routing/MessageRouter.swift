@@ -30,6 +30,8 @@ public struct MessageRouter: Sendable {
   private let transport: any TelegramTransport
   private let turnRunner: any TurnDispatching
   private let lanes: SessionLaneRegistry
+  private let schedule: ScheduleSurface
+  private let now: @Sendable () -> Date
   private let logger: Logger
 
   public init(
@@ -44,6 +46,8 @@ public struct MessageRouter: Sendable {
     transport: any TelegramTransport,
     turnRunner: any TurnDispatching,
     lanes: SessionLaneRegistry,
+    schedule: ScheduleSurface,
+    now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
     self.processed = processed
@@ -57,6 +61,8 @@ public struct MessageRouter: Sendable {
     self.transport = transport
     self.turnRunner = turnRunner
     self.lanes = lanes
+    self.schedule = schedule
+    self.now = now
     self.logger = logger
   }
 
@@ -117,6 +123,16 @@ public struct MessageRouter: Sendable {
           message: message,
           command: memoryCommand
         )
+      case .schedule(let scheduleCommand):
+        guard isAllowed else {
+          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+        }
+        switch scheduleCommand {
+        case .create(let text):
+          return await handleScheduleCreate(rawUpdate: rawUpdate, message: message, text: text)
+        case .list:
+          return await handleScheduleList(rawUpdate: rawUpdate, chatId: message.chatId)
+        }
       case .plain(let plainText):
         guard isAllowed else {
           return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
@@ -378,6 +394,127 @@ extension MessageRouter {
     )
   }
 
+  /// `/schedule <text>` (spec §7/§8): claim the update, run the ONE parse call, validate
+  /// deterministically, park the validated draft, and send the gateway-authored confirm prompt.
+  /// Nothing is armed here; every failure is a plain-language reply and parks nothing.
+  private func handleScheduleCreate(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    text: String
+  ) async -> HandleOutcome {
+    let claim: CommandClaim
+    do {
+      claim = try sessionMessages.claimCommandUpdate(
+        updateId: rawUpdate.updateId,
+        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+        now: now()
+      )
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("schedule claim failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard case .claimed(let sessionId) = claim else {
+      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
+      return .skipped
+    }
+
+    switch await schedule.parser.parse(ownerText: text) {
+    case .providerUnavailable:
+      // DEG-01: an LLM/API failure degrades exactly like any turn; nothing armed.
+      return await sendCommandAck(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: Degradation.providerUnavailable
+      )
+    case .unparseable:
+      return await sendCommandAck(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.parseFailed
+      )
+    case .draft(let draft):
+      let nowDate = now()
+      switch schedule.validator.validate(draft, now: nowDate) {
+      case .failure(let problem):
+        return await sendCommandAck(
+          rawUpdate: rawUpdate,
+          chatId: message.chatId,
+          text: problem.ownerReply
+        )
+      case .success(let validated):
+        // Single slot per session: a second /schedule visibly displaces the older draft (§9).
+        await pendingConfirmations.park(.scheduleArm(validated), sessionId: sessionId)
+        return await sendCommandAck(
+          rawUpdate: rawUpdate,
+          chatId: message.chatId,
+          text: ScheduleReplies.confirmPrompt(
+            schedule: validated,
+            nextFires: nextFires(for: validated, from: nowDate)
+          )
+        )
+      }
+    }
+  }
+
+  /// The confirm preview's fire times. The SAME `nowDate` that validation used seeds the
+  /// calculator, so the preview's first entry IS the parked `firstOccurrence`.
+  private func nextFires(for validated: ValidatedSchedule, from nowDate: Date) -> [Date] {
+    guard
+      let envelope = validated.recurrence,
+      let timezone = TimeZone(identifier: validated.timezone)
+    else {
+      return [validated.firstOccurrence]
+    }
+    return schedule.calculator.occurrences(
+      rule: envelope.rule,
+      timezone: timezone,
+      anchor: nowDate,
+      after: nowDate,
+      limit: ScheduleReplies.confirmPreviewCount
+    )
+  }
+
+  /// `/schedule list` (spec §9): read-only, deduped via the canned-reply claim like
+  /// `handleMemoryReview`.
+  private func handleScheduleList(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
+    let jobs: [ScheduledJob]
+    do {
+      jobs = try schedule.jobs.listAll()
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: chatId)
+    } catch {
+      logger.error("schedule list failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard jobs.isEmpty == false else {
+      return await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: ScheduleReplies.emptyList)
+    }
+
+    let rows = jobs.map { job in
+      (job: job, nextFire: displayNextFire(job))
+    }
+    return await sendCanned(
+      rawUpdate: rawUpdate,
+      chatId: chatId,
+      text: ScheduleReplies.listLines(rows)
+    )
+  }
+
+  /// The list's next-fire column: the stored `next_occurrence`, which is itself
+  /// calculator-produced — materialized at arm time and advanced only inside the claim (§4.1) —
+  /// so the list can never disagree with what actually fires (spec §9's single-source rule),
+  /// including everyNMinutes phase. Non-ACTIVE rows show none.
+  private func displayNextFire(_ job: ScheduledJob) -> Date? {
+    guard job.status == .active else {
+      return nil
+    }
+    return job.nextOccurrence
+  }
+
   /// Intercepts plain text while a confirmation is parked for the session. Returns nil when there
   /// is nothing to resolve, so the caller falls through to normal turn dispatch. The session lookup
   /// is read-only and fails closed: with the lookup down we cannot prove whether a parked "yes"
@@ -445,31 +582,51 @@ extension MessageRouter {
     }
   }
 
-  /// Confirms a parked memory effect through the atomic MemoryCommandStore seam.
+  /// Confirms a parked effect through its atomic claim+effect+audit store seam.
   private func commitPending(
     _ entry: PendingConfirmation,
     sessionId: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async -> HandleOutcome {
-    let result: MemoryCommandResult
+    let newlyClaimed: Bool
     let ackText: String
     do {
       switch entry {
       case .rememberWrite(let request):
-        result = try memoryCommands.applyRemember(
+        let result = try memoryCommands.applyRemember(
           updateId: rawUpdate.updateId,
           item: request.item,
           now: Date()
         )
+        newlyClaimed = result.newlyClaimed
         ackText = MemoryReplies.saved(id: result.item?.id)
       case .deleteItem(let itemId):
-        result = try memoryCommands.applyForget(
+        let result = try memoryCommands.applyForget(
           updateId: rawUpdate.updateId,
           itemId: itemId,
           now: Date()
         )
+        newlyClaimed = result.newlyClaimed
         ackText = MemoryReplies.deleted(id: itemId)
+      case .scheduleArm(let validated):
+        // owner_chat_id is set HERE, in code, from the arming chat — never model- or
+        // prompt-controlled (spec §4.1). The insert is the exact parked draft (§8, no re-parse).
+        let newJob = NewScheduledJob(
+          ownerChatId: message.chatId,
+          label: validated.label,
+          prompt: validated.prompt,
+          recurrence: validated.recurrence,
+          timezone: validated.timezone,
+          nextOccurrence: validated.firstOccurrence
+        )
+        let result = try schedule.commands.applyArm(
+          updateId: rawUpdate.updateId,
+          job: newJob,
+          now: now()
+        )
+        newlyClaimed = result.newlyClaimed
+        ackText = ScheduleReplies.armed(job: result.job)
       case .toolApproval:
         preconditionFailure("approvals resolve in resolvePendingConfirmation before commitPending")
       }
@@ -485,7 +642,7 @@ extension MessageRouter {
       )
     }
 
-    guard result.newlyClaimed else {
+    guard newlyClaimed else {
       logger.debug("duplicate update \(rawUpdate.updateId), skipping")
       return .skipped
     }
@@ -526,6 +683,8 @@ extension MessageRouter {
       errorText = MemoryReplies.saveFailed
     case .deleteItem:
       errorText = MemoryReplies.deleteFailed
+    case .scheduleArm:
+      errorText = ScheduleReplies.armFailed
     case .toolApproval:
       preconditionFailure("approvals resolve in resolvePendingConfirmation before commitPending")
     }

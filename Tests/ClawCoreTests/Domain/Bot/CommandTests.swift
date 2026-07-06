@@ -61,4 +61,25 @@ import Testing
     // then
     #expect(command == .plain(text))
   }
+
+  @Test(arguments: [
+    ("/schedule", Command.schedule(.list)),
+    ("/schedule list", .schedule(.list)),
+    ("/schedule LIST", .schedule(.list)),
+    ("/SCHEDULE@CLAW_BOT list", .schedule(.list)),
+    (
+      "/schedule every weekday at 07:00 — summarize my unread items",
+      .schedule(.create(text: "every weekday at 07:00 — summarize my unread items"))
+    ),
+  ])
+  func scheduleCommandParses(text: String, expected: Command) {
+    // given
+    let botUsername = "claw_bot"
+
+    // when
+    let command = Command.parse(text, botUsername: botUsername)
+
+    // then
+    #expect(command == expected)
+  }
 }
