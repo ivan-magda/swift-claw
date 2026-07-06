@@ -508,6 +508,28 @@ extension MessageRouter {
     )
   }
 
+  /// The fire time to arm with, recomputed against the arm-time clock so a draft confirmed long
+  /// after its preview was shown can't arm an already-past occurrence (a one-shot would silently
+  /// misfire to COMPLETED; a recurring one would fire immediately). This re-runs the SAME parked
+  /// rule — not a re-parse (§8): label/prompt/rule/timezone are still the parked draft's. Returns
+  /// nil when nothing valid remains to arm: a one-shot whose instant has passed, or (pathological)
+  /// a rule with no upcoming occurrence.
+  private func armNextOccurrence(for validated: ValidatedSchedule, now nowDate: Date) -> Date? {
+    guard let envelope = validated.recurrence else {
+      return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
+    }
+    guard let timezone = TimeZone(identifier: validated.timezone) else {
+      return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
+    }
+    return schedule.calculator.occurrences(
+      rule: envelope.rule,
+      timezone: timezone,
+      anchor: nowDate,
+      after: nowDate,
+      limit: 1
+    ).first
+  }
+
   /// `/schedule list` (spec §9): read-only, deduped via the canned-reply claim like
   /// `handleMemoryReview`.
   private func handleScheduleList(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
@@ -844,6 +866,18 @@ extension MessageRouter {
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async -> HandleOutcome {
+    // A parked schedule can be confirmed long after its preview; recompute the fire time from the
+    // parked rule against the arm-time clock (details in armNextOccurrence). A one-shot whose
+    // instant has passed cannot be salvaged — reject it so the owner reschedules rather than
+    // arming a job that silently never fires.
+    var scheduleArmNext: Date?
+    if case .scheduleArm(let validated) = entry {
+      guard let recomputed = armNextOccurrence(for: validated, now: now()) else {
+        return await rejectStaleArm(sessionId: sessionId, rawUpdate: rawUpdate, message: message)
+      }
+      scheduleArmNext = recomputed
+    }
+
     let newlyClaimed: Bool
     let ackText: String
     do {
@@ -873,7 +907,7 @@ extension MessageRouter {
           prompt: validated.prompt,
           recurrence: validated.recurrence,
           timezone: validated.timezone,
-          nextOccurrence: validated.firstOccurrence
+          nextOccurrence: scheduleArmNext ?? validated.firstOccurrence
         )
         let result = try schedule.commands.applyArm(
           updateId: rawUpdate.updateId,
@@ -905,6 +939,37 @@ extension MessageRouter {
     await pendingConfirmations.clear(sessionId: sessionId)
 
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: ackText)
+  }
+
+  /// A parked schedule confirmed after its only fire time has passed: nothing valid remains to
+  /// arm. Claim the update (dedup), clear the slot, and tell the owner to reschedule.
+  private func rejectStaleArm(
+    sessionId: Int64,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async -> HandleOutcome {
+    let claimed: Bool
+    do {
+      claimed = try processed.claimUpdate(updateId: rawUpdate.updateId)
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("stale-arm claim failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard claimed else {
+      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
+      return .skipped
+    }
+
+    await pendingConfirmations.clear(sessionId: sessionId)
+
+    return await sendCommandAck(
+      rawUpdate: rawUpdate,
+      chatId: message.chatId,
+      text: ScheduleReplies.armExpired
+    )
   }
 
   /// A non-disk commit failure is terminal for the parked entry: claim the update, clear the

@@ -150,6 +150,89 @@ import Testing
     #expect(ack.contains("2026-07-07 07:00"))
   }
 
+  /// A draft confirmed long after its preview must arm the NEXT occurrence from the arm-time
+  /// clock, not the stale parked `firstOccurrence` (M1): the validator/parser can never produce
+  /// this shape (it anchors recurring drafts at park-now), so the stale draft is parked directly.
+  @Test func armRecomputesNextOccurrenceForADraftParkedInThePast() async throws {
+    // given — a recurring draft whose parked firstOccurrence (last Sunday) is long past
+    let harness = try makeHarness()
+    await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am Berlin")
+    )
+    let sessionId = try #require(
+      try SessionMessageStoreGRDB(writer: harness.queue).findSession(
+        sessionKey: SessionKey.telegramDM(chatId: 42)
+      )
+    )
+    let rule = Calendar.RecurrenceRule(
+      calendar: {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin") ?? .gmt
+        return calendar
+      }(),
+      frequency: .weekly,
+      weekdays: [
+        .every(.monday), .every(.tuesday), .every(.wednesday), .every(.thursday),
+        .every(.friday),
+      ],
+      hours: [7],
+      minutes: [0],
+      seconds: [0]
+    )
+    let stale = ValidatedSchedule(
+      label: "morning digest",
+      prompt: "Summarize my unread items",
+      recurrence: RecurrenceEnvelope(schemaVersion: 1, rule: rule),
+      timezone: "Europe/Berlin",
+      firstOccurrence: Self.fixedNow.addingTimeInterval(-86_400),
+      recurrenceInWords: "every weekday at 07:00"
+    )
+    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
+
+    // when
+    let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
+
+    // then — armed forward from now (Tue 07:00 Berlin), never the stale Sunday value
+    #expect(outcome == .processed)
+    let jobs = try harness.jobs.listAll()
+    #expect(jobs.count == 1)
+    let job = try #require(jobs.first)
+    #expect(job.nextOccurrence == Date(timeIntervalSince1970: 1_783_400_400))
+  }
+
+  /// A parked one-shot confirmed after its only instant already passed cannot be salvaged: arming
+  /// it would silently misfire to COMPLETED with no run, so it is rejected instead (M1).
+  @Test func armOfAOneShotWhoseInstantPassedIsRejected() async throws {
+    // given — a one-shot draft whose parked firstOccurrence is an hour in the past
+    let harness = try makeHarness()
+    await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am Berlin")
+    )
+    let sessionId = try #require(
+      try SessionMessageStoreGRDB(writer: harness.queue).findSession(
+        sessionKey: SessionKey.telegramDM(chatId: 42)
+      )
+    )
+    let stale = ValidatedSchedule(
+      label: "send report",
+      prompt: "Send the report reminder",
+      recurrence: nil,
+      timezone: "Europe/Berlin",
+      firstOccurrence: Self.fixedNow.addingTimeInterval(-3_600),
+      recurrenceInWords: "once"
+    )
+    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
+
+    // when
+    let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
+
+    // then — nothing armed, owner told to reschedule, slot cleared
+    #expect(outcome == .processed)
+    #expect(try jobCount(harness) == 0)
+    #expect(await harness.transport.sent.last?.text == ScheduleReplies.armExpired)
+    #expect(await harness.pending.pending(sessionId: sessionId) == nil)
+  }
+
   @Test func replayedYesIsIdempotent() async throws {
     // given
     let harness = try makeHarness()

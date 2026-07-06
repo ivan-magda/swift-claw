@@ -23,6 +23,10 @@ public enum ScheduleReplies {
   public static let armFailed =
     "Couldn't arm the schedule. Nothing was created. Run /schedule again."
 
+  /// A parked one-shot confirmed after its instant already passed — nothing left to arm.
+  public static let armExpired =
+    "That schedule's time has already passed. Send /schedule again to set a new one."
+
   public static func confirmPrompt(schedule: ValidatedSchedule, nextFires: [Date]) -> String {
     var lines = [
       "Arm this schedule?",
