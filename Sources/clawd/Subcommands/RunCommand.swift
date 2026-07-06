@@ -112,10 +112,12 @@ struct RunCommand: AsyncParsableCommand {
   private static func bootstrapLogger(secrets: Secrets) -> Logger {
     let environment = ProcessInfo.processInfo.environment
     let redactor = SecretRedactor(secretValues: secrets.redactionValues)
+
     DeveloperLogging.bootstrap(
       level: DeveloperLogging.level(from: environment[DeveloperLogging.levelEnvKey]),
-      redact: { message in redactor.redact(message) }
+      redact: { redactor.redact($0) }
     )
+
     return Logger(label: "clawd")
   }
 
