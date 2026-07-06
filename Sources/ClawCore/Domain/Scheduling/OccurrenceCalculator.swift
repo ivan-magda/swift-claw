@@ -35,11 +35,14 @@ public struct OccurrenceCalculator: Sendable {
       guard occurrence > after else {
         continue
       }
+
       found.append(occurrence)
+
       if found.count == limit {
         break
       }
     }
+
     return found
   }
 
@@ -57,6 +60,7 @@ public struct OccurrenceCalculator: Sendable {
 
     let localized = Self.installing(timezone, on: rule)
     var latest: Date?
+
     for occurrence in localized.recurrences(of: Self.wholeSecond(anchor)) {
       if occurrence > atOrBefore {
         break  // ascending: nothing later can qualify
@@ -65,6 +69,7 @@ public struct OccurrenceCalculator: Sendable {
         latest = occurrence
       }
     }
+
     return latest
   }
 
@@ -85,8 +90,10 @@ public struct OccurrenceCalculator: Sendable {
   ) -> Calendar.RecurrenceRule {
     var localized = rule
     var calendar = localized.calendar
+
     calendar.timeZone = timezone
     localized.calendar = calendar
+
     return localized
   }
 }
