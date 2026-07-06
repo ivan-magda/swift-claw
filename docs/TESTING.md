@@ -1,15 +1,15 @@
 # swift-claw — Testing
 
-| | |
-|---|---|
-| **Status** | Normative testing conventions |
-| **Date** | 2026-07-06 |
-| **Owner** | Ivan Magda |
+|             |                                                                                                                |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| **Status**  | Normative testing conventions                                                                                  |
+| **Date**    | 2026-07-06                                                                                                     |
+| **Owner**   | Ivan Magda                                                                                                     |
 | **Related** | [`ARCHITECTURE.md`](./ARCHITECTURE.md) (esp. §12 untrusted data) · [`../CLAUDE.md`](../CLAUDE.md) (code style) |
 
 > **Authority.** This document is the normative guide for what to test and how. It states the principles a test must satisfy to earn its place in the suite, and the swift-claw-specific conventions that apply them. It is a companion to `ARCHITECTURE.md`: that spec says what the system must do; this one says how we prove it keeps doing it. Where a test and this guide disagree, rewrite the test.
 >
-> This is a *principles* document, not a review. It deliberately contains no point-in-time audit of the current suite (coverage numbers, lists of tests to delete) — that belongs in a PR or issue and goes stale the moment a test changes.
+> This is a _principles_ document, not a review. It deliberately contains no point-in-time audit of the current suite (coverage numbers, lists of tests to delete) — that belongs in a PR or issue and goes stale the moment a test changes.
 
 ---
 
@@ -21,8 +21,8 @@ The goal of the suite is **sustainable development speed** — the freedom to re
 
 A good automated test is defined by four attributes (Khorikov):
 
-1. **Protection against regressions** — it fails when a real fault is introduced. This is the *signal*.
-2. **Resistance to refactoring** — it does *not* fail when internal design changes but behavior is preserved. False failures are *noise*.
+1. **Protection against regressions** — it fails when a real fault is introduced. This is the _signal_.
+2. **Resistance to refactoring** — it does _not_ fail when internal design changes but behavior is preserved. False failures are _noise_.
 3. **Fast feedback** — it runs quickly enough to stay in the edit loop.
 4. **Maintainability** — it is small to run and easy to understand.
 
@@ -33,38 +33,38 @@ Pillars 1 and 2 are in tension and together form a **signal-to-noise ratio**. A 
 This is the root principle; every rule below is downstream of it.
 
 - **Assert observable behavior — an outcome visible from outside the unit — not the steps taken to produce it.** The behavior under test may span several types; the number of classes involved is irrelevant to test design.
-- **Coupling a test to implementation detail is the direct cause of false positives.** Asserting *how* (which private method ran, which collaborator was called in what order) breaks on refactor; asserting *what* (the returned value, the persisted row, the message enqueued, the error thrown) survives it.
+- **Coupling a test to implementation detail is the direct cause of false positives.** Asserting _how_ (which private method ran, which collaborator was called in what order) breaks on refactor; asserting _what_ (the returned value, the persisted row, the message enqueued, the error thrown) survives it.
 - **Drive the system through its public seam the way a real caller does**, so that a failure implies a genuine break in a contract someone depends on.
 - **Confidence through realism**: prefer the arrangement that most resembles real usage, within the speed budget.
 
-For swift-claw this means we assert on the **observable effects** the harness produces: outbox payloads, run-state transitions (§7 FSM), persisted rows, the network-egress list, the taint/sensitivity flags on a context snapshot, and the *typed* error at a seam — never on private structure or call order.
+For swift-claw this means we assert on the **observable effects** the harness produces: outbox payloads, run-state transitions (§7 FSM), persisted rows, the network-egress list, the taint/sensitivity flags on a context snapshot, and the _typed_ error at a seam — never on private structure or call order.
 
 ### 3.1 Assert the effect, not the interaction
 
-In acceptance and integration tests, assert that the effect happened ("a `.done` run and exactly one outbox row exist", "the fetched content is fenced and fed back to the model"), not that a specific method was invoked. Effect-assertions let us rewrite internals without touching the test; interaction-assertions do the opposite. Prefer **state verification over interaction verification**: check *what the result is*, not *how it was made*.
+In acceptance and integration tests, assert that the effect happened ("a `.done` run and exactly one outbox row exist", "the fetched content is fenced and fed back to the model"), not that a specific method was invoked. Effect-assertions let us rewrite internals without touching the test; interaction-assertions do the opposite. Prefer **state verification over interaction verification**: check _what the result is_, not _how it was made_.
 
 ## 4. Isolation and test doubles
 
 The useful question is never "mock or not" — it is **what kind of dependency is this**:
 
-- **Managed dependencies** are implementation details the outside world never observes. For us that is **SQLite via GRDB**. *Do not mock them.* Test against a real in-memory or file-backed database; a mocked store only tests the mock. Real SQLite is the right call for SQL, FTS, migration, trigger, and atomicity tests.
-- **Unmanaged dependencies** are observable to the outside world, and their communication pattern *is* a contract. For us that is the **LLM provider** and **Telegram**. Substitute them at their protocol seam (`LLMProvider`, `ToolDispatching`, `HTTPExecuting`, the Telegram transport) with a scripted double, and — only here — asserting the request we send them is legitimate, because that request is externally observable.
+- **Managed dependencies** are implementation details the outside world never observes. For us that is **SQLite via GRDB**. _Do not mock them._ Test against a real in-memory or file-backed database; a mocked store only tests the mock. Real SQLite is the right call for SQL, FTS, migration, trigger, and atomicity tests.
+- **Unmanaged dependencies** are observable to the outside world, and their communication pattern _is_ a contract. For us that is the **LLM provider** and **Telegram**. Substitute them at their protocol seam (`LLMProvider`, `ToolDispatching`, `HTTPExecuting`, the Telegram transport) with a scripted double, and — only here — asserting the request we send them is legitimate, because that request is externally observable.
 
 Pick the lightest double that expresses the intent (Meszaros/Fowler taxonomy):
 
-| Double | What it is | Use when |
-|---|---|---|
-| **Dummy** | fills a parameter, never used | satisfying a signature |
-| **Stub** | returns canned answers | the SUT needs to *receive* an input |
-| **Fake** | a working, in-memory alternative implementation | you need realistic behavior cheaply — prefer this to a mock |
-| **Spy** | a stub that records how it was called | you must assert a call that crosses an **unmanaged** seam |
-| **Mock** | pre-programmed with call expectations | verifying an unmanaged contract's protocol |
+| Double    | What it is                                      | Use when                                                    |
+| --------- | ----------------------------------------------- | ----------------------------------------------------------- |
+| **Dummy** | fills a parameter, never used                   | satisfying a signature                                      |
+| **Stub**  | returns canned answers                          | the SUT needs to _receive_ an input                         |
+| **Fake**  | a working, in-memory alternative implementation | you need realistic behavior cheaply — prefer this to a mock |
+| **Spy**   | a stub that records how it was called           | you must assert a call that crosses an **unmanaged** seam   |
+| **Mock**  | pre-programmed with call expectations           | verifying an unmanaged contract's protocol                  |
 
-A spy or mock that asserts "an *internal* collaborator was called with X" is a smell: it couples the test to implementation and will break on a behavior-preserving refactor. If X does not cross an unmanaged boundary, assert the resulting state instead.
+A spy or mock that asserts "an _internal_ collaborator was called with X" is a smell: it couples the test to implementation and will break on a behavior-preserving refactor. If X does not cross an unmanaged boundary, assert the resulting state instead.
 
 ## 5. Test shape for a long-running daemon
 
-The pyramid-vs-trophy debate is largely definitional (advocates of "fewer unit tests" usually mean *solitary*, mock-isolated ones). The durable conclusion: **suite value comes from test quality, not from a unit-to-integration ratio.** Good tests establish clear boundaries, run fast and reliably, and fail only for useful reasons; arguing percentages is a distraction.
+The pyramid-vs-trophy debate is largely definitional (advocates of "fewer unit tests" usually mean _solitary_, mock-isolated ones). The durable conclusion: **suite value comes from test quality, not from a unit-to-integration ratio.** Good tests establish clear boundaries, run fast and reliably, and fail only for useful reasons; arguing percentages is a distraction.
 
 swift-claw is IO- and concurrency-heavy, so a **diamond/honeycomb lean is correct**, not a defect:
 
@@ -106,13 +106,13 @@ Do not re-type a value the production code already names. Assert through the **e
 Pin the load-bearing part of an output, not the whole rendered blob:
 
 - **User-facing copy** (owner notices, `/memory` review blocks, prompts, doctor labels): assert the structural fields that carry meaning (an id, a number, the presence of a marker, the group order), or route the check through the same constant/template the code renders. Do not assert the full literal including emoji and punctuation — that is a change-detector on copy, not a behavior test.
-- **Counts, positions, ids:** assert content and containment, and ordering *by key*. Do not pin an assembled-message count, a positional row index, or an autoincrement id (`[1, 2]`) that is incidental to the contract. Keep an exact count only where cardinality is itself the contract (e.g. a guard against spurious rows).
+- **Counts, positions, ids:** assert content and containment, and ordering _by key_. Do not pin an assembled-message count, a positional row index, or an autoincrement id (`[1, 2]`) that is incidental to the contract. Keep an exact count only where cardinality is itself the contract (e.g. a guard against spurious rows).
 - **Schema shape:** assert a migration produced the required columns via `contains`/`isSuperset`; `PRAGMA table_info` order is not a behavioral contract.
 
 ## 8. Measuring test value
 
 - **Coverage is a negative indicator only.** Low coverage reliably flags under-testing; 100% coverage proves nothing about fault detection and is trivially gamed. Do not use coverage as a quality target.
-- **The real value signal is mutation-thinking.** Before writing or keeping a test, ask: *what fault would this fail on that no other test would?* If you can inject a plausible bug into the code the test "covers" and the test still passes, it is not protecting that behavior. A test that cannot kill any mutant is tautological — it tests the framework, the language, or the test double, not our logic.
+- **The real value signal is mutation-thinking.** Before writing or keeping a test, ask: _what fault would this fail on that no other test would?_ If you can inject a plausible bug into the code the test "covers" and the test still passes, it is not protecting that behavior. A test that cannot kill any mutant is tautological — it tests the framework, the language, or the test double, not our logic.
 
 ## 9. The decision rubric
 
@@ -142,11 +142,11 @@ A test in this repo:
 
 Verified against primary and authoritative secondary sources:
 
-- Vladimir Khorikov, *Unit Testing: Principles, Practices, and Patterns* — the four pillars; the signal-to-noise ratio; resistance-to-refactoring as the primary discriminator; managed vs. unmanaged dependencies; coverage as a negative-only indicator; deleting net-negative tests.
-- Martin Fowler, *Mocks Aren't Stubs* and *On the Diverse And Fantastical Shapes of Testing* — the test-double taxonomy; mockist vs. classicist; state vs. behavior verification; the pyramid-vs-trophy dispute as largely definitional (solitary vs. sociable).
-- *Software Engineering at Google*, ch. 12 (Unit Testing) — test through the public API; test behavior not implementation; brittleness from over-specification.
-- Kent C. Dodds, *The Testing Trophy* — confidence-through-realism; integration as the primary layer; static analysis as the base.
-- Codecov, *Mutation testing* — coverage as a vanity metric; mutation testing as the true value signal.
-- Datadog, *Flaky tests* — the order / concurrency / environment taxonomy of flakiness.
-- Shai Yallin, *Fake Don't Mock*; enterprisecraftsmanship, *DRY and DAMP in unit tests*.
-- Antoine van der Lee, *Unit testing async/await* — `Task.yield()` before assertions; `withMainSerialExecutor` for deterministic ordering.
+- Vladimir Khorikov, _Unit Testing: Principles, Practices, and Patterns_ — the four pillars; the signal-to-noise ratio; resistance-to-refactoring as the primary discriminator; managed vs. unmanaged dependencies; coverage as a negative-only indicator; deleting net-negative tests.
+- Martin Fowler, _Mocks Aren't Stubs_ and _On the Diverse And Fantastical Shapes of Testing_ — the test-double taxonomy; mockist vs. classicist; state vs. behavior verification; the pyramid-vs-trophy dispute as largely definitional (solitary vs. sociable).
+- _Software Engineering at Google_, ch. 12 (Unit Testing) — test through the public API; test behavior not implementation; brittleness from over-specification.
+- Kent C. Dodds, _The Testing Trophy_ — confidence-through-realism; integration as the primary layer; static analysis as the base.
+- Codecov, _Mutation testing_ — coverage as a vanity metric; mutation testing as the true value signal.
+- Datadog, _Flaky tests_ — the order / concurrency / environment taxonomy of flakiness.
+- Shai Yallin, _Fake Don't Mock_; enterprisecraftsmanship, _DRY and DAMP in unit tests_.
+- Antoine van der Lee, _Unit testing async/await_ — `Task.yield()` before assertions; `withMainSerialExecutor` for deterministic ordering.
