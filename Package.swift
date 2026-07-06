@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
   name: "swift-claw",
-  platforms: [.macOS(.v14)],
+  platforms: [.macOS(.v15)],
   products: [
     .executable(name: "clawd", targets: ["clawd"])
   ],

@@ -54,9 +54,20 @@ public enum CostSource: String, Sendable, Equatable {
 
 public enum SessionKey {
   private static let dmPrefix = "tg:dm:"
+  private static let jobPrefix = "sched:job:"
+
+  /// The heartbeat's dedicated persistent session (spec D3 symmetry). No chat id in the key —
+  /// the delivery target is resolved from config, so `chatId(from:)` stays nil by design.
+  public static let heartbeat = "sched:heartbeat"
 
   public static func telegramDM(chatId: Int64) -> String {
     "\(dmPrefix)\(chatId)"
+  }
+
+  /// A job's dedicated session, created lazily at first fire (spec D3). No chat id in the key —
+  /// the delivery target is `scheduled_jobs.owner_chat_id`, so `chatId(from:)` stays nil by design.
+  public static func scheduledJob(id: Int64) -> String {
+    "\(jobPrefix)\(id)"
   }
 
   public static func chatId(from key: String) -> Int64? {
@@ -320,6 +331,16 @@ public enum AuditAction: String, Sendable, Equatable {
   case budgetTripped = "budget_tripped"
   case turnCancelled = "turn_cancelled"
   case turnSuperseded = "turn_superseded"
+  case jobCreated = "job_created"
+  case jobExecuted = "job_executed"
+  case jobPaused = "job_paused"
+  case jobResumed = "job_resumed"
+  case jobCancelled = "job_cancelled"
+  case jobFailed = "job_failed"
+  case jobMisfire = "job_misfire"
+  case heartbeatFired = "heartbeat_fired"
+  case heartbeatSuppressed = "heartbeat_suppressed"
+  case heartbeatSkipped = "heartbeat_skipped"
 }
 
 public struct AuditEvent: Sendable, Equatable {
