@@ -80,6 +80,10 @@ public struct BudgetGate: Sendable {
   /// The cap name a proactive trip emits. TurnRunner keys the once-per-UTC-day owner DM on it,
   /// so it is a single named definition, not a call-site string.
   public static let proactivePerDayCap = "proactive per-day spend"
+  /// The remaining cap names, likewise defined once so callers and tests share one source of truth.
+  public static let perDaySpendCap = "per-day spend"
+  public static let perDayTokenCap = "per-day token"
+  public static let perRunSpendCap = "per-run spend"
 
   public let budget: RunBudget
 
@@ -100,16 +104,16 @@ public struct BudgetGate: Sendable {
     proactiveTodayUSD: Double = 0
   ) -> BudgetDecision {
     if todayUSD >= budget.perDayUSD {
-      return .deny(cap: "per-day spend")
+      return .deny(cap: Self.perDaySpendCap)
     }
     if todayTokens + estimatedTotalTokens > budget.dayTokenCeiling {
-      return .deny(cap: "per-day token")
+      return .deny(cap: Self.perDayTokenCap)
     }
     if estimatedCostUSD > budget.perRunUSD {
-      return .deny(cap: "per-run spend")
+      return .deny(cap: Self.perRunSpendCap)
     }
     if todayUSD + estimatedCostUSD > budget.perDayUSD {
-      return .deny(cap: "per-day spend")
+      return .deny(cap: Self.perDaySpendCap)
     }
     if origin != .interactive {
       if proactiveTodayUSD >= budget.proactivePerDayUSD {

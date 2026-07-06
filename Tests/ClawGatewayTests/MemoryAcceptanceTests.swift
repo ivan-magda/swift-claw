@@ -24,12 +24,7 @@ import Testing
     _ writer: any DatabaseWriter,
     expected: [String]
   ) async throws {
-    for _ in 0..<100 {
-      if try runStates(writer) == expected {
-        return
-      }
-      try await Task.sleep(for: .milliseconds(10))
-    }
+    _ = try await pollUntil { try runStates(writer) == expected ? expected : nil }
     #expect(try runStates(writer) == expected)
   }
 

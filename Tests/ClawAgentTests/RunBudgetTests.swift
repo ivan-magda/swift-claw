@@ -28,13 +28,13 @@ struct RunBudgetTests {
       todayTokens: 666_000,
       todayUSD: 0,
       estimatedTotalTokens: 5_000,
-      expectedCap: "per-day token"
+      expectedCap: BudgetGate.perDayTokenCap
     ),
     DenyCase(
       todayTokens: 0,
       todayUSD: 10.0,
       estimatedTotalTokens: 100,
-      expectedCap: "per-day spend"
+      expectedCap: BudgetGate.perDaySpendCap
     ),
   ]
 
@@ -68,7 +68,7 @@ struct RunBudgetTests {
     )
 
     // then
-    #expect(decision == .deny(cap: "per-run spend"))
+    #expect(decision == .deny(cap: BudgetGate.perRunSpendCap))
   }
 
   @Test("preflight allows a fresh day")
@@ -114,7 +114,7 @@ struct RunBudgetTests {
 
     // then — both proactive origins deny on the nested cap; interactive is untouched (S3)
     #expect(scheduled == .deny(cap: BudgetGate.proactivePerDayCap))
-    #expect(heartbeat == .deny(cap: "proactive per-day spend"))
+    #expect(heartbeat == .deny(cap: BudgetGate.proactivePerDayCap))
     #expect(interactive == .allow)
   }
 
@@ -134,7 +134,7 @@ struct RunBudgetTests {
     )
 
     // then
-    #expect(decision == .deny(cap: "proactive per-day spend"))
+    #expect(decision == .deny(cap: BudgetGate.proactivePerDayCap))
   }
 
   @Test("global checks run first, unchanged order — the household kill-switch wins")
@@ -152,7 +152,7 @@ struct RunBudgetTests {
     )
 
     // then — the GLOBAL cap is named, proving check order
-    #expect(decision == .deny(cap: "per-day spend"))
+    #expect(decision == .deny(cap: BudgetGate.perDaySpendCap))
   }
 
   @Test("a proactive run under the proactive cap is allowed")

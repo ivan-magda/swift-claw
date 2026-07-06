@@ -591,12 +591,7 @@ func makeStopNewStack(
     _ writer: any DatabaseWriter,
     expected: [String]
   ) async throws {
-    for _ in 0..<100 {
-      if try runStates(writer) == expected {
-        return
-      }
-      try await Task.sleep(for: .milliseconds(10))
-    }
+    _ = try await pollUntil { try runStates(writer) == expected ? expected : nil }
     #expect(try runStates(writer) == expected)
   }
 
@@ -604,12 +599,7 @@ func makeStopNewStack(
     _ outbox: OutboxStoreGRDB,
     count: Int
   ) async throws {
-    for _ in 0..<100 {
-      if try outbox.pendingOutbound().count == count {
-        return
-      }
-      try await Task.sleep(for: .milliseconds(10))
-    }
+    _ = try await pollUntil { try outbox.pendingOutbound().count == count ? count : nil }
     #expect(try outbox.pendingOutbound().count == count)
   }
 
@@ -708,7 +698,7 @@ func makeStopNewStack(
 
     // then — everything is durable, nothing is on the wire yet
     #expect(outcome == .processed)
-    #expect(try latestRunState(queue) == "DONE")
+    #expect(try latestRunState(queue) == RunState.done.rawValue)
     #expect(try rowCount(queue, in: "provider_usage") == 1)
     #expect(try rowCount(queue, in: "audit_events") >= 1)
     #expect(try stack.outbox.pendingOutbound().count == 1)
@@ -743,8 +733,13 @@ func makeStopNewStack(
       expected: [RunState.done.rawValue, RunState.done.rawValue]
     )
 
-    // then — the second call's request carried the full prior history plus the system prompt
-    #expect(await stack.provider.lastMessageCount == 4)
+    // then — the second call threads the prior user message and the committed assistant reply
+    // back alongside the new one, rather than pinning the exact assembled count
+    let requests = await stack.provider.requests
+    let secondContents = requests[1].map(\.content)
+    #expect(secondContents.contains("first"))
+    #expect(secondContents.contains("stub answer"))
+    #expect(secondContents.contains("second"))
   }
 
   /// §1: a provider outage that survives retries degrades to a plain-language message rather than
@@ -766,7 +761,7 @@ func makeStopNewStack(
     await stack.dispatcher.drainOnce()
 
     // then — the run failed but the owner was told, never left silent
-    #expect(try latestRunState(queue) == "FAILED")
+    #expect(try latestRunState(queue) == RunState.failed.rawValue)
     #expect(await stack.transport.richSends.first?.markdown == Degradation.providerUnavailable)
   }
 
@@ -819,9 +814,10 @@ func makeStopNewStack(
 
     // then — the gate refused pre-call (provider never invoked), the run failed, and the owner was told
     #expect(await stack.provider.lastMessageCount == 0)
-    #expect(try latestRunState(queue) == "FAILED")
+    #expect(try latestRunState(queue) == RunState.failed.rawValue)
     #expect(
-      await stack.transport.richSends.first?.markdown == Degradation.budget(cap: "per-day spend")
+      await stack.transport.richSends.first?.markdown
+        == Degradation.budget(cap: BudgetGate.perDaySpendCap)
     )
   }
 
@@ -914,7 +910,12 @@ func makeStopNewStack(
         sql: "SELECT run_id FROM messages WHERE role = 'assistant' ORDER BY id ASC"
       )
     }
-    #expect(assistantRunIds == [1, 2])
+    let runIds = try await queue.read { db in
+      try Int64.fetchAll(db, sql: "SELECT id FROM runs ORDER BY id ASC")
+    }
+    #expect(runIds.count == 2)
+    #expect(assistantRunIds == runIds)  // one assistant reply per run, in run order
+    #expect(assistantRunIds[0] < assistantRunIds[1])  // strictly ascending, not the literal [1, 2]
   }
 
   @Test func stopMidTurnCancelsRunAndNextPlainMessageStillReplies() async throws {

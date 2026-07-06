@@ -245,3 +245,120 @@ func makeSeededFixture() throws -> SeededFixture {
     chatId: chatId
   )
 }
+
+/// A boot-reconcile fixture with two HEALTHY runs and no unfinished orphan: a terminal DONE run, and
+/// a still-RUNNING run whose single outbox row was already delivered (SENT). Reconcile must leave the
+/// terminal run untouched and enqueue NO degradation for the already-answered run.
+struct HealthyRunsFixture {
+  let runs: RunStoreGRDB
+  let outbox: OutboxStoreGRDB
+  let doneRunId: Int64
+  let deliveredRunId: Int64
+}
+
+func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
+  let queue = try ClawDatabase.makeInMemoryQueue()
+  try ClawDatabase.migrate(queue)
+
+  let messages = SessionMessageStoreGRDB(writer: queue)
+  let runs = RunStoreGRDB(writer: queue)
+  let outbox = OutboxStoreGRDB(writer: queue)
+  let seededAt = Date()
+
+  // A completed, terminal run (PENDING → RUNNING → DONE). Terminal runs fall outside reconcile's
+  // PENDING/RUNNING sweep, so they must survive it unchanged.
+  let doneChatId: Int64 = 42
+  let doneClaim = try messages.claimAndPersistInbound(
+    InboundMessage(
+      updateId: 1,
+      sessionKey: SessionKey.telegramDM(chatId: doneChatId),
+      chatId: doneChatId,
+      userId: doneChatId,
+      text: "first",
+      isEdited: false,
+      ts: seededAt
+    )
+  )
+  let doneRunId = try #require(doneClaim.runId)
+  let doneSessionId = try #require(doneClaim.sessionId)
+  _ = try #require(try runs.pickUp(runId: doneRunId, now: seededAt))
+  let committed = try runs.commitAssistantTurn(
+    AssistantTurn(
+      runId: doneRunId,
+      sessionId: doneSessionId,
+      chatId: doneChatId,
+      content: "all done",
+      usage: ProviderUsage(
+        runId: doneRunId,
+        sessionId: doneSessionId,
+        model: "gpt-4o",
+        promptTokens: 10,
+        completionTokens: 5,
+        costUSD: 0.001,
+        costSource: .heuristic,
+        isEstimated: false,
+        ts: seededAt
+      ),
+      chunks: []
+    ),
+    now: seededAt
+  )
+  #expect(committed == .committed)
+
+  // A still-RUNNING run whose one outbox row was already delivered (SENT) before the crash: the
+  // owner already heard the answer, so reconcile must fail the orphan WITHOUT a degradation reply.
+  let deliveredChatId: Int64 = 43
+  let deliveredClaim = try messages.claimAndPersistInbound(
+    InboundMessage(
+      updateId: 2,
+      sessionKey: SessionKey.telegramDM(chatId: deliveredChatId),
+      chatId: deliveredChatId,
+      userId: deliveredChatId,
+      text: "second",
+      isEdited: false,
+      ts: seededAt
+    )
+  )
+  let deliveredRunId = try #require(deliveredClaim.runId)
+  _ = try #require(try runs.pickUp(runId: deliveredRunId, now: seededAt))
+  _ = try outbox.claimOutbound(
+    runId: deliveredRunId,
+    stepIndex: 0,
+    chatId: deliveredChatId,
+    payload: "already delivered",
+    payloadHash: "hash"
+  )
+  try outbox.markSent(runId: deliveredRunId, stepIndex: 0, telegramMessageId: 555, now: seededAt)
+
+  return HealthyRunsFixture(
+    runs: runs,
+    outbox: outbox,
+    doneRunId: doneRunId,
+    deliveredRunId: deliveredRunId
+  )
+}
+
+/// The single shared ceiling for acceptance bounded-polls — one knob to retune under CI load.
+let acceptancePollCeiling: Duration = .seconds(2)
+
+/// Re-runs `probe` every `interval` until it yields a non-nil value or `timeout` elapses, returning
+/// the last probe value (nil on exhaustion). Collapses the copied `for _ in 0..<N` + `Task.sleep`
+/// idiom so the ceiling lives in one place. Not a signal-await: the state these poll (runs/outbox
+/// rows) lands via a real GRDB write on the lane's background task, and the only wake available is
+/// the coalescing, valueless `OutboxSignal` poke — which cannot encode a count or a state vector.
+func pollUntil<Value>(
+  timeout: Duration = acceptancePollCeiling,
+  interval: Duration = .milliseconds(10),
+  _ probe: () throws -> Value?
+) async rethrows -> Value? {
+  let deadline = ContinuousClock.now + timeout
+  while true {
+    if let value = try probe() {
+      return value
+    }
+    if ContinuousClock.now >= deadline {
+      return nil
+    }
+    try? await Task.sleep(for: interval)
+  }
+}

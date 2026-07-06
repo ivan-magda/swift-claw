@@ -146,6 +146,19 @@ struct FullSessions: SessionMessageStore {
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
+  @Test func nonAllowlistedSenderPersistsNoRunOrMessage() async throws {
+    // given — the sender's id (7) is never seeded into the allowlist
+    let harness = try makeHarness(allowed: [42])
+
+    // when — a stranger sends plain text
+    await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "let me in"))
+
+    // then — fail-closed: no turn dispatched and nothing durable is written for the stranger
+    #expect(await harness.dispatcher.calls.isEmpty)
+    #expect(try runStates(harness.queue).isEmpty)
+    #expect(try messageCount(harness.queue, content: "let me in") == 0)
+  }
+
   @Test func unknownSenderStartEchoesTheirOwnId() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
@@ -386,7 +399,7 @@ struct FullSessions: SessionMessageStore {
     // then
     let sent = await harness.transport.sent
     let reply = try #require(sent.first)
-    #expect(reply.text == "I can't read photos yet.")
+    #expect(reply.text == MessageRouter.unsupportedMediaText(kind: "photos"))
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 

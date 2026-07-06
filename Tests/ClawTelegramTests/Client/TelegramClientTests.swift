@@ -352,4 +352,29 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(call.timeout == 40)
     #expect(TelegramClient.defaultHTTPTimeoutSlackSeconds == 10)
   }
+
+  @Test func getUpdatesPutsNonNilOffsetOnTheWire() async throws {
+    // given
+    let recorder = RecordingHTTPExecutor.Recorder()
+    let http = RecordingHTTPExecutor(
+      recorder: recorder,
+      result: HTTPResult(
+        statusCode: 200,
+        headers: [:],
+        body: Data(#"{"ok":true,"result":[]}"#.utf8)
+      )
+    )
+    let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
+
+    // when
+    _ = try await telegram.getUpdates(offset: 500, timeout: 30, allowedUpdates: ["message"])
+
+    // then — the concrete offset (and allowed_updates) ride in the POST body
+    let call = try #require(await recorder.calls.first)
+    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    #expect(call.url == "https://example.test/botT/getUpdates")
+    #expect(body["offset"] as? Int == 500)
+    #expect(body["timeout"] as? Int == 30)
+    #expect(body["allowed_updates"] as? [String] == ["message"])
+  }
 }

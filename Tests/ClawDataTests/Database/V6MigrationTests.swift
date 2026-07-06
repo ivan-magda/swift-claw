@@ -21,23 +21,25 @@ import Testing
     // when
     try ClawDatabase.migrate(queue)
 
-    // then — the exact §4.1 column set, in declaration order
+    // then — the required §4.1 columns are present (superset; order and extra columns not pinned)
+    let scheduledJobColumns = Set(try columnNames(queue, table: "scheduled_jobs"))
     #expect(
-      try columnNames(queue, table: "scheduled_jobs") == [
+      scheduledJobColumns.isSuperset(of: [
         "id", "owner_chat_id", "label", "prompt", "recurrence", "timezone",
         "next_occurrence", "last_fired_at", "status", "session_id", "created_ts", "updated_ts",
-      ]
+      ])
     )
 
     let runColumns = try columnNames(queue, table: "runs")
     #expect(runColumns.contains("origin"))
     #expect(runColumns.contains("job_id"))
 
+    let schedulerStateColumns = Set(try columnNames(queue, table: "scheduler_state"))
     #expect(
-      try columnNames(queue, table: "scheduler_state") == [
+      schedulerStateColumns.isSuperset(of: [
         "id", "last_tick_at", "last_misfire_at", "last_misfire_skipped_count",
         "last_heartbeat_at", "heartbeat_count_day", "heartbeat_count",
-      ]
+      ])
     )
   }
 

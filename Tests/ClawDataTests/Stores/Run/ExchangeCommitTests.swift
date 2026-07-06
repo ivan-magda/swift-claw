@@ -102,20 +102,41 @@ import Testing
       try Row.fetchAll(
         db,
         sql:
-          "SELECT role, content, provenance, tool_calls, tool_call_id, run_id FROM messages ORDER BY id ASC"
+          "SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id FROM messages ORDER BY id ASC"
       )
     }
-    // user inbound, exchange anchor, tool observation, final reply
+    // user inbound, exchange anchor, tool observation, final reply — count guards spurious rows
     #expect(rows.count == 4)
-    #expect(rows[1]["role"] == "assistant")
-    #expect((rows[1]["tool_calls"] as String?)?.contains("web_fetch") == true)
-    #expect(rows[1]["provenance"] == "trusted")
-    #expect(rows[2]["role"] == "tool")
-    #expect(rows[2]["content"] == "raw page text")  // raw, un-wrapped (§11)
-    #expect(rows[2]["provenance"] == "untrusted")
-    #expect(rows[2]["tool_call_id"] == "c1")
-    #expect(rows[2]["run_id"] == fixture.runId)
-    #expect(rows[3]["content"] == "summary of the page")
+    let assistantRows = rows.filter { ($0["role"] as String?) == "assistant" }
+    let toolRows = rows.filter { ($0["role"] as String?) == "tool" }
+    #expect(assistantRows.count == 2)
+    #expect(toolRows.count == 1)
+
+    // the exchange anchor is the assistant row carrying the tool_calls
+    let anchor = try #require(
+      assistantRows.first { ($0["tool_calls"] as String?)?.contains("web_fetch") == true }
+    )
+    #expect(anchor["provenance"] == "trusted")
+    #expect(anchor["run_id"] == fixture.runId)
+
+    // the untrusted tool observation, raw and un-wrapped (§11)
+    let toolRow = try #require(toolRows.first)
+    #expect(toolRow["content"] == "raw page text")
+    #expect(toolRow["provenance"] == "untrusted")
+    #expect(toolRow["tool_call_id"] == "c1")
+    #expect(toolRow["run_id"] == fixture.runId)
+
+    // the final reply is the assistant row without tool_calls
+    let reply = try #require(assistantRows.first { ($0["tool_calls"] as String?) == nil })
+    #expect(reply["content"] == "summary of the page")
+    #expect(reply["run_id"] == fixture.runId)
+
+    // …InOrderThenReply: anchor → observation → reply by insertion id
+    let anchorId = try #require(anchor["id"] as Int64?)
+    let toolId = try #require(toolRow["id"] as Int64?)
+    let replyId = try #require(reply["id"] as Int64?)
+    #expect(anchorId < toolId)
+    #expect(toolId < replyId)
     #expect(try isTainted(fixture))
   }
 

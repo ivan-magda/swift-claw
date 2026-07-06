@@ -125,4 +125,80 @@ import Testing
     #expect(none.tokens == 0)
     #expect(none.costUSD == 0)
   }
+
+  @Test func todayTotalsCountOnlyTheCurrentUtcDayAcrossTheBoundary() throws {
+    // given — a fixed UTC "now" at noon, its UTC day start, and a ~25h-old instant (previous day)
+    var utc = Calendar(identifier: .gregorian)
+    utc.timeZone = try #require(TimeZone(identifier: "UTC"))
+    let now = try #require(
+      utc.date(from: DateComponents(year: 2026, month: 7, day: 6, hour: 12, minute: 0, second: 0))
+    )
+    let dayStart = now.startOfUTCDay
+    let previousDay = now.addingTimeInterval(-25 * 3600)
+
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let sessions = SessionMessageStoreGRDB(writer: queue)
+    let claim = try sessions.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 1,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "seed",
+        isEdited: false,
+        ts: now
+      )
+    )
+    let sessionId = try #require(claim.sessionId)
+    let runId = try #require(claim.runId)
+    let usage = UsageStoreGRDB(writer: queue)
+
+    // when — previous-day (excluded), exactly at the UTC day start (included via `>=`), and midday
+    try usage.recordUsage(
+      ProviderUsage(
+        runId: runId,
+        sessionId: sessionId,
+        model: "m",
+        promptTokens: 900,
+        completionTokens: 99,
+        costUSD: 5.0,
+        costSource: .providerReturned,
+        isEstimated: false,
+        ts: previousDay
+      )
+    )
+    try usage.recordUsage(
+      ProviderUsage(
+        runId: runId,
+        sessionId: sessionId,
+        model: "m",
+        promptTokens: 10,
+        completionTokens: 0,
+        costUSD: 0.005,
+        costSource: .providerReturned,
+        isEstimated: false,
+        ts: dayStart
+      )
+    )
+    try usage.recordUsage(
+      ProviderUsage(
+        runId: runId,
+        sessionId: sessionId,
+        model: "m",
+        promptTokens: 100,
+        completionTokens: 50,
+        costUSD: 0.0123,
+        costSource: .providerReturned,
+        isEstimated: false,
+        ts: now
+      )
+    )
+
+    // then — only the two same-UTC-day rows are summed; the ~25h-old row is excluded
+    let (tokens, cost) = try usage.todayTokensAndCost(now: now)
+    #expect(tokens == 160)
+    #expect(abs(cost - 0.0173) < 1e-9)
+    #expect(try usage.costSourceMix(now: now) == [.providerReturned: 2])
+  }
 }
