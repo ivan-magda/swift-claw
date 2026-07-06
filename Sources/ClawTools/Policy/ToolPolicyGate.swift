@@ -91,6 +91,23 @@ public struct ToolPolicyGate: Sendable {
       return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: true)
     }
 
+    if context.nonInteractive {
+      // §10 (D5): a non-interactive run never parks an approval — would-park becomes an
+      // immediate audited DENY, surfaced in the delivered result as a plain-language note. No
+      // pending entry ⇒ no dangling confirmation can bind to the owner's next unrelated "yes"
+      // (§16 case 3).
+      return .block(
+        payload: ToolPayload(
+          content: "skipped \(call.name) of \(canonical) — it needs your approval; "
+            + "run it interactively.",
+          status: .error,
+          ingestedUntrusted: false
+        ),
+        argsRedacted: conditional.redactedArgs,
+        pendingApproval: nil
+      )
+    }
+
     return .block(
       payload: ToolPayload(
         content:

@@ -263,7 +263,8 @@ public struct AgentRuntime: Sendable {
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
           grant: remainingGrant,
-          approvalAlreadyPending: pendingApproval != nil
+          approvalAlreadyPending: pendingApproval != nil,
+          nonInteractive: origin != .interactive
         )
 
         guard let toolDispatcher else {

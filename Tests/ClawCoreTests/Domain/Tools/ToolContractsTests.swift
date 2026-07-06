@@ -107,7 +107,8 @@ import Testing
       assemblyPrivateData: true,
       runPrivateData: false,
       grant: grant,
-      approvalAlreadyPending: false
+      approvalAlreadyPending: false,
+      nonInteractive: false
     )
 
     // then

@@ -416,4 +416,40 @@ import Testing
     #expect(try requireCompleted(outcome.result).content == "recovered")
     #expect(outcome.exchanges[0].observations[0].status == .error)
   }
+
+  @Test func scheduledOriginThreadsNonInteractiveIntoTheDispatchContext() async throws {
+    // given
+    let provider = SequenceProvider([
+      toolCallResponse([fetchProposal()]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    _ = try await run(runtime, origin: .scheduled)
+
+    // then — the single dispatched call saw the reduced-privilege flag
+    let records = await dispatcher.records
+    #expect(records.count == 1)
+    #expect(records[0].context.nonInteractive)
+  }
+
+  @Test func interactiveOriginThreadsNonInteractiveFalse() async throws {
+    // given
+    let provider = SequenceProvider([
+      toolCallResponse([fetchProposal()]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when — the default origin
+    _ = try await run(runtime)
+
+    // then
+    let records = await dispatcher.records
+    #expect(records.count == 1)
+    #expect(records[0].context.nonInteractive == false)
+  }
 }

@@ -9,6 +9,10 @@ public struct ToolDispatchContext: Sendable, Equatable {
   public let runPrivateData: Bool
   public let grant: OneTurnGrant?
   public let approvalAlreadyPending: Bool
+  /// True for scheduled/heartbeat runs (§10): the gate converts every would-park approval
+  /// outcome into an immediate audited DENY. No default — every construction site decides
+  /// explicitly (secure-by-default; a forgotten site is a compile error, not a privilege grant).
+  public let nonInteractive: Bool
 
   public init(
     sessionTainted: Bool,
@@ -16,7 +20,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
     grant: OneTurnGrant?,
-    approvalAlreadyPending: Bool
+    approvalAlreadyPending: Bool,
+    nonInteractive: Bool
   ) {
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
@@ -24,6 +29,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.runPrivateData = runPrivateData
     self.grant = grant
     self.approvalAlreadyPending = approvalAlreadyPending
+    self.nonInteractive = nonInteractive
   }
 }
 
