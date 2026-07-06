@@ -160,6 +160,48 @@ public enum ClawDatabase {
         table.add(column: "tool_call_id", .text)
       }
     }
+    migrator.registerMigration("v6") { db in
+      // Spec §4.1. Occurrence/timestamp columns are UTC epoch-second INTEGERs so the fused
+      // claim's compare-and-advance (§5.2) is exact integer equality, never a string compare.
+      try db.create(table: "scheduled_jobs") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("owner_chat_id", .integer).notNull()
+        table.column("label", .text).notNull()
+        table.column("prompt", .text).notNull()
+        // {"schema_version":1,"rule":<RecurrenceRule JSON>}; NULL ⇔ one-shot (D2)
+        table.column("recurrence", .text)
+        table.column("timezone", .text).notNull()
+        table.column("next_occurrence", .integer)
+        table.column("last_fired_at", .integer)
+        table.column("status", .text).notNull()
+        table.column("session_id", .integer).references("sessions", onDelete: .setNull)
+        table.column("created_ts", .integer).notNull()
+        table.column("updated_ts", .integer).notNull()
+      }
+      // Partial: terminal rows keep next_occurrence NULL, so the ticker scan never sees them.
+      try db.create(
+        index: "index_scheduled_jobs_status_next_occurrence",
+        on: "scheduled_jobs",
+        columns: ["status", "next_occurrence"],
+        condition: Column("next_occurrence") != nil
+      )
+      try db.alter(table: "runs") { table in
+        // 'interactive' | 'scheduled' | 'heartbeat' — backfill is the default, no data rewrite.
+        table.add(column: "origin", .text).notNull().defaults(to: "interactive")
+        table.add(column: "job_id", .integer).references("scheduled_jobs")
+      }
+      // Spec §4.3: one row, updated inside tick/claim transactions; doctor reads it from its
+      // separate process. due_count is deliberately NOT stored (computed by query).
+      try db.create(table: "scheduler_state") { table in
+        table.primaryKey("id", .integer).check { id in id == 1 }
+        table.column("last_tick_at", .integer)
+        table.column("last_misfire_at", .integer)
+        table.column("last_misfire_skipped_count", .integer).notNull().defaults(to: 0)
+        table.column("last_heartbeat_at", .integer)
+        table.column("heartbeat_count_day", .text)
+        table.column("heartbeat_count", .integer).notNull().defaults(to: 0)
+      }
+    }
     return migrator
   }
 
