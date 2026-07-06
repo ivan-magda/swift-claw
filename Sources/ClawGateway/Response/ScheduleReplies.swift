@@ -67,8 +67,10 @@ public enum ScheduleReplies {
         row.nextFire.map { date in
           fireTime(date, timezoneId: row.job.timezone)
         } ?? "—"
-      return "\(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · "
-        + "\(RecurrenceWords.describe(row.job.recurrence)) · \(row.job.timezone) · next \(fire)"
+      return """
+        \(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · \
+        \(RecurrenceWords.describe(row.job.recurrence)) · \(row.job.timezone) · next \(fire)
+        """
     }.joined(separator: "\n")
   }
 
@@ -92,13 +94,17 @@ public enum ScheduleReplies {
     guard let next = job.nextOccurrence else {
       return "Resumed schedule \(job.id) · «\(job.label)» — nothing left to fire."
     }
-    return "Resumed schedule \(job.id) · «\(job.label)» — next fire "
-      + "\(fireTime(next, timezoneId: job.timezone))."
+    return """
+      Resumed schedule \(job.id) · «\(job.label)» — next fire \
+      \(fireTime(next, timezoneId: job.timezone)).
+      """
   }
 
   public static func cancelled(job: ScheduledJob) -> String {
-    "Cancelled schedule \(job.id) · «\(job.label)». It will not fire again; "
-      + "an in-flight run finishes on its own."
+    """
+    Cancelled schedule \(job.id) · «\(job.label)». It will not fire again; \
+    an in-flight run finishes on its own.
+    """
   }
 
   public static func runningNow(id: Int64) -> String {
