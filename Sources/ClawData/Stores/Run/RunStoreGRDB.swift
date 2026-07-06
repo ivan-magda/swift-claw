@@ -156,6 +156,7 @@ public struct RunStoreGRDB: RunStore {
       guard try Self.transitionRun(db, runId: turn.runId, event: .fail, now: now) != nil else {
         return .ignored
       }
+      try Self.appendJobFailedIfJobRun(db, runId: turn.runId, now: now)
 
       if let usage = turn.usage {
         try Self.insertUsage(db, usage)
@@ -174,7 +175,10 @@ public struct RunStoreGRDB: RunStore {
 
   public func failRun(runId: Int64, now: Date) throws {
     try writer.writeMapping { db in
-      _ = try Self.transitionRun(db, runId: runId, event: .fail, now: now)
+      guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
+        return
+      }
+      try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
     }
   }
 
@@ -186,7 +190,7 @@ public struct RunStoreGRDB: RunStore {
       let stale = try Row.fetchAll(
         db,
         sql: """
-          SELECT r.id AS run_id, s.session_key AS session_key FROM runs r
+          SELECT r.id AS run_id, r.job_id AS job_id, s.session_key AS session_key FROM runs r
           JOIN sessions s ON s.id = r.session_id
           WHERE r.state IN (?, ?)
           ORDER BY r.id ASC
@@ -201,6 +205,23 @@ public struct RunStoreGRDB: RunStore {
           continue
         }
 
+        try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+
+        // A6: job runs resolve the crash-notice target via the job row — sessions carry no chat
+        // id and the synthetic `sched:job:<id>` key parses to nil. Heartbeat runs (job_id NULL,
+        // `sched:heartbeat`) keep skipping here; Phase 4 routes them via config.
+        let jobId: Int64? = row["job_id"]
+        let noticeChatId: Int64?
+        if let jobId {
+          noticeChatId = try Int64.fetchOne(
+            db,
+            sql: "SELECT owner_chat_id FROM scheduled_jobs WHERE id = ?",
+            arguments: [jobId]
+          )
+        } else {
+          noticeChatId = SessionKey.chatId(from: row["session_key"])
+        }
+
         let sentCount =
           try Int.fetchOne(
             db,
@@ -210,10 +231,7 @@ public struct RunStoreGRDB: RunStore {
               """,
             arguments: [runId]
           ) ?? 0
-        guard
-          sentCount == 0,
-          let chatId = SessionKey.chatId(from: row["session_key"])
-        else {
+        guard sentCount == 0, let chatId = noticeChatId else {
           continue
         }
 
@@ -280,6 +298,37 @@ public struct RunStoreGRDB: RunStore {
         consecutiveFailures: consecutiveFailures
       )
     }
+  }
+}
+
+extension RunStoreGRDB {
+  /// FR-C4/spec §14: when a run that belongs to a scheduled job reaches FAILED, `jobFailed`
+  /// rides the SAME transaction as the state flip (house rule). No-op for job-less runs.
+  static func appendJobFailedIfJobRun(_ db: Database, runId: Int64, now: Date) throws {
+    let row = try Row.fetchOne(
+      db,
+      sql: "SELECT job_id, session_id FROM runs WHERE id = ?",
+      arguments: [runId]
+    )
+    guard let row else {
+      return
+    }
+    let jobId: Int64? = row["job_id"]
+    guard let jobId else {
+      return
+    }
+
+    try AuditLogGRDB.insertAudit(
+      db,
+      AuditEvent(
+        actor: .system,
+        action: .jobFailed,
+        decision: "job:\(jobId)",
+        runId: runId,
+        sessionId: row["session_id"],
+        ts: now
+      )
+    )
   }
 
   static func fetchActiveRunId(_ db: Database, sessionId: Int64) throws -> Int64? {
