@@ -161,6 +161,7 @@ public enum RecurrenceWords {
     guard let recurrence else {
       return "once"
     }
+
     let rule = recurrence.rule
     switch rule.frequency {
     case .minutely:
@@ -182,12 +183,15 @@ public enum RecurrenceWords {
       }
       return nil
     }
+
     if days.count == 5, Set(days) == [.monday, .tuesday, .wednesday, .thursday, .friday] {
       return "every weekday at \(clock(rule))"
     }
+
     guard days.isEmpty == false else {
       return "custom schedule"
     }
+
     let names = days.map { day in fullName(day) }.joined(separator: ", ")
     return "every \(names) at \(clock(rule))"
   }
@@ -198,14 +202,14 @@ public enum RecurrenceWords {
 
   private static func fullName(_ day: Locale.Weekday) -> String {
     switch day {
-    case .sunday: return "sunday"
-    case .monday: return "monday"
-    case .tuesday: return "tuesday"
-    case .wednesday: return "wednesday"
-    case .thursday: return "thursday"
-    case .friday: return "friday"
-    case .saturday: return "saturday"
-    @unknown default: return "weekday"
+    case .sunday: "sunday"
+    case .monday: "monday"
+    case .tuesday: "tuesday"
+    case .wednesday: "wednesday"
+    case .thursday: "thursday"
+    case .friday: "friday"
+    case .saturday: "saturday"
+    @unknown default: "weekday"
     }
   }
 }
@@ -237,9 +241,11 @@ public struct ScheduleDraftValidator: Sendable {
     guard label.isEmpty == false else {
       return .failure(.emptyLabel)
     }
+
     guard label.count <= Self.maxLabelGraphemes else {
       return .failure(.labelTooLong(count: label.count))
     }
+
     let prompt = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
     guard prompt.isEmpty == false else {
       return .failure(.emptyPrompt)
@@ -302,7 +308,9 @@ public struct ScheduleDraftValidator: Sendable {
       else {
         return .failure(.noUpcomingOccurrence)
       }
+
       let envelope = RecurrenceEnvelope(schemaVersion: 1, rule: rule)
+
       return .success(
         ValidatedSchedule(
           label: label,
@@ -332,11 +340,13 @@ public struct ScheduleDraftValidator: Sendable {
       guard let interval = schedule.intervalMinutes else {
         return .failure(.missingField(kind: .everyNMinutes, field: "intervalMinutes"))
       }
+
       guard interval >= minIntervalMinutes else {
         return .failure(
           .intervalTooSmall(minutes: interval, floorMinutes: minIntervalMinutes)
         )
       }
+
       return .success(
         Calendar.RecurrenceRule(
           calendar: calendar,
@@ -373,9 +383,11 @@ public struct ScheduleDraftValidator: Sendable {
       guard let rawWeekday = schedule.weekday else {
         return .failure(.missingField(kind: .weekly, field: "weekday"))
       }
+
       guard let weekday = Self.weekday(named: rawWeekday) else {
         return .failure(.invalidWeekday(rawWeekday))
       }
+
       return clockComponents(schedule, kind: .weekly).map { clock in
         Calendar.RecurrenceRule(
           calendar: calendar,
@@ -413,6 +425,7 @@ public struct ScheduleDraftValidator: Sendable {
       guard let dayParts = Self.parseDay(rawDate) else {
         return .failure(.invalidDate(rawDate))
       }
+
       var parts = DateComponents()
       parts.year = dayParts.year
       parts.month = dayParts.month
@@ -428,6 +441,7 @@ public struct ScheduleDraftValidator: Sendable {
       else {
         return .failure(.invalidDate(rawDate))
       }
+
       resolved = instant
     } else {
       // Omitted date ⇒ the next instant matching HH:MM in the zone (spec §7).
@@ -435,17 +449,24 @@ public struct ScheduleDraftValidator: Sendable {
       match.hour = clock.hour
       match.minute = clock.minute
       match.second = 0
+
       guard
-        let instant = calendar.nextDate(after: now, matching: match, matchingPolicy: .nextTime)
+        let instant = calendar.nextDate(
+          after: now,
+          matching: match,
+          matchingPolicy: .nextTime
+        )
       else {
         return .failure(.noUpcomingOccurrence)
       }
+
       resolved = instant
     }
 
     guard resolved > now else {
       return .failure(.onceInThePast)
     }
+
     return .success(
       ValidatedSchedule(
         label: label,
@@ -467,9 +488,11 @@ public struct ScheduleDraftValidator: Sendable {
     guard let rawTime = schedule.time else {
       return .failure(.missingField(kind: kind, field: "time"))
     }
+
     guard let clock = Self.parseClock(rawTime) else {
       return .failure(.invalidTime(rawTime))
     }
+
     return .success(clock)
   }
 
@@ -513,14 +536,14 @@ public struct ScheduleDraftValidator: Sendable {
 
   static func weekday(named raw: String) -> Locale.Weekday? {
     switch raw.trimmingCharacters(in: .whitespaces).lowercased() {
-    case "monday", "mon": return .monday
-    case "tuesday", "tue": return .tuesday
-    case "wednesday", "wed": return .wednesday
-    case "thursday", "thu": return .thursday
-    case "friday", "fri": return .friday
-    case "saturday", "sat": return .saturday
-    case "sunday", "sun": return .sunday
-    default: return nil
+    case "monday", "mon": .monday
+    case "tuesday", "tue": .tuesday
+    case "wednesday", "wed": .wednesday
+    case "thursday", "thu": .thursday
+    case "friday", "fri": .friday
+    case "saturday", "sat": .saturday
+    case "sunday", "sun": .sunday
+    default: nil
     }
   }
 }
