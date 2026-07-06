@@ -40,7 +40,6 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
   private let cannedState: SchedulerState
   private let heartbeatResult: ClaimedFire?
   private var recordedHeartbeats: [HeartbeatCall] = []
-  private var recordedStateReads = 0
 
   init(
     jobs: [ScheduledJob],
@@ -83,12 +82,6 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return recordedHeartbeats
-  }
-
-  var stateReads: Int {
-    lock.lock()
-    defer { lock.unlock() }
-    return recordedStateReads
   }
 
   func dueJobs(now: Date) throws -> [ScheduledJob] {
@@ -164,7 +157,6 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
   func schedulerState() throws -> SchedulerState {
     lock.lock()
     defer { lock.unlock() }
-    recordedStateReads += 1
     return cannedState
   }
 

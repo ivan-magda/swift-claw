@@ -344,7 +344,7 @@ func latestRunState(_ queue: DatabaseQueue) throws -> String? {
   }
 }
 
-func okResponse(content: String) -> ChatResponse {
+private func okResponse(content: String) -> ChatResponse {
   ChatResponse(
     content: content,
     finishReason: "stop",
