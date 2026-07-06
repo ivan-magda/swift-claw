@@ -45,7 +45,9 @@ public struct UsageStoreGRDB: UsageStore {
     guard origins.isEmpty == false else {
       return (0, 0)
     }
+
     let dayStart = now.startOfUTCDay
+
     return try writer.readMapping { db in
       // databaseQuestionMarks is GRDB's public helper (GRDB/Utils/Utils.swift), not a
       // project symbol — it renders "?,?,?" for the IN clause.
