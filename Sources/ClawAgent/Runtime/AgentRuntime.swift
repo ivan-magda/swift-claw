@@ -1,5 +1,6 @@
 import ClawCore
 import Foundation
+import Logging
 
 /// Why a turn produced no usable answer. Maps to a plain-language degradation reply (§7); the
 /// stable `rawValue` is what the audit log records, so it survives case renames.
@@ -61,7 +62,9 @@ public struct AgentRuntime: Sendable {
   private let toolDispatcher: (any ToolDispatching)?
   private let usageStore: any UsageStore
   private let auditLog: any AuditLog
-  private let warn: @Sendable (String) -> Void
+  /// Developer-facing diagnostics (swift-log). Distinct from `auditLog`, which is the durable
+  /// business/security trail. Defaults to a no-op so tests stay silent unless they inject one.
+  private let logger: Logger
   /// Injected so tests can make the deadline fire instantly with a no-op sleep.
   private let sleep: @Sendable (Duration) async throws -> Void
 
@@ -77,7 +80,7 @@ public struct AgentRuntime: Sendable {
     toolDispatcher: (any ToolDispatching)? = nil,
     usageStore: any UsageStore,
     auditLog: any AuditLog,
-    warn: @escaping @Sendable (String) -> Void = { _ in },
+    logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
     sleep: @escaping @Sendable (Duration) async throws -> Void
   ) {
     self.provider = provider
@@ -91,7 +94,7 @@ public struct AgentRuntime: Sendable {
     self.toolDispatcher = toolDispatcher
     self.usageStore = usageStore
     self.auditLog = auditLog
-    self.warn = warn
+    self.logger = logger
     self.sleep = sleep
   }
 
@@ -117,6 +120,17 @@ public struct AgentRuntime: Sendable {
     let definitions = toolDispatcher?.definitions ?? []
     let gate = BudgetGate(budget: budget)
 
+    // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
+    // ties the round-trips, tool calls, and outcome of a single turn together.
+    var turnLog = logger
+    for (key, value) in Self.turnMetadata(runId: runId, sessionId: sessionId) {
+      turnLog[metadataKey: key] = value
+    }
+    let turnStart = ContinuousClock.now
+    turnLog.info(
+      "turn started model=\(model) origin=\(origin) contextMessages=\(buildResult.messages.count) streaming=\(streamingEnabled) tools=\(definitions.count)"
+    )
+
     var wire = buildResult.messages
     var exchanges: [ToolExchange] = []
 
@@ -130,8 +144,12 @@ public struct AgentRuntime: Sendable {
     var recordedRunTokens = 0
     var recordedRunUSD = 0.0
 
+    // Terminal choke-point for the RESULT paths: every `return outcome(...)` flows through here, so a
+    // turn that produces a `TurnOutcome` emits exactly one finished line (see `logFinish`). The
+    // `StoreError.diskFull` fast-path throws to the gateway instead, which logs that terminal.
     func outcome(_ result: TurnResult) -> TurnOutcome {
-      TurnOutcome(
+      Self.logFinish(result, on: turnLog, elapsed: ContinuousClock.now - turnStart)
+      return TurnOutcome(
         result: result,
         exchanges: exchanges,
         ingestedUntrusted: ingestedUntrusted,
@@ -139,7 +157,7 @@ public struct AgentRuntime: Sendable {
       )
     }
 
-    for _ in 0..<max(1, budget.maxTurns) {
+    for roundTripIndex in 1...max(1, budget.maxTurns) {
       // Per-round-trip preflight (§6.2): day totals at run start + everything this run recorded.
       let inputTokens = TokenEstimator.estimateInputTokens(wire)
       let estimate = inputTokens + budget.maxOutputTokens
@@ -173,6 +191,7 @@ public struct AgentRuntime: Sendable {
 
       let remaining = deadline - ContinuousClock.now
       guard remaining > .zero else {
+        turnLog.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
         return outcome(
           .degraded(
             .providerUnavailable,
@@ -181,6 +200,9 @@ public struct AgentRuntime: Sendable {
         )
       }
 
+      turnLog.debug(
+        "round-trip \(roundTripIndex) inputTokens~=\(inputTokens) estCostUSD=\(USD.precise(estimatedCost))"
+      )
       let request = ChatRequest(
         model: model,
         messages: wire,
@@ -197,6 +219,7 @@ public struct AgentRuntime: Sendable {
           deadlineSeconds: max(1, Int(remaining.components.seconds))
         )
       } catch is DeadlineExceeded {
+        turnLog.notice("round-trip \(roundTripIndex) exceeded the wall-clock deadline; degrading")
         return outcome(
           .degraded(
             .providerUnavailable,
@@ -208,6 +231,7 @@ public struct AgentRuntime: Sendable {
         // an ESTIMATED row (`degradedForStreamingError`); the typing path debits nil for a terminal
         // (`degradedForCaughtError`). §15 estimated-debit rule; keeps
         // `terminalStreamFailureDegradesAndDebitsTheEstimate` green and both helpers live.
+        turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
         let degradation =
           streamingEnabled
           ? degradedForStreamingError(error, context: wire, runId: runId, sessionId: sessionId)
@@ -230,7 +254,7 @@ public struct AgentRuntime: Sendable {
       } catch StoreError.diskFull {
         throw StoreError.diskFull
       } catch {
-        warn("mid-run usage write failed; halting provider calls: \(error)")
+        turnLog.warning("mid-run usage write failed; halting provider calls: \(error)")
         return outcome(.degraded(.accountingFailed, usage: nil))
       }
       recordedRunTokens += intermediate.promptTokens + intermediate.completionTokens
@@ -280,7 +304,12 @@ public struct AgentRuntime: Sendable {
           continue
         }
 
+        turnLog.debug("tool \(call.name) invoked")
+        let toolStart = ContinuousClock.now
         let dispatched = await toolDispatcher.dispatch(call: call, context: context)
+        turnLog.debug(
+          "tool \(call.name) done decision=\(dispatched.observation.status.rawValue) bytes=\(dispatched.observation.content.utf8.count) ms=\(Self.millis(ContinuousClock.now - toolStart))"
+        )
         try recordToolAudit(for: call, outcome: dispatched, runId: runId, sessionId: sessionId)
 
         observations.append(dispatched.observation)
@@ -326,12 +355,46 @@ public struct AgentRuntime: Sendable {
 
     return outcome(.budgetStopped(cap: "per-run turn"))
   }
+}
 
-  // MARK: - Load-bearing
+// MARK: - Load-bearing
 
+extension AgentRuntime {
   /// Marker error thrown by turn-runtime deadline children when the wall-clock window elapses; the
   /// `runTurn` shell maps it to the estimated-debit degradation path.
   struct DeadlineExceeded: Error {}
+
+  /// The correlation fields stamped on every developer log line for one turn, so a single
+  /// `grep run=<id>` ties the turn's round-trips, tool calls, and outcome together.
+  private static func turnMetadata(runId: Int64, sessionId: Int64) -> Logger.Metadata {
+    ["run": "\(runId)", "session": "\(sessionId)"]
+  }
+
+  /// Emits the one finished line for a turn; its level reflects severity — completed → info,
+  /// budget-stopped → notice (an expected guard), degraded → warning (something went wrong). Only
+  /// safe fields (counts, tokens, cost, elapsed) are logged, never the reply text.
+  private static func logFinish(_ result: TurnResult, on log: Logger, elapsed: Duration) {
+    let elapsedMillis = millis(elapsed)
+    switch result {
+    case .completed(let content, let usage):
+      log.info(
+        "turn finished completed chars=\(content.count) tokens=\(usage.promptTokens + usage.completionTokens) usd=\(USD.precise(usage.costUSD)) ms=\(elapsedMillis)"
+      )
+    case .degraded(let kind, let usage):
+      let tokens = usage.map { "\($0.promptTokens + $0.completionTokens)" } ?? "n/a"
+      log.warning(
+        "turn finished degraded kind=\(kind.rawValue) tokens=\(tokens) ms=\(elapsedMillis)"
+      )
+    case .budgetStopped(let cap):
+      log.notice("turn finished budget-stopped cap=\(cap) ms=\(elapsedMillis)")
+    }
+  }
+
+  /// Whole milliseconds of a `Duration`, for compact latency fields in developer logs.
+  private static func millis(_ duration: Duration) -> Int64 {
+    let parts = duration.components
+    return parts.seconds * 1000 + parts.attoseconds / 1_000_000_000_000_000
+  }
 
   /// One audit row per dispatch, written immediately, blocked calls included (FR-T1/§6). Audit is
   /// observability, not a gate: a non-diskFull failure logs and the run continues.
@@ -358,7 +421,10 @@ public struct AgentRuntime: Sendable {
     } catch StoreError.diskFull {
       throw StoreError.diskFull
     } catch {
-      warn("tool audit write failed (continuing): \(error)")
+      logger.warning(
+        "tool audit write failed (continuing): \(error)",
+        metadata: Self.turnMetadata(runId: runId, sessionId: sessionId)
+      )
     }
   }
 

@@ -48,7 +48,7 @@ struct DoctorCommand: AsyncParsableCommand {
         ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
       report.add(
         key: "spend.proactive_per_day_usd",
-        value: String(format: "%.2f", config.proactivePerDayUSD) + proactiveNote
+        value: USD.display(config.proactivePerDayUSD) + proactiveNote
       )
       report.add(key: "heartbeat.enabled", value: config.heartbeatEnabled ? "on" : "off")
       report.add(key: "heartbeat.interval_min", value: "\(config.heartbeatIntervalMinutes)")
@@ -168,13 +168,13 @@ struct DoctorCommand: AsyncParsableCommand {
 
     let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
     let mix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
-    report.add(key: "spend.today_usd", value: String(format: "%.4f", todayUSD))
+    report.add(key: "spend.today_usd", value: USD.precise(todayUSD))
     report.add(key: "spend.today_tokens", value: "\(todayTokens)")
     report.add(
       key: "spend.remaining_day_usd",
-      value: String(format: "%.2f", max(0, config.budget.perDayUSD - todayUSD))
+      value: USD.display(max(0, config.budget.perDayUSD - todayUSD))
     )
-    report.add(key: "spend.per_run_cap_usd", value: String(format: "%.2f", config.budget.perRunUSD))
+    report.add(key: "spend.per_run_cap_usd", value: USD.display(config.budget.perRunUSD))
     let mixText = mix.map { "\($0.key.rawValue)=\($0.value)" }.sorted().joined(separator: " ")
     report.add(key: "spend.cost_source_mix", value: mixText.isEmpty ? "none" : mixText)
 

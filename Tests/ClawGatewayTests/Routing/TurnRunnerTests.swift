@@ -299,7 +299,7 @@ private func makeEnv(
     notifyOutbox: {},
     breaker: breaker,
     transport: transport,
-    logger: Logger(label: "test")
+    logger: TestLog.silent
   )
 
   return Env(

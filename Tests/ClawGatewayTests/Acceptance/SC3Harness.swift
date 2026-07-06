@@ -201,7 +201,7 @@ func makeSC3Harness(
 
   // 7. TurnRunner sharing the router's registry instance.
   let transport = RecordingTransport()
-  let logger = Logger(label: "sc3")
+  let logger = TestLog.silent
   let runner = TurnRunner(
     sessionMessages: stores.sessionMessages,
     runs: stores.runs,

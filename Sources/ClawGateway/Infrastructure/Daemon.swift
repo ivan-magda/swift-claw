@@ -32,10 +32,15 @@ public struct Daemon: Sendable {
     // runs (F22), so Telegram's state and the run table match this process before any update lands.
     await boot()
 
+    // ServiceLifecycle logs the whole service graph at debug/trace. Floor its logger at .info so a
+    // developer who sets CLAW_LOG_LEVEL=debug sees the app's request-lifecycle logs, not a large
+    // framework graph dump. The app's own loggers keep the configured level (separate copies).
+    var lifecycleLogger = logger
+    lifecycleLogger.logLevel = max(logger.logLevel, .info)
     var configuration = ServiceGroupConfiguration(
       services: services,
       gracefulShutdownSignals: gracefulShutdownSignals,
-      logger: logger
+      logger: lifecycleLogger
     )
     configuration.maximumGracefulShutdownDuration = .seconds(gracefulShutdownSeconds)
 

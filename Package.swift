@@ -13,7 +13,7 @@ let package = Package(
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.0"),
     .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.2"),
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-    .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
+    .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
     .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.11.0"),
   ],
@@ -50,10 +50,20 @@ let package = Package(
     ),
     .target(
       name: "ClawLLM",
-      dependencies: ["ClawCore"],
+      dependencies: [
+        "ClawCore",
+        .product(name: "Logging", package: "swift-log"),
+      ],
       resources: [.copy("Pricing/Prices.json")]
     ),
-    .target(name: "ClawAgent", dependencies: ["ClawCore", "ClawWorkspace"]),
+    .target(
+      name: "ClawAgent",
+      dependencies: [
+        "ClawCore",
+        "ClawWorkspace",
+        .product(name: "Logging", package: "swift-log"),
+      ]
+    ),
     .target(name: "ClawTools", dependencies: ["ClawCore"]),
     .target(
       name: "ClawGateway",
@@ -96,8 +106,20 @@ let package = Package(
         .product(name: "NIOPosix", package: "swift-nio"),
       ]
     ),
-    .testTarget(name: "ClawLLMTests", dependencies: ["ClawLLM", "ClawCore"]),
-    .testTarget(name: "ClawAgentTests", dependencies: ["ClawAgent", "ClawCore", "ClawWorkspace"]),
+    .testTarget(
+      name: "ClawLLMTests",
+      dependencies: [
+        "ClawLLM", "ClawCore",
+        .product(name: "Logging", package: "swift-log"),
+      ]
+    ),
+    .testTarget(
+      name: "ClawAgentTests",
+      dependencies: [
+        "ClawAgent", "ClawCore", "ClawWorkspace",
+        .product(name: "Logging", package: "swift-log"),
+      ]
+    ),
     .testTarget(name: "ClawToolsTests", dependencies: ["ClawTools", "ClawCore"]),
     .testTarget(
       name: "ClawGatewayTests",

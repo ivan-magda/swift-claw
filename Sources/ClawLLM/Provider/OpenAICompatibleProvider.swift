@@ -1,5 +1,6 @@
 import ClawCore
 import Foundation
+import Logging
 
 /// OpenAI-compatible Chat Completions client over the `HTTPExecuting` seam: request shaping
 /// (output-cap field switch, no sampling params), defensive response parse, status→`ProviderError`
@@ -15,23 +16,33 @@ public struct OpenAICompatibleProvider: LLMProvider {
   private let http: any HTTPExecuting & HTTPStreaming
   private let sleep: @Sendable (Double) async throws -> Void
   private let jitter: @Sendable (Double) -> Double
+  /// Developer-facing diagnostics (swift-log). Lines self-tag `[ClawLLM]` via the source module; a
+  /// no-op default keeps tests silent unless they inject one. Carries no run id by design — the
+  /// per-turn correlation lives in `AgentRuntime`, so the `LLMProvider` contract stays unchanged.
+  private let logger: Logger
 
   public init(
     config: LLMConfig,
     http: any HTTPExecuting & HTTPStreaming,
     sleep: @escaping @Sendable (Double) async throws -> Void,
-    jitter: @escaping @Sendable (Double) -> Double
+    jitter: @escaping @Sendable (Double) -> Double,
+    logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
   ) {
     self.config = config
     self.http = http
     self.sleep = sleep
     self.jitter = jitter
+    self.logger = logger
   }
 
   public func complete(request: ChatRequest) async throws -> ChatResponse {
     let body = try encode(request: request)
     let url = chatCompletionsURL()
     let headers = requestHeaders()
+
+    logger.debug(
+      "chat request model=\(request.model) messages=\(request.messages.count) tools=\(request.tools.count)"
+    )
 
     var attempt = 0
     while true {
@@ -51,6 +62,9 @@ public struct OpenAICompatibleProvider: LLMProvider {
         guard attempt < config.retryBudget else {
           throw ProviderError.retryable(status: nil, message: message)
         }
+        logger.notice(
+          "chat transport error (attempt \(attempt)/\(config.retryBudget)); retrying: \(message)"
+        )
         try await backoff(attempt: attempt, retryAfterSeconds: nil)
         continue
       }
@@ -67,6 +81,9 @@ public struct OpenAICompatibleProvider: LLMProvider {
         throw ProviderError.retryable(status: result.statusCode, message: message)
       }
 
+      logger.notice(
+        "chat retryable status \(result.statusCode) (attempt \(attempt)/\(config.retryBudget)); retrying"
+      )
       try await backoff(attempt: attempt, retryAfterSeconds: retryAfterSeconds(from: result))
     }
   }
@@ -76,6 +93,9 @@ public struct OpenAICompatibleProvider: LLMProvider {
       let task = Task {
         do {
           let body = try encode(request: request, streaming: true)
+          logger.debug(
+            "chat stream request model=\(request.model) messages=\(request.messages.count) tools=\(request.tools.count)"
+          )
           let response = try await http.postStream(
             url: chatCompletionsURL(),
             headers: requestHeaders(),
@@ -86,6 +106,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
           guard (200..<300).contains(response.head.statusCode) else {
             let errorBody = try await collectStreamingErrorBody(response.body)
             let message = sanitize(message: errorMessage(from: errorBody))
+            logger.notice("chat stream status \(response.head.statusCode)")
 
             if Self.isRetryableStatus(response.head.statusCode) {
               throw ProviderError.retryable(status: response.head.statusCode, message: message)

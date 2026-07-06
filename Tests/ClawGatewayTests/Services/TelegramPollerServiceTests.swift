@@ -78,7 +78,7 @@ private actor BlockingTurnRunner: TurnDispatching {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
     let cursor = UpdateCursorStoreGRDB(writer: queue)
 
@@ -87,7 +87,7 @@ private actor BlockingTurnRunner: TurnDispatching {
       router: router,
       cursor: cursor,
       pollTimeout: 0,
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     return Stack(poller: poller, transport: transport, cursor: cursor, dispatcher: dispatcher)
@@ -144,7 +144,7 @@ private actor BlockingTurnRunner: TurnDispatching {
       transport: transport,
       turnRunner: runner,
       lanes: SessionLaneRegistry(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
     let cursor = UpdateCursorStoreGRDB(writer: queue)
     let poller = TelegramPollerService(
@@ -152,7 +152,7 @@ private actor BlockingTurnRunner: TurnDispatching {
       router: router,
       cursor: cursor,
       pollTimeout: 0,
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when

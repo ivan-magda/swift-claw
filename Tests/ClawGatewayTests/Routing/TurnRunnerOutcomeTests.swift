@@ -62,7 +62,7 @@ import Testing
       contextBuilder: makeEmptyContextBuilder(),
       pendingConfirmations: registry,
       notifyOutbox: {},
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
     return Fixture(
       runner: runner,

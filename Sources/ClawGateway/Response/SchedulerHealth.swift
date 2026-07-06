@@ -34,7 +34,7 @@ public enum SchedulerHealth {
     let todayCount = heartbeatCountToday(state: state, timezone: timezone, now: now)
     // Spec §11: a proactive-cap trip is visible here even while global spend is under its cap.
     let proactiveSpend =
-      proactiveTodayUSD.map { spent in String(format: "%.2f", spent) } ?? "unknown"
+      proactiveTodayUSD.map { spent in USD.display(spent) } ?? "unknown"
 
     return [
       Row(
@@ -45,7 +45,7 @@ public enum SchedulerHealth {
       Row(key: "scheduler.last_misfire", value: misfire),
       Row(
         key: "spend.proactive_today_usd",
-        value: "\(proactiveSpend)/\(String(format: "%.2f", proactivePerDayUSD))"
+        value: "\(proactiveSpend)/\(USD.display(proactivePerDayUSD))"
       ),
       Row(key: "heartbeat.enabled", value: heartbeatEnabled ? "on" : "off"),
       Row(

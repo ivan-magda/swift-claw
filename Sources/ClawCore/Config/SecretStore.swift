@@ -19,6 +19,13 @@ public struct Secrets: Sendable, Equatable {
     self.llmApiKey = llmApiKey
     self.searchApiKey = searchApiKey
   }
+
+  /// The concrete secret strings an exact-value redactor should scrub — from tool output
+  /// (`SecretRedactor`) and from developer logs (the log-handler redactor). One source of truth so
+  /// the two call sites can never drift on what counts as a secret.
+  public var redactionValues: [String] {
+    [telegramBotToken, llmApiKey, searchApiKey].compactMap { value in value }
+  }
 }
 
 /// State-root-relative filenames the encrypted backend owns. Shared so the resolver's existence

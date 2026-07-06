@@ -46,7 +46,7 @@ struct MemoryRoutingHarness {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     return MemoryRoutingHarness(

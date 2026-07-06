@@ -221,7 +221,7 @@ private final class SleepRecorder: @unchecked Sendable {
       catchUpMaxAge: .seconds(1800),
       now: { now },
       sleep: { _ in },
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
     return Fixture(service: service, store: store, runner: runner)
   }
@@ -393,7 +393,7 @@ private final class SleepRecorder: @unchecked Sendable {
         recorder.append(duration)
         throw CancellationError()
       },
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when — restart recovery: the first tick happens BEFORE the first sleep
