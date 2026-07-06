@@ -315,8 +315,8 @@ extension RunStoreGRDB {
     guard let row else {
       return
     }
-    let jobId: Int64? = row["job_id"]
-    guard let jobId else {
+
+    guard let jobId: Int64 = row["job_id"] else {
       return
     }
 
