@@ -250,6 +250,7 @@ import Testing
     env[EnvKey.schedCatchUpMaxAgeMinutes] = "45"
     env[EnvKey.schedMinIntervalMinutes] = "10"
     env[EnvKey.proactivePerDayUSD] = "1.50"
+    env[EnvKey.allowlist] = "777"
     env[EnvKey.heartbeatEnabled] = "true"
     env[EnvKey.heartbeatIntervalMinutes] = "30"
     env[EnvKey.heartbeatQuietHours] = "23:30-06:15"
@@ -267,6 +268,50 @@ import Testing
     #expect(config.heartbeatIntervalMinutes == 30)
     #expect(config.heartbeatQuietHours.rendered == "23:30-06:15")
     #expect(config.heartbeatMaxPerDay == 4)
+  }
+
+  @Test(arguments: [
+    (allowlist: "", count: 0),
+    (allowlist: "1,2", count: 2),
+  ])
+  func heartbeatEnabledWithoutOneOwnerFailsClosed(_ fixture: (allowlist: String, count: Int)) {
+    // given — the heartbeat's delivery target is the config-resolved owner DM (spec §12)
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.heartbeatEnabled] = "true"
+    env[EnvKey.allowlist] = fixture.allowlist
+
+    // when / then
+    #expect(
+      throws: ConfigError.heartbeatOwnerUnresolved(allowlistCount: fixture.count)
+    ) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func heartbeatEnabledWithExactlyOneOwnerLoads() throws {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.heartbeatEnabled] = "true"
+    env[EnvKey.allowlist] = "42"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.heartbeatEnabled)
+    #expect(config.allowlist == [42])
+  }
+
+  @Test func heartbeatDisabledToleratesAnyAllowlist() throws {
+    // given — the default-OFF path must not constrain onboarding (empty allowlist still boots)
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.heartbeatEnabled == false)
+    #expect(config.allowlist.isEmpty)
   }
 
   @Test func invalidTimezoneFailsClosed() {

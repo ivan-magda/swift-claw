@@ -268,22 +268,54 @@ struct RunCommand: AsyncParsableCommand {
       logger: logger
     )
 
+    let (scheduler, heartbeatOwner) = makeScheduler(
+      config: config,
+      stores: stores,
+      lanes: lanes,
+      turnRunner: turnRunner,
+      workspace: workspace,
+      logger: logger
+    )
+
+    return Daemon(
+      services: [poller, dispatcher, scheduler],
+      boot: bootSequence(
+        transport: transport,
+        stores: stores,
+        heartbeatOwner: heartbeatOwner,
+        logger: logger
+      ),
+      logger: logger
+    )
+  }
+
+  /// Resolves the heartbeat settings bundle once from config and builds the scheduler around it.
+  /// The owner chat id also threads to boot reconcile (spec §12/A6): a crashed heartbeat run's
+  /// synthetic session key carries no chat id, so its crash notice can only reach the owner via
+  /// this config-derived target.
+  private func makeScheduler(
+    config: AppConfig,
+    stores: ClawStores,
+    lanes: SessionLaneRegistry,
+    turnRunner: TurnRunner,
+    workspace: FileSystemWorkspace,
+    logger: Logger
+  ) -> (scheduler: SchedulerService, heartbeatOwner: Int64?) {
+    let heartbeatSettings = HeartbeatSettings.resolve(config: config)
     let scheduler = SchedulerService(
       jobs: stores.scheduledJobs,
       lanes: lanes,
       turns: turnRunner,
       calculator: OccurrenceCalculator(),
       catchUpMaxAge: .seconds(Int64(config.schedCatchUpMaxAgeMinutes) * 60),
+      heartbeat: heartbeatSettings,
+      workspace: workspace,
+      audit: stores.audit,
       now: { Date() },
       sleep: { try await Task.sleep(for: $0) },
       logger: logger
     )
-
-    return Daemon(
-      services: [poller, dispatcher, scheduler],
-      boot: bootSequence(transport: transport, stores: stores, logger: logger),
-      logger: logger
-    )
+    return (scheduler, heartbeatSettings.ownerChatId)
   }
 
   private func fetchBotUsername(transport: TelegramClient, logger: Logger) async -> String? {
@@ -377,10 +409,15 @@ struct RunCommand: AsyncParsableCommand {
   private func bootSequence(
     transport: any TelegramTransport,
     stores: ClawStores,
+    heartbeatOwner: Int64?,
     logger: Logger
   ) -> @Sendable () async -> Void {
     let registerMenu = registerMenuCommands(transport: transport, logger: logger)
-    let reconcileRuns = bootReconcile(stores: stores, logger: logger)
+    let reconcileRuns = bootReconcile(
+      stores: stores,
+      heartbeatOwner: heartbeatOwner,
+      logger: logger
+    )
     return {
       await registerMenu()
       await reconcileRuns()
@@ -423,13 +460,15 @@ struct RunCommand: AsyncParsableCommand {
   /// serve, so the dispatcher's boot drain delivers whatever this enqueues.
   private func bootReconcile(
     stores: ClawStores,
+    heartbeatOwner: Int64?,
     logger: Logger
   ) -> @Sendable () async -> Void {
     {
       do {
         let replies = try stores.runs.reconcileRunsAtBoot(
           now: Date(),
-          degradationText: Degradation.unfinished
+          degradationText: Degradation.unfinished,
+          heartbeatNoticeChatId: heartbeatOwner
         )
         if !replies.isEmpty {
           logger.warning(

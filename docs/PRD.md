@@ -235,7 +235,7 @@ Each criterion is backed by an **automated acceptance test** (per-requirement ve
 
 ## 11. Constraints & assumptions
 
-- Pure Swift; Swift 6 strict concurrency; SwiftPM.
+- Pure Swift; Swift 6 strict concurrency; SwiftPM; **platform floor macOS 15** (`Calendar.RecurrenceRule` for the Inc 4 scheduler — Linux re-validation stays inside the Inc 6 gate).
 - macOS 26 + Apple Silicon for `apple/container` (P-tools); Linux needs a separate sandbox backend.
 - One owner; Telegram Bot API; long-polling.
 - LLM access via an OpenAI-compatible endpoint the owner configures, with a pinned/allowlisted `base_url`.

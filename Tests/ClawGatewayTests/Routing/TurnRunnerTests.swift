@@ -67,8 +67,16 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.supersedeSessionRuns(sessionId: sessionId, now: now)
   }
 
-  func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] {
-    try base.reconcileRunsAtBoot(now: now, degradationText: degradationText)
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?
+  ) throws -> [DegradationReply] {
+    try base.reconcileRunsAtBoot(
+      now: now,
+      degradationText: degradationText,
+      heartbeatNoticeChatId: heartbeatNoticeChatId
+    )
   }
 
   func runsHealth(now: Date) throws -> RunsHealth {
@@ -107,8 +115,16 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.supersedeSessionRuns(sessionId: sessionId, now: now)
   }
 
-  func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] {
-    try base.reconcileRunsAtBoot(now: now, degradationText: degradationText)
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?
+  ) throws -> [DegradationReply] {
+    try base.reconcileRunsAtBoot(
+      now: now,
+      degradationText: degradationText,
+      heartbeatNoticeChatId: heartbeatNoticeChatId
+    )
   }
 
   func runsHealth(now: Date) throws -> RunsHealth {
@@ -124,7 +140,11 @@ struct DiskFullRuns: RunStore {
   func failRun(runId: Int64, now: Date) throws {}
   func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? { nil }
   func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] { [] }
-  func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] { [] }
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?
+  ) throws -> [DegradationReply] { [] }
   func runsHealth(now: Date) throws -> RunsHealth {
     RunsHealth(
       inFlight: 0,
@@ -198,7 +218,8 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
 
 /// Shared `TurnRunner` test fixture, hoisted to file scope (out of `TurnRunnerTests`' body) so the
 /// suite's own body stays under the project's type-length gate as its test count grows.
-private struct Env {
+/// File-internal (not `private`) so the sibling `TurnRunnerBudgetTests` reuses it without duplication.
+struct Env {
   let runner: TurnRunner
   let queue: DatabaseQueue
   let sessionMessages: SessionMessageStoreGRDB
@@ -228,7 +249,7 @@ private func makeContextBuilder(
   )
 }
 
-private func makeEnv(
+func makeEnv(
   agentOutcome: StubLLMProvider.Outcome,
   runs: (any RunStore)? = nil,
   runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
@@ -236,7 +257,8 @@ private func makeEnv(
   sessionMessagesForRunner: (any SessionMessageStore)? = nil,
   budget: RunBudget = .default,
   breaker: BudgetBreaker? = nil,
-  transport: (any TelegramTransport)? = nil
+  transport: (any TelegramTransport)? = nil,
+  now: @escaping @Sendable () -> Date = { Date() }
 ) throws -> Env {
   let queue = try ClawDatabase.makeInMemoryQueue()
   try ClawDatabase.migrate(queue)
@@ -299,6 +321,7 @@ private func makeEnv(
     notifyOutbox: {},
     breaker: breaker,
     transport: transport,
+    now: now,
     logger: TestLog.silent
   )
 
@@ -315,7 +338,7 @@ private func makeEnv(
   )
 }
 
-private func latestRunState(_ queue: DatabaseQueue) throws -> String? {
+func latestRunState(_ queue: DatabaseQueue) throws -> String? {
   try queue.read { db in
     try String.fetchOne(db, sql: "SELECT state FROM runs ORDER BY id DESC LIMIT 1")
   }
@@ -766,5 +789,100 @@ private func okResponse(content: String) -> ChatResponse {
     let firstPending = try #require(pending.first)
     #expect(firstPending.payload.contains("`MEMORY.md` is 2201/2200"))
     #expect(firstPending.payload.contains(Degradation.budget(cap: "per-day token")))
+  }
+
+  @Test func heartbeatAckCommitsWithNoOutboxRowsAndAuditsSuppressed() async throws {
+    // given — a heartbeat-origin run whose whole result is the ack token
+    let env = try makeEnv(agentOutcome: .respond(okResponse(content: "HEARTBEAT_OK")))
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET origin = 'heartbeat' WHERE id = ?",
+        arguments: [env.runId]
+      )
+    }
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId,
+      grant: nil
+    )
+
+    // then — DONE with ZERO outbox rows; suppressed audited on the same commit path
+    #expect(try latestRunState(env.queue) == "DONE")
+    #expect(try env.outbox.pendingOutbound().isEmpty)
+    let counts = try heartbeatAuditCounts(env.queue)
+    #expect(counts.suppressed == 1)
+    #expect(counts.fired == 0)
+  }
+
+  @Test func substantiveHeartbeatResultDeliversAndAuditsFired() async throws {
+    // given — the token plus a 400-char report: remainder > 300 ⇒ deliver
+    let report = "HEARTBEAT_OK\n" + String(repeating: "a", count: 400)
+    let env = try makeEnv(agentOutcome: .respond(okResponse(content: report)))
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET origin = 'heartbeat' WHERE id = ?",
+        arguments: [env.runId]
+      )
+    }
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId,
+      grant: nil
+    )
+
+    // then — delivered like any run, plus the heartbeatFired marker
+    #expect(try latestRunState(env.queue) == "DONE")
+    let pending = try env.outbox.pendingOutbound()
+    #expect(pending.count == 1)
+    #expect(pending.first?.payload.contains("HEARTBEAT_OK") == true)
+    let counts = try heartbeatAuditCounts(env.queue)
+    #expect(counts.suppressed == 0)
+    #expect(counts.fired == 1)
+  }
+
+  @Test func interactiveRunsAreNeverSuppressedEvenForTheToken() async throws {
+    // given — the same token content on the DEFAULT interactive origin
+    let env = try makeEnv(agentOutcome: .respond(okResponse(content: "HEARTBEAT_OK")))
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId,
+      grant: nil
+    )
+
+    // then — delivered; no heartbeat audit rows of either kind
+    #expect(try env.outbox.pendingOutbound().count == 1)
+    let counts = try heartbeatAuditCounts(env.queue)
+    #expect(counts.suppressed == 0)
+    #expect(counts.fired == 0)
+  }
+
+  private func heartbeatAuditCounts(
+    _ queue: DatabaseQueue
+  ) throws -> (suppressed: Int, fired: Int) {
+    try queue.read { db in
+      let suppressed =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM audit_events WHERE action = 'heartbeat_suppressed'"
+        ) ?? 0
+      let fired =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM audit_events WHERE action = 'heartbeat_fired'"
+        ) ?? 0
+      return (suppressed, fired)
+    }
   }
 }

@@ -120,7 +120,8 @@ import Testing
     // when
     let replies = try fixture.runs.reconcileRunsAtBoot(
       now: Date(),
-      degradationText: "unfinished"
+      degradationText: "unfinished",
+      heartbeatNoticeChatId: nil
     )
 
     // then — the notice targets scheduled_jobs.owner_chat_id, no longer silently skipped (A6)
@@ -164,5 +165,90 @@ import Testing
         ?? 0
     }
     #expect(count == 0)
+  }
+
+  /// Seeds the sched:heartbeat session, its untrusted trigger, and a heartbeat run left RUNNING
+  /// by a crash — the §12 shape reconciliation must route via the config-derived owner target.
+  private func makeHeartbeatRunFixture() throws -> (queue: DatabaseQueue, runId: Int64) {
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let now = Date()
+    let runId: Int64 = try queue.write { db in
+      try db.execute(
+        sql: "INSERT INTO sessions(session_key, created_ts, updated_ts) VALUES (?, ?, ?)",
+        arguments: [SessionKey.heartbeat, now, now]
+      )
+      let sessionId = db.lastInsertedRowID
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'user', 'Review the checklist below…', 'untrusted', ?)
+          """,
+        arguments: [sessionId, now]
+      )
+      let messageId = db.lastInsertedRowID
+      try db.execute(
+        sql: """
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
+          VALUES (?, 'RUNNING', ?, ?, ?, 'heartbeat')
+          """,
+        arguments: [sessionId, now, now, messageId]
+      )
+      return db.lastInsertedRowID
+    }
+    return (queue, runId)
+  }
+
+  @Test func bootReconcileRoutesTheHeartbeatCrashNoticeViaTheConfigTarget() throws {
+    // given
+    let fixture = try makeHeartbeatRunFixture()
+    let runs = RunStoreGRDB(writer: fixture.queue)
+
+    // when — the boot caller passes the config-resolved owner DM (spec §12/A6)
+    let replies = try runs.reconcileRunsAtBoot(
+      now: Date(),
+      degradationText: "unfinished",
+      heartbeatNoticeChatId: 777
+    )
+
+    // then — the notice targets the owner; no jobFailed (a heartbeat run has no job)
+    #expect(replies == [DegradationReply(chatId: 777, runId: fixture.runId, text: "unfinished")])
+    let state = try fixture.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT state FROM runs WHERE id = ?",
+        arguments: [fixture.runId]
+      )
+    }
+    #expect(state == RunState.failed.rawValue)
+    let jobFailedRows = try fixture.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM audit_events WHERE action = 'job_failed'")
+        ?? 0
+    }
+    #expect(jobFailedRows == 0)
+  }
+
+  @Test func bootReconcileWithoutAConfigTargetStillFailsTheHeartbeatRunSilently() throws {
+    // given — heartbeat disabled/misconfigured: no target, no notice, but never a wedged run
+    let fixture = try makeHeartbeatRunFixture()
+    let runs = RunStoreGRDB(writer: fixture.queue)
+
+    // when
+    let replies = try runs.reconcileRunsAtBoot(
+      now: Date(),
+      degradationText: "unfinished",
+      heartbeatNoticeChatId: nil
+    )
+
+    // then
+    #expect(replies.isEmpty)
+    let state = try fixture.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT state FROM runs WHERE id = ?",
+        arguments: [fixture.runId]
+      )
+    }
+    #expect(state == RunState.failed.rawValue)
   }
 }

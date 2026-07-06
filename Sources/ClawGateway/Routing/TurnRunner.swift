@@ -34,6 +34,10 @@ public struct TurnRunner: TurnDispatching {
   /// exercise the breaker (the DM is best-effort and out-of-band from the durable outbox, D4).
   private let breaker: BudgetBreaker?
   private let transport: (any TelegramTransport)?
+  /// The turn's clock. Sourcing the budget "today" window from an injected now (defaulting to the
+  /// real clock) keeps the proactive/global daily-spend boundary deterministic under test — the
+  /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
+  private let now: @Sendable () -> Date
   private let logger: Logger
 
   /// Most-recent messages pulled for context; `ContextBuilder` then caps by grapheme budget (§9).
@@ -51,6 +55,7 @@ public struct TurnRunner: TurnDispatching {
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     transport: (any TelegramTransport)? = nil,
+    now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
     self.sessionMessages = sessionMessages
@@ -64,6 +69,7 @@ public struct TurnRunner: TurnDispatching {
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.transport = transport
+    self.now = now
     self.logger = logger
   }
 
@@ -78,7 +84,7 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let now = Date()
+    let now = now()
     guard let origin = try runs.pickUp(runId: runId, now: now) else {
       logger.debug("run \(runId) was not pending at pickup; skipping turn")
       return
@@ -188,20 +194,25 @@ public struct TurnRunner: TurnDispatching {
         outcome.pendingApproval.map { approval in
           [ToolApprovalPrompt.text(for: approval)]
         } ?? []
+      // Spec §12 ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
+      // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
+      let suppressHeartbeatAck = origin == .heartbeat && HeartbeatAck.isAck(content)
       let turn = AssistantTurn(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
         content: content,
         usage: usage,
-        chunks: outboxChunks(
-          for: ownerVisiblePayload(
-            reply: content,
-            ownerNotices: ownerNotices,
-            appendedNotices: appendedNotices
+        chunks: suppressHeartbeatAck
+          ? []
+          : outboxChunks(
+            for: ownerVisiblePayload(
+              reply: content,
+              ownerNotices: ownerNotices,
+              appendedNotices: appendedNotices
+            ),
+            chatId: chatId
           ),
-          chatId: chatId
-        ),
         exchanges: outcome.exchanges,
         setTainted: outcome.ingestedUntrusted
       )
@@ -223,6 +234,22 @@ public struct TurnRunner: TurnDispatching {
             at: committedAt
           )
         )
+        if origin == .heartbeat {
+          // The heartbeat outcome marker rides the same commit path and clock as turnCompleted
+          // (the durable side effect — zero vs. N outbox rows — is already inside the store
+          // transaction via `chunks`).
+          try audit.appendAudit(
+            AuditEvent(
+              actor: .assistant,
+              action: suppressHeartbeatAck ? .heartbeatSuppressed : .heartbeatFired,
+              resultSize: content.utf8.count,
+              decision: suppressHeartbeatAck ? "ack" : "delivered",
+              runId: runId,
+              sessionId: sessionId,
+              ts: committedAt
+            )
+          )
+        }
         notifyOutbox()
         await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
       case .usageRecordedAfterTerminal:

@@ -70,6 +70,7 @@ let package = Package(
       dependencies: [
         "ClawCore",
         "ClawAgent",
+        "ClawWorkspace",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "UnixSignals", package: "swift-service-lifecycle"),
         .product(name: "Logging", package: "swift-log"),

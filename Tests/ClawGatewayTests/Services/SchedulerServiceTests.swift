@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawWorkspace
 import Foundation
 import Logging
 import Testing
@@ -24,16 +25,39 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     let skippedCount: Int
   }
 
+  struct HeartbeatCall: Equatable {
+    let prompt: String
+    let ownerChatId: Int64
+    let day: String
+  }
+
   private let lock = NSLock()
   private var seededJobs: [ScheduledJob]
   private var recordedClaims: [ClaimCall] = []
   private var recordedSkips: [SkipCall] = []
   private var recordedTicks: [Date] = []
   private let claimResult: ClaimedFire?
+  private let cannedState: SchedulerState
+  private let heartbeatResult: ClaimedFire?
+  private var recordedHeartbeats: [HeartbeatCall] = []
 
-  init(jobs: [ScheduledJob], claimResult: ClaimedFire?) {
+  init(
+    jobs: [ScheduledJob],
+    claimResult: ClaimedFire?,
+    state: SchedulerState = SchedulerState(
+      lastTickAt: nil,
+      lastMisfireAt: nil,
+      lastMisfireSkippedCount: 0,
+      lastHeartbeatAt: nil,
+      heartbeatCountDay: nil,
+      heartbeatCount: 0
+    ),
+    heartbeatResult: ClaimedFire? = nil
+  ) {
     seededJobs = jobs
     self.claimResult = claimResult
+    cannedState = state
+    self.heartbeatResult = heartbeatResult
   }
 
   var claims: [ClaimCall] {
@@ -52,6 +76,12 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return recordedTicks
+  }
+
+  var heartbeatFires: [HeartbeatCall] {
+    lock.lock()
+    defer { lock.unlock() }
+    return recordedHeartbeats
   }
 
   func dueJobs(now: Date) throws -> [ScheduledJob] {
@@ -125,14 +155,9 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
   }
 
   func schedulerState() throws -> SchedulerState {
-    SchedulerState(
-      lastTickAt: nil,
-      lastMisfireAt: nil,
-      lastMisfireSkippedCount: 0,
-      lastHeartbeatAt: nil,
-      heartbeatCountDay: nil,
-      heartbeatCount: 0
-    )
+    lock.lock()
+    defer { lock.unlock() }
+    return cannedState
   }
 
   func fireHeartbeat(
@@ -141,7 +166,13 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     now: Date,
     day: String
   ) throws -> ClaimedFire {
-    throw StoreError.unexpected("unused until Phase 4")
+    lock.lock()
+    defer { lock.unlock() }
+    recordedHeartbeats.append(HeartbeatCall(prompt: prompt, ownerChatId: ownerChatId, day: day))
+    guard let heartbeatResult else {
+      throw StoreError.unexpected("fireHeartbeat called without a scripted result")
+    }
+    return heartbeatResult
   }
 }
 
@@ -209,6 +240,7 @@ private final class SleepRecorder: @unchecked Sendable {
       triggerMessageId: 300,
       ownerChatId: 42
     ),
+    heartbeat: HeartbeatSettings = .disabled,
     now: Date
   ) -> Fixture {
     let store = ScriptedJobStore(jobs: jobs, claimResult: claimResult)
@@ -219,6 +251,9 @@ private final class SleepRecorder: @unchecked Sendable {
       turns: runner,
       calculator: OccurrenceCalculator(),
       catchUpMaxAge: .seconds(1800),
+      heartbeat: heartbeat,
+      workspace: EmptyWorkspace(),
+      audit: RecordingAuditLog(),
       now: { now },
       sleep: { _ in },
       logger: TestLog.silent
@@ -388,6 +423,9 @@ private final class SleepRecorder: @unchecked Sendable {
       turns: FakeTurnRunner(),
       calculator: OccurrenceCalculator(),
       catchUpMaxAge: .seconds(1800),
+      heartbeat: .disabled,
+      workspace: EmptyWorkspace(),
+      audit: RecordingAuditLog(),
       now: { Date(timeIntervalSince1970: 1_750_000_000) },
       sleep: { duration in
         recorder.append(duration)
