@@ -26,7 +26,8 @@ import Testing
     // dispatcher starts and its boot drain delivers what reconcile just enqueued
     let replies = try fixture.runs.reconcileRunsAtBoot(
       now: Date(),
-      degradationText: Degradation.unfinished
+      degradationText: Degradation.unfinished,
+      heartbeatNoticeChatId: nil
     )
     #expect(replies.count == 1)
 
@@ -49,7 +50,8 @@ import Testing
     // when — the same boot sweep the crash-mid-turn test exercises
     let replies = try fixture.runs.reconcileRunsAtBoot(
       now: reconcileNow,
-      degradationText: Degradation.unfinished
+      degradationText: Degradation.unfinished,
+      heartbeatNoticeChatId: nil
     )
 
     // then — no degradation reply is produced or persisted for either healthy run, and the DONE

@@ -11,6 +11,7 @@ import Testing
     #expect(WorkspaceFile.tools.relativePath == "TOOLS.md")
     #expect(WorkspaceFile.user.relativePath == "USER.md")
     #expect(WorkspaceFile.memory.relativePath == "MEMORY.md")
+    #expect(WorkspaceFile.heartbeat.relativePath == "HEARTBEAT.md")
   }
 
   @Test func workspaceFileEnumeratesEveryFixedFileInOrder() {
@@ -18,7 +19,7 @@ import Testing
     let paths = WorkspaceFile.allCases.map(\.relativePath)
 
     // then
-    #expect(paths == ["SOUL.md", "AGENTS.md", "TOOLS.md", "USER.md", "MEMORY.md"])
+    #expect(paths == ["SOUL.md", "AGENTS.md", "TOOLS.md", "USER.md", "MEMORY.md", "HEARTBEAT.md"])
   }
 
   @Test func missingLoadedFileIsEmptyZeroLengthWithMissingOutcome() {

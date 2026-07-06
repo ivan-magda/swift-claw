@@ -254,7 +254,11 @@ import Testing
     _ = try #require(try env.runs.pickUp(runId: runningRunId, now: Date()))
 
     // when
-    let replies = try env.runs.reconcileRunsAtBoot(now: Date(), degradationText: "didn't finish")
+    let replies = try env.runs.reconcileRunsAtBoot(
+      now: Date(),
+      degradationText: "didn't finish",
+      heartbeatNoticeChatId: nil
+    )
 
     // then
     let states = try env.queue.read { db in
@@ -280,7 +284,11 @@ import Testing
     try env.outbox.markSent(runId: runId, stepIndex: 0, telegramMessageId: 1001, now: Date())
 
     // when
-    let replies = try env.runs.reconcileRunsAtBoot(now: Date(), degradationText: "didn't finish")
+    let replies = try env.runs.reconcileRunsAtBoot(
+      now: Date(),
+      degradationText: "didn't finish",
+      heartbeatNoticeChatId: nil
+    )
 
     // then
     #expect(replies.isEmpty)

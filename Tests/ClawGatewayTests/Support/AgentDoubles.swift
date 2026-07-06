@@ -153,3 +153,22 @@ func makeEmptyContextBuilder() -> ContextBuilder {
     now: { Date(timeIntervalSince1970: 0) }
   )
 }
+
+/// Audit log recording events; lock-guarded, not an actor (the protocol is synchronous).
+/// Mirror of the `ClawAgentTests` double of the same name.
+final class RecordingAuditLog: AuditLog, @unchecked Sendable {
+  private let lock = NSLock()
+  private var recorded: [AuditEvent] = []
+
+  var events: [AuditEvent] {
+    lock.lock()
+    defer { lock.unlock() }
+    return recorded
+  }
+
+  func appendAudit(_ event: AuditEvent) throws {
+    lock.lock()
+    defer { lock.unlock() }
+    recorded.append(event)
+  }
+}

@@ -129,6 +129,12 @@ public struct AppConfig: Sendable, Equatable {
       key: EnvKey.heartbeatEnabled,
       default: false
     )
+    // Spec §12: the heartbeat delivers to the config-resolved owner DM (and the same target
+    // serves the boot-reconcile crash notice). Enabling it without exactly one allowlisted id
+    // is a config ERROR (fail closed at load + doctor --check-config), never a runtime guess.
+    if heartbeatEnabled, allowlist.count != 1 {
+      throw ConfigError.heartbeatOwnerUnresolved(allowlistCount: allowlist.count)
+    }
     let heartbeatIntervalMinutes = try boundedInt(
       env[EnvKey.heartbeatIntervalMinutes],
       key: EnvKey.heartbeatIntervalMinutes,

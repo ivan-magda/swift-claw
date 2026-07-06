@@ -150,8 +150,15 @@ public protocol RunStore: Sendable {
   func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64?
   /// Terminates RUNNING and queued PENDING turns for `/new`.
   func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64]
-  /// Boot sweep: fail every orphaned PENDING/RUNNING run and enqueue degradation when needed.
-  func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply]
+  /// Boot sweep: every PENDING/RUNNING orphan → FAILED (+ jobFailed for job runs), one
+  /// degradation notice per run that never delivered. `heartbeatNoticeChatId` is the
+  /// config-resolved owner DM for crashed heartbeat runs (spec §12/A6) — their synthetic
+  /// session key carries no chat id; nil (heartbeat unconfigured) skips the notice only.
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?
+  ) throws -> [DegradationReply]
   /// Snapshot of run-table health: in-flight count, age of oldest running run, last
   /// success/failure timestamps, and count of consecutive failures at the head of the table.
   func runsHealth(now: Date) throws -> RunsHealth

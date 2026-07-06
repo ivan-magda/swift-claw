@@ -67,8 +67,16 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.supersedeSessionRuns(sessionId: sessionId, now: now)
   }
 
-  func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] {
-    try base.reconcileRunsAtBoot(now: now, degradationText: degradationText)
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?
+  ) throws -> [DegradationReply] {
+    try base.reconcileRunsAtBoot(
+      now: now,
+      degradationText: degradationText,
+      heartbeatNoticeChatId: heartbeatNoticeChatId
+    )
   }
 
   func runsHealth(now: Date) throws -> RunsHealth {
@@ -107,8 +115,16 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.supersedeSessionRuns(sessionId: sessionId, now: now)
   }
 
-  func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] {
-    try base.reconcileRunsAtBoot(now: now, degradationText: degradationText)
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?
+  ) throws -> [DegradationReply] {
+    try base.reconcileRunsAtBoot(
+      now: now,
+      degradationText: degradationText,
+      heartbeatNoticeChatId: heartbeatNoticeChatId
+    )
   }
 
   func runsHealth(now: Date) throws -> RunsHealth {
@@ -124,7 +140,11 @@ struct DiskFullRuns: RunStore {
   func failRun(runId: Int64, now: Date) throws {}
   func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? { nil }
   func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] { [] }
-  func reconcileRunsAtBoot(now: Date, degradationText: String) throws -> [DegradationReply] { [] }
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?
+  ) throws -> [DegradationReply] { [] }
   func runsHealth(now: Date) throws -> RunsHealth {
     RunsHealth(
       inFlight: 0,

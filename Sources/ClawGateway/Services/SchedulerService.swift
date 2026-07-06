@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawWorkspace
 import Foundation
 import Logging
 import ServiceLifecycle
@@ -23,9 +24,13 @@ public struct SchedulerService: Service {
   private let turns: any TurnDispatching
   private let calculator: OccurrenceCalculator
   private let catchUpMaxAge: Duration
+  private let heartbeat: HeartbeatSettings
+  private let workspace: any WorkspaceReading
+  private let audit: any AuditLog
   private let now: @Sendable () -> Date
   private let sleep: @Sendable (Duration) async throws -> Void
   private let logger: Logger
+  private let skipEpisode = HeartbeatSkipEpisode()
 
   public init(
     jobs: any ScheduledJobStore,
@@ -33,6 +38,9 @@ public struct SchedulerService: Service {
     turns: any TurnDispatching,
     calculator: OccurrenceCalculator,
     catchUpMaxAge: Duration,
+    heartbeat: HeartbeatSettings,
+    workspace: any WorkspaceReading,
+    audit: any AuditLog,
     now: @escaping @Sendable () -> Date,
     sleep: @escaping @Sendable (Duration) async throws -> Void,
     logger: Logger
@@ -42,6 +50,9 @@ public struct SchedulerService: Service {
     self.turns = turns
     self.calculator = calculator
     self.catchUpMaxAge = catchUpMaxAge
+    self.heartbeat = heartbeat
+    self.workspace = workspace
+    self.audit = audit
     self.now = now
     self.sleep = sleep
     self.logger = logger
@@ -86,6 +97,8 @@ public struct SchedulerService: Service {
     for job in dueJobs {
       await fire(job: job, tickTime: tickTime)
     }
+
+    await heartbeatIfDue(tickTime: tickTime)
   }
 
   /// The §5.3 lateness table for one due job — all wall clock, never tick counts.
@@ -220,5 +233,126 @@ public struct SchedulerService: Service {
         log.error("scheduled run \(fire.runId) failed with a storage error: \(error)")
       }
     }
+  }
+
+  // MARK: - Heartbeat (spec §12 — the end-of-tick config-gated branch, D9)
+
+  /// HEARTBEAT.md consumable cap, in graphemes — the hand-curated-file precedent
+  /// (`ContextBudget.default.memoryFileCap`): a checklist beyond it loads as `.overCap` with NO
+  /// text (never silent truncation) and the beat skips before any LLM cost.
+  static let heartbeatFileCapGraphemes = 2_200
+
+  /// The spec §12 fire condition: enabled ∧ interval elapsed ∧ outside quiet hours ∧ under the
+  /// daily cap ∧ HEARTBEAT.md usable. "Due" = enabled ∧ interval elapsed; only a DUE beat that
+  /// skips is audited, so the audit trail stays quiet tick-to-tick.
+  private func heartbeatIfDue(tickTime: Date) async {
+    guard heartbeat.enabled else {
+      return  // default OFF ⇒ structurally inert: no state read, no audit, no cost
+    }
+
+    let state: SchedulerState
+    do {
+      state = try jobs.schedulerState()
+    } catch {
+      logger.error("heartbeat state read failed: \(error)")
+      return
+    }
+
+    if let lastFired = state.lastHeartbeatAt {
+      let intervalSeconds = Double(heartbeat.intervalMinutes) * 60
+      guard tickTime.timeIntervalSince(lastFired) >= intervalSeconds else {
+        await skipEpisode.end()  // not due — the next due skip is a NEW episode
+        return
+      }
+    }
+
+    guard let ownerChatId = heartbeat.ownerChatId else {
+      // Unreachable when AppConfig validated the enabled+owner pair; fail closed, audibly.
+      await auditHeartbeatSkip(reason: .disabledMidFlight, at: tickTime)
+      return
+    }
+    guard heartbeat.quietHours.contains(tickTime, timezone: heartbeat.timezone) == false else {
+      await auditHeartbeatSkip(reason: .quietHours, at: tickTime)
+      return
+    }
+
+    // The cap's day boundary is the CLAW_TIMEZONE day string, aligned with quiet hours (§4.3);
+    // a stale stamp means the counter rolled over.
+    let day = SchedulerHealth.dayString(for: tickTime, timezone: heartbeat.timezone)
+    if state.heartbeatCountDay == day, state.heartbeatCount >= heartbeat.maxPerDay {
+      await auditHeartbeatSkip(reason: .dailyCap, at: tickTime)
+      return
+    }
+
+    let checklist = workspace.load(file: .heartbeat, maxGraphemes: Self.heartbeatFileCapGraphemes)
+    let usableText = checklist.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard checklist.outcome == .present, usableText.isEmpty == false else {
+      // BEFORE any LLM cost (spec §12)
+      await auditHeartbeatSkip(reason: .emptyFile, at: tickTime)
+      return
+    }
+
+    do {
+      let fire = try jobs.fireHeartbeat(
+        prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
+        ownerChatId: ownerChatId,
+        now: tickTime,
+        day: day
+      )
+      await skipEpisode.end()
+      await enqueue(fire)
+    } catch {
+      logger.error("heartbeat fire failed: \(error)")
+    }
+  }
+
+  /// A skip changes no durable state, so its audit row stands alone (no co-transaction to
+  /// ride). Deduped per EPISODE: a due heartbeat that keeps skipping for the same reason
+  /// audits once, not once per 60 s tick — spec §12's "audit stays quiet tick-to-tick" (an
+  /// 11-hour quiet window must not write ~660 identical rows).
+  private func auditHeartbeatSkip(reason: HeartbeatSkipReason, at tickTime: Date) async {
+    guard await skipEpisode.begin(reason) else {
+      return  // same episode as the previous tick — already audited
+    }
+    do {
+      try audit.appendAudit(
+        AuditEvent(
+          actor: .system,
+          action: .heartbeatSkipped,
+          decision: reason.rawValue,
+          ts: tickTime
+        )
+      )
+    } catch {
+      logger.error("heartbeatSkipped audit failed: \(error)")
+    }
+  }
+}
+
+/// The reason a due heartbeat tick skipped a fire — one source of truth for the audit `decision`
+/// string, so production and tests never re-type the bare literals.
+enum HeartbeatSkipReason: String, Sendable {
+  case disabledMidFlight = "disabled_mid_flight"
+  case quietHours = "quiet_hours"
+  case dailyCap = "daily_cap"
+  case emptyFile = "empty_file"
+}
+
+/// Dedupes consecutive heartbeat skip audits: one row per skip EPISODE — a run of consecutive
+/// due ticks skipping for the same reason — because "due" stays true tick after tick until a
+/// fire advances `last_heartbeat_at`. In-memory by design: a restart can re-audit one skip;
+/// durable state for a diagnostic row is not worth a schema column. A reason CHANGE
+/// (quiet_hours → daily_cap) starts a new episode and audits.
+actor HeartbeatSkipEpisode {
+  private var lastReason: HeartbeatSkipReason?
+
+  /// True exactly when `reason` starts a new episode.
+  func begin(_ reason: HeartbeatSkipReason) -> Bool {
+    defer { lastReason = reason }
+    return reason != lastReason
+  }
+
+  func end() {
+    lastReason = nil
   }
 }

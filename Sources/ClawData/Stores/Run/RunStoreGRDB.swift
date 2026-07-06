@@ -186,7 +186,8 @@ public struct RunStoreGRDB: RunStore {
 
   public func reconcileRunsAtBoot(
     now: Date,
-    degradationText: String
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?
   ) throws -> [DegradationReply] {
     try writer.writeMapping { db in
       let stale = try Row.fetchAll(
@@ -209,10 +210,8 @@ public struct RunStoreGRDB: RunStore {
 
         try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
 
-        // A6: job runs resolve the crash-notice target via the job row — sessions carry no chat
-        // id and the synthetic `sched:job:<id>` key parses to nil. Heartbeat runs (job_id NULL,
-        // `sched:heartbeat`) keep skipping here; Phase 4 routes them via config.
         let jobId: Int64? = row["job_id"]
+        let sessionKey: String = row["session_key"]
         let noticeChatId: Int64?
         if let jobId {
           noticeChatId = try Int64.fetchOne(
@@ -220,8 +219,12 @@ public struct RunStoreGRDB: RunStore {
             sql: "SELECT owner_chat_id FROM scheduled_jobs WHERE id = ?",
             arguments: [jobId]
           )
+        } else if sessionKey == SessionKey.heartbeat {
+          // Spec §12/A6: the heartbeat session has no chat id anywhere in the DB — the notice
+          // rides the config-derived owner target the boot caller resolved.
+          noticeChatId = heartbeatNoticeChatId
         } else {
-          noticeChatId = SessionKey.chatId(from: row["session_key"])
+          noticeChatId = SessionKey.chatId(from: sessionKey)
         }
 
         let sentCount =
