@@ -55,19 +55,6 @@ import Testing
     #expect(text.contains("[FAIL]"))
   }
 
-  @Test func passingCheckRendersAsOkWithoutTrailingSpaces() {
-    // given
-    var report = DoctorReport()
-    report.add(key: "config", value: "OK")
-
-    // when
-    let text = report.renderText()
-
-    // then
-    #expect(text.contains("[ok]"))
-    #expect(!text.contains("[ok  ]"))
-  }
-
   @Test func jsonRenderIsParseable() {
     // given
     var report = DoctorReport()

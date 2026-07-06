@@ -73,11 +73,11 @@ struct ContextBuilderTests {
     #expect(result.messages.count == 1)
     #expect(result.messages[0].role == .system)
     #expect(result.messages[0].content.contains("MEMORY.md") == false)
-    #expect(
-      result.ownerNotices == [
-        "⚠ `MEMORY.md` is 2201/2200 — edit it to trim; left out this turn."
-      ]
-    )
+    #expect(result.ownerNotices.count == 1)
+    let notice = try #require(result.ownerNotices.first)
+    #expect(notice.contains("MEMORY.md"))  // which file to trim
+    // actual/cap graphemes — the load-bearing overflow figure
+    #expect(notice.contains("2201/2200"))
     #expect(result.hasPrivateDataAccess == false)
   }
 
@@ -137,17 +137,14 @@ struct ContextBuilderTests {
     let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
 
     // then
-    #expect(
-      retriever.calls == [
-        FakeRetriever.Call(
-          query: "latest query",
-          currentSessionId: 42,
-          windowStartMessageId: 7,
-          excludedMessageIds: [10, 11, 12],
-          limit: 20
-        )
-      ]
-    )
+    #expect(retriever.calls.count == 1)
+    let call = try #require(retriever.calls.first)
+    #expect(call.query == "latest query")  // the latest user message, not older history
+    #expect(call.currentSessionId == 42)
+    #expect(call.windowStartMessageId == 7)
+    #expect(call.excludedMessageIds == [10, 11, 12])  // current history excluded from recall
+    // the recall candidate limit from its source of truth, not the literal 20
+    #expect(call.limit == ContextBuilder.recallCandidateLimit)
     let untrusted = try #require(result.messages.first { message in message.role == .user })
       .content
     #expect(untrusted.contains("label=\"recall\""))

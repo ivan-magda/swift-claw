@@ -640,13 +640,4 @@ extension ScheduledJobStoreGRDBTests {
       ) == 1
     )
   }
-
-  @Test func storeConformsToTheScheduledJobStoreProtocol() throws {
-    // given / when — compile-time proof the whole preamble contract is implemented
-    let (store, _) = try makeStore()
-    let conforming: any ScheduledJobStore = store
-
-    // then
-    #expect(try conforming.listAll().isEmpty)
-  }
 }

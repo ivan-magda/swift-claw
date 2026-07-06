@@ -145,6 +145,33 @@ import Testing
     #expect(attempts == 3)
   }
 
+  @Test func backoffGrowsExponentiallyAndClampsAtTheMaxCap() async throws {
+    // given — every attempt is a retryable 500 with no Retry-After, so each retry uses the
+    // exponential schedule; an identity jitter exposes the raw computed delay and the recorder
+    // captures every sleep the provider requests
+    let exec = ScriptedHTTPExecutor(Array(repeating: errorStep(500), count: 9))
+    let recorder = SleepRecorder()
+    let provider = makeProvider(
+      config: makeConfig(retryBudget: 9),
+      http: exec,
+      recorder: recorder,
+      jitter: { $0 }
+    )
+
+    // when — the budget is exhausted after 9 attempts (8 backoffs between them)
+    await #expect {
+      _ = try await provider.complete(request: sampleRequest)
+    } throws: { error in
+      guard case ProviderError.retryable(let status, _) = error else { return false }
+      return status == 500
+    }
+
+    // then — 0.5·2^(attempt-1) doubling, clamped at the 30 s cap for attempts 7 and 8
+    let delays = await recorder.delays
+    #expect(delays == [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 30.0, 30.0])
+    #expect(await exec.recorded.count == 9)
+  }
+
   @Test func transportErrorRedactsTheApiKey() async throws {
     // given — a transport error whose text embeds the key; retried then surfaced
     let apiKey = "sk-super-secret-123"

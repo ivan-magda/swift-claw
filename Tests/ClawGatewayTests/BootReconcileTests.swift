@@ -38,4 +38,27 @@ import Testing
     // then — the owner received the unfinished-run degradation, so the crash was never silent
     #expect(await transport.richSends.first?.markdown == Degradation.unfinished)
   }
+
+  @Test func reconcileLeavesDeliveredAndCompletedRunsUntouched() async throws {
+    // given — a terminal DONE run and a RUNNING run whose only outbox row was already SENT; neither
+    // is an unfinished orphan, so the no-silence sweep has nothing to announce
+    let fixture = try makeHealthyRunsFixture()
+    let reconcileNow = Date()
+    let beforeHealth = try fixture.runs.runsHealth(now: reconcileNow)
+
+    // when — the same boot sweep the crash-mid-turn test exercises
+    let replies = try fixture.runs.reconcileRunsAtBoot(
+      now: reconcileNow,
+      degradationText: Degradation.unfinished
+    )
+
+    // then — no degradation reply is produced or persisted for either healthy run, and the DONE
+    // run is left exactly as it was (its last-success timestamp is unchanged)
+    let afterHealth = try fixture.runs.runsHealth(now: reconcileNow)
+    #expect(replies.isEmpty)
+    #expect(try fixture.outbox.pendingOutbound().isEmpty)
+    #expect(beforeHealth.inFlight == 1)
+    #expect(afterHealth.inFlight == 0)
+    #expect(afterHealth.lastSuccessAt == beforeHealth.lastSuccessAt)
+  }
 }

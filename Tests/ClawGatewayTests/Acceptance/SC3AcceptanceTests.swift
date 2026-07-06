@@ -584,10 +584,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
 
     // the cancelled-but-ingested run persists taint (the /new-superseded skip is pinned at the store
     // level — Phase 1 Task 08)
-    for _ in 0..<200 {
-      if try harness.snapshot().isTainted { break }
-      try await Task.sleep(for: .milliseconds(25))
-    }
+    _ = try await pollUntil(timeout: .seconds(5)) { try harness.snapshot().isTainted ? true : nil }
     #expect(try harness.snapshot().isTainted)
   }
 

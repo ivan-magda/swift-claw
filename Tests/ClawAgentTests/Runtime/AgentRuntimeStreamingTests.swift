@@ -14,6 +14,7 @@ actor StreamingProvider: LLMProvider {
     case events([StreamEvent])
     case timed([TimedStreamEvent])
     case gated(TypingReleaseGate, [StreamEvent])
+    case gatedBetween([StreamEvent], TypingReleaseGate, [StreamEvent])
     case fail(ProviderError)
     case neverFinishes
     case ignoresCancellation(NonCooperativeStreamGate)
@@ -69,6 +70,15 @@ actor StreamingProvider: LLMProvider {
             continuation.yield(event)
           }
           continuation.finish()
+        case .gatedBetween(let prefix, let gate, let suffix):
+          for event in prefix {
+            continuation.yield(event)
+          }
+          await gate.awaitRelease()
+          for event in suffix {
+            continuation.yield(event)
+          }
+          continuation.finish()
         case .fail(let error):
           continuation.finish(throwing: error)
         case .neverFinishes:
@@ -114,6 +124,88 @@ actor RecordingDrafts: RichDraftStreaming {
   func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
     drafts.append((chatId, draftId, markdown))
   }
+}
+
+/// Records drafts and releases `gate` on its first send, so a mid-stream gate can hold the stream's
+/// suffix until the draft/typing loop has drawn its first frame over the prefix state — the empty
+/// window the old `.timed(pauseBefore:)` forced with a real 80ms sleep.
+actor ReleasingRecordingDrafts: RichDraftStreaming {
+  private(set) var drafts: [(chatId: Int64, draftId: Int64, markdown: String)] = []
+  private let gate: TypingReleaseGate
+
+  init(gate: TypingReleaseGate) {
+    self.gate = gate
+  }
+
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
+    drafts.append((chatId, draftId, markdown))
+    await gate.release()
+  }
+}
+
+/// Streams a DIFFERENT scripted event sequence per `stream` call and records the request each round
+/// received. The single-script `StreamingProvider` above replays one fixed script for every call
+/// and exposes only a call count, so it can neither terminate a two-round tool loop nor surface the
+/// fenced follow-up request — both of which the tool-round-trip test asserts.
+actor RecordingStreamingProvider: LLMProvider {
+  private var rounds: [[StreamEvent]]
+  private(set) var requests: [ChatRequest] = []
+
+  init(rounds: [[StreamEvent]]) {
+    self.rounds = rounds
+  }
+
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    // Streaming is enabled and never connect-fails here, so the blocking fallback is unreachable.
+    throw ProviderError.terminal(status: nil, message: "blocking path not scripted")
+  }
+
+  private func nextRound(recording request: ChatRequest) -> [StreamEvent] {
+    requests.append(request)
+    guard rounds.isEmpty == false else {
+      return []
+    }
+    return rounds.removeFirst()
+  }
+
+  nonisolated func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
+    AsyncThrowingStream { continuation in
+      Task {
+        let events = await self.nextRound(recording: request)
+        for event in events {
+          continuation.yield(event)
+        }
+        continuation.finish()
+      }
+    }
+  }
+}
+
+/// The two streamed rounds for a tool round-trip: round 1 streams a preamble then finishes with a
+/// fetch proposal; round 2 streams the answer once the fenced observation has been fed back.
+func toolRoundTripStreamRounds() -> [[StreamEvent]] {
+  [
+    [
+      .delta("let me "),
+      .delta("check"),
+      .finished(
+        finishReason: "tool_calls",
+        usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+        providerCost: nil,
+        toolCalls: [fetchProposal()]
+      ),
+    ],
+    [
+      .delta("the page "),
+      .delta("says hello"),
+      .finished(
+        finishReason: "stop",
+        usage: ChatUsage(promptTokens: 12, completionTokens: 4, totalTokens: 16),
+        providerCost: nil,
+        toolCalls: []
+      ),
+    ],
+  ]
 }
 
 /// Releases `gate` once typing has been issued `releaseAfter` times, so a test can hold the
@@ -443,18 +535,32 @@ func waitForTurnResult(
 
   @Test func emptyFirstDeltaNeverProducesABlankDraft() async throws {
     // given
+    // The gate withholds "hello" until the draft/typing loop has drawn its first frame over the
+    // empty accumulation — the ordering the old `.timed(pauseBefore:)` forced with 80ms of real
+    // sleep. Correct code publishes nothing for the empty delta, so the loop's first frame is a
+    // typing pulse (releases via `CountingReleaseTyping`); a regressed guard would publish "" and
+    // the loop's frame becomes a blank draft (releases via `ReleasingRecordingDrafts`) — caught by
+    // the non-empty assertion. Either path releases the shared gate, so the stream never wedges.
+    let gate = TypingReleaseGate()
     let provider = StreamingProvider(
-      streamScript: .timed([
-        TimedStreamEvent(pauseBefore: .zero, event: .delta("")),
-        TimedStreamEvent(pauseBefore: .milliseconds(80), event: .delta("hello")),
-        TimedStreamEvent(
-          pauseBefore: .zero,
-          event: .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: [])
-        ),
-      ])
+      streamScript: .gatedBetween(
+        [.delta("")],
+        gate,
+        [
+          .delta("hello"),
+          .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: []),
+        ]
+      )
     )
-    let drafts = RecordingDrafts()
-    let runtime = makeRuntime(provider: provider, drafts: drafts, streamingEnabled: true)
+    let drafts = ReleasingRecordingDrafts(gate: gate)
+    let typing = CountingReleaseTyping(releaseAfter: 1, gate: gate)
+    let runtime = makeRuntime(
+      provider: provider,
+      typing: typing,
+      drafts: drafts,
+      streamingEnabled: true,
+      sleep: compressedSleep
+    )
 
     // when
     let outcome = try await runtime.runTurn(
@@ -510,7 +616,9 @@ func waitForTurnResult(
       return outcome
     }
     await drafts.waitUntilFinalBlocked()
-    try await Task.sleep(for: .milliseconds(700))
+    // The turn is now suspended inside the final draft send; a yield lets any (incorrect)
+    // fire-and-forget completion surface before we snapshot, without a wall-clock window.
+    await Task.yield()
     let doneWhileFinalSendBlocked = await flag.done
     await drafts.release()
     let outcome = try await turnTask.value
@@ -525,13 +633,21 @@ func waitForTurnResult(
   @Test func externalCancellationNeverCompletesWithPartialContent() async throws {
     // A /stop-style cancel mid-stream must degrade the turn, never surface the partial
     // accumulation as a completed reply. AsyncThrowingStream ends iteration with nil on consumer
-    // cancellation (it does not throw), so the EOF path must re-check cancellation. The outcome
-    // races the deadline child's CancellationError, so one run can mask the bug — loop it.
+    // cancellation (it does not throw), so the EOF path must re-check cancellation. The wall-clock
+    // deadline child always throws a competing CancellationError on cancel, so one run can mask a
+    // removed re-check — loop it. (A gate now arms the "partial" accumulation deterministically,
+    // replacing the old 10ms sleep.)
     for _ in 0..<20 {
       // given
       let gate = NonCooperativeStreamGate()
       let provider = StreamingProvider(streamScript: .ignoresCancellation(gate))
-      let runtime = makeRuntime(provider: provider, streamingEnabled: true)
+      let drafts = BlockingDrafts()
+      let runtime = makeRuntime(
+        provider: provider,
+        drafts: drafts,
+        streamingEnabled: true,
+        sleep: compressedSleep
+      )
 
       // when
       let turnTask = Task {
@@ -547,15 +663,63 @@ func waitForTurnResult(
         )
       }
       await gate.waitUntilStarted()
-      try await Task.sleep(for: .milliseconds(10))
+      // The first draft send can only happen after `consumeStream` published "partial", so blocking
+      // on it arms the re-check regression deterministically, without a wall-clock window.
+      await drafts.waitUntilFirstSendBlocked()
       turnTask.cancel()
       let outcome = try await turnTask.value
       await gate.release()
+      await drafts.release()
 
       // then
       let (kind, _) = try requireDegraded(outcome.result)
       #expect(kind == .providerUnavailable)
     }
+  }
+
+  @Test func streamingToolRoundTripFencesObservationIntoFollowUpRequest() async throws {
+    // given — round 1 streams a preamble then finishes with a tool proposal; round 2 streams the
+    // answer once the fenced observation has been fed back
+    let provider = RecordingStreamingProvider(rounds: toolRoundTripStreamRounds())
+    let dispatcher = ScriptedDispatcher(respond: okOutcome(content: "page text"))
+    let runtime = makeRuntime(
+      provider: provider,
+      streamingEnabled: true,
+      toolDispatcher: dispatcher
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 11,
+      sessionId: 22,
+      chatId: 33,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      grant: nil,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the streamed round-trip completes with round 2's accumulated answer; the executed
+    // observation is recorded RAW in the exchange and tainted the run (mirrors the blocking path)
+    let completed = try requireCompleted(outcome.result)
+    #expect(completed.content == "the page says hello")
+    #expect(outcome.exchanges.count == 1)
+    #expect(outcome.exchanges[0].assistantContent == "let me check")
+    #expect(outcome.exchanges[0].observations[0].content == "page text")
+    #expect(outcome.ingestedUntrusted)
+
+    // and the follow-up streamed request carried the anchor + the FENCED observation (§6.5/§12)
+    let secondRequest = await provider.requests[1]
+    let anchor = secondRequest.messages[secondRequest.messages.count - 2]
+    #expect(anchor.role == .assistant)
+    #expect(anchor.toolCalls.map(\.id) == ["c1"])
+    let observationMessage = secondRequest.messages[secondRequest.messages.count - 1]
+    #expect(observationMessage.role == .tool)
+    #expect(observationMessage.toolCallId == "c1")
+    #expect(observationMessage.content.contains("<claw-untrusted"))
+    #expect(observationMessage.content.contains("page text"))
+    #expect(await provider.requests.count == 2)
   }
 
   @Test func streamingDisabledUsesBlockingCompletePath() async throws {

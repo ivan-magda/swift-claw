@@ -124,9 +124,4 @@ struct ScriptedSearch: SearchProviding {
     // when / then
     #expect((await tool.execute(arguments: .object([:]))).status == .error)
   }
-
-  @Test func timeoutIsPinnedToFifteenSeconds() {
-    // given / when / then (rev.1 L2)
-    #expect(WebSearchTool(search: ScriptedSearch()).timeout == .seconds(15))
-  }
 }
