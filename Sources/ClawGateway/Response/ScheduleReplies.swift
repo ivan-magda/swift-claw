@@ -9,7 +9,7 @@ public enum ScheduleReplies {
   public static let confirmPreviewCount = 3
 
   static let exampleLine =
-    "Example: /schedule every weekday at 07:00 — summarize my unread items"
+    "Example: /schedule every weekday at 07:00, summarize my unread items"
 
   public static var parseFailed: String {
     "I couldn't turn that into a schedule. \(exampleLine)"
@@ -81,10 +81,10 @@ public enum ScheduleReplies {
   /// Terminal verb failure after the update was already claimed: nothing changed; re-issue.
   public static let verbFailed = "Couldn't update the schedule. Nothing changed. Try again."
 
-  public static let pauseUsage = "Usage: /pause <id> — see /schedule list"
-  public static let resumeUsage = "Usage: /resume <id> — see /schedule list"
-  public static let runNowUsage = "Usage: /runnow <id> — see /schedule list"
-  public static let cancelUsage = "Usage: /cancel <id> — see /schedule list"
+  public static let pauseUsage = "Usage: /pause <id>. See /schedule list"
+  public static let resumeUsage = "Usage: /resume <id>. See /schedule list"
+  public static let runNowUsage = "Usage: /runnow <id>. See /schedule list"
+  public static let cancelUsage = "Usage: /cancel <id>. See /schedule list"
 
   public static func paused(job: ScheduledJob) -> String {
     "Paused schedule \(job.id) · «\(job.label)». Resume with /resume \(job.id)."
@@ -92,10 +92,10 @@ public enum ScheduleReplies {
 
   public static func resumed(job: ScheduledJob) -> String {
     guard let next = job.nextOccurrence else {
-      return "Resumed schedule \(job.id) · «\(job.label)» — nothing left to fire."
+      return "Resumed schedule \(job.id) · «\(job.label)». Nothing left to fire."
     }
     return """
-      Resumed schedule \(job.id) · «\(job.label)» — next fire \
+      Resumed schedule \(job.id) · «\(job.label)». Next fire \
       \(fireTime(next, timezoneId: job.timezone)).
       """
   }
@@ -108,7 +108,7 @@ public enum ScheduleReplies {
   }
 
   public static func runningNow(id: Int64) -> String {
-    "Running schedule \(id) now — the result will arrive like any scheduled delivery."
+    "Running schedule \(id) now. You'll get the result like any scheduled delivery."
   }
 
   /// `yyyy-MM-dd HH:mm` in the given zone — deterministic and locale-free (the ISO8601 format

@@ -180,7 +180,7 @@ import Testing
     let job = try #require(try harness.jobs.job(id: seeded.id))
     #expect(job.nextOccurrence == nil)
     let reply = await harness.transport.sent.last?.text ?? ""
-    #expect(reply.contains("nothing left to fire"))
+    #expect(reply.contains("Nothing left to fire"))
   }
 
   @Test func runNowFiresThroughTheLaneWithoutMovingTheSchedule() async throws {

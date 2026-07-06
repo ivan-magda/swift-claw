@@ -95,7 +95,7 @@ public enum ScheduleDraftProblem: Error, Sendable, Equatable {
   case noUpcomingOccurrence
 
   public var ownerReply: String {
-    let example = "Example: /schedule every weekday at 07:00 — summarize my unread items"
+    let example = "Example: /schedule every weekday at 07:00, summarize my unread items"
     switch self {
     case .emptyLabel:
       return """
@@ -103,7 +103,7 @@ public enum ScheduleDraftProblem: Error, Sendable, Equatable {
         """
     case .labelTooLong(let count):
       return """
-        That label is \(count) characters — the cap is 64. Use a shorter name. \(example)
+        That label is \(count) characters, past the 64 cap. Use a shorter name. \(example)
         """
     case .emptyPrompt:
       return """
@@ -120,28 +120,28 @@ public enum ScheduleDraftProblem: Error, Sendable, Equatable {
         """
     case .invalidTime(let time):
       return """
-        «\(time)» isn't a time I can use — write 24-hour HH:MM. \
-        Example: /schedule every day at 07:30 — summarize my unread items
+        «\(time)» isn't a time I can use. Write it as 24-hour HH:MM. \
+        Example: /schedule every day at 07:30, summarize my unread items
         """
     case .invalidDate(let date):
       return """
-        «\(date)» isn't a date I can use — write YYYY-MM-DD. \
-        Example: /schedule once on 2026-07-10 at 09:00 — send the report reminder
+        «\(date)» isn't a date I can use. Write it as YYYY-MM-DD. \
+        Example: /schedule once on 2026-07-10 at 09:00, send the report reminder
         """
     case .invalidWeekday(let day):
       return """
-        «\(day)» isn't a weekday I know — use monday…sunday. \
-        Example: /schedule every friday at 16:00 — post the weekly summary
+        «\(day)» isn't a weekday I know. Use monday…sunday. \
+        Example: /schedule every friday at 16:00, post the weekly summary
         """
     case .intervalTooSmall(let minutes, let floorMinutes):
       return """
         Every \(minutes) minutes is below the \(floorMinutes)-minute floor. \
-        Example: /schedule every 30 minutes — check the build status
+        Example: /schedule every 30 minutes, check the build status
         """
     case .onceInThePast:
       return """
         That time is already in the past. Pick a future one. \
-        Example: /schedule once on 2026-07-10 at 09:00 — send the report reminder
+        Example: /schedule once on 2026-07-10 at 09:00, send the report reminder
         """
     case .noUpcomingOccurrence:
       return """
