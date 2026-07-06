@@ -508,12 +508,16 @@ extension MessageRouter {
     )
   }
 
-  /// The fire time to arm with, recomputed against the arm-time clock so a draft confirmed long
-  /// after its preview was shown can't arm an already-past occurrence (a one-shot would silently
-  /// misfire to COMPLETED; a recurring one would fire immediately). This re-runs the SAME parked
-  /// rule — not a re-parse (§8): label/prompt/rule/timezone are still the parked draft's. Returns
-  /// nil when nothing valid remains to arm: a one-shot whose instant has passed, or (pathological)
-  /// a rule with no upcoming occurrence.
+  /// The fire time to arm with. Anchoring on the parked `firstOccurrence` (not arm-time `now`)
+  /// keeps the previewed everyNMinutes phase intact (preamble deviation #1: phase-continuous from
+  /// preview through every fire) — mirroring `resumeNextOccurrence`, which anchors on the stored
+  /// occurrence rather than `now` for the same reason. `after: nowDate` still does the M1 job: it
+  /// skips any occurrence already past by confirm time, so a draft confirmed long after its
+  /// preview can't arm an already-past occurrence (a one-shot would silently misfire to COMPLETED;
+  /// a recurring one would fire immediately). This re-runs the SAME parked rule — not a re-parse
+  /// (§8): label/prompt/rule/timezone are still the parked draft's. Returns nil when nothing valid
+  /// remains to arm: a one-shot whose instant has passed, or (pathological) a rule with no
+  /// upcoming occurrence.
   private func armNextOccurrence(for validated: ValidatedSchedule, now nowDate: Date) -> Date? {
     guard let envelope = validated.recurrence else {
       return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
@@ -524,7 +528,7 @@ extension MessageRouter {
     return schedule.calculator.occurrences(
       rule: envelope.rule,
       timezone: timezone,
-      anchor: nowDate,
+      anchor: validated.firstOccurrence,
       after: nowDate,
       limit: 1
     ).first

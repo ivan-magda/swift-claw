@@ -200,6 +200,52 @@ import Testing
     #expect(job.nextOccurrence == Date(timeIntervalSince1970: 1_783_400_400))
   }
 
+  /// The confirm preview anchors on the parked draft's `firstOccurrence`, so arming must too —
+  /// anchoring on arm-time `now` instead would re-phase the whole everyNMinutes chain off what
+  /// the owner just confirmed (preamble deviation #1: phase-continuous from preview to fire).
+  @Test func armPreservesEveryNMinutesPhaseFromThePreview() async throws {
+    // given — a 30-minute draft parked with a past, off-now-phase firstOccurrence (:05/:35)
+    let harness = try makeHarness()
+    await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am Berlin")
+    )
+    let sessionId = try #require(
+      try SessionMessageStoreGRDB(writer: harness.queue).findSession(
+        sessionKey: SessionKey.telegramDM(chatId: 42)
+      )
+    )
+    let calendar: Calendar = try {
+      var calendar = Calendar(identifier: .gregorian)
+      calendar.timeZone = try #require(TimeZone(identifier: "Europe/Berlin"))
+      return calendar
+    }()
+    let rule = Calendar.RecurrenceRule(
+      calendar: calendar,
+      frequency: .minutely,
+      interval: 30,
+      seconds: [0]
+    )
+    let stale = ValidatedSchedule(
+      label: "heartbeat",
+      prompt: "Post the heartbeat",
+      recurrence: RecurrenceEnvelope(schemaVersion: 1, rule: rule),
+      timezone: "Europe/Berlin",
+      firstOccurrence: Date(timeIntervalSince1970: 1_783_337_700),
+      recurrenceInWords: "every 30 minutes"
+    )
+    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
+
+    // when
+    let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
+
+    // then — next :05/:35-phase fire after now (12:05), not the re-phased :00/:30 (12:30)
+    #expect(outcome == .processed)
+    let jobs = try harness.jobs.listAll()
+    #expect(jobs.count == 1)
+    let job = try #require(jobs.first)
+    #expect(job.nextOccurrence == Date(timeIntervalSince1970: 1_783_339_500))
+  }
+
   /// A parked one-shot confirmed after its only instant already passed cannot be salvaged: arming
   /// it would silently misfire to COMPLETED with no run, so it is rejected instead (M1).
   @Test func armOfAOneShotWhoseInstantPassedIsRejected() async throws {
