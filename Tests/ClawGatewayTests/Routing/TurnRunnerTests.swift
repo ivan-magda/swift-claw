@@ -42,7 +42,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
   let base: RunStoreGRDB
   let sessionId: Int64
 
-  func pickUp(runId: Int64, now: Date) throws -> Bool {
+  func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
     try base.pickUp(runId: runId, now: now)
   }
 
@@ -82,7 +82,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   let base: RunStoreGRDB
   let sessionId: Int64
 
-  func pickUp(runId: Int64, now: Date) throws -> Bool {
+  func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
     try base.pickUp(runId: runId, now: now)
   }
 
@@ -118,7 +118,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
 
 /// A `RunStore` whose first write reports a full disk, to exercise the storage-full rethrow.
 struct DiskFullRuns: RunStore {
-  func pickUp(runId: Int64, now: Date) throws -> Bool { throw StoreError.diskFull }
+  func pickUp(runId: Int64, now: Date) throws -> RunOrigin? { throw StoreError.diskFull }
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult { .ignored }
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult { .ignored }
   func failRun(runId: Int64, now: Date) throws {}
@@ -196,133 +196,245 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
   func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {}
 }
 
-@Suite struct TurnRunnerTests {
-  private struct Env {
-    let runner: TurnRunner
-    let queue: DatabaseQueue
-    let sessionMessages: SessionMessageStoreGRDB
-    let outbox: OutboxStoreGRDB
-    let sessionId: Int64
-    let chatId: Int64
-    let runId: Int64
-    let triggerMessageId: Int64
-    let provider: StubLLMProvider
-  }
+/// Shared `TurnRunner` test fixture, hoisted to file scope (out of `TurnRunnerTests`' body) so the
+/// suite's own body stays under the project's type-length gate as its test count grows.
+private struct Env {
+  let runner: TurnRunner
+  let queue: DatabaseQueue
+  let sessionMessages: SessionMessageStoreGRDB
+  let outbox: OutboxStoreGRDB
+  let sessionId: Int64
+  let chatId: Int64
+  let runId: Int64
+  let triggerMessageId: Int64
+  let provider: StubLLMProvider
+}
 
-  private func makeContextBuilder(
-    workspace: TurnRunnerWorkspace = TurnRunnerWorkspace(),
-    budget: ContextBudget = .default
-  ) throws -> ContextBuilder {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let memory = MemoryStoreGRDB(writer: queue)
-    let retriever = RetrieverGRDB(writer: queue)
-    return ContextBuilder(
-      systemPrompt: SystemPrompt.minimal,
-      workspace: workspace,
-      memoryStore: memory,
-      retriever: retriever,
-      budget: budget,
-      now: { Date(timeIntervalSince1970: 0) }
+private func makeContextBuilder(
+  workspace: TurnRunnerWorkspace = TurnRunnerWorkspace(),
+  budget: ContextBudget = .default
+) throws -> ContextBuilder {
+  let queue = try ClawDatabase.makeInMemoryQueue()
+  try ClawDatabase.migrate(queue)
+  let memory = MemoryStoreGRDB(writer: queue)
+  let retriever = RetrieverGRDB(writer: queue)
+  return ContextBuilder(
+    systemPrompt: SystemPrompt.minimal,
+    workspace: workspace,
+    memoryStore: memory,
+    retriever: retriever,
+    budget: budget,
+    now: { Date(timeIntervalSince1970: 0) }
+  )
+}
+
+private func makeEnv(
+  agentOutcome: StubLLMProvider.Outcome,
+  runs: (any RunStore)? = nil,
+  runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
+  contextBuilder: ContextBuilder? = nil,
+  sessionMessagesForRunner: (any SessionMessageStore)? = nil,
+  budget: RunBudget = .default,
+  breaker: BudgetBreaker? = nil,
+  transport: (any TelegramTransport)? = nil
+) throws -> Env {
+  let queue = try ClawDatabase.makeInMemoryQueue()
+  try ClawDatabase.migrate(queue)
+
+  let sessionMessages = SessionMessageStoreGRDB(writer: queue)
+  let usage = UsageStoreGRDB(writer: queue)
+  let outbox = OutboxStoreGRDB(writer: queue)
+  let audit = AuditLogGRDB(writer: queue)
+
+  // Seed a session + a user message via the real fused claim, so history is realistic.
+  let chatId: Int64 = 42
+  let claim = try sessionMessages.claimAndPersistInbound(
+    InboundMessage(
+      updateId: 1,
+      sessionKey: SessionKey.telegramDM(chatId: chatId),
+      chatId: chatId,
+      userId: chatId,
+      text: "hi",
+      isEdited: false,
+      ts: Date()
     )
+  )
+  let sessionId = try #require(claim.sessionId)
+  let runId = try #require(claim.runId)
+  let triggerMessageId = try #require(claim.triggerMessageId)
+
+  let builder: ContextBuilder
+  if let contextBuilder {
+    builder = contextBuilder
+  } else {
+    builder = try makeContextBuilder()
   }
 
-  private func makeEnv(
-    agentOutcome: StubLLMProvider.Outcome,
-    runs: (any RunStore)? = nil,
-    runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
-    contextBuilder: ContextBuilder? = nil,
-    sessionMessagesForRunner: (any SessionMessageStore)? = nil,
-    budget: RunBudget = .default
-  ) throws -> Env {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+  let provider = StubLLMProvider(agentOutcome)
+  let agent = AgentRuntime(
+    provider: provider,
+    typingIndicator: NoopTyping(),
+    draftStreamer: NoopRichDraftStreaming(),
+    streamingEnabled: false,
+    costResolver: CostResolver(
+      priceTable: .empty,
+      referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
+    ),
+    budget: budget,
+    model: "gpt-4o",
+    usageStore: usage,
+    auditLog: audit,
+    sleep: { try await Task.sleep(for: $0) }
+  )
 
-    let sessionMessages = SessionMessageStoreGRDB(writer: queue)
-    let usage = UsageStoreGRDB(writer: queue)
-    let outbox = OutboxStoreGRDB(writer: queue)
-    let audit = AuditLogGRDB(writer: queue)
+  let runner = TurnRunner(
+    sessionMessages: sessionMessagesForRunner ?? sessionMessages,
+    runs: runsFactory?(queue, sessionId) ?? runs ?? RunStoreGRDB(writer: queue),
+    usageStore: usage,
+    audit: audit,
+    agent: agent,
+    budget: budget,
+    contextBuilder: builder,
+    pendingConfirmations: PendingConfirmationRegistry(),
+    notifyOutbox: {},
+    breaker: breaker,
+    transport: transport,
+    logger: Logger(label: "test")
+  )
 
-    // Seed a session + a user message via the real fused claim, so history is realistic.
-    let chatId: Int64 = 42
-    let claim = try sessionMessages.claimAndPersistInbound(
+  return Env(
+    runner: runner,
+    queue: queue,
+    sessionMessages: sessionMessages,
+    outbox: outbox,
+    sessionId: sessionId,
+    chatId: chatId,
+    runId: runId,
+    triggerMessageId: triggerMessageId,
+    provider: provider
+  )
+}
+
+private func latestRunState(_ queue: DatabaseQueue) throws -> String? {
+  try queue.read { db in
+    try String.fetchOne(db, sql: "SELECT state FROM runs ORDER BY id DESC LIMIT 1")
+  }
+}
+
+private func okResponse(content: String) -> ChatResponse {
+  ChatResponse(
+    content: content,
+    finishReason: "stop",
+    usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+    costFromProvider: 0.0021
+  )
+}
+
+@Suite struct TurnRunnerTests {
+  @Test func scheduledRunAtTheProactiveCapIsDeniedDMedOnceAndAudited() async throws {
+    // given — a scheduled-origin run whose proactive pool already spent 2.50 today
+    let transport = RecordingTransport()
+    let env = try makeEnv(
+      agentOutcome: .respond(okResponse(content: "should never run")),
+      breaker: BudgetBreaker(budget: .default),
+      transport: transport
+    )
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
+        arguments: [env.runId]
+      )
+    }
+    try UsageStoreGRDB(writer: env.queue).recordUsage(
+      ProviderUsage(
+        runId: env.runId,
+        sessionId: env.sessionId,
+        model: "m",
+        promptTokens: 10,
+        completionTokens: 5,
+        costUSD: 2.50,
+        costSource: .heuristic,
+        isEstimated: true,
+        ts: Date()
+      )
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId,
+      grant: nil
+    )
+
+    // then — FAILED with the named cap, the model never ran, one owner DM, one audit trip row
+    #expect(try latestRunState(env.queue) == "FAILED")
+    let pending = try env.outbox.pendingOutbound()
+    #expect(pending.first?.payload == Degradation.budget(cap: "proactive per-day spend"))
+    #expect(await env.provider.callCount == 0)
+    #expect(await transport.sent.map(\.text) == [Degradation.proactiveCapTripped])
+    let tripCount = try await env.queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: """
+          SELECT COUNT(*) FROM audit_events
+          WHERE action = 'budget_tripped' AND decision = 'proactive_per_day'
+          """
+      )
+    }
+    #expect(tripCount == 1)
+  }
+
+  @Test func interactiveRunIsUnaffectedByProactiveSpendAtTheSameMoment() async throws {
+    // given — the same 2.50 proactive spend, recorded on a DIFFERENT scheduled run
+    let env = try makeEnv(agentOutcome: .respond(okResponse(content: "Hello there")))
+    let otherClaim = try env.sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
-        text: "hi",
+        updateId: 2,
+        sessionKey: SessionKey.telegramDM(chatId: 77),
+        chatId: 77,
+        userId: 77,
+        text: "seed",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
-    let triggerMessageId = try #require(claim.triggerMessageId)
-
-    let builder: ContextBuilder
-    if let contextBuilder {
-      builder = contextBuilder
-    } else {
-      builder = try makeContextBuilder()
+    let otherRunId = try #require(otherClaim.runId)
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
+        arguments: [otherRunId]
+      )
     }
-
-    let provider = StubLLMProvider(agentOutcome)
-    let agent = AgentRuntime(
-      provider: provider,
-      typingIndicator: NoopTyping(),
-      draftStreamer: NoopRichDraftStreaming(),
-      streamingEnabled: false,
-      costResolver: CostResolver(
-        priceTable: .empty,
-        referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
-      ),
-      budget: budget,
-      model: "gpt-4o",
-      usageStore: usage,
-      auditLog: audit,
-      sleep: { try await Task.sleep(for: $0) }
+    try UsageStoreGRDB(writer: env.queue).recordUsage(
+      ProviderUsage(
+        runId: otherRunId,
+        sessionId: try #require(otherClaim.sessionId),
+        model: "m",
+        promptTokens: 10,
+        completionTokens: 5,
+        costUSD: 2.50,
+        costSource: .heuristic,
+        isEstimated: true,
+        ts: Date()
+      )
     )
 
-    let runner = TurnRunner(
-      sessionMessages: sessionMessagesForRunner ?? sessionMessages,
-      runs: runsFactory?(queue, sessionId) ?? runs ?? RunStoreGRDB(writer: queue),
-      usageStore: usage,
-      audit: audit,
-      agent: agent,
-      budget: budget,
-      contextBuilder: builder,
-      pendingConfirmations: PendingConfirmationRegistry(),
-      notifyOutbox: {},
-      logger: Logger(label: "test")
+    // when — the OWNER's interactive run at the same moment
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId,
+      grant: nil
     )
 
-    return Env(
-      runner: runner,
-      queue: queue,
-      sessionMessages: sessionMessages,
-      outbox: outbox,
-      sessionId: sessionId,
-      chatId: chatId,
-      runId: runId,
-      triggerMessageId: triggerMessageId,
-      provider: provider
-    )
-  }
-
-  private func latestRunState(_ queue: DatabaseQueue) throws -> String? {
-    try queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs ORDER BY id DESC LIMIT 1")
+    // then — completes normally; the proactive pool binds proactive runs only
+    let state = try await env.queue.read { db in
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runId])
     }
-  }
-
-  private func okResponse(content: String) -> ChatResponse {
-    ChatResponse(
-      content: content,
-      finishReason: "stop",
-      usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
-      costFromProvider: 0.0021
-    )
+    #expect(state == "DONE")
   }
 
   @Test func completedTurnCommitsDoneRunAndEnqueuesOneOutboxRow() async throws {

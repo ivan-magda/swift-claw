@@ -9,9 +9,18 @@ public struct RunStoreGRDB: RunStore {
     self.writer = writer
   }
 
-  public func pickUp(runId: Int64, now: Date) throws -> Bool {
+  public func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
     try writer.writeMapping { db in
-      try Self.transitionRun(db, runId: runId, event: .pickUp, now: now) != nil
+      guard try Self.transitionRun(db, runId: runId, event: .pickUp, now: now) != nil else {
+        return nil
+      }
+
+      let rawOrigin =
+        try String.fetchOne(db, sql: "SELECT origin FROM runs WHERE id = ?", arguments: [runId])
+        ?? RunOrigin.interactive.rawValue
+      // Fail closed: an unknown origin (unwritable via the closed enum) runs reduced-privilege,
+      // never interactive.
+      return RunOrigin(rawValue: rawOrigin) ?? .scheduled
     }
   }
 

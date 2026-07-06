@@ -180,7 +180,9 @@ struct FullSessions: SessionMessageStore {
     // given
     let harness = try makeHarness(allowed: [42])
     let seeded = try seedPendingRun(harness, updateId: 10, text: "working")
-    #expect(try harness.runs.pickUp(runId: seeded.runId, now: Date(timeIntervalSince1970: 10)))
+    #expect(
+      try harness.runs.pickUp(runId: seeded.runId, now: Date(timeIntervalSince1970: 10)) != nil
+    )
 
     // when
     let outcome = await harness.router.handle(
@@ -271,7 +273,7 @@ struct FullSessions: SessionMessageStore {
       )
     )
     let runId = try #require(claim.runId)
-    #expect(try runs.pickUp(runId: runId, now: Date(timeIntervalSince1970: 51)))
+    #expect(try runs.pickUp(runId: runId, now: Date(timeIntervalSince1970: 51)) != nil)
     let transport = RecordingTransport(sendError: .transport("ack down"))
     let dispatcher = FakeTurnRunner()
     let router = MessageRouter(
@@ -319,7 +321,7 @@ struct FullSessions: SessionMessageStore {
       )
     )
     let runningRunId = try #require(firstClaim.runId)
-    #expect(try runs.pickUp(runId: runningRunId, now: Date(timeIntervalSince1970: 61)))
+    #expect(try runs.pickUp(runId: runningRunId, now: Date(timeIntervalSince1970: 61)) != nil)
     let secondClaim = try sessionMessages.claimAndPersistInbound(
       InboundMessage(
         updateId: 61,

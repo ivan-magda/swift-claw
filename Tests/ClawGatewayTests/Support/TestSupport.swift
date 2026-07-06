@@ -237,7 +237,7 @@ func makeSeededFixture() throws -> SeededFixture {
   )
   let runId = try #require(claim.runId)
   let runs = RunStoreGRDB(writer: queue)
-  #expect(try runs.pickUp(runId: runId, now: Date()))
+  #expect(try runs.pickUp(runId: runId, now: Date()) != nil)
   return SeededFixture(
     outbox: OutboxStoreGRDB(writer: queue),
     runs: runs,

@@ -29,6 +29,11 @@ public enum Degradation {
   public static let dailyCapTripped =
     "Heads up — the daily spend cap was reached, so I've paused new requests until the next UTC day."
 
+  /// The once-per-UTC-day owner DM for a proactive-cap trip (§11). Names the cap explicitly and
+  /// says interactive use is unaffected, so the owner knows the household kill-switch did NOT trip.
+  public static let proactiveCapTripped =
+    "Heads up — scheduled/heartbeat runs hit the proactive per-day spend cap and are paused until the next UTC day. Interactive use is unaffected."
+
   /// Maps a runtime degradation classification to its owner-facing reply. Exhaustive over
   /// `DegradationKind`, so a new failure mode forces a deliberate copy decision here.
   public static func message(for kind: DegradationKind) -> String {

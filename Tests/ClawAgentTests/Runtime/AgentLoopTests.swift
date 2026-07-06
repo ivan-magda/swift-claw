@@ -9,7 +9,9 @@ import Testing
     _ runtime: AgentRuntime,
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
-    grant: OneTurnGrant? = nil
+    grant: OneTurnGrant? = nil,
+    origin: RunOrigin = .interactive,
+    proactiveTodayUSD: Double = 0
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
       runId: 1,
@@ -19,8 +21,36 @@ import Testing
       sessionTainted: sessionTainted,
       grant: grant,
       todayTokens: 0,
-      todayUSD: 0
+      todayUSD: 0,
+      origin: origin,
+      proactiveTodayUSD: proactiveTodayUSD
     )
+  }
+
+  @Test func proactiveRunStopsAtTheProactiveCapBeforeAnyProviderCall() async throws {
+    // given — the proactive pool is exhausted; the global pool is not
+    let provider = SequenceProvider([okResponse()])
+    let runtime = makeRuntime(provider: provider)
+
+    // when
+    let outcome = try await run(runtime, origin: .scheduled, proactiveTodayUSD: 2.0)
+
+    // then — denied offline, before the provider is reached
+    #expect(outcome.result == .budgetStopped(cap: "proactive per-day spend"))
+    #expect(await provider.requests.isEmpty)
+  }
+
+  @Test func interactiveRunIgnoresProactiveSpend() async throws {
+    // given — the same exhausted proactive pool
+    let provider = SequenceProvider([okResponse(content: "still on")])
+    let runtime = makeRuntime(provider: provider)
+
+    // when
+    let outcome = try await run(runtime, origin: .interactive, proactiveTodayUSD: 2.0)
+
+    // then — interactive runs never consult the nested pool (S3)
+    let completed = try requireCompleted(outcome.result)
+    #expect(completed.content == "still on")
   }
 
   @Test func toollessTurnIsOneRoundTripCompleted() async throws {

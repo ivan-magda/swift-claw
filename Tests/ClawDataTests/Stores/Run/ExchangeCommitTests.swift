@@ -31,7 +31,7 @@ import Testing
     )
     let runs = RunStoreGRDB(writer: queue)
     let runId = claim.runId ?? 0
-    #expect(try runs.pickUp(runId: runId, now: Date()))
+    #expect(try runs.pickUp(runId: runId, now: Date()) != nil)
     return Fixture(queue: queue, runs: runs, sessionId: claim.sessionId ?? 0, runId: runId)
   }
 

@@ -79,7 +79,7 @@ public struct TurnRunner: TurnDispatching {
     }
 
     let now = Date()
-    guard try runs.pickUp(runId: runId, now: now) else {
+    guard let origin = try runs.pickUp(runId: runId, now: now) else {
       logger.debug("run \(runId) was not pending at pickup; skipping turn")
       return
     }
@@ -92,6 +92,7 @@ public struct TurnRunner: TurnDispatching {
     let buildResult: BuildResult
     let todayTokens: Int
     let todayUSD: Double
+    let proactiveTodayUSD: Double
 
     do {
       snapshot = try sessionMessages.loadContextSnapshot(
@@ -103,6 +104,14 @@ public struct TurnRunner: TurnDispatching {
       let totals = try usageStore.todayTokensAndCost(now: now)
       todayTokens = totals.tokens
       todayUSD = totals.costUSD
+      // The proactive pool is one aggregate over scheduled + heartbeat (spec §11); interactive
+      // runs never pay for the extra query.
+      if origin == .interactive {
+        proactiveTodayUSD = 0
+      } else {
+        proactiveTodayUSD =
+          try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: now).costUSD
+      }
 
       buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
     } catch StoreError.diskFull {
@@ -136,7 +145,9 @@ public struct TurnRunner: TurnDispatching {
       sessionTainted: snapshot.isTainted,
       grant: grant,
       todayTokens: todayTokens,
-      todayUSD: todayUSD
+      todayUSD: todayUSD,
+      origin: origin,
+      proactiveTodayUSD: proactiveTodayUSD
     )
 
     try await commit(
@@ -144,7 +155,8 @@ public struct TurnRunner: TurnDispatching {
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
-      ownerNotices: buildResult.ownerNotices
+      ownerNotices: buildResult.ownerNotices,
+      origin: origin
     )
   }
 
@@ -157,12 +169,14 @@ public struct TurnRunner: TurnDispatching {
   ///    then run the shared failure tail with the kind's reply.
   ///  - `.budgetStopped`: the shared failure tail with the budget reply.
   /// Only `StoreError.diskFull` may propagate; every other failure is handled in-band here.
+  // swiftlint:disable:next function_parameter_count
   private func commit(
     _ outcome: TurnOutcome,
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    ownerNotices: [String]
+    ownerNotices: [String],
+    origin: RunOrigin
   ) async throws {
     let committedAt = Date()
 
@@ -252,6 +266,9 @@ public struct TurnRunner: TurnDispatching {
         decision: cap,
         at: committedAt
       )
+      if origin != .interactive, cap == BudgetGate.proactivePerDayCap {
+        await notifyProactiveCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
+      }
     }
   }
 
@@ -337,6 +354,36 @@ public struct TurnRunner: TurnDispatching {
         actor: .system,
         action: .budgetTripped,
         decision: "daily_cap",
+        runId: runId,
+        sessionId: sessionId,
+        ts: Date()
+      )
+    )
+  }
+
+  /// Post-commit proactive-cap owner DM (§11): once per UTC day via the breaker's second latch.
+  /// The trip itself is already durable (the run FAILED with the cap named); DM + audit are
+  /// best-effort, mirroring `notifyDailyCapIfTripped`.
+  private func notifyProactiveCapIfTripped(
+    chatId: Int64,
+    runId: Int64,
+    sessionId: Int64
+  ) async {
+    guard let breaker, let transport else {
+      return
+    }
+
+    let shouldNotify = await breaker.shouldNotifyProactiveTrip(now: Date())
+    guard shouldNotify else {
+      return
+    }
+
+    _ = try? await transport.sendMessage(chatId: chatId, text: Degradation.proactiveCapTripped)
+    try? audit.appendAudit(
+      AuditEvent(
+        actor: .system,
+        action: .budgetTripped,
+        decision: "proactive_per_day",
         runId: runId,
         sessionId: sessionId,
         ts: Date()

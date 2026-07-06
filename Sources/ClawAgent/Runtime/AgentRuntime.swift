@@ -109,7 +109,9 @@ public struct AgentRuntime: Sendable {
     sessionTainted: Bool,
     grant: OneTurnGrant?,
     todayTokens: Int,
-    todayUSD: Double
+    todayUSD: Double,
+    origin: RunOrigin = .interactive,
+    proactiveTodayUSD: Double = 0
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDispatcher?.definitions ?? []
@@ -158,7 +160,9 @@ public struct AgentRuntime: Sendable {
         todayTokens: todayTokens + recordedRunTokens,
         todayUSD: todayUSD + recordedRunUSD,
         estimatedTotalTokens: estimate,
-        estimatedCostUSD: estimatedCost
+        estimatedCostUSD: estimatedCost,
+        origin: origin,
+        proactiveTodayUSD: proactiveTodayUSD + recordedRunUSD
       ) {
         return outcome(.budgetStopped(cap: cap))
       }
