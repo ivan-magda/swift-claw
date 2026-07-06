@@ -98,8 +98,10 @@ public struct ToolPolicyGate: Sendable {
       // (§16 case 3).
       return .block(
         payload: ToolPayload(
-          content: "skipped \(call.name) of \(canonical) — it needs your approval; "
-            + "run it interactively.",
+          content: """
+            skipped \(call.name) of \(canonical) — it needs your approval; \
+            run it interactively.
+            """,
           status: .error,
           ingestedUntrusted: false
         ),
