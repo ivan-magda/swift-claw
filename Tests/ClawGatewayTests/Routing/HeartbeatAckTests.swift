@@ -59,4 +59,15 @@ import Testing
     // when / then
     #expect(HeartbeatAck.isAck(content) == false)
   }
+
+  @Test func nearTokenPrefixIsNotAnAck() {
+    // given — a malformed near-token alert (HEARTBEAT_OKAY…) must NOT be treated as the ack
+    // token; its substantive tail must deliver, not be silently suppressed (P2 fix).
+    #expect(HeartbeatAck.isAck("HEARTBEAT_OKAY: backup failed") == false)
+  }
+
+  @Test func nearTokenSuffixIsNotAnAck() {
+    // given — a word ending in the token bytes without a boundary is not the trailing marker
+    #expect(HeartbeatAck.isAck("status: allHEARTBEAT_OK") == false)
+  }
 }

@@ -14,19 +14,30 @@ enum HeartbeatAck {
   /// once the token has been confirmed present.
   static let maxAckChars = 300
 
-  /// A heartbeat reply is an ack only when the `HEARTBEAT_OK` token appears as a leading and/or
-  /// trailing marker and the remainder left after stripping it is ≤ `maxAckChars`. No token means
-  /// not an ack — the reply is owner-relevant and must be delivered.
+  /// A heartbeat reply is an ack only when the `HEARTBEAT_OK` token appears as a standalone leading
+  /// and/or trailing marker — bounded by whitespace or the string edge, never glued into a longer
+  /// word — and the remainder left after stripping it is ≤ `maxAckChars`. A near-token like
+  /// `HEARTBEAT_OKAY` is NOT the token, and no token means not an ack: the reply is owner-relevant
+  /// and must be delivered.
   static func isAck(_ content: String) -> Bool {
     var remainder = content.trimmingCharacters(in: .whitespacesAndNewlines)
     var tokenStripped = false
     if remainder.hasPrefix(token) {
-      remainder = String(remainder.dropFirst(token.count))
-      tokenStripped = true
+      let afterToken = remainder.dropFirst(token.count)
+      // The token must be a standalone leading marker, not the start of a longer word
+      // (HEARTBEAT_OKAY is NOT the token) — otherwise a malformed near-token alert would be
+      // silently suppressed. A boundary is whitespace or end-of-string.
+      if afterToken.first?.isWhitespace ?? true {
+        remainder = String(afterToken)
+        tokenStripped = true
+      }
     }
     if remainder.hasSuffix(token) {
-      remainder = String(remainder.dropLast(token.count))
-      tokenStripped = true
+      let beforeToken = remainder.dropLast(token.count)
+      if beforeToken.last?.isWhitespace ?? true {
+        remainder = String(beforeToken)
+        tokenStripped = true
+      }
     }
     remainder = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
     return tokenStripped && remainder.count <= maxAckChars
