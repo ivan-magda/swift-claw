@@ -98,33 +98,55 @@ public enum ScheduleDraftProblem: Error, Sendable, Equatable {
     let example = "Example: /schedule every weekday at 07:00 — summarize my unread items"
     switch self {
     case .emptyLabel:
-      return "I need a short name for this schedule. \(example)"
+      return """
+        I need a short name for this schedule. \(example)
+        """
     case .labelTooLong(let count):
-      return "That label is \(count) characters — the cap is 64. Use a shorter name. \(example)"
+      return """
+        That label is \(count) characters — the cap is 64. Use a shorter name. \(example)
+        """
     case .emptyPrompt:
-      return "I need a task to run. \(example)"
+      return """
+        I need a task to run. \(example)
+        """
     case .unknownTimezone(let zone):
-      return "I don't recognize the timezone «\(zone)». Use an IANA name like Europe/Berlin. "
-        + example
+      return """
+        I don't recognize the timezone «\(zone)». Use an IANA name like Europe/Berlin. \
+        \(example)
+        """
     case .missingField(let kind, let field):
-      return "A \(kind.rawValue) schedule needs «\(field)». \(example)"
+      return """
+        A \(kind.rawValue) schedule needs «\(field)». \(example)
+        """
     case .invalidTime(let time):
-      return "«\(time)» isn't a time I can use — write 24-hour HH:MM. "
-        + "Example: /schedule every day at 07:30 — summarize my unread items"
+      return """
+        «\(time)» isn't a time I can use — write 24-hour HH:MM. \
+        Example: /schedule every day at 07:30 — summarize my unread items
+        """
     case .invalidDate(let date):
-      return "«\(date)» isn't a date I can use — write YYYY-MM-DD. "
-        + "Example: /schedule once on 2026-07-10 at 09:00 — send the report reminder"
+      return """
+        «\(date)» isn't a date I can use — write YYYY-MM-DD. \
+        Example: /schedule once on 2026-07-10 at 09:00 — send the report reminder
+        """
     case .invalidWeekday(let day):
-      return "«\(day)» isn't a weekday I know — use monday…sunday. "
-        + "Example: /schedule every friday at 16:00 — post the weekly summary"
+      return """
+        «\(day)» isn't a weekday I know — use monday…sunday. \
+        Example: /schedule every friday at 16:00 — post the weekly summary
+        """
     case .intervalTooSmall(let minutes, let floorMinutes):
-      return "Every \(minutes) minutes is below the \(floorMinutes)-minute floor. "
-        + "Example: /schedule every 30 minutes — check the build status"
+      return """
+        Every \(minutes) minutes is below the \(floorMinutes)-minute floor. \
+        Example: /schedule every 30 minutes — check the build status
+        """
     case .onceInThePast:
-      return "That time is already in the past. Pick a future one. "
-        + "Example: /schedule once on 2026-07-10 at 09:00 — send the report reminder"
+      return """
+        That time is already in the past. Pick a future one. \
+        Example: /schedule once on 2026-07-10 at 09:00 — send the report reminder
+        """
     case .noUpcomingOccurrence:
-      return "I couldn't find an upcoming time for that schedule. \(example)"
+      return """
+        I couldn't find an upcoming time for that schedule. \(example)
+        """
     }
   }
 }
