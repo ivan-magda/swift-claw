@@ -44,7 +44,6 @@ public struct NewCommandResult: Sendable, Equatable {
 public protocol CommandStore: Sendable {
   /// Atomic `/stop`: claim update + resolve session + RUNNING→CANCELLED + audit in one write.
   func applyStop(updateId: Int64, sessionKey: String, now: Date) throws -> StopCommandResult
-
   /// Atomic `/new`: claim update + resolve session + RUNNING/PENDING→SUPERSEDED +
   /// resetWindowAndDetaint + audit in one write.
   func applyNew(updateId: Int64, sessionKey: String, now: Date) throws -> NewCommandResult
@@ -75,7 +74,6 @@ public protocol MemoryCommandStore: Sendable {
     item: NewMemoryItem,
     now: Date
   ) throws -> MemoryCommandResult
-
   /// Atomic confirmed delete: claim update + hard-delete memory item + audit in one write.
   func applyForget(updateId: Int64, itemId: Int64, now: Date) throws -> MemoryCommandResult
 }
