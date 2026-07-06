@@ -218,7 +218,8 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
 
 /// Shared `TurnRunner` test fixture, hoisted to file scope (out of `TurnRunnerTests`' body) so the
 /// suite's own body stays under the project's type-length gate as its test count grows.
-private struct Env {
+/// File-internal (not `private`) so the sibling `TurnRunnerBudgetTests` reuses it without duplication.
+struct Env {
   let runner: TurnRunner
   let queue: DatabaseQueue
   let sessionMessages: SessionMessageStoreGRDB
@@ -248,7 +249,7 @@ private func makeContextBuilder(
   )
 }
 
-private func makeEnv(
+func makeEnv(
   agentOutcome: StubLLMProvider.Outcome,
   runs: (any RunStore)? = nil,
   runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
@@ -256,7 +257,8 @@ private func makeEnv(
   sessionMessagesForRunner: (any SessionMessageStore)? = nil,
   budget: RunBudget = .default,
   breaker: BudgetBreaker? = nil,
-  transport: (any TelegramTransport)? = nil
+  transport: (any TelegramTransport)? = nil,
+  now: @escaping @Sendable () -> Date = { Date() }
 ) throws -> Env {
   let queue = try ClawDatabase.makeInMemoryQueue()
   try ClawDatabase.migrate(queue)
@@ -319,6 +321,7 @@ private func makeEnv(
     notifyOutbox: {},
     breaker: breaker,
     transport: transport,
+    now: now,
     logger: TestLog.silent
   )
 
@@ -335,13 +338,13 @@ private func makeEnv(
   )
 }
 
-private func latestRunState(_ queue: DatabaseQueue) throws -> String? {
+func latestRunState(_ queue: DatabaseQueue) throws -> String? {
   try queue.read { db in
     try String.fetchOne(db, sql: "SELECT state FROM runs ORDER BY id DESC LIMIT 1")
   }
 }
 
-private func okResponse(content: String) -> ChatResponse {
+func okResponse(content: String) -> ChatResponse {
   ChatResponse(
     content: content,
     finishReason: "stop",

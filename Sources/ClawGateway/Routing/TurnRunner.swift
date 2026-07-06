@@ -34,6 +34,10 @@ public struct TurnRunner: TurnDispatching {
   /// exercise the breaker (the DM is best-effort and out-of-band from the durable outbox, D4).
   private let breaker: BudgetBreaker?
   private let transport: (any TelegramTransport)?
+  /// The turn's clock. Sourcing the budget "today" window from an injected now (defaulting to the
+  /// real clock) keeps the proactive/global daily-spend boundary deterministic under test — the
+  /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
+  private let now: @Sendable () -> Date
   private let logger: Logger
 
   /// Most-recent messages pulled for context; `ContextBuilder` then caps by grapheme budget (§9).
@@ -51,6 +55,7 @@ public struct TurnRunner: TurnDispatching {
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     transport: (any TelegramTransport)? = nil,
+    now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
     self.sessionMessages = sessionMessages
@@ -64,6 +69,7 @@ public struct TurnRunner: TurnDispatching {
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.transport = transport
+    self.now = now
     self.logger = logger
   }
 
@@ -78,7 +84,7 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let now = Date()
+    let now = now()
     guard let origin = try runs.pickUp(runId: runId, now: now) else {
       logger.debug("run \(runId) was not pending at pickup; skipping turn")
       return
