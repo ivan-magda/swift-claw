@@ -124,7 +124,7 @@ public struct MessageRouter: Sendable {
           message: message,
           command: memoryCommand
         )
-      case .schedule, .pause, .resume, .runNow, .cancelJob:
+      case .schedule, .pause, .resume, .runNow, .cancelJob, .help:
         guard isAllowed else {
           return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
         }
@@ -390,9 +390,11 @@ extension MessageRouter {
     )
   }
 
-  /// Fans the allowlisted scheduling family out to its per-verb handler. The `isAllowed` gate is
-  /// applied once by the caller for the whole family; `default` is unreachable — only the schedule
-  /// create/list command and the four management verbs route here.
+  /// Fans the allowlisted scheduling family — plus `/help`, which shares the identical
+  /// owner-only `isAllowed` gate and has no state of its own to warrant a standalone arm in
+  /// `handle` — out to its per-verb handler. The `isAllowed` gate is applied once by the caller
+  /// for the whole family; `default` is unreachable — only the schedule create/list command,
+  /// the four management verbs, and `/help` route here.
   private func handleScheduleCommand(
     _ command: Command,
     rawUpdate: RawUpdate,
@@ -411,6 +413,12 @@ extension MessageRouter {
       return await handleRunNow(rawUpdate: rawUpdate, message: message, jobId: jobId)
     case .cancelJob(let jobId):
       return await handleCancelJob(rawUpdate: rawUpdate, message: message, jobId: jobId)
+    case .help:
+      return await sendCanned(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: CommandReplies.help
+      )
     default:
       logger.error("non-schedule command \(command) reached handleScheduleCommand")
       return .skipped

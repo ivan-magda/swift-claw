@@ -116,4 +116,11 @@ import Testing
         == .plain("Cancel that idea")
     )
   }
+
+  @Test func helpParses() {
+    // given / when / then
+    #expect(Command.parse("/help", botUsername: "claw_bot") == .help)
+    #expect(Command.parse("/HELP@CLAW_BOT", botUsername: "claw_bot") == .help)
+    #expect(Command.parse("please /help me", botUsername: "claw_bot") == .plain("please /help me"))
+  }
 }

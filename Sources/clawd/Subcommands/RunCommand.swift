@@ -404,6 +404,12 @@ struct RunCommand: AsyncParsableCommand {
             BotMenuCommand(command: "stop", description: "Stop the current run."),
             BotMenuCommand(command: "remember", description: "Save a memory."),
             BotMenuCommand(command: "memory", description: "Review saved memories."),
+            BotMenuCommand(command: "schedule", description: "Create or list schedules."),
+            BotMenuCommand(command: "pause", description: "Pause a schedule."),
+            BotMenuCommand(command: "resume", description: "Resume a paused schedule."),
+            BotMenuCommand(command: "runnow", description: "Run a schedule immediately."),
+            BotMenuCommand(command: "cancel", description: "Cancel a schedule."),
+            BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
           ]
         )
       } catch {

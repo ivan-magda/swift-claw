@@ -13,6 +13,7 @@ public enum Command: Sendable, Equatable {
   case resume(jobId: Int64?)
   case runNow(jobId: Int64?)
   case cancelJob(jobId: Int64?)
+  case help
   case plain(String)
 
   public static func parse(_ text: String, botUsername: String?) -> Command {
@@ -69,6 +70,8 @@ public enum Command: Sendable, Equatable {
       return .runNow(jobId: jobId(from: arguments))
     case "cancel":
       return .cancelJob(jobId: jobId(from: arguments))
+    case "help":
+      return .help
     default:
       return .plain(text)
     }
