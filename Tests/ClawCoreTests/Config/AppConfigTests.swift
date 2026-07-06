@@ -224,4 +224,99 @@ import Testing
       try AppConfig.load(environment: env)
     }
   }
+
+  @Test func schedulerAndHeartbeatDefaultsArePinned() throws {
+    // given — none of the eight Inc 4 keys set
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — spec §13 defaults
+    #expect(config.timezone == TimeZone.current)
+    #expect(config.schedCatchUpMaxAgeMinutes == 30)
+    #expect(config.schedMinIntervalMinutes == 5)
+    #expect(config.proactivePerDayUSD == 2.00)
+    #expect(config.heartbeatEnabled == false)
+    #expect(config.heartbeatIntervalMinutes == 60)
+    #expect(config.heartbeatQuietHours == QuietHours.parse("22:00-09:00"))
+    #expect(config.heartbeatMaxPerDay == 8)
+  }
+
+  @Test func schedulerOverridesParse() throws {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.timezone] = "Europe/Berlin"
+    env[EnvKey.schedCatchUpMaxAgeMinutes] = "45"
+    env[EnvKey.schedMinIntervalMinutes] = "10"
+    env[EnvKey.proactivePerDayUSD] = "1.50"
+    env[EnvKey.heartbeatEnabled] = "true"
+    env[EnvKey.heartbeatIntervalMinutes] = "30"
+    env[EnvKey.heartbeatQuietHours] = "23:30-06:15"
+    env[EnvKey.heartbeatMaxPerDay] = "4"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.timezone.identifier == "Europe/Berlin")
+    #expect(config.schedCatchUpMaxAgeMinutes == 45)
+    #expect(config.schedMinIntervalMinutes == 10)
+    #expect(config.proactivePerDayUSD == 1.50)
+    #expect(config.heartbeatEnabled)
+    #expect(config.heartbeatIntervalMinutes == 30)
+    #expect(config.heartbeatQuietHours.rendered == "23:30-06:15")
+    #expect(config.heartbeatMaxPerDay == 4)
+  }
+
+  @Test func invalidTimezoneFailsClosed() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.timezone] = "Mars/Olympus_Mons"
+
+    // when / then
+    #expect(throws: ConfigError.invalidTimezone("Mars/Olympus_Mons")) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func zeroWidthQuietHoursFailClosed() {
+    // given — the OpenClaw always-skipped footgun is a config ERROR here (spec §12)
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.heartbeatQuietHours] = "22:00-22:00"
+
+    // when / then
+    #expect(throws: ConfigError.invalidQuietHours("22:00-22:00")) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test(arguments: [
+    (key: AppConfig.EnvKey.schedCatchUpMaxAgeMinutes, value: "0"),
+    (key: AppConfig.EnvKey.schedMinIntervalMinutes, value: "0"),
+    (key: AppConfig.EnvKey.heartbeatIntervalMinutes, value: "14"),  // floor is 15 (spec §13)
+    (key: AppConfig.EnvKey.heartbeatMaxPerDay, value: "0"),
+    (key: AppConfig.EnvKey.schedCatchUpMaxAgeMinutes, value: "soon"),
+  ])
+  func outOfRangeSchedulingValuesFailClosed(_ fixture: (key: String, value: String)) {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[fixture.key] = fixture.value
+
+    // when / then
+    #expect(throws: ConfigError.invalidScheduling(key: fixture.key, value: fixture.value)) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func nonPositiveProactiveBudgetFailsClosed() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.proactivePerDayUSD] = "0"
+
+    // when / then — reuses the budget-value vocabulary (it IS a budget knob)
+    #expect(throws: ConfigError.invalidBudget("0")) {
+      try AppConfig.load(environment: env)
+    }
+  }
 }

@@ -16,6 +16,14 @@ public struct AppConfig: Sendable, Equatable {
     static let dayTokenCeiling = "CLAW_DAY_TOKEN_CEILING"
     static let maxTurns = "CLAW_MAX_TURNS"
     static let maxToolCalls = "CLAW_MAX_TOOL_CALLS"
+    static let timezone = "CLAW_TIMEZONE"
+    static let schedCatchUpMaxAgeMinutes = "CLAW_SCHED_CATCHUP_MAX_AGE_MINUTES"
+    static let schedMinIntervalMinutes = "CLAW_SCHED_MIN_INTERVAL_MINUTES"
+    static let proactivePerDayUSD = "CLAW_PROACTIVE_PER_DAY_USD"
+    static let heartbeatEnabled = "CLAW_HEARTBEAT_ENABLED"
+    static let heartbeatIntervalMinutes = "CLAW_HEARTBEAT_INTERVAL_MINUTES"
+    static let heartbeatQuietHours = "CLAW_HEARTBEAT_QUIET_HOURS"
+    static let heartbeatMaxPerDay = "CLAW_HEARTBEAT_MAX_PER_DAY"
   }
 
   private enum EnvDefaults {
@@ -25,6 +33,12 @@ public struct AppConfig: Sendable, Equatable {
     static let maxOutputTokens = 4096
     static let retryBudget = 3
     static let requestTimeoutSeconds = 180
+    static let schedCatchUpMaxAgeMinutes = 30
+    static let schedMinIntervalMinutes = 5
+    static let proactivePerDayUSD = 2.00
+    static let heartbeatIntervalMinutes = 60
+    static let heartbeatQuietHours = "22:00-09:00"
+    static let heartbeatMaxPerDay = 8
   }
 
   private static let stateRootPermissions = 0o700
@@ -34,19 +48,43 @@ public struct AppConfig: Sendable, Equatable {
   public let pollTimeoutSeconds: Int
   public let llm: LLMConfig
   public let budget: RunBudget
+  public let timezone: TimeZone
+  public let schedCatchUpMaxAgeMinutes: Int
+  public let schedMinIntervalMinutes: Int
+  public let proactivePerDayUSD: Double
+  public let heartbeatEnabled: Bool
+  public let heartbeatIntervalMinutes: Int
+  public let heartbeatQuietHours: QuietHours
+  public let heartbeatMaxPerDay: Int
 
   public init(
     allowlist: Set<Int64>,
     stateRoot: URL,
     pollTimeoutSeconds: Int,
     llm: LLMConfig,
-    budget: RunBudget
+    budget: RunBudget,
+    timezone: TimeZone,
+    schedCatchUpMaxAgeMinutes: Int,
+    schedMinIntervalMinutes: Int,
+    proactivePerDayUSD: Double,
+    heartbeatEnabled: Bool,
+    heartbeatIntervalMinutes: Int,
+    heartbeatQuietHours: QuietHours,
+    heartbeatMaxPerDay: Int
   ) {
     self.allowlist = allowlist
     self.stateRoot = stateRoot
     self.pollTimeoutSeconds = pollTimeoutSeconds
     self.llm = llm
     self.budget = budget
+    self.timezone = timezone
+    self.schedCatchUpMaxAgeMinutes = schedCatchUpMaxAgeMinutes
+    self.schedMinIntervalMinutes = schedMinIntervalMinutes
+    self.proactivePerDayUSD = proactivePerDayUSD
+    self.heartbeatEnabled = heartbeatEnabled
+    self.heartbeatIntervalMinutes = heartbeatIntervalMinutes
+    self.heartbeatQuietHours = heartbeatQuietHours
+    self.heartbeatMaxPerDay = heartbeatMaxPerDay
   }
 
   /// Loads and validates non-secret config from the environment. Secrets (the bot token / LLM key)
@@ -59,13 +97,56 @@ public struct AppConfig: Sendable, Equatable {
       env[EnvKey.pollTimeout].flatMap(Int.init) ?? EnvDefaults.pollTimeoutSeconds
     let llm = try parseLLMConfig(from: env)
     let budget = try parseBudget(from: env, llm: llm)
+    let timezone = try parseTimezone(from: env[EnvKey.timezone])
+    let schedCatchUpMaxAgeMinutes = try boundedInt(
+      env[EnvKey.schedCatchUpMaxAgeMinutes],
+      key: EnvKey.schedCatchUpMaxAgeMinutes,
+      default: EnvDefaults.schedCatchUpMaxAgeMinutes,
+      minimum: 1
+    )
+    let schedMinIntervalMinutes = try boundedInt(
+      env[EnvKey.schedMinIntervalMinutes],
+      key: EnvKey.schedMinIntervalMinutes,
+      default: EnvDefaults.schedMinIntervalMinutes,
+      minimum: 1
+    )
+    let proactivePerDayUSD = try positiveBudgetDouble(
+      env[EnvKey.proactivePerDayUSD],
+      default: EnvDefaults.proactivePerDayUSD
+    )
+    let heartbeatEnabled = try boolValue(
+      env[EnvKey.heartbeatEnabled],
+      key: EnvKey.heartbeatEnabled,
+      default: false
+    )
+    let heartbeatIntervalMinutes = try boundedInt(
+      env[EnvKey.heartbeatIntervalMinutes],
+      key: EnvKey.heartbeatIntervalMinutes,
+      default: EnvDefaults.heartbeatIntervalMinutes,
+      minimum: 15
+    )
+    let heartbeatQuietHours = try parseQuietHours(from: env[EnvKey.heartbeatQuietHours])
+    let heartbeatMaxPerDay = try boundedInt(
+      env[EnvKey.heartbeatMaxPerDay],
+      key: EnvKey.heartbeatMaxPerDay,
+      default: EnvDefaults.heartbeatMaxPerDay,
+      minimum: 1
+    )
 
     return AppConfig(
       allowlist: allowlist,
       stateRoot: stateRoot,
       pollTimeoutSeconds: pollTimeoutSeconds,
       llm: llm,
-      budget: budget
+      budget: budget,
+      timezone: timezone,
+      schedCatchUpMaxAgeMinutes: schedCatchUpMaxAgeMinutes,
+      schedMinIntervalMinutes: schedMinIntervalMinutes,
+      proactivePerDayUSD: proactivePerDayUSD,
+      heartbeatEnabled: heartbeatEnabled,
+      heartbeatIntervalMinutes: heartbeatIntervalMinutes,
+      heartbeatQuietHours: heartbeatQuietHours,
+      heartbeatMaxPerDay: heartbeatMaxPerDay
     )
   }
 
@@ -193,6 +274,57 @@ public struct AppConfig: Sendable, Equatable {
     return value
   }
 
+  /// The scheduling timezone: absent/blank falls back to the host's current zone; a present
+  /// value must resolve via `TimeZone(identifier:)`, else fail-closed.
+  private static func parseTimezone(from raw: String?) throws -> TimeZone {
+    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
+    guard !trimmed.isEmpty else {
+      return TimeZone.current
+    }
+
+    guard let zone = TimeZone(identifier: trimmed) else {
+      throw ConfigError.invalidTimezone(trimmed)
+    }
+
+    return zone
+  }
+
+  /// An `Int` override with a lower bound: `fallback` when absent/blank, else
+  /// `invalidScheduling` on a non-numeric or below-minimum value.
+  private static func boundedInt(
+    _ raw: String?,
+    key: String,
+    default fallback: Int,
+    minimum: Int
+  ) throws -> Int {
+    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
+    guard !trimmed.isEmpty else {
+      return fallback
+    }
+
+    guard let value = Int(trimmed), value >= minimum else {
+      throw ConfigError.invalidScheduling(key: key, value: trimmed)
+    }
+
+    return value
+  }
+
+  private static func parseQuietHours(from raw: String?) throws -> QuietHours {
+    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
+    guard !trimmed.isEmpty else {
+      guard let fallback = QuietHours.parse(EnvDefaults.heartbeatQuietHours) else {
+        throw ConfigError.invalidQuietHours(EnvDefaults.heartbeatQuietHours)
+      }
+      return fallback
+    }
+
+    guard let window = QuietHours.parse(trimmed) else {
+      throw ConfigError.invalidQuietHours(trimmed)
+    }
+
+    return window
+  }
+
   private static func boolValue(
     _ raw: String?,
     key: String,
@@ -258,5 +390,77 @@ public struct AppConfig: Sendable, Equatable {
     }
 
     return stateRootURL
+  }
+}
+
+/// A daily suppression window in minutes-of-day, evaluated in a caller-supplied timezone.
+/// The window is half-open `[start, end)` and may cross midnight (e.g. 22:00-09:00).
+/// `start == end` is rejected at parse: a zero-width window would silently mean "never quiet"
+/// or "always quiet" depending on reading — spec §12 makes it a config error instead.
+public struct QuietHours: Sendable, Equatable {
+  public let startMinuteOfDay: Int
+  public let endMinuteOfDay: Int
+
+  public init(startMinuteOfDay: Int, endMinuteOfDay: Int) {
+    self.startMinuteOfDay = startMinuteOfDay
+    self.endMinuteOfDay = endMinuteOfDay
+  }
+
+  /// Parses `"HH:MM-HH:MM"`; nil on malformed input or a zero-width window.
+  public static func parse(_ raw: String) -> QuietHours? {
+    let parts = raw.split(separator: "-", omittingEmptySubsequences: false)
+    guard
+      parts.count == 2,
+      let start = minuteOfDay(String(parts[0])),
+      let end = minuteOfDay(String(parts[1])),
+      start != end
+    else {
+      return nil
+    }
+
+    return QuietHours(startMinuteOfDay: start, endMinuteOfDay: end)
+  }
+
+  public func contains(_ instant: Date, timezone: TimeZone) -> Bool {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = timezone
+    let components = calendar.dateComponents([.hour, .minute], from: instant)
+    let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+
+    if startMinuteOfDay < endMinuteOfDay {
+      return minute >= startMinuteOfDay && minute < endMinuteOfDay
+    }
+    // Midnight-crossing window: quiet from start until midnight, then until end.
+    return minute >= startMinuteOfDay || minute < endMinuteOfDay
+  }
+
+  public var rendered: String {
+    String(
+      format: "%02d:%02d-%02d:%02d",
+      startMinuteOfDay / 60,
+      startMinuteOfDay % 60,
+      endMinuteOfDay / 60,
+      endMinuteOfDay % 60
+    )
+  }
+
+  private static func minuteOfDay(_ text: String) -> Int? {
+    // Fail-closed HH:MM grammar (spec §13): exactly two ASCII digits per field. "9:00",
+    // "09:0", and "+09:00" are config ERRORS — `Int(_:)` alone would accept all three.
+    let pieces = text.split(separator: ":", omittingEmptySubsequences: false)
+    guard
+      pieces.count == 2,
+      pieces[0].count == 2,
+      pieces[1].count == 2,
+      pieces.allSatisfy({ piece in piece.allSatisfy { char in char.isASCII && char.isNumber } }),
+      let hour = Int(pieces[0]),
+      let minute = Int(pieces[1]),
+      (0...23).contains(hour),
+      (0...59).contains(minute)
+    else {
+      return nil
+    }
+
+    return hour * 60 + minute
   }
 }

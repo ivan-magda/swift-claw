@@ -38,6 +38,22 @@ struct DoctorCommand: AsyncParsableCommand {
     report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)")
     if checkConfig {
       report.add(key: "llm.streaming", value: config.llm.streamingEnabled ? "on" : "off")
+      report.add(key: "sched.timezone", value: config.timezone.identifier)
+      report.add(key: "sched.catchup_max_age_min", value: "\(config.schedCatchUpMaxAgeMinutes)")
+      report.add(key: "sched.min_interval_min", value: "\(config.schedMinIntervalMinutes)")
+      // Warn-not-fail (spec §13): a proactive cap at/above the global cap is legal but inert —
+      // the household kill-switch dominates.
+      let proactiveNote =
+        config.proactivePerDayUSD >= config.budget.perDayUSD
+        ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
+      report.add(
+        key: "spend.proactive_per_day_usd",
+        value: String(format: "%.2f", config.proactivePerDayUSD) + proactiveNote
+      )
+      report.add(key: "heartbeat.enabled", value: config.heartbeatEnabled ? "on" : "off")
+      report.add(key: "heartbeat.interval_min", value: "\(config.heartbeatIntervalMinutes)")
+      report.add(key: "heartbeat.quiet_hours", value: config.heartbeatQuietHours.rendered)
+      report.add(key: "heartbeat.max_per_day", value: "\(config.heartbeatMaxPerDay)")
     }
 
     let secretsRow = SecretStoreResolver.doctorRow(
