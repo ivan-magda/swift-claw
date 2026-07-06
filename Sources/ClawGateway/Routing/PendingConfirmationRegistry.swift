@@ -5,6 +5,7 @@ public enum PendingConfirmation: Sendable, Equatable {
   case rememberWrite(MemoryWriteRequest)
   case deleteItem(id: Int64)
   case toolApproval(ToolApprovalRequest)
+  case scheduleArm(ValidatedSchedule)
 }
 
 public actor PendingConfirmationRegistry {

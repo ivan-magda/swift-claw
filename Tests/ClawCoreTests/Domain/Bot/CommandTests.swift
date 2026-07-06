@@ -61,4 +61,66 @@ import Testing
     // then
     #expect(command == .plain(text))
   }
+
+  @Test(arguments: [
+    ("/schedule", Command.schedule(.list)),
+    ("/schedule list", .schedule(.list)),
+    ("/schedule LIST", .schedule(.list)),
+    ("/SCHEDULE@CLAW_BOT list", .schedule(.list)),
+    (
+      "/schedule every weekday at 07:00 — summarize my unread items",
+      .schedule(.create(text: "every weekday at 07:00 — summarize my unread items"))
+    ),
+  ])
+  func scheduleCommandParses(text: String, expected: Command) {
+    // given
+    let botUsername = "claw_bot"
+
+    // when
+    let command = Command.parse(text, botUsername: botUsername)
+
+    // then
+    #expect(command == expected)
+  }
+
+  @Test(arguments: [
+    ("/pause 3", Command.pause(jobId: 3)),
+    ("/pause", .pause(jobId: nil)),
+    ("/pause abc", .pause(jobId: nil)),
+    ("/pause -2", .pause(jobId: nil)),
+    ("/resume 3", .resume(jobId: 3)),
+    ("/resume", .resume(jobId: nil)),
+    ("/runnow 12", .runNow(jobId: 12)),
+    ("/RUNNOW@CLAW_BOT 12", .runNow(jobId: 12)),
+    ("/cancel 3", .cancelJob(jobId: 3)),
+    ("/cancel", .cancelJob(jobId: nil)),
+    ("/cancel three", .cancelJob(jobId: nil)),
+  ])
+  func verbCommandsParse(text: String, expected: Command) {
+    // given
+    let botUsername = "claw_bot"
+
+    // when
+    let command = Command.parse(text, botUsername: botUsername)
+
+    // then
+    #expect(command == expected)
+  }
+
+  @Test func plainCancelWordStaysPlainText() {
+    // given / when / then — slash-first parsing: only "/cancel" is the verb; the bare word
+    // keeps its confirmation-rejection meaning (spec §9)
+    #expect(Command.parse("cancel", botUsername: "claw_bot") == .plain("cancel"))
+    #expect(
+      Command.parse("Cancel that idea", botUsername: "claw_bot")
+        == .plain("Cancel that idea")
+    )
+  }
+
+  @Test func helpParses() {
+    // given / when / then
+    #expect(Command.parse("/help", botUsername: "claw_bot") == .help)
+    #expect(Command.parse("/HELP@CLAW_BOT", botUsername: "claw_bot") == .help)
+    #expect(Command.parse("please /help me", botUsername: "claw_bot") == .plain("please /help me"))
+  }
 }

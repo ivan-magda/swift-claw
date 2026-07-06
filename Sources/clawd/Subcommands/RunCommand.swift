@@ -166,6 +166,15 @@ struct RunCommand: AsyncParsableCommand {
     let lanes = SessionLaneRegistry()
     let pendingConfirmations = PendingConfirmationRegistry()
 
+    // Hoisted so the schedule draft parser and the agent share one provider instance.
+    let provider = OpenAICompatibleProvider(
+      config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
+      http: executor,
+      sleep: { try await Task.sleep(for: .seconds($0)) },
+      jitter: { Double.random(in: 0...$0) },
+      logger: logger
+    )
+
     let workspace = FileSystemWorkspace(
       root: config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
     )
@@ -177,7 +186,7 @@ struct RunCommand: AsyncParsableCommand {
     let agent = makeAgent(
       config: config,
       secrets: secrets,
-      executor: executor,
+      provider: provider,
       transport: transport,
       stores: stores,
       toolDispatcher: toolDispatcher,
@@ -219,6 +228,16 @@ struct RunCommand: AsyncParsableCommand {
       transport: transport,
       logger: logger
     )
+    let scheduleSurface = ScheduleSurface(
+      parser: ScheduleDraftParser(provider: provider, model: config.llm.model),
+      validator: ScheduleDraftValidator(
+        minIntervalMinutes: config.schedMinIntervalMinutes,
+        defaultTimezone: config.timezone
+      ),
+      calculator: OccurrenceCalculator(),
+      jobs: stores.scheduledJobs,
+      commands: stores.scheduleCommands
+    )
     let router = MessageRouter(
       processed: stores.processed,
       sessionMessages: stores.sessionMessages,
@@ -231,6 +250,7 @@ struct RunCommand: AsyncParsableCommand {
       transport: transport,
       turnRunner: turnRunner,
       lanes: lanes,
+      schedule: scheduleSurface,
       logger: logger
     )
     let poller = TelegramPollerService(
@@ -324,20 +344,12 @@ struct RunCommand: AsyncParsableCommand {
   private func makeAgent(
     config: AppConfig,
     secrets: Secrets,
-    executor: AsyncHTTPExecutor,
+    provider: OpenAICompatibleProvider,
     transport: TelegramClient,
     stores: ClawStores,
     toolDispatcher: GatedToolDispatcher,
     logger: Logger
   ) -> AgentRuntime {
-    let provider = OpenAICompatibleProvider(
-      config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
-      http: executor,
-      sleep: { try await Task.sleep(for: .seconds($0)) },
-      jitter: { Double.random(in: 0...$0) },
-      logger: logger
-    )
-
     let costResolver = CostResolver(
       priceTable: PriceFileLoader.load(),
       referenceUSDPerToken: config.budget.referenceUSDPerToken
@@ -392,6 +404,12 @@ struct RunCommand: AsyncParsableCommand {
             BotMenuCommand(command: "stop", description: "Stop the current run."),
             BotMenuCommand(command: "remember", description: "Save a memory."),
             BotMenuCommand(command: "memory", description: "Review saved memories."),
+            BotMenuCommand(command: "schedule", description: "Create or list schedules."),
+            BotMenuCommand(command: "pause", description: "Pause a schedule."),
+            BotMenuCommand(command: "resume", description: "Resume a paused schedule."),
+            BotMenuCommand(command: "runnow", description: "Run a schedule now."),
+            BotMenuCommand(command: "cancel", description: "Cancel a schedule."),
+            BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
           ]
         )
       } catch {

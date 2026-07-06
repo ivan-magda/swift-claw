@@ -362,3 +362,37 @@ func pollUntil<Value>(
     try? await Task.sleep(for: interval)
   }
 }
+
+/// Scripted draft parser: returns results in order (last one sticks), records every owner text.
+actor FakeDraftParser: ScheduleDraftParsing {
+  private var results: [ScheduleDraftParseResult]
+  private(set) var ownerTexts: [String] = []
+
+  init(results: [ScheduleDraftParseResult]) {
+    self.results = results
+  }
+
+  init(result: ScheduleDraftParseResult) {
+    self.init(results: [result])
+  }
+
+  func parse(ownerText: String) async -> ScheduleDraftParseResult {
+    ownerTexts.append(ownerText)
+    guard results.isEmpty == false else {
+      return .unparseable
+    }
+    return results.count == 1 ? results[0] : results.removeFirst()
+  }
+}
+
+/// An inert schedule surface for router tests that never touch `/schedule` — real stores over
+/// the harness's own writer, a parser that can only fail.
+func makeIdleScheduleSurface(writer: any DatabaseWriter) -> ScheduleSurface {
+  ScheduleSurface(
+    parser: FakeDraftParser(result: .unparseable),
+    validator: ScheduleDraftValidator(minIntervalMinutes: 5, defaultTimezone: .gmt),
+    calculator: OccurrenceCalculator(),
+    jobs: ScheduledJobStoreGRDB(writer: writer),
+    commands: ScheduleCommandStoreGRDB(writer: writer)
+  )
+}

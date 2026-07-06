@@ -46,6 +46,7 @@ struct MemoryRoutingHarness {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
       logger: TestLog.silent
     )
 

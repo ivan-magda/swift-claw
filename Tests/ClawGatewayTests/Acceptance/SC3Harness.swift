@@ -225,6 +225,13 @@ func makeSC3Harness(
     transport: transport,
     turnRunner: runner,
     lanes: SessionLaneRegistry(),
+    schedule: ScheduleSurface(
+      parser: FakeDraftParser(result: .unparseable),
+      validator: ScheduleDraftValidator(minIntervalMinutes: 5, defaultTimezone: .gmt),
+      calculator: OccurrenceCalculator(),
+      jobs: stores.scheduledJobs,
+      commands: stores.scheduleCommands
+    ),
     logger: logger
   )
 
