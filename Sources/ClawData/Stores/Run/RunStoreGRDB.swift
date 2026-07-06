@@ -16,10 +16,12 @@ public struct RunStoreGRDB: RunStore {
       }
 
       let rawOrigin =
-        try String.fetchOne(db, sql: "SELECT origin FROM runs WHERE id = ?", arguments: [runId])
-        ?? RunOrigin.interactive.rawValue
-      // Fail closed: an unknown origin (unwritable via the closed enum) runs reduced-privilege,
-      // never interactive.
+        try String.fetchOne(
+          db,
+          sql: "SELECT origin FROM runs WHERE id = ?",
+          arguments: [runId]
+        ) ?? RunOrigin.interactive.rawValue
+
       return RunOrigin(rawValue: rawOrigin) ?? .scheduled
     }
   }
