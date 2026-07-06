@@ -56,7 +56,7 @@ public struct SchedulerService: Service {
         do {
           try await sleep(Self.tickInterval)
         } catch {
-          break  // cancellation unwinds the loop
+          break
         }
       }
     }
@@ -164,8 +164,11 @@ public struct SchedulerService: Service {
           anchor: due,
           after: due.addingTimeInterval(-1),
           limit: Self.misfireCountLimit
-        ).filter { occurrence in occurrence <= tickTime }.count
+        ).filter { occurrence in
+          occurrence <= tickTime
+        }.count
       } ?? 1
+
     _ = try jobs.skipMisfire(
       jobId: job.id,
       due: due,
@@ -199,7 +202,9 @@ public struct SchedulerService: Service {
   private func enqueue(_ fire: ClaimedFire) async {
     let runner = turns
     let log = logger
+
     let lane = await lanes.actor(for: fire.sessionId)
+
     await lane.enqueue(runId: fire.runId) {
       do {
         try await runner.run(
