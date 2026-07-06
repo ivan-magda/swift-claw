@@ -64,6 +64,39 @@ public enum ScheduleReplies {
     }.joined(separator: "\n")
   }
 
+  public static func notFound(id: Int64) -> String {
+    "No schedule with id \(id). See /schedule list."
+  }
+
+  /// Terminal verb failure after the update was already claimed: nothing changed; re-issue.
+  public static let verbFailed = "Couldn't update the schedule. Nothing changed. Try again."
+
+  public static let pauseUsage = "Usage: /pause <id> — see /schedule list"
+  public static let resumeUsage = "Usage: /resume <id> — see /schedule list"
+  public static let runNowUsage = "Usage: /runnow <id> — see /schedule list"
+  public static let cancelUsage = "Usage: /cancel <id> — see /schedule list"
+
+  public static func paused(job: ScheduledJob) -> String {
+    "Paused schedule \(job.id) · «\(job.label)». Resume with /resume \(job.id)."
+  }
+
+  public static func resumed(job: ScheduledJob) -> String {
+    guard let next = job.nextOccurrence else {
+      return "Resumed schedule \(job.id) · «\(job.label)» — nothing left to fire."
+    }
+    return "Resumed schedule \(job.id) · «\(job.label)» — next fire "
+      + "\(fireTime(next, timezoneId: job.timezone))."
+  }
+
+  public static func cancelled(job: ScheduledJob) -> String {
+    "Cancelled schedule \(job.id) · «\(job.label)». It will not fire again; "
+      + "an in-flight run finishes on its own."
+  }
+
+  public static func runningNow(id: Int64) -> String {
+    "Running schedule \(id) now — the result will arrive like any scheduled delivery."
+  }
+
   /// `yyyy-MM-dd HH:mm` in the given zone — deterministic and locale-free (the ISO8601 format
   /// styles force seconds; owners schedule in minutes).
   static func fireTime(_ date: Date, timezoneId: String) -> String {

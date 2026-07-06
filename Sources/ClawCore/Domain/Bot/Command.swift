@@ -9,6 +9,10 @@ public enum Command: Sendable, Equatable {
   case remember(RememberCommand)
   case memory(MemoryCommand)
   case schedule(ScheduleCommand)
+  case pause(jobId: Int64?)
+  case resume(jobId: Int64?)
+  case runNow(jobId: Int64?)
+  case cancelJob(jobId: Int64?)
   case plain(String)
 
   public static func parse(_ text: String, botUsername: String?) -> Command {
@@ -57,9 +61,26 @@ public enum Command: Sendable, Equatable {
       return .memory(MemoryCommand.parse(arguments: arguments))
     case "schedule":
       return .schedule(ScheduleCommand.parse(arguments: arguments))
+    case "pause":
+      return .pause(jobId: jobId(from: arguments))
+    case "resume":
+      return .resume(jobId: jobId(from: arguments))
+    case "runnow":
+      return .runNow(jobId: jobId(from: arguments))
+    case "cancel":
+      return .cancelJob(jobId: jobId(from: arguments))
     default:
       return .plain(text)
     }
+  }
+
+  /// nil ⇒ missing/invalid argument; the router replies with usage, never guesses.
+  private static func jobId(from arguments: Substring) -> Int64? {
+    let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let id = Int64(trimmed), id > 0 else {
+      return nil
+    }
+    return id
   }
 }
 

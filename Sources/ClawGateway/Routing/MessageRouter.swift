@@ -84,7 +84,8 @@ public struct MessageRouter: Sendable {
 
     switch message.content {
     case .text(let text):
-      switch Command.parse(text, botUsername: botUsername) {
+      let command = Command.parse(text, botUsername: botUsername)
+      switch command {
       case .start:
         // Onboarding stays a direct reply for both tiers: the owner gets the welcome; a stranger
         // gets THEIR own id to request access (never the allowlist, never a turn).
@@ -123,16 +124,11 @@ public struct MessageRouter: Sendable {
           message: message,
           command: memoryCommand
         )
-      case .schedule(let scheduleCommand):
+      case .schedule, .pause, .resume, .runNow, .cancelJob:
         guard isAllowed else {
           return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
         }
-        switch scheduleCommand {
-        case .create(let text):
-          return await handleScheduleCreate(rawUpdate: rawUpdate, message: message, text: text)
-        case .list:
-          return await handleScheduleList(rawUpdate: rawUpdate, chatId: message.chatId)
-        }
+        return await handleScheduleCommand(command, rawUpdate: rawUpdate, message: message)
       case .plain(let plainText):
         guard isAllowed else {
           return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
@@ -394,6 +390,33 @@ extension MessageRouter {
     )
   }
 
+  /// Fans the allowlisted scheduling family out to its per-verb handler. The `isAllowed` gate is
+  /// applied once by the caller for the whole family; `default` is unreachable — only the schedule
+  /// create/list command and the four management verbs route here.
+  private func handleScheduleCommand(
+    _ command: Command,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async -> HandleOutcome {
+    switch command {
+    case .schedule(.create(let text)):
+      return await handleScheduleCreate(rawUpdate: rawUpdate, message: message, text: text)
+    case .schedule(.list):
+      return await handleScheduleList(rawUpdate: rawUpdate, chatId: message.chatId)
+    case .pause(let jobId):
+      return await handlePause(rawUpdate: rawUpdate, message: message, jobId: jobId)
+    case .resume(let jobId):
+      return await handleResume(rawUpdate: rawUpdate, message: message, jobId: jobId)
+    case .runNow(let jobId):
+      return await handleRunNow(rawUpdate: rawUpdate, message: message, jobId: jobId)
+    case .cancelJob(let jobId):
+      return await handleCancelJob(rawUpdate: rawUpdate, message: message, jobId: jobId)
+    default:
+      logger.error("non-schedule command \(command) reached handleScheduleCommand")
+      return .skipped
+    }
+  }
+
   /// `/schedule <text>` (spec §7/§8): claim the update, run the ONE parse call, validate
   /// deterministically, park the validated draft, and send the gateway-authored confirm prompt.
   /// Nothing is armed here; every failure is a plain-language reply and parks nothing.
@@ -513,6 +536,230 @@ extension MessageRouter {
       return nil
     }
     return job.nextOccurrence
+  }
+
+  /// Claims a verb command's update BEFORE its effect, so a redelivered command applies once
+  /// (spec §5.4: /runnow idempotency rides the update_id claim; pause/resume/cancel get the
+  /// same discipline for uniformity). nil ⇒ claimed, proceed; non-nil ⇒ the outcome to return.
+  private func claimVerbUpdate(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome? {
+    do {
+      guard try processed.claimUpdate(updateId: rawUpdate.updateId) else {
+        logger.debug("duplicate update \(rawUpdate.updateId), skipping")
+        return .skipped
+      }
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: chatId)
+    } catch {
+      logger.error("verb claim failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+    return nil
+  }
+
+  private func handlePause(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    jobId: Int64?
+  ) async -> HandleOutcome {
+    guard let jobId else {
+      return await sendCanned(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.pauseUsage
+      )
+    }
+    if let handled = await claimVerbUpdate(rawUpdate: rawUpdate, chatId: message.chatId) {
+      return handled
+    }
+
+    let paused: ScheduledJob?
+    do {
+      paused = try schedule.jobs.pause(id: jobId, now: now())
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("pause failed for update \(rawUpdate.updateId): \(error)")
+      return await sendCommandAck(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.verbFailed
+      )
+    }
+
+    let reply = paused.map(ScheduleReplies.paused) ?? ScheduleReplies.notFound(id: jobId)
+    return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
+  }
+
+  private func handleResume(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    jobId: Int64?
+  ) async -> HandleOutcome {
+    guard let jobId else {
+      return await sendCanned(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.resumeUsage
+      )
+    }
+    if let handled = await claimVerbUpdate(rawUpdate: rawUpdate, chatId: message.chatId) {
+      return handled
+    }
+
+    let resumed: ScheduledJob?
+    do {
+      // The CALLER recomputes next-from-now (preamble contract): occurrences inside the paused
+      // window are skipped, never caught up (§5.4). No race with the ticker: the row is PAUSED
+      // until `resume` commits, and the ticker's scan predicate excludes PAUSED.
+      guard let job = try schedule.jobs.job(id: jobId) else {
+        return await sendCommandAck(
+          rawUpdate: rawUpdate,
+          chatId: message.chatId,
+          text: ScheduleReplies.notFound(id: jobId)
+        )
+      }
+      resumed = try schedule.jobs.resume(
+        id: jobId,
+        nextOccurrence: resumeNextOccurrence(job: job, from: now()),
+        now: now()
+      )
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("resume failed for update \(rawUpdate.updateId): \(error)")
+      return await sendCommandAck(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.verbFailed
+      )
+    }
+
+    let reply = resumed.map(ScheduleReplies.resumed) ?? ScheduleReplies.notFound(id: jobId)
+    return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
+  }
+
+  /// Resume's next fire: recurring ⇒ the calculator's next occurrence after now (anchored at
+  /// the job's createdTs like every other occurrence read); one-shot ⇒ its stored instant if
+  /// still ahead, else nothing left to fire.
+  private func resumeNextOccurrence(job: ScheduledJob, from nowDate: Date) -> Date? {
+    guard
+      let envelope = job.recurrence,
+      let timezone = TimeZone(identifier: job.timezone)
+    else {
+      guard let instant = job.nextOccurrence, instant > nowDate else {
+        return nil
+      }
+      return instant
+    }
+    // Anchor = the stale stored next (pause leaves next_occurrence untouched): the recompute
+    // stays on the armed chain — everyNMinutes keeps its phase — while `after: nowDate` skips
+    // everything inside the paused window (§5.4: pause = "be quiet", never catch up).
+    return schedule.calculator.occurrences(
+      rule: envelope.rule,
+      timezone: timezone,
+      anchor: job.nextOccurrence ?? job.createdTs,
+      after: nowDate,
+      limit: 1
+    ).first
+  }
+
+  private func handleRunNow(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    jobId: Int64?
+  ) async -> HandleOutcome {
+    guard let jobId else {
+      return await sendCanned(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.runNowUsage
+      )
+    }
+    if let handled = await claimVerbUpdate(rawUpdate: rawUpdate, chatId: message.chatId) {
+      return handled
+    }
+
+    let fire: ClaimedFire?
+    do {
+      fire = try schedule.jobs.fireNow(jobId: jobId, now: now())
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("run-now failed for update \(rawUpdate.updateId): \(error)")
+      return await sendCommandAck(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.verbFailed
+      )
+    }
+
+    guard let fire else {
+      return await sendCommandAck(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.notFound(id: jobId)
+      )
+    }
+
+    // Exactly the SchedulerService post-claim enqueue: the fused fireNow already created the
+    // session, trigger message, PENDING run, and jobExecuted audit; the lane gives the run
+    // ordering and cancellability, and `run` may throw only StoreError.diskFull (D1).
+    let lane = await lanes.actor(for: fire.sessionId)
+    await lane.enqueue(runId: fire.runId) { [turnRunner, logger] in
+      do {
+        try await turnRunner.run(
+          runId: fire.runId,
+          sessionId: fire.sessionId,
+          chatId: fire.ownerChatId,
+          triggerMessageId: fire.triggerMessageId,
+          grant: nil
+        )
+      } catch StoreError.diskFull {
+        logger.error("run-now turn \(fire.runId) stopped by storage full after enqueue")
+      } catch {
+        logger.error("run-now turn error (handled in-band) for job \(jobId): \(error)")
+      }
+    }
+
+    return await sendCommandAck(
+      rawUpdate: rawUpdate,
+      chatId: message.chatId,
+      text: ScheduleReplies.runningNow(id: jobId)
+    )
+  }
+
+  private func handleCancelJob(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    jobId: Int64?
+  ) async -> HandleOutcome {
+    guard let jobId else {
+      return await sendCanned(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.cancelUsage
+      )
+    }
+    if let handled = await claimVerbUpdate(rawUpdate: rawUpdate, chatId: message.chatId) {
+      return handled
+    }
+
+    let cancelled: ScheduledJob?
+    do {
+      cancelled = try schedule.jobs.cancel(id: jobId, now: now())
+    } catch StoreError.diskFull {
+      return await storageFull(chatId: message.chatId)
+    } catch {
+      logger.error("cancel failed for update \(rawUpdate.updateId): \(error)")
+      return await sendCommandAck(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        text: ScheduleReplies.verbFailed
+      )
+    }
+
+    let reply = cancelled.map(ScheduleReplies.cancelled) ?? ScheduleReplies.notFound(id: jobId)
+    return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
   }
 
   /// Intercepts plain text while a confirmation is parked for the session. Returns nil when there
