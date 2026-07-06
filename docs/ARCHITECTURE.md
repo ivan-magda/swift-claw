@@ -231,9 +231,11 @@ SchedulerService ticks every 60s
      (not by counting ticks) → robust across sleep/wake clock gaps
        └─ catch-up cap: collapse N missed occurrences into ≤1 delivery (max-age skip)
        └─ confirm-before-arm: a NEW LLM-parsed schedule requires owner confirmation
-       └─ run as a reduced-privilege agent turn (no auto-approval; default-DENY on
-          timeout; may not ingest untrusted web content while holding high-sensitivity
-          memory; own daily spend budget)
+       └─ run as a reduced-privilege agent turn (no auto-approval; default-DENY — in
+          Inc 4, pre-approval-FSM, any would-park approval outcome is an IMMEDIATE
+          audited DENY with no pending state; when Inc 5's FSM lands the same branch
+          becomes park-with-timeout → EXPIRED → DENY; may not ingest untrusted web
+          content while holding high-sensitivity memory; own daily spend budget)
        └─ deliver result to owner's Telegram DM (via outbox)
        └─ AuditLog: create/execute/cancel/failure
   └─ overlap guard: ONE authoritative atomic DB CLAIM (PENDING→RUNNING), not flock.
@@ -294,15 +296,18 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `update_cursor` | 0 | last *confirmed* `lastUpdateId` (advanced last, §6.1) | — |
 | `sessions` | 1 | session key, created/updated, rolling-summary ref, `tainted` | — |
 | `messages` | 1 | role, content (un-redacted by design), session, ts, token counts; provenance marker (trusted/untrusted); **FTS5 external-content index added Inc 3a (not Inc 1)**; **`tool_calls` TEXT (JSON `[ToolCall]`, assistant proposals) and `tool_call_id` TEXT (set iff `role='tool'`), migration `v5`; `role` gains `tool`; tool rows persist with `provenance='untrusted'`** | `messages.run_id → runs.id`, `messages.session_id → sessions.id` |
-| `runs` | 1 | RunState FSM, budgets used, `updated_ts` lease | `runs.session_id → sessions.id` |
+| `runs` | 1 | RunState FSM, budgets used, `updated_ts` lease; **Inc 4: `origin` `'interactive' \| 'scheduled' \| 'heartbeat'` (default `'interactive'` — drives reduced privilege, the proactive budget, and doctor metrics) + nullable `job_id`** | `runs.session_id → sessions.id`, `runs.job_id → scheduled_jobs.id` |
 | `provider_usage` | 1 | model, tokens (incl. cached/uncached where reported), computed USD | `run_id → runs.id`, `session_id → sessions.id` |
 | `outbound_deliveries` | 1 | transactional outbox (§6.4) | `run_id → runs.id` |
 | `audit_events` | 1 | **ordinary append-only** audit (actor, action, tool, args-redacted, result-size, decision, ts) | carries `run_id`, `session_id` |
 | `memory_items` | 3 | type, content, source/provenance, ts, importance, sensitivity (durable facts; `confidence` deferred, `visibility`→`sensitivity` — Inc 3a) | `session_id → sessions.id` (nullable) |
-| `scheduled_jobs` | 4 | owner, recurrence, tz, prompt, status, `last_fired_at`, next-occurrence | — |
+| `scheduled_jobs` | 4 | `owner_chat_id` (set in code at arm time), `label`, `prompt` (owner-authored, trusted, frozen at confirm), `recurrence` (`{"schema_version":1,"rule":<RecurrenceRule JSON>}`; NULL ⇔ one-shot), `timezone` (IANA), materialized `next_occurrence` (advanced only inside the claim; NULL once terminal; partial index `(status, next_occurrence)`), `last_fired_at`, status FSM `ACTIVE\|PAUSED\|COMPLETED\|CANCELLED`, `session_id` (the job's dedicated session `sched:job:<id>`, NULL until first fire), `created_ts`/`updated_ts` | `session_id → sessions.id` |
+| `scheduler_state` | 4 | single row (`id = 1` CHECK): `last_tick_at`, `last_misfire_at`, `last_misfire_skipped_count`, `last_heartbeat_at`, `heartbeat_count_day` (day string in `CLAW_TIMEZONE` — the cap boundary aligns with quiet hours, not UTC), `heartbeat_count`; `due_count` is computed by query, never stored | — |
 | `approvals` | 5 | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, ownerUserId, random callback nonce**, expiry | `approvals.run_id → runs.id` |
 
 `runs.state = AWAITING_APPROVAL` references `approvals.id` as the **one** canonical source of truth for "blocked on approval" (no ambiguous dual flags).
+
+Synthetic session keys (Inc 4): `sched:job:<id>` (one dedicated session per scheduled job, created lazily at first fire) and `sched:heartbeat`. `sessions` carries no chat id — a job run's delivery/notice target is `scheduled_jobs.owner_chat_id`; the heartbeat's is the config-resolved owner DM. `SessionKey.chatId(from:)` returns nil for both by design, so boot reconciliation resolves crashed-run owner notices for job runs via `scheduled_jobs.owner_chat_id` and for heartbeat runs via the config-derived target passed in at boot (§6.3, spec §5.2/§12).
 
 ### 7.2 Audit (Inc 1) — ordinary append-only, NOT tamper-evident
 
@@ -456,9 +461,9 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 ## 14. Scheduler architecture (Inc 4)
 
 - **`Calendar.RecurrenceRule`** (in-toolchain, DST/TZ-correct, `Sendable`/`Codable`) + a ~150-line custom 60s ticker.
-- Jobs persisted in `scheduled_jobs`; **fire-once-per-occurrence**; **one authoritative overlap guard = atomic DB CLAIM (PENDING→RUNNING)**, not flock. Due-time computed against **wall clock** (clock-gap-robust), with a catch-up cap (§6.3).
-- Scheduled runs are **reduced-privilege** agent runs (confirm-before-arm, no auto-approval, default-DENY on timeout, own daily budget); delivery routed to the owner's DM via the outbox; audit on create/execute/cancel/fail. NL → schedule via an LLM parse step that requires owner confirmation. Attack-case to test: a self-scheduling injection cannot create a recurring fetch-and-follow C2 loop.
-- `getUpdates` socket/read timeout + reconnect-on-wake behavior is specified; doctor exposes `last_tick_at`.
+- Jobs persisted in `scheduled_jobs`; **fire-once-per-occurrence**; **one authoritative overlap guard = atomic DB CLAIM (PENDING→RUNNING)**, not flock. Due-time computed against **wall clock** (clock-gap-robust), with a catch-up cap (§6.3). (Reconciliation, Inc 4: the research corpus suggests actor-lock *plus* flock as overlap guards — rejected; the atomic claim is the ONE guard, and the §4 startup flock already covers the second-process case.)
+- Scheduled runs are **reduced-privilege** agent runs (confirm-before-arm, no auto-approval, default-DENY — in Inc 4 (pre-approval-FSM) an immediate audited DENY with no pending state; with Inc 5's FSM the same branch becomes park-with-timeout → EXPIRED → DENY — own daily budget); delivery routed to the owner's DM via the outbox; audit on create/execute/cancel/fail. NL → schedule via an LLM parse step that requires owner confirmation. Attack-case to test: a self-scheduling injection cannot create a recurring fetch-and-follow C2 loop.
+- `getUpdates` recovery is pinned: socket read timeout = long-poll timeout + 10 s; backoff-reconnect on timeout/network error. Scheduler-side gap recovery is lateness-based (§6.3's catch-up table) — no wake detection. Doctor exposes `last_tick_at`.
 
 ## 15. Configuration & secrets
 
@@ -488,7 +493,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 ## 17. Deployment & portability
 
-- **Build:** SwiftPM; macOS native binary; **Static Linux SDK** (musl) cross-compiled from the Mac for a single fully-static Linux binary; **distroless/scratch** image (CA certs + tzdata). Escape hatch: `swift-sdk-generator` (glibc) if a dep needs WebSockets/newer TLS/glibc-only C libs.
+- **Build:** SwiftPM (**platform floor macOS 15** — `Calendar.RecurrenceRule` requires it, Inc 4/§14; verified on-toolchain, Linux availability re-validated at the Inc 6 gate); macOS native binary; **Static Linux SDK** (musl) cross-compiled from the Mac for a single fully-static Linux binary; **distroless/scratch** image (CA certs + tzdata). Escape hatch: `swift-sdk-generator` (glibc) if a dep needs WebSockets/newer TLS/glibc-only C libs.
 - **Portability is a soft guideline through Inc 0–5** with **one hard gate at Inc 6**: the CI Linux build (incl. GRDB + FTS5) must pass before release. Portable protocol seams + AsyncHTTPClient/OpenAI-compat choices are kept throughout; pragmatic macOS-native code is permitted behind a protocol or flagged for the Inc-6 audit.
 - **Supervise:** launchd plist (macOS) / systemd unit (Linux), with throttling (§4). Logs to stdout/stderr.
 - **CI:** a Linux build gates releases (catches target-only cross-compile issues) and includes a **GRDB + FTS5 job**.
@@ -506,7 +511,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 | HTTP/SSE | AsyncHTTPClient + small SSE parser (**streaming in v1**) | URLSession can't stream SSE on Linux | — | Low |
 | Sandbox | `apple/container` (macOS) + microVM/Podman (Linux) behind `ExecutionBackend` [Inc 5] | hardware-virt boundary for untrusted code | colima (weaker, older-macOS) | Med |
 | Secrets | `SecretStore` over sops+age + swift-crypto | daemon can't use macOS Keychain; portable | 0600 env file (dev) | Low |
-| Scheduling | `Calendar.RecurrenceRule` + custom ticker/store [Inc 4] | in-toolchain, DST-correct | SwifCron (vendored) | Low |
+| Scheduling | `Calendar.RecurrenceRule` + custom ticker/store [Inc 4]; **raises the platform floor to macOS 15** | in-toolchain, DST-correct; Codable round-trip + DST suite pinned as toolchain-drift tripwires | SwifCron (vendored) | Low |
 | Concurrency | std-lib actors + stored `currentTurn` Task handle (await-to-order, cancel-to-supersede) | per-session lanes without an external queue lib | `dfed/swift-async-queue` (escape hatch only) | Low |
 | Config files | YAML for SKILL.md frontmatter via Yams | maintained YAML parser | — | Low |
 | Deployment | Static Linux SDK → distroless; launchd + systemd | one static binary, runs anywhere | swift-sdk-generator (glibc) | Low |
@@ -566,7 +571,7 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 | **1** | LLM turn (blocking) + persistence | Allowlisted DM gets a real OpenAI-compatible answer, persisted (sessions/messages/runs/usage/audit + **outbox** + **`claimUpdate` ordering**), multi-turn, surviving restart; **`sendRichMessage` (markdown) + plain `sendMessage` fallback** (no formatting errors); **degradation UX**; **USD budget** breaker; context caps. |
 | **2** | Streaming + per-session lane | **SSE → `sendRichMessageDraft` (streaming rich drafts, finalized via `sendRichMessage`)**; per-session **Task-chaining** lane; a second message queues in order; `/stop` cancels; `/new` resets+detaints; `SecretStore` (no plaintext on disk). |
 | **3** | Memory & workspace + read-only tools | Workspace files injected at the **untrusted tier** (budgeted, caps, flush-before-compact); durable facts on confirm; `memory_items` + **FTS5 recall** across restarts; `/memory`; `web_search`/`web_fetch` + file READ at **`safe`** tier with the **exfil gate**. |
-| **4** | Scheduler & proactive | "Every weekday 07:00 Europe/Berlin…" fires once per occurrence across restarts/DST; **confirm-before-arm**; reduced-privilege runs; clock-gap catch-up cap; delivery via outbox; opt-in heartbeat with quiet hours. |
+| **4** | Scheduler & proactive | "Every weekday 07:00 Europe/Berlin…" fires once per occurrence across restarts/DST; **confirm-before-arm**; reduced-privilege runs; clock-gap catch-up cap; delivery via outbox; opt-in heartbeat with quiet hours. *(Scope reconciliation: the external research roadmap bundles memory/workspace into its "Increment 4" — this repo shipped those in Inc 3a; this increment is scheduler/proactive only.)* |
 | **5** | Write/shell tools + policy + approvals + sandbox | A consequential tool requires explicit approval (**callback auth + ≥128-bit nonce + FSM**); a **forged or third-party callback cannot approve**; untrusted code runs in a per-exec disposable VM (no host FS/network by default); the **enforced lethal-trifecta gate** forces approval on a tainted privileged action. |
 | **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (static SDK, distroless, systemd); **CI Linux build incl. GRDB+FTS5 passes** (the one hard portability gate). |
 
