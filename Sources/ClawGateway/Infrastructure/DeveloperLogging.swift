@@ -18,9 +18,11 @@ public enum DeveloperLogging {
   /// unrecognized input (a typo must never silence logging).
   public static func level(from raw: String?) -> Logger.Level {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+
     guard !trimmed.isEmpty else {
       return .info
     }
+
     return Logger.Level(rawValue: trimmed) ?? .info
   }
 
@@ -58,12 +60,14 @@ struct RedactingLogHandler: LogHandler {
 
   func log(event: LogEvent) {
     var metadata = event.metadata.map { Self.redacted($0, using: redact) } ?? [:]
+
     if let error = event.error {
       // `StreamLogHandler` renders `event.error` into these two keys. Do it here (redacted) and pass
       // `error: nil` downstream, so the detail survives without a second, unredacted render.
       metadata["error.message"] = .string(redact("\(error)"))
       metadata["error.type"] = .string("\(String(reflecting: type(of: error)))")
     }
+
     base.log(
       event: LogEvent(
         level: event.level,
@@ -118,13 +122,13 @@ struct RedactingLogHandler: LogHandler {
   ) -> Logger.MetadataValue {
     switch value {
     case .string(let text):
-      return .string(redact(text))
+      .string(redact(text))
     case .stringConvertible(let convertible):
-      return .string(redact("\(convertible)"))
+      .string(redact("\(convertible)"))
     case .array(let values):
-      return .array(values.map { redacted($0, using: redact) })
+      .array(values.map { redacted($0, using: redact) })
     case .dictionary(let nested):
-      return .dictionary(redacted(nested, using: redact))
+      .dictionary(redacted(nested, using: redact))
     }
   }
 }
