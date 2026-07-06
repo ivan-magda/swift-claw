@@ -5,7 +5,7 @@
 | **Status** | Normative technical spec (v1 scope approved) |
 | **Date** | 2026-06-15 |
 | **Owner** | Ivan Magda |
-| **Related** | [`PRD.md`](./PRD.md) · research: [impl-grounding](./research/swift-claw-impl-grounding-2026-06-15.md), [best-practices](./research/swift-claw-best-practices-2026-06-15.md) |
+| **Related** | [`PRD.md`](./PRD.md) · [`TESTING.md`](./TESTING.md) · research: [impl-grounding](./research/swift-claw-impl-grounding-2026-06-15.md), [best-practices](./research/swift-claw-best-practices-2026-06-15.md) |
 
 > Clean-room, original implementation. References OpenClaw/Hermes/teleclaw concepts only; copies no code.
 

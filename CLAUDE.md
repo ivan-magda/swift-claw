@@ -8,6 +8,7 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 
 - Before starting any task → read learned preferences and behavioral rules at `/Users/jetbrains/.claude/projects/-Users-jetbrains-Developer-swift-claw/memory/MEMORY.md`, then open any topic files relevant to the task.
 - Before implementing or changing the design → **`docs/ARCHITECTURE.md` is the NORMATIVE technical spec**; where it and anything else disagree, it wins.
+- Before writing or changing tests → **`docs/TESTING.md`** is the normative testing guide (what earns a test its place, isolation, determinism, the decision rubric).
 - Product scope, phasing, success criteria → `docs/PRD.md`.
 - Cited background research → `docs/research/`.
 - Building, running, or operating `clawd` locally → `docs/LOCAL_DEV.md`.
