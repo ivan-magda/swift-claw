@@ -103,6 +103,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 10,
       perDayUSD: 100,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015,
       maxTurns: 2,
       maxToolCalls: 20
@@ -134,6 +135,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 10,
       perDayUSD: 100,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015,
       maxTurns: 12,
       maxToolCalls: 2
@@ -162,6 +164,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 10,
       perDayUSD: 100,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015,
       maxTurns: 12,
       maxToolCalls: 2
@@ -307,6 +310,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 0.50,
       perDayUSD: 1_000,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_000_1
     )
     let runtime = makeRuntime(
@@ -340,6 +344,7 @@ import Testing
       retryBudget: 1,
       perRunUSD: 10,
       perDayUSD: 100,
+      proactivePerDayUSD: 2.00,
       referenceUSDPerToken: 0.000_015
     )
     let runtime = makeRuntime(provider: provider, budget: budget, toolDispatcher: dispatcher)

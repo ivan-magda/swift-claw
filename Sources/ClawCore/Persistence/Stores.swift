@@ -143,6 +143,10 @@ public protocol UsageStore: Sendable {
   func recordUsage(_ usage: ProviderUsage) throws
   /// Running totals over `provider_usage` for the calendar-day-UTC window containing `now` (D4).
   func todayTokensAndCost(now: Date) throws -> (tokens: Int, costUSD: Double)
+  /// The same UTC-day window as `todayTokensAndCost(now:)`, restricted to usage whose run's
+  /// origin is IN `origins` (JOIN provider_usage.run_id → runs.id — D6: no denormalized origin
+  /// on usage rows). One query, one day-boundary evaluation (spec §11).
+  func todayTokensAndCost(origins: [RunOrigin], now: Date) throws -> (tokens: Int, costUSD: Double)
   /// Count of `provider_usage` rows per `CostSource` in the calendar-day-UTC window (for doctor).
   func costSourceMix(now: Date) throws -> [CostSource: Int]
 }

@@ -105,7 +105,11 @@ public struct AppConfig: Sendable, Equatable {
     let pollTimeoutSeconds =
       env[EnvKey.pollTimeout].flatMap(Int.init) ?? EnvDefaults.pollTimeoutSeconds
     let llm = try parseLLMConfig(from: env)
-    let budget = try parseBudget(from: env, llm: llm)
+    let proactivePerDayUSD = try positiveBudgetDouble(
+      env[EnvKey.proactivePerDayUSD],
+      default: EnvDefaults.proactivePerDayUSD
+    )
+    let budget = try parseBudget(from: env, llm: llm, proactivePerDayUSD: proactivePerDayUSD)
 
     let timezone = try parseTimezone(from: env[EnvKey.timezone])
     let schedCatchUpMaxAgeMinutes = try boundedInt(
@@ -119,10 +123,6 @@ public struct AppConfig: Sendable, Equatable {
       key: EnvKey.schedMinIntervalMinutes,
       default: EnvDefaults.schedMinIntervalMinutes,
       minimum: 1
-    )
-    let proactivePerDayUSD = try positiveBudgetDouble(
-      env[EnvKey.proactivePerDayUSD],
-      default: EnvDefaults.proactivePerDayUSD
     )
     let heartbeatEnabled = try boolValue(
       env[EnvKey.heartbeatEnabled],
@@ -217,7 +217,8 @@ public struct AppConfig: Sendable, Equatable {
   /// those). Any present override must parse to a positive value, else fail-closed.
   private static func parseBudget(
     from env: [String: String],
-    llm: LLMConfig
+    llm: LLMConfig,
+    proactivePerDayUSD: Double
   ) throws -> RunBudget {
     let base = RunBudget.default
     return RunBudget(
@@ -227,6 +228,7 @@ public struct AppConfig: Sendable, Equatable {
       retryBudget: llm.retryBudget,
       perRunUSD: try positiveBudgetDouble(env[EnvKey.perRunUSD], default: base.perRunUSD),
       perDayUSD: try positiveBudgetDouble(env[EnvKey.perDayUSD], default: base.perDayUSD),
+      proactivePerDayUSD: proactivePerDayUSD,
       referenceUSDPerToken: try positiveBudgetDouble(
         env[EnvKey.referenceUSDPerToken],
         default: base.referenceUSDPerToken

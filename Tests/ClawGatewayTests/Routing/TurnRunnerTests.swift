@@ -625,6 +625,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
       retryBudget: RunBudget.default.retryBudget,
       perRunUSD: RunBudget.default.perRunUSD,
       perDayUSD: RunBudget.default.perDayUSD,
+      proactivePerDayUSD: RunBudget.default.proactivePerDayUSD,
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken,
       dayTokenCeilingOverride: 1
     )
