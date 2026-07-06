@@ -78,12 +78,15 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
         .replacingOccurrences(of: "```", with: "")
         .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
     guard text.hasPrefix("{"), text.hasSuffix("}") else {
       return .unparseable
     }
+
     guard let draft = try? JSONDecoder().decode(ScheduleDraft.self, from: Data(text.utf8)) else {
       return .unparseable
     }
+
     return .draft(draft)
   }
 }
