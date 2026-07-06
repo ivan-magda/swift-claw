@@ -82,7 +82,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
       outbox: fixture.outbox,
       transport: transport,
       signal: OutboxSignal(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when
@@ -105,7 +105,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
       outbox: fixture.outbox,
       transport: transport,
       signal: OutboxSignal(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when
@@ -126,7 +126,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
       outbox: fixture.outbox,
       transport: transport,
       signal: signal,
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when — run the service; its boot drain delivers the pre-committed row, then we stop it
@@ -150,7 +150,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
       outbox: fixture.outbox,
       transport: transport,
       signal: OutboxSignal(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when
@@ -173,7 +173,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
       outbox: MarkSentFailingOutbox(base: fixture.outbox),
       transport: transport,
       signal: OutboxSignal(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when

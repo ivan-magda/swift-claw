@@ -38,7 +38,7 @@ import Testing
       transport: transport,
       turnRunner: runner,
       lanes: SessionLaneRegistry(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
     return Fixture(
       router: router,

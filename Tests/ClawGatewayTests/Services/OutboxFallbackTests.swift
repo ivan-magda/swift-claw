@@ -37,7 +37,7 @@ import Testing
       outbox: fixture.outbox,
       transport: transport,
       signal: OutboxSignal(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
   }
 

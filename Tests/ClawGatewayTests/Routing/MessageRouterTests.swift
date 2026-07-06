@@ -82,7 +82,7 @@ struct FullSessions: SessionMessageStore {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     return Harness(
@@ -288,7 +288,7 @@ struct FullSessions: SessionMessageStore {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when
@@ -348,7 +348,7 @@ struct FullSessions: SessionMessageStore {
       transport: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when
@@ -409,7 +409,7 @@ struct FullSessions: SessionMessageStore {
       transport: transport,
       turnRunner: FakeTurnRunner(),
       lanes: SessionLaneRegistry(),
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when

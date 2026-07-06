@@ -19,9 +19,9 @@ struct RunCommand: AsyncParsableCommand {
   )
 
   func run() async throws {
-    let logger = Logger(label: "clawd")
     let config = try Self.loadConfigOrExit()
     let secrets = try Self.loadSecretsOrExit(config: config)
+    let logger = Self.bootstrapLogger(secrets: secrets)
 
     // Single-instance guard — held until the process exits (defer covers the graceful path).
     let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
@@ -103,6 +103,20 @@ struct RunCommand: AsyncParsableCommand {
       throw runFailure
     }
     logger.info("clawd stopped")
+  }
+
+  /// Installs the redacting swift-log backend (level from `CLAW_LOG_LEVEL`, default `.info`) over
+  /// stdout, then returns the root logger. Bootstrapping here — after secrets load, before the first
+  /// `Logger` — hands the redactor the real secret values so no downstream log line can leak them.
+  /// The earlier config/secret-load failures stay on stderr and cannot contain these secrets.
+  private static func bootstrapLogger(secrets: Secrets) -> Logger {
+    let environment = ProcessInfo.processInfo.environment
+    let redactor = SecretRedactor(secretValues: secrets.redactionValues)
+    DeveloperLogging.bootstrap(
+      level: DeveloperLogging.level(from: environment[DeveloperLogging.levelEnvKey]),
+      redact: { message in redactor.redact(message) }
+    )
+    return Logger(label: "clawd")
   }
 
   /// Loads config from the process environment, printing a diagnostic and exiting with the
@@ -270,8 +284,7 @@ struct RunCommand: AsyncParsableCommand {
     workspace: FileSystemWorkspace,
     toolExecutor: AsyncHTTPExecutor
   ) -> GatedToolDispatcher {
-    let secretValues = [secrets.telegramBotToken, secrets.llmApiKey, secrets.searchApiKey]
-      .compactMap { value in value }
+    let secretValues = secrets.redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)
 
     var tools: [any Tool] = [
@@ -319,7 +332,8 @@ struct RunCommand: AsyncParsableCommand {
       config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
       http: executor,
       sleep: { try await Task.sleep(for: .seconds($0)) },
-      jitter: { Double.random(in: 0...$0) }
+      jitter: { Double.random(in: 0...$0) },
+      logger: logger
     )
 
     let costResolver = CostResolver(
@@ -338,7 +352,7 @@ struct RunCommand: AsyncParsableCommand {
       toolDispatcher: toolDispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,
-      warn: { warning in logger.warning("\(warning)") },
+      logger: logger,
       sleep: { try await Task.sleep(for: $0) }
     )
   }

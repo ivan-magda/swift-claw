@@ -330,7 +330,7 @@ func makeStack(
   let transport = RecordingTransport()
   let signal = OutboxSignal()
   let lanes = SessionLaneRegistry()
-  let logger = Logger(label: "inc1-acceptance")
+  let logger = TestLog.silent
 
   let agent = AgentRuntime(
     provider: provider,
@@ -419,7 +419,7 @@ func makeStreamingStack(
   let transport = RecordingTransport()
   let signal = OutboxSignal()
   let lanes = SessionLaneRegistry()
-  let logger = Logger(label: "streaming-acceptance")
+  let logger = TestLog.silent
   let draftStreamer = TelegramRichDraftStreamer(transport: transport)
   let agent = AgentRuntime(
     provider: provider,
@@ -500,7 +500,7 @@ func makeStopNewStack(
   let transport = RecordingTransport()
   let signal = OutboxSignal()
   let lanes = SessionLaneRegistry()
-  let logger = Logger(label: "stop-new-acceptance")
+  let logger = TestLog.silent
 
   let agent = AgentRuntime(
     provider: provider,

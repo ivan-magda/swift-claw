@@ -597,8 +597,19 @@ extension MessageRouter {
       return .skipped
     }
 
+    // The inbound → run bridge: the one INFO line that shows a real message was accepted and which
+    // run it became. run/session/update ride as metadata so the whole lifecycle greps by `run=<id>`;
+    // only the message SIZE is logged, never its text.
+    var runLog = logger
+    runLog[metadataKey: "run"] = "\(runId)"
+    runLog[metadataKey: "session"] = "\(sessionId)"
+    runLog[metadataKey: "update"] = "\(rawUpdate.updateId)"
+    runLog.info(
+      "message accepted; dispatching run (chars=\(text.count) edited=\(message.isEdited))"
+    )
+
     let lane = await lanes.actor(for: sessionId)
-    await lane.enqueue(runId: runId) { [turnRunner, logger] in
+    await lane.enqueue(runId: runId) { [turnRunner, runLog] in
       do {
         try await turnRunner.run(
           runId: runId,
@@ -608,9 +619,9 @@ extension MessageRouter {
           grant: grant
         )
       } catch StoreError.diskFull {
-        logger.error("turn \(runId) stopped by storage full after enqueue")
+        runLog.error("turn stopped by storage full after enqueue")
       } catch {
-        logger.error("turn run error (handled in-band) for update \(rawUpdate.updateId): \(error)")
+        runLog.error("turn run error (handled in-band): \(error)")
       }
     }
 

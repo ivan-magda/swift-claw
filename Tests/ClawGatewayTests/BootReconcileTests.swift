@@ -19,7 +19,7 @@ import Testing
       outbox: fixture.outbox,
       transport: transport,
       signal: signal,
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when — boot reconcile sweeps the orphan to FAILED and enqueues the degradation, then the
