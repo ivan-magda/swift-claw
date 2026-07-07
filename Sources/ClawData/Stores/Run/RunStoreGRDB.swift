@@ -357,6 +357,21 @@ extension RunStoreGRDB {
   }
 
   static func supersedeRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
+    try terminateActiveRuns(db, sessionId: sessionId, event: .supersede, now: now)
+  }
+
+  /// `/stop`'s plural arm: every PENDING and RUNNING run for the session → CANCELLED. Mirrors
+  /// `supersedeRuns` so `/stop` and `/new` share one definition of "active".
+  static func cancelRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
+    try terminateActiveRuns(db, sessionId: sessionId, event: .cancel, now: now)
+  }
+
+  private static func terminateActiveRuns(
+    _ db: Database,
+    sessionId: Int64,
+    event: RunEvent,
+    now: Date
+  ) throws -> [Int64] {
     let rows = try Row.fetchAll(
       db,
       sql: """
@@ -370,7 +385,7 @@ extension RunStoreGRDB {
     var affected: [Int64] = []
     for row in rows {
       let runId: Int64 = row["id"]
-      if try transitionRun(db, runId: runId, event: .supersede, now: now) != nil {
+      if try transitionRun(db, runId: runId, event: event, now: now) != nil {
         affected.append(runId)
       }
     }

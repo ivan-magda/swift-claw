@@ -20,12 +20,14 @@ public enum CommandClaim: Sendable, Equatable {
 public struct StopCommandResult: Sendable, Equatable {
   public let newlyClaimed: Bool
   public let sessionId: Int64?
-  public let cancelledRunId: Int64?
+  /// Every run `/stop` terminated — the RUNNING turn AND any queued PENDING turns (spec FSM:
+  /// PENDING + /stop → CANCELLED). Empty when there was nothing to stop.
+  public let cancelledRunIds: [Int64]
 
-  public init(newlyClaimed: Bool, sessionId: Int64?, cancelledRunId: Int64?) {
+  public init(newlyClaimed: Bool, sessionId: Int64?, cancelledRunIds: [Int64]) {
     self.newlyClaimed = newlyClaimed
     self.sessionId = sessionId
-    self.cancelledRunId = cancelledRunId
+    self.cancelledRunIds = cancelledRunIds
   }
 }
 
@@ -42,7 +44,8 @@ public struct NewCommandResult: Sendable, Equatable {
 }
 
 public protocol CommandStore: Sendable {
-  /// Atomic `/stop`: claim update + resolve session + RUNNING→CANCELLED + audit in one write.
+  /// Atomic `/stop`: claim update + resolve session + every PENDING/RUNNING→CANCELLED + one
+  /// audit row per cancelled run, in one write.
   func applyStop(updateId: Int64, sessionKey: String, now: Date) throws -> StopCommandResult
   /// Atomic `/new`: claim update + resolve session + RUNNING/PENDING→SUPERSEDED +
   /// resetWindowAndDetaint + audit in one write.
