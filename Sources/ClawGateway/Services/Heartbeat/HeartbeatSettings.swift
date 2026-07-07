@@ -57,9 +57,10 @@ public struct HeartbeatSettings: Sendable, Equatable {
 /// verbatim; the checklist is appended as untrusted-tier DATA — the store persists the combined
 /// trigger at provenance 'untrusted' (Phase 1 pin), so file content can never gain trust here.
 enum HeartbeatTemplate {
-  static let contractSentence =
-    "Review the checklist below. If something needs the owner's attention, say it concisely. "
-    + "If nothing does, reply exactly HEARTBEAT_OK."
+  static let contractSentence = """
+    Review the checklist below. If something needs the owner's attention, say it concisely. \
+    If nothing does, reply exactly HEARTBEAT_OK.
+    """
 
   static func prompt(checklist: String) -> String {
     "\(contractSentence)\n\n\(checklist)"
