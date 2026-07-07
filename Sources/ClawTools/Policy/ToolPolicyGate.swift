@@ -140,6 +140,7 @@ public struct ToolPolicyGate: Sendable {
     guard tool.definition.egressClass == .arbitraryDestination else {
       return .action(nil)
     }
+
     guard let arguments = JSONValue.parse(call.argumentsJSON) else {
       return .blocked(
         ToolPayload(
@@ -149,6 +150,7 @@ public struct ToolPolicyGate: Sendable {
         )
       )
     }
+
     switch tool.canonicalTarget(arguments: arguments) {
     case .resolved(let target):
       return .action(ToolAction(tool: call.name, target: target))
