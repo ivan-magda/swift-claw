@@ -140,15 +140,15 @@ struct CommandHandlers: Sendable {
   ) async throws(RoutingHalt) -> HandleOutcome {
     switch command {
     case .review:
-      return try await memoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: nil)
+      try await memoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: nil)
     case .filter(let kind):
-      return try await memoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: kind)
+      try await memoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: kind)
     case .show(let id):
-      return try await memoryShow(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
+      try await memoryShow(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
     case .delete(let id):
-      return try await memoryDelete(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
+      try await memoryDelete(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
     case .invalid:
-      return await replies.sendCanned(
+      await replies.sendCanned(
         updateId: rawUpdate.updateId,
         chatId: message.chatId,
         text: MemoryReplies.memoryUsage
@@ -174,7 +174,10 @@ private extension CommandHandlers {
     }
 
     let text =
-      items.isEmpty ? MemoryReplies.emptyReview(kind: kind) : MemoryReplies.reviewList(items: items)
+      items.isEmpty
+      ? MemoryReplies.emptyReview(kind: kind)
+      : MemoryReplies.reviewList(items: items)
+
     return await replies.sendCanned(updateId: rawUpdate.updateId, chatId: chatId, text: text)
   }
 
