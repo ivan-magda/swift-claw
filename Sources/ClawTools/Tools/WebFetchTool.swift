@@ -137,10 +137,12 @@ public struct WebFetchTool: Tool {
       return successPayload(result)
     }
   }
+}
 
-  // MARK: - Load-bearing
+// MARK: - Load-bearing
 
-  private func successPayload(_ result: HTTPResult) -> ToolPayload {
+private extension WebFetchTool {
+  func successPayload(_ result: HTTPResult) -> ToolPayload {
     let contentType = (result.getHeader(for: "Content-Type") ?? "").lowercased()
     let mediaType = contentType.split(separator: ";").first.map(String.init) ?? ""
 
@@ -169,7 +171,7 @@ public struct WebFetchTool: Tool {
   }
 
   /// Relative `Location` values resolve against the current hop URL.
-  private static func resolveLocation(_ location: String, against current: String) -> String {
+  static func resolveLocation(_ location: String, against current: String) -> String {
     if location.lowercased().hasPrefix("http://") || location.lowercased().hasPrefix("https://") {
       return location
     }
@@ -184,7 +186,7 @@ public struct WebFetchTool: Tool {
     return resolved.absoluteString
   }
 
-  private static func describe(_ policyError: CanonicalURLError) -> String {
+  static func describe(_ policyError: CanonicalURLError) -> String {
     switch policyError {
     case .unparseable:
       return "That is not a valid URL."
@@ -199,7 +201,7 @@ public struct WebFetchTool: Tool {
     }
   }
 
-  private func errorPayload(_ reason: String) -> ToolPayload {
+  func errorPayload(_ reason: String) -> ToolPayload {
     ToolPayload(content: reason, status: .error, ingestedUntrusted: false)
   }
 }

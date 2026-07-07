@@ -93,10 +93,12 @@ struct StreamingTurnRuntime: Sendable {
       throw AgentRuntime.DeadlineExceeded()
     }
   }
+}
 
-  // MARK: - Load-bearing
+// MARK: - Stream Consumption
 
-  private func consumeStream(
+private extension StreamingTurnRuntime {
+  func consumeStream(
     request: ChatRequest,
     snapshot: DraftSnapshot
   ) async throws -> ChatResponse {
@@ -132,7 +134,7 @@ struct StreamingTurnRuntime: Sendable {
     return ChatResponse(content: content, finishReason: nil, usage: nil, costFromProvider: nil)
   }
 
-  private func append(
+  func append(
     delta: String,
     to content: inout String,
     contentBytes: inout Int
@@ -145,8 +147,12 @@ struct StreamingTurnRuntime: Sendable {
     contentBytes += deltaBytes
     content.append(delta)
   }
+}
 
-  private func runDraftAndTypingLoop(
+// MARK: - Draft And Typing Loop
+
+private extension StreamingTurnRuntime {
+  func runDraftAndTypingLoop(
     chatId: Int64,
     draftId: Int64,
     snapshot: DraftSnapshot
@@ -184,7 +190,7 @@ struct StreamingTurnRuntime: Sendable {
     }
   }
 
-  private func sendFinalDraft(_ content: String, chatId: Int64, draftId: Int64) async {
+  func sendFinalDraft(_ content: String, chatId: Int64, draftId: Int64) async {
     guard !content.isEmpty, !Task.isCancelled else {
       return
     }
@@ -195,7 +201,7 @@ struct StreamingTurnRuntime: Sendable {
   /// a stalled draft POST (spec §12 #14). Task groups always await their children, so the
   /// send/deadline pair is deliberately unstructured — first to finish wins, termination cancels
   /// both, and an abandoned send is harmless (the draft is ephemeral, best-effort UX).
-  private func sendDraftBounded(_ markdown: String, chatId: Int64, draftId: Int64) async {
+  func sendDraftBounded(_ markdown: String, chatId: Int64, draftId: Int64) async {
     let firstDone = AsyncStream<Void> { continuation in
       let sendTask = Task {
         await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)

@@ -74,8 +74,12 @@ public struct ContextBuilder: Sendable {
       hasPrivateDataAccess: hasPrivateDataAccess(fitted)
     )
   }
+}
 
-  private func buildFixedSections(ownerNotices: inout [String]) -> [FittableSection] {
+// MARK: - Section Assembly
+
+private extension ContextBuilder {
+  func buildFixedSections(ownerNotices: inout [String]) -> [FittableSection] {
     [
       section(
         id: .policy,
@@ -119,7 +123,7 @@ public struct ContextBuilder: Sendable {
     ].compactMap { $0 }
   }
 
-  private func buildTruncatableSections(
+  func buildTruncatableSections(
     snapshot: SessionContextSnapshot,
     sessionId: Int64,
     residual: Int
@@ -132,7 +136,7 @@ public struct ContextBuilder: Sendable {
     ].compactMap { $0 }
   }
 
-  private func workspaceSection(
+  func workspaceSection(
     id: ContextRowID,
     files: [WorkspaceFile],
     cap: Int?,
@@ -177,7 +181,7 @@ public struct ContextBuilder: Sendable {
     return section(id: id, units: units)
   }
 
-  private func memoryItemsSection(
+  func memoryItemsSection(
     snapshot: SessionContextSnapshot,
     residual: Int
   ) -> FittableSection? {
@@ -213,7 +217,7 @@ public struct ContextBuilder: Sendable {
     return section(id: .memoryItems, cap: cap, units: units)
   }
 
-  private func historySection(snapshot: SessionContextSnapshot, residual: Int) -> FittableSection? {
+  func historySection(snapshot: SessionContextSnapshot, residual: Int) -> FittableSection? {
     // No `cap > 0` early-return: even when fixed sections leave a zero residual, the newest
     // history unit (the current turn) must reach the fitter, which keeps it as a non-droppable
     // floor so the model always sees the message it is answering.
@@ -239,7 +243,7 @@ public struct ContextBuilder: Sendable {
 
   /// Groups sanitized history so each exchange is ONE unit (§12 atomic droppable units). Group
   /// ids are stable per assembly ("history-<index of the group's first row>").
-  private func historyGroups(from history: [StoredMessage]) -> [HistoryGroup] {
+  func historyGroups(from history: [StoredMessage]) -> [HistoryGroup] {
     let sanitized = HistoryHygiene.sanitize(history)
     var groups: [HistoryGroup] = []
     var index = 0
@@ -269,7 +273,7 @@ public struct ContextBuilder: Sendable {
     return groups
   }
 
-  private func recallSection(
+  func recallSection(
     snapshot: SessionContextSnapshot,
     sessionId: Int64,
     residual: Int
@@ -309,7 +313,26 @@ public struct ContextBuilder: Sendable {
     return section(id: .recall, cap: cap, units: units)
   }
 
-  private func skillsSection(residual: Int) -> FittableSection? {
+  func latestUserMessage(in history: [StoredMessage]) -> String? {
+    history.last { message in message.role == .user }?.content
+  }
+
+  func cappedRecallContent(_ content: String) -> String {
+    guard content.count > budget.recallHitCap else {
+      return content
+    }
+
+    let marker = BudgetFitter.truncationMarker
+    guard budget.recallHitCap > marker.count else {
+      return ""
+    }
+
+    let prefixCount = budget.recallHitCap - marker.count
+
+    return String(content.prefix(prefixCount)) + marker
+  }
+
+  func skillsSection(residual: Int) -> FittableSection? {
     let cap = cap(for: .skills, residual: residual)
     guard cap > 0 else {
       return nil
@@ -334,7 +357,18 @@ public struct ContextBuilder: Sendable {
     return section(id: .skills, cap: cap, units: units)
   }
 
-  private func section(
+  static func iso8601(_ date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    return formatter.string(from: date)
+  }
+}
+
+// MARK: - Row Spec & Budget Helpers
+
+private extension ContextBuilder {
+  func section(
     id: ContextRowID,
     cap: Int? = nil,
     units: [SectionUnit]
@@ -350,11 +384,11 @@ public struct ContextBuilder: Sendable {
     )
   }
 
-  private func cap(for id: ContextRowID, residual: Int) -> Int {
+  func cap(for id: ContextRowID, residual: Int) -> Int {
     spec(for: id).cap.resolve(in: budget, residualGraphemes: residual) ?? Int.max
   }
 
-  private func residualAfterFixedSections(_ sections: [FittableSection]) -> Int {
+  func residualAfterFixedSections(_ sections: [FittableSection]) -> Int {
     let required =
       sections
       .filter { section in !section.truncatable }
@@ -363,7 +397,18 @@ public struct ContextBuilder: Sendable {
     return max(0, budget.inputCapGraphemes - required)
   }
 
-  private func renderMessages(
+  func spec(for id: ContextRowID) -> RowSpec {
+    guard let spec = ContextRowPolicy.specs.first(where: { spec in spec.id == id }) else {
+      preconditionFailure("missing context row spec for \(id)")
+    }
+    return spec
+  }
+}
+
+// MARK: - Message Rendering
+
+private extension ContextBuilder {
+  func renderMessages(
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
   ) -> [ChatMessage] {
@@ -404,7 +449,7 @@ public struct ContextBuilder: Sendable {
   /// The one render seam for both native assistant anchors (with decoded `toolCalls`) and fenced
   /// tool rows (labeled by the owning anchor's tool name, §12). Kept groups come from the fitter
   /// verbatim — one `SectionUnit` per group — so this only re-expands each surviving group's rows.
-  private func fittedHistoryMessages(
+  func fittedHistoryMessages(
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
   ) -> [ChatMessage] {
@@ -453,32 +498,13 @@ public struct ContextBuilder: Sendable {
     return rendered
   }
 
-  private func hasPrivateDataAccess(_ fitted: [FittedSection]) -> Bool {
+  func hasPrivateDataAccess(_ fitted: [FittedSection]) -> Bool {
     fitted.contains { section in
       section.id == .userFile || section.id == .memoryFile || section.id == .memoryItems
     }
   }
 
-  private func latestUserMessage(in history: [StoredMessage]) -> String? {
-    history.last { message in message.role == .user }?.content
-  }
-
-  private func cappedRecallContent(_ content: String) -> String {
-    guard content.count > budget.recallHitCap else {
-      return content
-    }
-
-    let marker = BudgetFitter.truncationMarker
-    guard budget.recallHitCap > marker.count else {
-      return ""
-    }
-
-    let prefixCount = budget.recallHitCap - marker.count
-
-    return String(content.prefix(prefixCount)) + marker
-  }
-
-  private func label(for id: ContextRowID) -> String {
+  func label(for id: ContextRowID) -> String {
     switch id {
     case .userFile:
       "USER.md"
@@ -493,19 +519,5 @@ public struct ContextBuilder: Sendable {
     case .policy, .systemWorkspace, .tools, .metadata, .history:
       id.rawValue
     }
-  }
-
-  private func spec(for id: ContextRowID) -> RowSpec {
-    guard let spec = ContextRowPolicy.specs.first(where: { spec in spec.id == id }) else {
-      preconditionFailure("missing context row spec for \(id)")
-    }
-    return spec
-  }
-
-  private static func iso8601(_ date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime]
-    formatter.timeZone = TimeZone(secondsFromGMT: 0)
-    return formatter.string(from: date)
   }
 }

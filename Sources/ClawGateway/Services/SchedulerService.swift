@@ -15,10 +15,6 @@ public struct SchedulerService: Service {
   /// "lateness ≤ grain ⇒ on time" row is defined against this constant.
   public static let tickInterval: Duration = .seconds(60)
 
-  /// Cap on the misfire-count scan (observability only — the count feeds `jobMisfire` audit
-  /// details, never control flow), so a months-old due date cannot enumerate unbounded dates.
-  static let misfireCountLimit = 1_000
-
   private let jobs: any ScheduledJobStore
   private let lanes: SessionLaneRegistry
   private let turns: any TurnDispatching
@@ -74,8 +70,6 @@ public struct SchedulerService: Service {
     logger.info("scheduler stopped")
   }
 
-  // MARK: - Load-bearing
-
   /// One scan-and-fire pass. Non-throwing by contract: the ticker must survive every store
   /// failure (a failed tick is retried by the next one) rather than crash the service group.
   func tick() async {
@@ -100,9 +94,17 @@ public struct SchedulerService: Service {
 
     await heartbeatIfDue(tickTime: tickTime)
   }
+}
+
+// MARK: - Job Firing
+
+private extension SchedulerService {
+  /// Cap on the misfire-count scan (observability only — the count feeds `jobMisfire` audit
+  /// details, never control flow), so a months-old due date cannot enumerate unbounded dates.
+  static let misfireCountLimit = 1_000
 
   /// The §5.3 lateness table for one due job — all wall clock, never tick counts.
-  private func fire(job: ScheduledJob, tickTime: Date) async {
+  func fire(job: ScheduledJob, tickTime: Date) async {
     guard let due = job.nextOccurrence else {
       return  // dueJobs' predicate makes this unreachable; defensive, never crash the ticker
     }
@@ -163,7 +165,7 @@ public struct SchedulerService: Service {
     }
   }
 
-  private func skipMisfire(
+  func skipMisfire(
     job: ScheduledJob,
     due: Date,
     timezone: TimeZone,
@@ -194,7 +196,7 @@ public struct SchedulerService: Service {
   /// The advanced next_occurrence: strictly after `after`; nil for a one-shot (→ COMPLETED).
   /// `anchor` is the occurrence being advanced from (the claimed/skipped due) — advances stay
   /// on the armed chain, so /schedule's confirm preview can never disagree with actual fires.
-  private func nextOccurrence(
+  func nextOccurrence(
     for job: ScheduledJob,
     timezone: TimeZone,
     anchor: Date,
@@ -212,7 +214,7 @@ public struct SchedulerService: Service {
   }
 
   /// D1: a claimed fire is a first-class lane citizen — ordered and cancellable like any turn.
-  private func enqueue(_ fire: ClaimedFire) async {
+  func enqueue(_ fire: ClaimedFire) async {
     let runner = turns
     let log = logger
 
@@ -234,9 +236,11 @@ public struct SchedulerService: Service {
       }
     }
   }
+}
 
-  // MARK: - Heartbeat (spec §12 — the end-of-tick config-gated branch, D9)
+// MARK: - Heartbeat
 
+private extension SchedulerService {
   /// HEARTBEAT.md consumable cap, in graphemes — the hand-curated-file precedent
   /// (`ContextBudget.default.memoryFileCap`): a checklist beyond it loads as `.overCap` with NO
   /// text (never silent truncation) and the beat skips before any LLM cost.
@@ -245,7 +249,7 @@ public struct SchedulerService: Service {
   /// The spec §12 fire condition: enabled ∧ interval elapsed ∧ outside quiet hours ∧ under the
   /// daily cap ∧ HEARTBEAT.md usable. "Due" = enabled ∧ interval elapsed; only a DUE beat that
   /// skips is audited, so the audit trail stays quiet tick-to-tick.
-  private func heartbeatIfDue(tickTime: Date) async {
+  func heartbeatIfDue(tickTime: Date) async {
     guard heartbeat.enabled else {
       return  // default OFF ⇒ structurally inert: no state read, no audit, no cost
     }
@@ -310,7 +314,7 @@ public struct SchedulerService: Service {
   /// ride). Deduped per EPISODE: a due heartbeat that keeps skipping for the same reason
   /// audits once, not once per 60 s tick — spec §12's "audit stays quiet tick-to-tick" (an
   /// 11-hour quiet window must not write ~660 identical rows).
-  private func auditHeartbeatSkip(reason: HeartbeatSkipReason, at tickTime: Date) async {
+  func auditHeartbeatSkip(reason: HeartbeatSkipReason, at tickTime: Date) async {
     guard await skipEpisode.begin(reason) else {
       return  // same episode as the previous tick — already audited
     }

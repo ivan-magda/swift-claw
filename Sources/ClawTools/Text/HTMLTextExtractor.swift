@@ -14,19 +14,21 @@ public enum HTMLTextExtractor {
     let decoded = decodeEntities(stripped)
     return collapseWhitespace(decoded)
   }
+}
 
-  // MARK: - Markup stripping (one linear pass)
+// MARK: - Markup Stripping
 
+private extension HTMLTextExtractor {
   // Keywords are stored lowercase and matched case-insensitively via `matchesFolded`.
-  private static let commentOpen: [Unicode.Scalar] = ["<", "!", "-", "-"]
-  private static let commentClose: [Unicode.Scalar] = ["-", "-", ">"]
-  private static let scriptName: [Unicode.Scalar] = ["s", "c", "r", "i", "p", "t"]
-  private static let styleName: [Unicode.Scalar] = ["s", "t", "y", "l", "e"]
-  private static let scriptClose: [Unicode.Scalar] = ["<", "/", "s", "c", "r", "i", "p", "t"]
-  private static let styleClose: [Unicode.Scalar] = ["<", "/", "s", "t", "y", "l", "e"]
+  static let commentOpen: [Unicode.Scalar] = ["<", "!", "-", "-"]
+  static let commentClose: [Unicode.Scalar] = ["-", "-", ">"]
+  static let scriptName: [Unicode.Scalar] = ["s", "c", "r", "i", "p", "t"]
+  static let styleName: [Unicode.Scalar] = ["s", "t", "y", "l", "e"]
+  static let scriptClose: [Unicode.Scalar] = ["<", "/", "s", "c", "r", "i", "p", "t"]
+  static let styleClose: [Unicode.Scalar] = ["<", "/", "s", "t", "y", "l", "e"]
 
   /// The raw-text elements whose full body is dropped, each with its matching close keyword.
-  private static let rawElements: [(name: [Unicode.Scalar], close: [Unicode.Scalar])] = [
+  static let rawElements: [(name: [Unicode.Scalar], close: [Unicode.Scalar])] = [
     (scriptName, scriptClose),
     (styleName, styleClose),
   ]
@@ -35,7 +37,7 @@ public enum HTMLTextExtractor {
   /// with a single space. Each scalar is visited at most once by the outer loop; the bounded
   /// look-ahead keeps the whole pass linear even when a close token never appears (the unclosed
   /// `<script>` case just scans to EOF once and stops).
-  private static func stripMarkup(_ html: String) -> String {
+  static func stripMarkup(_ html: String) -> String {
     let scalars = Array(html.unicodeScalars)
     let count = scalars.count
     var output = String.UnicodeScalarView()
@@ -80,7 +82,7 @@ public enum HTMLTextExtractor {
 
   /// The raw element whose opening tag starts at `index`, else nil. The name must be followed by a
   /// real terminator, so `<scripting>` is an ordinary tag rather than a `script` raw element.
-  private static func rawElementOpening(
+  static func rawElementOpening(
     _ scalars: [Unicode.Scalar],
     tagAt index: Int
   ) -> (name: [Unicode.Scalar], close: [Unicode.Scalar])? {
@@ -97,7 +99,7 @@ public enum HTMLTextExtractor {
 
   /// True when `name` starts at `nameStart` and is followed by a name terminator — so the enclosing
   /// `<name…>` opens a raw element (`<script>`) rather than an ordinary tag (`<scripting>`).
-  private static func opensRawElement(
+  static func opensRawElement(
     _ name: [Unicode.Scalar],
     in scalars: [Unicode.Scalar],
     atNameStart nameStart: Int
@@ -108,7 +110,7 @@ public enum HTMLTextExtractor {
 
   /// From the opening `<` of a `script`/`style` element, skip its opening tag, then its body up to
   /// the matching close keyword, then that close tag's `>`. Returns EOF if the close never appears.
-  private static func skipRawElement(
+  static func skipRawElement(
     _ scalars: [Unicode.Scalar],
     from tagStart: Int,
     close: [Unicode.Scalar]
@@ -130,7 +132,7 @@ public enum HTMLTextExtractor {
   /// True when `close` (e.g. `</script`) matches at `index` AND is followed by a name terminator, so
   /// `</scriptx>` does not close the element — the close-side mirror of `opensRawElement`. Without it
   /// a fake close leaks the raw body between it and the real `</script>` into the extracted text.
-  private static func isRawElementClose(
+  static func isRawElementClose(
     _ close: [Unicode.Scalar],
     in scalars: [Unicode.Scalar],
     at index: Int
@@ -140,7 +142,7 @@ public enum HTMLTextExtractor {
   }
 
   /// Advance from `start` to just past the next `>`, or to EOF if there is none.
-  private static func skipToTagEnd(_ scalars: [Unicode.Scalar], from start: Int) -> Int {
+  static func skipToTagEnd(_ scalars: [Unicode.Scalar], from start: Int) -> Int {
     let count = scalars.count
     var index = start
 
@@ -152,7 +154,7 @@ public enum HTMLTextExtractor {
   }
 
   /// Advance from `start` to just past the next occurrence of `keyword`, or to EOF if absent.
-  private static func skip(
+  static func skip(
     _ scalars: [Unicode.Scalar],
     from start: Int,
     past keyword: [Unicode.Scalar]
@@ -170,7 +172,7 @@ public enum HTMLTextExtractor {
     return count
   }
 
-  private static func isNameTerminator(_ scalars: [Unicode.Scalar], at pos: Int) -> Bool {
+  static func isNameTerminator(_ scalars: [Unicode.Scalar], at pos: Int) -> Bool {
     guard pos < scalars.count else {
       return true  // `<script` at EOF: still a raw element with no body
     }
@@ -181,7 +183,7 @@ public enum HTMLTextExtractor {
 
   /// Whether the `<` at `index` opens a tag: HTML starts a tag only when `<` is followed by a
   /// tag-name letter, `/`, `!`, or `?` — otherwise the `<` is ordinary text.
-  private static func isTagStart(_ scalars: [Unicode.Scalar], after index: Int) -> Bool {
+  static func isTagStart(_ scalars: [Unicode.Scalar], after index: Int) -> Bool {
     let next = index + 1
 
     guard next < scalars.count else {
@@ -192,13 +194,15 @@ public enum HTMLTextExtractor {
     return isASCIILetter(scalar) || scalar == "/" || scalar == "!" || scalar == "?"
   }
 
-  private static func isASCIILetter(_ scalar: Unicode.Scalar) -> Bool {
+  static func isASCIILetter(_ scalar: Unicode.Scalar) -> Bool {
     ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar)
   }
+}
 
-  // MARK: - Entities & whitespace (linear)
+// MARK: - Text Normalization
 
-  private static let entities: [(token: [Unicode.Scalar], replacement: Unicode.Scalar)] = [
+private extension HTMLTextExtractor {
+  static let entities: [(token: [Unicode.Scalar], replacement: Unicode.Scalar)] = [
     (Array("&nbsp;".unicodeScalars), " "),
     (Array("&lt;".unicodeScalars), "<"),
     (Array("&gt;".unicodeScalars), ">"),
@@ -210,7 +214,7 @@ public enum HTMLTextExtractor {
 
   /// Left-to-right longest-match decode: advancing past a consumed entity means a freed `&` (from
   /// `&amp;`) is never re-scanned, so `&amp;lt;` decodes to `&lt;`, not `<` (no double-decode).
-  private static func decodeEntities(_ text: String) -> String {
+  static func decodeEntities(_ text: String) -> String {
     let scalars = Array(text.unicodeScalars)
     let count = scalars.count
     var output = String.UnicodeScalarView()
@@ -238,7 +242,7 @@ public enum HTMLTextExtractor {
   /// Collapse each run of ASCII whitespace to a single `\n` (if the run held a newline) or ` `,
   /// dropping leading and trailing whitespace — the linear equivalent of the old `[ \t]+` +
   /// `\s*\n\s*` regex pair, without their backtracking.
-  private static func collapseWhitespace(_ text: String) -> String {
+  static func collapseWhitespace(_ text: String) -> String {
     var output = String.UnicodeScalarView()
     var pendingNewline = false
     var pendingSpace = false
@@ -270,11 +274,13 @@ public enum HTMLTextExtractor {
 
     return String(output)
   }
+}
 
-  // MARK: - Scalar helpers
+// MARK: - Scalar Helpers
 
+private extension HTMLTextExtractor {
   /// Case-insensitive (ASCII-folded) match of a lowercase `keyword` against `scalars` at `pos`.
-  private static func matchesFolded(
+  static func matchesFolded(
     _ keyword: [Unicode.Scalar],
     in scalars: [Unicode.Scalar],
     at pos: Int
@@ -291,7 +297,7 @@ public enum HTMLTextExtractor {
   }
 
   /// Case-sensitive match — HTML entity names are case-sensitive (`&AMP;` is not `&amp;`).
-  private static func matchesExact(
+  static func matchesExact(
     _ keyword: [Unicode.Scalar],
     in scalars: [Unicode.Scalar],
     at pos: Int
@@ -307,7 +313,7 @@ public enum HTMLTextExtractor {
     return true
   }
 
-  private static func isASCIIWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+  static func isASCIIWhitespace(_ scalar: Unicode.Scalar) -> Bool {
     switch scalar {
     case " ", "\t", "\n", "\r", "\u{0B}", "\u{0C}":
       true
@@ -316,7 +322,7 @@ public enum HTMLTextExtractor {
     }
   }
 
-  private static func asciiLower(_ scalar: Unicode.Scalar) -> Unicode.Scalar {
+  static func asciiLower(_ scalar: Unicode.Scalar) -> Unicode.Scalar {
     if ("A"..."Z").contains(scalar) {
       return Unicode.Scalar(scalar.value + 32) ?? scalar
     }

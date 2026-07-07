@@ -175,8 +175,12 @@ public enum RecurrenceWords {
       return "custom schedule"
     }
   }
+}
 
-  private static func weeklyWords(_ rule: Calendar.RecurrenceRule) -> String {
+// MARK: - Phrase Formatting
+
+private extension RecurrenceWords {
+  static func weeklyWords(_ rule: Calendar.RecurrenceRule) -> String {
     let days = rule.weekdays.compactMap { weekday -> Locale.Weekday? in
       if case .every(let day) = weekday {
         return day
@@ -196,11 +200,11 @@ public enum RecurrenceWords {
     return "every \(names) at \(clock(rule))"
   }
 
-  private static func clock(_ rule: Calendar.RecurrenceRule) -> String {
+  static func clock(_ rule: Calendar.RecurrenceRule) -> String {
     String(format: "%02d:%02d", rule.hours.first ?? 0, rule.minutes.first ?? 0)
   }
 
-  private static func fullName(_ day: Locale.Weekday) -> String {
+  static func fullName(_ day: Locale.Weekday) -> String {
     switch day {
     case .sunday: "sunday"
     case .monday: "monday"
@@ -280,10 +284,12 @@ public struct ScheduleDraftValidator: Sendable {
       )
     }
   }
+}
 
-  // MARK: - Recurring kinds
+// MARK: - Recurring Schedules
 
-  private func recurringSchedule(
+private extension ScheduleDraftValidator {
+  func recurringSchedule(
     _ schedule: DraftSchedule,
     label: String,
     prompt: String,
@@ -326,7 +332,7 @@ public struct ScheduleDraftValidator: Sendable {
 
   /// The exhaustive draft → rule mapping (spec §7). Every rule pins `seconds: [0]` so fires
   /// land on the minute regardless of when validation ran.
-  private func buildRule(
+  func buildRule(
     _ schedule: DraftSchedule,
     timezone: TimeZone
   ) -> Result<Calendar.RecurrenceRule, ScheduleDraftProblem> {
@@ -400,10 +406,12 @@ public struct ScheduleDraftValidator: Sendable {
       }
     }
   }
+}
 
-  // MARK: - Once
+// MARK: - One-Time Schedules
 
-  private func onceSchedule(
+private extension ScheduleDraftValidator {
+  func onceSchedule(
     _ schedule: DraftSchedule,
     label: String,
     prompt: String,
@@ -478,9 +486,11 @@ public struct ScheduleDraftValidator: Sendable {
       )
     )
   }
+}
 
-  // MARK: - Field parsers
+// MARK: - Field Parsing
 
+extension ScheduleDraftValidator {
   private func clockComponents(
     _ schedule: DraftSchedule,
     kind: DraftScheduleKind

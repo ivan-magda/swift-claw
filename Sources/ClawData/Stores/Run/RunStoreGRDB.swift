@@ -306,6 +306,8 @@ public struct RunStoreGRDB: RunStore {
   }
 }
 
+// MARK: - Cross-Store Run Helpers
+
 extension RunStoreGRDB {
   /// FR-C4/spec §14: when a run that belongs to a scheduled job reaches FAILED, `jobFailed`
   /// rides the SAME transaction as the state flip (house rule). No-op for job-less runs.
@@ -392,20 +394,6 @@ extension RunStoreGRDB {
     return nextState
   }
 
-  private static func currentRunState(_ db: Database, runId: Int64) throws -> RunState? {
-    let rawState = try String.fetchOne(
-      db,
-      sql: "SELECT state FROM runs WHERE id = ?",
-      arguments: [runId]
-    )
-
-    guard let rawState else {
-      return nil
-    }
-
-    return RunState(rawValue: rawState)
-  }
-
   static func insertUsage(_ db: Database, _ usage: ProviderUsage) throws {
     try db.execute(
       sql: """
@@ -425,84 +413,6 @@ extension RunStoreGRDB {
         usage.ts,
       ]
     )
-  }
-
-  private static func recordTerminalUsageIfNeeded(
-    _ db: Database,
-    usage: ProviderUsage,
-    state: RunState,
-    now: Date
-  ) throws -> RunCommitResult {
-    guard state == .cancelled || state == .superseded else {
-      return .ignored
-    }
-
-    let existingRows =
-      try Int.fetchOne(
-        db,
-        sql: "SELECT COUNT(*) FROM provider_usage WHERE run_id = ?",
-        arguments: [usage.runId]
-      ) ?? 0
-    guard existingRows == 0 else {
-      return .ignored
-    }
-
-    try insertUsage(db, usage)
-    try updateRunUsage(db, usage: usage, now: now)
-
-    return .usageRecordedAfterTerminal
-  }
-
-  private static func updateRunUsage(_ db: Database, usage: ProviderUsage, now: Date) throws {
-    try db.execute(
-      sql: """
-        UPDATE runs SET updated_ts = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?
-        WHERE id = ?
-        """,
-      arguments: [
-        now,
-        usage.promptTokens,
-        usage.completionTokens,
-        usage.costUSD,
-        usage.runId,
-      ]
-    )
-  }
-
-  private static func setSessionTainted(_ db: Database, sessionId: Int64, now: Date) throws {
-    try db.execute(
-      sql: "UPDATE sessions SET tainted = 1, updated_ts = ? WHERE id = ?",
-      arguments: [now, sessionId]
-    )
-  }
-
-  /// Writes one exchange as rows: the assistant anchor (tool_calls JSON, trusted) then each
-  /// observation (raw content, untrusted, tool_call_id) — spec §11 row shapes.
-  private static func insertExchangeRows(
-    _ db: Database,
-    sessionId: Int64,
-    runId: Int64,
-    exchange: ToolExchange,
-    now: Date
-  ) throws {
-    try db.execute(
-      sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, 'assistant', ?, 'trusted', ?, ?)
-        """,
-      arguments: [
-        sessionId, runId, exchange.assistantContent, now, ToolCallCoding.encode(exchange.toolCalls),
-      ]
-    )
-    for observation in exchange.observations {
-      try db.execute(
-        sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, 'tool', ?, 'untrusted', ?, ?)
-          """,
-        arguments: [sessionId, runId, observation.content, now, observation.callId]
-      )
-    }
   }
 
   static func insertOutbox(
@@ -528,5 +438,101 @@ extension RunStoreGRDB {
       ]
     )
     return db.changesCount > 0
+  }
+}
+
+// MARK: - Turn Commit Helpers
+
+private extension RunStoreGRDB {
+  static func currentRunState(_ db: Database, runId: Int64) throws -> RunState? {
+    let rawState = try String.fetchOne(
+      db,
+      sql: "SELECT state FROM runs WHERE id = ?",
+      arguments: [runId]
+    )
+
+    guard let rawState else {
+      return nil
+    }
+
+    return RunState(rawValue: rawState)
+  }
+
+  static func recordTerminalUsageIfNeeded(
+    _ db: Database,
+    usage: ProviderUsage,
+    state: RunState,
+    now: Date
+  ) throws -> RunCommitResult {
+    guard state == .cancelled || state == .superseded else {
+      return .ignored
+    }
+
+    let existingRows =
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM provider_usage WHERE run_id = ?",
+        arguments: [usage.runId]
+      ) ?? 0
+    guard existingRows == 0 else {
+      return .ignored
+    }
+
+    try insertUsage(db, usage)
+    try updateRunUsage(db, usage: usage, now: now)
+
+    return .usageRecordedAfterTerminal
+  }
+
+  static func updateRunUsage(_ db: Database, usage: ProviderUsage, now: Date) throws {
+    try db.execute(
+      sql: """
+        UPDATE runs SET updated_ts = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?
+        WHERE id = ?
+        """,
+      arguments: [
+        now,
+        usage.promptTokens,
+        usage.completionTokens,
+        usage.costUSD,
+        usage.runId,
+      ]
+    )
+  }
+
+  static func setSessionTainted(_ db: Database, sessionId: Int64, now: Date) throws {
+    try db.execute(
+      sql: "UPDATE sessions SET tainted = 1, updated_ts = ? WHERE id = ?",
+      arguments: [now, sessionId]
+    )
+  }
+
+  /// Writes one exchange as rows: the assistant anchor (tool_calls JSON, trusted) then each
+  /// observation (raw content, untrusted, tool_call_id) — spec §11 row shapes.
+  static func insertExchangeRows(
+    _ db: Database,
+    sessionId: Int64,
+    runId: Int64,
+    exchange: ToolExchange,
+    now: Date
+  ) throws {
+    try db.execute(
+      sql: """
+        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
+        VALUES (?, ?, 'assistant', ?, 'trusted', ?, ?)
+        """,
+      arguments: [
+        sessionId, runId, exchange.assistantContent, now, ToolCallCoding.encode(exchange.toolCalls),
+      ]
+    )
+    for observation in exchange.observations {
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, ?)
+          """,
+        arguments: [sessionId, runId, observation.content, now, observation.callId]
+      )
+    }
   }
 }

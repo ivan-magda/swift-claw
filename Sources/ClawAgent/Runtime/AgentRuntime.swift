@@ -357,23 +357,27 @@ public struct AgentRuntime: Sendable {
   }
 }
 
-// MARK: - Load-bearing
+// MARK: - Deadline Signal
 
 extension AgentRuntime {
   /// Marker error thrown by turn-runtime deadline children when the wall-clock window elapses; the
   /// `runTurn` shell maps it to the estimated-debit degradation path.
   struct DeadlineExceeded: Error {}
+}
 
+// MARK: - Turn Diagnostics
+
+private extension AgentRuntime {
   /// The correlation fields stamped on every developer log line for one turn, so a single
   /// `grep run=<id>` ties the turn's round-trips, tool calls, and outcome together.
-  private static func turnMetadata(runId: Int64, sessionId: Int64) -> Logger.Metadata {
+  static func turnMetadata(runId: Int64, sessionId: Int64) -> Logger.Metadata {
     ["run": "\(runId)", "session": "\(sessionId)"]
   }
 
   /// Emits the one finished line for a turn; its level reflects severity — completed → info,
   /// budget-stopped → notice (an expected guard), degraded → warning (something went wrong). Only
   /// safe fields (counts, tokens, cost, elapsed) are logged, never the reply text.
-  private static func logFinish(_ result: TurnResult, on log: Logger, elapsed: Duration) {
+  static func logFinish(_ result: TurnResult, on log: Logger, elapsed: Duration) {
     let elapsedMillis = millis(elapsed)
     switch result {
     case .completed(let content, let usage):
@@ -391,14 +395,18 @@ extension AgentRuntime {
   }
 
   /// Whole milliseconds of a `Duration`, for compact latency fields in developer logs.
-  private static func millis(_ duration: Duration) -> Int64 {
+  static func millis(_ duration: Duration) -> Int64 {
     let parts = duration.components
     return parts.seconds * 1000 + parts.attoseconds / 1_000_000_000_000_000
   }
+}
 
+// MARK: - Round-Trip Recording
+
+private extension AgentRuntime {
   /// One audit row per dispatch, written immediately, blocked calls included (FR-T1/§6). Audit is
   /// observability, not a gate: a non-diskFull failure logs and the run continues.
-  private func recordToolAudit(
+  func recordToolAudit(
     for call: ToolCall,
     outcome dispatched: ToolDispatchOutcome,
     runId: Int64,
@@ -430,7 +438,7 @@ extension AgentRuntime {
 
   /// The reconciled usage row for an intermediate round-trip — same resolution as `classify`,
   /// without the terminal classification.
-  private func usageRow(
+  func usageRow(
     for response: ChatResponse,
     context: [ChatMessage],
     runId: Int64,
@@ -452,11 +460,15 @@ extension AgentRuntime {
       ts: Date()
     )
   }
+}
 
+// MARK: - Provider Round Trip
+
+private extension AgentRuntime {
   /// One provider round-trip inside the SHARED wall-clock window (§6.6): streaming when enabled,
   /// falling back to typing on a connect failure, else plain typing. `deadlineSeconds` is the
   /// REMAINING run budget, not a fresh 180 s. Throws the provider/deadline error; the loop maps it.
-  private func roundTrip(
+  func roundTrip(
     chatId: Int64,
     draftId: Int64,
     request: ChatRequest,
@@ -486,7 +498,7 @@ extension AgentRuntime {
     }
   }
 
-  private func runStreamingTurn(
+  func runStreamingTurn(
     chatId: Int64,
     draftId: Int64,
     request: ChatRequest,
@@ -502,7 +514,7 @@ extension AgentRuntime {
     return try await runtime.run(chatId: chatId, draftId: draftId, request: request)
   }
 
-  private func runTypingTurn(
+  func runTypingTurn(
     chatId: Int64,
     request: ChatRequest,
     deadlineSeconds: Int
@@ -515,8 +527,12 @@ extension AgentRuntime {
     )
     return try await runtime.run(chatId: chatId, request: request)
   }
+}
 
-  private func degradedForCaughtError(
+// MARK: - Result Classification
+
+private extension AgentRuntime {
+  func degradedForCaughtError(
     _ error: any Error,
     context: [ChatMessage],
     runId: Int64,
@@ -540,7 +556,7 @@ extension AgentRuntime {
     )
   }
 
-  private func degradedForStreamingError(
+  func degradedForStreamingError(
     _ error: any Error,
     context: [ChatMessage],
     runId: Int64,
@@ -566,7 +582,7 @@ extension AgentRuntime {
   /// the provider omits it): non-empty content → `.completed`; empty + `finishReason == "length"` →
   /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`. Cost is
   /// resolved via `costResolver` (provider cost wins) into the `ProviderUsage` row.
-  private func classify(
+  func classify(
     response: ChatResponse,
     context: [ChatMessage],
     runId: Int64,
@@ -602,7 +618,7 @@ extension AgentRuntime {
   /// exhausted retries): prompt from context, completion reserved at the output cap, cost via the
   /// best-effort tier. No provider cost exists for a call that never returned, so the resolver's
   /// heuristic tier carries USD (floored, never a silent $0 — D1/F19); the row is an estimate.
-  private func estimatedDebit(
+  func estimatedDebit(
     context: [ChatMessage],
     runId: Int64,
     sessionId: Int64

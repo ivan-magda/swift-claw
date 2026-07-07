@@ -165,9 +165,13 @@ public struct AppConfig: Sendable, Equatable {
       heartbeatMaxPerDay: heartbeatMaxPerDay
     )
   }
+}
 
+// MARK: - LLM Config Parsing
+
+private extension AppConfig {
   /// `apiKey` is optional — local servers need none.
-  private static func parseLLMConfig(from env: [String: String]) throws -> LLMConfig {
+  static func parseLLMConfig(from env: [String: String]) throws -> LLMConfig {
     guard
       let baseURL = env[EnvKey.llmBaseURL]?.trimmingCharacters(in: .whitespaces),
       !baseURL.isEmpty
@@ -217,11 +221,15 @@ public struct AppConfig: Sendable, Equatable {
       )
     )
   }
+}
 
+// MARK: - Budget Parsing
+
+private extension AppConfig {
   /// The spend budget mirrors `RunBudget.default`, except the four USD/ceiling knobs are env
   /// overridable and `maxOutputTokens`/`retryBudget` mirror `llm` (the single source of truth for
   /// those). Any present override must parse to a positive value, else fail-closed.
-  private static func parseBudget(
+  static func parseBudget(
     from env: [String: String],
     llm: LLMConfig,
     proactivePerDayUSD: Double
@@ -247,7 +255,7 @@ public struct AppConfig: Sendable, Equatable {
 
   /// A positive `Double` override: `fallback` when absent/blank, else `invalidBudget` on a
   /// non-numeric or non-positive value.
-  private static func positiveBudgetDouble(
+  static func positiveBudgetDouble(
     _ raw: String?,
     default fallback: Double
   ) throws -> Double {
@@ -265,7 +273,7 @@ public struct AppConfig: Sendable, Equatable {
 
   /// A positive `Int` override: `fallback` when absent/blank, else `invalidBudget` on a
   /// non-numeric or non-positive value.
-  private static func positiveBudgetInt(_ raw: String?, default fallback: Int) throws -> Int {
+  static func positiveBudgetInt(_ raw: String?, default fallback: Int) throws -> Int {
     let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
     guard !trimmed.isEmpty else {
       return fallback
@@ -279,7 +287,7 @@ public struct AppConfig: Sendable, Equatable {
   }
 
   /// An optional positive `Int` ceiling override; `nil` when absent so the budget derives it.
-  private static func positiveBudgetIntOrNil(_ raw: String?) throws -> Int? {
+  static func positiveBudgetIntOrNil(_ raw: String?) throws -> Int? {
     let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
     guard !trimmed.isEmpty else {
       return nil
@@ -291,10 +299,14 @@ public struct AppConfig: Sendable, Equatable {
 
     return value
   }
+}
 
+// MARK: - Scheduling & Heartbeat Parsing
+
+private extension AppConfig {
   /// The scheduling timezone: absent/blank falls back to the host's current zone; a present
   /// value must resolve via `TimeZone(identifier:)`, else fail-closed.
-  private static func parseTimezone(from raw: String?) throws -> TimeZone {
+  static func parseTimezone(from raw: String?) throws -> TimeZone {
     let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
     guard !trimmed.isEmpty else {
       return TimeZone.current
@@ -309,7 +321,7 @@ public struct AppConfig: Sendable, Equatable {
 
   /// An `Int` override with a lower bound: `fallback` when absent/blank, else
   /// `invalidScheduling` on a non-numeric or below-minimum value.
-  private static func boundedInt(
+  static func boundedInt(
     _ raw: String?,
     key: String,
     default fallback: Int,
@@ -327,7 +339,7 @@ public struct AppConfig: Sendable, Equatable {
     return value
   }
 
-  private static func parseQuietHours(from raw: String?) throws -> QuietHours {
+  static func parseQuietHours(from raw: String?) throws -> QuietHours {
     let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
 
     if trimmed.isEmpty {
@@ -343,8 +355,12 @@ public struct AppConfig: Sendable, Equatable {
 
     return window
   }
+}
 
-  private static func boolValue(
+// MARK: - Generic Value Parsing
+
+private extension AppConfig {
+  static func boolValue(
     _ raw: String?,
     key: String,
     default fallback: Bool
@@ -363,8 +379,12 @@ public struct AppConfig: Sendable, Equatable {
       throw ConfigError.invalidBool(key: key, value: trimmed)
     }
   }
+}
 
-  private static func parseAllowlist(from environmentValue: String?) throws -> Set<Int64> {
+// MARK: - Allowlist & State Root
+
+private extension AppConfig {
+  static func parseAllowlist(from environmentValue: String?) throws -> Set<Int64> {
     guard
       let environmentValue = environmentValue?.trimmingCharacters(in: .whitespaces),
       !environmentValue.isEmpty
@@ -387,7 +407,7 @@ public struct AppConfig: Sendable, Equatable {
     return allowlist
   }
 
-  private static func createStateRootURL(for rawPath: String?) throws -> URL {
+  static func createStateRootURL(for rawPath: String?) throws -> URL {
     let trimmedPath = rawPath?.trimmingCharacters(in: .whitespaces)
     let stateRootURL =
       if let path = trimmedPath, !path.isEmpty {

@@ -6,12 +6,6 @@ import Logging
 /// (output-cap field switch, no sampling params), defensive response parse, status→`ProviderError`
 /// mapping, and retry with `Retry-After`-aware backoff. Storeless — budget persistence is upstream.
 public struct OpenAICompatibleProvider: LLMProvider {
-  private static let baseBackoffSeconds = 0.5
-  private static let maxBackoffSeconds = 30.0
-
-  private static let maxStreamingErrorBodyBytes = 64 * 1024
-  private static let liteLLMResponseCostHeader = "x-litellm-response-cost"
-
   private let config: LLMConfig
   private let http: any HTTPExecuting & HTTPStreaming
   private let sleep: @Sendable (Double) async throws -> Void
@@ -148,21 +142,6 @@ public struct OpenAICompatibleProvider: LLMProvider {
       || model.contains("reasoning")
   }
 
-  // MARK: - Request
-
-  private func chatCompletionsURL() -> String {
-    let base = config.baseURL.hasSuffix("/") ? String(config.baseURL.dropLast()) : config.baseURL
-    return "\(base)/chat/completions"
-  }
-
-  private func requestHeaders() -> [String: String] {
-    var headers = ["Content-Type": "application/json"]
-    if !config.apiKey.isEmpty {
-      headers["Authorization"] = "Bearer \(config.apiKey)"
-    }
-    return headers
-  }
-
   func encode(request: ChatRequest, streaming: Bool = false) throws -> Data {
     let wireMessages = request.messages.map { message -> WireMessage in
       let wireCalls = message.toolCalls.map { call in
@@ -204,8 +183,6 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return try JSONEncoder().encode(payload)
   }
 
-  // MARK: - Response
-
   func parse(result: HTTPResult) throws -> ChatResponse {
     let decoded: ResponseBody
     do {
@@ -244,8 +221,32 @@ public struct OpenAICompatibleProvider: LLMProvider {
       toolCalls: toolCalls
     )
   }
+}
 
-  private func errorMessage(from body: Data) -> String {
+// MARK: - Request
+
+private extension OpenAICompatibleProvider {
+  func chatCompletionsURL() -> String {
+    let base = config.baseURL.hasSuffix("/") ? String(config.baseURL.dropLast()) : config.baseURL
+    return "\(base)/chat/completions"
+  }
+
+  func requestHeaders() -> [String: String] {
+    var headers = ["Content-Type": "application/json"]
+    if !config.apiKey.isEmpty {
+      headers["Authorization"] = "Bearer \(config.apiKey)"
+    }
+    return headers
+  }
+}
+
+// MARK: - Response
+
+private extension OpenAICompatibleProvider {
+  static let maxStreamingErrorBodyBytes = 64 * 1024
+  static let liteLLMResponseCostHeader = "x-litellm-response-cost"
+
+  func errorMessage(from body: Data) -> String {
     guard
       let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body),
       let message = decoded.error?.message
@@ -255,7 +256,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return message
   }
 
-  private func collectStreamingErrorBody(
+  func collectStreamingErrorBody(
     _ body: AsyncThrowingStream<Data, Error>
   ) async throws -> Data {
     var collected = Data()
@@ -270,24 +271,29 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return collected
   }
 
-  private func providerCost(from head: HTTPStreamHead) -> Double? {
+  func providerCost(from head: HTTPStreamHead) -> Double? {
     head.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
   }
 
-  private func providerCost(from result: HTTPResult) -> Double? {
+  func providerCost(from result: HTTPResult) -> Double? {
     result.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
   }
+}
 
-  // MARK: - Retry
+// MARK: - Retry
 
-  private func retryAfterSeconds(from result: HTTPResult) -> Double? {
+private extension OpenAICompatibleProvider {
+  static let baseBackoffSeconds = 0.5
+  static let maxBackoffSeconds = 30.0
+
+  func retryAfterSeconds(from result: HTTPResult) -> Double? {
     if let milliseconds = result.getHeader(for: "retry-after-ms").flatMap(Double.init) {
       return milliseconds / 1000
     }
     return result.getHeader(for: "retry-after").flatMap(Double.init)
   }
 
-  private func backoff(attempt: Int, retryAfterSeconds: Double?) async throws {
+  func backoff(attempt: Int, retryAfterSeconds: Double?) async throws {
     if let retryAfter = retryAfterSeconds {
       try await sleep(retryAfter)
       return
@@ -295,17 +301,19 @@ public struct OpenAICompatibleProvider: LLMProvider {
     let exponential = Self.baseBackoffSeconds * pow(2, Double(attempt - 1))
     try await sleep(jitter(min(exponential, Self.maxBackoffSeconds)))
   }
+}
 
-  // MARK: - Redaction
+// MARK: - Redaction
 
-  private func sanitize(message: String) -> String {
+private extension OpenAICompatibleProvider {
+  func sanitize(message: String) -> String {
     guard !config.apiKey.isEmpty else {
       return message
     }
     return message.replacingOccurrences(of: config.apiKey, with: "<redacted-key>")
   }
 
-  private func sanitize(providerError: ProviderError) -> ProviderError {
+  func sanitize(providerError: ProviderError) -> ProviderError {
     switch providerError {
     case .connectFailed(let message):
       return .connectFailed(message: sanitize(message: message))

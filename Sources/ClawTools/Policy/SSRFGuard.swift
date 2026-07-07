@@ -40,11 +40,13 @@ public enum SSRFGuard {
       isPublicV6(bytes)
     }
   }
+}
 
-  // MARK: - IPv4
+// MARK: - IPv4
 
+private extension SSRFGuard {
   /// (network, mask) pairs, host byte order. Matching is `value & mask == network`.
-  private static let blockedV4Ranges: [(network: UInt32, mask: UInt32)] = [
+  static let blockedV4Ranges: [(network: UInt32, mask: UInt32)] = [
     (v4(0, 0, 0, 0), mask(8)),  // "this network" + unspecified
     (v4(10, 0, 0, 0), mask(8)),  // RFC-1918
     (v4(100, 64, 0, 0), mask(10)),  // CGNAT
@@ -61,13 +63,13 @@ public enum SSRFGuard {
     (v4(240, 0, 0, 0), mask(4)),  // reserved (incl. 255.255.255.255 broadcast)
   ]
 
-  private static func isPublicV4(_ value: UInt32) -> Bool {
+  static func isPublicV4(_ value: UInt32) -> Bool {
     !blockedV4Ranges.contains { range in
       value & range.mask == range.network
     }
   }
 
-  private static func v4(
+  static func v4(
     _ byte0: UInt32,
     _ byte1: UInt32,
     _ byte2: UInt32,
@@ -76,18 +78,20 @@ public enum SSRFGuard {
     (byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3
   }
 
-  private static func mask(_ prefixLength: UInt32) -> UInt32 {
+  static func mask(_ prefixLength: UInt32) -> UInt32 {
     prefixLength == 0 ? 0 : ~UInt32(0) << (32 - prefixLength)
   }
 
   /// The IPv4 address embedded in the final four bytes of an IPv6 address (mapped/NAT64/compatible).
-  private static func embeddedV4(_ bytes: [UInt8]) -> UInt32 {
+  static func embeddedV4(_ bytes: [UInt8]) -> UInt32 {
     v4(UInt32(bytes[12]), UInt32(bytes[13]), UInt32(bytes[14]), UInt32(bytes[15]))
   }
+}
 
-  // MARK: - IPv6
+// MARK: - IPv6
 
-  private static func isPublicV6(_ bytes: [UInt8]) -> Bool {
+private extension SSRFGuard {
+  static func isPublicV6(_ bytes: [UInt8]) -> Bool {
     guard bytes.count == 16 else {
       return false  // malformed: fail closed
     }

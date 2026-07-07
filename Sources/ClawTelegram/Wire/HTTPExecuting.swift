@@ -104,8 +104,12 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
       body
     )
   }
+}
 
-  private func makeRequest(
+// MARK: - Request Construction
+
+private extension AsyncHTTPExecutor {
+  func makeRequest(
     url: String,
     headers: [String: String],
     jsonBody: Data
@@ -121,15 +125,19 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
     return request
   }
 
-  private func responseHeaders(_ response: HTTPClientResponse) -> [String: String] {
+  func responseHeaders(_ response: HTTPClientResponse) -> [String: String] {
     var result: [String: String] = [:]
     for header in response.headers {
       result[header.name] = header.value
     }
     return result
   }
+}
 
-  private func classifyPreHeadError(_ error: Error) -> ProviderError {
+// MARK: - Transport Error Classification
+
+private extension AsyncHTTPExecutor {
+  func classifyPreHeadError(_ error: Error) -> ProviderError {
     let message = "\(error)"
     if isClearlyPreSendConnectFailure(error) {
       return .connectFailed(message: message)
@@ -137,7 +145,7 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
     return .retryable(status: nil, message: "transport failed before response head: \(message)")
   }
 
-  private func isClearlyPreSendConnectFailure(_ error: Error) -> Bool {
+  func isClearlyPreSendConnectFailure(_ error: Error) -> Bool {
     if let httpError = error as? HTTPClientError {
       return httpError == .connectTimeout
     }

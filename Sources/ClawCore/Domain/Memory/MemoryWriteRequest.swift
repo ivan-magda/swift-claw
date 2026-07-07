@@ -80,8 +80,12 @@ public enum MemoryWriteBuilder {
       warnings: warnings
     )
   }
+}
 
-  private static func scanWarnings(in text: String) -> [MemoryWriteWarning] {
+// MARK: - Warning Scanning
+
+private extension MemoryWriteBuilder {
+  static func scanWarnings(in text: String) -> [MemoryWriteWarning] {
     let loweredText = text.lowercased()
     var warnings: [MemoryWriteWarning] = []
 
@@ -97,12 +101,16 @@ public enum MemoryWriteBuilder {
 
     return warnings
   }
+}
 
-  private static func stripBlockedControls(from text: String) -> String {
+// MARK: - Control Character Sanitization
+
+private extension MemoryWriteBuilder {
+  static func stripBlockedControls(from text: String) -> String {
     String(text.unicodeScalars.filter { blockedControls.contains($0.value) == false })
   }
 
-  private static func renderVisibleControls(in text: String) -> String {
+  static func renderVisibleControls(in text: String) -> String {
     var rendered = ""
     rendered.reserveCapacity(text.count)
 
@@ -117,13 +125,13 @@ public enum MemoryWriteBuilder {
     return rendered
   }
 
-  private static func visibleScalarCode(for scalar: Unicode.Scalar) -> String {
+  static func visibleScalarCode(for scalar: Unicode.Scalar) -> String {
     let hex = String(scalar.value, radix: 16, uppercase: true)
     let paddedHex = String(repeating: "0", count: max(0, 4 - hex.count)) + hex
     return "<U+\(paddedHex)>"
   }
 
-  private static let blockedControls: Set<UInt32> = {
+  static let blockedControls: Set<UInt32> = {
     var scalars: Set<UInt32> = [
       0x061C,
       0x200B,

@@ -160,8 +160,10 @@ public struct MessageRouter: Sendable {
   }
 }
 
-extension MessageRouter {
-  private func handleStop(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
+// MARK: - Session Commands
+
+private extension MessageRouter {
+  func handleStop(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
     let result: StopCommandResult
     do {
       result = try commands.applyStop(
@@ -190,7 +192,7 @@ extension MessageRouter {
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
   }
 
-  private func handleNew(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
+  func handleNew(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
     let result: NewCommandResult
     do {
       result = try commands.applyNew(
@@ -223,10 +225,12 @@ extension MessageRouter {
     )
   }
 
+  // MARK: - Memory Commands
+
   /// `/remember` is handled directly: claim the update, resolve the session, build the pure write
   /// request, park it, and send the confirm prompt. No durable memory row is written until the
   /// owner confirms.
-  private func handleRemember(
+  func handleRemember(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     command: RememberCommand
@@ -278,7 +282,7 @@ extension MessageRouter {
     )
   }
 
-  private func handleMemory(
+  func handleMemory(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     command: MemoryCommand
@@ -301,7 +305,7 @@ extension MessageRouter {
     }
   }
 
-  private func handleMemoryReview(
+  func handleMemoryReview(
     rawUpdate: RawUpdate,
     chatId: Int64,
     kind: MemoryKind?
@@ -321,7 +325,7 @@ extension MessageRouter {
     return await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: text)
   }
 
-  private func handleMemoryShow(
+  func handleMemoryShow(
     rawUpdate: RawUpdate,
     chatId: Int64,
     id: Int64
@@ -340,7 +344,7 @@ extension MessageRouter {
     return await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: text)
   }
 
-  private func handleMemoryDelete(
+  func handleMemoryDelete(
     rawUpdate: RawUpdate,
     chatId: Int64,
     id: Int64
@@ -390,12 +394,14 @@ extension MessageRouter {
     )
   }
 
+  // MARK: - Schedule Creation & Listing
+
   /// Fans the allowlisted scheduling family — plus `/help`, which shares the identical
   /// owner-only `isAllowed` gate and has no state of its own to warrant a standalone arm in
   /// `handle` — out to its per-verb handler. The `isAllowed` gate is applied once by the caller
   /// for the whole family; `default` is unreachable — only the schedule create/list command,
   /// the four management verbs, and `/help` route here.
-  private func handleScheduleCommand(
+  func handleScheduleCommand(
     _ command: Command,
     rawUpdate: RawUpdate,
     message: IncomingMessage
@@ -428,7 +434,7 @@ extension MessageRouter {
   /// `/schedule <text>` (spec §7/§8): claim the update, run the ONE parse call, validate
   /// deterministically, park the validated draft, and send the gateway-authored confirm prompt.
   /// Nothing is armed here; every failure is a plain-language reply and parks nothing.
-  private func handleScheduleCreate(
+  func handleScheduleCreate(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     text: String
@@ -492,7 +498,7 @@ extension MessageRouter {
 
   /// The confirm preview's fire times. The SAME `nowDate` that validation used seeds the
   /// calculator, so the preview's first entry IS the parked `firstOccurrence`.
-  private func nextFires(for validated: ValidatedSchedule, from nowDate: Date) -> [Date] {
+  func nextFires(for validated: ValidatedSchedule, from nowDate: Date) -> [Date] {
     guard
       let envelope = validated.recurrence,
       let timezone = TimeZone(identifier: validated.timezone)
@@ -518,7 +524,7 @@ extension MessageRouter {
   /// (§8): label/prompt/rule/timezone are still the parked draft's. Returns nil when nothing valid
   /// remains to arm: a one-shot whose instant has passed, or (pathological) a rule with no
   /// upcoming occurrence.
-  private func armNextOccurrence(for validated: ValidatedSchedule, now nowDate: Date) -> Date? {
+  func armNextOccurrence(for validated: ValidatedSchedule, now nowDate: Date) -> Date? {
     guard let envelope = validated.recurrence else {
       return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
     }
@@ -536,7 +542,7 @@ extension MessageRouter {
 
   /// `/schedule list` (spec §9): read-only, deduped via the canned-reply claim like
   /// `handleMemoryReview`.
-  private func handleScheduleList(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
+  func handleScheduleList(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
     let jobs: [ScheduledJob]
     do {
       jobs = try schedule.jobs.listAll()
@@ -565,17 +571,19 @@ extension MessageRouter {
   /// calculator-produced — materialized at arm time and advanced only inside the claim (§4.1) —
   /// so the list can never disagree with what actually fires (spec §9's single-source rule),
   /// including everyNMinutes phase. Non-ACTIVE rows show none.
-  private func displayNextFire(_ job: ScheduledJob) -> Date? {
+  func displayNextFire(_ job: ScheduledJob) -> Date? {
     guard job.status == .active else {
       return nil
     }
     return job.nextOccurrence
   }
 
+  // MARK: - Schedule Management Verbs
+
   /// Claims a verb command's update BEFORE its effect, so a redelivered command applies once
   /// (spec §5.4: /runnow idempotency rides the update_id claim; pause/resume/cancel get the
   /// same discipline for uniformity). nil ⇒ claimed, proceed; non-nil ⇒ the outcome to return.
-  private func claimVerbUpdate(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome? {
+  func claimVerbUpdate(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome? {
     do {
       guard try processed.claimUpdate(updateId: rawUpdate.updateId) else {
         logger.debug("duplicate update \(rawUpdate.updateId), skipping")
@@ -590,7 +598,7 @@ extension MessageRouter {
     return nil
   }
 
-  private func handlePause(
+  func handlePause(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     jobId: Int64?
@@ -624,7 +632,7 @@ extension MessageRouter {
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
   }
 
-  private func handleResume(
+  func handleResume(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     jobId: Int64?
@@ -675,7 +683,7 @@ extension MessageRouter {
   /// Resume's next fire: recurring ⇒ the calculator's next occurrence after now (anchored at
   /// the job's createdTs like every other occurrence read); one-shot ⇒ its stored instant if
   /// still ahead, else nothing left to fire.
-  private func resumeNextOccurrence(job: ScheduledJob, from nowDate: Date) -> Date? {
+  func resumeNextOccurrence(job: ScheduledJob, from nowDate: Date) -> Date? {
     guard
       let envelope = job.recurrence,
       let timezone = TimeZone(identifier: job.timezone)
@@ -697,7 +705,7 @@ extension MessageRouter {
     ).first
   }
 
-  private func handleRunNow(
+  func handleRunNow(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     jobId: Int64?
@@ -762,7 +770,7 @@ extension MessageRouter {
     )
   }
 
-  private func handleCancelJob(
+  func handleCancelJob(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     jobId: Int64?
@@ -796,11 +804,13 @@ extension MessageRouter {
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
   }
 
+  // MARK: - Pending Confirmation Resolution
+
   /// Intercepts plain text while a confirmation is parked for the session. Returns nil when there
   /// is nothing to resolve, so the caller falls through to normal turn dispatch. The session lookup
   /// is read-only and fails closed: with the lookup down we cannot prove whether a parked "yes"
   /// should be intercepted, so nothing is claimed and the update is retried instead.
-  private func resolvePendingConfirmation(
+  func resolvePendingConfirmation(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     text: String
@@ -864,7 +874,7 @@ extension MessageRouter {
   }
 
   /// Confirms a parked effect through its atomic claim+effect+audit store seam.
-  private func commitPending(
+  func commitPending(
     _ entry: PendingConfirmation,
     sessionId: Int64,
     rawUpdate: RawUpdate,
@@ -947,7 +957,7 @@ extension MessageRouter {
 
   /// A parked schedule confirmed after its only fire time has passed: nothing valid remains to
   /// arm. Claim the update (dedup), clear the slot, and tell the owner to reschedule.
-  private func rejectStaleArm(
+  func rejectStaleArm(
     sessionId: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
@@ -978,7 +988,7 @@ extension MessageRouter {
 
   /// A non-disk commit failure is terminal for the parked entry: claim the update, clear the
   /// ephemeral pending state, and tell the owner nothing changed so they can re-issue the command.
-  private func failPendingCommit(
+  func failPendingCommit(
     _ entry: PendingConfirmation,
     sessionId: Int64,
     rawUpdate: RawUpdate,
@@ -1017,7 +1027,7 @@ extension MessageRouter {
   }
 
   /// A negative confirmation claims the update, clears the parked entry, and sends a cancel ack.
-  private func cancelPending(
+  func cancelPending(
     sessionId: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
@@ -1046,9 +1056,11 @@ extension MessageRouter {
     )
   }
 
+  // MARK: - Turn Dispatch
+
   /// Fuses claim + persistence, then enqueues the durable run and returns without awaiting it.
   /// Persistence failure prevents cursor advancement; background turn failures are logged in-band.
-  private func dispatchTurn(
+  func dispatchTurn(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     text: String,
@@ -1115,7 +1127,9 @@ extension MessageRouter {
     return .processed
   }
 
-  private func sendCommandAck(
+  // MARK: - Outbound Replies
+
+  func sendCommandAck(
     rawUpdate: RawUpdate,
     chatId: Int64,
     text: String
@@ -1128,12 +1142,12 @@ extension MessageRouter {
     return .processed
   }
 
-  private func sendPrivateBotReply(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
+  func sendPrivateBotReply(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
     await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: Self.privateBotText)
   }
 
   /// A direct canned reply, deduped via `claimUpdate` so a redelivery doesn't double-send it.
-  private func sendCanned(
+  func sendCanned(
     rawUpdate: RawUpdate,
     chatId: Int64,
     text: String
@@ -1165,7 +1179,7 @@ extension MessageRouter {
 
   /// Best-effort "storage full" notice (the send may still succeed — a full disk doesn't break the
   /// network) and the signal for the poller to back off without advancing the offset (F23).
-  private func storageFull(chatId: Int64) async -> HandleOutcome {
+  func storageFull(chatId: Int64) async -> HandleOutcome {
     do {
       _ = try await transport.sendMessage(chatId: chatId, text: Degradation.storageFull)
     } catch {

@@ -104,12 +104,16 @@ struct RunCommand: AsyncParsableCommand {
     }
     logger.info("clawd stopped")
   }
+}
 
+// MARK: - Environment Bootstrap
+
+private extension RunCommand {
   /// Installs the redacting swift-log backend (level from `CLAW_LOG_LEVEL`, default `.info`) over
   /// stdout, then returns the root logger. Bootstrapping here — after secrets load, before the first
   /// `Logger` — hands the redactor the real secret values so no downstream log line can leak them.
   /// The earlier config/secret-load failures stay on stderr and cannot contain these secrets.
-  private static func bootstrapLogger(secrets: Secrets) -> Logger {
+  static func bootstrapLogger(secrets: Secrets) -> Logger {
     let environment = ProcessInfo.processInfo.environment
     let redactor = SecretRedactor(secretValues: secrets.redactionValues)
 
@@ -123,7 +127,7 @@ struct RunCommand: AsyncParsableCommand {
 
   /// Loads config from the process environment, printing a diagnostic and exiting with the
   /// error's distinct code so the supervisor backs off instead of hot-looping.
-  private static func loadConfigOrExit() throws -> AppConfig {
+  static func loadConfigOrExit() throws -> AppConfig {
     do {
       return try AppConfig.load(environment: ProcessInfo.processInfo.environment)
     } catch let error as ConfigError {
@@ -133,7 +137,7 @@ struct RunCommand: AsyncParsableCommand {
   }
 
   /// Loads secrets via the fail-closed resolver; a secret-load failure exits 11 (non-retryable).
-  private static func loadSecretsOrExit(config: AppConfig) throws -> Secrets {
+  static func loadSecretsOrExit(config: AppConfig) throws -> Secrets {
     let resolution = SecretStoreResolver.resolve(
       stateRoot: config.stateRoot,
       environment: ProcessInfo.processInfo.environment
@@ -146,10 +150,14 @@ struct RunCommand: AsyncParsableCommand {
       throw ExitCode(error.exitCode)
     }
   }
+}
 
+// MARK: - Service Graph Composition
+
+private extension RunCommand {
   /// Builds the service graph: the OpenAI-compatible provider + agent feed a `TurnRunner`, which
   /// the router dispatches from the poller. Both Telegram and the LLM share the injected executor.
-  private func makeDaemon(
+  func makeDaemon(
     config: AppConfig,
     secrets: Secrets,
     stores: ClawStores,
@@ -293,7 +301,7 @@ struct RunCommand: AsyncParsableCommand {
   /// The owner chat id also threads to boot reconcile (spec §12/A6): a crashed heartbeat run's
   /// synthetic session key carries no chat id, so its crash notice can only reach the owner via
   /// this config-derived target.
-  private func makeScheduler(
+  func makeScheduler(
     config: AppConfig,
     stores: ClawStores,
     lanes: SessionLaneRegistry,
@@ -318,7 +326,7 @@ struct RunCommand: AsyncParsableCommand {
     return (scheduler, heartbeatSettings.ownerChatId)
   }
 
-  private func fetchBotUsername(transport: TelegramClient, logger: Logger) async -> String? {
+  func fetchBotUsername(transport: TelegramClient, logger: Logger) async -> String? {
     do {
       return try await transport.getMe().username
     } catch {
@@ -328,12 +336,16 @@ struct RunCommand: AsyncParsableCommand {
       return nil
     }
   }
+}
 
+// MARK: - Agent Stack Assembly
+
+private extension RunCommand {
   /// Assembles the v1 tool catalog behind its policy gate (§7/§9). Tool fetches use the dedicated
   /// no-redirect `toolExecutor` (§7.2); no `searchApiKey` ⇒ `web_search` is never constructed
   /// (unconfigured ⇒ absent, §7.3). Tier-3 private texts load from DISK at gate-evaluation time
   /// (rev.1 H1), not the assembly snapshot, so the loader closure re-reads the workspace each call.
-  private func makeToolDispatcher(
+  func makeToolDispatcher(
     secrets: Secrets,
     workspace: FileSystemWorkspace,
     toolExecutor: AsyncHTTPExecutor
@@ -373,7 +385,7 @@ struct RunCommand: AsyncParsableCommand {
   /// Assembles the LLM agent stack: the OpenAI-compatible provider, the offline-first cost resolver,
   /// and the `AgentRuntime` that orchestrates one turn. Kept separate from the service wiring so the
   /// composition root reads as "build the agent → feed the turn runner → register the services".
-  private func makeAgent(
+  func makeAgent(
     config: AppConfig,
     secrets: Secrets,
     provider: OpenAICompatibleProvider,
@@ -402,11 +414,15 @@ struct RunCommand: AsyncParsableCommand {
       sleep: { try await Task.sleep(for: $0) }
     )
   }
+}
 
+// MARK: - Boot Sequence
+
+private extension RunCommand {
   /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram,
   /// then sweep crash-orphaned runs (F22). The steps are independent and best-effort, so the order
   /// is cosmetic; both run before any update is served.
-  private func bootSequence(
+  func bootSequence(
     transport: any TelegramTransport,
     stores: ClawStores,
     heartbeatOwner: Int64?,
@@ -428,7 +444,7 @@ struct RunCommand: AsyncParsableCommand {
   /// `setMyCommands` writes persistent server-side state, so re-declaring on every boot keeps the
   /// registered picker in sync with this build's `botMenuCommands`. Best-effort — a failure only
   /// means the picker is stale, never that the bot can't serve.
-  private func registerMenuCommands(
+  func registerMenuCommands(
     transport: any TelegramTransport,
     logger: Logger
   ) -> @Sendable () async -> Void {
@@ -458,7 +474,7 @@ struct RunCommand: AsyncParsableCommand {
   /// The boot step that sweeps any run left RUNNING by a crash to FAILED and enqueues a degradation
   /// reply, so a turn interrupted mid-flight is never silent (F22). It runs before the services
   /// serve, so the dispatcher's boot drain delivers whatever this enqueues.
-  private func bootReconcile(
+  func bootReconcile(
     stores: ClawStores,
     heartbeatOwner: Int64?,
     logger: Logger

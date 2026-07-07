@@ -165,9 +165,11 @@ public struct TurnRunner: TurnDispatching {
       origin: origin
     )
   }
+}
 
-  // MARK: - Load-bearing
+// MARK: - Turn Commit
 
+private extension TurnRunner {
   /// Persists one `TurnResult` against a single commit-time clock. The ordering is the contract:
   ///  - `.completed`: `runs.commitAssistantTurn` writes the assistant message + run→DONE +
   ///    provider_usage + outbox chunk(s) in ONE transaction, before any send; then audit + notify.
@@ -176,7 +178,7 @@ public struct TurnRunner: TurnDispatching {
   ///  - `.budgetStopped`: the shared failure tail with the budget reply.
   /// Only `StoreError.diskFull` may propagate; every other failure is handled in-band here.
   // swiftlint:disable:next function_parameter_count
-  private func commit(
+  func commit(
     _ outcome: TurnOutcome,
     runId: Int64,
     sessionId: Int64,
@@ -301,7 +303,7 @@ public struct TurnRunner: TurnDispatching {
 
   /// The shared failure tail. The store owns the run-state arbitration and writes usage, FAILED,
   /// and the degradation outbox row in one transaction so `/stop`/`/new` cannot interleave.
-  private func commitDegradation(  // swiftlint:disable:this function_parameter_count
+  func commitDegradation(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
@@ -347,12 +349,16 @@ public struct TurnRunner: TurnDispatching {
 
     return commitResult
   }
+}
 
+// MARK: - Budget Notifications
+
+private extension TurnRunner {
   /// Post-commit daily kill-switch. Reads today's totals (durable, from `provider_usage`) and asks
   /// the breaker whether to DM the owner — `shouldNotifyTrip` is idempotent per UTC day, so calling
   /// this from both the `.completed` and `.degraded` branches still yields at most one DM. The DM and
   /// its audit are best-effort (`try?`): a failed send is acceptable (D4), unlike a failed refusal.
-  private func notifyDailyCapIfTripped(
+  func notifyDailyCapIfTripped(
     chatId: Int64,
     runId: Int64,
     sessionId: Int64
@@ -391,7 +397,7 @@ public struct TurnRunner: TurnDispatching {
   /// Post-commit proactive-cap owner DM (§11): once per UTC day via the breaker's second latch.
   /// The trip itself is already durable (the run FAILED with the cap named); DM + audit are
   /// best-effort, mirroring `notifyDailyCapIfTripped`.
-  private func notifyProactiveCapIfTripped(
+  func notifyProactiveCapIfTripped(
     chatId: Int64,
     runId: Int64,
     sessionId: Int64
@@ -417,9 +423,13 @@ public struct TurnRunner: TurnDispatching {
       )
     )
   }
+}
 
+// MARK: - Commit Helpers
+
+private extension TurnRunner {
   /// Builds the audit row for a finished turn (actor = assistant, the turn's author).
-  private func turnAudit(
+  func turnAudit(
     action: AuditAction,
     runId: Int64,
     sessionId: Int64,
@@ -440,7 +450,7 @@ public struct TurnRunner: TurnDispatching {
 
   /// Assembles the owner-visible payload: overflow notices PREPEND (rev.1 L1), the approval
   /// prompt APPENDS. Single-part payloads (the common case) pass through unchanged.
-  private func ownerVisiblePayload(
+  func ownerVisiblePayload(
     reply: String,
     ownerNotices: [String],
     appendedNotices: [String] = []
@@ -454,7 +464,7 @@ public struct TurnRunner: TurnDispatching {
 
   /// Splits an assistant reply into deterministic outbox chunks (grapheme-capped, FNV-1a hashed).
   /// Mechanical helper for the `.completed` path — not part of the commit ordering.
-  private func outboxChunks(for content: String, chatId: Int64) -> [OutboxChunk] {
+  func outboxChunks(for content: String, chatId: Int64) -> [OutboxChunk] {
     ReplySplitter.split(text: content).enumerated().map { index, payload in
       OutboxChunk(
         stepIndex: index,
