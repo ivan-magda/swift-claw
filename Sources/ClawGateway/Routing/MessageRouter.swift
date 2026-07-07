@@ -505,55 +505,15 @@ private extension MessageRouter {
           chatId: message.chatId,
           text: ScheduleReplies.confirmPrompt(
             schedule: validated,
-            nextFires: nextFires(for: validated, from: nowDate)
+            nextFires: schedule.policy.confirmPreview(
+              for: validated,
+              from: nowDate,
+              limit: ScheduleReplies.confirmPreviewCount
+            )
           )
         )
       }
     }
-  }
-
-  /// The confirm preview's fire times. The SAME `nowDate` that validation used seeds the
-  /// calculator, so the preview's first entry IS the parked `firstOccurrence`.
-  func nextFires(for validated: ValidatedSchedule, from nowDate: Date) -> [Date] {
-    guard
-      let envelope = validated.recurrence,
-      let timezone = TimeZone(identifier: validated.timezone)
-    else {
-      return [validated.firstOccurrence]
-    }
-    return schedule.calculator.occurrences(
-      rule: envelope.rule,
-      timezone: timezone,
-      anchor: nowDate,
-      after: nowDate,
-      limit: ScheduleReplies.confirmPreviewCount
-    )
-  }
-
-  /// The fire time to arm with. Anchoring on the parked `firstOccurrence` (not arm-time `now`)
-  /// keeps the previewed everyNMinutes phase intact (preamble deviation #1: phase-continuous from
-  /// preview through every fire) — mirroring `resumeNextOccurrence`, which anchors on the stored
-  /// occurrence rather than `now` for the same reason. `after: nowDate` still does the M1 job: it
-  /// skips any occurrence already past by confirm time, so a draft confirmed long after its
-  /// preview can't arm an already-past occurrence (a one-shot would silently misfire to COMPLETED;
-  /// a recurring one would fire immediately). This re-runs the SAME parked rule — not a re-parse
-  /// (§8): label/prompt/rule/timezone are still the parked draft's. Returns nil when nothing valid
-  /// remains to arm: a one-shot whose instant has passed, or (pathological) a rule with no
-  /// upcoming occurrence.
-  func armNextOccurrence(for validated: ValidatedSchedule, now nowDate: Date) -> Date? {
-    guard let envelope = validated.recurrence else {
-      return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
-    }
-    guard let timezone = TimeZone(identifier: validated.timezone) else {
-      return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
-    }
-    return schedule.calculator.occurrences(
-      rule: envelope.rule,
-      timezone: timezone,
-      anchor: validated.firstOccurrence,
-      after: nowDate,
-      limit: 1
-    ).first
   }
 
   /// `/schedule list` (spec §9): read-only, deduped via the canned-reply claim like
@@ -678,7 +638,7 @@ private extension MessageRouter {
       }
       resumed = try schedule.jobs.resume(
         id: jobId,
-        nextOccurrence: resumeNextOccurrence(job: job, from: now()),
+        nextOccurrence: schedule.policy.resumeOccurrence(for: job, from: now()),
         now: now()
       )
     } catch StoreError.diskFull {
@@ -694,31 +654,6 @@ private extension MessageRouter {
 
     let reply = resumed.map(ScheduleReplies.resumed) ?? ScheduleReplies.notFound(id: jobId)
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
-  }
-
-  /// Resume's next fire: recurring ⇒ the calculator's next occurrence after now (anchored at
-  /// the job's createdTs like every other occurrence read); one-shot ⇒ its stored instant if
-  /// still ahead, else nothing left to fire.
-  func resumeNextOccurrence(job: ScheduledJob, from nowDate: Date) -> Date? {
-    guard
-      let envelope = job.recurrence,
-      let timezone = TimeZone(identifier: job.timezone)
-    else {
-      guard let instant = job.nextOccurrence, instant > nowDate else {
-        return nil
-      }
-      return instant
-    }
-    // Anchor = the stale stored next (pause leaves next_occurrence untouched): the recompute
-    // stays on the armed chain — everyNMinutes keeps its phase — while `after: nowDate` skips
-    // everything inside the paused window (§5.4: pause = "be quiet", never catch up).
-    return schedule.calculator.occurrences(
-      rule: envelope.rule,
-      timezone: timezone,
-      anchor: job.nextOccurrence ?? job.createdTs,
-      after: nowDate,
-      limit: 1
-    ).first
   }
 
   func handleRunNow(
@@ -881,12 +816,12 @@ private extension MessageRouter {
     message: IncomingMessage
   ) async -> HandleOutcome {
     // A parked schedule can be confirmed long after its preview; recompute the fire time from the
-    // parked rule against the arm-time clock (details in armNextOccurrence). A one-shot whose
-    // instant has passed cannot be salvaged — reject it so the owner reschedules rather than
-    // arming a job that silently never fires.
+    // parked rule against the arm-time clock (details in OccurrencePolicy.armOccurrence). A
+    // one-shot whose instant has passed cannot be salvaged — reject it so the owner reschedules
+    // rather than arming a job that silently never fires.
     var scheduleArmNext: Date?
     if case .scheduleArm(let validated) = entry {
-      guard let recomputed = armNextOccurrence(for: validated, now: now()) else {
+      guard let recomputed = schedule.policy.armOccurrence(for: validated, at: now()) else {
         return await rejectStaleArm(sessionId: sessionId, rawUpdate: rawUpdate, message: message)
       }
       scheduleArmNext = recomputed

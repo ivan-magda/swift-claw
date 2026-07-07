@@ -17,7 +17,7 @@ public struct SchedulerService: Service {
 
   private let jobs: any ScheduledJobStore
   private let enqueuer: TurnEnqueuer
-  private let calculator: OccurrenceCalculator
+  private let policy: OccurrencePolicy
   private let catchUpMaxAge: Duration
   private let heartbeat: HeartbeatSettings
   private let workspace: any WorkspaceReading
@@ -41,7 +41,7 @@ public struct SchedulerService: Service {
     logger: Logger
   ) {
     self.jobs = jobs
-    self.calculator = calculator
+    self.policy = OccurrencePolicy(calculator: calculator)
     self.catchUpMaxAge = catchUpMaxAge
     self.heartbeat = heartbeat
     self.workspace = workspace
@@ -123,21 +123,13 @@ private extension SchedulerService {
       let fireAt: Date
       if lateness <= Double(Self.tickInterval.components.seconds) {
         fireAt = due  // on time / one tick late
-      } else if let envelope = job.recurrence {
-        // Coalesce: N missed occurrences inside the window fire ONCE, at the latest missed
-        // occurrence ≤ now; the CAS still matches the stored due (§5.2 — due vs T_fire).
-        // Anchor = the stored due: every advance stays on the chain the confirm preview
-        // showed (for everyNMinutes the phase is due + k·N; time-of-day rules are anchor-inert).
-        fireAt =
-          calculator.latestOccurrence(
-            rule: envelope.rule,
-            timezone: timezone,
-            anchor: due,
-            after: due.addingTimeInterval(-1),
-            atOrBefore: tickTime
-          ) ?? due
       } else {
-        fireAt = due  // a one-shot has exactly one occurrence: the stored one
+        fireAt = policy.coalescedFireTime(
+          for: job,
+          timezone: timezone,
+          due: due,
+          atOrBefore: tickTime
+        )
       }
 
       guard
@@ -145,7 +137,7 @@ private extension SchedulerService {
           jobId: job.id,
           due: due,
           fireAt: fireAt,
-          nextOccurrence: nextOccurrence(
+          nextOccurrence: policy.advance(
             for: job,
             timezone: timezone,
             anchor: due,
@@ -169,46 +161,21 @@ private extension SchedulerService {
     timezone: TimeZone,
     tickTime: Date
   ) throws {
-    let skippedCount =
-      job.recurrence.map { envelope in
-        calculator.occurrences(
-          rule: envelope.rule,
-          timezone: timezone,
-          anchor: due,
-          after: due.addingTimeInterval(-1),
-          limit: Self.misfireCountLimit
-        ).filter { occurrence in
-          occurrence <= tickTime
-        }.count
-      } ?? 1
+    let skippedCount = policy.missedOccurrenceCount(
+      for: job,
+      timezone: timezone,
+      due: due,
+      atOrBefore: tickTime,
+      limit: Self.misfireCountLimit
+    )
 
     _ = try jobs.skipMisfire(
       jobId: job.id,
       due: due,
-      nextOccurrence: nextOccurrence(for: job, timezone: timezone, anchor: due, after: tickTime),
+      nextOccurrence: policy.advance(for: job, timezone: timezone, anchor: due, after: tickTime),
       skippedCount: skippedCount,
       now: tickTime
     )
-  }
-
-  /// The advanced next_occurrence: strictly after `after`; nil for a one-shot (→ COMPLETED).
-  /// `anchor` is the occurrence being advanced from (the claimed/skipped due) — advances stay
-  /// on the armed chain, so /schedule's confirm preview can never disagree with actual fires.
-  func nextOccurrence(
-    for job: ScheduledJob,
-    timezone: TimeZone,
-    anchor: Date,
-    after: Date
-  ) -> Date? {
-    job.recurrence.flatMap { envelope in
-      calculator.occurrences(
-        rule: envelope.rule,
-        timezone: timezone,
-        anchor: anchor,
-        after: after,
-        limit: 1
-      ).first
-    }
   }
 }
 
