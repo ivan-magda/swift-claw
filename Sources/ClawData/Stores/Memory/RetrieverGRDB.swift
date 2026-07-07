@@ -49,11 +49,16 @@ public struct RetrieverGRDB: Retriever {
       arguments += [limit]
 
       let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
-      return rows.map { row in
-        RecallHit(
+      return try rows.map { row in
+        // The SQL filters `role IN ('user','assistant')`, so an unknown role is unreachable
+        // today — the guard keeps the decode direction fail-closed if that filter ever moves.
+        guard let role = MessageRole(rawValue: row["role"]) else {
+          throw StoreError.unexpected("messages row \(row["id"] as Int64) has an unrecognized role")
+        }
+        return RecallHit(
           id: row["id"],
           sessionId: row["session_id"],
-          role: MessageRole(rawValue: row["role"]) ?? .user,
+          role: role,
           content: row["content"],
           score: RecallScore(sqliteBM25: row["bm25_score"]),
           createdAt: row["ts"]

@@ -15,14 +15,19 @@ public struct RunStoreGRDB: RunStore {
         return nil
       }
 
-      let rawOrigin =
-        try String.fetchOne(
-          db,
-          sql: "SELECT origin FROM runs WHERE id = ?",
-          arguments: [runId]
-        ) ?? RunOrigin.interactive.rawValue
+      let rawOrigin = try String.fetchOne(
+        db,
+        sql: "SELECT origin FROM runs WHERE id = ?",
+        arguments: [runId]
+      )
+      // Fail closed on a corrupted origin (same rule as decodeItem): a mislabeled origin would
+      // silently re-route budget pools and delivery policy. The throw rolls back the pickUp
+      // transition, so the run stays PENDING for the boot sweep.
+      guard let rawOrigin, let origin = RunOrigin(rawValue: rawOrigin) else {
+        throw StoreError.unexpected("runs row \(runId) has an unrecognized origin")
+      }
 
-      return RunOrigin(rawValue: rawOrigin) ?? .scheduled
+      return origin
     }
   }
 

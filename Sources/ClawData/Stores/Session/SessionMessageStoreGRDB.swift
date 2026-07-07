@@ -163,15 +163,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         arguments: [sessionId, windowStart, throughMessageId, boundaryId]
       )
 
-      let history = rows.map { row in
-        StoredMessage(
-          role: MessageRole(rawValue: row["role"]) ?? .user,
-          content: row["content"],
-          provenance: Provenance(rawValue: row["provenance"]) ?? .trusted,
-          toolCallsJSON: row["tool_calls"],
-          toolCallId: row["tool_call_id"]
-        )
-      }
+      let history = try rows.map(Self.decodeStoredMessage)
 
       // The new SELECT already returns `id`, so the id remap stays valid.
       let messageIds = rows.map { row in
@@ -235,5 +227,28 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
 
     return sessionId
+  }
+
+  /// Decodes a `messages` row, failing **closed** on an unrecognized persisted enum value:
+  /// `provenance` is the §12 trust tier — a corrupted value must not silently become the
+  /// permissive `.trusted` and unfence content the moment assembly keys off it. Same rule as
+  /// `MemoryStoreGRDB.decodeItem`.
+  static func decodeStoredMessage(_ row: Row) throws -> StoredMessage {
+    let rowId: Int64 = row["id"]
+
+    guard
+      let role = MessageRole(rawValue: row["role"]),
+      let provenance = Provenance(rawValue: row["provenance"])
+    else {
+      throw StoreError.unexpected("messages row \(rowId) has an unrecognized role or provenance")
+    }
+
+    return StoredMessage(
+      role: role,
+      content: row["content"],
+      provenance: provenance,
+      toolCallsJSON: row["tool_calls"],
+      toolCallId: row["tool_call_id"]
+    )
   }
 }

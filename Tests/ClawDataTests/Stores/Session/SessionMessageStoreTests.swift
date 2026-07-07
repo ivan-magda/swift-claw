@@ -283,4 +283,54 @@ import Testing
     #expect(counts.messages == 0)
     #expect(counts.runs == 0)
   }
+
+  @Test func corruptProvenanceFailsClosedInsteadOfDecodingTrusted() throws {
+    // given — a persisted message whose provenance left the vocabulary (rollback / hand-edit)
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let store = SessionMessageStoreGRDB(writer: queue)
+    let claim = try store.claimAndPersistInbound(inbound(updateId: 1, text: "hello"))
+    let sessionId = try #require(claim.sessionId)
+    let messageId = try #require(claim.messageId)
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE messages SET provenance = 'quarantined' WHERE id = ?",
+        arguments: [messageId]
+      )
+    }
+
+    // when / then — the load throws; it must never render the row as trusted (§12)
+    #expect(throws: StoreError.self) {
+      _ = try store.loadContextSnapshot(
+        sessionId: sessionId,
+        throughMessageId: messageId,
+        limit: 10
+      )
+    }
+  }
+
+  @Test func corruptRoleFailsClosedInsteadOfDecodingUser() throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let store = SessionMessageStoreGRDB(writer: queue)
+    let claim = try store.claimAndPersistInbound(inbound(updateId: 1, text: "hello"))
+    let sessionId = try #require(claim.sessionId)
+    let messageId = try #require(claim.messageId)
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE messages SET role = 'oracle' WHERE id = ?",
+        arguments: [messageId]
+      )
+    }
+
+    // when / then
+    #expect(throws: StoreError.self) {
+      _ = try store.loadContextSnapshot(
+        sessionId: sessionId,
+        throughMessageId: messageId,
+        limit: 10
+      )
+    }
+  }
 }
