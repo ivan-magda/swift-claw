@@ -33,6 +33,8 @@ public struct MessageRouter: Sendable {
   private let schedule: ScheduleSurface
   private let now: @Sendable () -> Date
   private let logger: Logger
+  private let replies: ReplySender
+  private let enqueuer: TurnEnqueuer
 
   public init(
     processed: any ProcessedUpdateStore,
@@ -64,6 +66,8 @@ public struct MessageRouter: Sendable {
     self.schedule = schedule
     self.now = now
     self.logger = logger
+    self.replies = ReplySender(processed: processed, transport: transport, logger: logger)
+    self.enqueuer = TurnEnqueuer(lanes: lanes, turns: turnRunner, logger: logger)
   }
 
   static let welcomeText = "Hi! I'm online. Send me a message and I'll do my best to help."
@@ -75,6 +79,14 @@ public struct MessageRouter: Sendable {
 
   @discardableResult
   public func handle(rawUpdate: RawUpdate) async -> HandleOutcome {
+    do throws(RoutingHalt) {
+      return try await route(rawUpdate: rawUpdate)
+    } catch {
+      return error.outcome
+    }
+  }
+
+  private func route(rawUpdate: RawUpdate) async throws(RoutingHalt) -> HandleOutcome {
     guard let message = IncomingMessage.normalize(from: rawUpdate) else {
       logger.debug("update \(rawUpdate.updateId) has nothing actionable, skipping")
       return .skipped
@@ -91,24 +103,24 @@ public struct MessageRouter: Sendable {
         // gets THEIR own id to request access (never the allowlist, never a turn).
         let reply =
           isAllowed ? Self.welcomeText : Self.unauthorizedStartText(userId: message.userId)
-        return await sendCanned(
-          rawUpdate: rawUpdate,
+        return await replies.sendCanned(
+          updateId: rawUpdate.updateId,
           chatId: message.chatId,
           text: reply
         )
       case .stop:
         guard isAllowed else {
-          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+          return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
         return await handleStop(rawUpdate: rawUpdate, message: message)
       case .new:
         guard isAllowed else {
-          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+          return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
         return await handleNew(rawUpdate: rawUpdate, message: message)
       case .remember(let rememberCommand):
         guard isAllowed else {
-          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+          return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
         return await handleRemember(
           rawUpdate: rawUpdate,
@@ -117,7 +129,7 @@ public struct MessageRouter: Sendable {
         )
       case .memory(let memoryCommand):
         guard isAllowed else {
-          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+          return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
         return await handleMemory(
           rawUpdate: rawUpdate,
@@ -126,12 +138,12 @@ public struct MessageRouter: Sendable {
         )
       case .schedule, .pause, .resume, .runNow, .cancelJob, .help:
         guard isAllowed else {
-          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+          return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
         return await handleScheduleCommand(command, rawUpdate: rawUpdate, message: message)
       case .plain(let plainText):
         guard isAllowed else {
-          return await sendPrivateBotReply(rawUpdate: rawUpdate, chatId: message.chatId)
+          return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
         if let resolved = await resolvePendingConfirmation(
           rawUpdate: rawUpdate,
@@ -149,7 +161,11 @@ public struct MessageRouter: Sendable {
     case .unsupported(let kind):
       // Never reveal capabilities to a stranger; the owner gets a specific "can't read X yet".
       let reply = isAllowed ? Self.unsupportedMediaText(kind: kind) : Self.privateBotText
-      return await sendCanned(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: reply
+      )
     }
   }
 
@@ -420,8 +436,8 @@ private extension MessageRouter {
     case .cancelJob(let jobId):
       return await handleCancelJob(rawUpdate: rawUpdate, message: message, jobId: jobId)
     case .help:
-      return await sendCanned(
-        rawUpdate: rawUpdate,
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
         chatId: message.chatId,
         text: CommandReplies.help
       )
@@ -743,25 +759,9 @@ private extension MessageRouter {
       )
     }
 
-    // Exactly the SchedulerService post-claim enqueue: the fused fireNow already created the
-    // session, trigger message, PENDING run, and jobExecuted audit; the lane gives the run
-    // ordering and cancellability, and `run` may throw only StoreError.diskFull (D1).
-    let lane = await lanes.actor(for: fire.sessionId)
-    await lane.enqueue(runId: fire.runId) { [turnRunner, logger] in
-      do {
-        try await turnRunner.run(
-          runId: fire.runId,
-          sessionId: fire.sessionId,
-          chatId: fire.ownerChatId,
-          triggerMessageId: fire.triggerMessageId,
-          grant: nil
-        )
-      } catch StoreError.diskFull {
-        logger.error("run-now turn \(fire.runId) stopped by storage full after enqueue")
-      } catch {
-        logger.error("run-now turn error (handled in-band) for job \(jobId): \(error)")
-      }
-    }
+    // The fused fireNow already created the session, trigger message, PENDING run, and
+    // jobExecuted audit; TurnEnqueuer gives the run ordering and cancellability (D1).
+    await enqueuer.enqueue(fire: fire)
 
     return await sendCommandAck(
       rawUpdate: rawUpdate,
@@ -1107,84 +1107,29 @@ private extension MessageRouter {
       "message accepted; dispatching run (chars=\(text.count) edited=\(message.isEdited))"
     )
 
-    let lane = await lanes.actor(for: sessionId)
-    await lane.enqueue(runId: runId) { [turnRunner, runLog] in
-      do {
-        try await turnRunner.run(
-          runId: runId,
-          sessionId: sessionId,
-          chatId: message.chatId,
-          triggerMessageId: triggerMessageId,
-          grant: grant
-        )
-      } catch StoreError.diskFull {
-        runLog.error("turn stopped by storage full after enqueue")
-      } catch {
-        runLog.error("turn run error (handled in-band): \(error)")
-      }
-    }
+    await enqueuer.enqueue(
+      runId: runId,
+      sessionId: sessionId,
+      chatId: message.chatId,
+      triggerMessageId: triggerMessageId,
+      grant: grant,
+      log: runLog
+    )
 
     return .processed
   }
 
   // MARK: - Outbound Replies
 
-  func sendCommandAck(
-    rawUpdate: RawUpdate,
-    chatId: Int64,
-    text: String
-  ) async -> HandleOutcome {
-    do {
-      _ = try await transport.sendMessage(chatId: chatId, text: text)
-    } catch {
-      logger.error("command ack send failed for update \(rawUpdate.updateId): \(error)")
-    }
-    return .processed
+  func sendCommandAck(rawUpdate: RawUpdate, chatId: Int64, text: String) async -> HandleOutcome {
+    await replies.sendCommandAck(updateId: rawUpdate.updateId, chatId: chatId, text: text)
   }
 
-  func sendPrivateBotReply(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
-    await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: Self.privateBotText)
+  func sendCanned(rawUpdate: RawUpdate, chatId: Int64, text: String) async -> HandleOutcome {
+    await replies.sendCanned(updateId: rawUpdate.updateId, chatId: chatId, text: text)
   }
 
-  /// A direct canned reply, deduped via `claimUpdate` so a redelivery doesn't double-send it.
-  func sendCanned(
-    rawUpdate: RawUpdate,
-    chatId: Int64,
-    text: String
-  ) async -> HandleOutcome {
-    let claimed: Bool
-    do {
-      claimed = try processed.claimUpdate(updateId: rawUpdate.updateId)
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: chatId)
-    } catch {
-      logger.error("claim failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard claimed else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    do {
-      _ = try await transport.sendMessage(chatId: chatId, text: text)
-    } catch {
-      logger.error("send failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    return .processed
-  }
-
-  /// Best-effort "storage full" notice (the send may still succeed — a full disk doesn't break the
-  /// network) and the signal for the poller to back off without advancing the offset (F23).
   func storageFull(chatId: Int64) async -> HandleOutcome {
-    do {
-      _ = try await transport.sendMessage(chatId: chatId, text: Degradation.storageFull)
-    } catch {
-      logger.error("failed to send storage-full notice: \(error)")
-    }
-    return .storageFull
+    await replies.storageFull(chatId: chatId)
   }
 }

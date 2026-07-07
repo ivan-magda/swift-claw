@@ -16,8 +16,7 @@ public struct SchedulerService: Service {
   public static let tickInterval: Duration = .seconds(60)
 
   private let jobs: any ScheduledJobStore
-  private let lanes: SessionLaneRegistry
-  private let turns: any TurnDispatching
+  private let enqueuer: TurnEnqueuer
   private let calculator: OccurrenceCalculator
   private let catchUpMaxAge: Duration
   private let heartbeat: HeartbeatSettings
@@ -42,8 +41,6 @@ public struct SchedulerService: Service {
     logger: Logger
   ) {
     self.jobs = jobs
-    self.lanes = lanes
-    self.turns = turns
     self.calculator = calculator
     self.catchUpMaxAge = catchUpMaxAge
     self.heartbeat = heartbeat
@@ -52,6 +49,7 @@ public struct SchedulerService: Service {
     self.now = now
     self.sleep = sleep
     self.logger = logger
+    self.enqueuer = TurnEnqueuer(lanes: lanes, turns: turns, logger: logger)
   }
 
   public func run() async throws {
@@ -159,7 +157,7 @@ private extension SchedulerService {
         return  // CAS matched no row: claimed elsewhere / job mutated — no fire
       }
 
-      await enqueue(fire)
+      await enqueuer.enqueue(fire: fire)
     } catch {
       logger.error("scheduler fire failed for job \(job.id): \(error)")
     }
@@ -210,30 +208,6 @@ private extension SchedulerService {
         after: after,
         limit: 1
       ).first
-    }
-  }
-
-  /// D1: a claimed fire is a first-class lane citizen — ordered and cancellable like any turn.
-  func enqueue(_ fire: ClaimedFire) async {
-    let runner = turns
-    let log = logger
-
-    let lane = await lanes.actor(for: fire.sessionId)
-
-    await lane.enqueue(runId: fire.runId) {
-      do {
-        try await runner.run(
-          runId: fire.runId,
-          sessionId: fire.sessionId,
-          chatId: fire.ownerChatId,
-          triggerMessageId: fire.triggerMessageId,
-          grant: nil
-        )
-      } catch {
-        // run() may throw only StoreError.diskFull; the lane closure cannot rethrow, so log it —
-        // the PENDING run stays durable and boot reconciliation resolves it (§5.2).
-        log.error("scheduled run \(fire.runId) failed with a storage error: \(error)")
-      }
     }
   }
 }
@@ -304,7 +278,7 @@ private extension SchedulerService {
         day: day
       )
       await skipEpisode.end()
-      await enqueue(fire)
+      await enqueuer.enqueue(fire: fire)
     } catch {
       logger.error("heartbeat fire failed: \(error)")
     }
