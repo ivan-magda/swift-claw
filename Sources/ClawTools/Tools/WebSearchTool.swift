@@ -32,13 +32,18 @@ public struct WebSearchTool: Tool {
           ]),
         ]),
         "required": .array([.string("query")]),
-      ])
+      ]),
+      egressClass: .fixedEndpoint
     )
   }
 
   public var timeout: Duration { .seconds(15) }
 
-  public func execute(arguments: JSONValue) async -> ToolPayload {
+  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil  // fixed-endpoint: the destination is pinned at composition, not chosen by args
+  }
+
+  public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     guard
       let query = arguments.objectValue?["query"]?.stringValue,
       query.isEmpty == false

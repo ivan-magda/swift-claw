@@ -120,16 +120,47 @@ extension JSONValue {
   }
 }
 
+/// How a tool's arguments can leave the machine (§18-H's sink classification). Declared on the
+/// contract — with no default — so a new tool cannot compile without classifying itself; the
+/// gate consumes this declaration instead of a name set, making a forgotten classification a
+/// compile error rather than a silent arg-guard bypass.
+public enum ToolEgressClass: Sendable, Equatable {
+  /// Nothing egresses (file_read): args are redaction-RENDERED for audit only.
+  case none
+  /// Args egress to one owner-pinned endpoint (web_search): the blocking arg-guard tiers apply;
+  /// no per-target approval exists because the destination is fixed at composition.
+  case fixedEndpoint
+  /// Args choose the destination (web_fetch): arg-guard tiers plus the trifecta approval, keyed
+  /// on the canonical target resolved via `Tool.canonicalTarget(arguments:)`.
+  case arbitraryDestination
+}
+
+/// The outcome of resolving an `.arbitraryDestination` tool's target: the canonical form the
+/// gate authorizes (and hands into `execute`), or the owner-facing refusal copy (URL policy,
+/// missing argument).
+public enum CanonicalTargetResolution: Sendable, Equatable {
+  case resolved(String)
+  case refused(reason: String)
+}
+
 /// What the registry advertises to the provider (wire `tools` entry).
 public struct ToolDefinition: Sendable, Equatable {
   public let name: String
   public let description: String
   public let parameters: JSONValue  // JSON-Schema object
+  /// The declared policy class the gate enforces. NOT advertised on the wire.
+  public let egressClass: ToolEgressClass
 
-  public init(name: String, description: String, parameters: JSONValue) {
+  public init(
+    name: String,
+    description: String,
+    parameters: JSONValue,
+    egressClass: ToolEgressClass
+  ) {
     self.name = name
     self.description = description
     self.parameters = parameters
+    self.egressClass = egressClass
   }
 }
 
@@ -202,12 +233,22 @@ public struct ToolObservation: Sendable, Equatable {
 }
 
 /// The tool seam. Gate checks happen BEFORE dispatch (ToolPolicyGate); an executing tool only
-/// ever sees already-authorized, parsed args.
+/// ever sees already-authorized, parsed args. Tools DECLARE their policy class
+/// (`definition.egressClass`) and, for `.arbitraryDestination`, HOW to resolve the target —
+/// enforcement lives exclusively in the gate.
 public protocol Tool: Sendable {
   var definition: ToolDefinition { get }
   var timeout: Duration { get }
 
-  func execute(arguments: JSONValue) async -> ToolPayload
+  /// The canonical, owner-visible target this call would act on — REQUIRED for
+  /// `.arbitraryDestination` tools (the gate keys grants/approvals on it and hands the resolved
+  /// form to `execute`); `nil` for `.none`/`.fixedEndpoint` tools. No default implementation:
+  /// every tool decides explicitly.
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution?
+
+  /// `canonicalTarget` is the gate-resolved form for `.arbitraryDestination` tools — act on
+  /// exactly what was authorized, never re-derive it; `nil` for the other classes.
+  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
 }
 
 /// The search seam (D2). One v1 impl: ExaSearchProvider (§7.4, research-settled).

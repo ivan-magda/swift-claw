@@ -106,7 +106,8 @@ import Testing
     let definition = ToolDefinition(
       name: "web_fetch",
       description: "d",
-      parameters: .object(["type": .string("object")])
+      parameters: .object(["type": .string("object")]),
+      egressClass: .none
     )
     let provider = SequenceProvider([okResponse()])
     let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())

@@ -39,13 +39,18 @@ public struct FileReadTool: Tool {
           ])
         ]),
         "required": .array([.string("path")]),
-      ])
+      ]),
+      egressClass: .none
     )
   }
 
   public var timeout: Duration { .seconds(5) }
 
-  public func execute(arguments: JSONValue) async -> ToolPayload {
+  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil  // nothing egresses; containment is enforced inside execute (FR-T4)
+  }
+
+  public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     guard
       let path = arguments.objectValue?["path"]?.stringValue,
       path.isEmpty == false
