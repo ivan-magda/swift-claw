@@ -23,7 +23,6 @@ public struct MessageRouter: Sendable {
   private let sessionMessages: any SessionMessageStore
   private let commands: any CommandStore
   private let memory: any MemoryStore
-  private let memoryCommands: any MemoryCommandStore
   private let pendingConfirmations: PendingConfirmationRegistry
   private let botUsername: String?
   private let accessControl: AccessControl
@@ -35,6 +34,8 @@ public struct MessageRouter: Sendable {
   private let logger: Logger
   private let replies: ReplySender
   private let enqueuer: TurnEnqueuer
+  private let turnDispatch: TurnDispatch
+  private let confirmations: ConfirmationResolver
 
   public init(
     processed: any ProcessedUpdateStore,
@@ -56,7 +57,6 @@ public struct MessageRouter: Sendable {
     self.sessionMessages = sessionMessages
     self.commands = commands
     self.memory = memory
-    self.memoryCommands = memoryCommands
     self.pendingConfirmations = pendingConfirmations
     self.botUsername = botUsername
     self.accessControl = accessControl
@@ -68,6 +68,24 @@ public struct MessageRouter: Sendable {
     self.logger = logger
     self.replies = ReplySender(processed: processed, transport: transport, logger: logger)
     self.enqueuer = TurnEnqueuer(lanes: lanes, turns: turnRunner, logger: logger)
+    let turnDispatch = TurnDispatch(
+      sessionMessages: sessionMessages,
+      enqueuer: self.enqueuer,
+      replies: self.replies,
+      now: now,
+      logger: logger
+    )
+    self.turnDispatch = turnDispatch
+    self.confirmations = ConfirmationResolver(
+      sessionMessages: sessionMessages,
+      pendingConfirmations: pendingConfirmations,
+      memoryCommands: memoryCommands,
+      schedule: schedule,
+      turnDispatch: turnDispatch,
+      replies: self.replies,
+      now: now,
+      logger: logger
+    )
   }
 
   static let welcomeText = "Hi! I'm online. Send me a message and I'll do my best to help."
@@ -145,14 +163,14 @@ public struct MessageRouter: Sendable {
         guard isAllowed else {
           return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
-        if let resolved = await resolvePendingConfirmation(
+        if let resolved = try await confirmations.resolve(
           rawUpdate: rawUpdate,
           message: message,
           text: plainText
         ) {
           return resolved
         }
-        return await dispatchTurn(
+        return try await turnDispatch.dispatch(
           rawUpdate: rawUpdate,
           message: message,
           text: plainText
@@ -737,323 +755,6 @@ private extension MessageRouter {
 
     let reply = cancelled.map(ScheduleReplies.cancelled) ?? ScheduleReplies.notFound(id: jobId)
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
-  }
-
-  // MARK: - Pending Confirmation Resolution
-
-  /// Intercepts plain text while a confirmation is parked for the session. Returns nil when there
-  /// is nothing to resolve, so the caller falls through to normal turn dispatch. The session lookup
-  /// is read-only and fails closed: with the lookup down we cannot prove whether a parked "yes"
-  /// should be intercepted, so nothing is claimed and the update is retried instead.
-  func resolvePendingConfirmation(
-    rawUpdate: RawUpdate,
-    message: IncomingMessage,
-    text: String
-  ) async -> HandleOutcome? {
-    let sessionId: Int64
-    do {
-      guard
-        let existing = try sessionMessages.findSession(
-          sessionKey: SessionKey.telegramDM(chatId: message.chatId)
-        )
-      else {
-        return nil
-      }
-      sessionId = existing
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("pending lookup failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard let entry = await pendingConfirmations.pending(sessionId: sessionId) else {
-      return nil
-    }
-
-    // A tool approval differs from the memory-confirm flow: BOTH a confirm and a non-confirm
-    // reply become an ordinary persisted turn (never a command ack, §14), so it resolves here,
-    // before the memory-only commit/cancel switch below ever sees the entry.
-    if case .toolApproval(let request) = entry {
-      await pendingConfirmations.clear(sessionId: sessionId)
-      let grant: OneTurnGrant? =
-        ConfirmationReply.parse(text) == .confirm
-        ? OneTurnGrant(action: request.action)
-        : nil
-      return await dispatchTurn(
-        rawUpdate: rawUpdate,
-        message: message,
-        text: text,
-        grant: grant
-      )
-    }
-
-    guard case .command(let confirmation) = entry else {
-      // .toolApproval returned above; the guard keeps the destructuring exhaustive without a
-      // fatal arm.
-      return nil
-    }
-
-    switch ConfirmationReply.parse(text) {
-    case .confirm:
-      return await commitPending(
-        confirmation,
-        sessionId: sessionId,
-        rawUpdate: rawUpdate,
-        message: message
-      )
-    case .cancel:
-      return await cancelPending(
-        sessionId: sessionId,
-        rawUpdate: rawUpdate,
-        message: message
-      )
-    case .other:
-      await pendingConfirmations.clear(sessionId: sessionId)
-      return nil
-    }
-  }
-
-  /// Confirms a parked effect through its atomic claim+effect+audit store seam.
-  func commitPending(
-    _ entry: CommandConfirmation,
-    sessionId: Int64,
-    rawUpdate: RawUpdate,
-    message: IncomingMessage
-  ) async -> HandleOutcome {
-    // A parked schedule can be confirmed long after its preview; recompute the fire time from the
-    // parked rule against the arm-time clock (details in OccurrencePolicy.armOccurrence). A
-    // one-shot whose instant has passed cannot be salvaged — reject it so the owner reschedules
-    // rather than arming a job that silently never fires.
-    var scheduleArmNext: Date?
-    if case .scheduleArm(let validated) = entry {
-      guard let recomputed = schedule.policy.armOccurrence(for: validated, at: now()) else {
-        return await rejectStaleArm(sessionId: sessionId, rawUpdate: rawUpdate, message: message)
-      }
-      scheduleArmNext = recomputed
-    }
-
-    let newlyClaimed: Bool
-    let ackText: String
-    do {
-      switch entry {
-      case .rememberWrite(let request):
-        let result = try memoryCommands.applyRemember(
-          updateId: rawUpdate.updateId,
-          item: request.item,
-          now: Date()
-        )
-        newlyClaimed = result.newlyClaimed
-        ackText = MemoryReplies.saved(id: result.item?.id)
-      case .deleteItem(let itemId):
-        let result = try memoryCommands.applyForget(
-          updateId: rawUpdate.updateId,
-          itemId: itemId,
-          now: Date()
-        )
-        newlyClaimed = result.newlyClaimed
-        ackText = MemoryReplies.deleted(id: itemId)
-      case .scheduleArm(let validated):
-        // owner_chat_id is set HERE, in code, from the arming chat — never model- or
-        // prompt-controlled (spec §4.1). The insert is the exact parked draft (§8, no re-parse).
-        let newJob = NewScheduledJob(
-          ownerChatId: message.chatId,
-          label: validated.label,
-          prompt: validated.prompt,
-          recurrence: validated.recurrence,
-          timezone: validated.timezone,
-          nextOccurrence: scheduleArmNext ?? validated.firstOccurrence
-        )
-        let result = try schedule.commands.applyArm(
-          updateId: rawUpdate.updateId,
-          job: newJob,
-          now: now()
-        )
-        newlyClaimed = result.newlyClaimed
-        ackText = ScheduleReplies.armed(job: result.job)
-      }
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("confirmation commit failed for update \(rawUpdate.updateId): \(error)")
-      return await failPendingCommit(
-        entry,
-        sessionId: sessionId,
-        rawUpdate: rawUpdate,
-        message: message
-      )
-    }
-
-    guard newlyClaimed else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    await pendingConfirmations.clear(sessionId: sessionId)
-
-    return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: ackText)
-  }
-
-  /// A parked schedule confirmed after its only fire time has passed: nothing valid remains to
-  /// arm. Claim the update (dedup), clear the slot, and tell the owner to reschedule.
-  func rejectStaleArm(
-    sessionId: Int64,
-    rawUpdate: RawUpdate,
-    message: IncomingMessage
-  ) async -> HandleOutcome {
-    let claimed: Bool
-    do {
-      claimed = try processed.claimUpdate(updateId: rawUpdate.updateId)
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("stale-arm claim failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard claimed else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    await pendingConfirmations.clear(sessionId: sessionId)
-
-    return await sendCommandAck(
-      rawUpdate: rawUpdate,
-      chatId: message.chatId,
-      text: ScheduleReplies.armExpired
-    )
-  }
-
-  /// A non-disk commit failure is terminal for the parked entry: claim the update, clear the
-  /// ephemeral pending state, and tell the owner nothing changed so they can re-issue the command.
-  func failPendingCommit(
-    _ entry: CommandConfirmation,
-    sessionId: Int64,
-    rawUpdate: RawUpdate,
-    message: IncomingMessage
-  ) async -> HandleOutcome {
-    let claimed: Bool
-    do {
-      claimed = try processed.claimUpdate(updateId: rawUpdate.updateId)
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("failure-claim failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard claimed else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    await pendingConfirmations.clear(sessionId: sessionId)
-
-    let errorText: String
-    switch entry {
-    case .rememberWrite:
-      errorText = MemoryReplies.saveFailed
-    case .deleteItem:
-      errorText = MemoryReplies.deleteFailed
-    case .scheduleArm:
-      errorText = ScheduleReplies.armFailed
-    }
-
-    return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: errorText)
-  }
-
-  /// A negative confirmation claims the update, clears the parked entry, and sends a cancel ack.
-  func cancelPending(
-    sessionId: Int64,
-    rawUpdate: RawUpdate,
-    message: IncomingMessage
-  ) async -> HandleOutcome {
-    let claimed: Bool
-    do {
-      claimed = try processed.claimUpdate(updateId: rawUpdate.updateId)
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("cancel claim failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard claimed else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    await pendingConfirmations.clear(sessionId: sessionId)
-
-    return await sendCommandAck(
-      rawUpdate: rawUpdate,
-      chatId: message.chatId,
-      text: MemoryReplies.cancelled
-    )
-  }
-
-  // MARK: - Turn Dispatch
-
-  /// Fuses claim + persistence, then enqueues the durable run and returns without awaiting it.
-  /// Persistence failure prevents cursor advancement; background turn failures are logged in-band.
-  func dispatchTurn(
-    rawUpdate: RawUpdate,
-    message: IncomingMessage,
-    text: String,
-    grant: OneTurnGrant? = nil
-  ) async -> HandleOutcome {
-    let inbound = InboundMessage(
-      updateId: rawUpdate.updateId,
-      sessionKey: SessionKey.telegramDM(chatId: message.chatId),
-      chatId: message.chatId,
-      userId: message.userId,
-      text: text,
-      isEdited: message.isEdited,
-      ts: Date()
-    )
-
-    let claim: ClaimResult
-    do {
-      claim = try sessionMessages.claimAndPersistInbound(inbound)
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("persist failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard
-      claim.newlyClaimed,
-      let sessionId = claim.sessionId,
-      let runId = claim.runId,
-      let triggerMessageId = claim.triggerMessageId
-    else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    // The inbound → run bridge: the one INFO line that shows a real message was accepted and which
-    // run it became. run/session/update ride as metadata so the whole lifecycle greps by `run=<id>`;
-    // only the message SIZE is logged, never its text.
-    var runLog = logger
-    runLog[metadataKey: "run"] = "\(runId)"
-    runLog[metadataKey: "session"] = "\(sessionId)"
-    runLog[metadataKey: "update"] = "\(rawUpdate.updateId)"
-    runLog.info(
-      "message accepted; dispatching run (chars=\(text.count) edited=\(message.isEdited))"
-    )
-
-    await enqueuer.enqueue(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: message.chatId,
-      triggerMessageId: triggerMessageId,
-      grant: grant,
-      log: runLog
-    )
-
-    return .processed
   }
 
   // MARK: - Outbound Replies
