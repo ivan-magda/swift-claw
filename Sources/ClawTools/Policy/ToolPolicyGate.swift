@@ -106,8 +106,11 @@ public struct ToolPolicyGate: Sendable {
 
     return .block(
       payload: ToolPayload(
-        content:
-          "BLOCKED_PENDING_APPROVAL: this fetch needs the owner's approval because this session has read external content and holds private data. Explain briefly why you want to fetch it and finish your reply.",
+        content: """
+          BLOCKED_PENDING_APPROVAL: this fetch needs the owner's approval because \
+          this session has read external content and holds private data. \
+          Explain briefly why you want to fetch it and finish your reply.
+          """,
         status: .blockedPendingApproval,
         ingestedUntrusted: false
       ),
