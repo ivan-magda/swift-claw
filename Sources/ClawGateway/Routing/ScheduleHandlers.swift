@@ -277,9 +277,9 @@ private extension ScheduleHandlers {
   /// so the list can never disagree with what actually fires (spec §9's single-source rule),
   /// including everyNMinutes phase. Non-ACTIVE rows show none.
   func displayNextFire(_ job: ScheduledJob) -> Date? {
-    guard job.status == .active else {
-      return nil
+    if job.status == .active {
+      return job.nextOccurrence
     }
-    return job.nextOccurrence
+    return nil
   }
 }
