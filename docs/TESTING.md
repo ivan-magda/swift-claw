@@ -81,6 +81,7 @@ A flaky test — one that passes and fails with no change to code — is worse t
 - **Order dependency.** Every test builds its own environment and cleans up; none depends on another's residue or on execution order. Use a fresh database per test.
 - **Concurrency.** Never synchronize a test with `sleep`/`Task.sleep`. Drive the timing point with an explicit gate/continuation and assert on the **signal** the system already emits (a completion, an outbox row, a published draft), not on a stopwatch. Reuse the existing gate primitives rather than inventing wall-clock windows.
 - **Environment.** Keep real time, the real network, and unmanaged third parties out of the deterministic path. Real loopback HTTP servers are acceptable only when the transport itself is under test, marked `.serialized`, and torn down deterministically.
+- **Log output.** A component under test emits developer logs by design; inject a **no-op log sink** (`TestLog.silent`) wherever it takes a `Logger`. A bare `Logger(label:)` is _not_ silent — no test bootstraps `LoggingSystem`, so swift-log falls back to `StreamLogHandler` at `info` and leaks those lines to the suite console.
 
 ### 6.1 Swift Testing / async specifics
 
