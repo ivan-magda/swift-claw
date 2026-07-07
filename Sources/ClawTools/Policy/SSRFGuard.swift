@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 
 #if canImport(Glibc)
@@ -143,8 +144,11 @@ public enum AddressResolutionError: Error, Sendable, Equatable {
   case unresolvable(host: String)
 }
 
-/// The system resolver via `getaddrinfo` — works on macOS and Linux behind the one seam. The call
-/// is synchronous inside the async method; resolver latency is bounded by the tool timeout above.
+/// The system resolver via `getaddrinfo` — works on macOS and Linux behind the one seam.
+/// `getaddrinfo` is a BLOCKING syscall that never observes cancellation, so it runs on a
+/// Dispatch worker thread, not the cooperative pool: after the tool timeout abandons this task,
+/// a stalled resolve must not pin one of the pool's fixed threads for its OS-level retry window
+/// (commonly 30 s–2 min against a DNS blackhole).
 public struct SystemAddressResolver: AddressResolving {
   public init() {}
 
@@ -154,6 +158,14 @@ public struct SystemAddressResolver: AddressResolving {
       return [literal]
     }
 
+    return try await withCheckedThrowingContinuation { continuation in
+      DispatchQueue.global(qos: .utility).async {
+        continuation.resume(with: Result { try Self.blockingResolve(host: host) })
+      }
+    }
+  }
+
+  private static func blockingResolve(host: String) throws -> [ResolvedAddress] {
     var hints = addrinfo()
     #if canImport(Glibc)
       // Glibc types SOCK_STREAM as the `__socket_type` enum; ai_socktype is a plain CInt.

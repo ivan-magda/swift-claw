@@ -81,4 +81,15 @@ import Testing
     #expect(addresses.isEmpty == false)
     #expect(addresses.allSatisfy { address in SSRFGuard.isPublic(address) == false })
   }
+
+  @Test func systemResolverShortCircuitsLiteralsWithoutDNS() async throws {
+    // given
+    let resolver = SystemAddressResolver()
+
+    // when
+    let addresses = try await resolver.resolve(host: "127.0.0.1")
+
+    // then — a literal parses locally; it must never hit the resolver
+    #expect(addresses == [ResolvedAddress.parse("127.0.0.1")])
+  }
 }

@@ -150,10 +150,17 @@ public struct ToolPolicyGate: Sendable {
 public struct GatedToolDispatcher: ToolDispatching {
   private let registry: ToolRegistry
   private let gate: ToolPolicyGate
+  /// Injected so tests drive the timeout race deterministically (same seam as `AgentRuntime`).
+  private let sleep: @Sendable (Duration) async throws -> Void
 
-  public init(registry: ToolRegistry, gate: ToolPolicyGate) {
+  public init(
+    registry: ToolRegistry,
+    gate: ToolPolicyGate,
+    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+  ) {
     self.registry = registry
     self.gate = gate
+    self.sleep = sleep
   }
 
   public var definitions: [ToolDefinition] {
@@ -179,7 +186,7 @@ public struct GatedToolDispatcher: ToolDispatching {
       )
     case .allow(let argsRedacted, let consumedGrant):
       // (4) execute under the tool's own timeout
-      let payload = await Self.executeWithTimeout(tool: tool, arguments: arguments)
+      let payload = await executeWithTimeout(tool: tool, arguments: arguments)
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
         argsRedacted: argsRedacted,
@@ -188,35 +195,42 @@ public struct GatedToolDispatcher: ToolDispatching {
     }
   }
 
-  /// First finisher wins: the tool's result or the timeout observation. The loser is cancelled.
-  private static func executeWithTimeout(
+  /// First finisher wins and the LOSER IS ABANDONED, never awaited: a task group always awaits
+  /// its children (the pitfall `sendDraftBounded` documents), so a wedged tool — a blocking
+  /// syscall, hung I/O — would otherwise hold the strict-FIFO session lane hostage far past its
+  /// declared timeout, beyond `/stop`'s reach. The abandoned execute task keeps running detached
+  /// until its I/O returns; today's tools are read-only, so a post-timeout side effect is
+  /// harmless — Inc 5's write tools must revisit this contract explicitly.
+  private func executeWithTimeout(
     tool: any Tool,
     arguments: JSONValue
   ) async -> ToolPayload {
-    await withTaskGroup(of: ToolPayload.self) { group in
-      group.addTask {
-        await tool.execute(arguments: arguments)
-      }
-      group.addTask {
-        try? await Task.sleep(for: tool.timeout)
-        return ToolPayload(
-          content: "The \(tool.definition.name) call timed out.",
-          status: .error,
-          ingestedUntrusted: false
-        )
-      }
+    let timeoutPayload = ToolPayload(
+      content: "The \(tool.definition.name) call timed out.",
+      status: .error,
+      ingestedUntrusted: false
+    )
 
-      let winner =
-        await group.next()
-        ?? ToolPayload(
-          content: "The \(tool.definition.name) call produced no result.",
-          status: .error,
-          ingestedUntrusted: false
-        )
-      group.cancelAll()
-
-      return winner
+    let firstResult = AsyncStream<ToolPayload> { continuation in
+      let executeTask = Task {
+        continuation.yield(await tool.execute(arguments: arguments))
+        continuation.finish()
+      }
+      let timeoutTask = Task { [sleep] in
+        try? await sleep(tool.timeout)
+        continuation.yield(timeoutPayload)
+        continuation.finish()
+      }
+      continuation.onTermination = { @Sendable _ in
+        executeTask.cancel()
+        timeoutTask.cancel()
+      }
     }
+
+    for await payload in firstResult {
+      return payload
+    }
+    return timeoutPayload
   }
 
   private func errorOutcome(call: ToolCall, reason: String) -> ToolDispatchOutcome {

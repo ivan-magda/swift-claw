@@ -306,14 +306,16 @@ import Testing
 @Suite struct GatedToolDispatcherTests {
   private func makeDispatcher(
     tools: [any Tool],
-    privateFiles: [String] = []
+    privateFiles: [String] = [],
+    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
   ) -> GatedToolDispatcher {
     GatedToolDispatcher(
       registry: ToolRegistry(tools: tools),
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: []),
         privateFileLoader: { privateFiles }
-      )
+      ),
+      sleep: sleep
     )
   }
 
@@ -426,5 +428,62 @@ import Testing
     #expect(outcome.observation.status == .error)
     #expect(outcome.observation.content.contains("timed out"))
     #expect(outcome.observation.ingestedUntrusted == false)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func wedgedToolIsAbandonedAtTimeoutNotAwaited() async {
+    // given — a tool that never returns and ignores cancellation; the injected sleep makes the
+    // timeout arm fire immediately, so no wall clock is involved on the green path
+    let release = WedgeRelease()
+    let dispatcher = makeDispatcher(tools: [WedgedTool(release: release)], sleep: { _ in })
+
+    // when — under group-await semantics this call would NEVER return (the group awaits the
+    // wedged child); the time limit converts that hang into a failure
+    let outcome = await dispatcher.dispatch(
+      call: ToolCall(id: "c1", name: "wedged", argumentsJSON: "{}"),
+      context: openContext
+    )
+
+    // then — the timeout observation returns while the tool is still wedged
+    #expect(outcome.observation.status == .error)
+    #expect(outcome.observation.content.contains("timed out"))
+
+    // release the abandoned task so it finishes before the suite exits
+    await release.release()
+  }
+}
+
+/// Blocks until released and IGNORES task cancellation — models a blocking syscall
+/// (`getaddrinfo`) or hung I/O that cooperative cancellation cannot interrupt.
+actor WedgeRelease {
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var released = false
+
+  func wait() async {
+    if released { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func release() {
+    released = true
+    for waiter in waiters {
+      waiter.resume()
+    }
+    waiters.removeAll()
+  }
+}
+
+struct WedgedTool: Tool {
+  let release: WedgeRelease
+  let definition = ToolDefinition(
+    name: "wedged",
+    description: "wedged",
+    parameters: .object(["type": .string("object")])
+  )
+  let timeout: Duration = .seconds(30)
+
+  func execute(arguments: JSONValue) async -> ToolPayload {
+    await release.wait()
+    return ToolPayload(content: "late", status: .ok, ingestedUntrusted: false)
   }
 }
