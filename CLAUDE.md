@@ -30,6 +30,7 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 - **Tests follow Given-When-Then** — separate the body with `// given` / `// when` / `// then` sections (AAA equivalent).
 - **Variable names ≥ 3 chars** — no single/double-letter locals (`incoming`, not `m`).
 - **Comments: signal, not noise** — explain non-obvious *why*/contract; never restate what the code already says.
+- **Group private helpers into `private extension TypeName { }` blocks** by logical grouping, headed by a bare `// MARK: - <Group Name>` comment, no prose above it (see `RunCommand.swift`).
 
 ## Build & test
 
