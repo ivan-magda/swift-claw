@@ -3,14 +3,14 @@ import GRDB
 
 /// Single-row (id = 0) cursor holding the last confirmed update id.
 public struct UpdateCursorStoreGRDB: UpdateCursorStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func loadCursor() throws -> Int64? {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       try Int64.fetchOne(
         db,
         sql: "SELECT last_update_id FROM update_cursor WHERE id = 0"
@@ -19,7 +19,7 @@ public struct UpdateCursorStoreGRDB: UpdateCursorStore {
   }
 
   public func advanceCursor(to updateId: Int64) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try db.execute(
         sql: """
           INSERT INTO update_cursor(id, last_update_id) VALUES (0, ?)

@@ -53,8 +53,8 @@ import Testing
     )
   }
 
-  @Test func stopCancelsOnlyRunningRunAndAuditsCancellation() throws {
-    // given
+  @Test func stopCancelsRunningAndQueuedPendingRunsAndAuditsEach() throws {
+    // given — one RUNNING turn and one queued PENDING turn behind it
     let env = try fixture()
     _ = try #require(
       try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10))
@@ -68,30 +68,31 @@ import Testing
     // when
     let result = try env.commands.applyStop(updateId: 100, sessionKey: env.sessionKey, now: now)
 
-    // then
+    // then — BOTH terminate (spec FSM table: PENDING + /stop → CANCELLED)
     #expect(
       result
         == StopCommandResult(
           newlyClaimed: true,
           sessionId: env.sessionId,
-          cancelledRunId: env.firstRunId
+          cancelledRunIds: [env.firstRunId, queuedRunId]
         )
     )
     let states = try runStates(env.queue)
     #expect(states[env.firstRunId] == RunState.cancelled.rawValue)
-    #expect(states[queuedRunId] == RunState.pending.rawValue)
+    #expect(states[queuedRunId] == RunState.cancelled.rawValue)
     #expect(try processedCount(env.queue, updateId: 100) == 1)
     #expect(try messageCount(env.queue, content: "/stop") == 0)
 
     let audits = try auditRows(env.queue)
-    #expect(audits.count == 1)
-    let audit = try #require(audits.first)
-    #expect(audit["actor"] as String == AuditActor.owner.rawValue)
-    #expect(audit["action"] as String == AuditAction.turnCancelled.rawValue)
-    #expect(audit["args_redacted"] as String == "/stop")
-    #expect(audit["decision"] as String == "cancelled")
-    #expect(audit["run_id"] as Int64? == env.firstRunId)
-    #expect(audit["session_id"] as Int64? == env.sessionId)
+    #expect(audits.count == 2)
+    #expect(audits.compactMap { $0["run_id"] as Int64? } == [env.firstRunId, queuedRunId])
+    for audit in audits {
+      #expect(audit["actor"] as String == AuditActor.owner.rawValue)
+      #expect(audit["action"] as String == AuditAction.turnCancelled.rawValue)
+      #expect(audit["args_redacted"] as String == "/stop")
+      #expect(audit["decision"] as String == "cancelled")
+      #expect(audit["session_id"] as Int64? == env.sessionId)
+    }
   }
 
   @Test func newSupersedesActiveRunsResetsWindowDetaintsAndAudits() throws {
@@ -175,9 +176,9 @@ import Testing
     let duplicate = try env.commands.applyStop(updateId: 300, sessionKey: env.sessionKey, now: now)
 
     // then
-    #expect(first.cancelledRunId == env.firstRunId)
+    #expect(first.cancelledRunIds == [env.firstRunId])
     #expect(
-      duplicate == StopCommandResult(newlyClaimed: false, sessionId: nil, cancelledRunId: nil)
+      duplicate == StopCommandResult(newlyClaimed: false, sessionId: nil, cancelledRunIds: [])
     )
     #expect(try processedCount(env.queue, updateId: 300) == 1)
     #expect(try auditRows(env.queue).count == 1)
@@ -207,7 +208,7 @@ import Testing
     #expect(try runStates(env.queue)[env.firstRunId] == RunState.running.rawValue)
 
     let retry = try env.commands.applyStop(updateId: 400, sessionKey: env.sessionKey, now: now)
-    #expect(retry.cancelledRunId == env.firstRunId)
+    #expect(retry.cancelledRunIds == [env.firstRunId])
     #expect(try processedCount(env.queue, updateId: 400) == 1)
     #expect(try runStates(env.queue)[env.firstRunId] == RunState.cancelled.rawValue)
   }

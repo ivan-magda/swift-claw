@@ -3,26 +3,31 @@ import Foundation
 import GRDB
 
 public struct RunStoreGRDB: RunStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard try Self.transitionRun(db, runId: runId, event: .pickUp, now: now) != nil else {
         return nil
       }
 
-      let rawOrigin =
-        try String.fetchOne(
-          db,
-          sql: "SELECT origin FROM runs WHERE id = ?",
-          arguments: [runId]
-        ) ?? RunOrigin.interactive.rawValue
+      let rawOrigin = try String.fetchOne(
+        db,
+        sql: "SELECT origin FROM runs WHERE id = ?",
+        arguments: [runId]
+      )
+      // Fail closed on a corrupted origin (same rule as decodeItem): a mislabeled origin would
+      // silently re-route budget pools and delivery policy. The throw rolls back the pickUp
+      // transition, so the run stays PENDING for the boot sweep.
+      guard let rawOrigin, let origin = RunOrigin(rawValue: rawOrigin) else {
+        throw StoreError.unexpected("runs row \(runId) has an unrecognized origin")
+      }
 
-      return RunOrigin(rawValue: rawOrigin) ?? .scheduled
+      return origin
     }
   }
 
@@ -31,7 +36,7 @@ public struct RunStoreGRDB: RunStore {
     reason: CancelReason,
     now: Date
   ) throws -> Int64? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let runId = try Self.fetchActiveRunId(db, sessionId: sessionId) else {
         return nil
       }
@@ -50,13 +55,13 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.supersedeRuns(db, sessionId: sessionId, now: now)
     }
   }
 
   public func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
         return .ignored
       }
@@ -135,7 +140,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
         return .ignored
       }
@@ -176,7 +181,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func failRun(runId: Int64, now: Date) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
         return
       }
@@ -189,7 +194,7 @@ public struct RunStoreGRDB: RunStore {
     degradationText: String,
     heartbeatNoticeChatId: Int64?
   ) throws -> [DegradationReply] {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let stale = try Row.fetchAll(
         db,
         sql: """
@@ -256,7 +261,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func runsHealth(now: Date) throws -> RunsHealth {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       let activeStates = [RunState.pending.rawValue, RunState.running.rawValue]
       let inFlight =
         try Int.fetchOne(
@@ -352,6 +357,21 @@ extension RunStoreGRDB {
   }
 
   static func supersedeRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
+    try terminateActiveRuns(db, sessionId: sessionId, event: .supersede, now: now)
+  }
+
+  /// `/stop`'s plural arm: every PENDING and RUNNING run for the session → CANCELLED. Mirrors
+  /// `supersedeRuns` so `/stop` and `/new` share one definition of "active".
+  static func cancelRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
+    try terminateActiveRuns(db, sessionId: sessionId, event: .cancel, now: now)
+  }
+
+  private static func terminateActiveRuns(
+    _ db: Database,
+    sessionId: Int64,
+    event: RunEvent,
+    now: Date
+  ) throws -> [Int64] {
     let rows = try Row.fetchAll(
       db,
       sql: """
@@ -365,7 +385,7 @@ extension RunStoreGRDB {
     var affected: [Int64] = []
     for row in rows {
       let runId: Int64 = row["id"]
-      if try transitionRun(db, runId: runId, event: .supersede, now: now) != nil {
+      if try transitionRun(db, runId: runId, event: event, now: now) != nil {
         affected.append(runId)
       }
     }

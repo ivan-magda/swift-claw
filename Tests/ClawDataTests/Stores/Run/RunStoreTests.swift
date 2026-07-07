@@ -344,4 +344,36 @@ import Testing
     #expect(state == RunState.running.rawValue)  // NOT flipped to DONE
     #expect(usageCount == 0)
   }
+
+  @Test func corruptOriginFailsClosedAtPickup() throws {
+    // given — a PENDING run whose origin left the vocabulary
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let sessions = SessionMessageStoreGRDB(writer: queue)
+    let runs = RunStoreGRDB(writer: queue)
+    let claim = try sessions.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 1,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "hello",
+        isEdited: false,
+        ts: Date(timeIntervalSince1970: 1)
+      )
+    )
+    let runId = try #require(claim.runId)
+    try queue.write { db in
+      try db.execute(sql: "UPDATE runs SET origin = 'webhook' WHERE id = ?", arguments: [runId])
+    }
+
+    // when / then — pickUp throws and the transaction rolls back: the run stays PENDING
+    #expect(throws: StoreError.self) {
+      _ = try runs.pickUp(runId: runId, now: Date(timeIntervalSince1970: 10))
+    }
+    let state = try queue.read { db in
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+    }
+    #expect(state == RunState.pending.rawValue)
+  }
 }

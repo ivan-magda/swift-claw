@@ -106,7 +106,8 @@ import Testing
     let definition = ToolDefinition(
       name: "web_fetch",
       description: "d",
-      parameters: .object(["type": .string("object")])
+      parameters: .object(["type": .string("object")]),
+      egressClass: .none
     )
     let provider = SequenceProvider([okResponse()])
     let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
@@ -356,6 +357,35 @@ import Testing
     // then — round-trip 1 recorded real cost; preflight 2 tripped the accumulated per-run check
     #expect(outcome.result == .budgetStopped(cap: "per-run spend"))
     #expect(await provider.requests.count == 1)
+  }
+
+  @Test func wireGrowthPastTheInputCapStopsBeforeTheNextProviderCall() async throws {
+    // given — round-trip 1 proposes a tool call whose observation blows far past maxInputTokens
+    let provider = SequenceProvider([
+      toolCallResponse([fetchProposal()]),
+      okResponse(content: "never reached"),
+    ])
+    let hugeObservation = String(repeating: "x", count: 40_000)  // ≈12.5k estimated tokens
+    let dispatcher = ScriptedDispatcher(respond: okOutcome(content: hugeObservation))
+    let budget = RunBudget(
+      maxInputTokens: 1_000,
+      maxOutputTokens: 64,
+      wallClockDeadlineSeconds: 60,
+      retryBudget: 0,
+      perRunUSD: 10,
+      perDayUSD: 100,
+      proactivePerDayUSD: 2,
+      referenceUSDPerToken: 0.000_015
+    )
+    let runtime = makeRuntime(provider: provider, budget: budget, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then — stopped offline at the input cap; the second provider call never happens
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunInputTokenCap))
+    #expect(await provider.requests.count == 1)
+    #expect(outcome.exchanges.count == 1)  // the executed exchange still rides the commit
   }
 
   @Test func deadlineSpansToolExecutionToo() async throws {

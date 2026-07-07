@@ -3,10 +3,10 @@ import Foundation
 import GRDB
 
 public struct OutboxStoreGRDB: OutboxStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func claimOutbound(
@@ -16,7 +16,7 @@ public struct OutboxStoreGRDB: OutboxStore {
     payload: String,
     payloadHash: String
   ) throws -> Bool {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try RunStoreGRDB.insertOutbox(
         db,
         runId: runId,
@@ -38,7 +38,7 @@ public struct OutboxStoreGRDB: OutboxStore {
     payload: String,
     payloadHash: String
   ) throws -> Bool {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try db.execute(
         sql: """
           INSERT OR IGNORE INTO outbound_deliveries(
@@ -66,7 +66,7 @@ public struct OutboxStoreGRDB: OutboxStore {
   }
 
   public func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64, now: Date) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try db.execute(
         sql: """
           UPDATE outbound_deliveries SET status = 'SENT', telegram_message_id = ?, sent_ts = ?
@@ -78,7 +78,7 @@ public struct OutboxStoreGRDB: OutboxStore {
   }
 
   public func pendingOutbound() throws -> [OutboxRow] {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       try Row.fetchAll(
         db,
         sql: """

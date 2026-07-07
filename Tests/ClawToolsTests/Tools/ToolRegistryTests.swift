@@ -13,18 +13,22 @@ struct StubTool: Tool {
   init(
     name: String,
     timeout: Duration = .seconds(1),
+    egressClass: ToolEgressClass = .none,
     payload: ToolPayload = ToolPayload(content: "ok", status: .ok, ingestedUntrusted: false)
   ) {
     definition = ToolDefinition(
       name: name,
       description: "stub",
-      parameters: .object(["type": .string("object")])
+      parameters: .object(["type": .string("object")]),
+      egressClass: egressClass
     )
     self.timeout = timeout
     self.payload = payload
   }
 
-  func execute(arguments: JSONValue) async -> ToolPayload {
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
+  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     payload
   }
 }

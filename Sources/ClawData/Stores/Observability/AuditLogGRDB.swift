@@ -3,14 +3,14 @@ import Foundation
 import GRDB
 
 public struct AuditLogGRDB: AuditLog {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func appendAudit(_ event: AuditEvent) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.insertAudit(db, event)
     }
   }

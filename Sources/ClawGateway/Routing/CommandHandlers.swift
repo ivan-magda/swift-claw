@@ -35,12 +35,15 @@ struct CommandHandlers: Sendable {
       return replies.skipDuplicate(updateId: rawUpdate.updateId)
     }
 
-    if let sessionId = result.sessionId, let runId = result.cancelledRunId {
+    if let sessionId = result.sessionId, result.cancelledRunIds.isEmpty == false {
       let lane = await lanes.actor(for: sessionId)
-      await lane.cancel(runId: runId)
+      for runId in result.cancelledRunIds {
+        await lane.cancel(runId: runId)
+      }
     }
 
-    let reply = result.cancelledRunId == nil ? CommandReplies.nothingToStop : CommandReplies.stopped
+    let reply =
+      result.cancelledRunIds.isEmpty ? CommandReplies.nothingToStop : CommandReplies.stopped
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
       chatId: message.chatId,

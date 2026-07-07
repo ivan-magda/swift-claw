@@ -47,24 +47,32 @@ public struct WebFetchTool: Tool {
           ])
         ]),
         "required": .array([.string("url")]),
-      ])
+      ]),
+      egressClass: .arbitraryDestination
     )
   }
 
   public var timeout: Duration { .seconds(30) }
 
-  public func execute(arguments: JSONValue) async -> ToolPayload {
+  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     guard let rawURL = arguments.objectValue?["url"]?.stringValue, rawURL.isEmpty == false else {
-      return errorPayload("web_fetch needs a non-empty \"url\" argument.")
+      return .refused(reason: "web_fetch needs a non-empty \"url\" argument.")
     }
-
-    var currentURL: String
     switch CanonicalURL.canonicalize(rawURL) {
     case .success(let canonical):
-      currentURL = canonical
+      return .resolved(canonical)
     case .failure(let policyError):
-      return errorPayload(Self.describe(policyError))
+      return .refused(reason: Self.describe(policyError))
     }
+  }
+
+  public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+    // The gate resolved and authorized exactly this canonical URL (§9.1); re-deriving it here
+    // could drift byte-for-byte from what the owner approved.
+    guard let canonicalTarget else {
+      return errorPayload("web_fetch was dispatched without a gate-resolved URL.")
+    }
+    var currentURL = canonicalTarget
 
     let deadline = ContinuousClock.now + timeout
     var hopsRemaining = maxHops

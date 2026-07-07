@@ -3,10 +3,10 @@ import Foundation
 import GRDB
 
 public struct RetrieverGRDB: Retriever {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func searchRelevantMessages(
@@ -21,7 +21,7 @@ public struct RetrieverGRDB: Retriever {
       return []
     }
 
-    return try writer.readMapping { db in
+    return try database.readMapping { db in
       // messages_fts.rowid == messages.id (external content). BM25 is negative; lower = better, so
       // ORDER BY is ASC. RecallScore negates it back so higher = better for policy/telemetry.
       var sql = """
@@ -49,11 +49,16 @@ public struct RetrieverGRDB: Retriever {
       arguments += [limit]
 
       let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
-      return rows.map { row in
-        RecallHit(
+      return try rows.map { row in
+        // The SQL filters `role IN ('user','assistant')`, so an unknown role is unreachable
+        // today — the guard keeps the decode direction fail-closed if that filter ever moves.
+        guard let role = MessageRole(rawValue: row["role"]) else {
+          throw StoreError.unexpected("messages row \(row["id"] as Int64) has an unrecognized role")
+        }
+        return RecallHit(
           id: row["id"],
           sessionId: row["session_id"],
-          role: MessageRole(rawValue: row["role"]) ?? .user,
+          role: role,
           content: row["content"],
           score: RecallScore(sqliteBM25: row["bm25_score"]),
           createdAt: row["ts"]

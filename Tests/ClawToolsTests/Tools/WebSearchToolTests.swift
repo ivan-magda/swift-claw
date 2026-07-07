@@ -39,7 +39,10 @@ struct ScriptedSearch: SearchProviding {
     )
 
     // when
-    let payload = await tool.execute(arguments: .object(["query": .string("swift")]))
+    let payload = await tool.execute(
+      arguments: .object(["query": .string("swift")]),
+      canonicalTarget: nil
+    )
 
     // then — "- title — url\n  snippet" (§7.3); snippets are third-party content
     #expect(payload.status == .ok)
@@ -65,9 +68,15 @@ struct ScriptedSearch: SearchProviding {
     )
 
     // when
-    _ = await tool.execute(arguments: .object(["query": .string("q")]))
-    _ = await tool.execute(arguments: .object(["query": .string("q"), "count": .number(99)]))
-    _ = await tool.execute(arguments: .object(["query": .string("q"), "count": .number(0)]))
+    _ = await tool.execute(arguments: .object(["query": .string("q")]), canonicalTarget: nil)
+    _ = await tool.execute(
+      arguments: .object(["query": .string("q"), "count": .number(99)]),
+      canonicalTarget: nil
+    )
+    _ = await tool.execute(
+      arguments: .object(["query": .string("q"), "count": .number(0)]),
+      canonicalTarget: nil
+    )
 
     // then
     #expect(box.counts == [5, 10, 1])
@@ -92,7 +101,8 @@ struct ScriptedSearch: SearchProviding {
 
     // when
     let payload = await tool.execute(
-      arguments: .object(["query": .string("q"), "count": .number(1e300)])
+      arguments: .object(["query": .string("q"), "count": .number(1e300)]),
+      canonicalTarget: nil
     )
 
     // then — the out-of-range Double clamps to the max instead of trapping on Int(Double)
@@ -109,7 +119,10 @@ struct ScriptedSearch: SearchProviding {
     )
 
     // when
-    let payload = await tool.execute(arguments: .object(["query": .string("q")]))
+    let payload = await tool.execute(
+      arguments: .object(["query": .string("q")]),
+      canonicalTarget: nil
+    )
 
     // then
     #expect(payload.status == .error)
@@ -122,6 +135,6 @@ struct ScriptedSearch: SearchProviding {
     let tool = WebSearchTool(search: ScriptedSearch())
 
     // when / then
-    #expect((await tool.execute(arguments: .object([:]))).status == .error)
+    #expect((await tool.execute(arguments: .object([:]), canonicalTarget: nil)).status == .error)
   }
 }

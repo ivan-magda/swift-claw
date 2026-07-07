@@ -3,7 +3,7 @@ import Foundation
 import GRDB
 
 public struct CommandStoreGRDB: CommandStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
   private let afterClaimForTesting: @Sendable () throws -> Void
 
   public init(writer: any DatabaseWriter) {
@@ -14,7 +14,7 @@ public struct CommandStoreGRDB: CommandStore {
     writer: any DatabaseWriter,
     afterClaimForTesting: @Sendable @escaping () throws -> Void
   ) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
     self.afterClaimForTesting = afterClaimForTesting
   }
 
@@ -23,14 +23,14 @@ public struct CommandStoreGRDB: CommandStore {
     sessionKey: String,
     now: Date
   ) throws -> StopCommandResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: updateId,
         claimedAt: now
       )
       guard newlyClaimed else {
-        return StopCommandResult(newlyClaimed: false, sessionId: nil, cancelledRunId: nil)
+        return StopCommandResult(newlyClaimed: false, sessionId: nil, cancelledRunIds: [])
       }
 
       try afterClaimForTesting()
@@ -40,34 +40,50 @@ public struct CommandStoreGRDB: CommandStore {
         sessionKey: sessionKey,
         now: now
       )
-      let runId = try RunStoreGRDB.fetchActiveRunId(db, sessionId: sessionId)
+      let cancelledRunIds = try RunStoreGRDB.cancelRuns(db, sessionId: sessionId, now: now)
+      try Self.insertStopAudits(db, sessionId: sessionId, runIds: cancelledRunIds, now: now)
 
-      // swift-format-ignore
-      let cancelledRunId: Int64? =
-        if let runId,
-          try RunStoreGRDB.transitionRun(db, runId: runId, event: .cancel, now: now) != nil {
-          runId
-        } else {
-          nil
-        }
+      return StopCommandResult(
+        newlyClaimed: true,
+        sessionId: sessionId,
+        cancelledRunIds: cancelledRunIds
+      )
+    }
+  }
 
+  private static func insertStopAudits(
+    _ db: Database,
+    sessionId: Int64,
+    runIds: [Int64],
+    now: Date
+  ) throws {
+    guard !runIds.isEmpty else {
       try AuditLogGRDB.insertAudit(
         db,
         AuditEvent(
           actor: .owner,
           action: .turnCancelled,
           argsRedacted: "/stop",
-          decision: cancelledRunId == nil ? "nothing_to_stop" : "cancelled",
-          runId: cancelledRunId,
+          decision: "nothing_to_stop",
           sessionId: sessionId,
           ts: now
         )
       )
+      return
+    }
 
-      return StopCommandResult(
-        newlyClaimed: true,
-        sessionId: sessionId,
-        cancelledRunId: cancelledRunId
+    for runId in runIds {
+      try AuditLogGRDB.insertAudit(
+        db,
+        AuditEvent(
+          actor: .owner,
+          action: .turnCancelled,
+          argsRedacted: "/stop",
+          decision: "cancelled",
+          runId: runId,
+          sessionId: sessionId,
+          ts: now
+        )
       )
     }
   }
@@ -77,7 +93,7 @@ public struct CommandStoreGRDB: CommandStore {
     sessionKey: String,
     now: Date
   ) throws -> NewCommandResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: updateId,

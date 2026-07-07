@@ -11,7 +11,7 @@
 
 Verdicts are marked CONFIRMED or PLAUSIBLE; two findings were downgraded during adversarial verification and are presented with those corrections.
 
-> **Progress (updated 2026-07-07).** Risk 2 (the `MessageRouter` split) and Stage 2 item 1 of the refactoring plan are done, landed on branch `split-message-router` (PR [#30](https://github.com/ivan-magda/swift-claw/pull/30)). The rest of the register stands as written. See the "Resolved" callout under Risk 2 for what shipped.
+> **Progress (updated 2026-07-07).** Risk 2 (the `MessageRouter` split, Stage 2 item 1) landed first (PR [#30](https://github.com/ivan-magda/swift-claw/pull/30)). Stage 1 has now landed in full on branch `structural-hardening`: Risk 3 (`ToolEgressClass` declared on `ToolDefinition` with no default; the gate consumes the declaration and hands the resolved canonical target into `execute`), Risk 1 (first-finisher-wins timeout that abandons the wedged tool; `getaddrinfo` moved to a Dispatch worker thread), Risk 4 (`applyStop` cancels every PENDING+RUNNING run; `StopCommandResult.cancelledRunIds`), Risk 5 (role/provenance/origin decode throws `StoreError.unexpected`, mirroring `decodeItem`), Risk 6 (`MappedDatabase` wrapper; the raw `write`/`read` extensions are deleted), and the Risk 8 input-token preflight guard (`BudgetGate.perRunInputTokenCap`). The rest of the register (Stage 2 items 2–5, Stage 3) stands as written.
 
 ---
 
@@ -353,13 +353,13 @@ Explicitly *not* in the target for now: a channel-neutral delivery-address table
 
 **Stage 1 — small, high-value, do before Increment 5 starts.** All five are contained, none changes behavior the owner can see:
 
-1. Tool policy class on `ToolDefinition` + gate consumes it + pass the canonical action into `execute` (Risk 3) — touches `ToolContracts.swift`, `ToolPolicyGate.swift`, the three tools, `RunCommand`.
-2. Real timeout abandonment in `executeWithTimeout` (reuse the `sendDraftBounded` pattern) and move `getaddrinfo` off the cooperative pool (Risk 1) — `ToolPolicyGate.swift`, `SSRFGuard.swift`.
-3. `applyStop` cancels PENDING+RUNNING (Risk 4) — `RunStoreGRDB.fetchActiveRunId` → plural, `CommandStoreGRDB`, router `/stop` handler.
-4. Fail-closed provenance/role decode (Risk 5) — `SessionMessageStoreGRDB`, `RetrieverGRDB`, comment or fix the `RunOrigin` fallback.
-5. `MappedDatabase` wrapper replacing `any DatabaseWriter` in stores (Risk 6) — mechanical, 14 inits.
+1. ~~Tool policy class on `ToolDefinition` + gate consumes it + pass the canonical action into `execute` (Risk 3) — touches `ToolContracts.swift`, `ToolPolicyGate.swift`, the three tools, `RunCommand`.~~ **Done (2026-07-07).**
+2. ~~Real timeout abandonment in `executeWithTimeout` (reuse the `sendDraftBounded` pattern) and move `getaddrinfo` off the cooperative pool (Risk 1) — `ToolPolicyGate.swift`, `SSRFGuard.swift`.~~ **Done (2026-07-07).**
+3. ~~`applyStop` cancels PENDING+RUNNING (Risk 4) — `RunStoreGRDB.fetchActiveRunId` → plural, `CommandStoreGRDB`, router `/stop` handler.~~ **Done (2026-07-07).**
+4. ~~Fail-closed provenance/role decode (Risk 5) — `SessionMessageStoreGRDB`, `RetrieverGRDB`, comment or fix the `RunOrigin` fallback.~~ **Done (2026-07-07).**
+5. ~~`MappedDatabase` wrapper replacing `any DatabaseWriter` in stores (Risk 6) — mechanical, 14 inits.~~ **Done (2026-07-07).**
 
-Plus the one-line input-token preflight guard (Risk 8). Do **not** touch: the session lane, the outbox design, the FSM reducer, the provider.
+~~Plus the one-line input-token preflight guard (Risk 8).~~ **Done (2026-07-07).** Do **not** touch: the session lane, the outbox design, the FSM reducer, the provider.
 
 **Stage 2 — medium cleanup, ideally interleaved with Inc 5 planning.**
 

@@ -35,7 +35,7 @@ import Testing
   }
 
   private func execute(_ tool: FileReadTool, path: String) async -> ToolPayload {
-    await tool.execute(arguments: .object(["path": .string(path)]))
+    await tool.execute(arguments: .object(["path": .string(path)]), canonicalTarget: nil)
   }
 
   @Test func readsARelativeFileAndSetsUntrusted() async throws {

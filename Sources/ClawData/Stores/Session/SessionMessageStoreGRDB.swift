@@ -3,14 +3,14 @@ import Foundation
 import GRDB
 
 public struct SessionMessageStoreGRDB: SessionMessageStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.upsertSession(db, sessionKey: sessionKey, now: now)
     }
   }
@@ -20,7 +20,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     sessionKey: String,
     now: Date
   ) throws -> CommandClaim {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: updateId,
@@ -37,7 +37,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   public func findSession(sessionKey: String) throws -> Int64? {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       try Int64.fetchOne(
         db,
         sql: "SELECT id FROM sessions WHERE session_key = ?",
@@ -47,7 +47,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   public func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: inbound.updateId,
@@ -118,7 +118,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     throughMessageId: Int64,
     limit: Int
   ) throws -> SessionContextSnapshot {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       let session = try Row.fetchOne(
         db,
         sql: "SELECT window_start_message_id, tainted FROM sessions WHERE id = ?",
@@ -163,15 +163,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         arguments: [sessionId, windowStart, throughMessageId, boundaryId]
       )
 
-      let history = rows.map { row in
-        StoredMessage(
-          role: MessageRole(rawValue: row["role"]) ?? .user,
-          content: row["content"],
-          provenance: Provenance(rawValue: row["provenance"]) ?? .trusted,
-          toolCallsJSON: row["tool_calls"],
-          toolCallId: row["tool_call_id"]
-        )
-      }
+      let history = try rows.map(Self.decodeStoredMessage)
 
       // The new SELECT already returns `id`, so the id remap stays valid.
       let messageIds = rows.map { row in
@@ -188,7 +180,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   public func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
     }
   }
@@ -235,5 +227,28 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
 
     return sessionId
+  }
+
+  /// Decodes a `messages` row, failing **closed** on an unrecognized persisted enum value:
+  /// `provenance` is the §12 trust tier — a corrupted value must not silently become the
+  /// permissive `.trusted` and unfence content the moment assembly keys off it. Same rule as
+  /// `MemoryStoreGRDB.decodeItem`.
+  static func decodeStoredMessage(_ row: Row) throws -> StoredMessage {
+    let rowId: Int64 = row["id"]
+
+    guard
+      let role = MessageRole(rawValue: row["role"]),
+      let provenance = Provenance(rawValue: row["provenance"])
+    else {
+      throw StoreError.unexpected("messages row \(rowId) has an unrecognized role or provenance")
+    }
+
+    return StoredMessage(
+      role: role,
+      content: row["content"],
+      provenance: provenance,
+      toolCallsJSON: row["tool_calls"],
+      toolCallId: row["tool_call_id"]
+    )
   }
 }

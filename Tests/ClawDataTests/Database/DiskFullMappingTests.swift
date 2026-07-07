@@ -16,9 +16,9 @@ import Testing
     #expect(classified as? StoreError == .diskFull)
 
     // and the write seam surfaces the same typed error when a write throws SQLITE_FULL
-    let writer = try ClawDatabase.makeInMemoryQueue()
+    let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
     #expect(throws: StoreError.diskFull) {
-      try writer.writeMapping { (_: Database) in throw sqliteFull }
+      try database.writeMapping { (_: Database) in throw sqliteFull }
     }
   }
 
@@ -41,9 +41,25 @@ import Testing
     }
 
     // and the write seam surfaces a domain StoreError, never a raw DatabaseError
-    let writer = try ClawDatabase.makeInMemoryQueue()
+    let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
     #expect(throws: StoreError.self) {
-      try writer.writeMapping { (_: Database) in throw constraint }
+      try database.writeMapping { (_: Database) in throw constraint }
+    }
+  }
+
+  @Test func mappedDatabaseTranslatesFailuresOnBothSeams() throws {
+    // given
+    let sqliteFull = DatabaseError(resultCode: .SQLITE_FULL, message: "database or disk is full")
+    let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
+
+    // when / then — the write seam surfaces the domain error
+    #expect(throws: StoreError.diskFull) {
+      try database.writeMapping { (_: Database) in throw sqliteFull }
+    }
+
+    // and the read seam classifies identically
+    #expect(throws: StoreError.diskFull) {
+      try database.readMapping { (_: Database) in throw sqliteFull }
     }
   }
 

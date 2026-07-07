@@ -5,12 +5,11 @@ import Foundation
 /// disk-time substring check, and the web_fetch grant/approval decision. Pure — every input
 /// arrives via the call/context; tier-3 texts via the injected loader (disk at gate time).
 public struct ToolPolicyGate: Sendable {
-  /// The outbound sinks the arg-guard tiers cover (§9.1 step 2 note, §18-H). `file_read` is not
-  /// an egress sink; its args are only redaction-RENDERED for audit.
-  static let egressTools: Set<String> = ["web_fetch", "web_search"]
-
   public enum Verdict: Sendable, Equatable {
-    case allow(argsRedacted: String, consumedGrant: Bool)
+    /// `action` is the gate-resolved canonical action for `.arbitraryDestination` tools — the
+    /// dispatcher hands its target into `execute` so the tool acts on exactly the form the gate
+    /// authorized; `nil` for the other classes.
+    case allow(argsRedacted: String, consumedGrant: Bool, action: ToolAction?)
     case block(payload: ToolPayload, argsRedacted: String, pendingApproval: ToolApprovalRequest?)
   }
 
@@ -22,15 +21,20 @@ public struct ToolPolicyGate: Sendable {
     self.privateFileLoader = privateFileLoader
   }
 
-  public func evaluate(call: ToolCall, context: ToolDispatchContext) -> Verdict {
-    guard Self.egressTools.contains(call.name) else {
+  public func evaluate(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) -> Verdict {
+    guard tool.definition.egressClass != .none else {
       return .allow(
         argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
-        consumedGrant: false
+        consumedGrant: false,
+        action: nil
       )
     }
 
-    // (2) unconditional tier — BLOCKING per FR-T6, fetch AND search
+    // (2) unconditional tier — BLOCKING per FR-T6, every egress class
     let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
     if let rule = unconditional.blockedRule {
       return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
@@ -40,7 +44,20 @@ public struct ToolPolicyGate: Sendable {
     let tainted = context.sessionTainted || context.runIngestedUntrusted
     let privateData = context.assemblyPrivateData || context.runPrivateData
     guard tainted && privateData else {
-      return .allow(argsRedacted: unconditional.redactedArgs, consumedGrant: false)
+      switch resolveAction(call: call, tool: tool) {
+      case .action(let action):
+        return .allow(
+          argsRedacted: unconditional.redactedArgs,
+          consumedGrant: false,
+          action: action
+        )
+      case .blocked(let payload):
+        return .block(
+          payload: payload,
+          argsRedacted: unconditional.redactedArgs,
+          pendingApproval: nil
+        )
+      }
     }
 
     // (3a) conditional tier — redaction-block WINS over approval (FR-T6); disk at gate time
@@ -52,43 +69,20 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
     }
 
-    // (3b) web_fetch only — the arbitrary-destination egress class (§18-H)
-    guard call.name == "web_fetch" else {
-      return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: false)
+    // (3b) the arbitrary-destination egress class (§18-H): grant match or approval
+    let action: ToolAction?
+    switch resolveAction(call: call, tool: tool) {
+    case .action(let resolved):
+      action = resolved
+    case .blocked(let payload):
+      return .block(payload: payload, argsRedacted: conditional.redactedArgs, pendingApproval: nil)
     }
-    guard let rawURL = JSONValue.parse(call.argumentsJSON)?.objectValue?["url"]?.stringValue else {
-      return .block(
-        payload: ToolPayload(
-          content: "web_fetch needs a \"url\" argument.",
-          status: .error,
-          ingestedUntrusted: false
-        ),
-        argsRedacted: conditional.redactedArgs,
-        pendingApproval: nil
-      )
+    guard let action else {
+      return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: false, action: nil)
     }
 
-    let canonical: String
-    switch CanonicalURL.canonicalize(rawURL) {
-    case .success(let value):
-      canonical = value
-    case .failure:
-      // URL-policy refusal BEFORE any prompt is built (§9.2 — userinfo/IDN/scheme/port)
-      return .block(
-        payload: ToolPayload(
-          content:
-            "That URL is not allowed (credentials, non-ASCII host, or unsupported scheme/port).",
-          status: .error,
-          ingestedUntrusted: false
-        ),
-        argsRedacted: conditional.redactedArgs,
-        pendingApproval: nil
-      )
-    }
-
-    let action = ToolAction(tool: call.name, target: canonical)
     if context.grant?.action == action {
-      return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: true)
+      return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: true, action: action)
     }
 
     if context.nonInteractive {
@@ -99,7 +93,7 @@ public struct ToolPolicyGate: Sendable {
       return .block(
         payload: ToolPayload(
           content: """
-            skipped \(call.name) of \(canonical) — it needs your approval; \
+            skipped \(call.name) of \(action.target) — it needs your approval; \
             run it interactively.
             """,
           status: .error,
@@ -112,8 +106,11 @@ public struct ToolPolicyGate: Sendable {
 
     return .block(
       payload: ToolPayload(
-        content:
-          "BLOCKED_PENDING_APPROVAL: this fetch needs the owner's approval because this session has read external content and holds private data. Explain briefly why you want to fetch it and finish your reply.",
+        content: """
+          BLOCKED_PENDING_APPROVAL: this fetch needs the owner's approval because \
+          this session has read external content and holds private data. \
+          Explain briefly why you want to fetch it and finish your reply.
+          """,
         status: .blockedPendingApproval,
         ingestedUntrusted: false
       ),
@@ -129,6 +126,45 @@ public struct ToolPolicyGate: Sendable {
   /// raw secret, whatever the outcome.
   public func renderRedacted(argsJSON: String) -> String {
     argGuard.renderRedacted(argsJSON: argsJSON)
+  }
+
+  private enum ActionResolution {
+    case action(ToolAction?)
+    case blocked(ToolPayload)
+  }
+
+  /// Resolves the canonical action for `.arbitraryDestination` tools (`.action(nil)` for the
+  /// classes with no destination). A declared arbitrary-destination tool that resolves nothing
+  /// is a contract violation and fails CLOSED — never a silent walk past the approval tier.
+  private func resolveAction(call: ToolCall, tool: any Tool) -> ActionResolution {
+    guard tool.definition.egressClass == .arbitraryDestination else {
+      return .action(nil)
+    }
+
+    guard let arguments = JSONValue.parse(call.argumentsJSON) else {
+      return .blocked(
+        ToolPayload(
+          content: "Malformed arguments for \(call.name).",
+          status: .error,
+          ingestedUntrusted: false
+        )
+      )
+    }
+
+    switch tool.canonicalTarget(arguments: arguments) {
+    case .resolved(let target):
+      return .action(ToolAction(tool: call.name, target: target))
+    case .refused(let reason):
+      return .blocked(ToolPayload(content: reason, status: .error, ingestedUntrusted: false))
+    case nil:
+      return .blocked(
+        ToolPayload(
+          content: "\(call.name) is declared arbitrary-destination but resolved no target.",
+          status: .error,
+          ingestedUntrusted: false
+        )
+      )
+    }
   }
 
   private func blockedArgs(rule: String, argsRedacted: String) -> Verdict {
@@ -150,10 +186,17 @@ public struct ToolPolicyGate: Sendable {
 public struct GatedToolDispatcher: ToolDispatching {
   private let registry: ToolRegistry
   private let gate: ToolPolicyGate
+  /// Injected so tests drive the timeout race deterministically (same seam as `AgentRuntime`).
+  private let sleep: @Sendable (Duration) async throws -> Void
 
-  public init(registry: ToolRegistry, gate: ToolPolicyGate) {
+  public init(
+    registry: ToolRegistry,
+    gate: ToolPolicyGate,
+    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+  ) {
     self.registry = registry
     self.gate = gate
+    self.sleep = sleep
   }
 
   public var definitions: [ToolDefinition] {
@@ -170,16 +213,20 @@ public struct GatedToolDispatcher: ToolDispatching {
       return errorOutcome(call: call, reason: "Malformed arguments for \(call.name).")
     }
     // (2)/(3) the gate
-    switch gate.evaluate(call: call, context: context) {
+    switch gate.evaluate(call: call, tool: tool, context: context) {
     case .block(let payload, let argsRedacted, let pendingApproval):
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
         argsRedacted: argsRedacted,
         pendingApproval: pendingApproval
       )
-    case .allow(let argsRedacted, let consumedGrant):
-      // (4) execute under the tool's own timeout
-      let payload = await Self.executeWithTimeout(tool: tool, arguments: arguments)
+    case .allow(let argsRedacted, let consumedGrant, let action):
+      // (4) execute under the tool's own timeout, on the gate-resolved canonical target
+      let payload = await executeWithTimeout(
+        tool: tool,
+        arguments: arguments,
+        canonicalTarget: action?.target
+      )
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
         argsRedacted: argsRedacted,
@@ -188,35 +235,45 @@ public struct GatedToolDispatcher: ToolDispatching {
     }
   }
 
-  /// First finisher wins: the tool's result or the timeout observation. The loser is cancelled.
-  private static func executeWithTimeout(
+  /// First finisher wins and the LOSER IS ABANDONED, never awaited: a task group always awaits
+  /// its children (the pitfall `sendDraftBounded` documents), so a wedged tool — a blocking
+  /// syscall, hung I/O — would otherwise hold the strict-FIFO session lane hostage far past its
+  /// declared timeout, beyond `/stop`'s reach. The abandoned execute task keeps running detached
+  /// until its I/O returns; today's tools are read-only, so a post-timeout side effect is
+  /// harmless — Inc 5's write tools must revisit this contract explicitly.
+  private func executeWithTimeout(
     tool: any Tool,
-    arguments: JSONValue
+    arguments: JSONValue,
+    canonicalTarget: String?
   ) async -> ToolPayload {
-    await withTaskGroup(of: ToolPayload.self) { group in
-      group.addTask {
-        await tool.execute(arguments: arguments)
-      }
-      group.addTask {
-        try? await Task.sleep(for: tool.timeout)
-        return ToolPayload(
-          content: "The \(tool.definition.name) call timed out.",
-          status: .error,
-          ingestedUntrusted: false
-        )
-      }
+    let timeoutPayload = ToolPayload(
+      content: "The \(tool.definition.name) call timed out.",
+      status: .error,
+      ingestedUntrusted: false
+    )
 
-      let winner =
-        await group.next()
-        ?? ToolPayload(
-          content: "The \(tool.definition.name) call produced no result.",
-          status: .error,
-          ingestedUntrusted: false
+    let firstResult = AsyncStream<ToolPayload> { continuation in
+      let executeTask = Task {
+        continuation.yield(
+          await tool.execute(arguments: arguments, canonicalTarget: canonicalTarget)
         )
-      group.cancelAll()
-
-      return winner
+        continuation.finish()
+      }
+      let timeoutTask = Task { [sleep] in
+        try? await sleep(tool.timeout)
+        continuation.yield(timeoutPayload)
+        continuation.finish()
+      }
+      continuation.onTermination = { @Sendable _ in
+        executeTask.cancel()
+        timeoutTask.cancel()
+      }
     }
+
+    for await payload in firstResult {
+      return payload
+    }
+    return timeoutPayload
   }
 
   private func errorOutcome(call: ToolCall, reason: String) -> ToolDispatchOutcome {
