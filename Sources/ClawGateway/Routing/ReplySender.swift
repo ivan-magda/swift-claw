@@ -23,6 +23,7 @@ enum StoreFailureReply: Sendable {
 struct ReplySender: Sendable {
   let processed: any ProcessedUpdateStore
   let transport: any TelegramTransport
+
   let logger: Logger
 
   /// Runs one store operation, mapping the failure classes every handler shares.
@@ -57,7 +58,7 @@ struct ReplySender: Sendable {
     let claimed = try await perform("update claim", updateId: updateId, chatId: chatId) {
       try processed.claimUpdate(updateId: updateId)
     }
-    guard claimed else {
+    if !claimed {
       throw RoutingHalt(outcome: skipDuplicate(updateId: updateId))
     }
   }
