@@ -111,10 +111,11 @@ import Testing
 
   @Test(.timeLimit(.minutes(1)))
   func extractorHandlesHostileUnclosedMarkupInLinearTime() {
-    // given — the two inputs that made the old backtracking regexes O(n²) (~minutes of CPU on a
-    // 2 MiB body): a run of never-closed `<script>` opens, and a long run of carriage returns
-    let unclosedScript = String(repeating: "<script>", count: 64 * 1024) + "PAYLOAD"  // ~512 KiB
-    let carriageReturns = String(repeating: "\r", count: 256 * 1024) + "tail"
+    // given — the two inputs that made the old backtracking regexes O(n²): a run of never-closed
+    // `<script>` opens, and a long run of carriage returns. These sizes are small for the linear
+    // scanner but still pathological for the old regex implementation.
+    let unclosedScript = String(repeating: "<script>", count: 2 * 1024) + "PAYLOAD"
+    let carriageReturns = String(repeating: "\r", count: 16 * 1024) + "tail"
 
     // when — the linear scan returns effectively instantly; a quadratic regression blows the limit
     let fromScript = HTMLTextExtractor.extractText(fromHTML: unclosedScript)

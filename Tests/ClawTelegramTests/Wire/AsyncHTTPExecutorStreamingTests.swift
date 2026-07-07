@@ -47,13 +47,17 @@ private final class StreamingHandler: ChannelInboundHandler, @unchecked Sendable
     let headers = HTTPHeaders([("content-type", "text/event-stream")])
     let head = HTTPResponseHead(version: .http1_1, status: .ok, headers: headers)
     context.write(wrapOutboundOut(.head(head)), promise: nil)
+    let finalWrite = context.eventLoop.makePromise(of: Void.self)
     for chunkIndex in 0..<chunkCount {
       var buffer = context.channel.allocator.buffer(capacity: 32)
       buffer.writeString("data: {\"index\":\(chunkIndex)}\n\n")
-      context.write(wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
+      let promise = chunkIndex == chunkCount - 1 ? finalWrite : nil
+      context.write(wrapOutboundOut(.body(.byteBuffer(buffer))), promise: promise)
     }
     context.flush()
-    Task { await self.probe.markStarted() }
+    finalWrite.futureResult.whenComplete { _ in
+      Task { await self.probe.markStarted() }
+    }
   }
 }
 
@@ -319,9 +323,8 @@ private func withTimeout<Result: Sendable>(
           timeoutSeconds: 30
         )
 
-        // when — let the producer race far ahead before the consumer reads a single chunk
+        // when — wait until the producer has queued the full burst before reading a single chunk
         await server.probe.waitStarted()
-        try await Task.sleep(nanoseconds: 100_000_000)
         let received = try await withTimeout(seconds: 5) {
           var collected = Data()
           for try await chunk in response.body {

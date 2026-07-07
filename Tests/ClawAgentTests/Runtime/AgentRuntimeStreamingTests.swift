@@ -975,8 +975,9 @@ func waitForTurnResult(
   }
 
   private func oversizedStreamCases() -> [[StreamEvent]] {
-    let chunk = String(repeating: "a", count: 1024)
-    let manySmallDeltas = Array(
+    let chunkByteCount = LLMStreamLimits.maxEventBytes / 4
+    let chunk = String(repeating: "a", count: chunkByteCount)
+    let cumulativeOverflowDeltas = Array(
       repeating: StreamEvent.delta(chunk),
       count: (LLMStreamLimits.maxAccumulatedContentBytes / chunk.utf8.count) + 1
     )
@@ -985,6 +986,6 @@ func waitForTurnResult(
         String(repeating: "a", count: LLMStreamLimits.maxAccumulatedContentBytes + 1)
       )
     ]
-    return [manySmallDeltas, singleOversizedDelta]
+    return [cumulativeOverflowDeltas, singleOversizedDelta]
   }
 }
