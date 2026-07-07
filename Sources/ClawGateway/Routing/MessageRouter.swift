@@ -21,8 +21,6 @@ public enum HandleOutcome: Sendable, Equatable {
 public struct MessageRouter: Sendable {
   private let processed: any ProcessedUpdateStore
   private let sessionMessages: any SessionMessageStore
-  private let commands: any CommandStore
-  private let memory: any MemoryStore
   private let pendingConfirmations: PendingConfirmationRegistry
   private let botUsername: String?
   private let accessControl: AccessControl
@@ -36,6 +34,7 @@ public struct MessageRouter: Sendable {
   private let enqueuer: TurnEnqueuer
   private let turnDispatch: TurnDispatch
   private let confirmations: ConfirmationResolver
+  private let commandHandlers: CommandHandlers
 
   public init(
     processed: any ProcessedUpdateStore,
@@ -55,8 +54,6 @@ public struct MessageRouter: Sendable {
   ) {
     self.processed = processed
     self.sessionMessages = sessionMessages
-    self.commands = commands
-    self.memory = memory
     self.pendingConfirmations = pendingConfirmations
     self.botUsername = botUsername
     self.accessControl = accessControl
@@ -67,6 +64,16 @@ public struct MessageRouter: Sendable {
     self.now = now
     self.logger = logger
     self.replies = ReplySender(processed: processed, transport: transport, logger: logger)
+    self.commandHandlers = CommandHandlers(
+      commands: commands,
+      sessionMessages: sessionMessages,
+      memory: memory,
+      pendingConfirmations: pendingConfirmations,
+      lanes: lanes,
+      replies: self.replies,
+      now: now,
+      logger: logger
+    )
     self.enqueuer = TurnEnqueuer(lanes: lanes, turns: turnRunner, logger: logger)
     let turnDispatch = TurnDispatch(
       sessionMessages: sessionMessages,
@@ -130,17 +137,17 @@ public struct MessageRouter: Sendable {
         guard isAllowed else {
           return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
-        return await handleStop(rawUpdate: rawUpdate, message: message)
+        return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message)
       case .new:
         guard isAllowed else {
           return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
-        return await handleNew(rawUpdate: rawUpdate, message: message)
+        return try await commandHandlers.new(rawUpdate: rawUpdate, message: message)
       case .remember(let rememberCommand):
         guard isAllowed else {
           return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
-        return await handleRemember(
+        return try await commandHandlers.remember(
           rawUpdate: rawUpdate,
           message: message,
           command: rememberCommand
@@ -149,7 +156,7 @@ public struct MessageRouter: Sendable {
         guard isAllowed else {
           return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
         }
-        return await handleMemory(
+        return try await commandHandlers.memory(
           rawUpdate: rawUpdate,
           message: message,
           command: memoryCommand
@@ -194,242 +201,9 @@ public struct MessageRouter: Sendable {
   }
 }
 
-// MARK: - Session Commands
+// MARK: - Schedule Creation & Listing
 
 private extension MessageRouter {
-  func handleStop(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
-    let result: StopCommandResult
-    do {
-      result = try commands.applyStop(
-        updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
-        now: Date()
-      )
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("stop command failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard result.newlyClaimed else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    if let sessionId = result.sessionId, let runId = result.cancelledRunId {
-      let lane = await lanes.actor(for: sessionId)
-      await lane.cancel(runId: runId)
-    }
-
-    let reply = result.cancelledRunId == nil ? CommandReplies.nothingToStop : CommandReplies.stopped
-    return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: reply)
-  }
-
-  func handleNew(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
-    let result: NewCommandResult
-    do {
-      result = try commands.applyNew(
-        updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
-        now: Date()
-      )
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("new command failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard result.newlyClaimed else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    if let sessionId = result.sessionId {
-      let lane = await lanes.actor(for: sessionId)
-      await lane.cancelAll()
-      await pendingConfirmations.clear(sessionId: sessionId)
-    }
-
-    return await sendCommandAck(
-      rawUpdate: rawUpdate,
-      chatId: message.chatId,
-      text: CommandReplies.freshConversation
-    )
-  }
-
-  // MARK: - Memory Commands
-
-  /// `/remember` is handled directly: claim the update, resolve the session, build the pure write
-  /// request, park it, and send the confirm prompt. No durable memory row is written until the
-  /// owner confirms.
-  func handleRemember(
-    rawUpdate: RawUpdate,
-    message: IncomingMessage,
-    command: RememberCommand
-  ) async -> HandleOutcome {
-    guard case .save(let kind, let text) = command else {
-      return await sendCanned(
-        rawUpdate: rawUpdate,
-        chatId: message.chatId,
-        text: MemoryReplies.rememberUsage
-      )
-    }
-
-    let claim: CommandClaim
-    do {
-      claim = try sessionMessages.claimCommandUpdate(
-        updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
-        now: Date()
-      )
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: message.chatId)
-    } catch {
-      logger.error("remember claim failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard case .claimed(let sessionId) = claim else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    let request: MemoryWriteRequest
-    do {
-      request = try MemoryWriteBuilder.build(rawText: text, kind: kind, sessionId: sessionId)
-    } catch {
-      return await sendCommandAck(
-        rawUpdate: rawUpdate,
-        chatId: message.chatId,
-        text: MemoryReplies.nothingToSave
-      )
-    }
-
-    await pendingConfirmations.park(.command(.rememberWrite(request)), sessionId: sessionId)
-
-    return await sendCommandAck(
-      rawUpdate: rawUpdate,
-      chatId: message.chatId,
-      text: request.confirmationText
-    )
-  }
-
-  func handleMemory(
-    rawUpdate: RawUpdate,
-    message: IncomingMessage,
-    command: MemoryCommand
-  ) async -> HandleOutcome {
-    switch command {
-    case .review:
-      return await handleMemoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: nil)
-    case .filter(let kind):
-      return await handleMemoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: kind)
-    case .show(let id):
-      return await handleMemoryShow(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
-    case .delete(let id):
-      return await handleMemoryDelete(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
-    case .invalid:
-      return await sendCanned(
-        rawUpdate: rawUpdate,
-        chatId: message.chatId,
-        text: MemoryReplies.memoryUsage
-      )
-    }
-  }
-
-  func handleMemoryReview(
-    rawUpdate: RawUpdate,
-    chatId: Int64,
-    kind: MemoryKind?
-  ) async -> HandleOutcome {
-    let items: [MemoryItem]
-    do {
-      items = try memory.list(kind: kind, limit: MemoryReplies.reviewListLimit)
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: chatId)
-    } catch {
-      logger.error("memory review failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    let text =
-      items.isEmpty ? MemoryReplies.emptyReview(kind: kind) : MemoryReplies.reviewList(items: items)
-    return await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: text)
-  }
-
-  func handleMemoryShow(
-    rawUpdate: RawUpdate,
-    chatId: Int64,
-    id: Int64
-  ) async -> HandleOutcome {
-    let item: MemoryItem?
-    do {
-      item = try memory.get(id: id)
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: chatId)
-    } catch {
-      logger.error("memory show failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    let text = item.map(MemoryReplies.showItem) ?? MemoryReplies.notFound(id: id)
-    return await sendCanned(rawUpdate: rawUpdate, chatId: chatId, text: text)
-  }
-
-  func handleMemoryDelete(
-    rawUpdate: RawUpdate,
-    chatId: Int64,
-    id: Int64
-  ) async -> HandleOutcome {
-    let item: MemoryItem
-    do {
-      guard let existing = try memory.get(id: id) else {
-        return await sendCanned(
-          rawUpdate: rawUpdate,
-          chatId: chatId,
-          text: MemoryReplies.notFound(id: id)
-        )
-      }
-      item = existing
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: chatId)
-    } catch {
-      logger.error("memory delete lookup failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    let claim: CommandClaim
-    do {
-      claim = try sessionMessages.claimCommandUpdate(
-        updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        now: Date()
-      )
-    } catch StoreError.diskFull {
-      return await storageFull(chatId: chatId)
-    } catch {
-      logger.error("memory delete claim failed for update \(rawUpdate.updateId): \(error)")
-      return .transientFailure
-    }
-
-    guard case .claimed(let sessionId) = claim else {
-      logger.debug("duplicate update \(rawUpdate.updateId), skipping")
-      return .skipped
-    }
-
-    await pendingConfirmations.park(.command(.deleteItem(id: id)), sessionId: sessionId)
-
-    return await sendCommandAck(
-      rawUpdate: rawUpdate,
-      chatId: chatId,
-      text: MemoryReplies.deleteConfirmPrompt(item: item)
-    )
-  }
-
-  // MARK: - Schedule Creation & Listing
-
   /// Fans the allowlisted scheduling family — plus `/help`, which shares the identical
   /// owner-only `isAllowed` gate and has no state of its own to warrant a standalone arm in
   /// `handle` — out to its per-verb handler. The `isAllowed` gate is applied once by the caller
@@ -535,7 +309,7 @@ private extension MessageRouter {
   }
 
   /// `/schedule list` (spec §9): read-only, deduped via the canned-reply claim like
-  /// `handleMemoryReview`.
+  /// `CommandHandlers.memoryReview`.
   func handleScheduleList(rawUpdate: RawUpdate, chatId: Int64) async -> HandleOutcome {
     let jobs: [ScheduledJob]
     do {
