@@ -5,7 +5,6 @@ import ClawTools
 import ClawWorkspace
 import Foundation
 import GRDB
-import Logging
 import Testing
 
 @testable import ClawGateway
@@ -225,7 +224,7 @@ func makeSC7Harness(
   //    DEV-2a: the injected clock also drives TurnRunner's proactive "today" window (Task 20b), so
   //    every turn — interactive AND scheduled/heartbeat — reads its budget day from the ManualClock.
   let transport = RecordingTransport()
-  let logger = Logger(label: "sc7")
+  let logger = TestLog.silent
   let runner = TurnRunner(
     sessionMessages: stores.sessionMessages,
     runs: stores.runs,

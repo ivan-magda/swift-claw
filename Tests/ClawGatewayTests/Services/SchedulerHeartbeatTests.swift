@@ -2,7 +2,6 @@ import ClawAgent
 import ClawCore
 import ClawWorkspace
 import Foundation
-import Logging
 import Testing
 
 @testable import ClawGateway
@@ -105,7 +104,7 @@ private struct HeartbeatWorkspace: WorkspaceReading {
       audit: audit,
       now: { now },
       sleep: { _ in },
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
     return Fixture(service: service, store: store, runner: runner, audit: audit)
   }

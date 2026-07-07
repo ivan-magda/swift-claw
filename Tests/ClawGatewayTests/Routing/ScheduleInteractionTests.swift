@@ -3,7 +3,6 @@ import ClawCore
 import ClawData
 import Foundation
 import GRDB
-import Logging
 import Testing
 
 @testable import ClawGateway
@@ -62,7 +61,7 @@ import Testing
         commands: ScheduleCommandStoreGRDB(writer: queue)
       ),
       now: { Self.fixedNow },
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
     return Harness(
       router: router,
