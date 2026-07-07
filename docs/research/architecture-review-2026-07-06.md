@@ -11,6 +11,8 @@
 
 Verdicts are marked CONFIRMED or PLAUSIBLE; two findings were downgraded during adversarial verification and are presented with those corrections.
 
+> **Progress (updated 2026-07-07).** Risk 2 (the `MessageRouter` split) and Stage 2 item 1 of the refactoring plan are done, landed on branch `split-message-router` (PR [#30](https://github.com/ivan-magda/swift-claw/pull/30)). The rest of the register stands as written. See the "Resolved" callout under Risk 2 for what shipped.
+
 ---
 
 ## 1. Architecture map
@@ -61,7 +63,17 @@ Tradeoffs: An abandoned tool task keeps running detached until its I/O returns, 
 
 ### Risk 2: MessageRouter is a 1,176-line convergence point whose invariants are enforced by comments and ordering
 
-Severity: High · Confidence: High · **CONFIRMED** (verified first-hand)
+Severity: High · Confidence: High · **CONFIRMED** (verified first-hand) · **RESOLVED (2026-07-07)**
+
+> **Resolved (2026-07-07, PR [#30](https://github.com/ivan-magda/swift-claw/pull/30), branch `split-message-router`).** Behavior-preserving split; the full suite passes with no test changes beyond mechanical `PendingConfirmation` case-path updates and one new `OccurrencePolicyTests.swift`. `MessageRouter` is now a 235-line dispatcher over internally-constructed `Sendable` structs:
+> - **`ReplySender`** + a `RoutingHalt` error collapse the 23 copied `catch StoreError.diskFull` blocks into one `perform` that spells the two-tier store-error contract once and unwinds to the single `handle` catch point.
+> - **`TurnEnqueuer`** replaces the three near-verbatim lane-enqueue closures (two of which were the cross-module copies cited below).
+> - **`TurnDispatch`** (claim-and-persist inbound), **`CommandHandlers`** (stop/new/remember/memory), **`ScheduleHandlers`** (the six-verb schedule family), **`ConfirmationResolver`** (parked-confirmation resolution).
+> - `PendingConfirmation` splits into `CommandConfirmation` vs tool-approval, so each resolver switch is exhaustive over only the cases it can legally see. Both `preconditionFailure` arms are deleted, not moved.
+> - The occurrence-anchoring math moves into a pure `OccurrencePolicy` in `ClawCore/Domain/Scheduling` beside `OccurrenceCalculator`, consumed by both the gateway and `SchedulerService` so the confirm preview and actual fires cannot drift apart.
+> - The per-arm `guard isAllowed` copies collapse into one `denyAccess` gate.
+>
+> Net: `MessageRouter.swift` holds 0 `catch StoreError.diskFull` and 0 `preconditionFailure`; public API (`MessageRouter.init`, `ScheduleSurface.init`, `SchedulerService.init`, `PendingConfirmationRegistry`, `HandleOutcome`) is unchanged. The original evidence, preserved below, describes the pre-split state.
 
 Evidence:
 
@@ -298,7 +310,7 @@ Evidence: quiet heartbeat runs visibly type (`AgentRuntime.swift:264`, unconditi
 
 **New tool — clean** (one struct + one array line, automatic auditing and budget caps) **unless it needs policy**, in which case you must know to edit `egressTools` (Risk 3). A confirmation-gated tool is **clean** — Scenario 3 traced the whole park/prompt/resolve/grant loop as tool-agnostic; only the gate branch and one `ApprovalReason` case (compiler-forced copy) are added.
 
-**New domain module — awkward but honest.** The scheduling precedent measured 98.7% additive (1,443 insertions, 18 deletions, 5 new files, 7 small compiler-guided edits to shared files). The open/closed story is: domain, store, replies are additive; `Command`, `PendingConfirmation`, `AuditAction`, `ClawStores`, the migrator are small forced edits; **MessageRouter absorbs the dominant edit** (+489 lines for scheduling). The router split (Risk 2) is what turns this "awkward" into "clean."
+**New domain module — awkward but honest.** The scheduling precedent measured 98.7% additive (1,443 insertions, 18 deletions, 5 new files, 7 small compiler-guided edits to shared files). The open/closed story is: domain, store, replies are additive; `Command`, `PendingConfirmation`, `AuditAction`, `ClawStores`, the migrator are small forced edits; **MessageRouter absorbs the dominant edit** (+489 lines for scheduling). The router split (Risk 2) is what turns this "awkward" into "clean" — now done (PR [#30](https://github.com/ivan-magda/swift-claw/pull/30)), so a new domain's handlers land in their own family file rather than growing the dispatcher.
 
 **New LLM provider — clean.** Scenario 2's full trace: a new `AnthropicMessagesProvider` module, finish-reason normalization, one composition-root discriminator, pricing rows. No changes to the loop, history model, or migrations. The optional payoffs (cache-token accounting, typed stop reasons) are additive.
 
@@ -351,7 +363,7 @@ Plus the one-line input-token preflight guard (Risk 8). Do **not** touch: the se
 
 **Stage 2 — medium cleanup, ideally interleaved with Inc 5 planning.**
 
-1. Split `MessageRouter` (CommandHandlers / ScheduleHandlers / ConfirmationResolver), extract the claim/error-mapping helper, split `PendingConfirmation` into command-confirmation vs tool-approval types, and move `armNextOccurrence`/`resumeNextOccurrence`/`nextFires` into an `OccurrencePolicy` domain type also consumed by `SchedulerService` (Risk 2).
+1. ~~Split `MessageRouter` (CommandHandlers / ScheduleHandlers / ConfirmationResolver), extract the claim/error-mapping helper, split `PendingConfirmation` into command-confirmation vs tool-approval types, and move `armNextOccurrence`/`resumeNextOccurrence`/`nextFires` into an `OccurrencePolicy` domain type also consumed by `SchedulerService` (Risk 2).~~ **Done (2026-07-07, PR [#30](https://github.com/ivan-magda/swift-claw/pull/30)).** Shipped as above, plus a `TurnEnqueuer` and `TurnDispatch` extraction and the `denyAccess` gate hoist.
 2. Split `TelegramTransport` into intake + delivery protocols; delete or adopt `OutgoingReply` (Risk 10).
 3. Add exchanges to `DegradedTurn` with a decided `HistoryHygiene` replay rule (Risk 7).
 4. Move the `/schedule` parse onto the lane (or deadline-bound it) and give it a usage row + day-cap check (Risk 9).
@@ -369,7 +381,7 @@ Do **not** start: any second-channel schema work.
 
 ## 8. Final recommendation
 
-**Three most important things to fix** (all before or with Increment 5): (1) make tool policy *declared on the tool contract* instead of a fail-open string set — it converts the architecture's one silent-bypass seam into the compile-error discipline the rest of the codebase already practices; (2) make the tool timeout real and move blocking DNS off the cooperative pool — the single-owner bot's availability currently hangs on the goodwill of any hostile URL the model fetches; (3) split `MessageRouter` and relocate its scheduling math — not for aesthetics, but because Inc 5's callback approvals land in its most invariant-dense region and every invariant there is currently enforced by comments.
+**Three most important things to fix** (all before or with Increment 5): (1) make tool policy *declared on the tool contract* instead of a fail-open string set — it converts the architecture's one silent-bypass seam into the compile-error discipline the rest of the codebase already practices; (2) make the tool timeout real and move blocking DNS off the cooperative pool — the single-owner bot's availability currently hangs on the goodwill of any hostile URL the model fetches; (3) split `MessageRouter` and relocate its scheduling math — not for aesthetics, but because Inc 5's callback approvals land in its most invariant-dense region and every invariant there is currently enforced by comments. **[Done 2026-07-07, PR [#30](https://github.com/ivan-magda/swift-claw/pull/30).]**
 
 **Three things not to over-engineer:** (1) multi-channel infrastructure — do the cheap transport-protocol split and stop; no channel columns, no address abstraction, no neutral streaming event bus until a second channel is actually chosen, or you'll design the wrong abstraction against zero real consumers; (2) the provider layer — the OpenAI-shaped internal model is a documented, verified-cheap bet; don't build a provider-neutral message model or multi-provider fallback speculatively; (3) audit forensics — a per-run content fingerprint is enough; tamper-evident chains and prompt-version registries are enterprise theater for a single-owner daemon whose workspace can simply live in git.
 
