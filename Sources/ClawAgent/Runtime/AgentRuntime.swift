@@ -103,7 +103,7 @@ public struct AgentRuntime: Sendable {
   /// DELIBERATE SOFTENING of Inc 1's "no persistence here": `usageStore`/`auditLog` are injected
   /// so mid-run rows survive a crash (D6/review H1). Throws ONLY `StoreError.diskFull`; every
   /// other failure resolves in-band to a `TurnResult`.
-  // swiftlint:disable:next function_parameter_count function_body_length
+  // swiftlint:disable:next function_parameter_count function_body_length cyclomatic_complexity
   public func runTurn(
     runId: Int64,
     sessionId: Int64,
@@ -160,6 +160,14 @@ public struct AgentRuntime: Sendable {
     for roundTripIndex in 1...max(1, budget.maxTurns) {
       // Per-round-trip preflight (§6.2): day totals at run start + everything this run recorded.
       let inputTokens = TokenEstimator.estimateInputTokens(wire)
+      // The loop is the one component that grows provider input (proposals + fenced
+      // observations, §6.5) and nothing re-fits the wire mid-run — without this check the
+      // provider's context window is the de facto enforcement: an HTTP 400 classified terminal,
+      // surfacing as an undiagnosable "provider unavailable". `budget.maxInputTokens` otherwise
+      // binds only at assembly (§9), which cannot see mid-run growth.
+      if inputTokens > budget.maxInputTokens {
+        return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
+      }
       let estimate = inputTokens + budget.maxOutputTokens
       let estimatedCost = costResolver.resolve(
         model: model,

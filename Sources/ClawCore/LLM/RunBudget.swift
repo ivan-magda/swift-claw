@@ -84,6 +84,7 @@ public struct BudgetGate: Sendable {
   public static let perDaySpendCap = "per-day spend"
   public static let perDayTokenCap = "per-day token"
   public static let perRunSpendCap = "per-run spend"
+  public static let perRunInputTokenCap = "per-run input-token"
 
   public let budget: RunBudget
 
