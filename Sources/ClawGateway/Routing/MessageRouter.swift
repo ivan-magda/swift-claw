@@ -129,10 +129,10 @@ private extension MessageRouter {
       )
     case .text(let text):
       let command = Command.parse(text, botUsername: botUsername)
-      guard isAllowed else {
-        return await denyAccess(command, rawUpdate: rawUpdate, message: message)
+      if isAllowed {
+        return try await routeAllowed(command, rawUpdate: rawUpdate, message: message)
       }
-      return try await routeAllowed(command, rawUpdate: rawUpdate, message: message)
+      return await denyAccess(command, rawUpdate: rawUpdate, message: message)
     }
   }
 
@@ -143,14 +143,14 @@ private extension MessageRouter {
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async -> HandleOutcome {
-    guard case .start = command else {
-      return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
+    if case .start = command {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: Self.unauthorizedStartText(userId: message.userId)
+      )
     }
-    return await replies.sendCanned(
-      updateId: rawUpdate.updateId,
-      chatId: message.chatId,
-      text: Self.unauthorizedStartText(userId: message.userId)
-    )
+    return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
   }
 
   func routeAllowed(
