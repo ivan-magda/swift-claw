@@ -199,15 +199,15 @@ private extension ConfirmationResolver {
 
     await pendingConfirmations.clear(sessionId: sessionId)
 
-    let errorText: String
-    switch confirmation {
-    case .rememberWrite:
-      errorText = MemoryReplies.saveFailed
-    case .deleteItem:
-      errorText = MemoryReplies.deleteFailed
-    case .scheduleArm:
-      errorText = ScheduleReplies.armFailed
-    }
+    let errorText: String =
+      switch confirmation {
+      case .rememberWrite:
+        MemoryReplies.saveFailed
+      case .deleteItem:
+        MemoryReplies.deleteFailed
+      case .scheduleArm:
+        ScheduleReplies.armFailed
+      }
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
