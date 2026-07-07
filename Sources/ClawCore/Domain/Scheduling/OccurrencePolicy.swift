@@ -48,9 +48,11 @@ public struct OccurrencePolicy: Sendable {
     guard let envelope = validated.recurrence else {
       return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
     }
+
     guard let timezone = TimeZone(identifier: validated.timezone) else {
       return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
     }
+
     return calculator.occurrences(
       rule: envelope.rule,
       timezone: timezone,
