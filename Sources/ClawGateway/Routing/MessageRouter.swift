@@ -289,7 +289,7 @@ private extension MessageRouter {
       )
     }
 
-    await pendingConfirmations.park(.rememberWrite(request), sessionId: sessionId)
+    await pendingConfirmations.park(.command(.rememberWrite(request)), sessionId: sessionId)
 
     return await sendCommandAck(
       rawUpdate: rawUpdate,
@@ -401,7 +401,7 @@ private extension MessageRouter {
       return .skipped
     }
 
-    await pendingConfirmations.park(.deleteItem(id: id), sessionId: sessionId)
+    await pendingConfirmations.park(.command(.deleteItem(id: id)), sessionId: sessionId)
 
     return await sendCommandAck(
       rawUpdate: rawUpdate,
@@ -499,7 +499,7 @@ private extension MessageRouter {
         )
       case .success(let validated):
         // Single slot per session: a second /schedule visibly displaces the older draft (§9).
-        await pendingConfirmations.park(.scheduleArm(validated), sessionId: sessionId)
+        await pendingConfirmations.park(.command(.scheduleArm(validated)), sessionId: sessionId)
         return await sendCommandAck(
           rawUpdate: rawUpdate,
           chatId: message.chatId,
@@ -788,10 +788,16 @@ private extension MessageRouter {
       )
     }
 
+    guard case .command(let confirmation) = entry else {
+      // .toolApproval returned above; the guard keeps the destructuring exhaustive without a
+      // fatal arm.
+      return nil
+    }
+
     switch ConfirmationReply.parse(text) {
     case .confirm:
       return await commitPending(
-        entry,
+        confirmation,
         sessionId: sessionId,
         rawUpdate: rawUpdate,
         message: message
@@ -810,7 +816,7 @@ private extension MessageRouter {
 
   /// Confirms a parked effect through its atomic claim+effect+audit store seam.
   func commitPending(
-    _ entry: PendingConfirmation,
+    _ entry: CommandConfirmation,
     sessionId: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
@@ -865,8 +871,6 @@ private extension MessageRouter {
         )
         newlyClaimed = result.newlyClaimed
         ackText = ScheduleReplies.armed(job: result.job)
-      case .toolApproval:
-        preconditionFailure("approvals resolve in resolvePendingConfirmation before commitPending")
       }
     } catch StoreError.diskFull {
       return await storageFull(chatId: message.chatId)
@@ -924,7 +928,7 @@ private extension MessageRouter {
   /// A non-disk commit failure is terminal for the parked entry: claim the update, clear the
   /// ephemeral pending state, and tell the owner nothing changed so they can re-issue the command.
   func failPendingCommit(
-    _ entry: PendingConfirmation,
+    _ entry: CommandConfirmation,
     sessionId: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
@@ -954,8 +958,6 @@ private extension MessageRouter {
       errorText = MemoryReplies.deleteFailed
     case .scheduleArm:
       errorText = ScheduleReplies.armFailed
-    case .toolApproval:
-      preconditionFailure("approvals resolve in resolvePendingConfirmation before commitPending")
     }
 
     return await sendCommandAck(rawUpdate: rawUpdate, chatId: message.chatId, text: errorText)
