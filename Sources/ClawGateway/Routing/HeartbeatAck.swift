@@ -22,6 +22,7 @@ enum HeartbeatAck {
   static func isAck(_ content: String) -> Bool {
     var remainder = content.trimmingCharacters(in: .whitespacesAndNewlines)
     var tokenStripped = false
+
     if remainder.hasPrefix(token) {
       let afterToken = remainder.dropFirst(token.count)
       // The token must be a standalone leading marker, not the start of a longer word
@@ -32,6 +33,7 @@ enum HeartbeatAck {
         tokenStripped = true
       }
     }
+
     if remainder.hasSuffix(token) {
       let beforeToken = remainder.dropLast(token.count)
       if beforeToken.last?.isWhitespace ?? true {
@@ -40,6 +42,7 @@ enum HeartbeatAck {
       }
     }
     remainder = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+
     return tokenStripped && remainder.count <= maxAckChars
   }
 }
