@@ -3,21 +3,21 @@ import Foundation
 import GRDB
 
 public struct UsageStoreGRDB: UsageStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func recordUsage(_ usage: ProviderUsage) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try RunStoreGRDB.insertUsage(db, usage)
     }
   }
 
   public func todayTokensAndCost(now: Date) throws -> (tokens: Int, costUSD: Double) {
     let dayStart = now.startOfUTCDay
-    return try writer.readMapping { db in
+    return try database.readMapping { db in
       // GRDB stores Date as a UTC "yyyy-MM-dd HH:mm:ss.SSS" string, so `ts >= ?` is a correct
       // chronological range scan over the calendar-day-UTC window.
       let row = try Row.fetchOne(
@@ -48,7 +48,7 @@ public struct UsageStoreGRDB: UsageStore {
 
     let dayStart = now.startOfUTCDay
 
-    return try writer.readMapping { db in
+    return try database.readMapping { db in
       // databaseQuestionMarks is GRDB's public helper (GRDB/Utils/Utils.swift), not a
       // project symbol — it renders "?,?,?" for the IN clause.
       let placeholders = databaseQuestionMarks(count: origins.count)
@@ -75,7 +75,7 @@ public struct UsageStoreGRDB: UsageStore {
 
   public func costSourceMix(now: Date) throws -> [CostSource: Int] {
     let dayStart = now.startOfUTCDay
-    return try writer.readMapping { db in
+    return try database.readMapping { db in
       let rows = try Row.fetchAll(
         db,
         sql: """

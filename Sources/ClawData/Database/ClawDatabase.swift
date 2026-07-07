@@ -225,29 +225,3 @@ public enum ClawDatabase {
     }
   }
 }
-
-extension DatabaseReader {
-  /// A store read whose GRDB failures are translated to domain `StoreError`s at the seam, so a raw
-  /// `DatabaseError` never leaks past the store boundary. Drop-in for `read` — same call-site
-  /// shape, no nesting. `DatabaseWriter` refines `DatabaseReader`, so writers inherit this too.
-  func readMapping<Value>(_ value: (Database) throws -> Value) throws -> Value {
-    do {
-      return try read(value)
-    } catch {
-      throw ClawDatabase.classifyError(error)
-    }
-  }
-}
-
-extension DatabaseWriter {
-  /// A store write whose GRDB failures are translated to domain `StoreError`s at the seam (e.g. a
-  /// full disk → `StoreError.diskFull`, F23). Drop-in for `write` — same call-site shape, no
-  /// nesting; a new turn-path write gets domain-error handling just by choosing this method.
-  func writeMapping<Value>(_ updates: (Database) throws -> Value) throws -> Value {
-    do {
-      return try write(updates)
-    } catch {
-      throw ClawDatabase.classifyError(error)
-    }
-  }
-}

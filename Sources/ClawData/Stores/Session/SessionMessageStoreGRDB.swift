@@ -3,14 +3,14 @@ import Foundation
 import GRDB
 
 public struct SessionMessageStoreGRDB: SessionMessageStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.upsertSession(db, sessionKey: sessionKey, now: now)
     }
   }
@@ -20,7 +20,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     sessionKey: String,
     now: Date
   ) throws -> CommandClaim {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: updateId,
@@ -37,7 +37,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   public func findSession(sessionKey: String) throws -> Int64? {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       try Int64.fetchOne(
         db,
         sql: "SELECT id FROM sessions WHERE session_key = ?",
@@ -47,7 +47,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   public func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: inbound.updateId,
@@ -118,7 +118,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     throughMessageId: Int64,
     limit: Int
   ) throws -> SessionContextSnapshot {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       let session = try Row.fetchOne(
         db,
         sql: "SELECT window_start_message_id, tainted FROM sessions WHERE id = ?",
@@ -188,7 +188,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   public func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
     }
   }

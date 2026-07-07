@@ -3,14 +3,14 @@ import Foundation
 import GRDB
 
 public struct ProcessedUpdateStoreGRDB: ProcessedUpdateStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func claimUpdate(updateId: Int64) throws -> Bool {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.claimUpdate(db: db, updateId: updateId, claimedAt: Date())
     }
   }

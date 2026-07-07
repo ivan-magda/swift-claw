@@ -3,10 +3,10 @@ import Foundation
 import GRDB
 
 public struct RetrieverGRDB: Retriever {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func searchRelevantMessages(
@@ -21,7 +21,7 @@ public struct RetrieverGRDB: Retriever {
       return []
     }
 
-    return try writer.readMapping { db in
+    return try database.readMapping { db in
       // messages_fts.rowid == messages.id (external content). BM25 is negative; lower = better, so
       // ORDER BY is ASC. RecallScore negates it back so higher = better for policy/telemetry.
       var sql = """

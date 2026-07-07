@@ -3,14 +3,14 @@ import Foundation
 import GRDB
 
 public struct RunStoreGRDB: RunStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard try Self.transitionRun(db, runId: runId, event: .pickUp, now: now) != nil else {
         return nil
       }
@@ -31,7 +31,7 @@ public struct RunStoreGRDB: RunStore {
     reason: CancelReason,
     now: Date
   ) throws -> Int64? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let runId = try Self.fetchActiveRunId(db, sessionId: sessionId) else {
         return nil
       }
@@ -50,13 +50,13 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.supersedeRuns(db, sessionId: sessionId, now: now)
     }
   }
 
   public func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
         return .ignored
       }
@@ -135,7 +135,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
         return .ignored
       }
@@ -176,7 +176,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func failRun(runId: Int64, now: Date) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
         return
       }
@@ -189,7 +189,7 @@ public struct RunStoreGRDB: RunStore {
     degradationText: String,
     heartbeatNoticeChatId: Int64?
   ) throws -> [DegradationReply] {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let stale = try Row.fetchAll(
         db,
         sql: """
@@ -256,7 +256,7 @@ public struct RunStoreGRDB: RunStore {
   }
 
   public func runsHealth(now: Date) throws -> RunsHealth {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       let activeStates = [RunState.pending.rawValue, RunState.running.rawValue]
       let inFlight =
         try Int.fetchOne(

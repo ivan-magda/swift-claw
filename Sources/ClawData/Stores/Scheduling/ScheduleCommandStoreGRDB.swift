@@ -6,10 +6,10 @@ import GRDB
 /// ONE transaction, `MemoryCommandStoreGRDB` pattern) applied to job creation. A replayed `yes`
 /// fails the claim and creates nothing.
 public struct ScheduleCommandStoreGRDB: ScheduleCommandStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func applyArm(
@@ -17,7 +17,7 @@ public struct ScheduleCommandStoreGRDB: ScheduleCommandStore {
     job: NewScheduledJob,
     now: Date
   ) throws -> ScheduleArmResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: updateId,

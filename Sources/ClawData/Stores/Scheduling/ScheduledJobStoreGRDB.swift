@@ -8,14 +8,14 @@ import GRDB
 /// conformance is declared once every method exists (end of this file's build-out); `Sendable`
 /// is declared NOW because Cycle B's task-group race test captures the store in `@Sendable`
 /// child tasks — strict concurrency rejects that until the conformance exists (the only stored
-/// property is the `Sendable` `any DatabaseWriter`). Method groups live in same-type extensions
+/// property is the `Sendable` `MappedDatabase`). Method groups live in same-type extensions
 /// below purely to keep each extension's body under the project's `type_body_length` gate; the
 /// store is still one type with one stored property.
 public struct ScheduledJobStoreGRDB: Sendable {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 }
 
@@ -23,7 +23,7 @@ public struct ScheduledJobStoreGRDB: Sendable {
 
 extension ScheduledJobStoreGRDB {
   public func create(_ job: NewScheduledJob, now: Date) throws -> ScheduledJob {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.insertJob(db, job, now: now)
     }
   }
@@ -69,20 +69,20 @@ extension ScheduledJobStoreGRDB {
   }
 
   public func job(id: Int64) throws -> ScheduledJob? {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       try Self.fetchJob(db, id: id)
     }
   }
 
   public func listAll() throws -> [ScheduledJob] {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       let rows = try Row.fetchAll(db, sql: "SELECT * FROM scheduled_jobs ORDER BY id ASC")
       return try rows.map { row in try Self.jobFromRow(row) }
     }
   }
 
   public func dueJobs(now: Date) throws -> [ScheduledJob] {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       let rows = try Row.fetchAll(
         db,
         sql: """
@@ -163,7 +163,7 @@ extension ScheduledJobStoreGRDB {
     nextOccurrence: Date?,
     now: Date
   ) throws -> ClaimedFire? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       // Step 1: the compare-and-advance. This IS the atomic claim of ARCHITECTURE §6.3/§14
       // expressed on the occurrence: the WHERE arms (id, stored due, ACTIVE) make two racers
       // for the same (job, due) structurally single-winner.
@@ -297,7 +297,7 @@ extension ScheduledJobStoreGRDB {
 
 extension ScheduledJobStoreGRDB {
   public func fireNow(jobId: Int64, now: Date) throws -> ClaimedFire? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let rawStatus = try String.fetchOne(
         db,
         sql: "SELECT status FROM scheduled_jobs WHERE id = ?",
@@ -328,7 +328,7 @@ extension ScheduledJobStoreGRDB {
     skippedCount: Int,
     now: Date
   ) throws -> Bool {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       // The same CAS predicate as the claim — a concurrently-mutated job means no skip.
       if let nextOccurrence {
         try db.execute(
@@ -393,7 +393,7 @@ extension ScheduledJobStoreGRDB {
 
 extension ScheduledJobStoreGRDB {
   public func schedulerState() throws -> SchedulerState {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       guard
         let row = try Row.fetchOne(db, sql: "SELECT * FROM scheduler_state WHERE id = 1")
       else {
@@ -418,7 +418,7 @@ extension ScheduledJobStoreGRDB {
   }
 
   public func recordTick(at tickTime: Date) throws {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try db.execute(
         sql: """
           INSERT INTO scheduler_state(id, last_tick_at) VALUES (1, ?)
@@ -434,7 +434,7 @@ extension ScheduledJobStoreGRDB {
 
 extension ScheduledJobStoreGRDB {
   public func pause(id: Int64, now: Date) throws -> ScheduledJob? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let current = try Self.fetchJob(db, id: id) else {
         return nil
       }
@@ -468,7 +468,7 @@ extension ScheduledJobStoreGRDB {
   }
 
   public func resume(id: Int64, nextOccurrence: Date?, now: Date) throws -> ScheduledJob? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let current = try Self.fetchJob(db, id: id) else {
         return nil
       }
@@ -506,7 +506,7 @@ extension ScheduledJobStoreGRDB {
   }
 
   public func cancel(id: Int64, now: Date) throws -> ScheduledJob? {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       guard let current = try Self.fetchJob(db, id: id) else {
         return nil
       }
@@ -568,7 +568,7 @@ extension ScheduledJobStoreGRDB {
     now: Date,
     day: String
   ) throws -> ClaimedFire {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let sessionId = try SessionMessageStoreGRDB.upsertSession(
         db,
         sessionKey: SessionKey.heartbeat,

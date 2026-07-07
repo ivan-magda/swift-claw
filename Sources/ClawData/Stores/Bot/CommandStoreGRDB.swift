@@ -3,7 +3,7 @@ import Foundation
 import GRDB
 
 public struct CommandStoreGRDB: CommandStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
   private let afterClaimForTesting: @Sendable () throws -> Void
 
   public init(writer: any DatabaseWriter) {
@@ -14,7 +14,7 @@ public struct CommandStoreGRDB: CommandStore {
     writer: any DatabaseWriter,
     afterClaimForTesting: @Sendable @escaping () throws -> Void
   ) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
     self.afterClaimForTesting = afterClaimForTesting
   }
 
@@ -23,7 +23,7 @@ public struct CommandStoreGRDB: CommandStore {
     sessionKey: String,
     now: Date
   ) throws -> StopCommandResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: updateId,
@@ -77,7 +77,7 @@ public struct CommandStoreGRDB: CommandStore {
     sessionKey: String,
     now: Date
   ) throws -> NewCommandResult {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
         updateId: updateId,

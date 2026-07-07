@@ -3,20 +3,20 @@ import Foundation
 import GRDB
 
 public struct MemoryStoreGRDB: MemoryStore {
-  private let writer: any DatabaseWriter
+  private let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
-    self.writer = writer
+    database = MappedDatabase(writer: writer)
   }
 
   public func append(_ newItem: NewMemoryItem, now: Date) throws -> MemoryItem {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try Self.insertItem(db, item: newItem, now: now)
     }
   }
 
   public func list(kind: MemoryKind?, limit: Int) throws -> [MemoryItem] {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       let rows: [Row]
       if let kind {
         rows = try Row.fetchAll(
@@ -41,7 +41,7 @@ public struct MemoryStoreGRDB: MemoryStore {
   }
 
   public func get(id: Int64) throws -> MemoryItem? {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       guard
         let row = try Row.fetchOne(
           db,
@@ -56,14 +56,14 @@ public struct MemoryStoreGRDB: MemoryStore {
   }
 
   public func delete(id: Int64) throws -> Bool {
-    try writer.writeMapping { db in
+    try database.writeMapping { db in
       try db.execute(sql: "DELETE FROM memory_items WHERE id = ?", arguments: [id])
       return db.changesCount > 0
     }
   }
 
   public func fetchRanked(excludeSensitive: Bool, limit: Int) throws -> [MemoryItem] {
-    try writer.readMapping { db in
+    try database.readMapping { db in
       // Pure SQL ordering; the grapheme/budget fill is MemoryRanker's job (spec §10.1).
       let sensitivityFilter = excludeSensitive ? "WHERE sensitivity = 'normal'" : ""
       let rows = try Row.fetchAll(
