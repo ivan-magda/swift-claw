@@ -1,11 +1,20 @@
 import ClawCore
 import Foundation
 
-public enum PendingConfirmation: Sendable, Equatable {
+/// A parked command effect awaiting the owner's yes/no (single slot per session, §9).
+public enum CommandConfirmation: Sendable, Equatable {
   case rememberWrite(MemoryWriteRequest)
   case deleteItem(id: Int64)
-  case toolApproval(ToolApprovalRequest)
   case scheduleArm(ValidatedSchedule)
+}
+
+/// What the confirmation slot can hold. Command confirmations resolve through the yes/no
+/// commit/cancel switch; a tool approval resolves by dispatching the reply as an ordinary
+/// persisted turn (§14). Two types, so each resolver switch is exhaustive over only the cases
+/// it can legally see — no "unreachable by ordering" arms.
+public enum PendingConfirmation: Sendable, Equatable {
+  case command(CommandConfirmation)
+  case toolApproval(ToolApprovalRequest)
 }
 
 public actor PendingConfirmationRegistry {

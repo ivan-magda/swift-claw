@@ -108,7 +108,10 @@ import Testing
     let harness = try MemoryRoutingHarness.make()
     let seeded = try harness.seedItem(text: "obsolete fact", kind: .user)
     let sessionId = try harness.ownerSessionId()
-    await harness.pendingConfirmations.park(.deleteItem(id: seeded.id), sessionId: sessionId)
+    await harness.pendingConfirmations.park(
+      .command(.deleteItem(id: seeded.id)),
+      sessionId: sessionId
+    )
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 9, from: 42, text: "yes"))
