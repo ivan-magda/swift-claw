@@ -346,7 +346,7 @@ private func withTimeout<Result: Sendable>(
   func connectionFailureBeforeResponseHeadIsConnectFailed() async throws {
     // given
     let port = try await closedLocalPort()
-    let configuration = HTTPClient.Configuration(timeout: .init(connect: .milliseconds(100)))
+    let configuration = HTTPClient.Configuration(timeout: .init(connect: .milliseconds(10)))
     try await withHTTPClient(configuration: configuration) { client in
       let executor = AsyncHTTPExecutor(client: client)
 

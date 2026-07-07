@@ -496,6 +496,13 @@ func waitForTurnResult(
     // given
     let gate = TypingReleaseGate()
     let typing = CountingReleaseTyping(releaseAfter: 3, gate: gate)
+    let tickYieldingSleep: @Sendable (Duration) async throws -> Void = { duration in
+      if duration >= .seconds(10) {
+        try await Task.sleep(for: .seconds(3600))
+      } else {
+        await Task.yield()
+      }
+    }
     let provider = StreamingProvider(
       streamScript: .gated(
         gate,
@@ -509,7 +516,7 @@ func waitForTurnResult(
       provider: provider,
       typing: typing,
       streamingEnabled: true,
-      sleep: compressedSleep
+      sleep: tickYieldingSleep
     )
 
     // when
