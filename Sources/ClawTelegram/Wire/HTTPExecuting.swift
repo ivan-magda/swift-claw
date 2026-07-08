@@ -2,6 +2,7 @@ import AsyncHTTPClient
 import ClawCore
 import Foundation
 import NIOCore
+import NIOFoundationCompat
 
 #if canImport(Glibc)
   import Glibc
