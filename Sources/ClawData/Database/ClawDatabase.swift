@@ -202,6 +202,27 @@ public enum ClawDatabase {
         table.column("heartbeat_count", .integer).notNull().defaults(to: 0)
       }
     }
+    // v7 (Risk 9): command-scoped LLM calls (the /schedule parse) record spend without a run, so
+    // provider_usage.run_id drops NOT NULL. SQLite cannot relax a constraint in place; the table
+    // is rebuilt and rows copied. No table references provider_usage, so the rebuild is safe.
+    migrator.registerMigration("v7") { db in
+      try db.create(table: "provider_usage_new") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("run_id", .integer).references("runs", onDelete: .cascade)
+        table.column("session_id", .integer).notNull()
+          .references("sessions", onDelete: .cascade)
+        table.column("model", .text).notNull()
+        table.column("prompt_tokens", .integer).notNull()
+        table.column("completion_tokens", .integer).notNull()
+        table.column("cost_usd", .double).notNull()
+        table.column("cost_source", .text).notNull()
+        table.column("is_estimated", .boolean).notNull()
+        table.column("ts", .datetime).notNull()
+      }
+      try db.execute(sql: "INSERT INTO provider_usage_new SELECT * FROM provider_usage")
+      try db.drop(table: "provider_usage")
+      try db.rename(table: "provider_usage_new", to: "provider_usage")
+    }
     return migrator
   }
 
