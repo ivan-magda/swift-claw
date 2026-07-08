@@ -21,7 +21,7 @@ jobs:
       id-token: write      # Sigstore OIDC for attestations
       attestations: write  # write build provenance
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Install system dependencies
@@ -35,10 +35,10 @@ jobs:
           cp .build/release/clawd clawd-linux-x86_64
           sha256sum clawd-linux-x86_64 > clawd-linux-x86_64.sha256
       - name: Attest provenance
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: clawd-linux-x86_64
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      - uses: actions/upload-artifact@v4
         with:
           name: linux
           path: clawd-linux-x86_64*
@@ -51,7 +51,7 @@ jobs:
       id-token: write      # Sigstore OIDC for attestations
       attestations: write  # write build provenance
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Select Swift 6.3 toolchain
@@ -65,10 +65,10 @@ jobs:
           cp .build/release/clawd clawd-macos-arm64
           shasum -a 256 clawd-macos-arm64 > clawd-macos-arm64.sha256
       - name: Attest provenance
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: clawd-macos-arm64
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      - uses: actions/upload-artifact@v4
         with:
           name: macos
           path: clawd-macos-arm64*
@@ -80,7 +80,7 @@ jobs:
     permissions:
       contents: write  # create the GitHub Release
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      - uses: actions/download-artifact@v4
         with:
           path: dist
       - name: Assemble SHA256SUMS
