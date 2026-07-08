@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.3-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          persist-credentials: false
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev ca-certificates tzdata
+      - name: Show toolchain
+        run: swift --version
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
+      - name: Build tests
+        run: swift build --build-tests
+      - name: Run tests
+        run: swift test
+
+  test-macos:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          persist-credentials: false
+      - name: Select Swift 6.3 toolchain
+        run: |
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          sudo xcode-select -s /Applications/Xcode_26.app
+          swift --version
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
+      - name: Build tests
+        run: swift build --build-tests
+      - name: Run tests
+        run: swift test
+
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: docker run --rm -v "${{ github.workspace }}:/repo" -w /repo rhysd/actionlint:latest -color
+      - name: zizmor
+        run: pipx run zizmor .
