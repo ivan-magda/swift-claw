@@ -18,8 +18,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      id-token: write      # Sigstore OIDC for attestations
-      attestations: write  # write build provenance
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -35,23 +36,22 @@ jobs:
           cp .build/release/clawd clawd-linux-x86_64
           sha256sum clawd-linux-x86_64 > clawd-linux-x86_64.sha256
       - name: Attest provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest@v4
         with:
           subject-path: clawd-linux-x86_64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: clawd-linux-x86_64*
 
   macos-binary:
-    # macos-26 (preview) is the only hosted image with a Swift 6.3.x Xcode (26.6 = 6.3.3);
-    # macos-15 tops out at Swift 6.2.4. Keeps release binaries on the same toolchain as CI.
     runs-on: macos-26
     timeout-minutes: 30
     permissions:
       contents: read
-      id-token: write      # Sigstore OIDC for attestations
-      attestations: write  # write build provenance
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -71,10 +71,10 @@ jobs:
           cp .build/release/clawd clawd-macos-arm64
           shasum -a 256 clawd-macos-arm64 > clawd-macos-arm64.sha256
       - name: Attest provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest@v4
         with:
           subject-path: clawd-macos-arm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: clawd-macos-arm64*
@@ -84,9 +84,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write  # create the GitHub Release
+      contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
       - name: Assemble SHA256SUMS
