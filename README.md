@@ -14,6 +14,8 @@ shasum -a 256 -c SHA256SUMS                   # macOS
 gh attestation verify clawd-linux-x86_64 -R ivan-magda/swift-claw
 ```
 
+`-c` checks every entry in `SHA256SUMS`; a `FAILED open or read` line for the platform binary you didn't download is expected.
+
 - **macOS:** first run is blocked by Gatekeeper for an unsigned binary — clear the quarantine flag: `xattr -d com.apple.quarantine ./clawd-macos-arm64`.
 - **Linux:** the binary links the system SQLite — install it if missing: `sudo apt-get install -y libsqlite3-0`.
 
