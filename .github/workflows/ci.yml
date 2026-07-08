@@ -14,7 +14,10 @@ concurrency:
 
 jobs:
   test-linux:
-    runs-on: ubuntu-latest
+    # arm64 Linux runner (GA, free for public repos): matches local/dev arch, where the full build
+    # completes in ~3 min. The x86_64 hosted runner stalled indefinitely emitting the large test
+    # modules — an arch-specific toolchain issue, not a code bug (macOS and arm64 both pass).
+    runs-on: ubuntu-24.04-arm
     container: swift:6.3-noble
     timeout-minutes: 30
     steps:
@@ -28,11 +31,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
-          restore-keys: ${{ runner.os }}-spm-
-      # One `swift test` builds then runs. A separate `swift build --build-tests` step made SwiftPM
-      # compile the whole package twice (~2x wall-clock), which blew past the job timeout on a cold
-      # cache and left the .build cache unsaved — starving every later run of the cache too.
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
+      # One `swift test` builds then runs; a separate build step would compile the package twice.
       - name: Build and run tests
         run: swift test
 
@@ -57,8 +58,8 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
-          restore-keys: ${{ runner.os }}-spm-
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
       # One `swift test` builds then runs. A separate `swift build --build-tests` step made SwiftPM
       # compile the whole package twice (~2x wall-clock), which blew past the job timeout on a cold
       # cache and left the .build cache unsaved — starving every later run of the cache too.

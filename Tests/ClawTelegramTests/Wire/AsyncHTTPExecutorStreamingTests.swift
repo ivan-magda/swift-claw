@@ -78,7 +78,7 @@ private final class StreamingHTTPServer {
     self.probe = probe
   }
 
-  static func start(chunkCount: Int = 1) throws -> StreamingHTTPServer {
+  static func start(chunkCount: Int = 1) async throws -> StreamingHTTPServer {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let probe = StreamProbe()
     let bootstrap = ServerBootstrap(group: group)
@@ -89,7 +89,7 @@ private final class StreamingHTTPServer {
         }
       }
 
-    let channel = try bootstrap.bind(host: "127.0.0.1", port: 0).wait()
+    let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
     return StreamingHTTPServer(group: group, channel: channel, probe: probe)
   }
 
@@ -133,7 +133,7 @@ private final class ClosingHTTPServer {
     self.channel = channel
   }
 
-  static func start() throws -> ClosingHTTPServer {
+  static func start() async throws -> ClosingHTTPServer {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let bootstrap = ServerBootstrap(group: group)
       .serverChannelOption(ChannelOptions.backlog, value: 16)
@@ -143,7 +143,7 @@ private final class ClosingHTTPServer {
         }
       }
 
-    let channel = try bootstrap.bind(host: "127.0.0.1", port: 0).wait()
+    let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
     return ClosingHTTPServer(group: group, channel: channel)
   }
 
@@ -165,7 +165,7 @@ private func withStreamingHTTPServer<Result>(
   chunkCount: Int = 1,
   _ operation: (StreamingHTTPServer) async throws -> Result
 ) async throws -> Result {
-  let server = try StreamingHTTPServer.start(chunkCount: chunkCount)
+  let server = try await StreamingHTTPServer.start(chunkCount: chunkCount)
   do {
     let result = try await operation(server)
     try await server.close()
@@ -179,7 +179,7 @@ private func withStreamingHTTPServer<Result>(
 private func withClosingHTTPServer<Result>(
   _ operation: (ClosingHTTPServer) async throws -> Result
 ) async throws -> Result {
-  let server = try ClosingHTTPServer.start()
+  let server = try await ClosingHTTPServer.start()
   do {
     let result = try await operation(server)
     try await server.close()
