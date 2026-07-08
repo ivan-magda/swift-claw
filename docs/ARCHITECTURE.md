@@ -23,7 +23,7 @@
 6. **Secure-by-default, fail-closed.** Dangerous tools off; consequential actions approval-gated; numeric-ID default-deny; access checks and rate limiters deny/throttle on internal error rather than failing open.
 7. **Stop and ask, never go silent.** Every failure mode (provider outage, budget exhaustion, storage full, unsupported input) produces a plain-language user-facing message, never silence or a raw error/stack.
 8. **Boring & legible.** Small, well-bounded modules; a layered dependency DAG; a pure domain core; heavy use of Swift value types + actors.
-9. **Portable, pragmatically.** macOS-primary; Linux-clean is a soft guideline through the early increments and **one hard CI gate at Inc 6** (§20, §17). Portable protocol seams are kept throughout.
+9. **Portable, pragmatically.** macOS-primary; Linux-clean is a soft guideline through the early increments, hardened by a **macOS + Linux GRDB/FTS5 build+test CI gate live on every PR** (`ci.yml`, §17). Portable protocol seams are kept throughout.
 
 ## 2. System context
 
@@ -493,10 +493,10 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 ## 17. Deployment & portability
 
-- **Build:** SwiftPM (**platform floor macOS 15** — `Calendar.RecurrenceRule` requires it, Inc 4/§14; verified on-toolchain, Linux availability re-validated at the Inc 6 gate); macOS native binary; **Static Linux SDK** (musl) cross-compiled from the Mac for a single fully-static Linux binary; **distroless/scratch** image (CA certs + tzdata). Escape hatch: `swift-sdk-generator` (glibc) if a dep needs WebSockets/newer TLS/glibc-only C libs.
-- **Portability is a soft guideline through Inc 0–5** with **one hard gate at Inc 6**: the CI Linux build (incl. GRDB + FTS5) must pass before release. Portable protocol seams + AsyncHTTPClient/OpenAI-compat choices are kept throughout; pragmatic macOS-native code is permitted behind a protocol or flagged for the Inc-6 audit.
+- **Build:** SwiftPM (**platform floor macOS 15** — `Calendar.RecurrenceRule` requires it, Inc 4/§14); two release binaries: a **macOS-native `arm64` binary** and a **Linux `x86_64` binary built natively in the `swift:6.3-noble` container** with `--static-swift-stdlib` (the Swift runtime is bundled; the system `libsqlite3` is the sole external runtime dependency). A musl **Static Linux SDK** → fully-static/distroless image is deferred: GRDB v7 declares SQLite as a `.systemLibrary` and the musl SDK ships none, so a musl cross-compile can't link (see §18 Deployment escape hatch).
+- **Portability is enforced continuously:** a **GRDB + FTS5 build+test gate runs on both macOS and Linux on every PR** (`ci.yml`) — the portability gate is live, not deferred. Portable protocol seams + AsyncHTTPClient/OpenAI-compat choices are kept throughout; pragmatic macOS-native code is permitted behind a protocol and covered by the Linux CI gate.
 - **Supervise:** launchd plist (macOS) / systemd unit (Linux), with throttling (§4). Logs to stdout/stderr.
-- **CI:** a Linux build gates releases (catches target-only cross-compile issues) and includes a **GRDB + FTS5 job**.
+- **CI:** the macOS + Linux **GRDB + FTS5 build+test gate** (`ci.yml`) runs on every PR and blocks merge; releases (`release.yml`) publish as **GitHub Releases with SHA256 checksums + build-provenance attestations**, not a container image.
 
 ## 18. Technology decisions
 
@@ -504,7 +504,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 |---|---|---|---|---|
 | Daemon framework | `swift-service-lifecycle` ServiceGroup / NIO | structured supervised lifecycle; no listen socket | Hummingbird 2 (if REST later) | Low |
 | Telegram client | **thin clean-room client** over AsyncHTTPClient (research **runner-up**; primary was `nerzh/swift-telegram-bot`) | deliberate clean-room provenance, zero bus-factor, full transport + offset-durability control; ~8–10 endpoints (getUpdates, sendMessage, **sendRichMessage**, editMessageText, sendChatAction, answerCallbackQuery, getMe, setMyCommands, getFile) | `nerzh/swift-telegram-bot` | Low–Med |
-| Persistence | GRDB.swift v7 (WAL, FTS5, migrations); **pin GRDB**; vendor SQLite amalgamation (FTS5 + sqlite-vec init compiled in); Linux CI job exercises GRDB+FTS5 | Swift-6 concurrency-native, boring, full-featured | SQLite.swift / raw C | **Low (macOS) / Med (Linux until our own CI exists)** |
+| Persistence | GRDB.swift v7 (WAL, FTS5, migrations); **pin GRDB** via committed `Package.resolved` + Dependabot + the CI gate (the `from:` range is the floor, `Package.resolved` is the pin); links the system `libsqlite3` (vendoring a SQLite amalgamation is deferred — it arrives only with sqlite-vec, §7.6); macOS + Linux CI job exercises GRDB+FTS5 | Swift-6 concurrency-native, boring, full-featured | SQLite.swift / raw C | Low |
 | Vectors | deferred, behind protocol; **requires custom SQLite amalgamation + Linux re-validation** (§7.6) | `sqlite-vec` is alpha; stock migrator can't make a `vec0` table | FTS5/BM25 for v1 | High |
 | LLM provider | **OpenAI-compatible** contract + `LLMProvider` protocol; single-provider v1 | swap providers/models via config; pinned/allowlisted `base_url` | native Anthropic adapter later | Med |
 | Web search backend | Exa (`https://api.exa.ai/search`) behind `SearchProviding` [Inc 3b] | pinned trusted endpoint, documented trust dependency like `base_url` (Exa may use query input/output to provide/improve its services) | unconfigured `Secrets.searchApiKey` ⇒ tool absent, doctor reports info not error | Low |
@@ -514,7 +514,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 | Scheduling | `Calendar.RecurrenceRule` + custom ticker/store [Inc 4]; **raises the platform floor to macOS 15** | in-toolchain, DST-correct; Codable round-trip + DST suite pinned as toolchain-drift tripwires | SwifCron (vendored) | Low |
 | Concurrency | std-lib actors + stored `currentTurn` Task handle (await-to-order, cancel-to-supersede) | per-session lanes without an external queue lib | `dfed/swift-async-queue` (escape hatch only) | Low |
 | Config files | YAML for SKILL.md frontmatter via Yams | maintained YAML parser | — | Low |
-| Deployment | Static Linux SDK → distroless; launchd + systemd | one static binary, runs anywhere | swift-sdk-generator (glibc) | Low |
+| Deployment | native-container Linux `x86_64` binary (`swift:6.3-noble`, `--static-swift-stdlib`) + macOS-native `arm64` binary; GitHub Releases with SHA256 checksums + provenance attestations; launchd + systemd | Swift runtime bundled; only `libsqlite3` needed at runtime; publishes without a container registry | musl Static Linux SDK → distroless/scratch (blocked today: GRDB links system SQLite, musl SDK ships none) / swift-sdk-generator (glibc) | Low |
 
 ## 19. Cross-cutting concerns
 
@@ -573,7 +573,7 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 | **3** | Memory & workspace + read-only tools | Workspace files injected at the **untrusted tier** (budgeted, caps, flush-before-compact); durable facts on confirm; `memory_items` + **FTS5 recall** across restarts; `/memory`; `web_search`/`web_fetch` + file READ at **`safe`** tier with the **exfil gate**. |
 | **4** | Scheduler & proactive | "Every weekday 07:00 Europe/Berlin…" fires once per occurrence across restarts/DST; **confirm-before-arm**; reduced-privilege runs; clock-gap catch-up cap; delivery via outbox; opt-in heartbeat with quiet hours. *(Scope reconciliation: the external research roadmap bundles memory/workspace into its "Increment 4" — this repo shipped those in Inc 3a; this increment is scheduler/proactive only.)* |
 | **5** | Write/shell tools + policy + approvals + sandbox | A consequential tool requires explicit approval (**callback auth + ≥128-bit nonce + FSM**); a **forged or third-party callback cannot approve**; untrusted code runs in a per-exec disposable VM (no host FS/network by default); the **enforced lethal-trifecta gate** forces approval on a tainted privileged action. |
-| **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (static SDK, distroless, systemd); **CI Linux build incl. GRDB+FTS5 passes** (the one hard portability gate). |
+| **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (systemd); the **macOS + Linux GRDB+FTS5 build+test CI gate already landed early** (`ci.yml`, §17), so the remainder here is the **musl Static Linux SDK → distroless packaging, which stays deferred/optional** (§17/§18 escape hatch). |
 
 *(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards.)*
 

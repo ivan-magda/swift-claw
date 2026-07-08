@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux-binary:
+    runs-on: ubuntu-latest
+    container: swift:6.3-noble
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev ca-certificates
+      - name: Stamp version
+        run: printf 'enum ClawdVersion {\n  static let current = "%s"\n}\n' "${GITHUB_REF_NAME#v}" > Sources/clawd/Version.swift
+      - name: Build release binary
+        run: swift build -c release --static-swift-stdlib --product clawd
+      - name: Package
+        run: |
+          cp .build/release/clawd clawd-linux-x86_64
+          sha256sum clawd-linux-x86_64 > clawd-linux-x86_64.sha256
+      - name: Attest provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: clawd-linux-x86_64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: clawd-linux-x86_64*
+
+  macos-binary:
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Select Swift 6.3 toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          swift --version
+          swift --version 2>&1 | grep -qF "Swift version 6.3" \
+            || { echo "::error::Expected a Swift 6.3.x toolchain on this runner"; exit 1; }
+      - name: Stamp version
+        run: printf 'enum ClawdVersion {\n  static let current = "%s"\n}\n' "${GITHUB_REF_NAME#v}" > Sources/clawd/Version.swift
+      - name: Build release binary
+        run: swift build -c release --product clawd
+      - name: Package
+        run: |
+          cp .build/release/clawd clawd-macos-arm64
+          shasum -a 256 clawd-macos-arm64 > clawd-macos-arm64.sha256
+      - name: Attest provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: clawd-macos-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: clawd-macos-arm64*
+
+  publish:
+    needs: [linux-binary, macos-binary]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+      - name: Assemble SHA256SUMS
+        run: |
+          cd dist
+          cat linux/clawd-linux-x86_64.sha256 macos/clawd-macos-arm64.sha256 > SHA256SUMS
+          cat SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=(--generate-notes)
+          [[ "${GITHUB_REF_NAME}" == *-* ]] && flags+=(--prerelease)
+          gh release create "${GITHUB_REF_NAME}" "${flags[@]}" \
+            dist/linux/clawd-linux-x86_64 \
+            dist/macos/clawd-macos-arm64 \
+            dist/SHA256SUMS

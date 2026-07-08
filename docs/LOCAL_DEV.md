@@ -30,6 +30,8 @@ The debug binary lands at `.build/debug/clawd`. For a release build:
 swift build -c release
 ```
 
+> The release binary links the **system** SQLite (GRDB uses `libsqlite3`, not a vendored copy). On Linux the target host needs `libsqlite3-0`; on macOS it's part of the OS. Released Linux binaries are built with `--static-swift-stdlib`, so the Swift runtime is bundled and only `libsqlite3` is an external dependency.
+
 ---
 
 ## Lint
