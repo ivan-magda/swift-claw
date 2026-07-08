@@ -36,7 +36,11 @@ jobs:
         run: swift test
 
   test-macos:
-    runs-on: macos-15
+    # macos-26 (preview) is the only hosted image carrying a Swift 6.3.x Xcode; macos-15
+    # tops out at Xcode 26.3 = Swift 6.2.4. Xcode 26.6 = Swift 6.3.3, matching the Linux
+    # container (swift:6.3-noble) and local dev. The grep guard fails loudly if the runner
+    # ever drifts off 6.3.x so a silent downgrade can't slip through a required check.
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -45,8 +49,10 @@ jobs:
       - name: Select Swift 6.3 toolchain
         run: |
           ls -d /Applications/Xcode*.app 2>/dev/null || true
-          sudo xcode-select -s /Applications/Xcode_26.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           swift --version
+          swift --version 2>&1 | grep -qF "Swift version 6.3" \
+            || { echo "::error::Expected a Swift 6.3.x toolchain on this runner"; exit 1; }
       - uses: actions/cache@v4
         with:
           path: .build
