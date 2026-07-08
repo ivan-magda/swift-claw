@@ -47,12 +47,15 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
 
   private let provider: any LLMProvider
   private let model: String
+
   private let usageStore: any UsageStore
   private let gate: BudgetGate
   private let costResolver: CostResolver
   private let usageResolver = UsageResolver()
+
   private let now: @Sendable () -> Date
   private let sleep: @Sendable (Duration) async throws -> Void
+
   private let logger: Logger
 
   public init(
@@ -95,6 +98,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       logger.warning("schedule parse: day-totals read failed; refusing to spend: \(error)")
       return .providerUnavailable
     }
+
     let promptTokens = TokenEstimator.estimateInputTokens(request.messages)
     let estimatedTokens = promptTokens + Self.maxParseOutputTokens
     let estimatedCost = costResolver.resolve(
@@ -106,6 +110,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       ),
       providerCost: nil
     ).costUSD
+
     if case .deny(let cap) = gate.preflight(
       todayTokens: todayTokens,
       todayUSD: todayUSD,
@@ -136,6 +141,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     }
 
     record(usageFor: response, request: request, sessionId: sessionId)
+
     return Self.decode(response.content)
   }
 
