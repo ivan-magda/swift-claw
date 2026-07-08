@@ -19,7 +19,7 @@ jobs:
     container:
       image: swift:6.3.2
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run swift-format
@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run swiftlint
-        uses: docker://ghcr.io/realm/swiftlint:0.65.0  # zizmor: ignore[unpinned-uses] pinned version; registry digest needs a live client
+        uses: docker://ghcr.io/realm/swiftlint:0.65.0
