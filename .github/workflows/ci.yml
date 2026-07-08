@@ -18,14 +18,14 @@ jobs:
     container: swift:6.3-noble
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Install system dependencies
         run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev ca-certificates tzdata
       - name: Show toolchain
         run: swift --version
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      - uses: actions/cache@v4
         with:
           path: .build
           key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
@@ -39,7 +39,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Select Swift 6.3 toolchain
@@ -47,7 +47,7 @@ jobs:
           ls -d /Applications/Xcode*.app 2>/dev/null || true
           sudo xcode-select -s /Applications/Xcode_26.app
           swift --version
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      - uses: actions/cache@v4
         with:
           path: .build
           key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: actionlint
