@@ -14,9 +14,12 @@ concurrency:
 
 jobs:
   test-linux:
-    runs-on: ubuntu-latest
+    # arm64 Linux runner (GA, free for public repos): matches local/dev arch, where the full build
+    # completes in ~3 min. The x86_64 hosted runner stalled indefinitely emitting the large test
+    # modules — an arch-specific toolchain issue, not a code bug (macOS and arm64 both pass).
+    runs-on: ubuntu-24.04-arm
     container: swift:6.3-noble
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -28,14 +31,11 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
-          restore-keys: ${{ runner.os }}-spm-
-      # One `swift test` builds then runs — a separate build step compiled the package twice. `-gnone`
-      # skips debug-info generation, which stalled the x86_64 runner while emitting the large test
-      # modules (arm64/local builds fine with it on); swift-testing failure locations still report via
-      # the #expect macro, not DWARF.
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
+      # One `swift test` builds then runs; a separate build step would compile the package twice.
       - name: Build and run tests
-        run: swift test -Xswiftc -gnone
+        run: swift test
 
   test-macos:
     # macos-26 (preview) is the only hosted image carrying a Swift 6.3.x Xcode; macos-15
@@ -58,8 +58,8 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
-          restore-keys: ${{ runner.os }}-spm-
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
       # One `swift test` builds then runs. A separate `swift build --build-tests` step made SwiftPM
       # compile the whole package twice (~2x wall-clock), which blew past the job timeout on a cold
       # cache and left the .build cache unsaved — starving every later run of the cache too.
