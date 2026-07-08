@@ -18,11 +18,21 @@ struct ScriptedResponse: Sendable {
 /// A minimal one-shot HTTP/1.1 server: responds to any request with the scripted response for
 /// its URI (or 404). Bound to 127.0.0.1 on an ephemeral port.
 final class ScriptedHTTPServer: @unchecked Sendable {
-  private let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-  private var channel: Channel?
-  private(set) var port = 0
+  private let group: MultiThreadedEventLoopGroup
+  private let channel: Channel
+  let port: Int
 
-  init(routes: [String: ScriptedResponse]) throws {
+  private init(group: MultiThreadedEventLoopGroup, channel: Channel) {
+    self.group = group
+    self.channel = channel
+    self.port = channel.localAddress?.port ?? 0
+  }
+
+  // Async bind/shutdown only: NIO's blocking `wait()`/`syncShutdownGracefully()` would park a Swift
+  // concurrency cooperative thread, and enough of those in flight starve the pool and deadlock the
+  // whole run on low-core hosts (CI runners). `get()` and the async `shutdownGracefully` never block.
+  static func start(routes: [String: ScriptedResponse]) async throws -> ScriptedHTTPServer {
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let bootstrap = ServerBootstrap(group: group)
       .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
       .childChannelInitializer { channel in
@@ -30,13 +40,21 @@ final class ScriptedHTTPServer: @unchecked Sendable {
           channel.pipeline.addHandler(ScriptedHandler(routes: routes))
         }
       }
-    channel = try bootstrap.bind(host: "127.0.0.1", port: 0).wait()
-    port = channel?.localAddress?.port ?? 0
+    let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
+    return ScriptedHTTPServer(group: group, channel: channel)
   }
 
-  func shutdown() {
-    try? channel?.close().wait()
-    try? group.syncShutdownGracefully()
+  func close() async throws {
+    try await channel.close().get()
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+      group.shutdownGracefully { error in
+        if let error {
+          continuation.resume(throwing: error)
+        } else {
+          continuation.resume()
+        }
+      }
+    }
   }
 }
 
@@ -79,6 +97,21 @@ private final class ScriptedHandler: ChannelInboundHandler, @unchecked Sendable 
   }
 }
 
+private func withScriptedServer<Result>(
+  routes: [String: ScriptedResponse],
+  _ operation: (ScriptedHTTPServer) async throws -> Result
+) async throws -> Result {
+  let server = try await ScriptedHTTPServer.start(routes: routes)
+  do {
+    let result = try await operation(server)
+    try await server.close()
+    return result
+  } catch {
+    try? await server.close()
+    throw error
+  }
+}
+
 @Suite(.serialized) struct AsyncHTTPExecutorGetTests {
   /// `HTTPClient.syncShutdown()` is unavailable from async contexts on this toolchain, and defer
   /// bodies cannot `await`; this helper guarantees `shutdown()` runs on every exit path (the AHC
@@ -101,75 +134,72 @@ private final class ScriptedHandler: ChannelInboundHandler, @unchecked Sendable 
 
   @Test func getReturnsStatusHeadersAndBody() async throws {
     // given
-    let server = try ScriptedHTTPServer(routes: [
+    try await withScriptedServer(routes: [
       "/page": ScriptedResponse(
         status: .ok,
         headers: [("content-type", "text/html")],
         body: "<html><body>hello</body></html>"
       )
-    ])
-    defer { server.shutdown() }
+    ]) { server in
+      // when
+      let result = try await withNoRedirectExecutor { executor in
+        try await executor.get(
+          url: "http://127.0.0.1:\(server.port)/page",
+          headers: [:],
+          timeoutSeconds: 5,
+          maxBodyBytes: 1024 * 1024
+        )
+      }
 
-    // when
-    let result = try await withNoRedirectExecutor { executor in
-      try await executor.get(
-        url: "http://127.0.0.1:\(server.port)/page",
-        headers: [:],
-        timeoutSeconds: 5,
-        maxBodyBytes: 1024 * 1024
-      )
+      // then
+      #expect(result.statusCode == 200)
+      #expect(result.getHeader(for: "Content-Type") == "text/html")
+      #expect(String(data: result.body, encoding: .utf8)?.contains("hello") == true)
     }
-
-    // then
-    #expect(result.statusCode == 200)
-    #expect(result.getHeader(for: "Content-Type") == "text/html")
-    #expect(String(data: result.body, encoding: .utf8)?.contains("hello") == true)
   }
 
   /// §20 item 3 — BLOCKING verification. The SSRF design requires that a redirect is NOT followed
   /// automatically: the 3xx must surface as the result so the tool can re-check the next hop.
   @Test func disallowConfiguredClientSurfacesRedirectInsteadOfFollowing() async throws {
     // given
-    let server = try ScriptedHTTPServer(routes: [
+    try await withScriptedServer(routes: [
       "/hop": ScriptedResponse(
         status: .movedPermanently,
         headers: [("location", "http://127.0.0.1:1/private")],
         body: ""
       )
-    ])
-    defer { server.shutdown() }
+    ]) { server in
+      // when
+      let result = try await withNoRedirectExecutor { executor in
+        try await executor.get(
+          url: "http://127.0.0.1:\(server.port)/hop",
+          headers: [:],
+          timeoutSeconds: 5,
+          maxBodyBytes: 1024
+        )
+      }
 
-    // when
-    let result = try await withNoRedirectExecutor { executor in
-      try await executor.get(
-        url: "http://127.0.0.1:\(server.port)/hop",
-        headers: [:],
-        timeoutSeconds: 5,
-        maxBodyBytes: 1024
-      )
+      // then — the redirect came back to us; nothing fetched the Location target
+      #expect(result.statusCode == 301)
+      #expect(result.getHeader(for: "Location") == "http://127.0.0.1:1/private")
     }
-
-    // then — the redirect came back to us; nothing fetched the Location target
-    #expect(result.statusCode == 301)
-    #expect(result.getHeader(for: "Location") == "http://127.0.0.1:1/private")
   }
 
   @Test func bodyBeyondMaxBodyBytesThrows() async throws {
     // given
-    let server = try ScriptedHTTPServer(routes: [
+    try await withScriptedServer(routes: [
       "/big": ScriptedResponse(status: .ok, headers: [], body: String(repeating: "a", count: 4096))
-    ])
-    defer { server.shutdown() }
-
-    // when / then
-    await #expect(throws: (any Error).self) {
-      try await withNoRedirectExecutor { executor in
-        _ = try await executor.get(
-          url: "http://127.0.0.1:\(server.port)/big",
-          headers: [:],
-          timeoutSeconds: 5,
-          maxBodyBytes: 128
-        )
+    ]) { server in
+      // when / then
+      _ = await #expect(throws: (any Error).self) {
+        try await withNoRedirectExecutor { executor in
+          _ = try await executor.get(
+            url: "http://127.0.0.1:\(server.port)/big",
+            headers: [:],
+            timeoutSeconds: 5,
+            maxBodyBytes: 128
+          )
+        }
       }
     }
   }
