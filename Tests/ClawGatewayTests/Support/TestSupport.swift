@@ -376,7 +376,7 @@ actor FakeDraftParser: ScheduleDraftParsing {
     self.init(results: [result])
   }
 
-  func parse(ownerText: String) async -> ScheduleDraftParseResult {
+  func parse(ownerText: String, sessionId: Int64) async -> ScheduleDraftParseResult {
     ownerTexts.append(ownerText)
     guard results.isEmpty == false else {
       return .unparseable
