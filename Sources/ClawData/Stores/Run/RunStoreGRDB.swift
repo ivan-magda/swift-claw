@@ -165,7 +165,7 @@ public struct RunStoreGRDB: RunStore {
       }
       try Self.appendJobFailedIfJobRun(db, runId: turn.runId, now: now)
 
-      // Executed tool work survives the failure commit (Risk 7): the same §11 rows the success
+      // Executed tool work survives the failure commit: the same §11 rows the success
       // path writes, so the next turn's context and the per-dispatch audit trail agree on what
       // actually ran.
       for exchange in turn.exchanges {

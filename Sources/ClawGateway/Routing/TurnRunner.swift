@@ -262,7 +262,7 @@ private extension TurnRunner {
         return
       }
     case .degraded(let degradationKind, let usage):
-      // Executed exchanges persist even on the failure path (Risk 7) so the next turn's context
+      // Executed exchanges persist even on the failure path so the next turn's context
       // knows what already ran; the taint from any ingesting call persists with them. No approval
       // is parked — the model's explanation never reached the owner, so the gate re-trips next time.
       let commitResult = try commitDegradation(

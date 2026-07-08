@@ -1,6 +1,4 @@
 /// The poller-facing intake half of the channel port: long-poll the channel for raw updates.
-/// Split from the delivery half (Risk 10) so a future second channel starts at a protocol, not
-/// inside a Telegram-named contract.
 public protocol ChannelIntake: Sendable {
   /// `allowedUpdates` MUST be re-sent on every call — omitting it reuses the previous
   /// server-side setting.

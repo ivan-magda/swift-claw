@@ -202,9 +202,6 @@ public enum ClawDatabase {
         table.column("heartbeat_count", .integer).notNull().defaults(to: 0)
       }
     }
-    // v7 (Risk 9): command-scoped LLM calls (the /schedule parse) record spend without a run, so
-    // provider_usage.run_id drops NOT NULL. SQLite cannot relax a constraint in place; the table
-    // is rebuilt and rows copied. No table references provider_usage, so the rebuild is safe.
     migrator.registerMigration("v7") { db in
       try db.create(table: "provider_usage_new") { table in
         table.autoIncrementedPrimaryKey("id")

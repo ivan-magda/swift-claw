@@ -810,7 +810,7 @@ func waitForTurnResult(
 
   @Test func preStreamRejectionFallsBackToBlockingCompleteOnce() async throws {
     // given — a clean 429 on the response head: nothing was generated, so one blocking
-    // re-attempt is double-charge-safe (Risk 11); mid-stream failures keep degrading
+    // re-attempt is double-charge-safe; mid-stream failures keep degrading
     let provider = StreamingProvider(
       streamScript: .fail(.rejected(status: 429, message: "rate limited"))
     )

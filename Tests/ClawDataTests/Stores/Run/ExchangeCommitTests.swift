@@ -184,7 +184,7 @@ import Testing
   }
 
   @Test func degradedCommitPersistsExecutedExchanges() throws {
-    // given — a run that executed one exchange, then degraded: the work must survive (Risk 7)
+    // given — a run that executed one exchange, then degraded: the work must survive
     let fixture = try makeRunningFixture()
     let turn = DegradedTurn(
       runId: fixture.runId,
