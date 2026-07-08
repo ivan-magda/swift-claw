@@ -183,6 +183,43 @@ import Testing
     #expect(toolRows == 0)
   }
 
+  @Test func degradedCommitPersistsExecutedExchanges() throws {
+    // given — a run that executed one exchange, then degraded: the work must survive (Risk 7)
+    let fixture = try makeRunningFixture()
+    let turn = DegradedTurn(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      chatId: 7,
+      usage: makeUsage(fixture),
+      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
+      exchanges: [makeExchange()],
+      setTainted: true
+    )
+
+    // when
+    let result = try fixture.runs.commitDegradedTurn(turn, now: Date())
+
+    // then — the same §11 row shapes as a completed turn: one trusted anchor with tool_calls,
+    // one untrusted tool row carrying its call id
+    #expect(result == .committed)
+    let anchors = try fixture.queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM messages WHERE role = 'assistant' AND tool_calls IS NOT NULL"
+      ) ?? -1
+    }
+    #expect(anchors == 1)
+    let toolRows = try fixture.queue.read { db in
+      try Row.fetchAll(
+        db,
+        sql: "SELECT provenance, tool_call_id FROM messages WHERE role = 'tool'"
+      )
+    }
+    #expect(toolRows.count == 1)
+    #expect(toolRows.first?["provenance"] == "untrusted")
+    #expect(toolRows.first?["tool_call_id"] == "c1")
+  }
+
   @Test func cancelledArbitrationArmStillTaints() throws {
     // given — /stop won the race (rev.1 M1: CANCELLED taints)
     let fixture = try makeRunningFixture()

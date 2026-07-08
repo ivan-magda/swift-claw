@@ -144,8 +144,9 @@ public protocol RunStore: Sendable {
   /// F6 atomicity: assistant message + run→DONE + provider_usage + outbox chunk(s) in ONE txn,
   /// committed before any send. If cancellation/supersede already won, records usage only.
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult
-  /// Failure/degradation commit: provider_usage + run→FAILED + degradation outbox in ONE txn.
-  /// If cancellation/supersede already won, records usage when present but writes no reply.
+  /// Failure/degradation commit: executed exchange rows (§11) + provider_usage + run→FAILED +
+  /// degradation outbox in ONE txn. If cancellation/supersede already won, records usage when
+  /// present but writes no reply and no exchanges.
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult
   /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING.
   func failRun(runId: Int64, now: Date) throws

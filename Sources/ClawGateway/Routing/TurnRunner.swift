@@ -129,6 +129,7 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         chatId: chatId,
         usage: nil,
+        exchanges: [],
         setTainted: false,
         message: ownerVisiblePayload(
           reply: Degradation.contextUnavailable,
@@ -261,14 +262,15 @@ private extension TurnRunner {
         return
       }
     case .degraded(let degradationKind, let usage):
-      // Exchanges are lost by design on the failure path (§10); the taint from any ingesting call
-      // this run still persists so the next turn's gate stays armed. No approval is parked — the
-      // model's explanation never reached the owner, so the gate simply re-trips next time.
+      // Executed exchanges persist even on the failure path (Risk 7) so the next turn's context
+      // knows what already ran; the taint from any ingesting call persists with them. No approval
+      // is parked — the model's explanation never reached the owner, so the gate re-trips next time.
       let commitResult = try commitDegradation(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
         usage: usage,
+        exchanges: outcome.exchanges,
         setTainted: outcome.ingestedUntrusted,
         message: ownerVisiblePayload(
           reply: Degradation.message(for: degradationKind),
@@ -287,6 +289,7 @@ private extension TurnRunner {
         sessionId: sessionId,
         chatId: chatId,
         usage: nil,
+        exchanges: outcome.exchanges,
         setTainted: outcome.ingestedUntrusted,
         message: ownerVisiblePayload(
           reply: Degradation.budget(cap: cap),
@@ -309,6 +312,7 @@ private extension TurnRunner {
     sessionId: Int64,
     chatId: Int64,
     usage: ProviderUsage?,
+    exchanges: [ToolExchange],
     setTainted: Bool,
     message: String,
     action: AuditAction,
@@ -329,6 +333,7 @@ private extension TurnRunner {
         chatId: chatId,
         usage: usage,
         chunk: chunk,
+        exchanges: exchanges,
         setTainted: setTainted
       ),
       now: committedAt

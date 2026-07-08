@@ -2,6 +2,7 @@ import ClawAgent
 import ClawCore
 import ClawData
 import Foundation
+import GRDB
 import Logging
 import Testing
 
@@ -178,6 +179,48 @@ import Testing
         }
       }
     )
+  }
+
+  @Test func degradedRunPersistsItsExecutedExchanges() async throws {
+    // given — round-trip 1 executes one tool; round-trip 2 is unscripted, so the provider throws
+    // terminal and the run degrades. The executed exchange must survive the failure commit.
+    let provider = SequenceProvider([
+      ChatResponse(
+        content: "",
+        finishReason: "tool_calls",
+        usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+        costFromProvider: 0.001,
+        toolCalls: [
+          ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#)
+        ]
+      )
+    ])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome())
+    let fixture = try makeFixture(provider: provider, dispatcher: dispatcher)
+
+    // when
+    try await fixture.runner.run(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      chatId: 7,
+      triggerMessageId: fixture.triggerMessageId,
+      grant: nil
+    )
+
+    // then — the run FAILED, yet the anchor + observation rows exist in durable history
+    let queue = try DatabaseQueue(path: fixture.databasePath)
+    let toolRows = try await queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE role = 'tool'") ?? -1
+    }
+    #expect(toolRows == 1)
+    let runState = try await queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT state FROM runs WHERE id = ?",
+        arguments: [fixture.runId]
+      )
+    }
+    #expect(runState == RunState.failed.rawValue)
   }
 
   @Test func budgetStoppedTurnStillTaints() async throws {

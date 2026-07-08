@@ -290,6 +290,7 @@ public struct DegradedTurn: Sendable, Equatable {
   public let chatId: Int64
   public let usage: ProviderUsage?
   public let chunk: OutboxChunk
+  public let exchanges: [ToolExchange]
   public let setTainted: Bool
 
   public init(
@@ -298,6 +299,7 @@ public struct DegradedTurn: Sendable, Equatable {
     chatId: Int64,
     usage: ProviderUsage?,
     chunk: OutboxChunk,
+    exchanges: [ToolExchange] = [],
     setTainted: Bool = false
   ) {
     self.runId = runId
@@ -305,6 +307,7 @@ public struct DegradedTurn: Sendable, Equatable {
     self.chatId = chatId
     self.usage = usage
     self.chunk = chunk
+    self.exchanges = exchanges
     self.setTainted = setTainted
   }
 }
