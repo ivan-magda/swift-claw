@@ -65,6 +65,6 @@ jobs:
         with:
           persist-credentials: false
       - name: actionlint
-        run: docker run --rm -v "${{ github.workspace }}:/repo" -w /repo rhysd/actionlint:latest -color
+        run: docker run --rm -v "${{ github.workspace }}:/repo" -w /repo rhysd/actionlint:1.7.12 -color
       - name: zizmor
-        run: pipx run zizmor .
+        run: pipx run zizmor==1.26.1 .
