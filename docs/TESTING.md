@@ -3,7 +3,7 @@
 |             |                                                                                                                |
 | ----------- | -------------------------------------------------------------------------------------------------------------- |
 | **Status**  | Normative testing conventions                                                                                  |
-| **Date**    | 2026-07-06                                                                                                     |
+| **Date**    | 2026-07-08                                                                                                     |
 | **Owner**   | Ivan Magda                                                                                                     |
 | **Related** | [`ARCHITECTURE.md`](./ARCHITECTURE.md) (esp. §12 untrusted data) · [`../CLAUDE.md`](../CLAUDE.md) (code style) |
 
@@ -88,7 +88,8 @@ A flaky test — one that passes and fails with no change to code — is worse t
 - Use **Swift Testing** (`@Test`, `#expect`, `#require`, `@Suite`). Prefer `#require` to unwrap a precondition so a failure stops the test at the right line rather than trapping later.
 - To observe an intermediate async state deterministically, insert **`await Task.yield()`** before the assertion to force the suspension point, instead of sleeping.
 - When a test needs deterministic task ordering, pin execution with **`withMainSerialExecutor`** (Swift Concurrency Extras) so intermediate state is observable without a race.
-- A bounded poll (loop-until-signal with a ceiling) is a last resort; if used, factor it into one shared helper so the ceiling is tunable in a single place, and prefer awaiting the emitted signal over polling state.
+- A bounded poll (loop-until-signal with a ceiling) is a last resort; if used, factor it into one shared helper so the ceiling is tunable in a single place — set generously enough to survive a CPU-starved CI runner — and prefer awaiting the emitted signal over polling state.
+- **Never block a Swift-concurrency cooperative thread.** A parked cooperative thread can't run other tasks; on a low-core CI runner enough parked threads deadlock the whole suite, though a many-core dev box hides it entirely (it presents as a CI-only "freeze"). Two traps seen here: a loopback server bound or torn down with NIO's blocking `EventLoopFuture.wait()` / `EventLoopGroup.syncShutdownGracefully()` (use async `bind(...).get()` and `shutdownGracefully` instead — a `defer` can't `await`, so wrap setup/teardown in a `withServer { }` helper), and an injected `sleep` double that returns without ever suspending (`{ _ in }` turns a throttled probe loop into a thread-hog — make it `try? await Task.sleep(for: .milliseconds(1))`). Reproduce a suspected pool deadlock deterministically in a one-core container (`docker run --cpuset-cpus=0 swift:6.3-noble … swift test`); an lldb `thread backtrace all` on the hung process names the blocking frame.
 
 ## 7. Readability: DAMP and DRY are not opposites
 
