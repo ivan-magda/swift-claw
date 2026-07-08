@@ -474,8 +474,9 @@ private extension AgentRuntime {
 
 private extension AgentRuntime {
   /// One provider round-trip inside the SHARED wall-clock window (§6.6): streaming when enabled,
-  /// falling back to typing on a connect failure, else plain typing. `deadlineSeconds` is the
-  /// REMAINING run budget, not a fresh 180 s. Throws the provider/deadline error; the loop maps it.
+  /// falling back to typing on a connect failure or a clean pre-stream rejection, else plain typing.
+  /// `deadlineSeconds` is the REMAINING run budget, not a fresh 180 s. Throws the provider/deadline
+  /// error; the loop maps it.
   func roundTrip(
     chatId: Int64,
     draftId: Int64,
@@ -497,7 +498,11 @@ private extension AgentRuntime {
         request: request,
         deadlineSeconds: deadlineSeconds
       )
-    } catch ProviderError.connectFailed {
+    } catch ProviderError.connectFailed, ProviderError.rejected {
+      // connectFailed: nothing was transmitted. rejected: the head carried an error status before
+      // any SSE bytes, so the server generated nothing — the Inc 2 no-double-issue rationale does
+      // not apply. Either way one blocking attempt is safe; `complete` brings its own retry
+      // budget, backoff, and Retry-After handling, all inside the remaining wall-clock window.
       return try await runTypingTurn(
         chatId: chatId,
         request: request,
@@ -548,7 +553,7 @@ private extension AgentRuntime {
   ) -> TurnResult {
     if let providerError = error as? ProviderError {
       switch providerError {
-      case .connectFailed, .retryable:
+      case .connectFailed, .retryable, .rejected:
         return .degraded(
           .providerUnavailable,
           usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
@@ -572,7 +577,7 @@ private extension AgentRuntime {
   ) -> TurnResult {
     if let providerError = error as? ProviderError {
       switch providerError {
-      case .connectFailed, .retryable, .terminal:
+      case .connectFailed, .retryable, .rejected, .terminal:
         return .degraded(
           .providerUnavailable,
           usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
