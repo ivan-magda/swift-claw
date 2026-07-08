@@ -16,7 +16,7 @@ jobs:
   test-linux:
     runs-on: ubuntu-latest
     container: swift:6.3-noble
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,11 +30,12 @@ jobs:
           path: .build
           key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: ${{ runner.os }}-spm-
-      # One `swift test` builds then runs. A separate `swift build --build-tests` step made SwiftPM
-      # compile the whole package twice (~2x wall-clock), which blew past the job timeout on a cold
-      # cache and left the .build cache unsaved — starving every later run of the cache too.
+      # One `swift test` builds then runs — a separate build step compiled the package twice. `-gnone`
+      # skips debug-info generation, which stalled the x86_64 runner while emitting the large test
+      # modules (arm64/local builds fine with it on); swift-testing failure locations still report via
+      # the #expect macro, not DWARF.
       - name: Build and run tests
-        run: swift test
+        run: swift test -Xswiftc -gnone
 
   test-macos:
     # macos-26 (preview) is the only hosted image carrying a Swift 6.3.x Xcode; macos-15
