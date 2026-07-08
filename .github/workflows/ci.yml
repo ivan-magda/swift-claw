@@ -16,7 +16,7 @@ jobs:
   test-linux:
     runs-on: ubuntu-latest
     container: swift:6.3-noble
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,9 +30,10 @@ jobs:
           path: .build
           key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: ${{ runner.os }}-spm-
-      - name: Build tests
-        run: swift build --build-tests
-      - name: Run tests
+      # One `swift test` builds then runs. A separate `swift build --build-tests` step made SwiftPM
+      # compile the whole package twice (~2x wall-clock), which blew past the job timeout on a cold
+      # cache and left the .build cache unsaved — starving every later run of the cache too.
+      - name: Build and run tests
         run: swift test
 
   test-macos:
@@ -41,7 +42,7 @@ jobs:
     # container (swift:6.3-noble) and local dev. The grep guard fails loudly if the runner
     # ever drifts off 6.3.x so a silent downgrade can't slip through a required check.
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -58,9 +59,10 @@ jobs:
           path: .build
           key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: ${{ runner.os }}-spm-
-      - name: Build tests
-        run: swift build --build-tests
-      - name: Run tests
+      # One `swift test` builds then runs. A separate `swift build --build-tests` step made SwiftPM
+      # compile the whole package twice (~2x wall-clock), which blew past the job timeout on a cold
+      # cache and left the .build cache unsaved — starving every later run of the cache too.
+      - name: Build and run tests
         run: swift test
 
   workflow-lint:
