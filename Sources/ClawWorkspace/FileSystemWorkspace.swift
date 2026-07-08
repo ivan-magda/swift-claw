@@ -53,8 +53,15 @@ public struct FileSystemWorkspace: WorkspaceReading {
     let fileManager = FileManager.default
     let skillsRoot = root.appendingPathComponent(Self.skillsDirectoryName, isDirectory: true)
 
-    guard fileManager.fileExists(atPath: skillsRoot.path) else {
+    // fileExists is also true for a stray file at skills/; distinguish it so a non-directory reads
+    // as unlistable, not missing. Apple Foundation throws from contentsOfDirectory on a non-dir, but
+    // swift-corelibs-foundation returns an empty listing — the explicit type check warns identically.
+    var skillsIsDirectory: ObjCBool = false
+    guard fileManager.fileExists(atPath: skillsRoot.path, isDirectory: &skillsIsDirectory) else {
       return SkillScanResult(descriptors: [], warnings: [])  // no skills/ dir: normal, silent
+    }
+    guard skillsIsDirectory.boolValue else {
+      return SkillScanResult(descriptors: [], warnings: [.unreadableSkillsDirectory])
     }
 
     guard
