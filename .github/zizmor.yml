@@ -1,6 +1,3 @@
-# Accept version-tag pins (e.g. actions/checkout@v7) rather than requiring
-# commit SHAs. Dependabot keeps the tags current, and zizmor's other rules
-# (template-injection, artipacked, excessive-permissions, ...) still run.
 rules:
   unpinned-uses:
     config:

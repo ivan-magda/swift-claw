@@ -14,9 +14,6 @@ concurrency:
 
 jobs:
   test-linux:
-    # arm64 Linux runner (GA, free for public repos): matches local/dev arch, where the full build
-    # completes in ~3 min. The x86_64 hosted runner stalled indefinitely emitting the large test
-    # modules — an arch-specific toolchain issue, not a code bug (macOS and arm64 both pass).
     runs-on: ubuntu-24.04-arm
     container: swift:6.3-noble
     timeout-minutes: 30
@@ -28,20 +25,15 @@ jobs:
         run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev ca-certificates tzdata
       - name: Show toolchain
         run: swift --version
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .build
           key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
-      # One `swift test` builds then runs; a separate build step would compile the package twice.
       - name: Build and run tests
         run: swift test
 
   test-macos:
-    # macos-26 (preview) is the only hosted image carrying a Swift 6.3.x Xcode; macos-15
-    # tops out at Xcode 26.3 = Swift 6.2.4. Xcode 26.6 = Swift 6.3.3, matching the Linux
-    # container (swift:6.3-noble) and local dev. The grep guard fails loudly if the runner
-    # ever drifts off 6.3.x so a silent downgrade can't slip through a required check.
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -55,20 +47,17 @@ jobs:
           swift --version
           swift --version 2>&1 | grep -qF "Swift version 6.3" \
             || { echo "::error::Expected a Swift 6.3.x toolchain on this runner"; exit 1; }
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .build
           key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
-      # One `swift test` builds then runs. A separate `swift build --build-tests` step made SwiftPM
-      # compile the whole package twice (~2x wall-clock), which blew past the job timeout on a cold
-      # cache and left the .build cache unsaved — starving every later run of the cache too.
       - name: Build and run tests
         run: swift test
 
   workflow-lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
