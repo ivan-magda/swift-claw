@@ -320,7 +320,7 @@ func makeEnv(
     pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: {},
     breaker: breaker,
-    transport: transport,
+    delivery: transport,
     now: now,
     logger: TestLog.silent
   )

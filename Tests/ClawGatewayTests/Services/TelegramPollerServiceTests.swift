@@ -75,7 +75,7 @@ private actor BlockingTurnRunner: TurnDispatching {
       pendingConfirmations: PendingConfirmationRegistry(),
       botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
-      transport: transport,
+      delivery: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
@@ -84,7 +84,7 @@ private actor BlockingTurnRunner: TurnDispatching {
     let cursor = UpdateCursorStoreGRDB(writer: queue)
 
     let poller = TelegramPollerService(
-      transport: transport,
+      intake: transport,
       router: router,
       cursor: cursor,
       pollTimeout: 0,
@@ -142,7 +142,7 @@ private actor BlockingTurnRunner: TurnDispatching {
       pendingConfirmations: PendingConfirmationRegistry(),
       botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
-      transport: transport,
+      delivery: transport,
       turnRunner: runner,
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
@@ -150,7 +150,7 @@ private actor BlockingTurnRunner: TurnDispatching {
     )
     let cursor = UpdateCursorStoreGRDB(writer: queue)
     let poller = TelegramPollerService(
-      transport: transport,
+      intake: transport,
       router: router,
       cursor: cursor,
       pollTimeout: 0,

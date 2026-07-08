@@ -236,7 +236,7 @@ func makeSC7Harness(
     pendingConfirmations: registry,
     notifyOutbox: {},
     breaker: withBreaker ? BudgetBreaker(budget: .default) : nil,
-    transport: withBreaker ? transport : nil,
+    delivery: withBreaker ? transport : nil,
     now: { clock.now },
     logger: logger
   )
@@ -254,7 +254,7 @@ func makeSC7Harness(
     pendingConfirmations: registry,
     botUsername: nil,
     accessControl: AccessControl(allowlist: stores.allowlist),
-    transport: transport,
+    delivery: transport,
     turnRunner: runner,
     lanes: lanes,
     schedule: ScheduleSurface(

@@ -43,7 +43,7 @@ struct MemoryRoutingHarness {
       pendingConfirmations: pendingConfirmations,
       botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: allowlist),
-      transport: transport,
+      delivery: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),

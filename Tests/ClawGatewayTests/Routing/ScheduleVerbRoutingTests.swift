@@ -36,7 +36,7 @@ import Testing
       pendingConfirmations: PendingConfirmationRegistry(),
       botUsername: "claw_bot",
       accessControl: AccessControl(allowlist: AllowlistStoreGRDB(writer: queue)),
-      transport: transport,
+      delivery: transport,
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),

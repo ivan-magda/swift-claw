@@ -6,7 +6,7 @@ import ServiceLifecycle
 /// for durably-handled updates, so a transient failure re-polls instead of acking a lost echo.
 /// Graceful shutdown cancels the task → the in-flight long poll unwinds and the loop exits.
 public struct TelegramPollerService: Service {
-  private let transport: any TelegramTransport
+  private let intake: any ChannelIntake
   private let router: MessageRouter
   private let cursor: any UpdateCursorStore
   private let pollTimeout: Int
@@ -25,13 +25,13 @@ public struct TelegramPollerService: Service {
   }
 
   public init(
-    transport: any TelegramTransport,
+    intake: any ChannelIntake,
     router: MessageRouter,
     cursor: any UpdateCursorStore,
     pollTimeout: Int,
     logger: Logger
   ) {
-    self.transport = transport
+    self.intake = intake
     self.router = router
     self.cursor = cursor
     self.pollTimeout = pollTimeout
@@ -44,7 +44,7 @@ public struct TelegramPollerService: Service {
       while !Task.isCancelled {
         do {
           let offset = try cursor.loadCursor().map { $0 + 1 }
-          let updates = try await transport.getUpdates(
+          let updates = try await intake.getUpdates(
             offset: offset,
             timeout: pollTimeout,
             allowedUpdates: Self.allowedUpdates

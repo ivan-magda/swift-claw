@@ -22,7 +22,7 @@ enum StoreFailureReply: Sendable {
 /// store-error contract (diskFull → notice + poller backoff; anything else → per-site recovery).
 struct ReplySender: Sendable {
   let processed: any ProcessedUpdateStore
-  let transport: any TelegramTransport
+  let delivery: any MessageDelivery
 
   let logger: Logger
 
@@ -78,7 +78,7 @@ struct ReplySender: Sendable {
     }
 
     do {
-      _ = try await transport.sendMessage(chatId: chatId, text: text)
+      _ = try await delivery.sendMessage(chatId: chatId, text: text)
     } catch {
       logger.error("send failed for update \(updateId): \(error)")
       return .transientFailure
@@ -91,7 +91,7 @@ struct ReplySender: Sendable {
   /// ack must not re-run the effect.
   func sendCommandAck(updateId: Int64, chatId: Int64, text: String) async -> HandleOutcome {
     do {
-      _ = try await transport.sendMessage(chatId: chatId, text: text)
+      _ = try await delivery.sendMessage(chatId: chatId, text: text)
     } catch {
       logger.error("command ack send failed for update \(updateId): \(error)")
     }
@@ -106,7 +106,7 @@ struct ReplySender: Sendable {
   /// the network) and the signal for the poller to back off without advancing the offset (F23).
   func storageFull(chatId: Int64) async -> HandleOutcome {
     do {
-      _ = try await transport.sendMessage(chatId: chatId, text: Degradation.storageFull)
+      _ = try await delivery.sendMessage(chatId: chatId, text: Degradation.storageFull)
     } catch {
       logger.error("failed to send storage-full notice: \(error)")
     }

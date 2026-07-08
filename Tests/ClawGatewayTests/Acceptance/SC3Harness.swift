@@ -222,7 +222,7 @@ func makeSC3Harness(
     pendingConfirmations: registry,
     botUsername: nil,
     accessControl: AccessControl(allowlist: stores.allowlist),
-    transport: transport,
+    delivery: transport,
     turnRunner: runner,
     lanes: SessionLaneRegistry(),
     schedule: ScheduleSurface(

@@ -233,7 +233,7 @@ private extension RunCommand {
       pendingConfirmations: pendingConfirmations,
       notifyOutbox: { outboxSignal.poke() },
       breaker: breaker,
-      transport: transport,
+      delivery: transport,
       logger: logger
     )
     let scheduleSurface = ScheduleSurface(
@@ -255,14 +255,14 @@ private extension RunCommand {
       pendingConfirmations: pendingConfirmations,
       botUsername: botUsername,
       accessControl: AccessControl(allowlist: stores.allowlist),
-      transport: transport,
+      delivery: transport,
       turnRunner: turnRunner,
       lanes: lanes,
       schedule: scheduleSurface,
       logger: logger
     )
     let poller = TelegramPollerService(
-      transport: transport,
+      intake: transport,
       router: router,
       cursor: stores.cursor,
       pollTimeout: config.pollTimeoutSeconds,
@@ -271,7 +271,7 @@ private extension RunCommand {
 
     let dispatcher = OutboxDispatcher(
       outbox: stores.outbox,
-      transport: transport,
+      delivery: transport,
       signal: outboxSignal,
       logger: logger
     )
