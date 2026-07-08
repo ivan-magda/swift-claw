@@ -17,7 +17,7 @@ import Testing
         requestTimeoutSeconds: 5
       ),
       http: UnusedHTTP(),
-      sleep: { _ in },
+      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) },
       jitter: { $0 }
     )
   }

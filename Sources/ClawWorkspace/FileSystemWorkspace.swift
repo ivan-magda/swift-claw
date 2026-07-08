@@ -53,8 +53,12 @@ public struct FileSystemWorkspace: WorkspaceReading {
     let fileManager = FileManager.default
     let skillsRoot = root.appendingPathComponent(Self.skillsDirectoryName, isDirectory: true)
 
-    guard fileManager.fileExists(atPath: skillsRoot.path) else {
-      return SkillScanResult(descriptors: [], warnings: [])  // no skills/ dir: normal, silent
+    var skillsIsDirectory: ObjCBool = false
+    guard fileManager.fileExists(atPath: skillsRoot.path, isDirectory: &skillsIsDirectory) else {
+      return SkillScanResult(descriptors: [], warnings: [])
+    }
+    guard skillsIsDirectory.boolValue else {
+      return SkillScanResult(descriptors: [], warnings: [.unreadableSkillsDirectory])
     }
 
     guard

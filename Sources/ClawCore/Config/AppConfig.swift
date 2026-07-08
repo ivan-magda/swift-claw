@@ -414,7 +414,8 @@ private extension AppConfig {
         URL(fileURLWithPath: path, isDirectory: true)
       } else {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
-          EnvDefaults.stateDirectoryName
+          EnvDefaults.stateDirectoryName,
+          isDirectory: true
         )
       }
 

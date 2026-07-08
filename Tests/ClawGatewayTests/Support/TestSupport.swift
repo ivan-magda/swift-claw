@@ -339,7 +339,9 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
 }
 
 /// The single shared ceiling for acceptance bounded-polls — one knob to retune under CI load.
-let acceptancePollCeiling: Duration = .seconds(2)
+/// 30s (not 2s) tolerates a heavily oversubscribed CI runner where a turn's async work is CPU-starved;
+/// a passing poll returns as soon as its condition holds, so the ceiling only bounds the failing path.
+let acceptancePollCeiling: Duration = .seconds(30)
 
 /// Re-runs `probe` every `interval` until it yields a non-nil value or `timeout` elapses, returning
 /// the last probe value (nil on exhaustion). Collapses the copied `for _ in 0..<N` + `Task.sleep`

@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-24.04-arm
+    container: swift:6.3-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev ca-certificates tzdata
+      - name: Show toolchain
+        run: swift --version
+      - uses: actions/cache@v6
+        with:
+          path: .build
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
+      - name: Build and run tests
+        run: swift test
+
+  test-macos:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Select Swift 6.3 toolchain
+        run: |
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          swift --version
+          swift --version 2>&1 | grep -qF "Swift version 6.3" \
+            || { echo "::error::Expected a Swift 6.3.x toolchain on this runner"; exit 1; }
+      - uses: actions/cache@v6
+        with:
+          path: .build
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
+      - name: Build and run tests
+        run: swift test
+
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: docker run --rm -v "${{ github.workspace }}:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+      - name: zizmor
+        run: pipx run zizmor==1.26.1 .
