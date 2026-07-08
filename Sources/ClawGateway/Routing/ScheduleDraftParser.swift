@@ -123,9 +123,15 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       // sees the spend, exactly like a deadline-hit turn.
       record(estimatedFor: request, sessionId: sessionId)
       return .providerUnavailable
+    } catch ProviderError.retryable, ProviderError.connectFailed {
+      // Exhausted retries / transport failure: parity with a turn's `degradedForCaughtError`
+      // (§15) — debit an estimate so a provider brownout still moves the day cap, rather than
+      // letting repeated `/schedule` attempts re-issue the call with the totals frozen.
+      record(estimatedFor: request, sessionId: sessionId)
+      return .providerUnavailable
     } catch {
-      // Clean rejections (retries exhausted / terminal): the provider returned nothing to
-      // account. The owner reply is the same DEG-01 degradation either way.
+      // Terminal rejection (a 4xx that won't retry): the provider generated and billed nothing,
+      // so there is nothing to account. The owner reply is the same DEG-01 degradation.
       return .providerUnavailable
     }
 

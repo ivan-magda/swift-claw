@@ -126,11 +126,34 @@ import Testing
     let provider = SequenceProvider([])
     let fixture = try makeFixture(provider: provider)
 
-    // when / then
+    // when / then — terminal: the provider generated and billed nothing, so no usage row
     #expect(
       await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
         == .providerUnavailable
     )
+    let rows = try await fixture.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM provider_usage") ?? -1
+    }
+    #expect(rows == 0)
+  }
+
+  @Test func exhaustedRetriesDebitAnEstimate() async throws {
+    // given — a brownout: `complete` retries and exhausts, throwing `.retryable` (not terminal)
+    let fixture = try makeFixture(provider: RetryExhaustedProvider())
+
+    // when
+    let result = await fixture.parser.parse(
+      ownerText: "every weekday at 7am",
+      sessionId: fixture.sessionId
+    )
+
+    // then — parity with a turn's degradedForCaughtError (§15): the day cap sees an estimate so
+    // repeated `/schedule` attempts during the brownout cannot re-issue the call with frozen totals
+    #expect(result == .providerUnavailable)
+    let estimated = try await fixture.queue.read { db in
+      try Bool.fetchOne(db, sql: "SELECT is_estimated FROM provider_usage")
+    }
+    #expect(estimated == true)
   }
 
   @Test func dayCapDenialRefusesBeforeAnyProviderCall() async throws {
@@ -209,5 +232,13 @@ private struct HangingProvider: LLMProvider {
   func complete(request: ChatRequest) async throws -> ChatResponse {
     try await Task.sleep(for: .seconds(3_600))
     throw ProviderError.terminal(status: nil, message: "unreachable")
+  }
+}
+
+/// Stands in for a provider whose retry budget is exhausted (repeated 429/5xx/transport): `complete`
+/// surfaces `.retryable`, the same case `OpenAICompatibleProvider` throws once its retries run out.
+private struct RetryExhaustedProvider: LLMProvider {
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    throw ProviderError.retryable(status: 429, message: "rate limited")
   }
 }
