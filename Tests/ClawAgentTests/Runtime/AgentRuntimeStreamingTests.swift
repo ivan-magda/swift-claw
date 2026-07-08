@@ -962,7 +962,11 @@ func waitForTurnResult(
   @Test func streamingDeadlineTerminatesNeverEndingStream() async throws {
     // given
     let provider = StreamingProvider(streamScript: .neverFinishes)
-    let runtime = makeRuntime(provider: provider, streamingEnabled: true, sleep: { _ in })
+    let runtime = makeRuntime(
+      provider: provider,
+      streamingEnabled: true,
+      sleep: { _ in await Task.yield() }
+    )
 
     // when
     let outcome = try await runtime.runTurn(
@@ -986,7 +990,11 @@ func waitForTurnResult(
     // given
     let gate = NonCooperativeStreamGate()
     let provider = StreamingProvider(streamScript: .ignoresCancellation(gate))
-    let runtime = makeRuntime(provider: provider, streamingEnabled: true, sleep: { _ in })
+    let runtime = makeRuntime(
+      provider: provider,
+      streamingEnabled: true,
+      sleep: { _ in await Task.yield() }
+    )
 
     // when
     let turnResult = startTurn {
