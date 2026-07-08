@@ -23,7 +23,7 @@
 6. **Secure-by-default, fail-closed.** Dangerous tools off; consequential actions approval-gated; numeric-ID default-deny; access checks and rate limiters deny/throttle on internal error rather than failing open.
 7. **Stop and ask, never go silent.** Every failure mode (provider outage, budget exhaustion, storage full, unsupported input) produces a plain-language user-facing message, never silence or a raw error/stack.
 8. **Boring & legible.** Small, well-bounded modules; a layered dependency DAG; a pure domain core; heavy use of Swift value types + actors.
-9. **Portable, pragmatically.** macOS-primary; Linux-clean is a soft guideline through the early increments and **one hard CI gate at Inc 6** (§20, §17). Portable protocol seams are kept throughout.
+9. **Portable, pragmatically.** macOS-primary; Linux-clean is a soft guideline through the early increments, hardened by a **macOS + Linux GRDB/FTS5 build+test CI gate live on every PR** (`ci.yml`, §17). Portable protocol seams are kept throughout.
 
 ## 2. System context
 
@@ -573,7 +573,7 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 | **3** | Memory & workspace + read-only tools | Workspace files injected at the **untrusted tier** (budgeted, caps, flush-before-compact); durable facts on confirm; `memory_items` + **FTS5 recall** across restarts; `/memory`; `web_search`/`web_fetch` + file READ at **`safe`** tier with the **exfil gate**. |
 | **4** | Scheduler & proactive | "Every weekday 07:00 Europe/Berlin…" fires once per occurrence across restarts/DST; **confirm-before-arm**; reduced-privilege runs; clock-gap catch-up cap; delivery via outbox; opt-in heartbeat with quiet hours. *(Scope reconciliation: the external research roadmap bundles memory/workspace into its "Increment 4" — this repo shipped those in Inc 3a; this increment is scheduler/proactive only.)* |
 | **5** | Write/shell tools + policy + approvals + sandbox | A consequential tool requires explicit approval (**callback auth + ≥128-bit nonce + FSM**); a **forged or third-party callback cannot approve**; untrusted code runs in a per-exec disposable VM (no host FS/network by default); the **enforced lethal-trifecta gate** forces approval on a tainted privileged action. |
-| **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (static SDK, distroless, systemd); **CI Linux build incl. GRDB+FTS5 passes** (the one hard portability gate). |
+| **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (systemd); the **macOS + Linux GRDB+FTS5 build+test CI gate already landed early** (`ci.yml`, §17), so the remainder here is the **musl Static Linux SDK → distroless packaging, which stays deferred/optional** (§17/§18 escape hatch). |
 
 *(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards.)*
 
