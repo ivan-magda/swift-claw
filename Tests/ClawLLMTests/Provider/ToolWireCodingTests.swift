@@ -17,7 +17,7 @@ import Testing
         requestTimeoutSeconds: 5
       ),
       http: UnusedHTTP(),
-      sleep: { _ in await Task.yield() },
+      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) },
       jitter: { $0 }
     )
   }

@@ -965,7 +965,7 @@ func waitForTurnResult(
     let runtime = makeRuntime(
       provider: provider,
       streamingEnabled: true,
-      sleep: { _ in await Task.yield() }
+      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) }
     )
 
     // when
@@ -993,7 +993,7 @@ func waitForTurnResult(
     let runtime = makeRuntime(
       provider: provider,
       streamingEnabled: true,
-      sleep: { _ in await Task.yield() }
+      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) }
     )
 
     // when
