@@ -44,7 +44,9 @@ jobs:
           path: clawd-linux-x86_64*
 
   macos-binary:
-    runs-on: macos-15
+    # macos-26 (preview) is the only hosted image with a Swift 6.3.x Xcode (26.6 = 6.3.3);
+    # macos-15 tops out at Swift 6.2.4. Keeps release binaries on the same toolchain as CI.
+    runs-on: macos-26
     timeout-minutes: 30
     permissions:
       contents: read
@@ -55,7 +57,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Select Swift 6.3 toolchain
-        run: sudo xcode-select -s /Applications/Xcode_26.app
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          swift --version
+          swift --version 2>&1 | grep -qF "Swift version 6.3" \
+            || { echo "::error::Expected a Swift 6.3.x toolchain on this runner"; exit 1; }
       - name: Stamp version
         run: printf 'enum ClawdVersion {\n  static let current = "%s"\n}\n' "${GITHUB_REF_NAME#v}" > Sources/clawd/Version.swift
       - name: Build release binary
