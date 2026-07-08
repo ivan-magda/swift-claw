@@ -103,7 +103,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
             logger.notice("chat stream status \(response.head.statusCode)")
 
             if Self.isRetryableStatus(response.head.statusCode) {
-              throw ProviderError.retryable(status: response.head.statusCode, message: message)
+              throw ProviderError.rejected(status: response.head.statusCode, message: message)
             }
 
             throw ProviderError.terminal(status: response.head.statusCode, message: message)
@@ -319,6 +319,8 @@ private extension OpenAICompatibleProvider {
       return .connectFailed(message: sanitize(message: message))
     case .retryable(let status, let message):
       return .retryable(status: status, message: sanitize(message: message))
+    case .rejected(let status, let message):
+      return .rejected(status: status, message: sanitize(message: message))
     case .terminal(let status, let message):
       return .terminal(status: status, message: sanitize(message: message))
     }

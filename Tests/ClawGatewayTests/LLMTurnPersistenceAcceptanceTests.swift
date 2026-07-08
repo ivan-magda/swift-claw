@@ -359,7 +359,7 @@ func makeStack(
     pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
-    transport: transport,
+    delivery: transport,
     logger: logger
   )
 
@@ -372,7 +372,7 @@ func makeStack(
     pendingConfirmations: PendingConfirmationRegistry(),
     botUsername: "claw_bot",
     accessControl: AccessControl(allowlist: allowlist),
-    transport: transport,
+    delivery: transport,
     turnRunner: turnRunner,
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
@@ -381,7 +381,7 @@ func makeStack(
 
   let dispatcher = OutboxDispatcher(
     outbox: outbox,
-    transport: transport,
+    delivery: transport,
     signal: signal,
     logger: logger
   )
@@ -448,7 +448,7 @@ func makeStreamingStack(
     pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
-    transport: transport,
+    delivery: transport,
     logger: logger
   )
   let router = MessageRouter(
@@ -460,7 +460,7 @@ func makeStreamingStack(
     pendingConfirmations: PendingConfirmationRegistry(),
     botUsername: "claw_bot",
     accessControl: AccessControl(allowlist: allowlist),
-    transport: transport,
+    delivery: transport,
     turnRunner: turnRunner,
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
@@ -468,7 +468,7 @@ func makeStreamingStack(
   )
   let dispatcher = OutboxDispatcher(
     outbox: outbox,
-    transport: transport,
+    delivery: transport,
     signal: signal,
     logger: logger
   )
@@ -531,7 +531,7 @@ func makeStopNewStack(
     pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
-    transport: transport,
+    delivery: transport,
     logger: logger
   )
 
@@ -544,7 +544,7 @@ func makeStopNewStack(
     pendingConfirmations: PendingConfirmationRegistry(),
     botUsername: "claw_bot",
     accessControl: AccessControl(allowlist: allowlist),
-    transport: transport,
+    delivery: transport,
     turnRunner: turnRunner,
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),

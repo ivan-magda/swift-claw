@@ -12,6 +12,8 @@
 Verdicts are marked CONFIRMED or PLAUSIBLE; two findings were downgraded during adversarial verification and are presented with those corrections.
 
 > **Progress (updated 2026-07-07).** Risk 2 (the `MessageRouter` split, Stage 2 item 1) landed first (PR [#30](https://github.com/ivan-magda/swift-claw/pull/30)). Stage 1 has now landed in full on branch `structural-hardening`: Risk 3 (`ToolEgressClass` declared on `ToolDefinition` with no default; the gate consumes the declaration and hands the resolved canonical target into `execute`), Risk 1 (first-finisher-wins timeout that abandons the wedged tool; `getaddrinfo` moved to a Dispatch worker thread), Risk 4 (`applyStop` cancels every PENDING+RUNNING run; `StopCommandResult.cancelledRunIds`), Risk 5 (role/provenance/origin decode throws `StoreError.unexpected`, mirroring `decodeItem`), Risk 6 (`MappedDatabase` wrapper; the raw `write`/`read` extensions are deleted), and the Risk 8 input-token preflight guard (`BudgetGate.perRunInputTokenCap`). The rest of the register (Stage 2 items 2–5, Stage 3) stands as written.
+>
+> **Update (2026-07-08).** Stage 2 items 2–5 have now landed on branch `runtime-and-transport-hardening`: Risk 10 (`TelegramTransport` split into `ChannelIntake` + `MessageDelivery` + the composite; the dead `OutgoingReply` struct deleted), Risk 7 (executed tool exchanges persist on degraded and budget-stopped commits, no longer only on the success path), Risk 9 (the `/schedule` NL parse gets a day-cap preflight before the call, a run-less `provider_usage` row after with `run_id NULL` via migration `v7`, and a 30 s deadline), and Risk 11 (a pre-stream retryable-class rejection is `ProviderError.rejected` and falls back to the blocking path once; mid-stream failures still degrade with no re-issue). Stage 3 stands as written.
 
 ---
 
@@ -364,10 +366,10 @@ Explicitly *not* in the target for now: a channel-neutral delivery-address table
 **Stage 2 — medium cleanup, ideally interleaved with Inc 5 planning.**
 
 1. ~~Split `MessageRouter` (CommandHandlers / ScheduleHandlers / ConfirmationResolver), extract the claim/error-mapping helper, split `PendingConfirmation` into command-confirmation vs tool-approval types, and move `armNextOccurrence`/`resumeNextOccurrence`/`nextFires` into an `OccurrencePolicy` domain type also consumed by `SchedulerService` (Risk 2).~~ **Done (2026-07-07, PR [#30](https://github.com/ivan-magda/swift-claw/pull/30)).** Shipped as above, plus a `TurnEnqueuer` and `TurnDispatch` extraction and the `denyAccess` gate hoist.
-2. Split `TelegramTransport` into intake + delivery protocols; delete or adopt `OutgoingReply` (Risk 10).
-3. Add exchanges to `DegradedTurn` with a decided `HistoryHygiene` replay rule (Risk 7).
-4. Move the `/schedule` parse onto the lane (or deadline-bound it) and give it a usage row + day-cap check (Risk 9).
-5. Narrow streaming retry: re-attempt pre-stream 429/5xx rejections only, preserving the pinned no-double-issue tests (Risk 11).
+2. ~~Split `TelegramTransport` into intake + delivery protocols; delete or adopt `OutgoingReply` (Risk 10).~~ **Done (2026-07-08).**
+3. ~~Add exchanges to `DegradedTurn` with a decided `HistoryHygiene` replay rule (Risk 7).~~ **Done (2026-07-08).**
+4. ~~Move the `/schedule` parse onto the lane (or deadline-bound it) and give it a usage row + day-cap check (Risk 9).~~ **Done (2026-07-08).**
+5. ~~Narrow streaming retry: re-attempt pre-stream 429/5xx rejections only, preserving the pinned no-double-issue tests (Risk 11).~~ **Done (2026-07-08).**
 
 Do **not** start: any second-channel schema work.
 

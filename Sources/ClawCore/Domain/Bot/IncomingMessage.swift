@@ -98,13 +98,3 @@ public struct IncomingMessage: Sendable, Equatable {
     )
   }
 }
-
-public struct OutgoingReply: Sendable, Equatable {
-  public let chatId: Int64
-  public let text: String
-
-  public init(chatId: Int64, text: String) {
-    self.chatId = chatId
-    self.text = text
-  }
-}

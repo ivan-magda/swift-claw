@@ -30,10 +30,10 @@ public struct TurnRunner: TurnDispatching {
   private let pendingConfirmations: PendingConfirmationRegistry
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until Task 6 wires the dispatcher.
   private let notifyOutbox: @Sendable () -> Void
-  /// Post-commit daily kill-switch + the transport for its owner DM. Both `nil` in tests that don't
-  /// exercise the breaker (the DM is best-effort and out-of-band from the durable outbox, D4).
+  /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that
+  /// don't exercise the breaker (the DM is best-effort and out-of-band from the durable outbox, D4).
   private let breaker: BudgetBreaker?
-  private let transport: (any TelegramTransport)?
+  private let delivery: (any MessageDelivery)?
   /// The turn's clock. Sourcing the budget "today" window from an injected now (defaulting to the
   /// real clock) keeps the proactive/global daily-spend boundary deterministic under test — the
   /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
@@ -54,7 +54,7 @@ public struct TurnRunner: TurnDispatching {
     pendingConfirmations: PendingConfirmationRegistry,
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
-    transport: (any TelegramTransport)? = nil,
+    delivery: (any MessageDelivery)? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
@@ -68,7 +68,7 @@ public struct TurnRunner: TurnDispatching {
     self.pendingConfirmations = pendingConfirmations
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
-    self.transport = transport
+    self.delivery = delivery
     self.now = now
     self.logger = logger
   }
@@ -129,6 +129,7 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         chatId: chatId,
         usage: nil,
+        exchanges: [],
         setTainted: false,
         message: ownerVisiblePayload(
           reply: Degradation.contextUnavailable,
@@ -261,14 +262,15 @@ private extension TurnRunner {
         return
       }
     case .degraded(let degradationKind, let usage):
-      // Exchanges are lost by design on the failure path (§10); the taint from any ingesting call
-      // this run still persists so the next turn's gate stays armed. No approval is parked — the
-      // model's explanation never reached the owner, so the gate simply re-trips next time.
+      // Executed exchanges persist even on the failure path so the next turn's context
+      // knows what already ran; the taint from any ingesting call persists with them. No approval
+      // is parked — the model's explanation never reached the owner, so the gate re-trips next time.
       let commitResult = try commitDegradation(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
         usage: usage,
+        exchanges: outcome.exchanges,
         setTainted: outcome.ingestedUntrusted,
         message: ownerVisiblePayload(
           reply: Degradation.message(for: degradationKind),
@@ -287,6 +289,7 @@ private extension TurnRunner {
         sessionId: sessionId,
         chatId: chatId,
         usage: nil,
+        exchanges: outcome.exchanges,
         setTainted: outcome.ingestedUntrusted,
         message: ownerVisiblePayload(
           reply: Degradation.budget(cap: cap),
@@ -309,6 +312,7 @@ private extension TurnRunner {
     sessionId: Int64,
     chatId: Int64,
     usage: ProviderUsage?,
+    exchanges: [ToolExchange],
     setTainted: Bool,
     message: String,
     action: AuditAction,
@@ -329,6 +333,7 @@ private extension TurnRunner {
         chatId: chatId,
         usage: usage,
         chunk: chunk,
+        exchanges: exchanges,
         setTainted: setTainted
       ),
       now: committedAt
@@ -364,7 +369,7 @@ private extension TurnRunner {
     runId: Int64,
     sessionId: Int64
   ) async {
-    guard let breaker, let transport else {
+    guard let breaker, let delivery else {
       return
     }
 
@@ -382,7 +387,7 @@ private extension TurnRunner {
       return
     }
 
-    _ = try? await transport.sendMessage(chatId: chatId, text: Degradation.dailyCapTripped)
+    _ = try? await delivery.sendMessage(chatId: chatId, text: Degradation.dailyCapTripped)
     try? audit.appendAudit(
       AuditEvent(
         actor: .system,
@@ -403,7 +408,7 @@ private extension TurnRunner {
     runId: Int64,
     sessionId: Int64
   ) async {
-    guard let breaker, let transport else {
+    guard let breaker, let delivery else {
       return
     }
 
@@ -412,7 +417,7 @@ private extension TurnRunner {
       return
     }
 
-    _ = try? await transport.sendMessage(chatId: chatId, text: Degradation.proactiveCapTripped)
+    _ = try? await delivery.sendMessage(chatId: chatId, text: Degradation.proactiveCapTripped)
     try? audit.appendAudit(
       AuditEvent(
         actor: .system,

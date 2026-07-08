@@ -183,6 +183,13 @@ private extension RunCommand {
       logger: logger
     )
 
+    // Hoisted so the agent and the /schedule parse share one offline-first cost resolver — both
+    // meter spend against the same price snapshot and reference rate.
+    let costResolver = CostResolver(
+      priceTable: PriceFileLoader.load(),
+      referenceUSDPerToken: config.budget.referenceUSDPerToken
+    )
+
     let workspace = FileSystemWorkspace(
       root: config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
     )
@@ -198,6 +205,7 @@ private extension RunCommand {
       transport: transport,
       stores: stores,
       toolDispatcher: toolDispatcher,
+      costResolver: costResolver,
       logger: logger
     )
 
@@ -233,18 +241,15 @@ private extension RunCommand {
       pendingConfirmations: pendingConfirmations,
       notifyOutbox: { outboxSignal.poke() },
       breaker: breaker,
-      transport: transport,
+      delivery: transport,
       logger: logger
     )
-    let scheduleSurface = ScheduleSurface(
-      parser: ScheduleDraftParser(provider: provider, model: config.llm.model),
-      validator: ScheduleDraftValidator(
-        minIntervalMinutes: config.schedMinIntervalMinutes,
-        defaultTimezone: config.timezone
-      ),
-      calculator: OccurrenceCalculator(),
-      jobs: stores.scheduledJobs,
-      commands: stores.scheduleCommands
+    let scheduleSurface = makeScheduleSurface(
+      config: config,
+      stores: stores,
+      provider: provider,
+      costResolver: costResolver,
+      logger: logger
     )
     let router = MessageRouter(
       processed: stores.processed,
@@ -255,14 +260,14 @@ private extension RunCommand {
       pendingConfirmations: pendingConfirmations,
       botUsername: botUsername,
       accessControl: AccessControl(allowlist: stores.allowlist),
-      transport: transport,
+      delivery: transport,
       turnRunner: turnRunner,
       lanes: lanes,
       schedule: scheduleSurface,
       logger: logger
     )
     let poller = TelegramPollerService(
-      transport: transport,
+      intake: transport,
       router: router,
       cursor: stores.cursor,
       pollTimeout: config.pollTimeoutSeconds,
@@ -271,7 +276,7 @@ private extension RunCommand {
 
     let dispatcher = OutboxDispatcher(
       outbox: stores.outbox,
-      transport: transport,
+      delivery: transport,
       signal: outboxSignal,
       logger: logger
     )
@@ -294,6 +299,37 @@ private extension RunCommand {
         logger: logger
       ),
       logger: logger
+    )
+  }
+
+  /// Builds the `/schedule` surface: the budget-gated, deadline-bounded draft parser (sharing the
+  /// daemon's provider and cost resolver so its ONE LLM call meters spend like a turn), the
+  /// deterministic validator, and the read/claim stores. Extracted from `makeDaemon` so the parser's
+  /// spend-discipline wiring reads in one place.
+  func makeScheduleSurface(
+    config: AppConfig,
+    stores: ClawStores,
+    provider: OpenAICompatibleProvider,
+    costResolver: CostResolver,
+    logger: Logger
+  ) -> ScheduleSurface {
+    ScheduleSurface(
+      parser: ScheduleDraftParser(
+        provider: provider,
+        model: config.llm.model,
+        usageStore: stores.usage,
+        budget: config.budget,
+        costResolver: costResolver,
+        sleep: { try await Task.sleep(for: $0) },
+        logger: logger
+      ),
+      validator: ScheduleDraftValidator(
+        minIntervalMinutes: config.schedMinIntervalMinutes,
+        defaultTimezone: config.timezone
+      ),
+      calculator: OccurrenceCalculator(),
+      jobs: stores.scheduledJobs,
+      commands: stores.scheduleCommands
     )
   }
 
@@ -382,9 +418,10 @@ private extension RunCommand {
     )
   }
 
-  /// Assembles the LLM agent stack: the OpenAI-compatible provider, the offline-first cost resolver,
-  /// and the `AgentRuntime` that orchestrates one turn. Kept separate from the service wiring so the
-  /// composition root reads as "build the agent → feed the turn runner → register the services".
+  /// Assembles the LLM agent stack: the OpenAI-compatible provider, the injected offline-first cost
+  /// resolver (shared with the /schedule parse), and the `AgentRuntime` that orchestrates one turn.
+  /// Kept separate from the service wiring so the composition root reads as "build the agent → feed
+  /// the turn runner → register the services".
   func makeAgent(
     config: AppConfig,
     secrets: Secrets,
@@ -392,14 +429,10 @@ private extension RunCommand {
     transport: TelegramClient,
     stores: ClawStores,
     toolDispatcher: GatedToolDispatcher,
+    costResolver: CostResolver,
     logger: Logger
   ) -> AgentRuntime {
-    let costResolver = CostResolver(
-      priceTable: PriceFileLoader.load(),
-      referenceUSDPerToken: config.budget.referenceUSDPerToken
-    )
-
-    return AgentRuntime(
+    AgentRuntime(
       provider: provider,
       typingIndicator: TelegramTypingIndicator(transport: transport),
       draftStreamer: TelegramRichDraftStreamer(transport: transport),

@@ -35,7 +35,7 @@ import Testing
   ) -> OutboxDispatcher {
     OutboxDispatcher(
       outbox: fixture.outbox,
-      transport: transport,
+      delivery: transport,
       signal: OutboxSignal(),
       logger: TestLog.silent
     )

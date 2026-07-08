@@ -305,7 +305,7 @@ import Testing
     #expect(await exec.recorded.count == 1)
   }
 
-  @Test func streamRetryableNon2xxMapsWithoutRetrying() async throws {
+  @Test func streamRetryableClassNon2xxMapsToRejectedWithoutRetrying() async throws {
     // given
     let errorBody = Data(#"{"error":{"message":"rate limited"}}"#.utf8)
     let exec = ScriptedHTTPExecutor([
@@ -313,11 +313,11 @@ import Testing
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
-    // then
+    // then — classified once as a clean pre-stream rejection; the stream itself never retries
     await #expect {
       for try await _ in provider.stream(request: sampleRequest) {}
     } throws: { error in
-      guard case ProviderError.retryable(let status, let message) = error else {
+      guard case ProviderError.rejected(let status, let message) = error else {
         return false
       }
       return status == 429 && message == "rate limited"

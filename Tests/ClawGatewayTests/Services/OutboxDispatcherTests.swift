@@ -80,7 +80,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
     let transport = RecordingTransport()
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
-      transport: transport,
+      delivery: transport,
       signal: OutboxSignal(),
       logger: TestLog.silent
     )
@@ -103,7 +103,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
     )
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
-      transport: transport,
+      delivery: transport,
       signal: OutboxSignal(),
       logger: TestLog.silent
     )
@@ -124,7 +124,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
     let signal = OutboxSignal()
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
-      transport: transport,
+      delivery: transport,
       signal: signal,
       logger: TestLog.silent
     )
@@ -148,7 +148,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
     let transport = RecordingTransport(failSendAtAttempt: 2)
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
-      transport: transport,
+      delivery: transport,
       signal: OutboxSignal(),
       logger: TestLog.silent
     )
@@ -171,7 +171,7 @@ private struct MarkSentFailingOutbox: OutboxStore {
     let transport = RecordingTransport()
     let dispatcher = OutboxDispatcher(
       outbox: MarkSentFailingOutbox(base: fixture.outbox),
-      transport: transport,
+      delivery: transport,
       signal: OutboxSignal(),
       logger: TestLog.silent
     )

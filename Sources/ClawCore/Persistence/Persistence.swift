@@ -168,7 +168,10 @@ public struct SessionContextSnapshot: Sendable, Equatable {
 }
 
 public struct ProviderUsage: Sendable, Equatable {
-  public let runId: Int64
+  /// The owning run, or `nil` for spend issued outside any run (command-scoped LLM calls such as
+  /// the /schedule parse). Plain day totals include nil-run rows; the origin-filtered totals
+  /// cannot (the JOIN has nothing to match) — correct, since command spend is owner-interactive.
+  public let runId: Int64?
   public let sessionId: Int64
   public let model: String
   public let promptTokens: Int
@@ -179,7 +182,7 @@ public struct ProviderUsage: Sendable, Equatable {
   public let ts: Date
 
   public init(
-    runId: Int64,
+    runId: Int64?,
     sessionId: Int64,
     model: String,
     promptTokens: Int,
@@ -204,7 +207,7 @@ public struct ProviderUsage: Sendable, Equatable {
   /// is the single place the row's `isEstimated` is derived: a row is an estimate iff either input
   /// was guessed.
   public init(
-    runId: Int64,
+    runId: Int64?,
     sessionId: Int64,
     model: String,
     usage: ResolvedUsage,
@@ -290,6 +293,7 @@ public struct DegradedTurn: Sendable, Equatable {
   public let chatId: Int64
   public let usage: ProviderUsage?
   public let chunk: OutboxChunk
+  public let exchanges: [ToolExchange]
   public let setTainted: Bool
 
   public init(
@@ -298,6 +302,7 @@ public struct DegradedTurn: Sendable, Equatable {
     chatId: Int64,
     usage: ProviderUsage?,
     chunk: OutboxChunk,
+    exchanges: [ToolExchange] = [],
     setTainted: Bool = false
   ) {
     self.runId = runId
@@ -305,6 +310,7 @@ public struct DegradedTurn: Sendable, Equatable {
     self.chatId = chatId
     self.usage = usage
     self.chunk = chunk
+    self.exchanges = exchanges
     self.setTainted = setTainted
   }
 }

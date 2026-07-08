@@ -440,6 +440,9 @@ func waitForTurnResult(
   }
 }
 
+// One cohesive @Suite of streaming-turn behaviors sharing the fixtures/helpers declared here;
+// splitting would scatter thematically paired tests.
+// swiftlint:disable:next type_body_length
 @Suite struct AgentRuntimeStreamingTests {
   private func singleUserBuildResult(_ content: String) -> BuildResult {
     BuildResult(
@@ -784,6 +787,33 @@ func waitForTurnResult(
   @Test func connectFailureFallsBackToBlockingCompleteOnce() async throws {
     // given
     let provider = StreamingProvider(streamScript: .fail(.connectFailed(message: "refused")))
+    let runtime = makeRuntime(provider: provider, streamingEnabled: true)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      grant: nil,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    let (content, _) = try requireCompleted(outcome.result)
+    #expect(content == "blocking fallback")
+    #expect(await provider.streamCalls == 1)
+    #expect(await provider.completeCalls == 1)
+  }
+
+  @Test func preStreamRejectionFallsBackToBlockingCompleteOnce() async throws {
+    // given — a clean 429 on the response head: nothing was generated, so one blocking
+    // re-attempt is double-charge-safe; mid-stream failures keep degrading
+    let provider = StreamingProvider(
+      streamScript: .fail(.rejected(status: 429, message: "rate limited"))
+    )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when

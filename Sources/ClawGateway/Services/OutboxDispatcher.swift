@@ -36,18 +36,18 @@ public struct OutboxSignal: Sendable {
 /// fallback on any rich-send error (§6.4 / F8).
 public struct OutboxDispatcher: Service {
   private let outbox: any OutboxStore
-  private let transport: any TelegramTransport
+  private let delivery: any MessageDelivery
   private let signal: OutboxSignal
   private let logger: Logger
 
   public init(
     outbox: any OutboxStore,
-    transport: any TelegramTransport,
+    delivery: any MessageDelivery,
     signal: OutboxSignal,
     logger: Logger
   ) {
     self.outbox = outbox
-    self.transport = transport
+    self.delivery = delivery
     self.signal = signal
     self.logger = logger
   }
@@ -128,12 +128,12 @@ public struct OutboxDispatcher: Service {
   /// failure of the plain fallback itself propagates — the row stays PENDING for the next drain.
   private func send(_ row: OutboxRow) async throws -> Int64 {
     do {
-      return try await transport.sendRichMessage(chatId: row.chatId, markdown: row.payload)
+      return try await delivery.sendRichMessage(chatId: row.chatId, markdown: row.payload)
     } catch {
       logger.warning(
         "rich send failed for run \(row.runId) step \(row.stepIndex), falling back to plain: \(error)"
       )
-      return try await transport.sendMessage(chatId: row.chatId, text: row.payload)
+      return try await delivery.sendMessage(chatId: row.chatId, text: row.payload)
     }
   }
 }

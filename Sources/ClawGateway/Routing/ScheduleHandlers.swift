@@ -38,13 +38,20 @@ struct ScheduleHandlers: Sendable {
       return replies.skipDuplicate(updateId: rawUpdate.updateId)
     }
 
-    switch await schedule.parser.parse(ownerText: text) {
+    switch await schedule.parser.parse(ownerText: text, sessionId: sessionId) {
     case .providerUnavailable:
       // DEG-01: an LLM/API failure degrades exactly like any turn; nothing armed.
       return await replies.sendCommandAck(
         updateId: rawUpdate.updateId,
         chatId: message.chatId,
         text: Degradation.providerUnavailable
+      )
+    case .budgetDenied(let cap):
+      // The day-spend gate refused before the call issued; nothing armed, plain-language stop.
+      return await replies.sendCommandAck(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: Degradation.budget(cap: cap)
       )
     case .unparseable:
       return await replies.sendCommandAck(

@@ -37,7 +37,7 @@ public struct MessageRouter: Sendable {
     pendingConfirmations: PendingConfirmationRegistry,
     botUsername: String?,
     accessControl: AccessControl,
-    transport: any TelegramTransport,
+    delivery: any MessageDelivery,
     turnRunner: any TurnDispatching,
     lanes: SessionLaneRegistry,
     schedule: ScheduleSurface,
@@ -48,7 +48,7 @@ public struct MessageRouter: Sendable {
     self.accessControl = accessControl
     self.logger = logger
 
-    let replies = ReplySender(processed: processed, transport: transport, logger: logger)
+    let replies = ReplySender(processed: processed, delivery: delivery, logger: logger)
     let enqueuer = TurnEnqueuer(lanes: lanes, turns: turnRunner, logger: logger)
     let turnDispatch = TurnDispatch(
       sessionMessages: sessionMessages,

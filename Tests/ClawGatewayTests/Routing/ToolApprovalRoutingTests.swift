@@ -35,7 +35,7 @@ import Testing
       pendingConfirmations: registry,
       botUsername: nil,
       accessControl: AccessControl(allowlist: allowlist),
-      transport: transport,
+      delivery: transport,
       turnRunner: runner,
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),

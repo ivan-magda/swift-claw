@@ -17,7 +17,7 @@ import Testing
     let signal = OutboxSignal()
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
-      transport: transport,
+      delivery: transport,
       signal: signal,
       logger: TestLog.silent
     )
