@@ -308,7 +308,10 @@ struct AgentRuntimeTests {
   @Test("the wall-clock deadline degrades and debits the estimate")
   func deadlineDegradesAndDebitsTheEstimate() async throws {
     // given — the provider hangs; a no-op sleep makes the 180s deadline fire immediately.
-    let runtime = makeRuntime(provider: HangingProvider(), sleep: { _ in await Task.yield() })
+    let runtime = makeRuntime(
+      provider: HangingProvider(),
+      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) }
+    )
 
     // when
     let outcome = try await runtime.runTurn(
