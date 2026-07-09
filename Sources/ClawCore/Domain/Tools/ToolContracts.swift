@@ -267,8 +267,10 @@ public protocol Tool: Sendable {
   /// The §5.4 prompt inputs for an ask-tier or trifecta approval, produced at gate time on the
   /// gate-resolved `canonicalTarget`. The default is a generic egress presentation; write tools
   /// override with blast radius, a redacted preview, and any scan warnings.
-  func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
-    -> ToolApprovalPresentation
+  func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation
 }
 
 extension Tool {
