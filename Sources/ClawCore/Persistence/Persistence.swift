@@ -347,6 +347,9 @@ public enum AuditAction: String, Sendable, Equatable {
   case heartbeatFired = "heartbeat_fired"
   case heartbeatSuppressed = "heartbeat_suppressed"
   case heartbeatSkipped = "heartbeat_skipped"
+  case approvalRequested = "approval_requested"
+  case approvalGranted = "approval_granted"
+  case approvalDenied = "approval_denied"
 }
 
 public struct AuditEvent: Sendable, Equatable {

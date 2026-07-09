@@ -44,4 +44,16 @@ import Testing
     // given / when / then — rawValues are the durable audit vocabulary (preamble)
     #expect(fixture.action.rawValue == fixture.rawValue)
   }
+
+  private static let approvalActions: [(action: AuditAction, rawValue: String)] = [
+    (.approvalRequested, "approval_requested"),
+    (.approvalGranted, "approval_granted"),
+    (.approvalDenied, "approval_denied"),
+  ]
+
+  @Test(arguments: approvalActions)
+  func approvalActionsHaveStableRawValues(_ fixture: (action: AuditAction, rawValue: String)) {
+    // given / when / then — rawValues are the durable audit vocabulary (spec §3.1, preamble)
+    #expect(fixture.action.rawValue == fixture.rawValue)
+  }
 }
