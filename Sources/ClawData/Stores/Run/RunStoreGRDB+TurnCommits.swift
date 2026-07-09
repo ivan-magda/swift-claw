@@ -83,7 +83,15 @@ extension RunStoreGRDB {
         try Self.updateRunUsage(db, usage: usage, now: now)
       }
 
-      _ = try Self.insertOutbox(db, runId: turn.runId, chunk: turn.chunk, now: now)
+      // Same collision guard as the completed path: a degraded RESUME must not silently drop
+      // its owner-facing reply against the run's already-enqueued approval prompt.
+      let stepBase = try Self.nextOutboxStepBase(db, runId: turn.runId)
+      _ = try Self.insertOutbox(
+        db,
+        runId: turn.runId,
+        chunk: Self.shiftedChunk(turn.chunk, by: stepBase),
+        now: now
+      )
 
       if turn.setTainted {
         try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
@@ -142,13 +150,31 @@ private extension RunStoreGRDB {
     )
     try insertUsage(db, usage)
 
+    let stepBase = try nextOutboxStepBase(db, runId: turn.runId)
     for chunk in turn.chunks {
-      _ = try insertOutbox(db, runId: turn.runId, chunk: chunk, now: now)
+      _ = try insertOutbox(
+        db,
+        runId: turn.runId,
+        chunk: shiftedChunk(chunk, by: stepBase),
+        now: now
+      )
     }
 
     if turn.setTainted {
       try setSessionTainted(db, sessionId: turn.sessionId, now: now)
     }
+  }
+
+  /// A resumed run already enqueued its §5.3 approval prompt at step 0, and `dedup_key` is
+  /// `runId:stepIndex` under INSERT OR IGNORE — a colliding continuation chunk would be dropped
+  /// SILENTLY. New chunks therefore extend the run's delivery sequence past whatever is already
+  /// enqueued (base 0 for an ordinary run, so the plain path is untouched).
+  static func nextOutboxStepBase(_ db: Database, runId: Int64) throws -> Int {
+    try Int.fetchOne(
+      db,
+      sql: "SELECT COALESCE(MAX(step_index) + 1, 0) FROM outbound_deliveries WHERE run_id = ?",
+      arguments: [runId]
+    ) ?? 0
   }
 
   static func recordTerminalUsageIfNeeded(
@@ -190,6 +216,21 @@ private extension RunStoreGRDB {
         usage.costUSD,
         usage.runId,
       ]
+    )
+  }
+
+  /// The same chunk re-based into the run's delivery sequence (identity when `base == 0`).
+  static func shiftedChunk(_ chunk: OutboxChunk, by base: Int) -> OutboxChunk {
+    guard base > 0 else {
+      return chunk
+    }
+    return OutboxChunk(
+      stepIndex: chunk.stepIndex + base,
+      chatId: chunk.chatId,
+      payload: chunk.payload,
+      payloadHash: chunk.payloadHash,
+      approvalId: chunk.approvalId,
+      replyMarkup: chunk.replyMarkup
     )
   }
 

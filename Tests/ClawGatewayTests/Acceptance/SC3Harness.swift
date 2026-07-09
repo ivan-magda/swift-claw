@@ -39,6 +39,22 @@ struct SC3Harness {
   let databasePath: String
   let workspaceRoot: URL
   let sessionKey: String
+  let waiter: ApprovalWaiter
+  let lanes: SessionLaneRegistry
+
+  /// Re-establishes the fabric against the SAME DB after a "restart" (a second harness over one
+  /// `databasePath`): cleans terminal-run PENDING rows, re-parks unexpired approvals on their
+  /// lanes, sweeps expired ones to DENY, and resumes crash-window APPROVED rows (§6.5/§7).
+  func runBootReconciliation() async {
+    await ApprovalBootReconciler(
+      approvals: stores.approvals,
+      lanes: lanes,
+      coordinator: coordinator,
+      waiter: waiter,
+      now: { Date() },
+      logger: TestLog.silent
+    ).reconcile()
+  }
 
   /// Awaits the lane-dispatched turn: polls the outbox until `count` payloads exist (bounded).
   func waitForOutbox(atLeast count: Int) async throws -> [String] {
@@ -163,6 +179,7 @@ func makeSC3Harness(
   let tools: [any Tool] =
     [
       FileReadTool(workspaceRoot: workspaceRoot, redactor: redactor),
+      FileWriteTool(workspaceRoot: workspaceRoot, redactor: redactor),
       WebFetchTool(http: http, resolver: resolver, redactor: redactor),
       WebSearchTool(search: ExaSearchProvider(apiKey: "exa-key", http: http)),
     ] + extraTools
@@ -203,6 +220,7 @@ func makeSC3Harness(
   // 7. TurnRunner sharing the router's registry instance.
   let transport = RecordingTransport()
   let logger = TestLog.silent
+  let deferredParker = DeferredApprovalParker()
   let runner = TurnRunner(
     sessionMessages: stores.sessionMessages,
     runs: stores.runs,
@@ -213,11 +231,47 @@ func makeSC3Harness(
     contextBuilder: contextBuilder,
     pendingConfirmations: registry,
     notifyOutbox: {},
-    parker: InertApprovalParker(coordinator: coordinator, logger: logger),
+    parker: deferredParker,
+    logger: logger
+  )
+
+  // 7b. The REAL approve-resume fabric (mirrors RunCommand+Composition.makeApprovalFabric):
+  // recorded-args executor → waiter adopted into the runner's parker → callback handler the
+  // router routes owner taps into.
+  let approvedExecutor = ApprovedActionExecutor(
+    tools: dispatcher.toolsByName,
+    runs: stores.runs,
+    now: { Date() },
+    logger: logger
+  )
+  let waiter = ApprovalWaiter(
+    approvals: stores.approvals,
+    runs: stores.runs,
+    coordinator: coordinator,
+    executor: approvedExecutor,
+    turns: runner,
+    delivery: transport,
+    callbacks: transport,
+    currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
+    now: { Date() },
+    logger: logger
+  )
+  deferredParker.adopt(waiter)
+  let approvalCallbacks = ApprovalCallbackHandler.make(
+    processed: stores.processed,
+    delivery: transport,
+    accessControl: AccessControl(allowlist: stores.allowlist),
+    approvals: stores.approvals,
+    audit: stores.audit,
+    coordinator: coordinator,
+    callbacks: transport,
+    currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
+    now: { Date() },
     logger: logger
   )
 
   // 8. MessageRouter over the real stores + RecordingTransport + SessionLaneRegistry.
+  let lanes = SessionLaneRegistry()
   let router = MessageRouter(
     processed: stores.processed,
     sessionMessages: stores.sessionMessages,
@@ -229,7 +283,7 @@ func makeSC3Harness(
     accessControl: AccessControl(allowlist: stores.allowlist),
     delivery: transport,
     turnRunner: runner,
-    lanes: SessionLaneRegistry(),
+    lanes: lanes,
     schedule: ScheduleSurface(
       parser: FakeDraftParser(result: .unparseable),
       validator: ScheduleDraftValidator(minIntervalMinutes: 5, defaultTimezone: .gmt),
@@ -237,6 +291,7 @@ func makeSC3Harness(
       jobs: stores.scheduledJobs,
       commands: stores.scheduleCommands
     ),
+    approvalCallbacks: approvalCallbacks,
     coordinator: coordinator,
     logger: logger
   )
@@ -251,7 +306,9 @@ func makeSC3Harness(
     provider: provider,
     databasePath: resolvedDatabasePath,
     workspaceRoot: workspaceRoot,
-    sessionKey: SessionKey.telegramDM(chatId: 7)
+    sessionKey: SessionKey.telegramDM(chatId: 7),
+    waiter: waiter,
+    lanes: lanes
   )
 }
 

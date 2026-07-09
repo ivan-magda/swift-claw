@@ -12,33 +12,6 @@ import ClawWorkspace
 import Foundation
 import Logging
 
-/// Breaks the `turnRunner` ⇄ `approvalWaiter` construction cycle: `TurnRunner` needs a `parker`,
-/// and the real parker (the waiter) needs `turnRunner` as its dispatcher. Adopted once during
-/// composition, before the service group starts.
-actor DeferredApprovalParker: ApprovalParking {
-  private var wrapped: (any ApprovalParking)?
-
-  func adopt(_ parker: any ApprovalParking) {
-    wrapped = parker
-  }
-
-  func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    revalidatePolicyOnApprove: Bool
-  ) async {
-    await wrapped?.park(
-      approvalId: approvalId,
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
-      revalidatePolicyOnApprove: revalidatePolicyOnApprove
-    )
-  }
-}
-
 struct RunCommand: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "run",

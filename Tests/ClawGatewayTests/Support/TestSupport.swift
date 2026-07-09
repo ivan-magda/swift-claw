@@ -65,7 +65,20 @@ actor RecordingTransport: TelegramTransport {
     let markdown: String
   }
 
+  struct CallbackAnswer: Sendable, Equatable {
+    let id: String
+    let text: String?
+  }
+
+  struct MarkupEdit: Sendable, Equatable {
+    let chatId: Int64
+    let messageId: Int64
+    let replyMarkup: String?
+  }
+
   private(set) var sent: [(chatId: Int64, text: String)] = []
+  private(set) var answeredCallbacks: [CallbackAnswer] = []
+  private(set) var markupEdits: [MarkupEdit] = []
   private(set) var richSends: [(chatId: Int64, markdown: String)] = []
   private(set) var drafts: [DraftRecord] = []
   private(set) var sendAttempts = 0
@@ -80,7 +93,7 @@ actor RecordingTransport: TelegramTransport {
   private let failSendAtAttempt: Int?
   private var failPlainFallbackNext = false
 
-  private enum Event { case sent, attempt, poll, draft }
+  private enum Event { case sent, attempt, poll, draft, answer }
 
   private var waiters: [Event: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)]] =
     [:]
@@ -157,6 +170,20 @@ actor RecordingTransport: TelegramTransport {
 
   func sendChatAction(chatId: Int64, action: String) async throws {}
 
+  func answerCallbackQuery(id: String, text: String?) async throws {
+    answeredCallbacks.append(CallbackAnswer(id: id, text: text))
+    resumeWaiters(.answer, reached: answeredCallbacks.count)
+  }
+
+  func editMessageReplyMarkup(chatId: Int64, messageId: Int64, replyMarkup: String?) async throws {
+    markupEdits.append(MarkupEdit(chatId: chatId, messageId: messageId, replyMarkup: replyMarkup))
+  }
+
+  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
+    // Recorded sends don't render keyboards; prompt-row assertions are DB-side (outbox rows).
+    try await sendMessage(chatId: chatId, text: text)
+  }
+
   /// Suspends until at least `threshold` messages have been recorded as sent.
   func waitForSends(atLeast threshold: Int) async {
     await wait(.sent, current: sent.count, threshold: threshold)
@@ -175,6 +202,11 @@ actor RecordingTransport: TelegramTransport {
   /// Suspends until at least `threshold` draft updates have been recorded.
   func waitForDrafts(atLeast threshold: Int) async {
     await wait(.draft, current: drafts.count, threshold: threshold)
+  }
+
+  /// Suspends until at least `threshold` callback answers have been recorded.
+  func waitForAnswers(atLeast threshold: Int) async {
+    await wait(.answer, current: answeredCallbacks.count, threshold: threshold)
   }
 
   private func wait(_ event: Event, current: Int, threshold: Int) async {
