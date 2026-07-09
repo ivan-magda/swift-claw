@@ -12,6 +12,7 @@ public enum PolicyFingerprint {
   /// the UTF-8 bytes), rendered as the full 64-char lowercase hex digest.
   public static func hash(parts: [String]) -> String {
     var hasher = SHA256()
+
     for part in parts {
       let bytes = Array(part.utf8)
       withUnsafeBytes(of: UInt64(bytes.count).bigEndian) { lengthBytes in
@@ -19,7 +20,10 @@ public enum PolicyFingerprint {
       }
       hasher.update(data: Data(bytes))
     }
-    return hasher.finalize().map { byte in String(format: "%02x", byte) }.joined()
+
+    return hasher.finalize().map { byte in
+      String(format: "%02x", byte)
+    }.joined()
   }
 
   /// Input classes 2–3 (§3.2): the tool-registry surface (sorted by name — each tool contributes
