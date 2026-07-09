@@ -33,6 +33,32 @@ jobs:
       - name: Build and run tests
         run: swift test
 
+  # docs/TESTING.md single-core convention: cooperative-scheduler races and deadlocks in the
+  # approval suites only discriminate when the runtime has one lane. A one-thread cooperative pool
+  # (SWIFT_MAX_CONCURRENCY_THREADS=1) reproduces that deterministically without pinning the build
+  # itself to one core the way a docker --cpuset-cpus=0 run would.
+  test-linux-single-core:
+    runs-on: ubuntu-24.04-arm
+    container: swift:6.3-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev ca-certificates tzdata
+      - name: Show toolchain
+        run: swift --version
+      - uses: actions/cache@v6
+        with:
+          path: .build
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
+      - name: Run the concurrency-sensitive suites on one cooperative thread
+        env:
+          SWIFT_MAX_CONCURRENCY_THREADS: "1"
+        run: swift test --filter 'CommandApprovalCancelSignalRaceTests|ApprovalExpiryServiceTests|ApprovalWaiterTests|ApprovalBootReconcilerTests'
+
   test-macos:
     runs-on: macos-26
     timeout-minutes: 30
