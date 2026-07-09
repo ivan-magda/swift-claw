@@ -14,9 +14,11 @@ import Logging
 /// §7 boot reconciliation for the approval fabric — the restart entry point of the §5.5 single
 /// execution locus. It never transitions a run row directly: it cleans terminal-run orphans, then
 /// per unresolved approval either re-parks a waiter on the session lane (unexpired PENDING),
-/// CAS-expires + signals a denial for the parked waiter to consume (expired PENDING), or re-parks
-/// under the §6.5 crash-window belt (APPROVED row on an AWAITING_APPROVAL run). The parked waiter
-/// performs every run transition, owner notice, and button disarm; the reconciler only orchestrates.
+/// CAS-expires + signals a denial for the parked waiter to consume (expired PENDING), re-parks
+/// under the §6.5 crash-window belt (APPROVED row on an AWAITING_APPROVAL run), or re-buffers the
+/// already-committed denial (REJECTED/EXPIRED row on an AWAITING_APPROVAL run — the deny-side
+/// crash window). The parked waiter performs every run transition, owner notice, and button
+/// disarm; the reconciler only orchestrates.
 public struct ApprovalBootReconciler: Sendable {
   private let approvals: any ApprovalStore
   private let lanes: SessionLaneRegistry
@@ -86,7 +88,11 @@ private extension ApprovalBootReconciler {
       // §6.4 expiry: CAS PENDING→EXPIRED (+ approvalDenied/expired audit) here, then let the parked
       // waiter consume the buffered denial and drive the run AWAITING_APPROVAL→FAILED.
       do {
-        _ = try approvals.deny(id: approval.id, decision: .expired, now: instant)
+        // Nothing races the boot sweep, so a lost CAS should be impossible; still signal so the
+        // parked waiter frees the lane, but leave a trace instead of silently dropping the miss.
+        if try approvals.deny(id: approval.id, decision: .expired, now: instant) == false {
+          logger.warning("boot approvals: expiry CAS found approval \(approval.id) not PENDING")
+        }
       } catch {
         logger.error("boot approvals: expiry deny failed for approval \(approval.id): \(error)")
         return
@@ -96,9 +102,20 @@ private extension ApprovalBootReconciler {
     case .pending:
       // Unexpired: re-park so buttons and the FIFO queue-behind contract survive restart (§5.5).
       revalidate = false
-    case .rejected, .expired:
-      // `unresolvedAtBoot` never returns a resolved row; ignore defensively.
-      return
+    case .rejected:
+      // Deny-side twin of the §6.5 crash window: the deny CAS (+ its audit) committed but the
+      // process died before the waiter's observation-fill/run-fail commit. Never re-CAS or
+      // re-audit — just re-buffer the denial so the re-parked waiter finalizes the run
+      // AWAITING_APPROVAL→FAILED. The original decision (owner reject vs stale policy) is not
+      // recoverable from the row; both map to run→FAILED with no cancel, so the generic
+      // `.rejected` differs only in owner-notice copy. (Cancel/supersede denials can never land
+      // here — the command txn moves the run off AWAITING_APPROVAL atomically with the CAS.)
+      await coordinator.signal(approvalId: approval.id, .denied(.rejected))
+      revalidate = false
+    case .expired:
+      // The same deny-side belt for a row the expiry CAS resolved before the crash.
+      await coordinator.signal(approvalId: approval.id, .denied(.expired))
+      revalidate = false
     }
 
     let park = waiter

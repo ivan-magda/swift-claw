@@ -366,3 +366,72 @@ import Testing
     #expect(await env.spy.awaitParkResolution(of: approvalId) == .approved)
   }
 }
+
+// MARK: - Deny-Side Crash Window
+
+extension ApprovalBootReconcilerTests {
+  @Test func rejectedAwaitingRunIsReParkedWithTheBufferedDenial() async throws {
+    // given — the deny-side crash window: the reject CAS (+ its approvalDenied audit) committed,
+    // but the process died before the waiter's observation-fill/run-fail commit, so boot finds a
+    // REJECTED approval on a still-AWAITING_APPROVAL run
+    let env = try makeFixture()
+    let runId = try env.seedRun(state: RunState.awaitingApproval.rawValue)
+    let now = Date(timeIntervalSince1970: 1_782_000_000)
+    let approvalId = try env.insertApproval(
+      runId: runId,
+      nonce: "n-rejected",
+      createdTs: now,
+      expiresTs: now.addingTimeInterval(3600)
+    )
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'REJECTED' WHERE id = ?",
+        arguments: [approvalId]
+      )
+    }
+
+    // when
+    await env.reconciler(now: now).reconcile()
+    let call = await env.spy.nextParkCall()
+
+    // then — finalized, not ignored: re-parked without re-validation and the generic denial
+    // buffered so the waiter drives the run AWAITING_APPROVAL→FAILED. The row STAYS REJECTED and
+    // no new audit lands — the pre-crash CAS already recorded both
+    #expect(call.approvalId == approvalId)
+    #expect(call.revalidate == false)
+    #expect(await env.spy.awaitParkResolution(of: approvalId) == .denied(.rejected))
+    #expect(try env.approvalState(approvalId) == .rejected)
+    #expect(try env.audits().isEmpty)
+  }
+
+  @Test func expiredAwaitingRunIsReParkedWithTheBufferedDenial() async throws {
+    // given — the same deny-side crash window for a row the expiry CAS resolved before the crash:
+    // an EXPIRED approval on a still-AWAITING_APPROVAL run
+    let env = try makeFixture()
+    let runId = try env.seedRun(state: RunState.awaitingApproval.rawValue)
+    let now = Date(timeIntervalSince1970: 1_782_010_000)
+    let approvalId = try env.insertApproval(
+      runId: runId,
+      nonce: "n-expired-cas",
+      createdTs: now.addingTimeInterval(-7200),
+      expiresTs: now.addingTimeInterval(-60)
+    )
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'EXPIRED' WHERE id = ?",
+        arguments: [approvalId]
+      )
+    }
+
+    // when
+    await env.reconciler(now: now).reconcile()
+    let call = await env.spy.nextParkCall()
+
+    // then — the buffered denial carries .expired; the row stays EXPIRED with no re-CAS/re-audit
+    #expect(call.approvalId == approvalId)
+    #expect(call.revalidate == false)
+    #expect(await env.spy.awaitParkResolution(of: approvalId) == .denied(.expired))
+    #expect(try env.approvalState(approvalId) == .expired)
+    #expect(try env.audits().isEmpty)
+  }
+}

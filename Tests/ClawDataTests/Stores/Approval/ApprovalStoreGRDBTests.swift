@@ -376,7 +376,11 @@ import Testing
       ]
     )
   }
+}
 
+// MARK: - Boot Reconciliation
+
+extension ApprovalStoreGRDBTests {
   @Test func unresolvedAtBootReturnsPendingAndAwaitingApprovedRows() throws {
     // given — a PENDING row, an APPROVED row whose run is AWAITING_APPROVAL (§6.5 crash window),
     // and an APPROVED row whose run already reached DONE (settled — must be excluded)
@@ -426,6 +430,70 @@ import Testing
     #expect(Set(unresolved.map(\.id)) == Set([pendingId, crashId]))
   }
 
+  @Test func unresolvedAtBootReturnsDeniedRowsOnlyOnAwaitingRuns() throws {
+    // given — the deny-side crash window: REJECTED and EXPIRED rows whose run is still
+    // AWAITING_APPROVAL (the deny CAS committed, the waiter's run-fail commit did not), plus the
+    // same denied states on terminal runs (settled — must be excluded)
+    let env = try makeFixture()
+    let rejectedAwaitingRun = try seedRun(env.queue, state: .awaitingApproval)
+    let expiredAwaitingRun = try seedRun(env.queue, state: .awaitingApproval)
+    let rejectedFailedRun = try seedRun(env.queue, state: .failed)
+    let expiredCancelledRun = try seedRun(env.queue, state: .cancelled)
+    let now = Date()
+    let rejectedAwaitingId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: rejectedAwaitingRun,
+        nonce: "n-rej-awaiting",
+        createdTs: now,
+        expiresTs: now.addingTimeInterval(3600)
+      )
+    )
+    let expiredAwaitingId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: expiredAwaitingRun,
+        nonce: "n-exp-awaiting",
+        createdTs: now.addingTimeInterval(-7200),
+        expiresTs: now.addingTimeInterval(-60)
+      )
+    )
+    let rejectedFailedId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: rejectedFailedRun,
+        nonce: "n-rej-failed",
+        createdTs: now,
+        expiresTs: now.addingTimeInterval(3600)
+      )
+    )
+    let expiredCancelledId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: expiredCancelledRun,
+        nonce: "n-exp-cancelled",
+        createdTs: now.addingTimeInterval(-7200),
+        expiresTs: now.addingTimeInterval(-60)
+      )
+    )
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'REJECTED' WHERE id IN (?, ?)",
+        arguments: [rejectedAwaitingId, rejectedFailedId]
+      )
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'EXPIRED' WHERE id IN (?, ?)",
+        arguments: [expiredAwaitingId, expiredCancelledId]
+      )
+    }
+
+    // when
+    let unresolved = try env.store.unresolvedAtBoot()
+
+    // then — only the AWAITING_APPROVAL-run rows come back; terminal-run denials stay settled
+    #expect(Set(unresolved.map(\.id)) == Set([rejectedAwaitingId, expiredAwaitingId]))
+  }
+
   @Test func resolveOrphansRejectsPendingRowsOfTerminalRuns() throws {
     // given — a PENDING approval whose run FAILED (orphan) and one whose run is still parked
     let env = try makeFixture()
@@ -468,7 +536,11 @@ import Testing
       ]
     )
   }
+}
 
+// MARK: - Health + Store Wiring
+
+extension ApprovalStoreGRDBTests {
   @Test func approvalsHealthCountsPendingAndOldestAge() throws {
     // given — two PENDING rows on distinct runs; the older created 300 s before now
     let env = try makeFixture()

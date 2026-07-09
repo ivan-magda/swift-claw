@@ -154,13 +154,15 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         db,
         whereClause: """
           state = ?
-          OR (state = ? AND EXISTS (
+          OR (state IN (?, ?, ?) AND EXISTS (
             SELECT 1 FROM runs WHERE runs.id = approvals.run_id AND runs.state = ?
           ))
           """,
         arguments: [
           ApprovalState.pending.rawValue,
           ApprovalState.approved.rawValue,
+          ApprovalState.rejected.rawValue,
+          ApprovalState.expired.rawValue,
           RunState.awaitingApproval.rawValue,
         ]
       )
