@@ -12,6 +12,33 @@ import ClawWorkspace
 import Foundation
 import Logging
 
+/// Breaks the `turnRunner` ⇄ `approvalWaiter` construction cycle: `TurnRunner` needs a `parker`,
+/// and the real parker (the waiter) needs `turnRunner` as its dispatcher. Adopted once during
+/// composition, before the service group starts.
+actor DeferredApprovalParker: ApprovalParking {
+  private var wrapped: (any ApprovalParking)?
+
+  func adopt(_ parker: any ApprovalParking) {
+    wrapped = parker
+  }
+
+  func park(
+    approvalId: Int64,
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    revalidatePolicyOnApprove: Bool
+  ) async {
+    await wrapped?.park(
+      approvalId: approvalId,
+      runId: runId,
+      sessionId: sessionId,
+      chatId: chatId,
+      revalidatePolicyOnApprove: revalidatePolicyOnApprove
+    )
+  }
+}
+
 struct RunCommand: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "run",
@@ -74,7 +101,7 @@ struct RunCommand: AsyncParsableCommand {
     let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
     let botUsername = await fetchBotUsername(transport: transport, logger: logger)
 
-    let daemon = makeDaemon(
+    let daemon = await makeDaemon(
       config: config,
       secrets: secrets,
       stores: stores,
@@ -166,7 +193,7 @@ private extension RunCommand {
     transport: TelegramClient,
     botUsername: String?,
     logger: Logger
-  ) -> Daemon {
+  ) async -> Daemon {
     // Created before the TurnRunner so its notifyOutbox closure can capture it: each commit pokes
     // the dispatcher to drain the rows it just enqueued.
     let outboxSignal = OutboxSignal()
@@ -194,36 +221,19 @@ private extension RunCommand {
     let workspace = FileSystemWorkspace(
       root: config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
     )
-    let toolDispatcher = makeToolDispatcher(
-      secrets: secrets,
-      workspace: workspace,
-      toolExecutor: toolExecutor
-    )
-    let staticSubhash = policyStaticSubhash(
-      toolDispatcher: toolDispatcher,
-      config: config,
-      secrets: secrets,
-      workspace: workspace
-    )
-    let agent = makeAgent(
+    let (toolDispatcher, agent, contextBuilder) = makeAgentStack(
       config: config,
       secrets: secrets,
       provider: provider,
       transport: transport,
       stores: stores,
-      toolDispatcher: toolDispatcher,
+      workspace: workspace,
+      toolExecutor: toolExecutor,
       costResolver: costResolver,
       logger: logger
     )
 
-    let contextBuilder = makeContextBuilder(
-      config: config,
-      workspace: workspace,
-      stores: stores,
-      policyStaticSubhash: staticSubhash,
-      logger: logger
-    )
-
+    let deferredParker = DeferredApprovalParker()
     let turnRunner = TurnRunner(
       sessionMessages: stores.sessionMessages,
       runs: stores.runs,
@@ -236,10 +246,22 @@ private extension RunCommand {
       notifyOutbox: { outboxSignal.poke() },
       breaker: breaker,
       delivery: transport,
-      parker: InertApprovalParker(coordinator: approvalCoordinator, logger: logger),
+      parker: deferredParker,
       approvalExpirySeconds: config.approvalExpirySeconds,
       logger: logger
     )
+
+    let (approvalCallbackHandler, approvalWaiter, approvalExpiry) = await makeApprovalFabric(
+      stores: stores,
+      transport: transport,
+      toolDispatcher: toolDispatcher,
+      turnRunner: turnRunner,
+      approvalCoordinator: approvalCoordinator,
+      deferredParker: deferredParker,
+      contextBuilder: contextBuilder,
+      logger: logger
+    )
+
     let scheduleSurface = makeScheduleSurface(
       config: config,
       stores: stores,
@@ -260,6 +282,8 @@ private extension RunCommand {
       turnRunner: turnRunner,
       lanes: lanes,
       schedule: scheduleSurface,
+      approvalCallbacks: approvalCallbackHandler,
+      coordinator: approvalCoordinator,
       logger: logger
     )
     let poller = TelegramPollerService(
@@ -287,15 +311,126 @@ private extension RunCommand {
     )
 
     return Daemon(
-      services: [poller, dispatcher, scheduler],
+      services: [poller, dispatcher, scheduler, approvalExpiry],
       boot: bootSequence(
         transport: transport,
         stores: stores,
+        lanes: lanes,
+        coordinator: approvalCoordinator,
+        waiter: approvalWaiter,
         heartbeatOwner: heartbeatOwner,
         logger: logger
       ),
       logger: logger
     )
+  }
+
+  /// Assembles the tool-gated agent stack: the policy-gated dispatcher, its static sub-hash, the
+  /// `AgentRuntime`, and the context builder that folds the sub-hash into `policy_version`.
+  /// Extracted from `makeDaemon` purely to keep its body short.
+  // swiftlint:disable:next function_parameter_count
+  func makeAgentStack(
+    config: AppConfig,
+    secrets: Secrets,
+    provider: OpenAICompatibleProvider,
+    transport: TelegramClient,
+    stores: ClawStores,
+    workspace: FileSystemWorkspace,
+    toolExecutor: AsyncHTTPExecutor,
+    costResolver: CostResolver,
+    logger: Logger
+  ) -> (toolDispatcher: GatedToolDispatcher, agent: AgentRuntime, contextBuilder: ContextBuilder) {
+    let toolDispatcher = makeToolDispatcher(
+      secrets: secrets,
+      workspace: workspace,
+      toolExecutor: toolExecutor
+    )
+    let staticSubhash = policyStaticSubhash(
+      toolDispatcher: toolDispatcher,
+      config: config,
+      secrets: secrets,
+      workspace: workspace
+    )
+    let agent = makeAgent(
+      config: config,
+      secrets: secrets,
+      provider: provider,
+      transport: transport,
+      stores: stores,
+      toolDispatcher: toolDispatcher,
+      costResolver: costResolver,
+      logger: logger
+    )
+    let contextBuilder = makeContextBuilder(
+      config: config,
+      workspace: workspace,
+      stores: stores,
+      policyStaticSubhash: staticSubhash,
+      logger: logger
+    )
+    return (toolDispatcher, agent, contextBuilder)
+  }
+
+  /// Builds the Task-16 approve-resume fabric — the executor (recorded-args execution) and the
+  /// waiter (the single execution locus, §5.5), adopted into `deferredParker` to close the
+  /// `turnRunner` ⇄ `approvalWaiter` construction cycle — and the Task-15 callback handler that
+  /// answers an owner's tap into it. Extracted from `makeDaemon` purely to keep its body short;
+  /// every argument here is already in scope at the call site.
+  // swiftlint:disable:next function_parameter_count
+  func makeApprovalFabric(
+    stores: ClawStores,
+    transport: TelegramClient,
+    toolDispatcher: GatedToolDispatcher,
+    turnRunner: TurnRunner,
+    approvalCoordinator: ApprovalCoordinator,
+    deferredParker: DeferredApprovalParker,
+    contextBuilder: ContextBuilder,
+    logger: Logger
+  ) async -> (
+    handler: ApprovalCallbackHandler, waiter: ApprovalWaiter, expiry: ApprovalExpiryService
+  ) {
+    let approvedExecutor = ApprovedActionExecutor(
+      tools: toolDispatcher.toolsByName,
+      runs: stores.runs,
+      now: { Date() },
+      logger: logger
+    )
+    let approvalWaiter = ApprovalWaiter(
+      approvals: stores.approvals,
+      runs: stores.runs,
+      coordinator: approvalCoordinator,
+      executor: approvedExecutor,
+      turns: turnRunner,
+      delivery: transport,
+      callbacks: transport,
+      currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
+      now: { Date() },
+      logger: logger
+    )
+    await deferredParker.adopt(approvalWaiter)
+
+    let handler = ApprovalCallbackHandler.make(
+      processed: stores.processed,
+      delivery: transport,
+      accessControl: AccessControl(allowlist: stores.allowlist),
+      approvals: stores.approvals,
+      audit: stores.audit,
+      coordinator: approvalCoordinator,
+      callbacks: transport,
+      currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
+      now: { Date() },
+      logger: logger
+    )
+    let expiry = ApprovalExpiryService(
+      approvals: stores.approvals,
+      coordinator: approvalCoordinator,
+      now: { Date() },
+      sleep: { try await Task.sleep(for: $0) },
+      logger: logger
+    )
+    // The real waiter is returned so boot re-park (spec §7) parks the SAME instance the callback
+    // path resumes — one execution locus across suspend, callback, and restart.
+    return (handler: handler, waiter: approvalWaiter, expiry: expiry)
   }
 
   /// Builds the `/schedule` surface: the budget-gated, deadline-bounded draft parser (sharing the
@@ -499,12 +634,17 @@ private extension RunCommand {
 // MARK: - Boot Sequence
 
 private extension RunCommand {
-  /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram,
-  /// then sweep crash-orphaned runs (F22). The steps are independent and best-effort, so the order
-  /// is cosmetic; both run before any update is served.
+  /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram
+  /// (`registerMenu`), sweep crash-orphaned runs (`reconcileRuns`, F22), then re-park unresolved
+  /// approvals (`reconcileApprovals`, §7). Each step is best-effort, but `reconcileApprovals` is
+  /// deliberately last: the run sweep must fail its orphans first so the approval sweep only sees
+  /// runs that are genuinely still parked. All three run before any update is served.
   func bootSequence(
     transport: any TelegramTransport,
     stores: ClawStores,
+    lanes: SessionLaneRegistry,
+    coordinator: ApprovalCoordinator,
+    waiter: ApprovalWaiter,
     heartbeatOwner: Int64?,
     logger: Logger
   ) -> @Sendable () async -> Void {
@@ -514,9 +654,17 @@ private extension RunCommand {
       heartbeatOwner: heartbeatOwner,
       logger: logger
     )
+    let reconcileApprovals = bootReconcileApprovals(
+      stores: stores,
+      lanes: lanes,
+      coordinator: coordinator,
+      waiter: waiter,
+      logger: logger
+    )
     return {
       await registerMenu()
       await reconcileRuns()
+      await reconcileApprovals()
     }
   }
 
@@ -574,6 +722,32 @@ private extension RunCommand {
       } catch {
         logger.error("boot reconcile failed: \(error)")
       }
+    }
+  }
+
+  /// The boot step that re-establishes the approval fabric after a restart (spec §7): terminal-run
+  /// PENDING rows are cleaned, unexpired parked approvals are re-parked on their lanes so buttons and
+  /// the FIFO queue-behind contract survive restart (§5.5), expired ones are swept to DENY→FAILED
+  /// (§6.4), and an APPROVED row left by a crash between grant and execution is resumed under the
+  /// §6.5 re-validation belt. Runs before the services serve, so the re-parked lanes are live before
+  /// the first callback arrives.
+  func bootReconcileApprovals(
+    stores: ClawStores,
+    lanes: SessionLaneRegistry,
+    coordinator: ApprovalCoordinator,
+    waiter: ApprovalWaiter,
+    logger: Logger
+  ) -> @Sendable () async -> Void {
+    let reconciler = ApprovalBootReconciler(
+      approvals: stores.approvals,
+      lanes: lanes,
+      coordinator: coordinator,
+      waiter: waiter,
+      now: { Date() },
+      logger: logger
+    )
+    return {
+      await reconciler.reconcile()
     }
   }
 }

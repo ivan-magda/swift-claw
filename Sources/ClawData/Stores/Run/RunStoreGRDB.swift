@@ -219,6 +219,42 @@ public struct RunStoreGRDB: RunStore {
     }
   }
 
+  public func resolveDeniedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    cancel: CancelReason?,
+    now: Date
+  ) throws -> RunCommitResult {
+    try database.writeMapping { db in
+      // Fill the placeholder observation in place (§6.4): both `ContextBuilder.historyGroups` and
+      // `HistoryHygiene` require every anchor's tool rows to be answered, so a dangling
+      // "awaiting owner approval" row would drop the whole exchange from the next assembly. The
+      // UPDATE is by message id — idempotent on a boot re-park, and correct for the /stop//new
+      // path where the command transaction moved the run but never touched this row.
+      try db.execute(
+        sql: "UPDATE messages SET content = ? WHERE id = ?",
+        arguments: [content, observationMessageId]
+      )
+
+      let event: RunEvent =
+        switch cancel {
+        case .none: .resolveDenied
+        case .cancelled: .cancel
+        case .superseded: .supersede
+        }
+      // For the command path the run is already CANCELLED/SUPERSEDED, so the FSM returns nil and we
+      // report `.ignored`: the observation fix above was the only remaining work.
+      guard let nextState = try Self.transitionRun(db, runId: runId, event: event, now: now) else {
+        return .ignored
+      }
+      if nextState == .failed {
+        try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+      }
+      return .committed
+    }
+  }
+
   public func commitSuspendedTurn(
     runId: Int64,
     sessionId: Int64,
@@ -344,6 +380,11 @@ public struct RunStoreGRDB: RunStore {
     heartbeatNoticeChatId: Int64?
   ) throws -> [DegradationReply] {
     try database.writeMapping { db in
+      // AWAITING_APPROVAL is deliberately excluded, not merely omitted: a suspended run is a live
+      // durable checkpoint, not a crash orphan. The approval boot reconciliation
+      // (ApprovalBootReconciler, spec §7) owns those runs — re-parking the unexpired ones and running
+      // the per-row expiry check on the rest. Only true PENDING/RUNNING orphans fail here.
+      let orphanFailStates = [RunState.pending.rawValue, RunState.running.rawValue]
       let stale = try Row.fetchAll(
         db,
         sql: """
@@ -352,7 +393,7 @@ public struct RunStoreGRDB: RunStore {
           WHERE r.state IN (?, ?)
           ORDER BY r.id ASC
           """,
-        arguments: [RunState.pending.rawValue, RunState.running.rawValue]
+        arguments: StatementArguments(orphanFailStates)
       )
 
       var replies: [DegradationReply] = []
@@ -464,6 +505,133 @@ public struct RunStoreGRDB: RunStore {
   }
 }
 
+// MARK: - Approved Resume (Task 16)
+
+extension RunStoreGRDB {
+  public func completeApprovedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    try database.writeMapping { db in
+      // Exactly-once (§6.3): the run flips AWAITING_APPROVAL → RUNNING through the reducer. A
+      // duplicate resume finds the run already RUNNING (or terminal) and no-ops — the observation
+      // (and, for memory_write, the fused insert) never double-apply. This is equivalent to the
+      // spec's "observation still placeholder" guard because the placeholder is only ever filled
+      // inside this same transaction.
+      guard try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
+        return .ignored
+      }
+      try Self.fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: content
+      )
+      return .committed
+    }
+  }
+
+  public func applyApprovedMemoryWrite(
+    runId: Int64,
+    observationMessageId: Int64,
+    item: NewMemoryItem,
+    observationContent: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    try database.writeMapping { db in
+      guard try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
+        return .ignored
+      }
+      // §6.3 exactly-once: the item insert shares this transaction with the observation fill, both
+      // gated by the AWAITING_APPROVAL → RUNNING flip above (D10 — the same db-scoped static
+      // `applyRemember` uses; MemoryStore.append would open its own txn and could not fuse).
+      _ = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
+      try Self.fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: observationContent
+      )
+      return .committed
+    }
+  }
+
+  public func resumeUsage(runId: Int64) throws -> ResumeUsage {
+    try database.readMapping { db in
+      let rounds =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = 'assistant'",
+          arguments: [runId]
+        ) ?? 0
+      let toolCalls =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = 'tool'",
+          arguments: [runId]
+        ) ?? 0
+      let tokens =
+        try Int.fetchOne(
+          db,
+          sql: """
+            SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0)
+            FROM provider_usage WHERE run_id = ?
+            """,
+          arguments: [runId]
+        ) ?? 0
+      let costUSD =
+        try Double.fetchOne(
+          db,
+          sql: "SELECT COALESCE(SUM(cost_usd), 0) FROM provider_usage WHERE run_id = ?",
+          arguments: [runId]
+        ) ?? 0
+      return ResumeUsage(rounds: rounds, toolCalls: toolCalls, tokens: tokens, costUSD: costUSD)
+    }
+  }
+
+  public func runOrigin(runId: Int64) throws -> RunOrigin? {
+    try database.readMapping { db in
+      let rawOrigin = try String.fetchOne(
+        db,
+        sql: "SELECT origin FROM runs WHERE id = ?",
+        arguments: [runId]
+      )
+      guard let rawOrigin else {
+        return nil
+      }
+      // Fail closed on a corrupted origin, same rule as `pickUp`: a mislabeled origin would
+      // misroute the continuation's budget pool.
+      guard let origin = RunOrigin(rawValue: rawOrigin) else {
+        throw StoreError.unexpected("runs row \(runId) has an unrecognized origin")
+      }
+      return origin
+    }
+  }
+
+  public func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
+    try database.writeMapping { db in
+      guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
+        return false
+      }
+      try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+      try AuditLogGRDB.insertAudit(
+        db,
+        AuditEvent(
+          actor: .system,
+          action: .approvalDenied,
+          decision: ApprovalDecision.stalePolicy.rawValue,
+          runId: runId,
+          sessionId: sessionId,
+          ts: now
+        )
+      )
+      return true
+    }
+  }
+}
+
 // MARK: - Cross-Store Run Helpers
 
 extension RunStoreGRDB {
@@ -558,7 +726,9 @@ extension RunStoreGRDB {
   /// The parked-observation body (§5.3). A resolution overwrites it in place with the real result.
   static let placeholderObservationContent = "awaiting owner approval"
 
-  static func transitionRun(
+  // `public`: Task 16 test fixtures outside this module (ClawGatewayTests, via plain `import
+  // ClawData`) drive suspended-run fixtures through the real reducer instead of hand-rolling state.
+  public static func transitionRun(
     _ db: Database,
     runId: Int64,
     event: RunEvent,
@@ -635,6 +805,21 @@ extension RunStoreGRDB {
       ]
     )
     return db.changesCount > 0
+  }
+
+  /// UPDATEs the reserved placeholder observation row in place with the resolved result. Scoped to
+  /// the run + `role = 'tool'` so a stray id can never rewrite an unrelated row. The v4 FTS5
+  /// synchronize triggers cover the UPDATE — no extra index work.
+  static func fillApprovedObservation(
+    _ db: Database,
+    runId: Int64,
+    messageId: Int64,
+    content: String
+  ) throws {
+    try db.execute(
+      sql: "UPDATE messages SET content = ? WHERE id = ? AND run_id = ? AND role = 'tool'",
+      arguments: [content, messageId, runId]
+    )
   }
 }
 

@@ -237,6 +237,7 @@ func makeSC3Harness(
       jobs: stores.scheduledJobs,
       commands: stores.scheduleCommands
     ),
+    coordinator: coordinator,
     logger: logger
   )
 

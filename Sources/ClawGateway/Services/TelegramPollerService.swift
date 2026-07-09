@@ -12,9 +12,10 @@ public struct TelegramPollerService: Service {
   private let pollTimeout: Int
   private let logger: Logger
 
-  /// Re-sent on every call: omitting it would reuse the previous server-side setting. Only
-  /// direct messages and edits are requested (no callback_query — no approvals yet).
-  private static let allowedUpdates = ["message", "edited_message"]
+  /// Re-sent on every call: omitting it would reuse the previous server-side setting. Approval
+  /// inline buttons are delivered as `callback_query`, so it joins direct messages and edits — the
+  /// callback branch in `MessageRouter` (spec §6.1/§6.2) handles them ahead of `normalize`.
+  private static let allowedUpdates = ["message", "edited_message", "callback_query"]
 
   /// Back-off windows that stop a persistent fault from becoming a tight re-poll loop.
   private enum Backoff {

@@ -40,6 +40,7 @@ import Testing
       turnRunner: dispatcher,
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
+      coordinator: ApprovalCoordinator(),
       now: { Self.fixedNow },
       logger: TestLog.silent
     )

@@ -26,6 +26,7 @@ public struct MessageRouter: Sendable {
   private let scheduleHandlers: ScheduleHandlers
   private let confirmations: ConfirmationResolver
   private let turnDispatch: TurnDispatch
+  private let approvalCallbacks: ApprovalCallbackHandler?
   private let logger: Logger
 
   public init(
@@ -41,11 +42,14 @@ public struct MessageRouter: Sendable {
     turnRunner: any TurnDispatching,
     lanes: SessionLaneRegistry,
     schedule: ScheduleSurface,
+    approvalCallbacks: ApprovalCallbackHandler? = nil,
+    coordinator: ApprovalCoordinator,
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
     self.botUsername = botUsername
     self.accessControl = accessControl
+    self.approvalCallbacks = approvalCallbacks
     self.logger = logger
 
     let replies = ReplySender(processed: processed, delivery: delivery, logger: logger)
@@ -67,7 +71,8 @@ public struct MessageRouter: Sendable {
       lanes: lanes,
       replies: replies,
       now: now,
-      logger: logger
+      logger: logger,
+      coordinator: coordinator
     )
     self.scheduleHandlers = ScheduleHandlers(
       schedule: schedule,
@@ -111,6 +116,17 @@ public struct MessageRouter: Sendable {
 
 private extension MessageRouter {
   func route(rawUpdate: RawUpdate) async throws(RoutingHalt) -> HandleOutcome {
+    // A callback-only update normalizes to nil (no message/edited_message); without this branch it
+    // would .skipped and the cursor would advance past it (spec §6.1). The handler runs the §6.2
+    // chain and returns a real HandleOutcome, so cursor semantics are unchanged.
+    if let callback = rawUpdate.callback {
+      guard let approvalCallbacks else {
+        logger.debug("callback update \(rawUpdate.updateId) with no approval handler, skipping")
+        return .skipped
+      }
+      return await approvalCallbacks.handle(callback, updateId: rawUpdate.updateId)
+    }
+
     guard let message = IncomingMessage.normalize(from: rawUpdate) else {
       logger.debug("update \(rawUpdate.updateId) has nothing actionable, skipping")
       return .skipped

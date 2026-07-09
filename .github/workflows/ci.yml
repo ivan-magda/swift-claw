@@ -32,6 +32,10 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
       - name: Build and run tests
         run: swift test
+      - name: Re-run the concurrency-sensitive suites on one cooperative thread
+        env:
+          LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
+        run: swift test --filter 'CommandApprovalCancelSignalRaceTests|ApprovalExpiryServiceTests|ApprovalWaiterTests|ApprovalBootReconcilerTests'
 
   test-macos:
     runs-on: macos-26

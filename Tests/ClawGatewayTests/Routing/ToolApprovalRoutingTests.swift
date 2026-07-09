@@ -39,6 +39,7 @@ import Testing
       turnRunner: runner,
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
+      coordinator: ApprovalCoordinator(),
       logger: TestLog.silent
     )
     return Fixture(

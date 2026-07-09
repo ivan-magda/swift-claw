@@ -14,6 +14,7 @@ struct CommandHandlers: Sendable {
   let replies: ReplySender
   let now: @Sendable () -> Date
   let logger: Logger
+  let coordinator: ApprovalCoordinator
 
   func stop(
     rawUpdate: RawUpdate,
@@ -33,6 +34,18 @@ struct CommandHandlers: Sendable {
 
     guard result.newlyClaimed else {
       return replies.skipDuplicate(updateId: rawUpdate.updateId)
+    }
+
+    // Signal the coordinator BEFORE cancelling the lane. Cancelling first would race the parked
+    // waiter: `lane.cancel` cancels the very Task suspended in `ApprovalWaiter.park`, whose
+    // `awaitResolution` cancellation path resumes the waiter with `nil` — if that wins the race
+    // against this signal, `park` returns early and never fills the synthetic observation, leaving
+    // a dangling tool_call on the now-terminal run. Signalling first delivers a real `.denied` to
+    // the still-registered waiter, and there is no suspension point between its resume and the
+    // synchronous observation-fill write, so the subsequent cancel can only no-op an already
+    // resumed task. (Deliberate deviation from the plan's literal Step 13 ordering.)
+    for approvalId in result.resolvedApprovalIds {
+      await coordinator.signal(approvalId: approvalId, .denied(.cancelled))
     }
 
     if let sessionId = result.sessionId, result.cancelledRunIds.isEmpty == false {
@@ -69,6 +82,15 @@ struct CommandHandlers: Sendable {
 
     guard result.newlyClaimed else {
       return replies.skipDuplicate(updateId: rawUpdate.updateId)
+    }
+
+    // Signal the coordinator BEFORE cancelling the lane — same race as `/stop` (see `stop`):
+    // cancelling first can let the parked waiter's `nil`-resume win over this signal, so `park`
+    // exits without filling the synthetic observation. Signalling first delivers a real
+    // `.superseded` to the still-registered waiter, whose observation-fill write then runs before
+    // the cancel can interrupt it. (Deliberate deviation from the plan's literal Step 13 ordering.)
+    for approvalId in result.resolvedApprovalIds {
+      await coordinator.signal(approvalId: approvalId, .denied(.superseded))
     }
 
     if let sessionId = result.sessionId {

@@ -125,7 +125,8 @@ public struct AgentRuntime: Sendable {
     todayTokens: Int,
     todayUSD: Double,
     origin: RunOrigin = .interactive,
-    proactiveTodayUSD: Double = 0
+    proactiveTodayUSD: Double = 0,
+    carryOver: ResumeUsage? = nil
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDispatcher?.definitions ?? []
@@ -152,9 +153,11 @@ public struct AgentRuntime: Sendable {
     var pendingSuspension: PendingToolAction?
     var remainingGrant = grant
 
-    var proposedToolCalls = 0
-    var recordedRunTokens = 0
-    var recordedRunUSD = 0.0
+    // Seeded from the carried-over usage (nil = a fresh run; §6.3 continuation carries the run's
+    // persisted totals so the tool-call / token / USD caps keep counting across the suspension).
+    var proposedToolCalls = carryOver?.toolCalls ?? 0
+    var recordedRunTokens = carryOver?.tokens ?? 0
+    var recordedRunUSD = carryOver?.costUSD ?? 0.0
 
     // Terminal choke-point for the RESULT paths: every `return outcome(...)` flows through here, so a
     // turn that produces a `TurnOutcome` emits exactly one finished line (see `logFinish`). The
@@ -170,7 +173,10 @@ public struct AgentRuntime: Sendable {
       )
     }
 
-    for roundTripIndex in 1...max(1, budget.maxTurns) {
+    // The wall-clock deadline is left per-segment by construction — it is recomputed at each
+    // `runTurn` entry above; only the round count needs to account for rounds already consumed.
+    let priorRounds = carryOver?.rounds ?? 0
+    for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
       // Per-round-trip preflight (§6.2): day totals at run start + everything this run recorded.
       let inputTokens = TokenEstimator.estimateInputTokens(wire)
       // The loop is the one component that grows provider input (proposals + fenced

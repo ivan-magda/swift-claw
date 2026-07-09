@@ -154,13 +154,15 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         db,
         whereClause: """
           state = ?
-          OR (state = ? AND EXISTS (
+          OR (state IN (?, ?, ?) AND EXISTS (
             SELECT 1 FROM runs WHERE runs.id = approvals.run_id AND runs.state = ?
           ))
           """,
         arguments: [
           ApprovalState.pending.rawValue,
           ApprovalState.approved.rawValue,
+          ApprovalState.rejected.rawValue,
+          ApprovalState.expired.rawValue,
           RunState.awaitingApproval.rawValue,
         ]
       )
@@ -289,6 +291,48 @@ extension ApprovalStoreGRDB {
     )
 
     return nextState
+  }
+
+  /// §6.4 command-path resolution: CAS every PENDING approval of `runIds` → REJECTED (cancel and
+  /// supersede both land in REJECTED — the four-state rule; the audit `decision` records why) and
+  /// append its `approvalDenied` audit inside the CALLER's transaction (D3 — the CAS is the
+  /// recorded transition). Returns the resolved ids for the coordinator signals. Reused by
+  /// `CommandStoreGRDB.applyStop`/`applyNew` so the run flip and the approval CAS share one commit.
+  static func resolvePendingApprovals(
+    _ db: Database,
+    runIds: [Int64],
+    decision: ApprovalDecision,
+    now: Date
+  ) throws -> [Int64] {
+    guard runIds.isEmpty == false else {
+      return []
+    }
+
+    let placeholders = runIds.map { _ in "?" }.joined(separator: ", ")
+    var arguments: [any DatabaseValueConvertible] = [ApprovalState.pending.rawValue]
+    arguments.append(contentsOf: runIds)
+    let pending = try fetchApprovals(
+      db,
+      whereClause: "state = ? AND run_id IN (\(placeholders))",
+      arguments: StatementArguments(arguments)
+    )
+
+    var resolved: [Int64] = []
+    for approval in pending {
+      guard try transitionApproval(db, id: approval.id, on: .reject, now: now) != nil else {
+        continue
+      }
+      try insertApprovalAudit(
+        db,
+        approval: approval,
+        actor: .owner,
+        action: .approvalDenied,
+        decision: decision,
+        now: now
+      )
+      resolved.append(approval.id)
+    }
+    return resolved
   }
 }
 

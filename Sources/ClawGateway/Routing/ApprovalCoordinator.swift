@@ -13,18 +13,29 @@ public enum ApprovalSignal: Sendable, Equatable {
 /// the suspend commit and the waiter's registration (§5.5): a signal with no waiter is retained and
 /// delivered on the next `awaitResolution`.
 public actor ApprovalCoordinator {
-  private var waiters: [Int64: CheckedContinuation<ApprovalSignal, Never>] = [:]
+  private var waiters: [Int64: CheckedContinuation<ApprovalSignal?, Never>] = [:]
   private var buffered: [Int64: ApprovalSignal] = [:]
 
   public init() {}
 
   /// One waiter per approval id. A buffered signal (resolver won the race) returns immediately.
-  public func awaitResolution(approvalId: Int64) async -> ApprovalSignal {
+  /// Returns `nil` when the awaiting task is cancelled before a signal arrives (graceful shutdown /
+  /// lane cancel): the continuation is resumed and its slot cleared so nothing leaks, and the
+  /// durable row is left untouched for Task 19 boot re-park to rebuild.
+  public func awaitResolution(approvalId: Int64) async -> ApprovalSignal? {
     if let signal = buffered.removeValue(forKey: approvalId) {
       return signal
     }
-    return await withCheckedContinuation { continuation in
-      waiters[approvalId] = continuation
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { (continuation: CheckedContinuation<ApprovalSignal?, Never>) in
+        if Task.isCancelled {
+          continuation.resume(returning: nil)
+        } else {
+          waiters[approvalId] = continuation
+        }
+      }
+    } onCancel: {
+      Task { await self.cancelWaiter(approvalId) }
     }
   }
 
@@ -34,6 +45,15 @@ public actor ApprovalCoordinator {
       continuation.resume(returning: signal)
     } else {
       buffered[approvalId] = signal
+    }
+  }
+
+  /// Resumes a still-parked waiter with `nil` on cancellation. A no-op if a `signal` already removed
+  /// it (the resolver won the race), so a resolution is never dropped. Actor isolation guarantees
+  /// the `waiters[id] = continuation` registration completes before this can observe the slot.
+  private func cancelWaiter(_ approvalId: Int64) {
+    if let continuation = waiters.removeValue(forKey: approvalId) {
+      continuation.resume(returning: nil)
     }
   }
 }
@@ -73,6 +93,8 @@ public struct InertApprovalParker: ApprovalParking {
     revalidatePolicyOnApprove: Bool
   ) async {
     let signal = await coordinator.awaitResolution(approvalId: approvalId)
-    logger.debug("approval \(approvalId) resolved as \(signal); Phase 3 waiter completes the run")
+    logger.debug(
+      "approval \(approvalId) resolved as \(String(describing: signal)); Phase 3 waiter completes the run"
+    )
   }
 }

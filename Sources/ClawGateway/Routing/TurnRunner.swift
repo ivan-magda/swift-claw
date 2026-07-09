@@ -13,6 +13,18 @@ public protocol TurnDispatching: Sendable {
     triggerMessageId: Int64,
     grant: OneTurnGrant?
   ) async throws
+  /// Continues a run the approval waiter already flipped AWAITING_APPROVAL → RUNNING: no pick-up,
+  /// context bound to the filled observation row, budget counters carried over (§6.3).
+  func resume(runId: Int64, sessionId: Int64, chatId: Int64, contextBoundMessageId: Int64) async
+}
+
+extension TurnDispatching {
+  public func resume(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    contextBoundMessageId: Int64
+  ) async {}
 }
 
 /// Picks up a durable PENDING run, assembles its trigger-bounded context, executes the agent, and
@@ -179,6 +191,99 @@ public struct TurnRunner: TurnDispatching {
       ownerNotices: buildResult.ownerNotices,
       origin: origin
     )
+  }
+
+  /// The §6.3 continuation, identical to `run` except: no `pickUp` (the waiter already flipped
+  /// AWAITING_APPROVAL → RUNNING via the executor), the context bound is the FILLED observation
+  /// row's message id (the trigger id would exclude the partial exchange), and `runTurn` is seeded
+  /// with the run's carried-over budget counters. Non-throwing: it runs on the session lane inside
+  /// the waiter's `park`, so every failure resolves in-band (a build/turn failure fails the run so
+  /// the lane frees).
+  public func resume(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    contextBoundMessageId: Int64
+  ) async {
+    guard !Task.isCancelled else {
+      return
+    }
+
+    let origin: RunOrigin
+    do {
+      guard let resolvedOrigin = try runs.runOrigin(runId: runId) else {
+        logger.debug("run \(runId) has no origin at resume; skipping")
+        return
+      }
+      origin = resolvedOrigin
+    } catch {
+      logger.error("resume origin read failed for run \(runId): \(error)")
+      return
+    }
+
+    let clock = now()
+    let snapshot: SessionContextSnapshot
+    let buildResult: BuildResult
+    let todayTokens: Int
+    let todayUSD: Double
+    let proactiveTodayUSD: Double
+    let carryOver: ResumeUsage
+    do {
+      snapshot = try sessionMessages.loadContextSnapshot(
+        sessionId: sessionId,
+        throughMessageId: contextBoundMessageId,
+        limit: Self.historyLimit
+      )
+      let totals = try usageStore.todayTokensAndCost(now: clock)
+      todayTokens = totals.tokens
+      todayUSD = totals.costUSD
+      if origin == .interactive {
+        proactiveTodayUSD = 0
+      } else {
+        proactiveTodayUSD =
+          try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: clock).costUSD
+      }
+      carryOver = try runs.resumeUsage(runId: runId)
+      buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
+    } catch {
+      logger.error("resume context build failed for run \(runId): \(error)")
+      try? runs.failRun(runId: runId, now: now())
+      return
+    }
+
+    let outcome: TurnOutcome
+    do {
+      outcome = try await agent.runTurn(
+        runId: runId,
+        sessionId: sessionId,
+        chatId: chatId,
+        buildResult: buildResult,
+        sessionTainted: snapshot.isTainted,
+        grant: nil,
+        todayTokens: todayTokens,
+        todayUSD: todayUSD,
+        origin: origin,
+        proactiveTodayUSD: proactiveTodayUSD,
+        carryOver: carryOver
+      )
+    } catch {
+      logger.error("resume turn failed for run \(runId): \(error)")
+      try? runs.failRun(runId: runId, now: now())
+      return
+    }
+
+    do {
+      try await commit(
+        outcome,
+        runId: runId,
+        sessionId: sessionId,
+        chatId: chatId,
+        ownerNotices: buildResult.ownerNotices,
+        origin: origin
+      )
+    } catch {
+      logger.error("resume commit failed for run \(runId): \(error)")
+    }
   }
 }
 

@@ -321,6 +321,12 @@ public struct GatedToolDispatcher: ToolDispatching {
     registry.definitions
   }
 
+  /// The same name-keyed catalog `dispatch` gates through, surfaced so Task 16's composition root
+  /// can build `ApprovedActionExecutor` against the identical tool instances.
+  public var toolsByName: [String: any Tool] {
+    registry.toolsByName
+  }
+
   public func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
     // (0) unknown tool → error observation, never a crash
     guard let tool = registry.tool(named: call.name) else {
