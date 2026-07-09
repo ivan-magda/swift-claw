@@ -54,6 +54,92 @@ struct ContextBuilderTests {
     #expect(result.ownerNotices.isEmpty)
   }
 
+  @Test func policyVersionFoldsTheStaticSubhashWithTheRawPromptMaterials() throws {
+    // given — the RAW file texts (pre "## path" wrapping) fold into the injected static sub-hash
+    let builder = makeBuilder(
+      policyStaticSubhash: "static-sub-hash",
+      workspace: FakeWorkspace(
+        files: [
+          .soul: .present("soul text"),
+          .agents: .present("agent rules"),
+          .tools: .present("tool policy"),
+        ]
+      )
+    )
+    let snapshot = SessionContextSnapshot(
+      history: [],
+      historyMessageIds: [],
+      windowStartMessageId: 0,
+      isTainted: false
+    )
+
+    // when
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 1)
+
+    // then — combined = first 16 hex over [staticSubhash, systemPrompt, soul, agents, tools]
+    let expected = PolicyFingerprint.combined(
+      staticSubhash: "static-sub-hash",
+      promptMaterials: ["system policy", "soul text", "agent rules", "tool policy"]
+    )
+    #expect(result.policyVersion == expected)
+    #expect(result.policyVersion.count == 16)
+  }
+
+  @Test func currentPolicyVersionMatchesTheAssembledFingerprint() throws {
+    // given — the recompute seam (§6.3) must equal the value `assemble` produces, by construction
+    let builder = makeBuilder(
+      policyStaticSubhash: "sub",
+      workspace: FakeWorkspace(
+        files: [.soul: .present("s"), .agents: .present("a"), .tools: .present("t")]
+      )
+    )
+    let snapshot = SessionContextSnapshot(
+      history: [],
+      historyMessageIds: [],
+      windowStartMessageId: 0,
+      isTainted: false
+    )
+
+    // when
+    let standalone = builder.currentPolicyVersion()
+    let assembled = try builder.assemble(snapshot: snapshot, sessionId: 1).policyVersion
+
+    // then
+    #expect(standalone == assembled)
+  }
+
+  @Test func missingPromptFilesFoldInAsEmpty() {
+    // given — no workspace files; only the systemPrompt contributes to class 1
+    let builder = makeBuilder(policyStaticSubhash: "sub", workspace: FakeWorkspace(files: [:]))
+
+    // when
+    let version = builder.currentPolicyVersion()
+
+    // then — missing/unreadable files hash as "" (spec §3.2)
+    #expect(
+      version
+        == PolicyFingerprint.combined(
+          staticSubhash: "sub",
+          promptMaterials: ["system policy", "", "", ""]
+        )
+    )
+  }
+
+  @Test func editingAPromptFileChangesThePolicyVersion() {
+    // given / when — a strict-inequality voider (§3.2)
+    let before = makeBuilder(
+      policyStaticSubhash: "sub",
+      workspace: FakeWorkspace(files: [.soul: .present("v1")])
+    ).currentPolicyVersion()
+    let after = makeBuilder(
+      policyStaticSubhash: "sub",
+      workspace: FakeWorkspace(files: [.soul: .present("v2")])
+    ).currentPolicyVersion()
+
+    // then
+    #expect(before != after)
+  }
+
   @Test func hardCapOverflowOmitsFileAndProducesOwnerNotice() throws {
     // given
     let builder = makeBuilder(
@@ -278,6 +364,7 @@ struct ContextBuilderTests {
 }
 
 private func makeBuilder(
+  policyStaticSubhash: String = "",
   workspace: FakeWorkspace = FakeWorkspace(),
   memoryStore: FakeMemoryStore = FakeMemoryStore(),
   retriever: FakeRetriever = FakeRetriever(),
@@ -290,6 +377,7 @@ private func makeBuilder(
     retriever: retriever,
     recallCutoff: CandidateCapRecallCutoff(),
     budget: budget,
+    policyStaticSubhash: policyStaticSubhash,
     now: { Date(timeIntervalSince1970: 0) }
   )
 }

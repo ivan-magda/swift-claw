@@ -139,8 +139,9 @@ public protocol SessionMessageStore: Sendable {
 public protocol RunStore: Sendable {
   /// PENDING → RUNNING through `RunFSM`, returning the run's origin in the same write; nil means
   /// the run is absent or no longer pending — the guard semantics are unchanged (spec §10,
-  /// preamble deviation 3: one query, no separate origin read).
-  func pickUp(runId: Int64, now: Date) throws -> RunOrigin?
+  /// preamble deviation 3: one query, no separate origin read). `policyVersion` (spec §3.2) is
+  /// stamped onto `runs.policy_version` in the SAME UPDATE as the flip; nil records no fingerprint.
+  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin?
   /// F6 atomicity: assistant message + run→DONE + provider_usage + outbox chunk(s) in ONE txn,
   /// committed before any send. If cancellation/supersede already won, records usage only.
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult
@@ -166,6 +167,14 @@ public protocol RunStore: Sendable {
   /// Snapshot of run-table health: in-flight count, age of oldest running run, last
   /// success/failure timestamps, and count of consecutive failures at the head of the table.
   func runsHealth(now: Date) throws -> RunsHealth
+}
+
+public extension RunStore {
+  /// The no-stamp pick-up (the resume path, which never re-stamps, and every non-interactive
+  /// caller): PENDING → RUNNING without touching `runs.policy_version`.
+  func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
+    try pickUp(runId: runId, policyVersion: nil, now: now)
+  }
 }
 
 /// The four outcomes of the §6.2 step-5 approve CAS. Only `.approved`/`.stalePolicy` mutate the

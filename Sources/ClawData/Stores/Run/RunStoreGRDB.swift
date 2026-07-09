@@ -9,9 +9,17 @@ public struct RunStoreGRDB: RunStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
+  public func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
     try database.writeMapping { db in
-      guard try Self.transitionRun(db, runId: runId, event: .pickUp, now: now) != nil else {
+      guard
+        try Self.transitionRun(
+          db,
+          runId: runId,
+          event: .pickUp,
+          now: now,
+          policyVersion: policyVersion
+        ) != nil
+      else {
         return nil
       }
 
@@ -423,7 +431,8 @@ extension RunStoreGRDB {
     _ db: Database,
     runId: Int64,
     event: RunEvent,
-    now: Date
+    now: Date,
+    policyVersion: String? = nil
   ) throws -> RunState? {
     guard
       let state = try currentRunState(db, runId: runId),
@@ -432,10 +441,19 @@ extension RunStoreGRDB {
       return nil
     }
 
-    try db.execute(
-      sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
-      arguments: [nextState.rawValue, now, runId]
-    )
+    // The fingerprint rides the state flip in one UPDATE (spec §3.2); a nil leaves the column
+    // untouched so resolution/deny transitions never disturb the stamped value.
+    if let policyVersion {
+      try db.execute(
+        sql: "UPDATE runs SET state = ?, updated_ts = ?, policy_version = ? WHERE id = ?",
+        arguments: [nextState.rawValue, now, policyVersion, runId]
+      )
+    } else {
+      try db.execute(
+        sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
+        arguments: [nextState.rawValue, now, runId]
+      )
+    }
 
     return nextState
   }

@@ -198,6 +198,12 @@ private extension RunCommand {
       workspace: workspace,
       toolExecutor: toolExecutor
     )
+    let policyStaticSubhash = policyStaticSubhash(
+      toolDispatcher: toolDispatcher,
+      config: config,
+      secrets: secrets,
+      workspace: workspace
+    )
     let agent = makeAgent(
       config: config,
       secrets: secrets,
@@ -209,25 +215,12 @@ private extension RunCommand {
       logger: logger
     )
 
-    let contextBudget = ContextBudget(
-      inputCapGraphemes: TokenEstimator.graphemeBudget(
-        forInputTokens: config.budget.maxInputTokens
-      ),
-      userFileCap: ContextBudget.default.userFileCap,
-      memoryFileCap: ContextBudget.default.memoryFileCap,
-      itemsCap: ContextBudget.default.itemsCap,
-      historyCap: ContextBudget.default.historyCap,
-      recallCap: ContextBudget.default.recallCap,
-      skillsCap: ContextBudget.default.skillsCap,
-      recallHitCap: ContextBudget.default.recallHitCap
-    )
-    let contextBuilder = ContextBuilder(
-      systemPrompt: SystemPrompt.minimal,
+    let contextBuilder = makeContextBuilder(
+      config: config,
       workspace: workspace,
-      memoryStore: stores.memory,
-      retriever: stores.retriever,
-      budget: contextBudget,
-      warn: { warning in logger.warning("\(warning)") }
+      stores: stores,
+      policyStaticSubhash: policyStaticSubhash,
+      logger: logger
     )
 
     let turnRunner = TurnRunner(
@@ -415,6 +408,57 @@ private extension RunCommand {
         argGuard: ExfilArgGuard(secretValues: secretValues),
         privateFileLoader: privateFileLoader
       )
+    )
+  }
+
+  /// §3.2 static sub-hash (classes 2–3): the same tool surface the gate enforces, plus the pinned
+  /// egress/policy config. Secret values are never hashed — only the base URL, search presence,
+  /// and workspace root identity. Injected into `ContextBuilder`, which folds in the class-1 prompt
+  /// materials and returns the combined `policy_version`.
+  func policyStaticSubhash(
+    toolDispatcher: GatedToolDispatcher,
+    config: AppConfig,
+    secrets: Secrets,
+    workspace: FileSystemWorkspace
+  ) -> String {
+    PolicyFingerprint.staticSubhash(
+      tools: toolDispatcher.definitions,
+      llmBaseURL: config.llm.baseURL,
+      searchEndpointPresent: secrets.searchApiKey != nil,
+      workspaceRoot: workspace.root.path
+    )
+  }
+
+  /// Builds the grapheme-budgeted context assembler, injected with the composition root's static
+  /// policy sub-hash (§3.2) so `contextBuilder.currentPolicyVersion()` reflects the real tool/config
+  /// surface, not a test default.
+  func makeContextBuilder(
+    config: AppConfig,
+    workspace: FileSystemWorkspace,
+    stores: ClawStores,
+    policyStaticSubhash: String,
+    logger: Logger
+  ) -> ContextBuilder {
+    let contextBudget = ContextBudget(
+      inputCapGraphemes: TokenEstimator.graphemeBudget(
+        forInputTokens: config.budget.maxInputTokens
+      ),
+      userFileCap: ContextBudget.default.userFileCap,
+      memoryFileCap: ContextBudget.default.memoryFileCap,
+      itemsCap: ContextBudget.default.itemsCap,
+      historyCap: ContextBudget.default.historyCap,
+      recallCap: ContextBudget.default.recallCap,
+      skillsCap: ContextBudget.default.skillsCap,
+      recallHitCap: ContextBudget.default.recallHitCap
+    )
+    return ContextBuilder(
+      systemPrompt: SystemPrompt.minimal,
+      workspace: workspace,
+      memoryStore: stores.memory,
+      retriever: stores.retriever,
+      budget: contextBudget,
+      policyStaticSubhash: policyStaticSubhash,
+      warn: { warning in logger.warning("\(warning)") }
     )
   }
 
