@@ -82,11 +82,37 @@ struct SendRichMessageDraftRequest: Encodable {
   let linkPreviewOptions: LinkPreviewOptions
 }
 
+/// Bot API `CallbackQuery` — an inline-button tap. `from` is never absent (a callback always has a
+/// sender), unlike `TMessage.from`; `message` is present when the button rode a message we can
+/// still edit; `data` carries the ≤64-byte `callback_data` we set on the button.
+struct TCallbackQuery: Decodable {
+  let id: String
+  let from: TUser
+  let message: TMessage?
+  let data: String?
+}
+
+/// The inline-keyboard wire shape Telegram expects inside `reply_markup`:
+/// `{"inline_keyboard":[[{"text":…,"callback_data":…}]]}`. This is the authoritative shape the
+/// approval keyboard's JSON string (Task 13) must reproduce; the client sends the string parsed to
+/// a `JSONValue`, so these Encodable types are the contract, not the send path.
+struct TInlineKeyboardButton: Encodable {
+  let text: String
+  let callback_data: String
+}
+struct TInlineKeyboardMarkup: Encodable {
+  let inline_keyboard: [[TInlineKeyboardButton]]
+}
+
 struct TUpdate: Decodable {
   let update_id: Int64
   let message: TMessage?
   let edited_message: TMessage?
+  let callback_query: TCallbackQuery?
 
+  // The button tap is decoded here so the client + tests have the wire surface; it is mapped into
+  // the wire-agnostic RawUpdate once that type gains its callback field (the intake half lands
+  // with the router's callback branch).
   func toRawUpdate() -> RawUpdate {
     RawUpdate(
       updateId: update_id,

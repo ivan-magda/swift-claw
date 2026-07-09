@@ -20,12 +20,27 @@ public protocol MessageDelivery: Sendable {
   /// Returns the assigned `message_id` like `sendMessage`. On any rich-send error the dispatcher
   /// re-sends the chunk as plain `sendMessage` (F8), so this never has to succeed for a reply to land.
   func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64
+  /// As `sendMessage`, but attaches an inline keyboard when `replyMarkup` is a Telegram
+  /// `reply_markup` JSON string (nil = no keyboard). The approval prompt's buttons ride this.
+  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64
+  /// As `sendRichMessage`, but attaches the same optional inline keyboard.
+  func sendRichMessage(chatId: Int64, markdown: String, replyMarkup: String?) async throws -> Int64
+}
+
+/// Answers and disarms inline-button callbacks. A separate port so the callback handler can hold a
+/// `any CallbackResponding` without the full Telegram composite (spec §6.1).
+public protocol CallbackResponding: Sendable {
+  /// Called on EVERY callback, valid or not, to stop the client's button spinner. `text` is the
+  /// optional neutral toast; a nil/empty toast is the fail-closed default (§6.2).
+  func answerCallbackQuery(id: String, text: String?) async throws
+  /// Disarms the prompt's buttons on resolve; `replyMarkup` nil removes the keyboard entirely.
+  func editMessageReplyMarkup(chatId: Int64, messageId: Int64, replyMarkup: String?) async throws
 }
 
 /// The full Telegram surface: intake + delivery plus the Telegram-specific extras (identity,
 /// streaming drafts, chat actions, the command menu) that only `clawd` and the `ClawTelegram`
 /// wrappers consume.
-public protocol TelegramTransport: ChannelIntake, MessageDelivery {
+public protocol TelegramTransport: ChannelIntake, MessageDelivery, CallbackResponding {
   func getMe() async throws -> BotIdentity
   func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool
   /// Emits a Telegram chat action (e.g. `"typing"`). Fire-and-forget: the action auto-expires (~5s),
@@ -45,6 +60,38 @@ extension TelegramTransport {
   }
 
   public func setMyCommands(_ commands: [BotMenuCommand]) async throws {}
+
+  public func answerCallbackQuery(id: String, text: String?) async throws {
+    throw TelegramError.transport("answerCallbackQuery not implemented")
+  }
+
+  public func editMessageReplyMarkup(
+    chatId: Int64,
+    messageId: Int64,
+    replyMarkup: String?
+  ) async throws {
+    throw TelegramError.transport("editMessageReplyMarkup not implemented")
+  }
+}
+
+extension MessageDelivery {
+  public func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
+    guard replyMarkup == nil else {
+      throw TelegramError.transport("sendMessage(replyMarkup:) not implemented")
+    }
+    return try await sendMessage(chatId: chatId, text: text)
+  }
+
+  public func sendRichMessage(
+    chatId: Int64,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
+    guard replyMarkup == nil else {
+      throw TelegramError.transport("sendRichMessage(replyMarkup:) not implemented")
+    }
+    return try await sendRichMessage(chatId: chatId, markdown: markdown)
+  }
 }
 
 public protocol RichDraftStreaming: Sendable {

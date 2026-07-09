@@ -50,10 +50,15 @@ public struct TelegramClient: TelegramTransport {
   }
 
   public func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
+    try await sendMessage(chatId: chatId, text: text, replyMarkup: nil)
+  }
+
+  public func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
     let request = SendMessageRequest(
       chatId: chatId,
       text: text,
-      linkPreviewOptions: LinkPreviewOptions(isDisabled: true)
+      linkPreviewOptions: LinkPreviewOptions(isDisabled: true),
+      replyMarkup: replyMarkup.flatMap(JSONValue.parse)
     )
     let message: TMessage = try await callMethod(
       "sendMessage",
@@ -64,10 +69,19 @@ public struct TelegramClient: TelegramTransport {
   }
 
   public func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 {
+    try await sendRichMessage(chatId: chatId, markdown: markdown, replyMarkup: nil)
+  }
+
+  public func sendRichMessage(
+    chatId: Int64,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     let request = SendRichMessageRequest(
       chatId: chatId,
       richMessage: InputRichMessage(markdown: markdown),
-      linkPreviewOptions: LinkPreviewOptions(isDisabled: true)
+      linkPreviewOptions: LinkPreviewOptions(isDisabled: true),
+      replyMarkup: replyMarkup.flatMap(JSONValue.parse)
     )
     let message: TMessage = try await callMethod(
       "sendRichMessage",
@@ -75,6 +89,35 @@ public struct TelegramClient: TelegramTransport {
       httpTimeout: Timeout.sendMessageSeconds
     )
     return message.message_id
+  }
+
+  public func answerCallbackQuery(id: String, text: String?) async throws {
+    let request = AnswerCallbackQueryRequest(callbackQueryId: id, text: text)
+    // Telegram always returns `true`; decode as Bool like sendChatAction and discard it.
+    let _: Bool = try await callMethod(
+      "answerCallbackQuery",
+      body: request,
+      httpTimeout: Timeout.shortRequestSeconds
+    )
+  }
+
+  public func editMessageReplyMarkup(
+    chatId: Int64,
+    messageId: Int64,
+    replyMarkup: String?
+  ) async throws {
+    let request = EditMessageReplyMarkupRequest(
+      chatId: chatId,
+      messageId: messageId,
+      replyMarkup: replyMarkup.flatMap(JSONValue.parse)
+    )
+    // The result is `Message | true` depending on the target; decode permissively as JSONValue so
+    // a Message-shaped success does not surface as a spurious decoding error.
+    let _: JSONValue = try await callMethod(
+      "editMessageReplyMarkup",
+      body: request,
+      httpTimeout: Timeout.shortRequestSeconds
+    )
   }
 
   public func sendRichMessageDraft(
@@ -204,12 +247,16 @@ private struct SendMessageRequest: Encodable {
   let chatId: Int64
   let text: String
   let linkPreviewOptions: LinkPreviewOptions
+  // The button keyboard, already parsed from its JSON string. Its keys (inline_keyboard,
+  // callback_data) are lowercase snake_case, so `.convertToSnakeCase` passes them through as-is.
+  let replyMarkup: JSONValue?
 }
 
 private struct SendRichMessageRequest: Encodable {
   let chatId: Int64
   let richMessage: InputRichMessage
   let linkPreviewOptions: LinkPreviewOptions
+  let replyMarkup: JSONValue?
 }
 
 private struct SendChatActionRequest: Encodable {
@@ -219,6 +266,17 @@ private struct SendChatActionRequest: Encodable {
 
 private struct SetMyCommandsRequest: Encodable {
   let commands: [BotMenuCommand]
+}
+
+private struct AnswerCallbackQueryRequest: Encodable {
+  let callbackQueryId: String
+  let text: String?
+}
+
+private struct EditMessageReplyMarkupRequest: Encodable {
+  let chatId: Int64
+  let messageId: Int64
+  let replyMarkup: JSONValue?
 }
 
 /// The Telegram-backed `TypingIndicator` the agent uses during a turn. Errors are swallowed: the
