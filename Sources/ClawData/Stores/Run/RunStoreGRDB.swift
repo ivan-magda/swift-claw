@@ -380,6 +380,11 @@ public struct RunStoreGRDB: RunStore {
     heartbeatNoticeChatId: Int64?
   ) throws -> [DegradationReply] {
     try database.writeMapping { db in
+      // AWAITING_APPROVAL is deliberately excluded, not merely omitted: a suspended run is a live
+      // durable checkpoint, not a crash orphan. The approval boot reconciliation
+      // (ApprovalBootReconciler, spec §7) owns those runs — re-parking the unexpired ones and running
+      // the per-row expiry check on the rest. Only true PENDING/RUNNING orphans fail here.
+      let orphanFailStates = [RunState.pending.rawValue, RunState.running.rawValue]
       let stale = try Row.fetchAll(
         db,
         sql: """
@@ -388,7 +393,7 @@ public struct RunStoreGRDB: RunStore {
           WHERE r.state IN (?, ?)
           ORDER BY r.id ASC
           """,
-        arguments: [RunState.pending.rawValue, RunState.running.rawValue]
+        arguments: StatementArguments(orphanFailStates)
       )
 
       var replies: [DegradationReply] = []

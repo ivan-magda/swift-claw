@@ -251,7 +251,7 @@ private extension RunCommand {
       logger: logger
     )
 
-    let approvalCallbackHandler = await makeApprovalFabric(
+    let (approvalCallbackHandler, approvalWaiter, approvalExpiry) = await makeApprovalFabric(
       stores: stores,
       transport: transport,
       toolDispatcher: toolDispatcher,
@@ -310,19 +310,14 @@ private extension RunCommand {
       logger: logger
     )
 
-    let approvalExpiry = ApprovalExpiryService(
-      approvals: stores.approvals,
-      coordinator: approvalCoordinator,
-      now: { Date() },
-      sleep: { try await Task.sleep(for: $0) },
-      logger: logger
-    )
-
     return Daemon(
       services: [poller, dispatcher, scheduler, approvalExpiry],
       boot: bootSequence(
         transport: transport,
         stores: stores,
+        lanes: lanes,
+        coordinator: approvalCoordinator,
+        waiter: approvalWaiter,
         heartbeatOwner: heartbeatOwner,
         logger: logger
       ),
@@ -391,7 +386,9 @@ private extension RunCommand {
     deferredParker: DeferredApprovalParker,
     contextBuilder: ContextBuilder,
     logger: Logger
-  ) async -> ApprovalCallbackHandler {
+  ) async -> (
+    handler: ApprovalCallbackHandler, waiter: ApprovalWaiter, expiry: ApprovalExpiryService
+  ) {
     let approvedExecutor = ApprovedActionExecutor(
       tools: toolDispatcher.toolsByName,
       runs: stores.runs,
@@ -412,7 +409,7 @@ private extension RunCommand {
     )
     await deferredParker.adopt(approvalWaiter)
 
-    return ApprovalCallbackHandler.make(
+    let handler = ApprovalCallbackHandler.make(
       processed: stores.processed,
       delivery: transport,
       accessControl: AccessControl(allowlist: stores.allowlist),
@@ -424,6 +421,16 @@ private extension RunCommand {
       now: { Date() },
       logger: logger
     )
+    let expiry = ApprovalExpiryService(
+      approvals: stores.approvals,
+      coordinator: approvalCoordinator,
+      now: { Date() },
+      sleep: { try await Task.sleep(for: $0) },
+      logger: logger
+    )
+    // The real waiter is returned so boot re-park (spec §7) parks the SAME instance the callback
+    // path resumes — one execution locus across suspend, callback, and restart.
+    return (handler: handler, waiter: approvalWaiter, expiry: expiry)
   }
 
   /// Builds the `/schedule` surface: the budget-gated, deadline-bounded draft parser (sharing the
@@ -633,6 +640,9 @@ private extension RunCommand {
   func bootSequence(
     transport: any TelegramTransport,
     stores: ClawStores,
+    lanes: SessionLaneRegistry,
+    coordinator: ApprovalCoordinator,
+    waiter: ApprovalWaiter,
     heartbeatOwner: Int64?,
     logger: Logger
   ) -> @Sendable () async -> Void {
@@ -642,9 +652,17 @@ private extension RunCommand {
       heartbeatOwner: heartbeatOwner,
       logger: logger
     )
+    let reconcileApprovals = bootReconcileApprovals(
+      stores: stores,
+      lanes: lanes,
+      coordinator: coordinator,
+      waiter: waiter,
+      logger: logger
+    )
     return {
       await registerMenu()
       await reconcileRuns()
+      await reconcileApprovals()
     }
   }
 
@@ -702,6 +720,32 @@ private extension RunCommand {
       } catch {
         logger.error("boot reconcile failed: \(error)")
       }
+    }
+  }
+
+  /// The boot step that re-establishes the approval fabric after a restart (spec §7): terminal-run
+  /// PENDING rows are cleaned, unexpired parked approvals are re-parked on their lanes so buttons and
+  /// the FIFO queue-behind contract survive restart (§5.5), expired ones are swept to DENY→FAILED
+  /// (§6.4), and an APPROVED row left by a crash between grant and execution is resumed under the
+  /// §6.5 re-validation belt. Runs before the services serve, so the re-parked lanes are live before
+  /// the first callback arrives.
+  func bootReconcileApprovals(
+    stores: ClawStores,
+    lanes: SessionLaneRegistry,
+    coordinator: ApprovalCoordinator,
+    waiter: ApprovalWaiter,
+    logger: Logger
+  ) -> @Sendable () async -> Void {
+    let reconciler = ApprovalBootReconciler(
+      approvals: stores.approvals,
+      lanes: lanes,
+      coordinator: coordinator,
+      waiter: waiter,
+      now: { Date() },
+      logger: logger
+    )
+    return {
+      await reconciler.reconcile()
     }
   }
 }
