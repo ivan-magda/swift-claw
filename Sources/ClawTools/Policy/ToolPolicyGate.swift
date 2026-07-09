@@ -45,13 +45,13 @@ public struct ToolPolicyGate: Sendable {
       )
     }
 
-    // (2) unconditional tier — BLOCKING per FR-T6, every egress class
+    // (3) unconditional tier — BLOCKING per FR-T6, every egress class
     let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
     if let rule = unconditional.blockedRule {
       return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
     }
 
-    // (3) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run)  [rev.1 H1]
+    // (4) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run)  [rev.1 H1]
     let tainted = context.sessionTainted || context.runIngestedUntrusted
     let privateData = context.assemblyPrivateData || context.runPrivateData
     guard tainted && privateData else {
@@ -71,7 +71,7 @@ public struct ToolPolicyGate: Sendable {
       }
     }
 
-    // (3a) conditional tier — redaction-block WINS over approval (FR-T6); disk at gate time
+    // (4a) conditional tier — redaction-block WINS over approval (FR-T6); disk at gate time
     let conditional = argGuard.evaluateConditional(
       argsJSON: call.argumentsJSON,
       privateFileTexts: privateFileLoader()
@@ -80,7 +80,7 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
     }
 
-    // (3b) the arbitrary-destination egress class (§18-H): grant match or approval
+    // (5) the arbitrary-destination egress class (§18-H): grant match or approval
     let action: ToolAction?
     switch resolveAction(call: call, tool: tool) {
     case .action(let resolved):

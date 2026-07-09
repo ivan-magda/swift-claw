@@ -396,13 +396,18 @@ private extension TurnRunner {
     chatId: Int64,
     at committedAt: Date
   ) async throws {
+    // Invariant: `.suspended` is only returned after `outcome.exchanges.append(...)` upstream, so
+    // `exchanges.last` is never nil on this path — this branch is defensive-only, unreachable today.
+    // `usage` here is the SAME intermediate usage AgentRuntime already recorded mid-loop; passing it
+    // to `commitDegradation` would debit `provider_usage` a second time for the same round. Pass
+    // `nil` so this dead fallback can never double-debit even if the invariant above ever broke.
     guard let anchor = outcome.exchanges.last else {
       logger.error("suspended turn for run \(runId) carried no exchange; failing in-band")
       _ = try commitDegradation(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
-        usage: usage,
+        usage: nil,
         exchanges: [],
         setTainted: outcome.ingestedUntrusted,
         message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),

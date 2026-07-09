@@ -124,8 +124,10 @@ public struct OutboxDispatcher: Service {
   /// Delivers one row, returning the Telegram `message_id` so the caller can record it via `markSent`.
   ///
   /// Sends the payload as rich markdown; on **any** rich-send error it re-sends the same payload as
-  /// plain `sendMessage` so a malformed-markdown reply still lands (F8, "no formatting errors"). A
-  /// failure of the plain fallback itself propagates — the row stays PENDING for the next drain.
+  /// plain `sendMessage` so a malformed-markdown reply still lands (F8, "no formatting errors").
+  /// `replyMarkup` (the inline keyboard) rides both the rich send and the plain fallback, so a
+  /// degraded delivery never drops the approval keyboard. A failure of the plain fallback itself
+  /// propagates — the row stays PENDING for the next drain.
   private func send(_ row: OutboxRow) async throws -> Int64 {
     do {
       return try await delivery.sendRichMessage(

@@ -52,7 +52,7 @@ public enum ToolApprovalPrompt {
   }
 
   /// The retired Inc 3b ephemeral trifecta prompt (§9.2), still rendered by `TurnRunner`'s
-  /// pending-approval path (`TurnRunner.swift:198`) until Task 24 deletes the ephemeral flow. Kept
+  /// pending-approval path (`TurnRunner.swift:212`) until Task 24 deletes the ephemeral flow. Kept
   /// exhaustive over `ApprovalReason` so it compiles alongside the durable renderer.
   public static func text(for request: ToolApprovalRequest) -> String {
     switch request.reason {
