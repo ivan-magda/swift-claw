@@ -11,6 +11,19 @@ public enum DegradationKind: String, Sendable, Equatable {
   case accountingFailed  // NEW (§6 — usage-write failure mid-run)
 }
 
+/// The ask-tier proposal that parked a run (§5.2): the `tool_call_id` its placeholder observation
+/// answers, plus the recorded canonical action the approval binds to and the waiter later replays
+/// (§6.3). `RecordedToolAction` is Equatable, so `TurnResult.suspended` stays Equatable.
+public struct PendingToolAction: Sendable, Equatable {
+  public let toolCallId: String
+  public let recorded: RecordedToolAction
+
+  public init(toolCallId: String, recorded: RecordedToolAction) {
+    self.toolCallId = toolCallId
+    self.recorded = recorded
+  }
+}
+
 /// The outcome of one orchestrated turn. `runTurn` never throws — every failure becomes one of
 /// these so the gateway always has something to persist and send (never silence).
 public enum TurnResult: Sendable, Equatable {
@@ -21,6 +34,10 @@ public enum TurnResult: Sendable, Equatable {
   case degraded(DegradationKind, usage: ProviderUsage?)
   /// The offline budget gate refused before any provider call; `cap` names the tripped limit.
   case budgetStopped(cap: String)
+  /// The batch drained after an ask-tier proposal recorded its action (§5.2); the gateway commits
+  /// the durable suspend checkpoint. `usage` is the suspending round-trip's reconciled row — it was
+  /// already recorded mid-loop, so the suspend commit (Task 14) must NOT re-debit it.
+  case suspended(pending: PendingToolAction, usage: ProviderUsage)
 }
 
 /// The outcome of the bounded agentic loop (§6): the terminal `TurnResult` plus everything the
@@ -31,6 +48,11 @@ public struct TurnOutcome: Sendable {
   public let exchanges: [ToolExchange]
   /// Taint signal: any executed observation ingested untrusted content this run (§10).
   public let ingestedUntrusted: Bool
+  /// Private-data signal (§4.5): the assembly flag (fitted USER/MEMORY sections) OR any executed
+  /// observation that read private data this run — `assemblyPrivateData ∪ runPrivateData`. Every
+  /// commit path persists it as `setPrivateData`; the suspend commit (Task 14) is its first
+  /// consumer, the rest of the §4.5 lifecycle lands in Task 23 (D6).
+  public let hadPrivateData: Bool
   /// A gate trip awaiting the owner's approval, if this run tripped one (§9).
   public let pendingApproval: ToolApprovalRequest?
 
@@ -38,11 +60,13 @@ public struct TurnOutcome: Sendable {
     result: TurnResult,
     exchanges: [ToolExchange] = [],
     ingestedUntrusted: Bool = false,
+    hadPrivateData: Bool = false,
     pendingApproval: ToolApprovalRequest? = nil
   ) {
     self.result = result
     self.exchanges = exchanges
     self.ingestedUntrusted = ingestedUntrusted
+    self.hadPrivateData = hadPrivateData
     self.pendingApproval = pendingApproval
   }
 }
@@ -138,6 +162,7 @@ public struct AgentRuntime: Sendable {
     var runPrivateData = false
 
     var pendingApproval: ToolApprovalRequest?
+    var pendingSuspension: PendingToolAction?
     var remainingGrant = grant
 
     var proposedToolCalls = 0
@@ -153,6 +178,7 @@ public struct AgentRuntime: Sendable {
         result: result,
         exchanges: exchanges,
         ingestedUntrusted: ingestedUntrusted,
+        hadPrivateData: buildResult.hasPrivateDataAccess || runPrivateData,
         pendingApproval: pendingApproval
       )
     }
@@ -295,7 +321,7 @@ public struct AgentRuntime: Sendable {
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
           grant: remainingGrant,
-          approvalAlreadyPending: pendingApproval != nil,
+          approvalAlreadyPending: pendingApproval != nil || pendingSuspension != nil,
           nonInteractive: origin != .interactive
         )
 
@@ -318,6 +344,18 @@ public struct AgentRuntime: Sendable {
         turnLog.debug(
           "tool \(call.name) done decision=\(dispatched.observation.status.rawValue) bytes=\(dispatched.observation.content.utf8.count) ms=\(Self.millis(ContinuousClock.now - toolStart))"
         )
+
+        // §5.2 durable suspend: the FIRST ask-tier proposal records its action and parks the run.
+        // The tool did NOT execute — its placeholder observation row and the approvalRequested
+        // audit both ride the suspend commit (§5.3 / Task 14), so skip both the toolCall audit and
+        // the observation append here. Later gated calls in the batch see approvalAlreadyPending
+        // (Step 5) and return a blocked observation instead (requiresApproval nil), which appends
+        // normally below.
+        if pendingSuspension == nil, let recordedAction = dispatched.requiresApproval {
+          pendingSuspension = PendingToolAction(toolCallId: call.id, recorded: recordedAction)
+          continue
+        }
+
         try recordToolAudit(for: call, outcome: dispatched, runId: runId, sessionId: sessionId)
 
         observations.append(dispatched.observation)
@@ -359,6 +397,14 @@ public struct AgentRuntime: Sendable {
           observations: observations
         )
       )
+
+      // §5.2: the batch has drained. If an ask-tier proposal parked, return the suspend result now.
+      // `intermediate` is THIS round-trip's already-recorded usage (recorded above via
+      // `usageStore.recordUsage`); the exchange above carries the assistant anchor + completed
+      // observations, and the parked call's placeholder is reserved at the suspend commit.
+      if let pending = pendingSuspension {
+        return outcome(.suspended(pending: pending, usage: intermediate))
+      }
     }
 
     return outcome(.budgetStopped(cap: "per-run turn"))
@@ -399,6 +445,10 @@ private extension AgentRuntime {
       )
     case .budgetStopped(let cap):
       log.notice("turn finished budget-stopped cap=\(cap) ms=\(elapsedMillis)")
+    case .suspended(let pending, let usage):
+      log.info(
+        "turn finished suspended tool=\(pending.recorded.tool) tokens=\(usage.promptTokens + usage.completionTokens) ms=\(elapsedMillis)"
+      )
     }
   }
 

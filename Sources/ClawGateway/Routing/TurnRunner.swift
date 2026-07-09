@@ -306,6 +306,11 @@ private extension TurnRunner {
       if origin != .interactive, cap == BudgetGate.proactivePerDayCap {
         await notifyProactiveCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
       }
+    case .suspended:
+      // Phase 2 is DORMANT: no registered tool declares ask-tier, so no production run can suspend.
+      // Task 14 replaces this arm with the durable `runs.commitSuspendedTurn(...)` transaction.
+      // Logged (not fatal) so a stray suspend never crashes the lane before the commit is wired.
+      logger.error("run \(runId) produced .suspended before the suspend commit is wired (Task 14)")
     }
   }
 
