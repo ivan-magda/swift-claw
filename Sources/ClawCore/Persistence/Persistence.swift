@@ -411,6 +411,19 @@ public struct RunsHealth: Sendable, Equatable {
   }
 }
 
+/// Doctor snapshot of the approvals table (spec §4.6): how many owner decisions are outstanding
+/// and how long the oldest one has waited. `oldestPendingAgeSeconds` is nil when nothing is
+/// pending. The ClawGateway renderer (Task 07) compares the age against `approval_expiry`.
+public struct ApprovalsHealth: Sendable, Equatable {
+  public let pendingCount: Int
+  public let oldestPendingAgeSeconds: Int?
+
+  public init(pendingCount: Int, oldestPendingAgeSeconds: Int?) {
+    self.pendingCount = pendingCount
+    self.oldestPendingAgeSeconds = oldestPendingAgeSeconds
+  }
+}
+
 public struct DegradationReply: Sendable, Equatable {
   public let chatId: Int64
   public let runId: Int64
