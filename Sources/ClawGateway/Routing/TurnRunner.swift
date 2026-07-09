@@ -85,7 +85,11 @@ public struct TurnRunner: TurnDispatching {
     }
 
     let now = now()
-    guard let origin = try runs.pickUp(runId: runId, now: now) else {
+    // §3.2: the fingerprint is computed from the same builder inputs `assemble` will use and
+    // stamped in the same UPDATE that flips PENDING→RUNNING, so an approval this run creates binds
+    // to the exact prompt/tool/config surface in force at run start.
+    let policyVersion = contextBuilder.currentPolicyVersion()
+    guard let origin = try runs.pickUp(runId: runId, policyVersion: policyVersion, now: now) else {
       logger.debug("run \(runId) was not pending at pickup; skipping turn")
       return
     }

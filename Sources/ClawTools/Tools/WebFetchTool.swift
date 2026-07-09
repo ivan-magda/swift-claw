@@ -48,7 +48,8 @@ public struct WebFetchTool: Tool {
         ]),
         "required": .array([.string("url")]),
       ]),
-      egressClass: .arbitraryDestination
+      egressClass: .arbitraryDestination,
+      riskLevel: .safe
     )
   }
 

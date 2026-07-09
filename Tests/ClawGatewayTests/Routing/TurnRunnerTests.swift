@@ -42,8 +42,8 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
   let base: RunStoreGRDB
   let sessionId: Int64
 
-  func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
-    try base.pickUp(runId: runId, now: now)
+  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
+    try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
   }
 
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
@@ -90,8 +90,8 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   let base: RunStoreGRDB
   let sessionId: Int64
 
-  func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
-    try base.pickUp(runId: runId, now: now)
+  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
+    try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
   }
 
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
@@ -134,7 +134,9 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
 
 /// A `RunStore` whose first write reports a full disk, to exercise the storage-full rethrow.
 struct DiskFullRuns: RunStore {
-  func pickUp(runId: Int64, now: Date) throws -> RunOrigin? { throw StoreError.diskFull }
+  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
+    throw StoreError.diskFull
+  }
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult { .ignored }
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult { .ignored }
   func failRun(runId: Int64, now: Date) throws {}

@@ -107,7 +107,8 @@ import Testing
       name: "web_fetch",
       description: "d",
       parameters: .object(["type": .string("object")]),
-      egressClass: .none
+      egressClass: .none,
+      riskLevel: .safe
     )
     let provider = SequenceProvider([okResponse()])
     let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())

@@ -13,6 +13,9 @@ public enum RunState: String, Sendable, Equatable {
   case cancelled = "CANCELLED"
   /// Terminal cancellation requested by `/new`; queued turns are superseded too.
   case superseded = "SUPERSEDED"
+  /// Suspended to a durable checkpoint: an `approvals` row is the one source of truth for
+  /// "blocked on approval" (ARCHITECTURE §7.1); resolved by callback, ticker, boot, or command.
+  case awaitingApproval = "AWAITING_APPROVAL"
 }
 
 /// The two command-owned reasons for terminating a live run.
@@ -347,6 +350,9 @@ public enum AuditAction: String, Sendable, Equatable {
   case heartbeatFired = "heartbeat_fired"
   case heartbeatSuppressed = "heartbeat_suppressed"
   case heartbeatSkipped = "heartbeat_skipped"
+  case approvalRequested = "approval_requested"
+  case approvalGranted = "approval_granted"
+  case approvalDenied = "approval_denied"
 }
 
 public struct AuditEvent: Sendable, Equatable {
@@ -402,6 +408,19 @@ public struct RunsHealth: Sendable, Equatable {
     self.lastFailedAt = lastFailedAt
     self.lastSuccessAt = lastSuccessAt
     self.consecutiveFailures = consecutiveFailures
+  }
+}
+
+/// Doctor snapshot of the approvals table (spec §4.6): how many owner decisions are outstanding
+/// and how long the oldest one has waited. `oldestPendingAgeSeconds` is nil when nothing is
+/// pending. The ClawGateway renderer (Task 07) compares the age against `approval_expiry`.
+public struct ApprovalsHealth: Sendable, Equatable {
+  public let pendingCount: Int
+  public let oldestPendingAgeSeconds: Int?
+
+  public init(pendingCount: Int, oldestPendingAgeSeconds: Int?) {
+    self.pendingCount = pendingCount
+    self.oldestPendingAgeSeconds = oldestPendingAgeSeconds
   }
 }
 

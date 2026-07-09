@@ -11,36 +11,48 @@ public enum RunEvent: Sendable, Equatable {
   case cancel
   /// `/new` terminates the running turn and any queued turns from the old conversation window.
   case supersede
+  /// The gate demanded an approval mid-turn (§5.3 suspend commit).
+  case suspendForApproval
+  /// A valid owner approval resolved the row; the waiter resumes the turn (§6.3).
+  case resumeApproved
+  /// Reject/expiry resolved the row against the run (§6.4).
+  case resolveDenied
 }
 
 /// The run lifecycle reducer: the single source of truth for legal state changes.
 public enum RunFSM {
+  // The exhaustive no-default state×event switch is deliberate — a `default` arm would defeat the
+  // compiler-enforced exhaustiveness — so `reduce`'s branch count (and thus its cyclomatic
+  // complexity) is intrinsic to the design rather than incidental. The block form keeps the doc
+  // comment attached to the declaration (a `disable:next` line between them would orphan it).
+  // swiftlint:disable cyclomatic_complexity
   /// Returns the next state for a legal transition, or `nil` when the store must perform no write.
   ///
   /// Every state/event pair is explicit so adding a future state or event produces a compiler
   /// reminder to revisit the lifecycle rules.
   public static func reduce(state: RunState, on event: RunEvent) -> RunState? {
     switch (state, event) {
-    case (.pending, .pickUp):
-      .running
-    case (.pending, .fail):
-      .failed
-    case (.pending, .cancel):
-      .cancelled
-    case (.pending, .supersede):
-      .superseded
-    case (.running, .complete):
-      .done
-    case (.running, .fail):
-      .failed
-    case (.running, .cancel):
-      .cancelled
-    case (.running, .supersede):
-      .superseded
-    case (.pending, .complete), (.running, .pickUp):
+    case (.pending, .pickUp): .running
+    case (.pending, .fail): .failed
+    case (.pending, .cancel): .cancelled
+    case (.pending, .supersede): .superseded
+    case (.running, .complete): .done
+    case (.running, .fail): .failed
+    case (.running, .cancel): .cancelled
+    case (.running, .supersede): .superseded
+    case (.running, .suspendForApproval): .awaitingApproval
+    case (.awaitingApproval, .resumeApproved): .running
+    case (.awaitingApproval, .resolveDenied): .failed
+    case (.awaitingApproval, .fail): .failed
+    case (.awaitingApproval, .cancel): .cancelled
+    case (.awaitingApproval, .supersede): .superseded
+    case (.pending, .complete), (.pending, .suspendForApproval), (.pending, .resumeApproved),
+      (.pending, .resolveDenied), (.running, .pickUp), (.running, .resumeApproved),
+      (.running, .resolveDenied), (.awaitingApproval, .pickUp), (.awaitingApproval, .complete),
+      (.awaitingApproval, .suspendForApproval):
       nil
-    case (.done, _), (.failed, _), (.cancelled, _), (.superseded, _):
-      nil
+    case (.done, _), (.failed, _), (.cancelled, _), (.superseded, _): nil
     }
   }
+  // swiftlint:enable cyclomatic_complexity
 }

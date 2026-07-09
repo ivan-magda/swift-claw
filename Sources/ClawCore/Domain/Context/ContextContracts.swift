@@ -118,11 +118,20 @@ public struct BuildResult: Sendable, Equatable {
   public let messages: [ChatMessage]
   public let ownerNotices: [String]
   public let hasPrivateDataAccess: Bool
+  /// The per-run prompt/workspace fingerprint (spec §3.2); "" only for test doubles that do not
+  /// exercise the approval fabric — `ContextBuilder.assemble` always sets the real value.
+  public let policyVersion: String
 
-  public init(messages: [ChatMessage], ownerNotices: [String], hasPrivateDataAccess: Bool) {
+  public init(
+    messages: [ChatMessage],
+    ownerNotices: [String],
+    hasPrivateDataAccess: Bool,
+    policyVersion: String = ""
+  ) {
     self.messages = messages
     self.ownerNotices = ownerNotices
     self.hasPrivateDataAccess = hasPrivateDataAccess
+    self.policyVersion = policyVersion
   }
 }
 

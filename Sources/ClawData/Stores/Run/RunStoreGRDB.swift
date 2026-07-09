@@ -9,9 +9,17 @@ public struct RunStoreGRDB: RunStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
+  public func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
     try database.writeMapping { db in
-      guard try Self.transitionRun(db, runId: runId, event: .pickUp, now: now) != nil else {
+      guard
+        try Self.transitionRun(
+          db,
+          runId: runId,
+          event: .pickUp,
+          now: now,
+          policyVersion: policyVersion
+        ) != nil
+      else {
         return nil
       }
 
@@ -275,18 +283,22 @@ public struct RunStoreGRDB: RunStore {
 
   public func runsHealth(now: Date) throws -> RunsHealth {
     try database.readMapping { db in
-      let activeStates = [RunState.pending.rawValue, RunState.running.rawValue]
+      let activeStates = [
+        RunState.pending.rawValue,
+        RunState.running.rawValue,
+        RunState.awaitingApproval.rawValue,
+      ]
       let inFlight =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM runs WHERE state IN (?, ?)",
+          sql: "SELECT COUNT(*) FROM runs WHERE state IN (?, ?, ?)",
           arguments: StatementArguments(activeStates)
         ) ?? 0
 
       let oldestRunAgeSeconds: Double? =
         try Date.fetchOne(
           db,
-          sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (?, ?)",
+          sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (?, ?, ?)",
           arguments: StatementArguments(activeStates)
         ).map { now.timeIntervalSince($0) }
 
@@ -361,11 +373,15 @@ extension RunStoreGRDB {
       db,
       sql: """
         SELECT id FROM runs
-        WHERE session_id = ? AND state = ?
+        WHERE session_id = ? AND state IN (?, ?)
         ORDER BY id DESC
         LIMIT 1
         """,
-      arguments: [sessionId, RunState.running.rawValue]
+      arguments: [
+        sessionId,
+        RunState.running.rawValue,
+        RunState.awaitingApproval.rawValue,
+      ]
     )
   }
 
@@ -389,10 +405,15 @@ extension RunStoreGRDB {
       db,
       sql: """
         SELECT id FROM runs
-        WHERE session_id = ? AND state IN (?, ?)
+        WHERE session_id = ? AND state IN (?, ?, ?)
         ORDER BY id ASC
         """,
-      arguments: [sessionId, RunState.pending.rawValue, RunState.running.rawValue]
+      arguments: [
+        sessionId,
+        RunState.pending.rawValue,
+        RunState.running.rawValue,
+        RunState.awaitingApproval.rawValue,
+      ]
     )
 
     var affected: [Int64] = []
@@ -410,7 +431,8 @@ extension RunStoreGRDB {
     _ db: Database,
     runId: Int64,
     event: RunEvent,
-    now: Date
+    now: Date,
+    policyVersion: String? = nil
   ) throws -> RunState? {
     guard
       let state = try currentRunState(db, runId: runId),
@@ -419,10 +441,19 @@ extension RunStoreGRDB {
       return nil
     }
 
-    try db.execute(
-      sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
-      arguments: [nextState.rawValue, now, runId]
-    )
+    // The fingerprint rides the state flip in one UPDATE (spec §3.2); a nil leaves the column
+    // untouched so resolution/deny transitions never disturb the stamped value.
+    if let policyVersion {
+      try db.execute(
+        sql: "UPDATE runs SET state = ?, updated_ts = ?, policy_version = ? WHERE id = ?",
+        arguments: [nextState.rawValue, now, policyVersion, runId]
+      )
+    } else {
+      try db.execute(
+        sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
+        arguments: [nextState.rawValue, now, runId]
+      )
+    }
 
     return nextState
   }

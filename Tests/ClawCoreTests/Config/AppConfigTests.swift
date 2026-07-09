@@ -379,4 +379,60 @@ import Testing
     #expect(config.budget.proactivePerDayUSD == 1.25)
     #expect(config.proactivePerDayUSD == 1.25)
   }
+
+  @Test func approvalExpiryDefaultsTo3600() throws {
+    // given — the key unset
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — spec §4.6 default
+    #expect(config.approvalExpirySeconds == 3600)
+  }
+
+  @Test func approvalExpiryOverrideParses() throws {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.approvalExpiry] = "1800"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.approvalExpirySeconds == 1800)
+  }
+
+  @Test func approvalExpiryFloorAndCeilingAreInclusive() throws {
+    // given — the exact bounds are legal (spec §4.6: floor 60, ceiling 86400)
+    var floorEnv = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    floorEnv[EnvKey.approvalExpiry] = "60"
+    var ceilingEnv = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    ceilingEnv[EnvKey.approvalExpiry] = "86400"
+
+    // when
+    let floorConfig = try AppConfig.load(environment: floorEnv)
+    let ceilingConfig = try AppConfig.load(environment: ceilingEnv)
+
+    // then
+    #expect(floorConfig.approvalExpirySeconds == 60)
+    #expect(ceilingConfig.approvalExpirySeconds == 86400)
+  }
+
+  @Test(arguments: [
+    "59",  // below the 60s floor
+    "86401",  // above the 86400s ceiling
+    "soon",  // non-numeric
+    "0",  // zero
+  ])
+  func outOfRangeApprovalExpiryFailsClosed(_ rawValue: String) {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.approvalExpiry] = rawValue
+
+    // when / then — a dedicated ConfigError case (spec §4.6), never the scheduling vocabulary
+    #expect(throws: ConfigError.invalidApprovalExpiry(rawValue)) {
+      try AppConfig.load(environment: env)
+    }
+  }
 }

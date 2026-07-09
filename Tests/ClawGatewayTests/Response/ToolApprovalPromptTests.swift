@@ -20,4 +20,19 @@ import Testing
     #expect(text.contains("This session has read external content and holds private data."))
     #expect(text.contains("Reply yes to allow this one fetch"))
   }
+
+  @Test func askTierPromptCarriesTheToolAndTheFullTarget() {
+    // given — the minimal Phase 1 arm; the full §5.4 contract lands in Task 13
+    let request = ToolApprovalRequest(
+      action: ToolAction(tool: "file_write", target: "/workspace/notes/plan.md"),
+      reason: .askTier
+    )
+
+    // when
+    let text = ToolApprovalPrompt.text(for: request)
+
+    // then — structural fields only, not full copy (TESTING §7.2)
+    #expect(text.contains("file_write"))
+    #expect(text.contains("/workspace/notes/plan.md"))
+  }
 }

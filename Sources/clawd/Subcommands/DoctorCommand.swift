@@ -54,6 +54,7 @@ struct DoctorCommand: AsyncParsableCommand {
       report.add(key: "heartbeat.interval_min", value: "\(config.heartbeatIntervalMinutes)")
       report.add(key: "heartbeat.quiet_hours", value: config.heartbeatQuietHours.rendered)
       report.add(key: "heartbeat.max_per_day", value: "\(config.heartbeatMaxPerDay)")
+      report.add(key: "approval.expiry_s", value: "\(config.approvalExpirySeconds)")
     }
 
     let secretsRow = SecretStoreResolver.doctorRow(
@@ -211,6 +212,16 @@ struct DoctorCommand: AsyncParsableCommand {
       heartbeatMaxPerDay: config.heartbeatMaxPerDay,
       timezone: config.timezone,
       now: now
+    ) {
+      report.add(key: row.key, value: row.value)
+    }
+
+    let approvalsHealth =
+      (try? stores.approvals.approvalsHealth(now: now))
+      ?? ApprovalsHealth(pendingCount: 0, oldestPendingAgeSeconds: nil)
+    for row in ApprovalsHealthRows.rows(
+      health: approvalsHealth,
+      approvalExpirySeconds: config.approvalExpirySeconds
     ) {
       report.add(key: row.key, value: row.value)
     }

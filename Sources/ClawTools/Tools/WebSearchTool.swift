@@ -33,7 +33,8 @@ public struct WebSearchTool: Tool {
         ]),
         "required": .array([.string("query")]),
       ]),
-      egressClass: .fixedEndpoint
+      egressClass: .fixedEndpoint,
+      riskLevel: .safe
     )
   }
 

@@ -15,6 +15,12 @@ public enum ToolApprovalPrompt {
       This session has read external content and holds private data.
       Reply yes to allow this one fetch; anything else cancels.
       """
+    case .askTier:
+      """
+      ⚠ I want to run \(request.action.tool) on
+      \(request.action.target)
+      This action changes state and needs your explicit approval.
+      """
     }
   }
 }

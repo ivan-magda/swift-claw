@@ -25,6 +25,8 @@ public struct ContextBuilder: Sendable {
   private let recallCutoff: any RecallCutoff
   private let budget: ContextBudget
 
+  private let policyStaticSubhash: String
+
   private let now: @Sendable () -> Date
   private let warn: @Sendable (String) -> Void
 
@@ -35,6 +37,7 @@ public struct ContextBuilder: Sendable {
     retriever: any Retriever,
     recallCutoff: any RecallCutoff = CandidateCapRecallCutoff(),
     budget: ContextBudget,
+    policyStaticSubhash: String = "",
     now: @escaping @Sendable () -> Date = Date.init,
     warn: @escaping @Sendable (String) -> Void = { _ in }
   ) {
@@ -44,6 +47,7 @@ public struct ContextBuilder: Sendable {
     self.retriever = retriever
     self.recallCutoff = recallCutoff
     self.budget = budget
+    self.policyStaticSubhash = policyStaticSubhash
     self.now = now
     self.warn = warn
   }
@@ -71,7 +75,8 @@ public struct ContextBuilder: Sendable {
     return BuildResult(
       messages: messages,
       ownerNotices: ownerNotices,
-      hasPrivateDataAccess: hasPrivateDataAccess(fitted)
+      hasPrivateDataAccess: hasPrivateDataAccess(fitted),
+      policyVersion: currentPolicyVersion()
     )
   }
 }
@@ -362,6 +367,41 @@ private extension ContextBuilder {
     formatter.formatOptions = [.withInternetDateTime]
     formatter.timeZone = TimeZone(secondsFromGMT: 0)
     return formatter.string(from: date)
+  }
+}
+
+// MARK: - Policy Fingerprint
+
+public extension ContextBuilder {
+  /// The class-1 prompt materials in the §3.2 pinned order, RAW (pre "## path" wrapping), folded
+  /// into the injected static sub-hash. Reused verbatim at pick-up (the persisted `policy_version`,
+  /// stamped by `TurnRunner`) and at callback resolution (Phase 3 recompute) so the two can never
+  /// diverge. `public` because `TurnRunner` (ClawGateway) stamps with it cross-module and `assemble`
+  /// returns it — a `private` helper would be invisible to both the stamp seam and `@testable`.
+  func currentPolicyVersion() -> String {
+    PolicyFingerprint.combined(
+      staticSubhash: policyStaticSubhash,
+      promptMaterials: [
+        systemPrompt,
+        rawPromptText(.soul),
+        rawPromptText(.agents),
+        rawPromptText(.tools),
+      ]
+    )
+  }
+}
+
+private extension ContextBuilder {
+  /// The uncapped raw file text for a system-tier prompt file; missing/unreadable folds in as ""
+  /// (spec §3.2). Uncapped because these files load uncapped in `buildFixedSections`.
+  func rawPromptText(_ file: WorkspaceFile) -> String {
+    let loadedFile = workspace.load(file: file, maxGraphemes: nil)
+    switch loadedFile.outcome {
+    case .present:
+      return loadedFile.text
+    case .overCap, .missing, .unreadable:
+      return ""
+    }
   }
 }
 

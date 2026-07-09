@@ -67,7 +67,8 @@ import Testing
         "properties": .object(["url": .object(["type": .string("string")])]),
         "required": .array([.string("url")]),
       ]),
-      egressClass: .none
+      egressClass: .none,
+      riskLevel: .safe
     )
     let request = ChatRequest(
       model: "m",

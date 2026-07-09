@@ -143,6 +143,16 @@ public enum CanonicalTargetResolution: Sendable, Equatable {
   case refused(reason: String)
 }
 
+/// The declared risk tier the gate enforces (ARCHITECTURE §10.2): `safe` executes untapped,
+/// `ask` requires a per-action durable approval (Inc 5a), `dangerous` is refused unless
+/// explicitly config-enabled (vacuous until Inc 5b). No default anywhere — a new tool cannot
+/// compile without classifying itself, mirroring `ToolEgressClass`.
+public enum RiskLevel: String, Sendable, Equatable {
+  case safe
+  case ask
+  case dangerous
+}
+
 /// What the registry advertises to the provider (wire `tools` entry).
 public struct ToolDefinition: Sendable, Equatable {
   public let name: String
@@ -150,17 +160,21 @@ public struct ToolDefinition: Sendable, Equatable {
   public let parameters: JSONValue  // JSON-Schema object
   /// The declared policy class the gate enforces. NOT advertised on the wire.
   public let egressClass: ToolEgressClass
+  /// The declared risk tier (orthogonal to egress). NOT advertised on the wire.
+  public let riskLevel: RiskLevel
 
   public init(
     name: String,
     description: String,
     parameters: JSONValue,
-    egressClass: ToolEgressClass
+    egressClass: ToolEgressClass,
+    riskLevel: RiskLevel
   ) {
     self.name = name
     self.description = description
     self.parameters = parameters
     self.egressClass = egressClass
+    self.riskLevel = riskLevel
   }
 }
 
