@@ -133,6 +133,22 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
   func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
     try base.failRunStalePolicy(runId: runId, sessionId: sessionId, now: now)
   }
+
+  func resolveDeniedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    cancel: CancelReason?,
+    now: Date
+  ) throws -> RunCommitResult {
+    try base.resolveDeniedObservation(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      content: content,
+      cancel: cancel,
+      now: now
+    )
+  }
 }
 
 /// Delegates to the real run store but flips the active run to CANCELLED immediately before the
@@ -232,6 +248,22 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
     try base.failRunStalePolicy(runId: runId, sessionId: sessionId, now: now)
   }
+
+  func resolveDeniedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    cancel: CancelReason?,
+    now: Date
+  ) throws -> RunCommitResult {
+    try base.resolveDeniedObservation(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      content: content,
+      cancel: cancel,
+      now: now
+    )
+  }
 }
 
 /// A `RunStore` whose first write reports a full disk, to exercise the storage-full rethrow.
@@ -290,6 +322,15 @@ struct DiskFullRuns: RunStore {
     throw StoreError.diskFull
   }
   func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
+    throw StoreError.diskFull
+  }
+  func resolveDeniedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    cancel: CancelReason?,
+    now: Date
+  ) throws -> RunCommitResult {
     throw StoreError.diskFull
   }
 }

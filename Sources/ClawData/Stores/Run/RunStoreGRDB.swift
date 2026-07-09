@@ -219,6 +219,42 @@ public struct RunStoreGRDB: RunStore {
     }
   }
 
+  public func resolveDeniedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    cancel: CancelReason?,
+    now: Date
+  ) throws -> RunCommitResult {
+    try database.writeMapping { db in
+      // Fill the placeholder observation in place (§6.4): both `ContextBuilder.historyGroups` and
+      // `HistoryHygiene` require every anchor's tool rows to be answered, so a dangling
+      // "awaiting owner approval" row would drop the whole exchange from the next assembly. The
+      // UPDATE is by message id — idempotent on a boot re-park, and correct for the /stop//new
+      // path where the command transaction moved the run but never touched this row.
+      try db.execute(
+        sql: "UPDATE messages SET content = ? WHERE id = ?",
+        arguments: [content, observationMessageId]
+      )
+
+      let event: RunEvent =
+        switch cancel {
+        case .none: .resolveDenied
+        case .cancelled: .cancel
+        case .superseded: .supersede
+        }
+      // For the command path the run is already CANCELLED/SUPERSEDED, so the FSM returns nil and we
+      // report `.ignored`: the observation fix above was the only remaining work.
+      guard let nextState = try Self.transitionRun(db, runId: runId, event: event, now: now) else {
+        return .ignored
+      }
+      if nextState == .failed {
+        try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+      }
+      return .committed
+    }
+  }
+
   public func commitSuspendedTurn(
     runId: Int64,
     sessionId: Int64,

@@ -321,6 +321,47 @@ import Testing
     #expect(await callbacks.disarmed == [env.promptMessageId])
   }
 
+  @Test func denySignalFillsPlaceholderObservationInPlace() async throws {
+    // given — a parked waiter with the real deny half
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks
+    )
+
+    // when — an owner reject lands and the parked waiter finalizes it
+    await coordinator.signal(approvalId: env.approvalId, .denied(.rejected))
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then — the placeholder is REPLACED in place (no dangling tool_call), the run is FAILED, the
+    // owner is notified, and the buttons are disarmed — via resolveDeniedObservation, not failRun
+    let observation = try await env.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT content FROM messages WHERE id = ?",
+        arguments: [env.observationMessageId]
+      )
+    }
+    #expect(observation == "The owner declined this action.")
+    #expect(try runState(env) == RunState.failed.rawValue)
+    #expect(await turns.resumeCalls.isEmpty)
+    #expect(await delivery.texts.isEmpty == false)
+    #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
   // MARK: - Cancellation (carried-in liveness note #2)
 
   @Test(.timeLimit(.minutes(1)))

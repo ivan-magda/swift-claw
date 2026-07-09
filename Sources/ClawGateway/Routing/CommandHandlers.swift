@@ -14,6 +14,7 @@ struct CommandHandlers: Sendable {
   let replies: ReplySender
   let now: @Sendable () -> Date
   let logger: Logger
+  let coordinator: ApprovalCoordinator
 
   func stop(
     rawUpdate: RawUpdate,
@@ -40,6 +41,10 @@ struct CommandHandlers: Sendable {
       for runId in result.cancelledRunIds {
         await lane.cancel(runId: runId)
       }
+    }
+
+    for approvalId in result.resolvedApprovalIds {
+      await coordinator.signal(approvalId: approvalId, .denied(.cancelled))
     }
 
     let reply =
@@ -75,6 +80,10 @@ struct CommandHandlers: Sendable {
       let lane = await lanes.actor(for: sessionId)
       await lane.cancelAll()
       await pendingConfirmations.clear(sessionId: sessionId)
+    }
+
+    for approvalId in result.resolvedApprovalIds {
+      await coordinator.signal(approvalId: approvalId, .denied(.superseded))
     }
 
     return await replies.sendCommandAck(

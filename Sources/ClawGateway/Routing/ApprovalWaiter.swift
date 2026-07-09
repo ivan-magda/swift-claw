@@ -71,12 +71,13 @@ public struct ApprovalWaiter: ApprovalParking {
         revalidatePolicyOnApprove: revalidatePolicyOnApprove
       )
     case .denied(let decision):
-      await resolveDenied(
-        approvalId: approvalId,
-        runId: runId,
-        chatId: chatId,
-        decision: decision
-      )
+      guard let approval = loadApproval(approvalId) else {
+        // The nonce is never consumed, so a nil row means a resolver already drove the run
+        // terminal; the durable state is settled and the lane is free.
+        logger.debug("approval \(approvalId) absent at deny resume; nothing to finalize")
+        return
+      }
+      await resolveDenied(approval: approval, decision: decision, chatId: chatId)
     }
   }
 }
@@ -142,40 +143,79 @@ private extension ApprovalWaiter {
   }
 }
 
-// MARK: - Deny Finalization (Task 17 replaces the body)
+// MARK: - Deny Half (§6.4)
+
+extension ApprovalWaiter {
+  /// The §6.4 deny/cancel/expiry half: the resolver (callback handler, ticker, `/stop`//`new`, or
+  /// boot sweep) has ALREADY CAS'd the row and signalled the coordinator (D3 — the audit rode that
+  /// CAS). The waiter — the single execution locus (§5.5) — now (1) fills the placeholder
+  /// observation in place so history never holds a dangling tool_call, (2) drives the run to its
+  /// terminal state, (3) sends the plain-language owner notice for a reject/expiry (the `/stop`//
+  /// `new` command already acked the owner), and (4) disarms the buttons. Steps 3–4 are best-effort
+  /// transport over already-committed durable state — a transport failure must not strand the lane.
+  func resolveDenied(
+    approval: Approval,
+    decision: ApprovalDecision,
+    chatId: Int64
+  ) async {
+    let cancel: CancelReason? =
+      switch decision {
+      case .cancelled: .cancelled
+      case .superseded: .superseded
+      case .rejected, .expired, .stalePolicy: nil
+      }
+
+    do {
+      _ = try runs.resolveDeniedObservation(
+        runId: approval.runId,
+        observationMessageId: approval.observationMessageId,
+        content: Self.deniedObservationContent(for: decision),
+        cancel: cancel,
+        now: now()
+      )
+    } catch {
+      logger.error("approval \(approval.id) deny-observation commit failed: \(error)")
+    }
+
+    if cancel == nil {
+      _ = try? await delivery.sendMessage(
+        chatId: chatId,
+        text: Self.ownerNotice(for: decision)
+      )
+    }
+
+    if let promptMessageId = approval.promptMessageId {
+      try? await callbacks.editMessageReplyMarkup(
+        chatId: chatId,
+        messageId: promptMessageId,
+        replyMarkup: nil
+      )
+    }
+  }
+}
+
+// MARK: - Deny Copy
 
 private extension ApprovalWaiter {
-  /// Task 17 owns the deny half: it replaces this body with `resolveDeniedObservation` (the
-  /// synthetic in-place observation + cancel/supersede run states + decision-specific copy). This
-  /// increment guarantees only the lane-freeing contract: the run fails, the owner is told, the
-  /// keyboard is disarmed — so a `.denied` signal never leaves the lane hung.
-  func resolveDenied(
-    approvalId: Int64,
-    runId: Int64,
-    chatId: Int64,
-    decision: ApprovalDecision
-  ) async {
-    guard let approval = loadApproval(approvalId) else {
-      return
+  /// The synthetic tool-observation content (§6.4) — what the model sees for the un-run call, so
+  /// the next assembly explains the missing result instead of exposing a dangling proposal.
+  static func deniedObservationContent(for decision: ApprovalDecision) -> String {
+    switch decision {
+    case .rejected: "The owner declined this action."
+    case .expired: "The approval expired before the owner responded."
+    case .cancelled: "Cancelled by /stop."
+    case .superseded: "Superseded by /new."
+    case .stalePolicy: "The approval was voided because the policy changed before it ran."
     }
-    do {
-      // No-op when the run is already CANCELLED/SUPERSEDED (the command path won first); fails an
-      // AWAITING_APPROVAL run for reject/expiry.
-      try runs.failRun(runId: runId, now: now())
-    } catch {
-      logger.error("failRun after denial failed for run \(runId): \(error)")
-    }
-    await notifyOwner(chatId: chatId, text: Self.denialNotice(for: decision))
-    await disarm(approval, chatId: chatId)
   }
 
-  static func denialNotice(for decision: ApprovalDecision) -> String {
+  /// The plain-language owner DM for a reject/expiry (§6.4). Cancel/supersede are covered by the
+  /// `/stop`//`new` command ack, so no notice is sent for those.
+  static func ownerNotice(for decision: ApprovalDecision) -> String {
     switch decision {
-    case .rejected: "Okay — I won't do that."
-    case .expired: "That approval expired, so I didn't do it."
-    case .cancelled: "Cancelled."
-    case .superseded: "Starting fresh — I dropped the pending action."
-    case .stalePolicy: "My instructions or tools changed, so I didn't run that."
+    case .expired: "That approval expired, so I didn't run the action."
+    case .stalePolicy: "I didn't run that action — the configuration changed after I asked."
+    case .rejected, .cancelled, .superseded: "Understood — I won't run that action."
     }
   }
 }

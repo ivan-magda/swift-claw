@@ -23,11 +23,21 @@ public struct StopCommandResult: Sendable, Equatable {
   /// Every run `/stop` terminated — the RUNNING turn AND any queued PENDING turns (spec FSM:
   /// PENDING + /stop → CANCELLED). Empty when there was nothing to stop.
   public let cancelledRunIds: [Int64]
+  /// PENDING approvals of the terminated runs, CAS'd to REJECTED (decision `cancelled`) in the same
+  /// command transaction (§6.4). The handler signals the coordinator per id so a held/boot-parked
+  /// lane releases. Defaulted so the `newlyClaimed: false` early return needs no change.
+  public let resolvedApprovalIds: [Int64]
 
-  public init(newlyClaimed: Bool, sessionId: Int64?, cancelledRunIds: [Int64]) {
+  public init(
+    newlyClaimed: Bool,
+    sessionId: Int64?,
+    cancelledRunIds: [Int64],
+    resolvedApprovalIds: [Int64] = []
+  ) {
     self.newlyClaimed = newlyClaimed
     self.sessionId = sessionId
     self.cancelledRunIds = cancelledRunIds
+    self.resolvedApprovalIds = resolvedApprovalIds
   }
 }
 
@@ -35,11 +45,21 @@ public struct NewCommandResult: Sendable, Equatable {
   public let newlyClaimed: Bool
   public let sessionId: Int64?
   public let supersededRunIds: [Int64]
+  /// PENDING approvals of the superseded runs, CAS'd to REJECTED (decision `superseded`) in the
+  /// same command transaction (§6.4). The handler signals the coordinator per id. Defaulted so the
+  /// `newlyClaimed: false` early return needs no change.
+  public let resolvedApprovalIds: [Int64]
 
-  public init(newlyClaimed: Bool, sessionId: Int64?, supersededRunIds: [Int64]) {
+  public init(
+    newlyClaimed: Bool,
+    sessionId: Int64?,
+    supersededRunIds: [Int64],
+    resolvedApprovalIds: [Int64] = []
+  ) {
     self.newlyClaimed = newlyClaimed
     self.sessionId = sessionId
     self.supersededRunIds = supersededRunIds
+    self.resolvedApprovalIds = resolvedApprovalIds
   }
 }
 
@@ -275,6 +295,20 @@ public protocol RunStore: Sendable {
   /// `approvalDenied`/`stale_policy` audit in ONE txn, while the approval row stays APPROVED — the
   /// one documented granted-then-denied pair. Returns false when the run was not AWAITING.
   func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool
+  /// §6.4 deny/cancel resolution: fill the placeholder observation row in place with the synthetic
+  /// denial `content` so persisted history never holds a dangling tool_call, then drive the run to
+  /// its terminal state. `cancel == nil` is the owner-deny / expiry path
+  /// (AWAITING_APPROVAL → FAILED via `resolveDenied`, returns `.committed`); `cancel != nil` is the
+  /// `/stop`//`new` path whose command transaction already flipped the run to CANCELLED/SUPERSEDED,
+  /// so the FSM no-ops the transition and the method returns `.ignored` after fixing the
+  /// observation. One transaction.
+  func resolveDeniedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    cancel: CancelReason?,
+    now: Date
+  ) throws -> RunCommitResult
 }
 
 public extension RunStore {

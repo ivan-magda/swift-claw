@@ -41,12 +41,19 @@ public struct CommandStoreGRDB: CommandStore {
         now: now
       )
       let cancelledRunIds = try RunStoreGRDB.cancelRuns(db, sessionId: sessionId, now: now)
+      let resolvedApprovalIds = try ApprovalStoreGRDB.resolvePendingApprovals(
+        db,
+        runIds: cancelledRunIds,
+        decision: .cancelled,
+        now: now
+      )
       try Self.insertStopAudits(db, sessionId: sessionId, runIds: cancelledRunIds, now: now)
 
       return StopCommandResult(
         newlyClaimed: true,
         sessionId: sessionId,
-        cancelledRunIds: cancelledRunIds
+        cancelledRunIds: cancelledRunIds,
+        resolvedApprovalIds: resolvedApprovalIds
       )
     }
   }
@@ -111,6 +118,12 @@ public struct CommandStoreGRDB: CommandStore {
         now: now
       )
       let supersededRunIds = try RunStoreGRDB.supersedeRuns(db, sessionId: sessionId, now: now)
+      let resolvedApprovalIds = try ApprovalStoreGRDB.resolvePendingApprovals(
+        db,
+        runIds: supersededRunIds,
+        decision: .superseded,
+        now: now
+      )
 
       try SessionMessageStoreGRDB.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
       try Self.insertNewAudits(db, sessionId: sessionId, runIds: supersededRunIds, now: now)
@@ -118,7 +131,8 @@ public struct CommandStoreGRDB: CommandStore {
       return NewCommandResult(
         newlyClaimed: true,
         sessionId: sessionId,
-        supersededRunIds: supersededRunIds
+        supersededRunIds: supersededRunIds,
+        resolvedApprovalIds: resolvedApprovalIds
       )
     }
   }

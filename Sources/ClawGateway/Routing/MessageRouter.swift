@@ -43,6 +43,7 @@ public struct MessageRouter: Sendable {
     lanes: SessionLaneRegistry,
     schedule: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
+    coordinator: ApprovalCoordinator = ApprovalCoordinator(),
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
@@ -70,7 +71,8 @@ public struct MessageRouter: Sendable {
       lanes: lanes,
       replies: replies,
       now: now,
-      logger: logger
+      logger: logger,
+      coordinator: coordinator
     )
     self.scheduleHandlers = ScheduleHandlers(
       schedule: schedule,

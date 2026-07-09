@@ -283,6 +283,7 @@ private extension RunCommand {
       lanes: lanes,
       schedule: scheduleSurface,
       approvalCallbacks: approvalCallbackHandler,
+      coordinator: approvalCoordinator,
       logger: logger
     )
     let poller = TelegramPollerService(
