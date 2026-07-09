@@ -4,9 +4,6 @@ import GRDB
 
 public struct RunStoreGRDB: RunStore {
   private let database: MappedDatabase
-  /// Injected fault hook for the §5.3 atomicity test only: thrown inside the suspend-commit txn so
-  /// a scripted mid-write failure proves the whole checkpoint rolls back. The public init passes a
-  /// no-op (mirrors `MemoryCommandStoreGRDB.afterClaimForTesting`).
   private let suspendCommitFault: @Sendable () throws -> Void
 
   public init(writer: any DatabaseWriter) {
@@ -229,9 +226,8 @@ public struct RunStoreGRDB: RunStore {
     now: Date
   ) throws -> SuspendedCommitReceipt {
     try database.writeMapping { db in
-      // Lost arbitration (a racing /stop//new already terminated the run) rolls back with no
-      // orphan approval — the FSM refuses RUNNING→AWAITING from any non-running state.
-      guard try Self.transitionRun(db, runId: runId, event: .suspendForApproval, now: now) != nil
+      guard
+        try Self.transitionRun(db, runId: runId, event: .suspendForApproval, now: now) != nil
       else {
         throw StoreError.unexpected("run \(runId) was not RUNNING at suspend commit")
       }
@@ -243,6 +239,7 @@ public struct RunStoreGRDB: RunStore {
           """,
         arguments: [sessionId, runId, commit.assistantContent, now, commit.toolCallsJSON]
       )
+
       for observation in commit.completedObservations {
         try db.execute(
           sql: """
@@ -333,6 +330,7 @@ public struct RunStoreGRDB: RunStore {
       )
 
       try suspendCommitFault()
+
       return SuspendedCommitReceipt(
         approvalId: approvalId,
         observationMessageId: observationMessageId
