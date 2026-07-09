@@ -247,7 +247,7 @@ public struct TurnRunner: TurnDispatching {
       buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
     } catch {
       logger.error("resume context build failed for run \(runId): \(error)")
-      try? runs.failRun(runId: runId, now: Date())
+      try? runs.failRun(runId: runId, now: now())
       return
     }
 
@@ -268,7 +268,7 @@ public struct TurnRunner: TurnDispatching {
       )
     } catch {
       logger.error("resume turn failed for run \(runId): \(error)")
-      try? runs.failRun(runId: runId, now: Date())
+      try? runs.failRun(runId: runId, now: now())
       return
     }
 

@@ -634,9 +634,11 @@ private extension RunCommand {
 // MARK: - Boot Sequence
 
 private extension RunCommand {
-  /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram,
-  /// then sweep crash-orphaned runs (F22). The steps are independent and best-effort, so the order
-  /// is cosmetic; both run before any update is served.
+  /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram
+  /// (`registerMenu`), sweep crash-orphaned runs (`reconcileRuns`, F22), then re-park unresolved
+  /// approvals (`reconcileApprovals`, §7). Each step is best-effort, but `reconcileApprovals` is
+  /// deliberately last: the run sweep must fail its orphans first so the approval sweep only sees
+  /// runs that are genuinely still parked. All three run before any update is served.
   func bootSequence(
     transport: any TelegramTransport,
     stores: ClawStores,
