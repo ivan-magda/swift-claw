@@ -16,14 +16,18 @@ private struct MarkSentFailingOutbox: OutboxStore {
     stepIndex: Int,
     chatId: Int64,
     payload: String,
-    payloadHash: String
+    payloadHash: String,
+    approvalId: Int64?,
+    replyMarkup: String?
   ) throws -> Bool {
     try base.claimOutbound(
       runId: runId,
       stepIndex: stepIndex,
       chatId: chatId,
       payload: payload,
-      payloadHash: payloadHash
+      payloadHash: payloadHash,
+      approvalId: approvalId,
+      replyMarkup: replyMarkup
     )
   }
 
@@ -32,14 +36,18 @@ private struct MarkSentFailingOutbox: OutboxStore {
     stepIndex: Int,
     chatId: Int64,
     payload: String,
-    payloadHash: String
+    payloadHash: String,
+    approvalId: Int64?,
+    replyMarkup: String?
   ) throws -> Bool {
     try base.claimOutboundIfRunActive(
       runId: runId,
       stepIndex: stepIndex,
       chatId: chatId,
       payload: payload,
-      payloadHash: payloadHash
+      payloadHash: payloadHash,
+      approvalId: approvalId,
+      replyMarkup: replyMarkup
     )
   }
 
@@ -48,6 +56,39 @@ private struct MarkSentFailingOutbox: OutboxStore {
   }
 
   func pendingOutbound() throws -> [OutboxRow] { try base.pendingOutbound() }
+}
+
+/// Records the `replyMarkup` argument the dispatcher passes to each send overload. Implements the
+/// reply-markup overloads directly (rather than the throwing default) so the keyboard is captured.
+private actor ReplyMarkupSpy: MessageDelivery {
+  private(set) var richMarkups: [String?] = []
+  private(set) var plainMarkups: [String?] = []
+  private let failRich: Bool
+
+  init(failRich: Bool = false) {
+    self.failRich = failRich
+  }
+
+  func sendMessage(chatId: Int64, text: String) async throws -> Int64 { 1 }
+
+  func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 { 1 }
+
+  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
+    plainMarkups.append(replyMarkup)
+    return 1
+  }
+
+  func sendRichMessage(
+    chatId: Int64,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
+    if failRich {
+      throw TelegramError.transport("rich down")
+    }
+    richMarkups.append(replyMarkup)
+    return 1
+  }
 }
 
 @Suite struct OutboxDispatcherTests {
@@ -184,5 +225,59 @@ private struct MarkSentFailingOutbox: OutboxStore {
     let deliveredMarkdown = await transport.richSends.map { $0.markdown }
     #expect(deliveredMarkdown == ["hello"])
     #expect(try fixture.outbox.pendingOutbound().count == 1)
+  }
+
+  @Test func dispatcherForwardsReplyMarkupOnTheRichSend() async throws {
+    // given — a PENDING row carrying an inline keyboard
+    let fixture = try makeFixture()
+    let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
+    _ = try fixture.outbox.claimOutbound(
+      runId: fixture.runId,
+      stepIndex: 0,
+      chatId: fixture.chatId,
+      payload: "prompt",
+      payloadHash: "h",
+      replyMarkup: markup
+    )
+    let spy = ReplyMarkupSpy()
+    let dispatcher = OutboxDispatcher(
+      outbox: fixture.outbox,
+      delivery: spy,
+      signal: OutboxSignal(),
+      logger: TestLog.silent
+    )
+
+    // when
+    await dispatcher.drainOnce()
+
+    // then — the keyboard rode the rich send
+    #expect(await spy.richMarkups == [markup])
+  }
+
+  @Test func dispatcherForwardsReplyMarkupOnThePlainFallback() async throws {
+    // given — the rich send fails, forcing the plain fallback
+    let fixture = try makeFixture()
+    let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
+    _ = try fixture.outbox.claimOutbound(
+      runId: fixture.runId,
+      stepIndex: 0,
+      chatId: fixture.chatId,
+      payload: "prompt",
+      payloadHash: "h",
+      replyMarkup: markup
+    )
+    let spy = ReplyMarkupSpy(failRich: true)
+    let dispatcher = OutboxDispatcher(
+      outbox: fixture.outbox,
+      delivery: spy,
+      signal: OutboxSignal(),
+      logger: TestLog.silent
+    )
+
+    // when
+    await dispatcher.drainOnce()
+
+    // then — the same keyboard rode the plain fallback
+    #expect(await spy.plainMarkups == [markup])
   }
 }

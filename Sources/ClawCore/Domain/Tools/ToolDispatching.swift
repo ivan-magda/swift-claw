@@ -40,17 +40,20 @@ public struct ToolDispatchOutcome: Sendable, Equatable {
   public let observation: ToolObservation
   public let argsRedacted: String
   public let pendingApproval: ToolApprovalRequest?
+  public let requiresApproval: RecordedToolAction?
   public let consumedGrant: Bool
 
   public init(
     observation: ToolObservation,
     argsRedacted: String,
     pendingApproval: ToolApprovalRequest? = nil,
+    requiresApproval: RecordedToolAction? = nil,
     consumedGrant: Bool = false
   ) {
     self.observation = observation
     self.argsRedacted = argsRedacted
     self.pendingApproval = pendingApproval
+    self.requiresApproval = requiresApproval
     self.consumedGrant = consumedGrant
   }
 }

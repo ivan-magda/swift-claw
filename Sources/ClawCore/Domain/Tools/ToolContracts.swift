@@ -263,6 +263,27 @@ public protocol Tool: Sendable {
   /// `canonicalTarget` is the gate-resolved form for `.arbitraryDestination` tools — act on
   /// exactly what was authorized, never re-derive it; `nil` for the other classes.
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
+
+  /// The §5.4 prompt inputs for an ask-tier or trifecta approval, produced at gate time on the
+  /// gate-resolved `canonicalTarget`. The default is a generic egress presentation; write tools
+  /// override with blast radius, a redacted preview, and any scan warnings.
+  func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation
+}
+
+extension Tool {
+  public func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation {
+    ToolApprovalPresentation(
+      blastRadius: "egress to \(canonicalTarget)",
+      contentPreview: nil,
+      warnings: []
+    )
+  }
 }
 
 /// The search seam (D2). One v1 impl: ExaSearchProvider (§7.4, research-settled).

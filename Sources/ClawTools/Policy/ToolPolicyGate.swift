@@ -11,6 +11,9 @@ public struct ToolPolicyGate: Sendable {
     /// authorized; `nil` for the other classes.
     case allow(argsRedacted: String, consumedGrant: Bool, action: ToolAction?)
     case block(payload: ToolPayload, argsRedacted: String, pendingApproval: ToolApprovalRequest?)
+    /// An ask-tier action (§4.3/§5.1) parked for the owner's durable approval. Carries the recorded
+    /// canonical args the §5.3 suspend commit persists and the §6.3 resume replays.
+    case requireApproval(recorded: RecordedToolAction)
   }
 
   private let argGuard: ExfilArgGuard
@@ -26,6 +29,14 @@ public struct ToolPolicyGate: Sendable {
     tool: any Tool,
     context: ToolDispatchContext
   ) -> Verdict {
+    // (1) ask-tier is evaluated FIRST, before the egress fast-path (§4.3/§5.1): an ask-tier tool
+    // reaches the durable approval arm regardless of egress class — an ask-tier file_write has
+    // egress `.none` yet must still park for the owner's decision.
+    if tool.definition.riskLevel == .ask {
+      return evaluateAskTier(call: call, tool: tool, context: context)
+    }
+
+    // (2) .none-egress fast path — a safe non-egress read (file_read): audit-render only.
     guard tool.definition.egressClass != .none else {
       return .allow(
         argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
@@ -34,13 +45,13 @@ public struct ToolPolicyGate: Sendable {
       )
     }
 
-    // (2) unconditional tier — BLOCKING per FR-T6, every egress class
+    // (3) unconditional tier — BLOCKING per FR-T6, every egress class
     let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
     if let rule = unconditional.blockedRule {
       return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
     }
 
-    // (3) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run)  [rev.1 H1]
+    // (4) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run)  [rev.1 H1]
     let tainted = context.sessionTainted || context.runIngestedUntrusted
     let privateData = context.assemblyPrivateData || context.runPrivateData
     guard tainted && privateData else {
@@ -60,7 +71,7 @@ public struct ToolPolicyGate: Sendable {
       }
     }
 
-    // (3a) conditional tier — redaction-block WINS over approval (FR-T6); disk at gate time
+    // (4a) conditional tier — redaction-block WINS over approval (FR-T6); disk at gate time
     let conditional = argGuard.evaluateConditional(
       argsJSON: call.argumentsJSON,
       privateFileTexts: privateFileLoader()
@@ -69,7 +80,7 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
     }
 
-    // (3b) the arbitrary-destination egress class (§18-H): grant match or approval
+    // (5) the arbitrary-destination egress class (§18-H): grant match or approval
     let action: ToolAction?
     switch resolveAction(call: call, tool: tool) {
     case .action(let resolved):
@@ -181,6 +192,113 @@ public struct ToolPolicyGate: Sendable {
   }
 }
 
+// MARK: - Ask-tier approval
+
+private extension ToolPolicyGate {
+  /// §4.3/§5.1(a): an ask-tier tool MUST resolve a canonical target regardless of egress class —
+  /// the approval binds to the resolved form. Malformed args or a `.refused` resolution block as
+  /// they do for web_fetch; a `nil` resolution is a contract violation and fails CLOSED.
+  func evaluateAskTier(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) -> Verdict {
+    guard let arguments = JSONValue.parse(call.argumentsJSON) else {
+      return askTierBlock(reason: "Malformed arguments for \(call.name).", call: call)
+    }
+
+    let target: String
+    switch tool.canonicalTarget(arguments: arguments) {
+    case .resolved(let resolved):
+      target = resolved
+    case .refused(let reason):
+      return askTierBlock(reason: reason, call: call)
+    case nil:
+      return askTierBlock(
+        reason: "\(call.name) is ask-tier but resolved no canonical target.",
+        call: call
+      )
+    }
+
+    // The run holds one approval slot (§5.2): a further ask-tier call while one is pending gets the
+    // blocked observation, never a second park.
+    guard context.approvalAlreadyPending == false else {
+      return .block(
+        payload: ToolPayload(
+          content: "blocked: an approval is already pending",
+          status: .blockedPendingApproval,
+          ingestedUntrusted: false
+        ),
+        argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
+        pendingApproval: nil
+      )
+    }
+
+    let recorded = recordedAction(call: call, tool: tool, target: target, reason: .askTier)
+    return .requireApproval(recorded: recorded)
+  }
+
+  /// Phase 4 Task 23 (assumption A1) reuses this to record the trifecta action too. Canonicalizes
+  /// the call arguments to sorted-keys JSON, hashes via `ApprovalArgsHash`, and asks the tool for
+  /// its §5.4 presentation on the gate-resolved target.
+  func recordedAction(
+    call: ToolCall,
+    tool: any Tool,
+    target: String,
+    reason: ApprovalReason
+  ) -> RecordedToolAction {
+    let canonicalArgsJSON = Self.canonicalArgs(call.argumentsJSON)
+    let presentation: ToolApprovalPresentation
+
+    if let arguments = JSONValue.parse(call.argumentsJSON) {
+      presentation = tool.approvalPresentation(arguments: arguments, canonicalTarget: target)
+    } else {
+      presentation = ToolApprovalPresentation(
+        blastRadius: "egress to \(target)",
+        contentPreview: nil,
+        warnings: []
+      )
+    }
+
+    return RecordedToolAction(
+      tool: call.name,
+      canonicalArgsJSON: canonicalArgsJSON,
+      argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
+      canonicalTarget: target,
+      reason: reason,
+      presentation: presentation
+    )
+  }
+
+  func askTierBlock(reason: String, call: ToolCall) -> Verdict {
+    .block(
+      payload: ToolPayload(content: reason, status: .error, ingestedUntrusted: false),
+      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
+      pendingApproval: nil
+    )
+  }
+
+  /// Deterministic sorted-keys re-encoding so the same arguments always hash the same. Falls back
+  /// to the raw string only if it is unparseable (the ask-tier path already blocks that case).
+  static func canonicalArgs(_ rawArgumentsJSON: String) -> String {
+    guard let value = JSONValue.parse(rawArgumentsJSON) else {
+      return rawArgumentsJSON
+    }
+
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+
+    guard
+      let data = try? encoder.encode(value),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return rawArgumentsJSON
+    }
+
+    return json
+  }
+}
+
 /// §9.1's full per-call order behind the loop's `ToolDispatching` seam: (0) lookup → (1) parse →
 /// (2)/(3) gate → (4) execute under the tool's own timeout. Audit is the LOOP's job (§6).
 public struct GatedToolDispatcher: ToolDispatching {
@@ -219,6 +337,21 @@ public struct GatedToolDispatcher: ToolDispatching {
         observation: ToolObservation(call: call, payload: payload),
         argsRedacted: argsRedacted,
         pendingApproval: pendingApproval
+      )
+    case .requireApproval(let recorded):
+      // The recorded action rides the outcome to the loop (Task 12), which sets the pending action
+      // and returns `.suspended`. The observation is the placeholder the §5.3 suspend commit
+      // persists in place and updates at resolution — the pending call itself does not execute now.
+      return ToolDispatchOutcome(
+        observation: ToolObservation(
+          callId: call.id,
+          toolName: call.name,
+          content: "awaiting owner approval",
+          status: .blockedPendingApproval,
+          ingestedUntrusted: false
+        ),
+        argsRedacted: gate.renderRedacted(argsJSON: call.argumentsJSON),
+        requiresApproval: recorded
       )
     case .allow(let argsRedacted, let consumedGrant, let action):
       // (4) execute under the tool's own timeout, on the gate-resolved canonical target

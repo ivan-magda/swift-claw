@@ -173,6 +173,7 @@ private extension RunCommand {
     let breaker = BudgetBreaker(budget: config.budget)
     let lanes = SessionLaneRegistry()
     let pendingConfirmations = PendingConfirmationRegistry()
+    let approvalCoordinator = ApprovalCoordinator()
 
     // Hoisted so the schedule draft parser and the agent share one provider instance.
     let provider = OpenAICompatibleProvider(
@@ -235,6 +236,8 @@ private extension RunCommand {
       notifyOutbox: { outboxSignal.poke() },
       breaker: breaker,
       delivery: transport,
+      parker: InertApprovalParker(coordinator: approvalCoordinator, logger: logger),
+      approvalExpirySeconds: config.approvalExpirySeconds,
       logger: logger
     )
     let scheduleSurface = makeScheduleSurface(
