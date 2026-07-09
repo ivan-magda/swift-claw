@@ -136,6 +136,74 @@ public protocol SessionMessageStore: Sendable {
   func resetWindowAndDetaint(sessionId: Int64, now: Date) throws
 }
 
+/// One already-executed observation of the suspending batch, in the order it ran (spec §5.3).
+public struct ToolObservationRow: Sendable, Equatable {
+  public let toolCallId: String
+  public let content: String
+
+  public init(toolCallId: String, content: String) {
+    self.toolCallId = toolCallId
+    self.content = content
+  }
+}
+
+/// Everything the §5.3 suspend commit persists in ONE transaction. Mirrors `AssistantTurn`, plus
+/// the pending action the approval binds to and the button-carrying outbox chunk(s). `promptChunks`
+/// carry `replyMarkup` already; the store stamps `approvalId` on the button chunk after inserting
+/// the `approvals` row (the id is unknown until then).
+public struct SuspendedTurnCommit: Sendable {
+  public let assistantContent: String
+  public let toolCallsJSON: String
+  public let completedObservations: [ToolObservationRow]
+  public let pending: PendingToolAction
+  public let ownerUserId: Int64  // the run's delivery chat id (§4.4)
+  public let nonce: String  // caller-generated via ApprovalNonce.generate()
+  public let promptChunks: [OutboxChunk]
+  public let setTainted: Bool
+  public let setPrivateData: Bool
+  public let expiresTs: Date  // now + approval_expiry
+  // NOTE: no `usage` field. The suspending round-trip's `provider_usage` row is already written
+  // mid-loop by `AgentRuntime` before dispatch (crash-safe); re-inserting it here would double the
+  // day budget AND the §6.3 resume carry-over, since `provider_usage` has no dedup key and both
+  // totals SUM every row. The commit persists the checkpoint only, never usage.
+
+  public init(
+    assistantContent: String,
+    toolCallsJSON: String,
+    completedObservations: [ToolObservationRow],
+    pending: PendingToolAction,
+    ownerUserId: Int64,
+    nonce: String,
+    promptChunks: [OutboxChunk],
+    setTainted: Bool,
+    setPrivateData: Bool,
+    expiresTs: Date
+  ) {
+    self.assistantContent = assistantContent
+    self.toolCallsJSON = toolCallsJSON
+    self.completedObservations = completedObservations
+    self.pending = pending
+    self.ownerUserId = ownerUserId
+    self.nonce = nonce
+    self.promptChunks = promptChunks
+    self.setTainted = setTainted
+    self.setPrivateData = setPrivateData
+    self.expiresTs = expiresTs
+  }
+}
+
+/// The suspend commit's outputs the waiter and boot re-park need: the new approval id and the
+/// placeholder observation row's message id (§6.3 continuation bound).
+public struct SuspendedCommitReceipt: Sendable, Equatable {
+  public let approvalId: Int64
+  public let observationMessageId: Int64
+
+  public init(approvalId: Int64, observationMessageId: Int64) {
+    self.approvalId = approvalId
+    self.observationMessageId = observationMessageId
+  }
+}
+
 public protocol RunStore: Sendable {
   /// PENDING → RUNNING through `RunFSM`, returning the run's origin in the same write; nil means
   /// the run is absent or no longer pending — the guard semantics are unchanged (spec §10,
@@ -167,6 +235,18 @@ public protocol RunStore: Sendable {
   /// Snapshot of run-table health: in-flight count, age of oldest running run, last
   /// success/failure timestamps, and count of consecutive failures at the head of the table.
   func runsHealth(now: Date) throws -> RunsHealth
+  /// §5.3 suspend checkpoint — ONE txn (mirrors `commitAssistantTurn`): the anchor assistant row
+  /// (content + tool_calls JSON), every completed observation, a real PLACEHOLDER observation row
+  /// (role tool, the pending toolCallId, content "awaiting owner approval") to pin rowid adjacency,
+  /// the `approvals` row (policy_version copied from the run row in-txn), `RUNNING→AWAITING_APPROVAL`,
+  /// `setTainted`/`setPrivateData`, the `approvalRequested` audit, and the approval-prompt outbox
+  /// chunk(s). Commit, then send.
+  func commitSuspendedTurn(
+    runId: Int64,
+    sessionId: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws -> SuspendedCommitReceipt
 }
 
 public extension RunStore {

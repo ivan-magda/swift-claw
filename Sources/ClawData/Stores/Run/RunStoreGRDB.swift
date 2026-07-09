@@ -4,9 +4,21 @@ import GRDB
 
 public struct RunStoreGRDB: RunStore {
   private let database: MappedDatabase
+  /// Injected fault hook for the §5.3 atomicity test only: thrown inside the suspend-commit txn so
+  /// a scripted mid-write failure proves the whole checkpoint rolls back. The public init passes a
+  /// no-op (mirrors `MemoryCommandStoreGRDB.afterClaimForTesting`).
+  private let suspendCommitFault: @Sendable () throws -> Void
 
   public init(writer: any DatabaseWriter) {
+    self.init(writer: writer, suspendCommitFault: {})
+  }
+
+  init(
+    writer: any DatabaseWriter,
+    suspendCommitFault: @escaping @Sendable () throws -> Void
+  ) {
     database = MappedDatabase(writer: writer)
+    self.suspendCommitFault = suspendCommitFault
   }
 
   public func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
@@ -207,6 +219,124 @@ public struct RunStoreGRDB: RunStore {
         return
       }
       try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+    }
+  }
+
+  public func commitSuspendedTurn(
+    runId: Int64,
+    sessionId: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws -> SuspendedCommitReceipt {
+    try database.writeMapping { db in
+      // Lost arbitration (a racing /stop//new already terminated the run) rolls back with no
+      // orphan approval — the FSM refuses RUNNING→AWAITING from any non-running state.
+      guard try Self.transitionRun(db, runId: runId, event: .suspendForApproval, now: now) != nil
+      else {
+        throw StoreError.unexpected("run \(runId) was not RUNNING at suspend commit")
+      }
+
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
+          VALUES (?, ?, 'assistant', ?, 'trusted', ?, ?)
+          """,
+        arguments: [sessionId, runId, commit.assistantContent, now, commit.toolCallsJSON]
+      )
+      for observation in commit.completedObservations {
+        try db.execute(
+          sql: """
+            INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+            VALUES (?, ?, 'tool', ?, 'untrusted', ?, ?)
+            """,
+          arguments: [sessionId, runId, observation.content, now, observation.toolCallId]
+        )
+      }
+      // The PLACEHOLDER pins rowid adjacency: a real `tool` row satisfying the anchor's expected
+      // tool_call_id so `HistoryHygiene` keeps the exchange while parked (§5.3). Resolution UPDATEs
+      // it in place (v4 FTS triggers cover the edit).
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, ?)
+          """,
+        arguments: [
+          sessionId, runId, Self.placeholderObservationContent, now, commit.pending.toolCallId,
+        ]
+      )
+      let observationMessageId = db.lastInsertedRowID
+
+      // policy_version copied from the run row IN-txn (§3.2); empty when unstamped.
+      let policyVersion =
+        try String.fetchOne(
+          db,
+          sql: "SELECT policy_version FROM runs WHERE id = ?",
+          arguments: [runId]
+        ) ?? ""
+
+      let recorded = commit.pending.recorded
+      let approvalId = try ApprovalStoreGRDB.insertApproval(
+        db,
+        NewApproval(
+          runId: runId,
+          sessionId: sessionId,
+          tool: recorded.tool,
+          canonicalArgsJSON: recorded.canonicalArgsJSON,
+          canonicalTarget: recorded.canonicalTarget,
+          argsHash: recorded.argsHash,
+          policyVersion: policyVersion,
+          ownerUserId: commit.ownerUserId,
+          nonce: commit.nonce,
+          observationMessageId: observationMessageId,
+          toolCallId: commit.pending.toolCallId,
+          reason: recorded.reason,
+          createdTs: now,
+          expiresTs: commit.expiresTs
+        )
+      )
+
+      if commit.setTainted {
+        try Self.setSessionTainted(db, sessionId: sessionId, now: now)
+      }
+      if commit.setPrivateData {
+        try Self.setSessionPrivateData(db, sessionId: sessionId, now: now)
+      }
+
+      // No usage insert here — the suspending round's `provider_usage` row was already written
+      // mid-loop by `AgentRuntime`; re-inserting would double-debit the budget and resume carry-over.
+
+      // Stamp the new approval id onto the button-carrying chunk so `markSent` can link
+      // `prompt_message_id` (Task 10); explanation chunks keep their nil approval_id.
+      for chunk in commit.promptChunks {
+        let linked = OutboxChunk(
+          stepIndex: chunk.stepIndex,
+          chatId: chunk.chatId,
+          payload: chunk.payload,
+          payloadHash: chunk.payloadHash,
+          approvalId: chunk.replyMarkup != nil ? approvalId : chunk.approvalId,
+          replyMarkup: chunk.replyMarkup
+        )
+        _ = try Self.insertOutbox(db, runId: runId, chunk: linked, now: now)
+      }
+
+      try AuditLogGRDB.insertAudit(
+        db,
+        AuditEvent(
+          actor: .assistant,
+          action: .approvalRequested,
+          tool: recorded.tool,
+          decision: recorded.reason.rawValue,
+          runId: runId,
+          sessionId: sessionId,
+          ts: now
+        )
+      )
+
+      try suspendCommitFault()
+      return SuspendedCommitReceipt(
+        approvalId: approvalId,
+        observationMessageId: observationMessageId
+      )
     }
   }
 
@@ -427,6 +557,9 @@ extension RunStoreGRDB {
     return affected
   }
 
+  /// The parked-observation body (§5.3). A resolution overwrites it in place with the real result.
+  static let placeholderObservationContent = "awaiting owner approval"
+
   static func transitionRun(
     _ db: Database,
     runId: Int64,
@@ -569,6 +702,15 @@ private extension RunStoreGRDB {
   static func setSessionTainted(_ db: Database, sessionId: Int64, now: Date) throws {
     try db.execute(
       sql: "UPDATE sessions SET tainted = 1, updated_ts = ? WHERE id = ?",
+      arguments: [now, sessionId]
+    )
+  }
+
+  /// §4.5 set-leg: the sticky private-data flag rides the suspend commit from its first landing
+  /// (D6). The read-leg, gate-leg, and `/new` clear land in Task 23 — this is set-only.
+  static func setSessionPrivateData(_ db: Database, sessionId: Int64, now: Date) throws {
+    try db.execute(
+      sql: "UPDATE sessions SET has_private_data = 1, updated_ts = ? WHERE id = ?",
       arguments: [now, sessionId]
     )
   }

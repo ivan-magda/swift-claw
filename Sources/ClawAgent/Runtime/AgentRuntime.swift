@@ -11,19 +11,6 @@ public enum DegradationKind: String, Sendable, Equatable {
   case accountingFailed  // NEW (§6 — usage-write failure mid-run)
 }
 
-/// The ask-tier proposal that parked a run (§5.2): the `tool_call_id` its placeholder observation
-/// answers, plus the recorded canonical action the approval binds to and the waiter later replays
-/// (§6.3). `RecordedToolAction` is Equatable, so `TurnResult.suspended` stays Equatable.
-public struct PendingToolAction: Sendable, Equatable {
-  public let toolCallId: String
-  public let recorded: RecordedToolAction
-
-  public init(toolCallId: String, recorded: RecordedToolAction) {
-    self.toolCallId = toolCallId
-    self.recorded = recorded
-  }
-}
-
 /// The outcome of one orchestrated turn. `runTurn` never throws — every failure becomes one of
 /// these so the gateway always has something to persist and send (never silence).
 public enum TurnResult: Sendable, Equatable {

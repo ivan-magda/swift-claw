@@ -173,6 +173,9 @@ private extension RunCommand {
     let breaker = BudgetBreaker(budget: config.budget)
     let lanes = SessionLaneRegistry()
     let pendingConfirmations = PendingConfirmationRegistry()
+    // Phase 2: the coordinator is constructed and threaded through the suspend path's parker; the
+    // Phase 3 callback handler + ApprovalWaiter (Tasks 15-19) will signal/consume it.
+    let approvalCoordinator = ApprovalCoordinator()
 
     // Hoisted so the schedule draft parser and the agent share one provider instance.
     let provider = OpenAICompatibleProvider(
@@ -235,6 +238,8 @@ private extension RunCommand {
       notifyOutbox: { outboxSignal.poke() },
       breaker: breaker,
       delivery: transport,
+      parker: InertApprovalParker(coordinator: approvalCoordinator, logger: logger),
+      approvalExpirySeconds: config.approvalExpirySeconds,
       logger: logger
     )
     let scheduleSurface = makeScheduleSurface(

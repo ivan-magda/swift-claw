@@ -59,6 +59,15 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.failRun(runId: runId, now: now)
   }
 
+  func commitSuspendedTurn(
+    runId: Int64,
+    sessionId: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws -> SuspendedCommitReceipt {
+    try base.commitSuspendedTurn(runId: runId, sessionId: sessionId, commit: commit, now: now)
+  }
+
   func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? {
     try base.cancelActiveRun(sessionId: sessionId, reason: reason, now: now)
   }
@@ -107,6 +116,15 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.failRun(runId: runId, now: now)
   }
 
+  func commitSuspendedTurn(
+    runId: Int64,
+    sessionId: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws -> SuspendedCommitReceipt {
+    try base.commitSuspendedTurn(runId: runId, sessionId: sessionId, commit: commit, now: now)
+  }
+
   func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? {
     try base.cancelActiveRun(sessionId: sessionId, reason: reason, now: now)
   }
@@ -140,6 +158,14 @@ struct DiskFullRuns: RunStore {
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult { .ignored }
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult { .ignored }
   func failRun(runId: Int64, now: Date) throws {}
+  func commitSuspendedTurn(
+    runId: Int64,
+    sessionId: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws -> SuspendedCommitReceipt {
+    throw StoreError.diskFull
+  }
   func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? { nil }
   func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] { [] }
   func reconcileRunsAtBoot(

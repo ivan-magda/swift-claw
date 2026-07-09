@@ -92,3 +92,18 @@ public struct RecordedToolAction: Sendable, Equatable {
     self.presentation = presentation
   }
 }
+
+/// The ask-tier proposal that parked a run (§5.2): the `tool_call_id` its placeholder observation
+/// answers, plus the recorded canonical action the approval binds to and the waiter later replays
+/// (§6.3). `RecordedToolAction` is Equatable, so `TurnResult.suspended` stays Equatable. Lives in
+/// ClawCore so the §5.3 suspend commit (`RunStore`) and its GRDB store can bind to it without a
+/// dependency on ClawAgent.
+public struct PendingToolAction: Sendable, Equatable {
+  public let toolCallId: String
+  public let recorded: RecordedToolAction
+
+  public init(toolCallId: String, recorded: RecordedToolAction) {
+    self.toolCallId = toolCallId
+    self.recorded = recorded
+  }
+}

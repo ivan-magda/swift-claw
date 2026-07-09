@@ -30,6 +30,7 @@ func resolvedAddress(_ literal: String) -> ResolvedAddress {
 /// policy, real tools — scripted only at the provider, HTTP, and DNS seams.
 struct SC3Harness {
   let router: MessageRouter
+  let coordinator: ApprovalCoordinator
   let registry: PendingConfirmationRegistry
   let transport: RecordingTransport
   let stores: ClawStores
@@ -118,6 +119,8 @@ func makeSC3Harness(
   workspaceFiles: [String: String] = [:],
   registry: PendingConfirmationRegistry = PendingConfirmationRegistry(),
   databasePath: String? = nil,
+  coordinator: ApprovalCoordinator = ApprovalCoordinator(),
+  extraTools: [any Tool] = [],
   dispatcherOverride: (any ToolDispatching)? = nil
 ) throws -> SC3Harness {
   let fileManager = FileManager.default
@@ -157,11 +160,12 @@ func makeSC3Harness(
   let http = ScriptedHTTP(responses: httpResponses)
   let resolver = ScriptedResolver(table: resolverTable)
   let redactor = SecretRedactor(secretValues: secretValues)
-  let tools: [any Tool] = [
-    FileReadTool(workspaceRoot: workspaceRoot, redactor: redactor),
-    WebFetchTool(http: http, resolver: resolver, redactor: redactor),
-    WebSearchTool(search: ExaSearchProvider(apiKey: "exa-key", http: http)),
-  ]
+  let tools: [any Tool] =
+    [
+      FileReadTool(workspaceRoot: workspaceRoot, redactor: redactor),
+      WebFetchTool(http: http, resolver: resolver, redactor: redactor),
+      WebSearchTool(search: ExaSearchProvider(apiKey: "exa-key", http: http)),
+    ] + extraTools
 
   // 5. GatedToolDispatcher: tier-3 private files load from DISK at gate-evaluation time (rev.1 H1).
   let privateFileLoader: @Sendable () -> [String] = {
@@ -209,6 +213,7 @@ func makeSC3Harness(
     contextBuilder: contextBuilder,
     pendingConfirmations: registry,
     notifyOutbox: {},
+    parker: InertApprovalParker(coordinator: coordinator, logger: logger),
     logger: logger
   )
 
@@ -237,6 +242,7 @@ func makeSC3Harness(
 
   return SC3Harness(
     router: router,
+    coordinator: coordinator,
     registry: registry,
     transport: transport,
     stores: stores,

@@ -39,6 +39,12 @@ public struct TurnRunner: TurnDispatching {
   /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
   private let now: @Sendable () -> Date
   private let logger: Logger
+  /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's resolution
+  /// (§5.5). Phase 2 uses `InertApprovalParker`; Phase 3 swaps in `ApprovalWaiter`.
+  private let parker: any ApprovalParking
+  /// Seconds a suspended approval stays live (spec §4.6). Injected so the commit's `expires_ts` is
+  /// deterministic under test.
+  private let approvalExpirySeconds: Int
 
   /// Most-recent messages pulled for context; `ContextBuilder` then caps by grapheme budget (§9).
   private static let historyLimit = 50
@@ -56,6 +62,8 @@ public struct TurnRunner: TurnDispatching {
     breaker: BudgetBreaker? = nil,
     delivery: (any MessageDelivery)? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
+    parker: any ApprovalParking = InertApprovalParker(coordinator: ApprovalCoordinator()),
+    approvalExpirySeconds: Int = 3600,
     logger: Logger
   ) {
     self.sessionMessages = sessionMessages
@@ -70,6 +78,8 @@ public struct TurnRunner: TurnDispatching {
     self.breaker = breaker
     self.delivery = delivery
     self.now = now
+    self.parker = parker
+    self.approvalExpirySeconds = approvalExpirySeconds
     self.logger = logger
   }
 
@@ -306,11 +316,16 @@ private extension TurnRunner {
       if origin != .interactive, cap == BudgetGate.proactivePerDayCap {
         await notifyProactiveCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
       }
-    case .suspended:
-      // Phase 2 is DORMANT: no registered tool declares ask-tier, so no production run can suspend.
-      // Task 14 replaces this arm with the durable `runs.commitSuspendedTurn(...)` transaction.
-      // Logged (not fatal) so a stray suspend never crashes the lane before the commit is wired.
-      logger.error("run \(runId) produced .suspended before the suspend commit is wired (Task 14)")
+    case .suspended(let pending, let usage):
+      try await suspendForApproval(
+        pending: pending,
+        usage: usage,
+        outcome: outcome,
+        runId: runId,
+        sessionId: sessionId,
+        chatId: chatId,
+        at: committedAt
+      )
     }
   }
 
@@ -363,6 +378,123 @@ private extension TurnRunner {
     notifyOutbox()
 
     return commitResult
+  }
+}
+
+// MARK: - Suspend Commit
+
+private extension TurnRunner {
+  /// Persists the §5.3 checkpoint, drains the prompt, then HOLDS the lane on the durable approval.
+  /// A lost-arbitration race (a /stop//new already terminated the run) or a write fault rolls the
+  /// commit back — there is nothing to park, so the turn simply ends (in-band, no throw escapes).
+  func suspendForApproval(  // swiftlint:disable:this function_parameter_count
+    pending: PendingToolAction,
+    usage: ProviderUsage,
+    outcome: TurnOutcome,
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    at committedAt: Date
+  ) async throws {
+    guard let anchor = outcome.exchanges.last else {
+      logger.error("suspended turn for run \(runId) carried no exchange; failing in-band")
+      _ = try commitDegradation(
+        runId: runId,
+        sessionId: sessionId,
+        chatId: chatId,
+        usage: usage,
+        exchanges: [],
+        setTainted: outcome.ingestedUntrusted,
+        message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
+        action: .turnDegraded,
+        decision: DegradationKind.contextUnavailable.rawValue,
+        at: committedAt
+      )
+      return
+    }
+
+    let nonce = ApprovalNonce.generate()
+    let completed =
+      anchor.observations
+      .filter { observation in observation.callId != pending.toolCallId }
+      .map { observation in
+        ToolObservationRow(toolCallId: observation.callId, content: observation.content)
+      }
+    let commit = SuspendedTurnCommit(
+      assistantContent: anchor.assistantContent,
+      toolCallsJSON: ToolCallCoding.encode(anchor.toolCalls) ?? "[]",
+      completedObservations: completed,
+      pending: pending,
+      ownerUserId: chatId,  // §4.4: the run's delivery chat id
+      nonce: nonce,
+      promptChunks: approvalPromptChunks(
+        pending: pending,
+        outcome: outcome,
+        chatId: chatId,
+        nonce: nonce
+      ),
+      setTainted: outcome.ingestedUntrusted,
+      setPrivateData: outcome.hadPrivateData,
+      expiresTs: committedAt.addingTimeInterval(TimeInterval(approvalExpirySeconds))
+    )
+
+    let receipt: SuspendedCommitReceipt
+    do {
+      receipt = try runs.commitSuspendedTurn(
+        runId: runId,
+        sessionId: sessionId,
+        commit: commit,
+        now: committedAt
+      )
+    } catch StoreError.diskFull {
+      throw StoreError.diskFull
+    } catch {
+      logger.debug("suspend commit did not apply for run \(runId): \(error)")
+      return
+    }
+
+    notifyOutbox()
+    // Holds THIS lane Task until the approval resolves; the Phase 3 waiter performs the resume/deny.
+    await parker.park(
+      approvalId: receipt.approvalId,
+      runId: runId,
+      sessionId: sessionId,
+      chatId: chatId,
+      revalidatePolicyOnApprove: false
+    )
+  }
+
+  /// One outbox chunk carrying the §5.4 prompt text plus the inline keyboard (`replyMarkup`); the
+  /// store stamps its `approval_id` after inserting the row.
+  func approvalPromptChunks(
+    pending: PendingToolAction,
+    outcome: TurnOutcome,
+    chatId: Int64,
+    nonce: String
+  ) -> [OutboxChunk] {
+    let input = ToolApprovalPrompt.Input(
+      recorded: pending.recorded,
+      taintBanner: outcome.ingestedUntrusted,
+      privilegedFileBanner: Self.isPrivilegedFile(pending.recorded.canonicalTarget)
+    )
+    let text = ToolApprovalPrompt.text(for: input)
+    return [
+      OutboxChunk(
+        stepIndex: 0,
+        chatId: chatId,
+        payload: text,
+        payloadHash: ContentHash.fnv1a(text),
+        approvalId: nil,
+        replyMarkup: ApprovalKeyboard.markup(nonce: nonce)
+      )
+    ]
+  }
+
+  /// §5.4 privileged-file banner: the owner-editable prompt files. Basename match on the resolved
+  /// canonical target.
+  static func isPrivilegedFile(_ canonicalTarget: String) -> Bool {
+    let privileged: Set<String> = ["SOUL.md", "AGENTS.md", "USER.md", "MEMORY.md"]
+    return privileged.contains((canonicalTarget as NSString).lastPathComponent)
   }
 }
 
