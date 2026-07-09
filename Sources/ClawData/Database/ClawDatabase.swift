@@ -220,6 +220,51 @@ public enum ClawDatabase {
       try db.drop(table: "provider_usage")
       try db.rename(table: "provider_usage_new", to: "provider_usage")
     }
+    migrator.registerMigration("v8") { db in
+      // Spec §4.1. Timestamps are UTC epoch-second INTEGERs (the v6 idiom) so the expiry
+      // sweep's `expires_ts <= now` compare is exact integer arithmetic.
+      try db.create(table: "approvals") { table in
+        table.autoIncrementedPrimaryKey("id")  // never exposed in callback data (§4.1)
+        table.column("run_id", .integer).notNull().references("runs", onDelete: .cascade)
+        table.column("session_id", .integer).notNull()
+          .references("sessions", onDelete: .cascade)
+        table.column("state", .text).notNull()  // PENDING | APPROVED | REJECTED | EXPIRED
+        table.column("tool", .text).notNull()
+        table.column("canonical_args", .text).notNull()  // the exact recorded args that execute
+        table.column("canonical_target", .text).notNull()
+        table.column("args_hash", .text).notNull()
+        table.column("policy_version", .text).notNull()  // copied from the run row (§3.2)
+        table.column("owner_user_id", .integer).notNull()
+        table.column("nonce", .text).notNull().unique()
+        table.column("observation_message_id", .integer).notNull()
+        table.column("tool_call_id", .text).notNull()
+        table.column("reason", .text).notNull()  // ask_tier | exfil_trifecta
+        table.column("prompt_message_id", .integer)
+        table.column("created_ts", .integer).notNull()
+        table.column("expires_ts", .integer).notNull()
+        table.column("resolved_ts", .integer)
+      }
+      // At most one live approval per run, enforced by the schema, not by convention (§4.1).
+      try db.create(
+        index: "index_approvals_pending_run",
+        on: "approvals",
+        columns: ["run_id"],
+        options: [.unique],
+        condition: Column("state") == "PENDING"
+      )
+      try db.alter(table: "runs") { table in
+        table.add(column: "policy_version", .text)
+      }
+      try db.alter(table: "sessions") { table in
+        table.add(column: "has_private_data", .boolean).notNull().defaults(to: false)
+      }
+      // Additive nullable columns: pre-upgrade PENDING deliveries stay valid; the button
+      // envelope is not smuggled into `payload` (§4.1).
+      try db.alter(table: "outbound_deliveries") { table in
+        table.add(column: "approval_id", .integer).references("approvals")
+        table.add(column: "reply_markup", .text)
+      }
+    }
     return migrator
   }
 
