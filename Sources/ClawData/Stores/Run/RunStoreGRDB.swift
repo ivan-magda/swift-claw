@@ -628,7 +628,7 @@ extension RunStoreGRDB {
         runId,
         chunk.stepIndex,
         chunk.chatId,
-        "\(runId):\(chunk.stepIndex)",
+        OutboxDedupKey.make(runId: runId, stepIndex: chunk.stepIndex),
         chunk.payload,
         chunk.payloadHash,
         chunk.approvalId,

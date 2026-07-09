@@ -60,7 +60,7 @@ public struct OutboxStoreGRDB: OutboxStore {
           runId,
           stepIndex,
           chatId,
-          "\(runId):\(stepIndex)",
+          OutboxDedupKey.make(runId: runId, stepIndex: stepIndex),
           payload,
           payloadHash,
           approvalId,
@@ -77,7 +77,7 @@ public struct OutboxStoreGRDB: OutboxStore {
 
   public func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64, now: Date) throws {
     try database.writeMapping { db in
-      let dedupKey = "\(runId):\(stepIndex)"
+      let dedupKey = OutboxDedupKey.make(runId: runId, stepIndex: stepIndex)
       try db.execute(
         sql: """
           UPDATE outbound_deliveries SET status = 'SENT', telegram_message_id = ?, sent_ts = ?
