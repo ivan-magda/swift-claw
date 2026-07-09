@@ -395,10 +395,12 @@ private extension ContextBuilder {
   /// The uncapped raw file text for a system-tier prompt file; missing/unreadable folds in as ""
   /// (spec §3.2). Uncapped because these files load uncapped in `buildFixedSections`.
   func rawPromptText(_ file: WorkspaceFile) -> String {
-    let loaded = workspace.load(file: file, maxGraphemes: nil)
-    switch loaded.outcome {
-    case .present: return loaded.text
-    case .overCap, .missing, .unreadable: return ""
+    let loadedFile = workspace.load(file: file, maxGraphemes: nil)
+    switch loadedFile.outcome {
+    case .present:
+      return loadedFile.text
+    case .overCap, .missing, .unreadable:
+      return ""
     }
   }
 }
