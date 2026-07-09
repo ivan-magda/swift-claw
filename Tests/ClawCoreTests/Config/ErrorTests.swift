@@ -28,5 +28,8 @@ import Testing
     // then
     #expect(ConfigError.invalidAllowlist("bad").exitCode == ClawExitCode.configInvalid.rawValue)
     #expect(ConfigError.unwritableStateRoot("/x").exitCode == ClawExitCode.configInvalid.rawValue)
+    #expect(
+      ConfigError.invalidApprovalExpiry("999999").exitCode == ClawExitCode.configInvalid.rawValue
+    )
   }
 }

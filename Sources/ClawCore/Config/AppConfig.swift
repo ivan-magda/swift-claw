@@ -29,6 +29,7 @@ public struct AppConfig: Sendable, Equatable {
     static let heartbeatIntervalMinutes = "CLAW_HEARTBEAT_INTERVAL_MINUTES"
     static let heartbeatQuietHours = "CLAW_HEARTBEAT_QUIET_HOURS"
     static let heartbeatMaxPerDay = "CLAW_HEARTBEAT_MAX_PER_DAY"
+    static let approvalExpiry = "CLAW_APPROVAL_EXPIRY"
   }
 
   private enum EnvDefaults {
@@ -46,6 +47,10 @@ public struct AppConfig: Sendable, Equatable {
     static let heartbeatIntervalMinutes = 60
     static let heartbeatQuietHours = "22:00-09:00"
     static let heartbeatMaxPerDay = 8
+
+    static let approvalExpirySeconds = 3600
+    static let approvalExpiryFloor = 60
+    static let approvalExpiryCeiling = 86_400
   }
 
   private static let stateRootPermissions = 0o700
@@ -66,6 +71,8 @@ public struct AppConfig: Sendable, Equatable {
   public let heartbeatQuietHours: QuietHours
   public let heartbeatMaxPerDay: Int
 
+  public let approvalExpirySeconds: Int
+
   public init(
     allowlist: Set<Int64>,
     stateRoot: URL,
@@ -79,7 +86,8 @@ public struct AppConfig: Sendable, Equatable {
     heartbeatEnabled: Bool,
     heartbeatIntervalMinutes: Int,
     heartbeatQuietHours: QuietHours,
-    heartbeatMaxPerDay: Int
+    heartbeatMaxPerDay: Int,
+    approvalExpirySeconds: Int
   ) {
     self.allowlist = allowlist
     self.stateRoot = stateRoot
@@ -94,6 +102,7 @@ public struct AppConfig: Sendable, Equatable {
     self.heartbeatIntervalMinutes = heartbeatIntervalMinutes
     self.heartbeatQuietHours = heartbeatQuietHours
     self.heartbeatMaxPerDay = heartbeatMaxPerDay
+    self.approvalExpirySeconds = approvalExpirySeconds
   }
 
   /// Loads and validates non-secret config from the environment. Secrets (the bot token / LLM key)
@@ -149,6 +158,8 @@ public struct AppConfig: Sendable, Equatable {
       minimum: 1
     )
 
+    let approvalExpirySeconds = try parseApprovalExpiry(env[EnvKey.approvalExpiry])
+
     return AppConfig(
       allowlist: allowlist,
       stateRoot: stateRoot,
@@ -162,7 +173,8 @@ public struct AppConfig: Sendable, Equatable {
       heartbeatEnabled: heartbeatEnabled,
       heartbeatIntervalMinutes: heartbeatIntervalMinutes,
       heartbeatQuietHours: heartbeatQuietHours,
-      heartbeatMaxPerDay: heartbeatMaxPerDay
+      heartbeatMaxPerDay: heartbeatMaxPerDay,
+      approvalExpirySeconds: approvalExpirySeconds
     )
   }
 }
@@ -430,5 +442,30 @@ private extension AppConfig {
     }
 
     return stateRootURL
+  }
+}
+
+// MARK: - Approval Parsing
+
+private extension AppConfig {
+  /// Seconds a pending tool approval stays live before auto-deny (spec §4.6). Absent/blank falls
+  /// back to the default; a present value must be an integer within `[floor, ceiling]`, else it
+  /// fails closed with the dedicated `invalidApprovalExpiry` case — the scheduling vocabulary
+  /// deliberately is NOT reused (§4.6: "a new `ConfigError` case").
+  static func parseApprovalExpiry(_ raw: String?) throws -> Int {
+    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
+    guard !trimmed.isEmpty else {
+      return EnvDefaults.approvalExpirySeconds
+    }
+
+    guard
+      let value = Int(trimmed),
+      value >= EnvDefaults.approvalExpiryFloor,
+      value <= EnvDefaults.approvalExpiryCeiling
+    else {
+      throw ConfigError.invalidApprovalExpiry(trimmed)
+    }
+
+    return value
   }
 }
