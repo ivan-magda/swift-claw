@@ -46,7 +46,7 @@ public struct OutboxStoreGRDB: OutboxStore {
           )
           SELECT ?, ?, ?, ?, ?, ?, 'PENDING', ?
           WHERE EXISTS (
-            SELECT 1 FROM runs WHERE id = ? AND state = ?
+            SELECT 1 FROM runs WHERE id = ? AND state IN (?, ?)
           )
           """,
         arguments: [
@@ -59,6 +59,7 @@ public struct OutboxStoreGRDB: OutboxStore {
           Date(),
           runId,
           RunState.running.rawValue,
+          RunState.awaitingApproval.rawValue,
         ]
       )
       return db.changesCount > 0

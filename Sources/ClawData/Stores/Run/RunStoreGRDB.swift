@@ -275,18 +275,22 @@ public struct RunStoreGRDB: RunStore {
 
   public func runsHealth(now: Date) throws -> RunsHealth {
     try database.readMapping { db in
-      let activeStates = [RunState.pending.rawValue, RunState.running.rawValue]
+      let activeStates = [
+        RunState.pending.rawValue,
+        RunState.running.rawValue,
+        RunState.awaitingApproval.rawValue,
+      ]
       let inFlight =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM runs WHERE state IN (?, ?)",
+          sql: "SELECT COUNT(*) FROM runs WHERE state IN (?, ?, ?)",
           arguments: StatementArguments(activeStates)
         ) ?? 0
 
       let oldestRunAgeSeconds: Double? =
         try Date.fetchOne(
           db,
-          sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (?, ?)",
+          sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (?, ?, ?)",
           arguments: StatementArguments(activeStates)
         ).map { now.timeIntervalSince($0) }
 
@@ -361,11 +365,15 @@ extension RunStoreGRDB {
       db,
       sql: """
         SELECT id FROM runs
-        WHERE session_id = ? AND state = ?
+        WHERE session_id = ? AND state IN (?, ?)
         ORDER BY id DESC
         LIMIT 1
         """,
-      arguments: [sessionId, RunState.running.rawValue]
+      arguments: [
+        sessionId,
+        RunState.running.rawValue,
+        RunState.awaitingApproval.rawValue,
+      ]
     )
   }
 
@@ -389,10 +397,15 @@ extension RunStoreGRDB {
       db,
       sql: """
         SELECT id FROM runs
-        WHERE session_id = ? AND state IN (?, ?)
+        WHERE session_id = ? AND state IN (?, ?, ?)
         ORDER BY id ASC
         """,
-      arguments: [sessionId, RunState.pending.rawValue, RunState.running.rawValue]
+      arguments: [
+        sessionId,
+        RunState.pending.rawValue,
+        RunState.running.rawValue,
+        RunState.awaitingApproval.rawValue,
+      ]
     )
 
     var affected: [Int64] = []

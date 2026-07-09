@@ -188,7 +188,8 @@ public protocol OutboxStore: Sendable {
     payload: String,
     payloadHash: String
   ) throws -> Bool
-  /// Claims a degradation reply only while the owning run is still RUNNING.
+  /// Claims a reply only while the owning run is still active (RUNNING or AWAITING_APPROVAL —
+  /// a suspended run's own approval prompt must be deliverable, preamble D7).
   func claimOutboundIfRunActive(
     runId: Int64,
     stepIndex: Int,
