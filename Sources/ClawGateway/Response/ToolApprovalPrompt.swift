@@ -30,6 +30,7 @@ public enum ToolApprovalPrompt {
   public static func text(for input: Input) -> String {
     let recorded = input.recorded
     var lines: [String] = [headline(tool: recorded.tool, reason: recorded.reason)]
+
     if input.taintBanner {
       lines.append(taintBannerText)
     }
@@ -37,17 +38,22 @@ public enum ToolApprovalPrompt {
     // the full URL including query.
     lines.append("Target: \(recorded.canonicalTarget)")
     lines.append("Effect: \(recorded.presentation.blastRadius)")
+
     if input.privilegedFileBanner {
       lines.append(privilegedFileBannerText)
     }
+
     if let preview = recorded.presentation.contentPreview {
       lines.append("Preview:")
       lines.append(preview)
     }
+
     for warning in recorded.presentation.warnings {
       lines.append("⚠ \(warning)")
     }
+
     lines.append("Tap Approve to allow this one action, or Deny to cancel.")
+
     return lines.joined(separator: "\n")
   }
 
