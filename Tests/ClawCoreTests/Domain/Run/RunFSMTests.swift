@@ -20,6 +20,12 @@ import Testing
       Transition(state: .running, event: .fail, expected: .failed),
       Transition(state: .running, event: .cancel, expected: .cancelled),
       Transition(state: .running, event: .supersede, expected: .superseded),
+      Transition(state: .running, event: .suspendForApproval, expected: .awaitingApproval),
+      Transition(state: .awaitingApproval, event: .resumeApproved, expected: .running),
+      Transition(state: .awaitingApproval, event: .resolveDenied, expected: .failed),
+      Transition(state: .awaitingApproval, event: .fail, expected: .failed),
+      Transition(state: .awaitingApproval, event: .cancel, expected: .cancelled),
+      Transition(state: .awaitingApproval, event: .supersede, expected: .superseded),
     ]
 
     for transition in legal {
@@ -40,6 +46,18 @@ import Testing
       (.superseded, .fail),
       (.pending, .complete),
       (.running, .pickUp),
+      (.pending, .suspendForApproval),
+      (.pending, .resumeApproved),
+      (.pending, .resolveDenied),
+      (.running, .resumeApproved),
+      (.running, .resolveDenied),
+      (.awaitingApproval, .pickUp),
+      (.awaitingApproval, .complete),
+      (.awaitingApproval, .suspendForApproval),
+      (.done, .suspendForApproval),
+      (.failed, .resumeApproved),
+      (.cancelled, .resolveDenied),
+      (.superseded, .suspendForApproval),
     ]
 
     for transition in illegal {

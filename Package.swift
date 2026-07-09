@@ -18,7 +18,12 @@ let package = Package(
     .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.11.0"),
   ],
   targets: [
-    .target(name: "ClawCore"),
+    .target(
+      name: "ClawCore",
+      dependencies: [
+        .product(name: "Crypto", package: "swift-crypto")
+      ]
+    ),
     .target(
       name: "ClawSecrets",
       dependencies: [

@@ -13,6 +13,9 @@ public enum RunState: String, Sendable, Equatable {
   case cancelled = "CANCELLED"
   /// Terminal cancellation requested by `/new`; queued turns are superseded too.
   case superseded = "SUPERSEDED"
+  /// Suspended to a durable checkpoint: an `approvals` row is the one source of truth for
+  /// "blocked on approval" (ARCHITECTURE §7.1); resolved by callback, ticker, boot, or command.
+  case awaitingApproval = "AWAITING_APPROVAL"
 }
 
 /// The two command-owned reasons for terminating a live run.
