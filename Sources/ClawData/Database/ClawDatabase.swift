@@ -62,7 +62,7 @@ public enum ClawDatabase {
           .references("sessions", onDelete: .cascade)
         table.column("state", .text).notNull()
         table.column("created_ts", .datetime).notNull()
-        table.column("updated_ts", .datetime).notNull()  // lease for the boot sweep
+        table.column("updated_ts", .datetime).notNull()
         table.column("input_tokens", .integer)
         table.column("output_tokens", .integer)
         table.column("cost_usd", .double)
@@ -96,9 +96,7 @@ public enum ClawDatabase {
         table.column("run_id", .integer).notNull().references("runs", onDelete: .cascade)
         table.column("step_index", .integer).notNull()
         table.column("chat_id", .integer).notNull()
-        // Deterministic dedup key = "run_id:step_index" (NOT a UUID/wall-clock).
         table.column("dedup_key", .text).notNull().unique()
-        // the markdown to (re-)send
         table.column("payload", .text).notNull()
         table.column("payload_hash", .text).notNull()
         table.column("telegram_message_id", .integer)
@@ -111,7 +109,7 @@ public enum ClawDatabase {
         table.column("ts", .datetime).notNull()
         table.column("actor", .text).notNull()
         table.column("action", .text).notNull()
-        table.column("tool", .text)  // nullable now → no Inc-3 migration (F9)
+        table.column("tool", .text)
         table.column("args_redacted", .text).notNull()
         table.column("result_size", .integer).notNull()
         table.column("decision", .text).notNull()
@@ -145,9 +143,6 @@ public enum ClawDatabase {
         columns: ["created_at"]
       )
       try db.create(index: "index_memory_items_kind", on: "memory_items", columns: ["kind"])
-      // messages FTS5 index. GRDB's FTS5 builder - never raw SQL.
-      // `synchronize` wires external content (content_rowid = messages.id), the ordered
-      // AFTER INSERT/UPDATE/DELETE sync triggers, and the initial backfill of existing rows.
       try db.create(virtualTable: "messages_fts", using: FTS5()) { table in
         table.synchronize(withTable: "messages")
         table.tokenizer = .unicode61(diacritics: .remove)
@@ -161,14 +156,11 @@ public enum ClawDatabase {
       }
     }
     migrator.registerMigration("v6") { db in
-      // Spec §4.1. Occurrence/timestamp columns are UTC epoch-second INTEGERs so the fused
-      // claim's compare-and-advance (§5.2) is exact integer equality, never a string compare.
       try db.create(table: "scheduled_jobs") { table in
         table.autoIncrementedPrimaryKey("id")
         table.column("owner_chat_id", .integer).notNull()
         table.column("label", .text).notNull()
         table.column("prompt", .text).notNull()
-        // {"schema_version":1,"rule":<RecurrenceRule JSON>}; NULL ⇔ one-shot (D2)
         table.column("recurrence", .text)
         table.column("timezone", .text).notNull()
         table.column("next_occurrence", .integer)
@@ -178,7 +170,6 @@ public enum ClawDatabase {
         table.column("created_ts", .integer).notNull()
         table.column("updated_ts", .integer).notNull()
       }
-      // Partial: terminal rows keep next_occurrence NULL, so the ticker scan never sees them.
       try db.create(
         index: "index_scheduled_jobs_status_next_occurrence",
         on: "scheduled_jobs",
@@ -186,12 +177,9 @@ public enum ClawDatabase {
         condition: Column("next_occurrence") != nil
       )
       try db.alter(table: "runs") { table in
-        // 'interactive' | 'scheduled' | 'heartbeat' — backfill is the default, no data rewrite.
         table.add(column: "origin", .text).notNull().defaults(to: "interactive")
         table.add(column: "job_id", .integer).references("scheduled_jobs")
       }
-      // Spec §4.3: one row, updated inside tick/claim transactions; doctor reads it from its
-      // separate process. due_count is deliberately NOT stored (computed by query).
       try db.create(table: "scheduler_state") { table in
         table.primaryKey("id", .integer).check { id in id == 1 }
         table.column("last_tick_at", .integer)
@@ -221,30 +209,27 @@ public enum ClawDatabase {
       try db.rename(table: "provider_usage_new", to: "provider_usage")
     }
     migrator.registerMigration("v8") { db in
-      // Spec §4.1. Timestamps are UTC epoch-second INTEGERs (the v6 idiom) so the expiry
-      // sweep's `expires_ts <= now` compare is exact integer arithmetic.
       try db.create(table: "approvals") { table in
-        table.autoIncrementedPrimaryKey("id")  // never exposed in callback data (§4.1)
+        table.autoIncrementedPrimaryKey("id")
         table.column("run_id", .integer).notNull().references("runs", onDelete: .cascade)
         table.column("session_id", .integer).notNull()
           .references("sessions", onDelete: .cascade)
-        table.column("state", .text).notNull()  // PENDING | APPROVED | REJECTED | EXPIRED
+        table.column("state", .text).notNull()
         table.column("tool", .text).notNull()
-        table.column("canonical_args", .text).notNull()  // the exact recorded args that execute
+        table.column("canonical_args", .text).notNull()
         table.column("canonical_target", .text).notNull()
         table.column("args_hash", .text).notNull()
-        table.column("policy_version", .text).notNull()  // copied from the run row (§3.2)
+        table.column("policy_version", .text).notNull()
         table.column("owner_user_id", .integer).notNull()
         table.column("nonce", .text).notNull().unique()
         table.column("observation_message_id", .integer).notNull()
         table.column("tool_call_id", .text).notNull()
-        table.column("reason", .text).notNull()  // ask_tier | exfil_trifecta
+        table.column("reason", .text).notNull()
         table.column("prompt_message_id", .integer)
         table.column("created_ts", .integer).notNull()
         table.column("expires_ts", .integer).notNull()
         table.column("resolved_ts", .integer)
       }
-      // At most one live approval per run, enforced by the schema, not by convention (§4.1).
       try db.create(
         index: "index_approvals_pending_run",
         on: "approvals",
@@ -258,8 +243,6 @@ public enum ClawDatabase {
       try db.alter(table: "sessions") { table in
         table.add(column: "has_private_data", .boolean).notNull().defaults(to: false)
       }
-      // Additive nullable columns: pre-upgrade PENDING deliveries stay valid; the button
-      // envelope is not smuggled into `payload` (§4.1).
       try db.alter(table: "outbound_deliveries") { table in
         table.add(column: "approval_id", .integer).references("approvals")
         table.add(column: "reply_markup", .text)
