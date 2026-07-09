@@ -48,6 +48,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         guard try Self.transitionApproval(db, id: id, on: .reject, now: now) != nil else {
           return .notPending
         }
+
         try Self.insertApprovalAudit(
           db,
           approval: approval,
@@ -56,15 +57,18 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           decision: .stalePolicy,
           now: now
         )
+
         guard let rejected = try Self.fetchApproval(db, id: id) else {
           return .notPending
         }
+
         return .stalePolicy(rejected)
       }
 
       guard try Self.transitionApproval(db, id: id, on: .approve, now: now) != nil else {
         return .notPending
       }
+
       try Self.insertApprovalAudit(
         db,
         approval: approval,
@@ -73,9 +77,11 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         decision: nil,
         now: now
       )
+
       guard let approved = try Self.fetchApproval(db, id: id) else {
         return .notPending
       }
+
       return .approved(approved)
     }
   }
@@ -105,6 +111,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         decision: decision,
         now: now
       )
+
       return true
     }
   }
@@ -122,6 +129,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         guard try Self.transitionApproval(db, id: approval.id, on: .expire, now: now) != nil else {
           continue
         }
+
         try Self.insertApprovalAudit(
           db,
           approval: approval,
@@ -130,10 +138,12 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           decision: .expired,
           now: now
         )
+
         if let resolved = try Self.fetchApproval(db, id: approval.id) {
           swept.append(resolved)
         }
       }
+
       return swept
     }
   }
@@ -181,6 +191,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         guard try Self.transitionApproval(db, id: approval.id, on: .reject, now: now) != nil else {
           continue
         }
+
         try Self.insertApprovalAudit(
           db,
           approval: approval,
@@ -189,8 +200,10 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           decision: .cancelled,
           now: now
         )
+
         cleaned += 1
       }
+
       return cleaned
     }
   }
@@ -209,7 +222,9 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           db,
           sql: "SELECT MIN(created_ts) FROM approvals WHERE state = ?",
           arguments: [ApprovalState.pending.rawValue]
-        ).map { oldestEpoch in Int(Self.epoch(now) - oldestEpoch) }
+        ).map { oldestEpoch in
+          Int(Self.epoch(now) - oldestEpoch)
+        }
 
       return ApprovalsHealth(
         pendingCount: pendingCount,
@@ -287,16 +302,14 @@ private extension ApprovalStoreGRDB {
     """
 
   static func currentApprovalState(_ db: Database, id: Int64) throws -> ApprovalState? {
-    guard
-      let rawState = try String.fetchOne(
-        db,
-        sql: "SELECT state FROM approvals WHERE id = ?",
-        arguments: [id]
-      )
-    else {
-      return nil
+    if let rawState = try String.fetchOne(
+      db,
+      sql: "SELECT state FROM approvals WHERE id = ?",
+      arguments: [id]
+    ) {
+      return ApprovalState(rawValue: rawState)
     }
-    return ApprovalState(rawValue: rawState)
+    return nil
   }
 
   static func fetchApproval(_ db: Database, id: Int64) throws -> Approval? {
@@ -308,16 +321,14 @@ private extension ApprovalStoreGRDB {
     whereClause: String,
     arguments: StatementArguments
   ) throws -> Approval? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause)",
-        arguments: arguments
-      )
-    else {
-      return nil
+    if let row = try Row.fetchOne(
+      db,
+      sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause)",
+      arguments: arguments
+    ) {
+      return try mapApproval(row)
     }
-    return try mapApproval(row)
+    return nil
   }
 
   static func fetchApprovals(
@@ -339,9 +350,11 @@ private extension ApprovalStoreGRDB {
     guard let state = ApprovalState(rawValue: row["state"]) else {
       throw StoreError.unexpected("approvals row has an unrecognized state")
     }
+
     guard let reason = ApprovalReason(rawValue: row["reason"]) else {
       throw StoreError.unexpected("approvals row has an unrecognized reason")
     }
+
     guard
       let createdTs = date(fromEpoch: row["created_ts"]),
       let expiresTs = date(fromEpoch: row["expires_ts"])
@@ -409,6 +422,8 @@ private extension ApprovalStoreGRDB {
   }
 
   static func date(fromEpoch value: Int64?) -> Date? {
-    value.map { seconds in Date(timeIntervalSince1970: TimeInterval(seconds)) }
+    value.map { seconds in
+      Date(timeIntervalSince1970: TimeInterval(seconds))
+    }
   }
 }
