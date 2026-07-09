@@ -2,7 +2,7 @@ import ClawCore
 
 /// Renders doctor's approvals health rows from the persisted `approvals` table (spec §4.6). Pure
 /// so the rendering is unit-testable; doctor is a separate process, so only persisted state is
-/// visible to it (D8) — the count/age arrive from `ApprovalStore.approvalsHealth` at call time.
+/// visible to it — the count/age arrive from `ApprovalStore.approvalsHealth` at call time.
 ///
 /// Named `ApprovalsHealthRows` (not `ApprovalsHealth`) so it never collides with the ClawCore
 /// `ApprovalsHealth` data struct it renders — ClawGateway imports both.

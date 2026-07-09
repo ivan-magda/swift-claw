@@ -198,7 +198,7 @@ private extension RunCommand {
       workspace: workspace,
       toolExecutor: toolExecutor
     )
-    let policyStaticSubhash = policyStaticSubhash(
+    let staticSubhash = policyStaticSubhash(
       toolDispatcher: toolDispatcher,
       config: config,
       secrets: secrets,
@@ -219,7 +219,7 @@ private extension RunCommand {
       config: config,
       workspace: workspace,
       stores: stores,
-      policyStaticSubhash: policyStaticSubhash,
+      policyStaticSubhash: staticSubhash,
       logger: logger
     )
 

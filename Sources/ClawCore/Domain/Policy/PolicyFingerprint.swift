@@ -37,6 +37,7 @@ public enum PolicyFingerprint {
 
     var parts: [String] = []
     for tool in tools.sorted(by: { lhs, rhs in lhs.name < rhs.name }) {
+      // JSONValue encoding cannot realistically fail for the finite case set; tool name still distinguishes entries.
       let canonicalParameters =
         (try? encoder.encode(tool.parameters))
         .map { data in String(decoding: data, as: UTF8.self) } ?? ""
