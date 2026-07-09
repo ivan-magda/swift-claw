@@ -674,6 +674,7 @@ struct WriteLikeTool: Tool {
     // given — a recording arbitrary-destination tool
     actor TargetRecorder {
       private(set) var received: String?
+
       func record(_ target: String?) { received = target }
     }
     struct RecordingFetchTool: Tool {

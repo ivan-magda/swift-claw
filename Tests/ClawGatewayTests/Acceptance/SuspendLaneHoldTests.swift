@@ -22,6 +22,7 @@ struct ScriptedAskTool: Tool {
     )
   }
   var timeout: Duration { .seconds(5) }
+
   func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     .resolved("/workspace/notes/plan.md")
   }

@@ -15,44 +15,73 @@ public enum SchedulerHealth {
     }
   }
 
-  public static func rows(
-    state: SchedulerState,
-    dueCount: Int?,
-    proactiveTodayUSD: Double?,
-    proactivePerDayUSD: Double,
-    heartbeatEnabled: Bool,
-    heartbeatMaxPerDay: Int,
-    timezone: TimeZone,
-    now: Date
-  ) -> [Row] {
+  /// One doctor-time observation: persisted `scheduler_state` plus the live/config values that
+  /// contextualize it (due query result, proactive spend vs. its cap, heartbeat settings).
+  public struct Snapshot: Sendable {
+    public let state: SchedulerState
+    public let dueCount: Int?
+    public let proactiveTodayUSD: Double?
+    public let proactivePerDayUSD: Double
+    public let heartbeatEnabled: Bool
+    public let heartbeatMaxPerDay: Int
+    public let timezone: TimeZone
+    public let now: Date
+
+    public init(
+      state: SchedulerState,
+      dueCount: Int?,
+      proactiveTodayUSD: Double?,
+      proactivePerDayUSD: Double,
+      heartbeatEnabled: Bool,
+      heartbeatMaxPerDay: Int,
+      timezone: TimeZone,
+      now: Date
+    ) {
+      self.state = state
+      self.dueCount = dueCount
+      self.proactiveTodayUSD = proactiveTodayUSD
+      self.proactivePerDayUSD = proactivePerDayUSD
+      self.heartbeatEnabled = heartbeatEnabled
+      self.heartbeatMaxPerDay = heartbeatMaxPerDay
+      self.timezone = timezone
+      self.now = now
+    }
+  }
+
+  public static func rows(_ snapshot: Snapshot) -> [Row] {
+    let state = snapshot.state
     let misfire: String
     if let lastMisfireAt = state.lastMisfireAt {
       misfire = "\(lastMisfireAt) (skipped \(state.lastMisfireSkippedCount))"
     } else {
       misfire = "none"
     }
-    let todayCount = heartbeatCountToday(state: state, timezone: timezone, now: now)
+    let todayCount = heartbeatCountToday(
+      state: state,
+      timezone: snapshot.timezone,
+      now: snapshot.now
+    )
     // Spec §11: a proactive-cap trip is visible here even while global spend is under its cap.
     let proactiveSpend =
-      proactiveTodayUSD.map { spent in USD.display(spent) } ?? "unknown"
+      snapshot.proactiveTodayUSD.map { spent in USD.display(spent) } ?? "unknown"
 
     return [
       Row(
         key: "scheduler.last_tick_at",
         value: state.lastTickAt.map(String.init(describing:)) ?? "never"
       ),
-      Row(key: "scheduler.due_count", value: dueCount.map(String.init) ?? "unknown"),
+      Row(key: "scheduler.due_count", value: snapshot.dueCount.map(String.init) ?? "unknown"),
       Row(key: "scheduler.last_misfire", value: misfire),
       Row(
         key: "spend.proactive_today_usd",
-        value: "\(proactiveSpend)/\(USD.display(proactivePerDayUSD))"
+        value: "\(proactiveSpend)/\(USD.display(snapshot.proactivePerDayUSD))"
       ),
-      Row(key: "heartbeat.enabled", value: heartbeatEnabled ? "on" : "off"),
+      Row(key: "heartbeat.enabled", value: snapshot.heartbeatEnabled ? "on" : "off"),
       Row(
         key: "heartbeat.last",
         value: state.lastHeartbeatAt.map(String.init(describing:)) ?? "never"
       ),
-      Row(key: "heartbeat.today", value: "\(todayCount)/\(heartbeatMaxPerDay)"),
+      Row(key: "heartbeat.today", value: "\(todayCount)/\(snapshot.heartbeatMaxPerDay)"),
     ]
   }
 

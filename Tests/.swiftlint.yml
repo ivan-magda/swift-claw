@@ -1,0 +1,12 @@
+# Test-target overrides (nested config, merged over the root .swiftlint.yml).
+# Test suites are long by nature — many tests per type/file — and test helpers
+# legitimately take many parameters/tuples; size and complexity caps are churn,
+# not signal, here. Idiom and correctness rules still apply in full.
+disabled_rules:
+  - closure_body_length
+  - cyclomatic_complexity
+  - file_length
+  - function_body_length
+  - function_parameter_count
+  - large_tuple
+  - type_body_length

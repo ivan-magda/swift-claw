@@ -766,14 +766,16 @@ import Testing
       now: harness.clock.now
     )
     let rows = SchedulerHealth.rows(
-      state: state,
-      dueCount: dueCount,
-      proactiveTodayUSD: proactiveSpend.costUSD,
-      proactivePerDayUSD: 2.0,
-      heartbeatEnabled: false,
-      heartbeatMaxPerDay: 8,
-      timezone: berlin,
-      now: harness.clock.now
+      SchedulerHealth.Snapshot(
+        state: state,
+        dueCount: dueCount,
+        proactiveTodayUSD: proactiveSpend.costUSD,
+        proactivePerDayUSD: 2.0,
+        heartbeatEnabled: false,
+        heartbeatMaxPerDay: 8,
+        timezone: berlin,
+        now: harness.clock.now
+      )
     )
     func value(_ key: String) -> String? {
       rows.first { row in row.key == key }?.value

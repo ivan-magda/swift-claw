@@ -49,8 +49,7 @@ public struct ApprovalCallbackHandler: Sendable {
   /// so the daemon cannot call the init directly; this builds the internal `ReplySender` from public
   /// ingredients and returns the composed handler. Task 16's `makeDaemon` calls it and injects the
   /// result into the production `MessageRouter` via `approvalCallbacks`.
-  // swiftlint:disable:next function_parameter_count
-  public static func make(
+  public static func make(  // swiftlint:disable:this function_parameter_count
     processed: any ProcessedUpdateStore,
     delivery: any MessageDelivery,
     accessControl: AccessControl,

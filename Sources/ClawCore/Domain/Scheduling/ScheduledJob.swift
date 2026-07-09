@@ -39,7 +39,8 @@ public struct RecurrenceEnvelope: Sendable, Equatable, Codable {
   public func encodedJSON() throws -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    return String(decoding: try encoder.encode(self), as: UTF8.self)
+    // JSONEncoder output is always valid UTF-8, so the failable init's nil branch is unreachable.
+    return String(data: try encoder.encode(self), encoding: .utf8) ?? ""
   }
 
   public static func decode(fromJSON json: String) throws -> RecurrenceEnvelope {

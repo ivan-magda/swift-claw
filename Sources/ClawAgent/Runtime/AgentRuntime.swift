@@ -109,12 +109,12 @@ public struct AgentRuntime: Sendable {
     self.sleep = sleep
   }
 
+  // swiftlint:disable function_parameter_count function_body_length cyclomatic_complexity
   /// The bounded agentic loop (spec §6): one context assembly, then up to `maxTurns` round-trips
   /// with per-round-trip budget preflight, gated tool dispatch, and immediate usage/audit writes.
   /// DELIBERATE SOFTENING of Inc 1's "no persistence here": `usageStore`/`auditLog` are injected
   /// so mid-run rows survive a crash (D6/review H1). Throws ONLY `StoreError.diskFull`; every
   /// other failure resolves in-band to a `TurnResult`.
-  // swiftlint:disable:next function_parameter_count function_body_length cyclomatic_complexity
   public func runTurn(
     runId: Int64,
     sessionId: Int64,
@@ -402,6 +402,7 @@ public struct AgentRuntime: Sendable {
 
     return outcome(.budgetStopped(cap: "per-run turn"))
   }
+  // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
 }
 
 // MARK: - Deadline Signal

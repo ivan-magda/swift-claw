@@ -99,10 +99,7 @@ import Testing
     // when — the suspended run's own approval prompt rides this claim (preamble D7)
     let claimed = try env.outbox.claimOutboundIfRunActive(
       runId: env.runId,
-      stepIndex: 0,
-      chatId: 7,
-      payload: "approve?",
-      payloadHash: "h"
+      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "approve?", payloadHash: "h")
     )
 
     // then

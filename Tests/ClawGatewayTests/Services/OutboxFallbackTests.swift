@@ -21,10 +21,12 @@ import Testing
     let seeded = try makeSeededFixture()
     _ = try seeded.outbox.claimOutbound(
       runId: seeded.runId,
-      stepIndex: 0,
-      chatId: seeded.chatId,
-      payload: "**hi**",
-      payloadHash: "hash"
+      chunk: OutboxChunk(
+        stepIndex: 0,
+        chatId: seeded.chatId,
+        payload: "**hi**",
+        payloadHash: "hash"
+      )
     )
     return Fixture(outbox: seeded.outbox, runId: seeded.runId, chatId: seeded.chatId)
   }

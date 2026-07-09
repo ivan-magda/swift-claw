@@ -68,17 +68,11 @@ import Testing
     // when — the same run_id:step_index claimed twice
     let first = try env.outbox.claimOutbound(
       runId: env.runId,
-      stepIndex: 0,
-      chatId: 42,
-      payload: "p",
-      payloadHash: "h"
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "p", payloadHash: "h")
     )
     let second = try env.outbox.claimOutbound(
       runId: env.runId,
-      stepIndex: 0,
-      chatId: 42,
-      payload: "p",
-      payloadHash: "h"
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "p", payloadHash: "h")
     )
 
     // then — INSERT OR IGNORE dedups; one PENDING row
@@ -92,10 +86,7 @@ import Testing
     let env = try fixture()
     let claimed = try env.outbox.claimOutbound(
       runId: env.runId,
-      stepIndex: 0,
-      chatId: 42,
-      payload: "p",
-      payloadHash: "h"
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "p", payloadHash: "h")
     )
     #expect(claimed)
 
@@ -119,20 +110,14 @@ import Testing
     #expect(
       try env.outbox.claimOutboundIfRunActive(
         runId: env.runId,
-        stepIndex: 0,
-        chatId: 42,
-        payload: "pending",
-        payloadHash: "p"
+        chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "pending", payloadHash: "p")
       ) == false
     )
     _ = try #require(try env.runs.pickUp(runId: env.runId, now: Date()))
     #expect(
       try env.outbox.claimOutboundIfRunActive(
         runId: env.runId,
-        stepIndex: 0,
-        chatId: 42,
-        payload: "running",
-        payloadHash: "r"
+        chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "running", payloadHash: "r")
       )
     )
     _ = try env.runs.cancelActiveRun(
@@ -143,10 +128,7 @@ import Testing
     #expect(
       try env.outbox.claimOutboundIfRunActive(
         runId: env.runId,
-        stepIndex: 1,
-        chatId: 42,
-        payload: "cancelled",
-        payloadHash: "c"
+        chunk: OutboxChunk(stepIndex: 1, chatId: 42, payload: "cancelled", payloadHash: "c")
       ) == false
     )
   }
@@ -165,12 +147,14 @@ import Testing
     // when
     _ = try env.outbox.claimOutbound(
       runId: env.runId,
-      stepIndex: 0,
-      chatId: 42,
-      payload: "prompt",
-      payloadHash: "h",
-      approvalId: approvalId,
-      replyMarkup: markup
+      chunk: OutboxChunk(
+        stepIndex: 0,
+        chatId: 42,
+        payload: "prompt",
+        payloadHash: "h",
+        approvalId: approvalId,
+        replyMarkup: markup
+      )
     )
     let rows = try env.outbox.pendingOutbound()
 
@@ -191,12 +175,14 @@ import Testing
     }
     _ = try env.outbox.claimOutbound(
       runId: env.runId,
-      stepIndex: 0,
-      chatId: 42,
-      payload: "prompt",
-      payloadHash: "h",
-      approvalId: approvalId,
-      replyMarkup: "{\"inline_keyboard\":[]}"
+      chunk: OutboxChunk(
+        stepIndex: 0,
+        chatId: 42,
+        payload: "prompt",
+        payloadHash: "h",
+        approvalId: approvalId,
+        replyMarkup: "{\"inline_keyboard\":[]}"
+      )
     )
 
     // when — the dispatcher records the delivered Telegram message id
@@ -218,10 +204,7 @@ import Testing
     }
     _ = try env.outbox.claimOutbound(
       runId: env.runId,
-      stepIndex: 0,
-      chatId: 42,
-      payload: "plain",
-      payloadHash: "h"
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "plain", payloadHash: "h")
     )
     // the plain row carries nil approval_id/reply_markup — assert BEFORE markSent flips it to SENT
     // (a SENT row drops out of pendingOutbound, so this read must precede the mark).

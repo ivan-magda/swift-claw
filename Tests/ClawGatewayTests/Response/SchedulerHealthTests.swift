@@ -28,14 +28,16 @@ import Testing
 
     // when
     let rows = SchedulerHealth.rows(
-      state: state,
-      dueCount: 0,
-      proactiveTodayUSD: 0,
-      proactivePerDayUSD: 2.0,
-      heartbeatEnabled: false,
-      heartbeatMaxPerDay: 8,
-      timezone: berlin,
-      now: now
+      SchedulerHealth.Snapshot(
+        state: state,
+        dueCount: 0,
+        proactiveTodayUSD: 0,
+        proactivePerDayUSD: 2.0,
+        heartbeatEnabled: false,
+        heartbeatMaxPerDay: 8,
+        timezone: berlin,
+        now: now
+      )
     )
 
     // then
@@ -62,14 +64,16 @@ import Testing
 
     // when
     let rows = SchedulerHealth.rows(
-      state: state,
-      dueCount: 2,
-      proactiveTodayUSD: 0.42,
-      proactivePerDayUSD: 2.0,
-      heartbeatEnabled: true,
-      heartbeatMaxPerDay: 8,
-      timezone: berlin,
-      now: now
+      SchedulerHealth.Snapshot(
+        state: state,
+        dueCount: 2,
+        proactiveTodayUSD: 0.42,
+        proactivePerDayUSD: 2.0,
+        heartbeatEnabled: true,
+        heartbeatMaxPerDay: 8,
+        timezone: berlin,
+        now: now
+      )
     )
 
     // then
@@ -96,14 +100,16 @@ import Testing
 
     // when
     let rows = SchedulerHealth.rows(
-      state: state,
-      dueCount: nil,
-      proactiveTodayUSD: nil,
-      proactivePerDayUSD: 2.0,
-      heartbeatEnabled: true,
-      heartbeatMaxPerDay: 8,
-      timezone: berlin,
-      now: now
+      SchedulerHealth.Snapshot(
+        state: state,
+        dueCount: nil,
+        proactiveTodayUSD: nil,
+        proactivePerDayUSD: 2.0,
+        heartbeatEnabled: true,
+        heartbeatMaxPerDay: 8,
+        timezone: berlin,
+        now: now
+      )
     )
 
     // then — a stale stamp reads as zero; an unreadable count/spend says so instead of lying
@@ -126,14 +132,16 @@ import Testing
 
     // when
     let rows = SchedulerHealth.rows(
-      state: state,
-      dueCount: 0,
-      proactiveTodayUSD: 0,
-      proactivePerDayUSD: 2.0,
-      heartbeatEnabled: true,
-      heartbeatMaxPerDay: 8,
-      timezone: berlin,
-      now: lateEvening
+      SchedulerHealth.Snapshot(
+        state: state,
+        dueCount: 0,
+        proactiveTodayUSD: 0,
+        proactivePerDayUSD: 2.0,
+        heartbeatEnabled: true,
+        heartbeatMaxPerDay: 8,
+        timezone: berlin,
+        now: lateEvening
+      )
     )
 
     // then — the cap's day boundary aligns with quiet hours (CLAW_TIMEZONE), not UTC (§4.3)

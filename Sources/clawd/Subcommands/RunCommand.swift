@@ -51,34 +51,10 @@ struct RunCommand: AsyncParsableCommand {
     let logger = Self.bootstrapLogger(secrets: secrets)
 
     // Single-instance guard — held until the process exits (defer covers the graceful path).
-    let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
-    let lock: InstanceLock
-    do {
-      lock = try InstanceLock(path: lockPath)
-    } catch InstanceLock.LockError.alreadyLocked {
-      FileHandle.standardError.write(
-        Data("another clawd is already running for this state root\n".utf8)
-      )
-      throw ExitCode(ClawExitCode.alreadyRunning.rawValue)
-    }
+    let lock = try Self.acquireInstanceLockOrExit(config: config)
     defer { lock.release() }
 
-    let stores: ClawStores
-    do {
-      stores = try ClawDatabase.openStores(
-        path: config.stateRoot.appendingPathComponent(StateFile.database).path
-      )
-    } catch {
-      FileHandle.standardError.write(Data("database error: \(error)\n".utf8))
-      throw ExitCode(ClawExitCode.storeError.rawValue)
-    }
-    do {
-      // Additive only — removing an ID from config doesn't revoke it. Revocation is deferred
-      // to pairing (§17), which needs an audited remove path, not a config-mirroring reconcile.
-      try stores.allowlist.seedAllowlist(userIds: Array(config.allowlist))
-    } catch {
-      logger.error("failed to seed allowlist: \(error)")
-    }
+    let stores = try Self.openStoresOrExit(config: config, logger: logger)
 
     // Shared HTTP client for both Telegram and the LLM; gzip decompression is a client-wide toggle
     // (the executor only advertises `accept-encoding`), so it's configured here at the root.
@@ -102,14 +78,16 @@ struct RunCommand: AsyncParsableCommand {
     let botUsername = await fetchBotUsername(transport: transport, logger: logger)
 
     let daemon = await makeDaemon(
-      config: config,
-      secrets: secrets,
-      stores: stores,
-      executor: executor,
-      toolExecutor: toolExecutor,
-      transport: transport,
-      botUsername: botUsername,
-      logger: logger
+      deps: DaemonDependencies(
+        config: config,
+        secrets: secrets,
+        stores: stores,
+        executor: executor,
+        toolExecutor: toolExecutor,
+        transport: transport,
+        botUsername: botUsername,
+        logger: logger
+      )
     )
 
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
@@ -177,577 +155,39 @@ private extension RunCommand {
       throw ExitCode(error.exitCode)
     }
   }
-}
 
-// MARK: - Service Graph Composition
-
-private extension RunCommand {
-  /// Builds the service graph: the OpenAI-compatible provider + agent feed a `TurnRunner`, which
-  /// the router dispatches from the poller. Both Telegram and the LLM share the injected executor.
-  func makeDaemon(
-    config: AppConfig,
-    secrets: Secrets,
-    stores: ClawStores,
-    executor: AsyncHTTPExecutor,
-    toolExecutor: AsyncHTTPExecutor,
-    transport: TelegramClient,
-    botUsername: String?,
-    logger: Logger
-  ) async -> Daemon {
-    // Created before the TurnRunner so its notifyOutbox closure can capture it: each commit pokes
-    // the dispatcher to drain the rows it just enqueued.
-    let outboxSignal = OutboxSignal()
-    let breaker = BudgetBreaker(budget: config.budget)
-    let lanes = SessionLaneRegistry()
-    let pendingConfirmations = PendingConfirmationRegistry()
-    let approvalCoordinator = ApprovalCoordinator()
-
-    // Hoisted so the schedule draft parser and the agent share one provider instance.
-    let provider = OpenAICompatibleProvider(
-      config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
-      http: executor,
-      sleep: { try await Task.sleep(for: .seconds($0)) },
-      jitter: { Double.random(in: 0...$0) },
-      logger: logger
-    )
-
-    // Hoisted so the agent and the /schedule parse share one offline-first cost resolver — both
-    // meter spend against the same price snapshot and reference rate.
-    let costResolver = CostResolver(
-      priceTable: PriceFileLoader.load(),
-      referenceUSDPerToken: config.budget.referenceUSDPerToken
-    )
-
-    let workspace = FileSystemWorkspace(
-      root: config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
-    )
-    let (toolDispatcher, agent, contextBuilder) = makeAgentStack(
-      config: config,
-      secrets: secrets,
-      provider: provider,
-      transport: transport,
-      stores: stores,
-      workspace: workspace,
-      toolExecutor: toolExecutor,
-      costResolver: costResolver,
-      logger: logger
-    )
-
-    let deferredParker = DeferredApprovalParker()
-    let turnRunner = TurnRunner(
-      sessionMessages: stores.sessionMessages,
-      runs: stores.runs,
-      usageStore: stores.usage,
-      audit: stores.audit,
-      agent: agent,
-      budget: config.budget,
-      contextBuilder: contextBuilder,
-      pendingConfirmations: pendingConfirmations,
-      notifyOutbox: { outboxSignal.poke() },
-      breaker: breaker,
-      delivery: transport,
-      parker: deferredParker,
-      approvalExpirySeconds: config.approvalExpirySeconds,
-      logger: logger
-    )
-
-    let (approvalCallbackHandler, approvalWaiter, approvalExpiry) = await makeApprovalFabric(
-      stores: stores,
-      transport: transport,
-      toolDispatcher: toolDispatcher,
-      turnRunner: turnRunner,
-      approvalCoordinator: approvalCoordinator,
-      deferredParker: deferredParker,
-      contextBuilder: contextBuilder,
-      logger: logger
-    )
-
-    let scheduleSurface = makeScheduleSurface(
-      config: config,
-      stores: stores,
-      provider: provider,
-      costResolver: costResolver,
-      logger: logger
-    )
-    let router = MessageRouter(
-      processed: stores.processed,
-      sessionMessages: stores.sessionMessages,
-      commands: stores.commands,
-      memory: stores.memory,
-      memoryCommands: stores.memoryCommands,
-      pendingConfirmations: pendingConfirmations,
-      botUsername: botUsername,
-      accessControl: AccessControl(allowlist: stores.allowlist),
-      delivery: transport,
-      turnRunner: turnRunner,
-      lanes: lanes,
-      schedule: scheduleSurface,
-      approvalCallbacks: approvalCallbackHandler,
-      coordinator: approvalCoordinator,
-      logger: logger
-    )
-    let poller = TelegramPollerService(
-      intake: transport,
-      router: router,
-      cursor: stores.cursor,
-      pollTimeout: config.pollTimeoutSeconds,
-      logger: logger
-    )
-
-    let dispatcher = OutboxDispatcher(
-      outbox: stores.outbox,
-      delivery: transport,
-      signal: outboxSignal,
-      logger: logger
-    )
-
-    let (scheduler, heartbeatOwner) = makeScheduler(
-      config: config,
-      stores: stores,
-      lanes: lanes,
-      turnRunner: turnRunner,
-      workspace: workspace,
-      logger: logger
-    )
-
-    return Daemon(
-      services: [poller, dispatcher, scheduler, approvalExpiry],
-      boot: bootSequence(
-        transport: transport,
-        stores: stores,
-        lanes: lanes,
-        coordinator: approvalCoordinator,
-        waiter: approvalWaiter,
-        heartbeatOwner: heartbeatOwner,
-        logger: logger
-      ),
-      logger: logger
-    )
-  }
-
-  /// Assembles the tool-gated agent stack: the policy-gated dispatcher, its static sub-hash, the
-  /// `AgentRuntime`, and the context builder that folds the sub-hash into `policy_version`.
-  /// Extracted from `makeDaemon` purely to keep its body short.
-  // swiftlint:disable:next function_parameter_count
-  func makeAgentStack(
-    config: AppConfig,
-    secrets: Secrets,
-    provider: OpenAICompatibleProvider,
-    transport: TelegramClient,
-    stores: ClawStores,
-    workspace: FileSystemWorkspace,
-    toolExecutor: AsyncHTTPExecutor,
-    costResolver: CostResolver,
-    logger: Logger
-  ) -> (toolDispatcher: GatedToolDispatcher, agent: AgentRuntime, contextBuilder: ContextBuilder) {
-    let toolDispatcher = makeToolDispatcher(
-      secrets: secrets,
-      workspace: workspace,
-      toolExecutor: toolExecutor
-    )
-    let staticSubhash = policyStaticSubhash(
-      toolDispatcher: toolDispatcher,
-      config: config,
-      secrets: secrets,
-      workspace: workspace
-    )
-    let agent = makeAgent(
-      config: config,
-      secrets: secrets,
-      provider: provider,
-      transport: transport,
-      stores: stores,
-      toolDispatcher: toolDispatcher,
-      costResolver: costResolver,
-      logger: logger
-    )
-    let contextBuilder = makeContextBuilder(
-      config: config,
-      workspace: workspace,
-      stores: stores,
-      policyStaticSubhash: staticSubhash,
-      logger: logger
-    )
-    return (toolDispatcher, agent, contextBuilder)
-  }
-
-  /// Builds the Task-16 approve-resume fabric — the executor (recorded-args execution) and the
-  /// waiter (the single execution locus, §5.5), adopted into `deferredParker` to close the
-  /// `turnRunner` ⇄ `approvalWaiter` construction cycle — and the Task-15 callback handler that
-  /// answers an owner's tap into it. Extracted from `makeDaemon` purely to keep its body short;
-  /// every argument here is already in scope at the call site.
-  // swiftlint:disable:next function_parameter_count
-  func makeApprovalFabric(
-    stores: ClawStores,
-    transport: TelegramClient,
-    toolDispatcher: GatedToolDispatcher,
-    turnRunner: TurnRunner,
-    approvalCoordinator: ApprovalCoordinator,
-    deferredParker: DeferredApprovalParker,
-    contextBuilder: ContextBuilder,
-    logger: Logger
-  ) async -> (
-    handler: ApprovalCallbackHandler, waiter: ApprovalWaiter, expiry: ApprovalExpiryService
-  ) {
-    let approvedExecutor = ApprovedActionExecutor(
-      tools: toolDispatcher.toolsByName,
-      runs: stores.runs,
-      now: { Date() },
-      logger: logger
-    )
-    let approvalWaiter = ApprovalWaiter(
-      approvals: stores.approvals,
-      runs: stores.runs,
-      coordinator: approvalCoordinator,
-      executor: approvedExecutor,
-      turns: turnRunner,
-      delivery: transport,
-      callbacks: transport,
-      currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
-      now: { Date() },
-      logger: logger
-    )
-    await deferredParker.adopt(approvalWaiter)
-
-    let handler = ApprovalCallbackHandler.make(
-      processed: stores.processed,
-      delivery: transport,
-      accessControl: AccessControl(allowlist: stores.allowlist),
-      approvals: stores.approvals,
-      audit: stores.audit,
-      coordinator: approvalCoordinator,
-      callbacks: transport,
-      currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
-      now: { Date() },
-      logger: logger
-    )
-    let expiry = ApprovalExpiryService(
-      approvals: stores.approvals,
-      coordinator: approvalCoordinator,
-      now: { Date() },
-      sleep: { try await Task.sleep(for: $0) },
-      logger: logger
-    )
-    // The real waiter is returned so boot re-park (spec §7) parks the SAME instance the callback
-    // path resumes — one execution locus across suspend, callback, and restart.
-    return (handler: handler, waiter: approvalWaiter, expiry: expiry)
-  }
-
-  /// Builds the `/schedule` surface: the budget-gated, deadline-bounded draft parser (sharing the
-  /// daemon's provider and cost resolver so its ONE LLM call meters spend like a turn), the
-  /// deterministic validator, and the read/claim stores. Extracted from `makeDaemon` so the parser's
-  /// spend-discipline wiring reads in one place.
-  func makeScheduleSurface(
-    config: AppConfig,
-    stores: ClawStores,
-    provider: OpenAICompatibleProvider,
-    costResolver: CostResolver,
-    logger: Logger
-  ) -> ScheduleSurface {
-    ScheduleSurface(
-      parser: ScheduleDraftParser(
-        provider: provider,
-        model: config.llm.model,
-        usageStore: stores.usage,
-        budget: config.budget,
-        costResolver: costResolver,
-        sleep: { try await Task.sleep(for: $0) },
-        logger: logger
-      ),
-      validator: ScheduleDraftValidator(
-        minIntervalMinutes: config.schedMinIntervalMinutes,
-        defaultTimezone: config.timezone
-      ),
-      calculator: OccurrenceCalculator(),
-      jobs: stores.scheduledJobs,
-      commands: stores.scheduleCommands
-    )
-  }
-
-  /// Resolves the heartbeat settings bundle once from config and builds the scheduler around it.
-  /// The owner chat id also threads to boot reconcile (spec §12/A6): a crashed heartbeat run's
-  /// synthetic session key carries no chat id, so its crash notice can only reach the owner via
-  /// this config-derived target.
-  func makeScheduler(
-    config: AppConfig,
-    stores: ClawStores,
-    lanes: SessionLaneRegistry,
-    turnRunner: TurnRunner,
-    workspace: FileSystemWorkspace,
-    logger: Logger
-  ) -> (scheduler: SchedulerService, heartbeatOwner: Int64?) {
-    let heartbeatSettings = HeartbeatSettings.resolve(config: config)
-    let scheduler = SchedulerService(
-      jobs: stores.scheduledJobs,
-      lanes: lanes,
-      turns: turnRunner,
-      calculator: OccurrenceCalculator(),
-      catchUpMaxAge: .seconds(Int64(config.schedCatchUpMaxAgeMinutes) * 60),
-      heartbeat: heartbeatSettings,
-      workspace: workspace,
-      audit: stores.audit,
-      now: { Date() },
-      sleep: { try await Task.sleep(for: $0) },
-      logger: logger
-    )
-    return (scheduler, heartbeatSettings.ownerChatId)
-  }
-
-  func fetchBotUsername(transport: TelegramClient, logger: Logger) async -> String? {
+  /// Takes the single-instance lock; a second daemon on the same state root exits with the
+  /// distinct already-running code instead of corrupting shared state.
+  static func acquireInstanceLockOrExit(config: AppConfig) throws -> InstanceLock {
+    let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
     do {
-      return try await transport.getMe().username
+      return try InstanceLock(path: lockPath)
+    } catch InstanceLock.LockError.alreadyLocked {
+      FileHandle.standardError.write(
+        Data("another clawd is already running for this state root\n".utf8)
+      )
+      throw ExitCode(ClawExitCode.alreadyRunning.rawValue)
+    }
+  }
+
+  /// Opens the store bundle (exiting with the store code on failure) and seeds the allowlist.
+  static func openStoresOrExit(config: AppConfig, logger: Logger) throws -> ClawStores {
+    let stores: ClawStores
+    do {
+      stores = try ClawDatabase.openStores(
+        path: config.stateRoot.appendingPathComponent(StateFile.database).path
+      )
     } catch {
-      logger.warning(
-        "failed to fetch bot identity; command mentions will require bare commands: \(error)"
-      )
-      return nil
+      FileHandle.standardError.write(Data("database error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.storeError.rawValue)
     }
-  }
-}
-
-// MARK: - Agent Stack Assembly
-
-private extension RunCommand {
-  /// Assembles the v1 tool catalog behind its policy gate (§7/§9). Tool fetches use the dedicated
-  /// no-redirect `toolExecutor` (§7.2); no `searchApiKey` ⇒ `web_search` is never constructed
-  /// (unconfigured ⇒ absent, §7.3). Tier-3 private texts load from DISK at gate-evaluation time
-  /// (rev.1 H1), not the assembly snapshot, so the loader closure re-reads the workspace each call.
-  func makeToolDispatcher(
-    secrets: Secrets,
-    workspace: FileSystemWorkspace,
-    toolExecutor: AsyncHTTPExecutor
-  ) -> GatedToolDispatcher {
-    let secretValues = secrets.redactionValues
-    let redactor = SecretRedactor(secretValues: secretValues)
-
-    var tools: [any Tool] = [
-      FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
-      WebFetchTool(http: toolExecutor, resolver: SystemAddressResolver(), redactor: redactor),
-    ]
-
-    if let searchApiKey = secrets.searchApiKey {
-      tools.append(
-        WebSearchTool(search: ExaSearchProvider(apiKey: searchApiKey, http: toolExecutor))
-      )
+    do {
+      // Additive only — removing an ID from config doesn't revoke it. Revocation is deferred
+      // to pairing (§17), which needs an audited remove path, not a config-mirroring reconcile.
+      try stores.allowlist.seedAllowlist(userIds: Array(config.allowlist))
+    } catch {
+      logger.error("failed to seed allowlist: \(error)")
     }
-
-    let privateFileLoader: @Sendable () -> [String] = {
-      [WorkspaceFile.memory, WorkspaceFile.user].compactMap { file in
-        try? String(
-          contentsOf: workspace.root.appendingPathComponent(file.relativePath),
-          encoding: .utf8
-        )
-      }
-    }
-
-    return GatedToolDispatcher(
-      registry: ToolRegistry(tools: tools),
-      gate: ToolPolicyGate(
-        argGuard: ExfilArgGuard(secretValues: secretValues),
-        privateFileLoader: privateFileLoader
-      )
-    )
-  }
-
-  /// §3.2 static sub-hash (classes 2–3): the same tool surface the gate enforces, plus the pinned
-  /// egress/policy config. Secret values are never hashed — only the base URL, search presence,
-  /// and workspace root identity. Injected into `ContextBuilder`, which folds in the class-1 prompt
-  /// materials and returns the combined `policy_version`.
-  func policyStaticSubhash(
-    toolDispatcher: GatedToolDispatcher,
-    config: AppConfig,
-    secrets: Secrets,
-    workspace: FileSystemWorkspace
-  ) -> String {
-    PolicyFingerprint.staticSubhash(
-      tools: toolDispatcher.definitions,
-      llmBaseURL: config.llm.baseURL,
-      searchEndpointPresent: secrets.searchApiKey != nil,
-      workspaceRoot: workspace.root.path
-    )
-  }
-
-  /// Builds the grapheme-budgeted context assembler, injected with the composition root's static
-  /// policy sub-hash (§3.2) so `contextBuilder.currentPolicyVersion()` reflects the real tool/config
-  /// surface, not a test default.
-  func makeContextBuilder(
-    config: AppConfig,
-    workspace: FileSystemWorkspace,
-    stores: ClawStores,
-    policyStaticSubhash: String,
-    logger: Logger
-  ) -> ContextBuilder {
-    let contextBudget = ContextBudget(
-      inputCapGraphemes: TokenEstimator.graphemeBudget(
-        forInputTokens: config.budget.maxInputTokens
-      ),
-      userFileCap: ContextBudget.default.userFileCap,
-      memoryFileCap: ContextBudget.default.memoryFileCap,
-      itemsCap: ContextBudget.default.itemsCap,
-      historyCap: ContextBudget.default.historyCap,
-      recallCap: ContextBudget.default.recallCap,
-      skillsCap: ContextBudget.default.skillsCap,
-      recallHitCap: ContextBudget.default.recallHitCap
-    )
-    return ContextBuilder(
-      systemPrompt: SystemPrompt.minimal,
-      workspace: workspace,
-      memoryStore: stores.memory,
-      retriever: stores.retriever,
-      budget: contextBudget,
-      policyStaticSubhash: policyStaticSubhash,
-      warn: { warning in logger.warning("\(warning)") }
-    )
-  }
-
-  /// Assembles the LLM agent stack: the OpenAI-compatible provider, the injected offline-first cost
-  /// resolver (shared with the /schedule parse), and the `AgentRuntime` that orchestrates one turn.
-  /// Kept separate from the service wiring so the composition root reads as "build the agent → feed
-  /// the turn runner → register the services".
-  func makeAgent(
-    config: AppConfig,
-    secrets: Secrets,
-    provider: OpenAICompatibleProvider,
-    transport: TelegramClient,
-    stores: ClawStores,
-    toolDispatcher: GatedToolDispatcher,
-    costResolver: CostResolver,
-    logger: Logger
-  ) -> AgentRuntime {
-    AgentRuntime(
-      provider: provider,
-      typingIndicator: TelegramTypingIndicator(transport: transport),
-      draftStreamer: TelegramRichDraftStreamer(transport: transport),
-      streamingEnabled: config.llm.streamingEnabled,
-      costResolver: costResolver,
-      budget: config.budget,
-      model: config.llm.model,
-      toolDispatcher: toolDispatcher,
-      usageStore: stores.usage,
-      auditLog: stores.audit,
-      logger: logger,
-      sleep: { try await Task.sleep(for: $0) }
-    )
-  }
-}
-
-// MARK: - Boot Sequence
-
-private extension RunCommand {
-  /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram
-  /// (`registerMenu`), sweep crash-orphaned runs (`reconcileRuns`, F22), then re-park unresolved
-  /// approvals (`reconcileApprovals`, §7). Each step is best-effort, but `reconcileApprovals` is
-  /// deliberately last: the run sweep must fail its orphans first so the approval sweep only sees
-  /// runs that are genuinely still parked. All three run before any update is served.
-  func bootSequence(
-    transport: any TelegramTransport,
-    stores: ClawStores,
-    lanes: SessionLaneRegistry,
-    coordinator: ApprovalCoordinator,
-    waiter: ApprovalWaiter,
-    heartbeatOwner: Int64?,
-    logger: Logger
-  ) -> @Sendable () async -> Void {
-    let registerMenu = registerMenuCommands(transport: transport, logger: logger)
-    let reconcileRuns = bootReconcile(
-      stores: stores,
-      heartbeatOwner: heartbeatOwner,
-      logger: logger
-    )
-    let reconcileApprovals = bootReconcileApprovals(
-      stores: stores,
-      lanes: lanes,
-      coordinator: coordinator,
-      waiter: waiter,
-      logger: logger
-    )
-    return {
-      await registerMenu()
-      await reconcileRuns()
-      await reconcileApprovals()
-    }
-  }
-
-  /// Builds the boot step that registers the command menu with Telegram. This is a reconciliation:
-  /// `setMyCommands` writes persistent server-side state, so re-declaring on every boot keeps the
-  /// registered picker in sync with this build's `botMenuCommands`. Best-effort — a failure only
-  /// means the picker is stale, never that the bot can't serve.
-  func registerMenuCommands(
-    transport: any TelegramTransport,
-    logger: Logger
-  ) -> @Sendable () async -> Void {
-    {
-      do {
-        try await transport.setMyCommands(
-          [
-            BotMenuCommand(command: "start", description: "Start the bot."),
-            BotMenuCommand(command: "new", description: "Start a new session."),
-            BotMenuCommand(command: "stop", description: "Stop the current run."),
-            BotMenuCommand(command: "remember", description: "Save a memory."),
-            BotMenuCommand(command: "memory", description: "Review saved memories."),
-            BotMenuCommand(command: "schedule", description: "Create or list schedules."),
-            BotMenuCommand(command: "pause", description: "Pause a schedule."),
-            BotMenuCommand(command: "resume", description: "Resume a paused schedule."),
-            BotMenuCommand(command: "runnow", description: "Run a schedule now."),
-            BotMenuCommand(command: "cancel", description: "Cancel a schedule."),
-            BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
-          ]
-        )
-      } catch {
-        logger.warning("setMyCommands failed: \(error)")
-      }
-    }
-  }
-
-  /// The boot step that sweeps any run left RUNNING by a crash to FAILED and enqueues a degradation
-  /// reply, so a turn interrupted mid-flight is never silent (F22). It runs before the services
-  /// serve, so the dispatcher's boot drain delivers whatever this enqueues.
-  func bootReconcile(
-    stores: ClawStores,
-    heartbeatOwner: Int64?,
-    logger: Logger
-  ) -> @Sendable () async -> Void {
-    {
-      do {
-        let replies = try stores.runs.reconcileRunsAtBoot(
-          now: Date(),
-          degradationText: Degradation.unfinished,
-          heartbeatNoticeChatId: heartbeatOwner
-        )
-        if !replies.isEmpty {
-          logger.warning(
-            "boot reconcile: \(replies.count) unfinished run(s) → degradation enqueued"
-          )
-        }
-      } catch {
-        logger.error("boot reconcile failed: \(error)")
-      }
-    }
-  }
-
-  /// The boot step that re-establishes the approval fabric after a restart (spec §7): terminal-run
-  /// PENDING rows are cleaned, unexpired parked approvals are re-parked on their lanes so buttons and
-  /// the FIFO queue-behind contract survive restart (§5.5), expired ones are swept to DENY→FAILED
-  /// (§6.4), and an APPROVED row left by a crash between grant and execution is resumed under the
-  /// §6.5 re-validation belt. Runs before the services serve, so the re-parked lanes are live before
-  /// the first callback arrives.
-  func bootReconcileApprovals(
-    stores: ClawStores,
-    lanes: SessionLaneRegistry,
-    coordinator: ApprovalCoordinator,
-    waiter: ApprovalWaiter,
-    logger: Logger
-  ) -> @Sendable () async -> Void {
-    let reconciler = ApprovalBootReconciler(
-      approvals: stores.approvals,
-      lanes: lanes,
-      coordinator: coordinator,
-      waiter: waiter,
-      now: { Date() },
-      logger: logger
-    )
-    return {
-      await reconciler.reconcile()
-    }
+    return stores
   }
 }

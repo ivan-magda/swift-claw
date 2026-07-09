@@ -386,24 +386,31 @@ private extension ScheduleDraftValidator {
         )
       }
     case .weekly:
-      guard let rawWeekday = schedule.weekday else {
-        return .failure(.missingField(kind: .weekly, field: "weekday"))
-      }
+      return weeklyRule(schedule, calendar: calendar)
+    }
+  }
 
-      guard let weekday = Self.weekday(named: rawWeekday) else {
-        return .failure(.invalidWeekday(rawWeekday))
-      }
+  func weeklyRule(
+    _ schedule: DraftSchedule,
+    calendar: Calendar
+  ) -> Result<Calendar.RecurrenceRule, ScheduleDraftProblem> {
+    guard let rawWeekday = schedule.weekday else {
+      return .failure(.missingField(kind: .weekly, field: "weekday"))
+    }
 
-      return clockComponents(schedule, kind: .weekly).map { clock in
-        Calendar.RecurrenceRule(
-          calendar: calendar,
-          frequency: .weekly,
-          weekdays: [.every(weekday)],
-          hours: [clock.hour],
-          minutes: [clock.minute],
-          seconds: [0]
-        )
-      }
+    guard let weekday = Self.weekday(named: rawWeekday) else {
+      return .failure(.invalidWeekday(rawWeekday))
+    }
+
+    return clockComponents(schedule, kind: .weekly).map { clock in
+      Calendar.RecurrenceRule(
+        calendar: calendar,
+        frequency: .weekly,
+        weekdays: [.every(weekday)],
+        hours: [clock.hour],
+        minutes: [clock.minute],
+        seconds: [0]
+      )
     }
   }
 }
@@ -520,7 +527,14 @@ extension ScheduleDraftValidator {
     return (hour, minute)
   }
 
-  static func parseDay(_ text: String) -> (year: Int, month: Int, day: Int)? {
+  /// A parsed `YYYY-MM-DD` stem.
+  struct DayParts: Sendable, Equatable {
+    let year: Int
+    let month: Int
+    let day: Int
+  }
+
+  static func parseDay(_ text: String) -> DayParts? {
     let pieces = text.split(separator: "-", omittingEmptySubsequences: false)
     guard
       pieces.count == 3,
@@ -532,7 +546,7 @@ extension ScheduleDraftValidator {
     else {
       return nil
     }
-    return (year, month, day)
+    return DayParts(year: year, month: month, day: day)
   }
 
   private static func dayRoundTrips(

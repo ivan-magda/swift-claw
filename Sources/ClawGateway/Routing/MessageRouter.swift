@@ -203,10 +203,8 @@ private extension MessageRouter {
         message: message,
         command: memoryCommand
       )
-    case .schedule(.create(let text)):
-      return try await scheduleHandlers.create(rawUpdate: rawUpdate, message: message, text: text)
-    case .schedule(.list):
-      return try await scheduleHandlers.list(rawUpdate: rawUpdate, chatId: message.chatId)
+    case .schedule(let scheduleCommand):
+      return try await routeSchedule(scheduleCommand, rawUpdate: rawUpdate, message: message)
     case .pause(let jobId):
       return try await scheduleHandlers.pause(rawUpdate: rawUpdate, message: message, jobId: jobId)
     case .resume(let jobId):
@@ -228,19 +226,38 @@ private extension MessageRouter {
         jobId: jobId
       )
     case .plain(let plainText):
-      if let resolved = try await confirmations.resolve(
-        rawUpdate: rawUpdate,
-        message: message,
-        text: plainText
-      ) {
-        return resolved
-      }
-      return try await turnDispatch.dispatch(
-        rawUpdate: rawUpdate,
-        message: message,
-        text: plainText
-      )
+      return try await routePlain(plainText, rawUpdate: rawUpdate, message: message)
     }
+  }
+
+  func routeSchedule(
+    _ scheduleCommand: ScheduleCommand,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    switch scheduleCommand {
+    case .create(let text):
+      return try await scheduleHandlers.create(rawUpdate: rawUpdate, message: message, text: text)
+    case .list:
+      return try await scheduleHandlers.list(rawUpdate: rawUpdate, chatId: message.chatId)
+    }
+  }
+
+  /// Plain text first offers itself to any parked confirmation for the session (§9/§14); only an
+  /// unclaimed message becomes a durable turn.
+  func routePlain(
+    _ text: String,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    if let resolved = try await confirmations.resolve(
+      rawUpdate: rawUpdate,
+      message: message,
+      text: text
+    ) {
+      return resolved
+    }
+    return try await turnDispatch.dispatch(rawUpdate: rawUpdate, message: message, text: text)
   }
 
   static func unauthorizedStartText(userId: Int64) -> String {

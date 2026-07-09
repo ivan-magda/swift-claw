@@ -77,7 +77,7 @@ actor ScriptedPostHTTP: HTTPExecuting {
     #expect(results.count == 3)
     #expect(results[0].snippet == "Swift is a general-purpose programming language.")
     #expect(results[1].snippet == "Community discussion for Swift.")
-    #expect(results[2].snippet == "")
+    #expect(results[2].snippet.isEmpty)
     #expect(results[0].url == "https://swift.org/")
 
     // and the wire request is the pinned shape

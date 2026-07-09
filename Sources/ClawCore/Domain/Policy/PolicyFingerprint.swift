@@ -41,10 +41,14 @@ public enum PolicyFingerprint {
 
     var parts: [String] = []
     for tool in tools.sorted(by: { lhs, rhs in lhs.name < rhs.name }) {
-      // JSONValue encoding cannot realistically fail for the finite case set; tool name still distinguishes entries.
+      // JSONValue encoding cannot realistically fail for the finite case set; tool name still
+      // distinguishes entries. JSONEncoder output is always valid UTF-8, so the failable decode
+      // preserves the byte-exact contribution and folds to "" only on the same encode failure.
       let canonicalParameters =
         (try? encoder.encode(tool.parameters))
-        .map { data in String(decoding: data, as: UTF8.self) } ?? ""
+        .flatMap { data in
+          String(data: data, encoding: .utf8)
+        } ?? ""
       parts.append(tool.name)
       parts.append(canonicalParameters)
       parts.append(tool.riskLevel.rawValue)

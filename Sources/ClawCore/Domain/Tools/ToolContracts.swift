@@ -98,6 +98,8 @@ extension JSONValue {
     try? JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
   }
 
+  // nil means "not an object" — distinct from `.object([:])`, so an empty default would lie.
+  // swiftlint:disable:next discouraged_optional_collection
   public var objectValue: [String: JSONValue]? {
     guard case .object(let objectValue) = self else {
       return nil

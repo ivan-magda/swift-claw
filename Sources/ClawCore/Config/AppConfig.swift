@@ -133,30 +133,7 @@ public struct AppConfig: Sendable, Equatable {
       default: EnvDefaults.schedMinIntervalMinutes,
       minimum: 1
     )
-    let heartbeatEnabled = try boolValue(
-      env[EnvKey.heartbeatEnabled],
-      key: EnvKey.heartbeatEnabled,
-      default: false
-    )
-    // Spec §12: the heartbeat delivers to the config-resolved owner DM (and the same target
-    // serves the boot-reconcile crash notice). Enabling it without exactly one allowlisted id
-    // is a config ERROR (fail closed at load + doctor --check-config), never a runtime guess.
-    if heartbeatEnabled, allowlist.count != 1 {
-      throw ConfigError.heartbeatOwnerUnresolved(allowlistCount: allowlist.count)
-    }
-    let heartbeatIntervalMinutes = try boundedInt(
-      env[EnvKey.heartbeatIntervalMinutes],
-      key: EnvKey.heartbeatIntervalMinutes,
-      default: EnvDefaults.heartbeatIntervalMinutes,
-      minimum: 15
-    )
-    let heartbeatQuietHours = try parseQuietHours(from: env[EnvKey.heartbeatQuietHours])
-    let heartbeatMaxPerDay = try boundedInt(
-      env[EnvKey.heartbeatMaxPerDay],
-      key: EnvKey.heartbeatMaxPerDay,
-      default: EnvDefaults.heartbeatMaxPerDay,
-      minimum: 1
-    )
+    let heartbeat = try parseHeartbeat(from: env, allowlist: allowlist)
 
     let approvalExpirySeconds = try parseApprovalExpiry(env[EnvKey.approvalExpiry])
 
@@ -170,10 +147,10 @@ public struct AppConfig: Sendable, Equatable {
       schedCatchUpMaxAgeMinutes: schedCatchUpMaxAgeMinutes,
       schedMinIntervalMinutes: schedMinIntervalMinutes,
       proactivePerDayUSD: proactivePerDayUSD,
-      heartbeatEnabled: heartbeatEnabled,
-      heartbeatIntervalMinutes: heartbeatIntervalMinutes,
-      heartbeatQuietHours: heartbeatQuietHours,
-      heartbeatMaxPerDay: heartbeatMaxPerDay,
+      heartbeatEnabled: heartbeat.enabled,
+      heartbeatIntervalMinutes: heartbeat.intervalMinutes,
+      heartbeatQuietHours: heartbeat.quietHours,
+      heartbeatMaxPerDay: heartbeat.maxPerDay,
       approvalExpirySeconds: approvalExpirySeconds
     )
   }
@@ -349,6 +326,47 @@ private extension AppConfig {
     }
 
     return value
+  }
+
+  struct HeartbeatSettings {
+    let enabled: Bool
+    let intervalMinutes: Int
+    let quietHours: QuietHours
+    let maxPerDay: Int
+  }
+
+  static func parseHeartbeat(
+    from env: [String: String],
+    allowlist: Set<Int64>
+  ) throws -> HeartbeatSettings {
+    let enabled = try boolValue(
+      env[EnvKey.heartbeatEnabled],
+      key: EnvKey.heartbeatEnabled,
+      default: false
+    )
+    // Spec §12: the heartbeat delivers to the config-resolved owner DM (and the same target
+    // serves the boot-reconcile crash notice). Enabling it without exactly one allowlisted id
+    // is a config ERROR (fail closed at load + doctor --check-config), never a runtime guess.
+    if enabled, allowlist.count != 1 {
+      throw ConfigError.heartbeatOwnerUnresolved(allowlistCount: allowlist.count)
+    }
+
+    return HeartbeatSettings(
+      enabled: enabled,
+      intervalMinutes: try boundedInt(
+        env[EnvKey.heartbeatIntervalMinutes],
+        key: EnvKey.heartbeatIntervalMinutes,
+        default: EnvDefaults.heartbeatIntervalMinutes,
+        minimum: 15
+      ),
+      quietHours: try parseQuietHours(from: env[EnvKey.heartbeatQuietHours]),
+      maxPerDay: try boundedInt(
+        env[EnvKey.heartbeatMaxPerDay],
+        key: EnvKey.heartbeatMaxPerDay,
+        default: EnvDefaults.heartbeatMaxPerDay,
+        minimum: 1
+      )
+    )
   }
 
   static func parseQuietHours(from raw: String?) throws -> QuietHours {

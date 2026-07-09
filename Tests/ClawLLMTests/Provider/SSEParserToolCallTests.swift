@@ -13,13 +13,13 @@ import Testing
     return collected
   }
 
-  private func finishedToolCalls(_ events: [StreamEvent]) -> [ToolCall]? {
+  private func finishedToolCalls(_ events: [StreamEvent]) -> [ToolCall] {
     for event in events {
       if case .finished(_, _, _, let toolCalls) = event {
         return toolCalls
       }
     }
-    return nil
+    return []
   }
 
   @Test func assemblesSplitIdAndArgumentFragments() throws {
@@ -43,7 +43,12 @@ import Testing
         ToolCall(id: "call_1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#)
       ]
     )
-    #expect(events.filter { if case .delta = $0 { true } else { false } }.isEmpty)
+    let sawDelta = events.contains { event in
+      if case .delta = event { return true }
+      return false
+    }
+
+    #expect(!sawDelta)
   }
 
   @Test func assemblesMultipleIndicesInOrder() throws {
@@ -58,7 +63,7 @@ import Testing
     )
 
     // then
-    #expect(finishedToolCalls(events)?.map(\.id) == ["a", "b"])
+    #expect(finishedToolCalls(events).map(\.id) == ["a", "b"])
   }
 
   @Test func accumulatedArgumentBytesRespectTheStreamLimit() throws {
@@ -92,7 +97,7 @@ import Testing
 
     // then
     #expect(events.contains(.delta("Let me check.")))
-    #expect(finishedToolCalls(events)?.count == 1)
+    #expect(finishedToolCalls(events).count == 1)
   }
 
   @Test func eofWithoutFinishedYieldsNoToolCalls() throws {

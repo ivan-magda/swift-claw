@@ -106,42 +106,12 @@ private extension ConfirmationResolver {
     let newlyClaimed: Bool
     let ackText: String
     do {
-      switch confirmation {
-      case .rememberWrite(let request):
-        let result = try memoryCommands.applyRemember(
-          updateId: rawUpdate.updateId,
-          item: request.item,
-          now: now()
-        )
-        newlyClaimed = result.newlyClaimed
-        ackText = MemoryReplies.saved(id: result.item?.id)
-      case .deleteItem(let itemId):
-        let result = try memoryCommands.applyForget(
-          updateId: rawUpdate.updateId,
-          itemId: itemId,
-          now: now()
-        )
-        newlyClaimed = result.newlyClaimed
-        ackText = MemoryReplies.deleted(id: itemId)
-      case .scheduleArm(let validated):
-        // owner_chat_id is set HERE, in code, from the arming chat — never model- or
-        // prompt-controlled (spec §4.1). The insert is the exact parked draft (§8, no re-parse).
-        let newJob = NewScheduledJob(
-          ownerChatId: message.chatId,
-          label: validated.label,
-          prompt: validated.prompt,
-          recurrence: validated.recurrence,
-          timezone: validated.timezone,
-          nextOccurrence: scheduleArmNext ?? validated.firstOccurrence
-        )
-        let result = try schedule.commands.applyArm(
-          updateId: rawUpdate.updateId,
-          job: newJob,
-          now: now()
-        )
-        newlyClaimed = result.newlyClaimed
-        ackText = ScheduleReplies.armed(job: result.job)
-      }
+      (newlyClaimed, ackText) = try applyConfirmedEffect(
+        confirmation,
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        scheduleArmNext: scheduleArmNext
+      )
     } catch StoreError.diskFull {
       throw RoutingHalt(outcome: await replies.storageFull(chatId: message.chatId))
     } catch {
@@ -167,6 +137,49 @@ private extension ConfirmationResolver {
       chatId: message.chatId,
       text: ackText
     )
+  }
+
+  /// Applies the parked effect through its atomic claim+effect+audit store seam and returns the
+  /// claim verdict plus the per-effect ack text. Store failures propagate to `commitPending`.
+  func applyConfirmedEffect(
+    _ confirmation: CommandConfirmation,
+    updateId: Int64,
+    chatId: Int64,
+    scheduleArmNext: Date?
+  ) throws -> (newlyClaimed: Bool, ackText: String) {
+    switch confirmation {
+    case .rememberWrite(let request):
+      let result = try memoryCommands.applyRemember(
+        updateId: updateId,
+        item: request.item,
+        now: now()
+      )
+      return (result.newlyClaimed, MemoryReplies.saved(id: result.item?.id))
+    case .deleteItem(let itemId):
+      let result = try memoryCommands.applyForget(
+        updateId: updateId,
+        itemId: itemId,
+        now: now()
+      )
+      return (result.newlyClaimed, MemoryReplies.deleted(id: itemId))
+    case .scheduleArm(let validated):
+      // owner_chat_id is set HERE, in code, from the arming chat — never model- or
+      // prompt-controlled (spec §4.1). The insert is the exact parked draft (§8, no re-parse).
+      let newJob = NewScheduledJob(
+        ownerChatId: chatId,
+        label: validated.label,
+        prompt: validated.prompt,
+        recurrence: validated.recurrence,
+        timezone: validated.timezone,
+        nextOccurrence: scheduleArmNext ?? validated.firstOccurrence
+      )
+      let result = try schedule.commands.applyArm(
+        updateId: updateId,
+        job: newJob,
+        now: now()
+      )
+      return (result.newlyClaimed, ScheduleReplies.armed(job: result.job))
+    }
   }
 
   /// A parked schedule confirmed after its only fire time has passed: nothing valid remains to

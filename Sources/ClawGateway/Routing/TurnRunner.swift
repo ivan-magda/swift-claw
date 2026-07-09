@@ -120,49 +120,23 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let snapshot: SessionContextSnapshot
-    let buildResult: BuildResult
-    let todayTokens: Int
-    let todayUSD: Double
-    let proactiveTodayUSD: Double
-
+    let inputs: TurnInputs
     do {
-      snapshot = try sessionMessages.loadContextSnapshot(
+      inputs = try loadTurnInputs(
         sessionId: sessionId,
-        throughMessageId: triggerMessageId,
-        limit: Self.historyLimit
+        boundMessageId: triggerMessageId,
+        origin: origin,
+        at: now
       )
-
-      let totals = try usageStore.todayTokensAndCost(now: now)
-      todayTokens = totals.tokens
-      todayUSD = totals.costUSD
-      // The proactive pool is one aggregate over scheduled + heartbeat (spec §11); interactive
-      // runs never pay for the extra query.
-      if origin == .interactive {
-        proactiveTodayUSD = 0
-      } else {
-        proactiveTodayUSD =
-          try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: now).costUSD
-      }
-
-      buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
     } catch StoreError.diskFull {
       throw StoreError.diskFull
     } catch {
       logger.error("context build failed for run \(runId): \(error)")
-      _ = try commitDegradation(
+      try commitContextUnavailable(
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
-        usage: nil,
-        exchanges: [],
         setTainted: false,
-        message: ownerVisiblePayload(
-          reply: Degradation.contextUnavailable,
-          ownerNotices: []
-        ),
-        action: .turnDegraded,
-        decision: DegradationKind.contextUnavailable.rawValue,
         at: Date()
       )
       return
@@ -174,13 +148,13 @@ public struct TurnRunner: TurnDispatching {
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
-      buildResult: buildResult,
-      sessionTainted: snapshot.isTainted,
+      buildResult: inputs.buildResult,
+      sessionTainted: inputs.snapshot.isTainted,
       grant: grant,
-      todayTokens: todayTokens,
-      todayUSD: todayUSD,
+      todayTokens: inputs.todayTokens,
+      todayUSD: inputs.todayUSD,
       origin: origin,
-      proactiveTodayUSD: proactiveTodayUSD
+      proactiveTodayUSD: inputs.proactiveTodayUSD
     )
 
     try await commit(
@@ -188,7 +162,7 @@ public struct TurnRunner: TurnDispatching {
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
-      ownerNotices: buildResult.ownerNotices,
+      ownerNotices: inputs.buildResult.ownerNotices,
       origin: origin
     )
   }
@@ -221,33 +195,18 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let clock = now()
-    let snapshot: SessionContextSnapshot
-    let buildResult: BuildResult
-    let todayTokens: Int
-    let todayUSD: Double
-    let proactiveTodayUSD: Double
+    let inputs: TurnInputs
     let carryOver: ResumeUsage
     do {
-      snapshot = try sessionMessages.loadContextSnapshot(
-        sessionId: sessionId,
-        throughMessageId: contextBoundMessageId,
-        limit: Self.historyLimit
-      )
-      let totals = try usageStore.todayTokensAndCost(now: clock)
-      todayTokens = totals.tokens
-      todayUSD = totals.costUSD
-      if origin == .interactive {
-        proactiveTodayUSD = 0
-      } else {
-        proactiveTodayUSD =
-          try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: clock).costUSD
-      }
       carryOver = try runs.resumeUsage(runId: runId)
-      buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
+      inputs = try loadTurnInputs(
+        sessionId: sessionId,
+        boundMessageId: contextBoundMessageId,
+        origin: origin,
+        at: now()
+      )
     } catch {
-      logger.error("resume context build failed for run \(runId): \(error)")
-      try? runs.failRun(runId: runId, now: now())
+      failResume(runId: runId, stage: "context build", error: error)
       return
     }
 
@@ -257,18 +216,17 @@ public struct TurnRunner: TurnDispatching {
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
-        buildResult: buildResult,
-        sessionTainted: snapshot.isTainted,
+        buildResult: inputs.buildResult,
+        sessionTainted: inputs.snapshot.isTainted,
         grant: nil,
-        todayTokens: todayTokens,
-        todayUSD: todayUSD,
+        todayTokens: inputs.todayTokens,
+        todayUSD: inputs.todayUSD,
         origin: origin,
-        proactiveTodayUSD: proactiveTodayUSD,
+        proactiveTodayUSD: inputs.proactiveTodayUSD,
         carryOver: carryOver
       )
     } catch {
-      logger.error("resume turn failed for run \(runId): \(error)")
-      try? runs.failRun(runId: runId, now: now())
+      failResume(runId: runId, stage: "turn", error: error)
       return
     }
 
@@ -278,12 +236,56 @@ public struct TurnRunner: TurnDispatching {
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
-        ownerNotices: buildResult.ownerNotices,
+        ownerNotices: inputs.buildResult.ownerNotices,
         origin: origin
       )
     } catch {
       logger.error("resume commit failed for run \(runId): \(error)")
     }
+  }
+}
+
+// MARK: - Context Assembly
+
+private extension TurnRunner {
+  /// Loads the bounded snapshot, today's budget totals, and the assembled context in one place —
+  /// `run` and `resume` share it; only the bounding message id and the clock differ.
+  func loadTurnInputs(
+    sessionId: Int64,
+    boundMessageId: Int64,
+    origin: RunOrigin,
+    at clock: Date
+  ) throws -> TurnInputs {
+    let snapshot = try sessionMessages.loadContextSnapshot(
+      sessionId: sessionId,
+      throughMessageId: boundMessageId,
+      limit: Self.historyLimit
+    )
+    let totals = try usageStore.todayTokensAndCost(now: clock)
+    // The proactive pool is one aggregate over scheduled + heartbeat (spec §11); interactive
+    // runs never pay for the extra query.
+    let proactiveTodayUSD: Double
+    if origin == .interactive {
+      proactiveTodayUSD = 0
+    } else {
+      proactiveTodayUSD =
+        try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: clock).costUSD
+    }
+    let buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
+    return TurnInputs(
+      snapshot: snapshot,
+      buildResult: buildResult,
+      todayTokens: totals.tokens,
+      todayUSD: totals.costUSD,
+      proactiveTodayUSD: proactiveTodayUSD
+    )
+  }
+
+  /// `resume`'s shared failure tail: every pre-commit failure fails the run in-band (best-effort)
+  /// so the lane frees — `resume` is non-throwing by contract (§6.3).
+  func failResume(runId: Int64, stage: String, error: any Error) {
+    logger.error("resume \(stage) failed for run \(runId): \(error)")
+    try? runs.failRun(runId: runId, now: now())
   }
 }
 
@@ -297,8 +299,7 @@ private extension TurnRunner {
   ///    then run the shared failure tail with the kind's reply.
   ///  - `.budgetStopped`: the shared failure tail with the budget reply.
   /// Only `StoreError.diskFull` may propagate; every other failure is handled in-band here.
-  // swiftlint:disable:next function_parameter_count
-  func commit(
+  func commit(  // swiftlint:disable:this function_parameter_count
     _ outcome: TurnOutcome,
     runId: Int64,
     sessionId: Int64,
@@ -306,130 +307,175 @@ private extension TurnRunner {
     ownerNotices: [String],
     origin: RunOrigin
   ) async throws {
-    let committedAt = Date()
+    let context = CommitContext(
+      runId: runId,
+      sessionId: sessionId,
+      chatId: chatId,
+      ownerNotices: ownerNotices,
+      origin: origin,
+      committedAt: Date()
+    )
 
     switch outcome.result {
     case .completed(let content, let usage):
-      // The deterministic approval prompt (D7) is APPENDED after the model's reply; overflow owner
-      // notices keep their PREPEND slot (rev.1 L1). Delivery-only — never stored as history.
-      let appendedNotices =
-        outcome.pendingApproval.map { approval in
-          [ToolApprovalPrompt.text(for: approval)]
-        } ?? []
-      // Spec §12 ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
-      // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
-      let suppressHeartbeatAck = origin == .heartbeat && HeartbeatAck.isAck(content)
-      let chunks =
-        suppressHeartbeatAck
-        ? []
-        : outboxChunks(
-          for: ownerVisiblePayload(
-            reply: content,
-            ownerNotices: ownerNotices,
-            appendedNotices: appendedNotices
-          ),
-          chatId: chatId
-        )
-      let turn = AssistantTurn(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
-        content: content,
-        usage: usage,
-        chunks: chunks,
-        exchanges: outcome.exchanges,
-        setTainted: outcome.ingestedUntrusted
-      )
-
-      let commitResult = try runs.commitAssistantTurn(turn, now: committedAt)
-      switch commitResult {
-      case .committed:
-        // Park ONLY after the commit won arbitration — a superseded run must not leave a live
-        // approval behind. One slot per session: parking replaces (deny-by-default holds).
-        if let approval = outcome.pendingApproval {
-          await pendingConfirmations.park(.toolApproval(approval), sessionId: sessionId)
-        }
-
-        try audit.appendAudit(
-          turnAudit(
-            action: .turnCompleted,
-            runId: runId,
-            sessionId: sessionId,
-            resultSize: content.utf8.count,
-            at: committedAt
-          )
-        )
-        if origin == .heartbeat {
-          try audit.appendAudit(
-            AuditEvent(
-              actor: .assistant,
-              action: suppressHeartbeatAck ? .heartbeatSuppressed : .heartbeatFired,
-              resultSize: content.utf8.count,
-              decision: suppressHeartbeatAck ? "ack" : "delivered",
-              runId: runId,
-              sessionId: sessionId,
-              ts: committedAt
-            )
-          )
-        }
-
-        notifyOutbox()
-        await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
-      case .usageRecordedAfterTerminal:
-        await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
-      case .ignored:
-        return
-      }
+      try await commitCompleted(content: content, usage: usage, outcome: outcome, in: context)
     case .degraded(let degradationKind, let usage):
-      // Executed exchanges persist even on the failure path so the next turn's context
-      // knows what already ran; the taint from any ingesting call persists with them. No approval
-      // is parked — the model's explanation never reached the owner, so the gate re-trips next time.
-      let commitResult = try commitDegradation(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
-        usage: usage,
-        exchanges: outcome.exchanges,
-        setTainted: outcome.ingestedUntrusted,
-        message: ownerVisiblePayload(
-          reply: Degradation.message(for: degradationKind),
-          ownerNotices: ownerNotices
-        ),
-        action: .turnDegraded,
-        decision: degradationKind.rawValue,
-        at: committedAt
-      )
-      if commitResult != .ignored {
-        await notifyDailyCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
-      }
+      try await commitDegraded(kind: degradationKind, usage: usage, outcome: outcome, in: context)
     case .budgetStopped(let cap):
-      _ = try commitDegradation(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
-        usage: nil,
-        exchanges: outcome.exchanges,
-        setTainted: outcome.ingestedUntrusted,
-        message: ownerVisiblePayload(
-          reply: Degradation.budget(cap: cap),
-          ownerNotices: ownerNotices
-        ),
-        action: .turnBudgetStopped,
-        decision: cap,
-        at: committedAt
-      )
-      if origin != .interactive, cap == BudgetGate.proactivePerDayCap {
-        await notifyProactiveCapIfTripped(chatId: chatId, runId: runId, sessionId: sessionId)
-      }
+      try await commitBudgetStopped(cap: cap, outcome: outcome, in: context)
     case .suspended(let pending, let usage):
-      try await suspendForApproval(
-        pending: pending,
-        usage: usage,
-        outcome: outcome,
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
-        at: committedAt
+      try await suspendForApproval(pending: pending, usage: usage, outcome: outcome, in: context)
+    }
+  }
+
+  func commitCompleted(
+    content: String,
+    usage: ProviderUsage,
+    outcome: TurnOutcome,
+    in context: CommitContext
+  ) async throws {
+    // The deterministic approval prompt (D7) is APPENDED after the model's reply; overflow owner
+    // notices keep their PREPEND slot (rev.1 L1). Delivery-only — never stored as history.
+    let appendedNotices =
+      outcome.pendingApproval.map { approval in
+        [ToolApprovalPrompt.text(for: approval)]
+      } ?? []
+    // Spec §12 ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
+    // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
+    let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
+    let chunks =
+      suppressHeartbeatAck
+      ? []
+      : outboxChunks(
+        for: ownerVisiblePayload(
+          reply: content,
+          ownerNotices: context.ownerNotices,
+          appendedNotices: appendedNotices
+        ),
+        chatId: context.chatId
+      )
+    let turn = AssistantTurn(
+      runId: context.runId,
+      sessionId: context.sessionId,
+      chatId: context.chatId,
+      content: content,
+      usage: usage,
+      chunks: chunks,
+      exchanges: outcome.exchanges,
+      setTainted: outcome.ingestedUntrusted
+    )
+
+    switch try runs.commitAssistantTurn(turn, now: context.committedAt) {
+    case .committed:
+      // Park ONLY after the commit won arbitration — a superseded run must not leave a live
+      // approval behind. One slot per session: parking replaces (deny-by-default holds).
+      if let approval = outcome.pendingApproval {
+        await pendingConfirmations.park(.toolApproval(approval), sessionId: context.sessionId)
+      }
+      try auditCompleted(content: content, suppressedAck: suppressHeartbeatAck, in: context)
+      notifyOutbox()
+      await notifyDailyCapIfTripped(
+        chatId: context.chatId,
+        runId: context.runId,
+        sessionId: context.sessionId
+      )
+    case .usageRecordedAfterTerminal:
+      await notifyDailyCapIfTripped(
+        chatId: context.chatId,
+        runId: context.runId,
+        sessionId: context.sessionId
+      )
+    case .ignored:
+      return
+    }
+  }
+
+  /// Audit tail for a committed `.completed` turn: the turn row, plus the heartbeat
+  /// delivered/suppressed marker (spec §12) when the run is a heartbeat.
+  func auditCompleted(content: String, suppressedAck: Bool, in context: CommitContext) throws {
+    try audit.appendAudit(
+      turnAudit(
+        action: .turnCompleted,
+        runId: context.runId,
+        sessionId: context.sessionId,
+        resultSize: content.utf8.count,
+        at: context.committedAt
+      )
+    )
+    guard context.origin == .heartbeat else {
+      return
+    }
+    try audit.appendAudit(
+      AuditEvent(
+        actor: .assistant,
+        action: suppressedAck ? .heartbeatSuppressed : .heartbeatFired,
+        resultSize: content.utf8.count,
+        decision: suppressedAck ? "ack" : "delivered",
+        runId: context.runId,
+        sessionId: context.sessionId,
+        ts: context.committedAt
+      )
+    )
+  }
+
+  /// Executed exchanges persist even on the failure path so the next turn's context knows what
+  /// already ran; the taint from any ingesting call persists with them. No approval is parked —
+  /// the model's explanation never reached the owner, so the gate re-trips next time.
+  func commitDegraded(
+    kind: DegradationKind,
+    usage: ProviderUsage?,
+    outcome: TurnOutcome,
+    in context: CommitContext
+  ) async throws {
+    let commitResult = try commitDegradation(
+      runId: context.runId,
+      sessionId: context.sessionId,
+      chatId: context.chatId,
+      usage: usage,
+      exchanges: outcome.exchanges,
+      setTainted: outcome.ingestedUntrusted,
+      message: ownerVisiblePayload(
+        reply: Degradation.message(for: kind),
+        ownerNotices: context.ownerNotices
+      ),
+      action: .turnDegraded,
+      decision: kind.rawValue,
+      at: context.committedAt
+    )
+    if commitResult != .ignored {
+      await notifyDailyCapIfTripped(
+        chatId: context.chatId,
+        runId: context.runId,
+        sessionId: context.sessionId
+      )
+    }
+  }
+
+  func commitBudgetStopped(
+    cap: String,
+    outcome: TurnOutcome,
+    in context: CommitContext
+  ) async throws {
+    _ = try commitDegradation(
+      runId: context.runId,
+      sessionId: context.sessionId,
+      chatId: context.chatId,
+      usage: nil,
+      exchanges: outcome.exchanges,
+      setTainted: outcome.ingestedUntrusted,
+      message: ownerVisiblePayload(
+        reply: Degradation.budget(cap: cap),
+        ownerNotices: context.ownerNotices
+      ),
+      action: .turnBudgetStopped,
+      decision: cap,
+      at: context.committedAt
+    )
+    if context.origin != .interactive, cap == BudgetGate.proactivePerDayCap {
+      await notifyProactiveCapIfTripped(
+        chatId: context.chatId,
+        runId: context.runId,
+        sessionId: context.sessionId
       )
     }
   }
@@ -484,6 +530,29 @@ private extension TurnRunner {
 
     return commitResult
   }
+
+  /// The "the turn could not even assemble" fallback: a degradation commit with no usage and no
+  /// exchanges, carrying the canned context-unavailable reply.
+  func commitContextUnavailable(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    setTainted: Bool,
+    at committedAt: Date
+  ) throws {
+    _ = try commitDegradation(
+      runId: runId,
+      sessionId: sessionId,
+      chatId: chatId,
+      usage: nil,
+      exchanges: [],
+      setTainted: setTainted,
+      message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
+      action: .turnDegraded,
+      decision: DegradationKind.contextUnavailable.rawValue,
+      at: committedAt
+    )
+  }
 }
 
 // MARK: - Suspend Commit
@@ -492,14 +561,11 @@ private extension TurnRunner {
   /// Persists the §5.3 checkpoint, drains the prompt, then HOLDS the lane on the durable approval.
   /// A lost-arbitration race (a /stop//new already terminated the run) or a write fault rolls the
   /// commit back — there is nothing to park, so the turn simply ends (in-band, no throw escapes).
-  func suspendForApproval(  // swiftlint:disable:this function_parameter_count
+  func suspendForApproval(
     pending: PendingToolAction,
     usage: ProviderUsage,
     outcome: TurnOutcome,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    at committedAt: Date
+    in context: CommitContext
   ) async throws {
     // Invariant: `.suspended` is only returned after `outcome.exchanges.append(...)` upstream, so
     // `exchanges.last` is never nil on this path — this branch is defensive-only, unreachable today.
@@ -507,18 +573,13 @@ private extension TurnRunner {
     // to `commitDegradation` would debit `provider_usage` a second time for the same round. Pass
     // `nil` so this dead fallback can never double-debit even if the invariant above ever broke.
     guard let anchor = outcome.exchanges.last else {
-      logger.error("suspended turn for run \(runId) carried no exchange; failing in-band")
-      _ = try commitDegradation(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
-        usage: nil,
-        exchanges: [],
+      logger.error("suspended turn for run \(context.runId) carried no exchange; failing in-band")
+      try commitContextUnavailable(
+        runId: context.runId,
+        sessionId: context.sessionId,
+        chatId: context.chatId,
         setTainted: outcome.ingestedUntrusted,
-        message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
-        action: .turnDegraded,
-        decision: DegradationKind.contextUnavailable.rawValue,
-        at: committedAt
+        at: context.committedAt
       )
       return
     }
@@ -534,31 +595,31 @@ private extension TurnRunner {
       toolCallsJSON: ToolCallCoding.encode(anchor.toolCalls) ?? "[]",
       completedObservations: completed,
       pending: pending,
-      ownerUserId: chatId,
+      ownerUserId: context.chatId,
       nonce: nonce,
       promptChunks: approvalPromptChunks(
         pending: pending,
         outcome: outcome,
-        chatId: chatId,
+        chatId: context.chatId,
         nonce: nonce
       ),
       setTainted: outcome.ingestedUntrusted,
       setPrivateData: outcome.hadPrivateData,
-      expiresTs: committedAt.addingTimeInterval(TimeInterval(approvalExpirySeconds))
+      expiresTs: context.committedAt.addingTimeInterval(TimeInterval(approvalExpirySeconds))
     )
 
     let receipt: SuspendedCommitReceipt
     do {
       receipt = try runs.commitSuspendedTurn(
-        runId: runId,
-        sessionId: sessionId,
+        runId: context.runId,
+        sessionId: context.sessionId,
         commit: commit,
-        now: committedAt
+        now: context.committedAt
       )
     } catch StoreError.diskFull {
       throw StoreError.diskFull
     } catch {
-      logger.debug("suspend commit did not apply for run \(runId): \(error)")
+      logger.debug("suspend commit did not apply for run \(context.runId): \(error)")
       return
     }
 
@@ -566,44 +627,11 @@ private extension TurnRunner {
     // Holds THIS lane Task until the approval resolves; the Phase 3 waiter performs the resume/deny.
     await parker.park(
       approvalId: receipt.approvalId,
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
+      runId: context.runId,
+      sessionId: context.sessionId,
+      chatId: context.chatId,
       revalidatePolicyOnApprove: false
     )
-  }
-
-  /// One outbox chunk carrying the §5.4 prompt text plus the inline keyboard (`replyMarkup`); the
-  /// store stamps its `approval_id` after inserting the row.
-  func approvalPromptChunks(
-    pending: PendingToolAction,
-    outcome: TurnOutcome,
-    chatId: Int64,
-    nonce: String
-  ) -> [OutboxChunk] {
-    let input = ToolApprovalPrompt.Input(
-      recorded: pending.recorded,
-      taintBanner: outcome.ingestedUntrusted,
-      privilegedFileBanner: Self.isPrivilegedFile(pending.recorded.canonicalTarget)
-    )
-    let text = ToolApprovalPrompt.text(for: input)
-    return [
-      OutboxChunk(
-        stepIndex: 0,
-        chatId: chatId,
-        payload: text,
-        payloadHash: ContentHash.fnv1a(text),
-        approvalId: nil,
-        replyMarkup: ApprovalKeyboard.markup(nonce: nonce)
-      )
-    ]
-  }
-
-  /// §5.4 privileged-file banner: the owner-editable prompt files. Basename match on the resolved
-  /// canonical target.
-  static func isPrivilegedFile(_ canonicalTarget: String) -> Bool {
-    let privileged: Set<String> = ["SOUL.md", "AGENTS.md", "USER.md", "MEMORY.md"]
-    return privileged.contains((canonicalTarget as NSString).lastPathComponent)
   }
 }
 
@@ -678,56 +706,5 @@ private extension TurnRunner {
         ts: Date()
       )
     )
-  }
-}
-
-// MARK: - Commit Helpers
-
-private extension TurnRunner {
-  /// Builds the audit row for a finished turn (actor = assistant, the turn's author).
-  func turnAudit(
-    action: AuditAction,
-    runId: Int64,
-    sessionId: Int64,
-    resultSize: Int = 0,
-    decision: String = "ok",
-    at ts: Date
-  ) -> AuditEvent {
-    AuditEvent(
-      actor: .assistant,
-      action: action,
-      resultSize: resultSize,
-      decision: decision,
-      runId: runId,
-      sessionId: sessionId,
-      ts: ts
-    )
-  }
-
-  /// Assembles the owner-visible payload: overflow notices PREPEND (rev.1 L1), the approval
-  /// prompt APPENDS. Single-part payloads (the common case) pass through unchanged.
-  func ownerVisiblePayload(
-    reply: String,
-    ownerNotices: [String],
-    appendedNotices: [String] = []
-  ) -> String {
-    let parts = ownerNotices + [reply] + appendedNotices
-    guard parts.count > 1 else {
-      return reply
-    }
-    return parts.joined(separator: "\n\n")
-  }
-
-  /// Splits an assistant reply into deterministic outbox chunks (grapheme-capped, FNV-1a hashed).
-  /// Mechanical helper for the `.completed` path — not part of the commit ordering.
-  func outboxChunks(for content: String, chatId: Int64) -> [OutboxChunk] {
-    ReplySplitter.split(text: content).enumerated().map { index, payload in
-      OutboxChunk(
-        stepIndex: index,
-        chatId: chatId,
-        payload: payload,
-        payloadHash: ContentHash.fnv1a(payload)
-      )
-    }
   }
 }

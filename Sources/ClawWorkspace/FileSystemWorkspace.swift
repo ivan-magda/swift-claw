@@ -82,9 +82,10 @@ public struct FileSystemWorkspace: WorkspaceReading {
         continue  // not a skill directory: normal, no warning
       }
 
+      // An unreadable manifest folds to "" → empty frontmatter → the same invalid-manifest warning.
+      let manifestText = (try? String(contentsOf: manifestURL, encoding: .utf8)) ?? ""
+      let frontmatter = Self.frontmatter(in: manifestText)
       guard
-        let manifestText = try? String(contentsOf: manifestURL, encoding: .utf8),
-        let frontmatter = Self.frontmatter(in: manifestText),
         let name = frontmatter["name"], name.isEmpty == false,
         let description = frontmatter["description"], description.isEmpty == false
       else {
@@ -98,12 +99,12 @@ public struct FileSystemWorkspace: WorkspaceReading {
     return SkillScanResult(descriptors: descriptors, warnings: warnings)
   }
 
-  /// Extracts the leading `---`-fenced YAML block, keeping only string-valued keys. Returns nil when
+  /// Extracts the leading `---`-fenced YAML block, keeping only string-valued keys. Empty when
   /// there is no opening/closing fence or the block is not a parseable string map.
-  private static func frontmatter(in text: String) -> [String: String]? {
+  private static func frontmatter(in text: String) -> [String: String] {
     let lines = text.components(separatedBy: "\n")
     guard lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) == "---" else {
-      return nil
+      return [:]
     }
 
     var yamlLines: [String] = []
@@ -117,12 +118,12 @@ public struct FileSystemWorkspace: WorkspaceReading {
     }
 
     guard didCloseFence else {
-      return nil
+      return [:]
     }
 
     let yaml = yamlLines.joined(separator: "\n")
     guard let parsed = (try? Yams.load(yaml: yaml)) as? [String: Any] else {
-      return nil
+      return [:]
     }
 
     var result: [String: String] = [:]

@@ -325,10 +325,12 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
   _ = try #require(try runs.pickUp(runId: deliveredRunId, now: seededAt))
   _ = try outbox.claimOutbound(
     runId: deliveredRunId,
-    stepIndex: 0,
-    chatId: deliveredChatId,
-    payload: "already delivered",
-    payloadHash: "hash"
+    chunk: OutboxChunk(
+      stepIndex: 0,
+      chatId: deliveredChatId,
+      payload: "already delivered",
+      payloadHash: "hash"
+    )
   )
   try outbox.markSent(runId: deliveredRunId, stepIndex: 0, telegramMessageId: 555, now: seededAt)
 

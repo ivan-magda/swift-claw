@@ -37,24 +37,7 @@ struct DoctorCommand: AsyncParsableCommand {
     report.add(key: "config", value: "OK")
     report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)")
     if checkConfig {
-      report.add(key: "llm.streaming", value: config.llm.streamingEnabled ? "on" : "off")
-      report.add(key: "sched.timezone", value: config.timezone.identifier)
-      report.add(key: "sched.catchup_max_age_min", value: "\(config.schedCatchUpMaxAgeMinutes)")
-      report.add(key: "sched.min_interval_min", value: "\(config.schedMinIntervalMinutes)")
-      // Warn-not-fail (spec §13): a proactive cap at/above the global cap is legal but inert —
-      // the household kill-switch dominates.
-      let proactiveNote =
-        config.proactivePerDayUSD >= config.budget.perDayUSD
-        ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
-      report.add(
-        key: "spend.proactive_per_day_usd",
-        value: USD.display(config.proactivePerDayUSD) + proactiveNote
-      )
-      report.add(key: "heartbeat.enabled", value: config.heartbeatEnabled ? "on" : "off")
-      report.add(key: "heartbeat.interval_min", value: "\(config.heartbeatIntervalMinutes)")
-      report.add(key: "heartbeat.quiet_hours", value: config.heartbeatQuietHours.rendered)
-      report.add(key: "heartbeat.max_per_day", value: "\(config.heartbeatMaxPerDay)")
-      report.add(key: "approval.expiry_s", value: "\(config.approvalExpirySeconds)")
+      addConfigDetailRows(to: &report, config: config)
     }
 
     let secretsRow = SecretStoreResolver.doctorRow(
@@ -76,6 +59,45 @@ struct DoctorCommand: AsyncParsableCommand {
       return
     }
 
+    addDatabaseRows(to: &report, config: config)
+    await addConnectivityRows(to: &report, config: config)
+
+    emit(report)
+
+    if !secretsRow.ok {
+      throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
+    }
+    if !report.ok {
+      throw ExitCode.failure
+    }
+  }
+}
+
+// MARK: - Check Sections
+
+private extension DoctorCommand {
+  func addConfigDetailRows(to report: inout DoctorReport, config: AppConfig) {
+    report.add(key: "llm.streaming", value: config.llm.streamingEnabled ? "on" : "off")
+    report.add(key: "sched.timezone", value: config.timezone.identifier)
+    report.add(key: "sched.catchup_max_age_min", value: "\(config.schedCatchUpMaxAgeMinutes)")
+    report.add(key: "sched.min_interval_min", value: "\(config.schedMinIntervalMinutes)")
+    // Warn-not-fail (spec §13): a proactive cap at/above the global cap is legal but inert —
+    // the household kill-switch dominates.
+    let proactiveNote =
+      config.proactivePerDayUSD >= config.budget.perDayUSD
+      ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
+    report.add(
+      key: "spend.proactive_per_day_usd",
+      value: USD.display(config.proactivePerDayUSD) + proactiveNote
+    )
+    report.add(key: "heartbeat.enabled", value: config.heartbeatEnabled ? "on" : "off")
+    report.add(key: "heartbeat.interval_min", value: "\(config.heartbeatIntervalMinutes)")
+    report.add(key: "heartbeat.quiet_hours", value: config.heartbeatQuietHours.rendered)
+    report.add(key: "heartbeat.max_per_day", value: "\(config.heartbeatMaxPerDay)")
+    report.add(key: "approval.expiry_s", value: "\(config.approvalExpirySeconds)")
+  }
+
+  func addDatabaseRows(to report: inout DoctorReport, config: AppConfig) {
     do {
       let stores = try ClawDatabase.openStores(
         path: config.stateRoot.appendingPathComponent(StateFile.database).path
@@ -92,51 +114,59 @@ struct DoctorCommand: AsyncParsableCommand {
     } catch {
       report.add(key: "db.writable", value: "false: \(error)", ok: false)
     }
+  }
 
-    // Best-effort connectivity check (only if a token is available).
+  /// Best-effort connectivity check (only if a token is available).
+  func addConnectivityRows(to report: inout DoctorReport, config: AppConfig) async {
     let secretStore = SecretStoreResolver.resolve(
       stateRoot: config.stateRoot,
       environment: ProcessInfo.processInfo.environment
     ).store
-    if let secrets = try? secretStore.loadSecrets() {
-      // Info, never a failed check: unconfigured search just means the tool is absent (§7.3).
-      report.add(
-        key: "web_search",
-        value: secrets.searchApiKey != nil
-          ? "configured" : "not configured (web_search tool absent)"
-      )
-
-      let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
-      let transport = TelegramClient(
-        token: secrets.telegramBotToken,
-        http: AsyncHTTPExecutor(client: httpClient)
-      )
-
-      if let identity = try? await transport.getMe() {
-        report.add(key: "telegram.bot", value: identity.username ?? "id:\(identity.id)")
-      } else {
-        report.add(key: "telegram.bot", value: "unreachable", ok: false)
-      }
-
-      try? await httpClient.shutdown()
+    guard let secrets = try? secretStore.loadSecrets() else {
+      return
     }
 
-    emit(report)
+    // Info, never a failed check: unconfigured search just means the tool is absent (§7.3).
+    report.add(
+      key: "web_search",
+      value: secrets.searchApiKey != nil
+        ? "configured" : "not configured (web_search tool absent)"
+    )
 
-    if !secretsRow.ok {
-      throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
+    let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
+    let transport = TelegramClient(
+      token: secrets.telegramBotToken,
+      http: AsyncHTTPExecutor(client: httpClient)
+    )
+
+    if let identity = try? await transport.getMe() {
+      report.add(key: "telegram.bot", value: identity.username ?? "id:\(identity.id)")
+    } else {
+      report.add(key: "telegram.bot", value: "unreachable", ok: false)
     }
-    if !report.ok {
-      throw ExitCode.failure
-    }
+
+    try? await httpClient.shutdown()
+  }
+}
+
+// MARK: - Health Rows
+
+private extension DoctorCommand {
+  func addHealthRows(to report: inout DoctorReport, stores: ClawStores, config: AppConfig) {
+    let now = Date()
+    addRunHealthRows(to: &report, stores: stores, config: config, now: now)
+    addSpendRows(to: &report, stores: stores, config: config, now: now)
+    addStorageRows(to: &report, config: config)
+    addSchedulerRows(to: &report, stores: stores, config: config, now: now)
+    addApprovalRows(to: &report, stores: stores, config: config, now: now)
   }
 
-  private func addHealthRows(
+  func addRunHealthRows(
     to report: inout DoctorReport,
     stores: ClawStores,
-    config: AppConfig
+    config: AppConfig,
+    now: Date
   ) {
-    let now = Date()
     let health =
       if let storedRunsHealth = try? stores.runs.runsHealth(now: now) {
         storedRunsHealth
@@ -166,7 +196,14 @@ struct DoctorCommand: AsyncParsableCommand {
       key: "runs.last_FAILED",
       value: health.lastFailedAt.map(String.init(describing:)) ?? "none"
     )
+  }
 
+  func addSpendRows(
+    to report: inout DoctorReport,
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date
+  ) {
     let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
     let mix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
     report.add(key: "spend.today_usd", value: USD.precise(todayUSD))
@@ -178,7 +215,9 @@ struct DoctorCommand: AsyncParsableCommand {
     report.add(key: "spend.per_run_cap_usd", value: USD.display(config.budget.perRunUSD))
     let mixText = mix.map { "\($0.key.rawValue)=\($0.value)" }.sorted().joined(separator: " ")
     report.add(key: "spend.cost_source_mix", value: mixText.isEmpty ? "none" : mixText)
+  }
 
+  func addStorageRows(to report: inout DoctorReport, config: AppConfig) {
     let dbPath = config.stateRoot.appendingPathComponent(StateFile.database).path
     let walBytes =
       (try? FileManager.default.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int) ?? 0
@@ -189,7 +228,14 @@ struct DoctorCommand: AsyncParsableCommand {
     )
     let freeBytes = (fileSystemAttributes?[.systemFreeSize] as? Int) ?? 0
     report.add(key: "db.free_disk", value: "\(freeBytes)", ok: freeBytes > 0)
+  }
 
+  func addSchedulerRows(
+    to report: inout DoctorReport,
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date
+  ) {
     let schedulerState =
       (try? stores.scheduledJobs.schedulerState())
       ?? SchedulerState(
@@ -203,7 +249,7 @@ struct DoctorCommand: AsyncParsableCommand {
     let dueCount = try? stores.scheduledJobs.dueJobs(now: now).count
     let proactiveTodayUSD =
       (try? stores.usage.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: now))?.costUSD
-    for row in SchedulerHealth.rows(
+    let snapshot = SchedulerHealth.Snapshot(
       state: schedulerState,
       dueCount: dueCount,
       proactiveTodayUSD: proactiveTodayUSD,
@@ -212,10 +258,18 @@ struct DoctorCommand: AsyncParsableCommand {
       heartbeatMaxPerDay: config.heartbeatMaxPerDay,
       timezone: config.timezone,
       now: now
-    ) {
+    )
+    for row in SchedulerHealth.rows(snapshot) {
       report.add(key: row.key, value: row.value)
     }
+  }
 
+  func addApprovalRows(
+    to report: inout DoctorReport,
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date
+  ) {
     let approvalsHealth =
       (try? stores.approvals.approvalsHealth(now: now))
       ?? ApprovalsHealth(pendingCount: 0, oldestPendingAgeSeconds: nil)
@@ -226,8 +280,12 @@ struct DoctorCommand: AsyncParsableCommand {
       report.add(key: row.key, value: row.value)
     }
   }
+}
 
-  private func emit(_ report: DoctorReport) {
+// MARK: - Output
+
+private extension DoctorCommand {
+  func emit(_ report: DoctorReport) {
     // swiftlint:disable:next no_print_in_production
     print(json ? report.renderJSON() : report.renderText())
   }

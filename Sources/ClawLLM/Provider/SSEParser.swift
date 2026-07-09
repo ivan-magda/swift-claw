@@ -83,12 +83,7 @@ public struct SSEParser: Sendable {
     }
 
     finished = true
-    return .finished(
-      finishReason: finishReason,
-      usage: usage,
-      providerCost: providerCost,
-      toolCalls: assembledToolCalls
-    )
+    return finishedEvent
   }
 
   private mutating func parseEvent(_ data: Data) throws -> [StreamEvent] {
@@ -96,31 +91,7 @@ public struct SSEParser: Sendable {
       throw SSEParserError.malformedJSON("invalid UTF-8")
     }
 
-    let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
-    let payloadLines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
-      .compactMap { rawLine -> String? in
-        var line = String(rawLine)
-
-        if line.last == "\r" {
-          line.removeLast()
-        }
-
-        if line.hasPrefix(":") {
-          return nil
-        }
-
-        guard line.hasPrefix("data:") else {
-          return nil
-        }
-        var value = String(line.dropFirst(5))
-
-        if value.first == " " {
-          value.removeFirst()
-        }
-
-        return value
-      }
-
+    let payloadLines = Self.dataPayloadLines(in: text)
     guard !payloadLines.isEmpty else {
       return []
     }
@@ -128,28 +99,14 @@ public struct SSEParser: Sendable {
     let payload = payloadLines.joined(separator: "\n")
     if payload == "[DONE]" {
       finished = true
-      return [
-        .finished(
-          finishReason: finishReason,
-          usage: usage,
-          providerCost: providerCost,
-          toolCalls: assembledToolCalls
-        )
-      ]
+      return [finishedEvent]
     }
 
     let chunk = try decodeChunk(payload)
     sawEvent = true
     var events: [StreamEvent] = []
     if let chunkUsage = chunk.usage {
-      usage = ChatUsage(
-        promptTokens: chunkUsage.promptTokens ?? 0,
-        completionTokens: chunkUsage.completionTokens ?? 0,
-        totalTokens: chunkUsage.totalTokens ?? 0
-      )
-      if let cost = chunkUsage.cost {
-        providerCost = cost
-      }
+      record(chunkUsage)
     }
 
     guard let choice = chunk.choices.first else {
@@ -238,6 +195,61 @@ public struct SSEParser: Sendable {
       return range
     case (.some(let left), .some(let right)):
       return left.lowerBound < right.lowerBound ? left : right
+    }
+  }
+}
+
+// MARK: - Event Assembly
+
+private extension SSEParser {
+  /// The terminal event, built from everything accumulated so far — one construction shared by
+  /// `finish()` and the `[DONE]` sentinel so the two paths can never drift.
+  var finishedEvent: StreamEvent {
+    .finished(
+      finishReason: finishReason,
+      usage: usage,
+      providerCost: providerCost,
+      toolCalls: assembledToolCalls
+    )
+  }
+
+  /// The `data:` field values of one SSE event: comments (`:`) and non-`data` fields are dropped,
+  /// a single leading space after the colon is stripped, per the SSE field-parsing rules.
+  static func dataPayloadLines(in text: String) -> [String] {
+    let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+    return normalized.split(separator: "\n", omittingEmptySubsequences: false)
+      .compactMap { rawLine -> String? in
+        var line = String(rawLine)
+
+        if line.last == "\r" {
+          line.removeLast()
+        }
+
+        if line.hasPrefix(":") {
+          return nil
+        }
+
+        guard line.hasPrefix("data:") else {
+          return nil
+        }
+        var value = String(line.dropFirst(5))
+
+        if value.first == " " {
+          value.removeFirst()
+        }
+
+        return value
+      }
+  }
+
+  mutating func record(_ chunkUsage: Usage) {
+    usage = ChatUsage(
+      promptTokens: chunkUsage.promptTokens ?? 0,
+      completionTokens: chunkUsage.completionTokens ?? 0,
+      totalTokens: chunkUsage.totalTokens ?? 0
+    )
+    if let cost = chunkUsage.cost {
+      providerCost = cost
     }
   }
 }

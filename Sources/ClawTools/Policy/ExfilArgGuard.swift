@@ -132,8 +132,8 @@ public struct ExfilArgGuard: Sendable {
   /// A best-effort percent decoder: decode every valid `%XX` escape and preserve everything else
   /// (a lone `%`, `%` not followed by two hex digits) verbatim. Unlike `removingPercentEncoding`,
   /// which returns nil for the ENTIRE string on any malformed escape, this recovers the decodable
-  /// spans so an appended `%ZZ` can't shield an encoded secret (M1). Returns nil when nothing was
-  /// decoded (so the caller stops the pass loop) or when the decoded bytes aren't valid UTF-8.
+  /// spans so an appended `%ZZ` can't shield an encoded secret (M1). Returns nil only when nothing
+  /// was decoded (so the caller stops the pass loop).
   static func bestEffortPercentDecode(_ text: String) -> String? {
     let scalars = Array(text.unicodeScalars)
     var bytes: [UInt8] = []
@@ -161,6 +161,9 @@ public struct ExfilArgGuard: Sendable {
       return nil
     }
 
+    // Deliberately lossy: the failable form returns nil on any invalid UTF-8 byte, letting a
+    // single `%FF` shield an otherwise-decodable encoded secret from redaction (fail-open).
+    // swiftlint:disable:next optional_data_string_conversion
     return String(decoding: bytes, as: UTF8.self)
   }
 

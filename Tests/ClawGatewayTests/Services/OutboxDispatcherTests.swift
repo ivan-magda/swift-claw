@@ -11,44 +11,12 @@ import Testing
 private struct MarkSentFailingOutbox: OutboxStore {
   let base: OutboxStoreGRDB
 
-  func claimOutbound(
-    runId: Int64,
-    stepIndex: Int,
-    chatId: Int64,
-    payload: String,
-    payloadHash: String,
-    approvalId: Int64?,
-    replyMarkup: String?
-  ) throws -> Bool {
-    try base.claimOutbound(
-      runId: runId,
-      stepIndex: stepIndex,
-      chatId: chatId,
-      payload: payload,
-      payloadHash: payloadHash,
-      approvalId: approvalId,
-      replyMarkup: replyMarkup
-    )
+  func claimOutbound(runId: Int64, chunk: OutboxChunk) throws -> Bool {
+    try base.claimOutbound(runId: runId, chunk: chunk)
   }
 
-  func claimOutboundIfRunActive(
-    runId: Int64,
-    stepIndex: Int,
-    chatId: Int64,
-    payload: String,
-    payloadHash: String,
-    approvalId: Int64?,
-    replyMarkup: String?
-  ) throws -> Bool {
-    try base.claimOutboundIfRunActive(
-      runId: runId,
-      stepIndex: stepIndex,
-      chatId: chatId,
-      payload: payload,
-      payloadHash: payloadHash,
-      approvalId: approvalId,
-      replyMarkup: replyMarkup
-    )
+  func claimOutboundIfRunActive(runId: Int64, chunk: OutboxChunk) throws -> Bool {
+    try base.claimOutboundIfRunActive(runId: runId, chunk: chunk)
   }
 
   func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64, now: Date) throws {
@@ -107,10 +75,12 @@ private actor ReplyMarkupSpy: MessageDelivery {
   private func seedPending(_ fixture: Fixture, stepIndex: Int = 0, payload: String) throws {
     _ = try fixture.outbox.claimOutbound(
       runId: fixture.runId,
-      stepIndex: stepIndex,
-      chatId: fixture.chatId,
-      payload: payload,
-      payloadHash: "hash"
+      chunk: OutboxChunk(
+        stepIndex: stepIndex,
+        chatId: fixture.chatId,
+        payload: payload,
+        payloadHash: "hash"
+      )
     )
   }
 
@@ -233,11 +203,13 @@ private actor ReplyMarkupSpy: MessageDelivery {
     let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
     _ = try fixture.outbox.claimOutbound(
       runId: fixture.runId,
-      stepIndex: 0,
-      chatId: fixture.chatId,
-      payload: "prompt",
-      payloadHash: "h",
-      replyMarkup: markup
+      chunk: OutboxChunk(
+        stepIndex: 0,
+        chatId: fixture.chatId,
+        payload: "prompt",
+        payloadHash: "h",
+        replyMarkup: markup
+      )
     )
     let spy = ReplyMarkupSpy()
     let dispatcher = OutboxDispatcher(
@@ -260,11 +232,13 @@ private actor ReplyMarkupSpy: MessageDelivery {
     let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
     _ = try fixture.outbox.claimOutbound(
       runId: fixture.runId,
-      stepIndex: 0,
-      chatId: fixture.chatId,
-      payload: "prompt",
-      payloadHash: "h",
-      replyMarkup: markup
+      chunk: OutboxChunk(
+        stepIndex: 0,
+        chatId: fixture.chatId,
+        payload: "prompt",
+        payloadHash: "h",
+        replyMarkup: markup
+      )
     )
     let spy = ReplyMarkupSpy(failRich: true)
     let dispatcher = OutboxDispatcher(

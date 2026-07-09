@@ -83,21 +83,8 @@ public struct WebFetchTool: Tool {
         return errorPayload("Could not parse the host of \(currentURL).")
       }
 
-      let addresses: [ResolvedAddress]
-      do {
-        addresses = try await resolver.resolve(host: host)
-      } catch {
-        return errorPayload("Could not resolve \(host).")
-      }
-
-      guard addresses.isEmpty == false,
-        addresses.allSatisfy({ address in SSRFGuard.isPublic(address) })
-      else {
-        return ToolPayload(
-          content: "Refused: \(host) resolves to a private or reserved address.",
-          status: .blockedSSRF,
-          ingestedUntrusted: false
-        )
+      if let refusal = await refusalForNonPublicHost(host) {
+        return refusal
       }
 
       let remaining = deadline - ContinuousClock.now
@@ -121,21 +108,12 @@ public struct WebFetchTool: Tool {
       }
 
       if (300..<400).contains(result.statusCode) {
-        guard hopsRemaining > 0 else {
-          return errorPayload("Too many redirects (more than \(maxHops)).")
-        }
-        hopsRemaining -= 1
-
-        guard let location = result.getHeader(for: "Location") else {
-          return errorPayload("Redirect (HTTP \(result.statusCode)) without a Location header.")
-        }
-        let nextRaw = Self.resolveLocation(location, against: currentURL)
-        switch CanonicalURL.canonicalize(nextRaw) {
-        case .success(let canonical):
-          currentURL = canonical
+        switch redirectStep(after: result, current: currentURL, hopsRemaining: &hopsRemaining) {
+        case .follow(let nextURL):
+          currentURL = nextURL
           continue
-        case .failure(let policyError):
-          return errorPayload("Redirect target refused: \(Self.describe(policyError))")
+        case .refused(let payload):
+          return payload
         }
       }
 
@@ -144,6 +122,64 @@ public struct WebFetchTool: Tool {
       }
 
       return successPayload(result)
+    }
+  }
+}
+
+// MARK: - Fetch Loop Steps
+
+private extension WebFetchTool {
+  enum RedirectStep {
+    case follow(String)
+    case refused(ToolPayload)
+  }
+
+  /// Per-hop SSRF assertion: resolves the host and returns the refusal/error payload unless every
+  /// resolved address is public; nil means the hop may proceed.
+  func refusalForNonPublicHost(_ host: String) async -> ToolPayload? {
+    let addresses: [ResolvedAddress]
+    do {
+      addresses = try await resolver.resolve(host: host)
+    } catch {
+      return errorPayload("Could not resolve \(host).")
+    }
+
+    guard addresses.isEmpty == false,
+      addresses.allSatisfy({ address in SSRFGuard.isPublic(address) })
+    else {
+      return ToolPayload(
+        content: "Refused: \(host) resolves to a private or reserved address.",
+        status: .blockedSSRF,
+        ingestedUntrusted: false
+      )
+    }
+
+    return nil
+  }
+
+  /// One 3xx hop: consumes a hop from the budget and re-canonicalizes the Location target so the
+  /// next iteration re-runs the full per-hop policy on it.
+  func redirectStep(
+    after result: HTTPResult,
+    current: String,
+    hopsRemaining: inout Int
+  ) -> RedirectStep {
+    guard hopsRemaining > 0 else {
+      return .refused(errorPayload("Too many redirects (more than \(maxHops))."))
+    }
+    hopsRemaining -= 1
+
+    guard let location = result.getHeader(for: "Location") else {
+      return .refused(
+        errorPayload("Redirect (HTTP \(result.statusCode)) without a Location header.")
+      )
+    }
+    let nextRaw = Self.resolveLocation(location, against: current)
+    switch CanonicalURL.canonicalize(nextRaw) {
+    case .success(let canonical):
+      return .follow(canonical)
+    case .failure(let policyError):
+      return .refused(errorPayload("Redirect target refused: \(Self.describe(policyError))"))
     }
   }
 }

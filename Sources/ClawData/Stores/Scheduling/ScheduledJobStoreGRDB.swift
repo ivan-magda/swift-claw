@@ -224,22 +224,12 @@ extension ScheduledJobStoreGRDB {
     let ownerChatId: Int64 = jobRow["owner_chat_id"]
     let prompt: String = jobRow["prompt"]
 
-    // Step 3: the job's dedicated session, created lazily on first fire (D3). The session row
-    // stores NO chat id — the delivery target stays on the job row (spec §4.1).
-    let sessionId: Int64
-    if let existingSessionId = jobRow["session_id"] as Int64? {
-      sessionId = existingSessionId
-    } else {
-      sessionId = try SessionMessageStoreGRDB.upsertSession(
-        db,
-        sessionKey: SessionKey.scheduledJob(id: jobId),
-        now: now
-      )
-      try db.execute(
-        sql: "UPDATE scheduled_jobs SET session_id = ? WHERE id = ?",
-        arguments: [sessionId, jobId]
-      )
-    }
+    let sessionId = try ensureJobSession(
+      db,
+      jobId: jobId,
+      existingSessionId: jobRow["session_id"],
+      now: now
+    )
 
     // Step 4: the trigger message — the owner's own confirmed text, frozen at arm time, so
     // trusted-tier deliberately (spec §5.2; anything the RUN ingests stays untrusted).
@@ -252,24 +242,13 @@ extension ScheduledJobStoreGRDB {
     )
     let triggerMessageId = db.lastInsertedRowID
 
-    // Step 5: the PENDING run TurnRunner will pick up, stamped with origin + job linkage.
-    try db.execute(
-      sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
-          origin, job_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        sessionId,
-        RunState.pending.rawValue,
-        now,
-        now,
-        triggerMessageId,
-        RunOrigin.scheduled.rawValue,
-        jobId,
-      ]
+    let runId = try insertPendingJobRun(
+      db,
+      sessionId: sessionId,
+      triggerMessageId: triggerMessageId,
+      jobId: jobId,
+      now: now
     )
-    let runId = db.lastInsertedRowID
 
     // Step 6: the audit row rides the same transaction as its side effect (house rule).
     try AuditLogGRDB.insertAudit(
@@ -631,6 +610,60 @@ extension ScheduledJobStoreGRDB {
         ownerChatId: ownerChatId
       )
     }
+  }
+}
+
+// MARK: - Fire-Row Helpers
+
+private extension ScheduledJobStoreGRDB {
+  /// Step 3: the job's dedicated session, created lazily on first fire (D3). The session row
+  /// stores NO chat id — the delivery target stays on the job row (spec §4.1).
+  static func ensureJobSession(
+    _ db: Database,
+    jobId: Int64,
+    existingSessionId: Int64?,
+    now: Date
+  ) throws -> Int64 {
+    if let existingSessionId {
+      return existingSessionId
+    }
+    let sessionId = try SessionMessageStoreGRDB.upsertSession(
+      db,
+      sessionKey: SessionKey.scheduledJob(id: jobId),
+      now: now
+    )
+    try db.execute(
+      sql: "UPDATE scheduled_jobs SET session_id = ? WHERE id = ?",
+      arguments: [sessionId, jobId]
+    )
+    return sessionId
+  }
+
+  /// Step 5: the PENDING run TurnRunner will pick up, stamped with origin + job linkage.
+  static func insertPendingJobRun(
+    _ db: Database,
+    sessionId: Int64,
+    triggerMessageId: Int64,
+    jobId: Int64,
+    now: Date
+  ) throws -> Int64 {
+    try db.execute(
+      sql: """
+        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
+          origin, job_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+      arguments: [
+        sessionId,
+        RunState.pending.rawValue,
+        now,
+        now,
+        triggerMessageId,
+        RunOrigin.scheduled.rawValue,
+        jobId,
+      ]
+    )
+    return db.lastInsertedRowID
   }
 }
 

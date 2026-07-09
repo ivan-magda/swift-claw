@@ -24,6 +24,7 @@ import Testing
       )
     }
     var timeout: Duration { .seconds(1) }
+
     func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       ToolPayload(content: result, status: .ok, ingestedUntrusted: false)
@@ -36,6 +37,7 @@ import Testing
       let runId: Int64
       let contextBoundMessageId: Int64
     }
+
     private(set) var resumeCalls: [ResumeCall] = []
 
     func run(
@@ -58,6 +60,7 @@ import Testing
 
   private actor RecordingDelivery: MessageDelivery {
     private(set) var texts: [String] = []
+
     func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
       texts.append(text)
       return 1
@@ -67,6 +70,7 @@ import Testing
 
   private actor RecordingCallbacks: CallbackResponding {
     private(set) var disarmed: [Int64] = []
+
     func answerCallbackQuery(id: String, text: String?) async throws {}
     func editMessageReplyMarkup(
       chatId: Int64,

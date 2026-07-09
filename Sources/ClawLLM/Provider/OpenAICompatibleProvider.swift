@@ -426,18 +426,18 @@ private struct DecodedToolCall: Decodable {
 }
 
 private struct ResponseBody: Decodable {
-  struct Choice: Decodable {
-    struct Message: Decodable {
-      let content: String?
-      // swiftlint:disable:next discouraged_optional_collection
-      let toolCalls: [DecodedToolCall]?
+  struct Message: Decodable {
+    let content: String?
+    // swiftlint:disable:next discouraged_optional_collection
+    let toolCalls: [DecodedToolCall]?
 
-      enum CodingKeys: String, CodingKey {
-        case content
-        case toolCalls = "tool_calls"
-      }
+    enum CodingKeys: String, CodingKey {
+      case content
+      case toolCalls = "tool_calls"
     }
+  }
 
+  struct Choice: Decodable {
     let message: Message
     let finishReason: String?
 

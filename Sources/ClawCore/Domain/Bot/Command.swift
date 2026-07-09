@@ -17,15 +17,30 @@ public enum Command: Sendable, Equatable {
   case plain(String)
 
   public static func parse(_ text: String, botUsername: String?) -> Command {
-    guard text.first == "/" else {
+    guard let token = slashToken(in: text, botUsername: botUsername) else {
       return .plain(text)
+    }
+    return command(named: token.name, arguments: token.arguments, originalText: text)
+  }
+}
+
+// MARK: - Slash-Token Parsing
+
+private extension Command {
+  /// The leading slash-token, split into a lowercased command name and its argument tail. nil when
+  /// the text carries no authoritative slash-token (or one addressed to a different bot).
+  static func slashToken(
+    in text: String,
+    botUsername: String?
+  ) -> (name: String, arguments: Substring)? {
+    guard text.first == "/" else {
+      return nil
     }
 
     let tokenEnd = text.firstIndex(where: { $0.isWhitespace }) ?? text.endIndex
-    let token = text[..<tokenEnd]
-    let commandBody = token.dropFirst()
+    let commandBody = text[..<tokenEnd].dropFirst()
     guard commandBody.isEmpty == false else {
-      return .plain(text)
+      return nil
     }
 
     let pieces = commandBody.split(
@@ -34,7 +49,7 @@ public enum Command: Sendable, Equatable {
       omittingEmptySubsequences: false
     )
     guard let rawName = pieces.first, rawName.isEmpty == false else {
-      return .plain(text)
+      return nil
     }
 
     if pieces.count == 2 {
@@ -42,14 +57,16 @@ public enum Command: Sendable, Equatable {
         let botUsername,
         pieces[1].caseInsensitiveCompare(botUsername) == .orderedSame
       else {
-        return .plain(text)
+        return nil
       }
     }
 
     let argumentsStart = tokenEnd < text.endIndex ? text.index(after: tokenEnd) : text.endIndex
-    let arguments = text[argumentsStart...]
+    return (name: String(rawName).lowercased(), arguments: text[argumentsStart...])
+  }
 
-    switch String(rawName).lowercased() {
+  static func command(named name: String, arguments: Substring, originalText: String) -> Command {
+    switch name {
     case "start":
       return .start
     case "stop":
@@ -73,12 +90,12 @@ public enum Command: Sendable, Equatable {
     case "help":
       return .help
     default:
-      return .plain(text)
+      return .plain(originalText)
     }
   }
 
   /// nil ⇒ missing/invalid argument; the router replies with usage, never guesses.
-  private static func jobId(from arguments: Substring) -> Int64? {
+  static func jobId(from arguments: Substring) -> Int64? {
     let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let id = Int64(trimmed), id > 0 else {
       return nil

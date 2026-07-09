@@ -56,6 +56,7 @@ struct ScriptedSearch: SearchProviding {
     final class CountBox: @unchecked Sendable {
       private let lock = NSLock()
       private(set) var counts: [Int] = []
+
       func record(_ value: Int) {
         lock.lock()
         defer { lock.unlock() }
@@ -88,6 +89,7 @@ struct ScriptedSearch: SearchProviding {
     final class CountBox: @unchecked Sendable {
       private let lock = NSLock()
       private(set) var counts: [Int] = []
+
       func record(_ value: Int) {
         lock.lock()
         defer { lock.unlock() }

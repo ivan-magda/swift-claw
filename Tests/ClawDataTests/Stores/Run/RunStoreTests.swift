@@ -276,10 +276,7 @@ import Testing
     _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
     _ = try env.outbox.claimOutbound(
       runId: runId,
-      stepIndex: 0,
-      chatId: 42,
-      payload: "x",
-      payloadHash: "h"
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "x", payloadHash: "h")
     )
     try env.outbox.markSent(runId: runId, stepIndex: 0, telegramMessageId: 1001, now: Date())
 

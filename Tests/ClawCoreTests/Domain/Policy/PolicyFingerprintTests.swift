@@ -50,13 +50,13 @@ import Testing
   }
 
   private func subhash(
-    tools: [ToolDefinition]? = nil,
+    tools: [ToolDefinition] = [],
     llm: String = "https://llm.example",
     search: Bool = false,
     root: String = "/workspace"
   ) -> String {
     PolicyFingerprint.staticSubhash(
-      tools: tools ?? [tool(name: "file_read")],
+      tools: tools,
       llmBaseURL: llm,
       searchEndpointPresent: search,
       workspaceRoot: root

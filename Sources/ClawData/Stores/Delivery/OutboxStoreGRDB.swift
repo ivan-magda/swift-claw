@@ -9,41 +9,13 @@ public struct OutboxStoreGRDB: OutboxStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func claimOutbound(
-    runId: Int64,
-    stepIndex: Int,
-    chatId: Int64,
-    payload: String,
-    payloadHash: String,
-    approvalId: Int64? = nil,
-    replyMarkup: String? = nil
-  ) throws -> Bool {
+  public func claimOutbound(runId: Int64, chunk: OutboxChunk) throws -> Bool {
     try database.writeMapping { db in
-      try RunStoreGRDB.insertOutbox(
-        db,
-        runId: runId,
-        chunk: OutboxChunk(
-          stepIndex: stepIndex,
-          chatId: chatId,
-          payload: payload,
-          payloadHash: payloadHash,
-          approvalId: approvalId,
-          replyMarkup: replyMarkup
-        ),
-        now: Date()
-      )
+      try RunStoreGRDB.insertOutbox(db, runId: runId, chunk: chunk, now: Date())
     }
   }
 
-  public func claimOutboundIfRunActive(
-    runId: Int64,
-    stepIndex: Int,
-    chatId: Int64,
-    payload: String,
-    payloadHash: String,
-    approvalId: Int64? = nil,
-    replyMarkup: String? = nil
-  ) throws -> Bool {
+  public func claimOutboundIfRunActive(runId: Int64, chunk: OutboxChunk) throws -> Bool {
     try database.writeMapping { db in
       try db.execute(
         sql: """
@@ -58,13 +30,13 @@ public struct OutboxStoreGRDB: OutboxStore {
           """,
         arguments: [
           runId,
-          stepIndex,
-          chatId,
-          OutboxDedupKey.make(runId: runId, stepIndex: stepIndex),
-          payload,
-          payloadHash,
-          approvalId,
-          replyMarkup,
+          chunk.stepIndex,
+          chunk.chatId,
+          OutboxDedupKey.make(runId: runId, stepIndex: chunk.stepIndex),
+          chunk.payload,
+          chunk.payloadHash,
+          chunk.approvalId,
+          chunk.replyMarkup,
           Date(),
           runId,
           RunState.running.rawValue,

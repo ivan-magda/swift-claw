@@ -7,22 +7,23 @@ import Foundation
   import Darwin
 #endif
 
-/// A resolved IP address in a checkable form. `.v4` is host byte order; `.v6` is the 16 raw bytes.
+/// A resolved IP address in a checkable form. `.ipv4` is host byte order; `.ipv6` is the 16 raw
+/// bytes.
 public enum ResolvedAddress: Sendable, Equatable {
-  case v4(UInt32)
-  case v6([UInt8])
+  case ipv4(UInt32)
+  case ipv6([UInt8])
 
   /// Parses a textual IPv4/IPv6 literal via `inet_pton`; nil for anything else.
   public static func parse(_ text: String) -> ResolvedAddress? {
     var v4Address = in_addr()
     if inet_pton(AF_INET, text, &v4Address) == 1 {
-      return .v4(UInt32(bigEndian: v4Address.s_addr))
+      return .ipv4(UInt32(bigEndian: v4Address.s_addr))
     }
 
     var v6Address = in6_addr()
     if inet_pton(AF_INET6, text, &v6Address) == 1 {
       let bytes = withUnsafeBytes(of: &v6Address) { raw in Array(raw) }
-      return .v6(bytes)
+      return .ipv6(bytes)
     }
 
     return nil
@@ -35,9 +36,9 @@ public enum ResolvedAddress: Sendable, Equatable {
 public enum SSRFGuard {
   public static func isPublic(_ address: ResolvedAddress) -> Bool {
     switch address {
-    case .v4(let value):
+    case .ipv4(let value):
       isPublicV4(value)
-    case .v6(let bytes):
+    case .ipv6(let bytes):
       isPublicV6(bytes)
     }
   }
@@ -191,13 +192,13 @@ public struct SystemAddressResolver: AddressResolving {
     while let info = cursor {
       if info.pointee.ai_family == AF_INET, let rawAddress = info.pointee.ai_addr {
         rawAddress.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { pointer in
-          addresses.append(.v4(UInt32(bigEndian: pointer.pointee.sin_addr.s_addr)))
+          addresses.append(.ipv4(UInt32(bigEndian: pointer.pointee.sin_addr.s_addr)))
         }
       } else if info.pointee.ai_family == AF_INET6, let rawAddress = info.pointee.ai_addr {
         rawAddress.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { pointer in
           var v6Address = pointer.pointee.sin6_addr
           let bytes = withUnsafeBytes(of: &v6Address) { raw in Array(raw) }
-          addresses.append(.v6(bytes))
+          addresses.append(.ipv6(bytes))
         }
       }
       cursor = info.pointee.ai_next

@@ -173,7 +173,7 @@ import Testing
 
     // then
     #expect(response.finishReason == "tool_calls")
-    #expect(response.content == "")
+    #expect(response.content.isEmpty)
     #expect(
       response.toolCalls == [
         ToolCall(id: "call_9", name: "web_search", argumentsJSON: #"{"query":"swift"}"#)
