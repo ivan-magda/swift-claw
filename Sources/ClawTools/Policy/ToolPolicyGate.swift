@@ -249,6 +249,7 @@ private extension ToolPolicyGate {
   ) -> RecordedToolAction {
     let canonicalArgsJSON = Self.canonicalArgs(call.argumentsJSON)
     let presentation: ToolApprovalPresentation
+
     if let arguments = JSONValue.parse(call.argumentsJSON) {
       presentation = tool.approvalPresentation(arguments: arguments, canonicalTarget: target)
     } else {
@@ -258,6 +259,7 @@ private extension ToolPolicyGate {
         warnings: []
       )
     }
+
     return RecordedToolAction(
       tool: call.name,
       canonicalArgsJSON: canonicalArgsJSON,
@@ -282,14 +284,17 @@ private extension ToolPolicyGate {
     guard let value = JSONValue.parse(rawArgumentsJSON) else {
       return rawArgumentsJSON
     }
+
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+
     guard
       let data = try? encoder.encode(value),
       let json = String(data: data, encoding: .utf8)
     else {
       return rawArgumentsJSON
     }
+
     return json
   }
 }
