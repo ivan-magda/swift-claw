@@ -20,7 +20,8 @@ struct StubTool: Tool {
       name: name,
       description: "stub",
       parameters: .object(["type": .string("object")]),
-      egressClass: egressClass
+      egressClass: egressClass,
+      riskLevel: .safe
     )
     self.timeout = timeout
     self.payload = payload

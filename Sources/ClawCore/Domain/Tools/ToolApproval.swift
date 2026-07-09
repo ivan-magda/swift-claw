@@ -20,6 +20,7 @@ public struct ToolAction: Sendable, Equatable {
 /// never reuses one, because the prompt copy is keyed on the reason alone.
 public enum ApprovalReason: String, Sendable, Equatable {
   case exfilTrifecta = "exfil_trifecta"
+  case askTier = "ask_tier"
 }
 
 /// A gate trip awaiting the owner's ephemeral text approval (§9.2). Carries the action identity

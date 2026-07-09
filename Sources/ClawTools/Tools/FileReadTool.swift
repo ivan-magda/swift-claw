@@ -40,7 +40,8 @@ public struct FileReadTool: Tool {
         ]),
         "required": .array([.string("path")]),
       ]),
-      egressClass: .none
+      egressClass: .none,
+      riskLevel: .safe
     )
   }
 

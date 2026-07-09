@@ -15,7 +15,8 @@ struct FetchLikeTool: Tool {
       name: name,
       description: "stub",
       parameters: .object(["type": .string("object")]),
-      egressClass: .arbitraryDestination
+      egressClass: .arbitraryDestination,
+      riskLevel: .safe
     )
   }
 
@@ -43,7 +44,8 @@ struct SearchLikeTool: Tool {
     name: "web_search",
     description: "stub",
     parameters: .object(["type": .string("object")]),
-    egressClass: .fixedEndpoint
+    egressClass: .fixedEndpoint,
+    riskLevel: .safe
   )
   let timeout: Duration = .seconds(1)
 
@@ -532,7 +534,8 @@ struct SearchLikeTool: Tool {
         name: "web_fetch",
         description: "stub",
         parameters: .object(["type": .string("object")]),
-        egressClass: .arbitraryDestination
+        egressClass: .arbitraryDestination,
+        riskLevel: .safe
       )
       let timeout: Duration = .seconds(1)
 
@@ -575,7 +578,8 @@ struct SearchLikeTool: Tool {
         name: "slow",
         description: "slow",
         parameters: .object(["type": .string("object")]),
-        egressClass: .none
+        egressClass: .none,
+        riskLevel: .safe
       )
       let timeout: Duration = .milliseconds(20)
 
@@ -649,7 +653,8 @@ struct WedgedTool: Tool {
     name: "wedged",
     description: "wedged",
     parameters: .object(["type": .string("object")]),
-    egressClass: .none
+    egressClass: .none,
+    riskLevel: .safe
   )
   let timeout: Duration = .seconds(30)
 
