@@ -78,6 +78,7 @@ public struct ApprovalBootReconciler: Sendable {
 private extension ApprovalBootReconciler {
   func reparkOne(_ approval: Approval, now instant: Date) async {
     let revalidate: Bool
+
     switch approval.state {
     case .approved:
       // §6.5 crash window: granted before the crash. Buffer the approval signal and re-park under
@@ -124,6 +125,7 @@ private extension ApprovalBootReconciler {
     let sessionId = approval.sessionId
     let chatId = approval.ownerUserId
     let lane = await lanes.actor(for: sessionId)
+
     await lane.enqueue(runId: runId) {
       await park.park(
         approvalId: approvalId,
