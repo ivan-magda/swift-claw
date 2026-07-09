@@ -128,12 +128,20 @@ public struct OutboxDispatcher: Service {
   /// failure of the plain fallback itself propagates — the row stays PENDING for the next drain.
   private func send(_ row: OutboxRow) async throws -> Int64 {
     do {
-      return try await delivery.sendRichMessage(chatId: row.chatId, markdown: row.payload)
+      return try await delivery.sendRichMessage(
+        chatId: row.chatId,
+        markdown: row.payload,
+        replyMarkup: row.replyMarkup
+      )
     } catch {
       logger.warning(
         "rich send failed for run \(row.runId) step \(row.stepIndex), falling back to plain: \(error)"
       )
-      return try await delivery.sendMessage(chatId: row.chatId, text: row.payload)
+      return try await delivery.sendMessage(
+        chatId: row.chatId,
+        text: row.payload,
+        replyMarkup: row.replyMarkup
+      )
     }
   }
 }

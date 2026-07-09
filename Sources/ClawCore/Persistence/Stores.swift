@@ -229,7 +229,9 @@ public protocol OutboxStore: Sendable {
     stepIndex: Int,
     chatId: Int64,
     payload: String,
-    payloadHash: String
+    payloadHash: String,
+    approvalId: Int64?,
+    replyMarkup: String?
   ) throws -> Bool
   /// Claims a reply only while the owning run is still active (RUNNING or AWAITING_APPROVAL —
   /// a suspended run's own approval prompt must be deliverable, preamble D7).
@@ -238,7 +240,9 @@ public protocol OutboxStore: Sendable {
     stepIndex: Int,
     chatId: Int64,
     payload: String,
-    payloadHash: String
+    payloadHash: String,
+    approvalId: Int64?,
+    replyMarkup: String?
   ) throws -> Bool
   func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64, now: Date) throws
   func pendingOutbound() throws -> [OutboxRow]

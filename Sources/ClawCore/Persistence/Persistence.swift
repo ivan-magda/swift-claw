@@ -236,12 +236,23 @@ public struct OutboxChunk: Sendable, Equatable {
   public let chatId: Int64
   public let payload: String
   public let payloadHash: String
+  public let approvalId: Int64?
+  public let replyMarkup: String?
 
-  public init(stepIndex: Int, chatId: Int64, payload: String, payloadHash: String) {
+  public init(
+    stepIndex: Int,
+    chatId: Int64,
+    payload: String,
+    payloadHash: String,
+    approvalId: Int64? = nil,
+    replyMarkup: String? = nil
+  ) {
     self.stepIndex = stepIndex
     self.chatId = chatId
     self.payload = payload
     self.payloadHash = payloadHash
+    self.approvalId = approvalId
+    self.replyMarkup = replyMarkup
   }
 }
 
@@ -250,12 +261,23 @@ public struct OutboxRow: Sendable, Equatable {
   public let stepIndex: Int
   public let chatId: Int64
   public let payload: String
+  public let approvalId: Int64?
+  public let replyMarkup: String?
 
-  public init(runId: Int64, stepIndex: Int, chatId: Int64, payload: String) {
+  public init(
+    runId: Int64,
+    stepIndex: Int,
+    chatId: Int64,
+    payload: String,
+    approvalId: Int64? = nil,
+    replyMarkup: String? = nil
+  ) {
     self.runId = runId
     self.stepIndex = stepIndex
     self.chatId = chatId
     self.payload = payload
+    self.approvalId = approvalId
+    self.replyMarkup = replyMarkup
   }
 }
 

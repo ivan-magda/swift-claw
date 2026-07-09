@@ -488,8 +488,8 @@ extension RunStoreGRDB {
     try db.execute(
       sql: """
         INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-          payload_hash, status, created_ts)
-        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
+          payload_hash, approval_id, reply_markup, status, created_ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
         """,
       arguments: [
         runId,
@@ -498,6 +498,8 @@ extension RunStoreGRDB {
         "\(runId):\(chunk.stepIndex)",
         chunk.payload,
         chunk.payloadHash,
+        chunk.approvalId,
+        chunk.replyMarkup,
         now,
       ]
     )
