@@ -93,6 +93,8 @@ public struct InertApprovalParker: ApprovalParking {
     revalidatePolicyOnApprove: Bool
   ) async {
     let signal = await coordinator.awaitResolution(approvalId: approvalId)
-    logger.debug("approval \(approvalId) resolved as \(signal); Phase 3 waiter completes the run")
+    logger.debug(
+      "approval \(approvalId) resolved as \(String(describing: signal)); Phase 3 waiter completes the run"
+    )
   }
 }
