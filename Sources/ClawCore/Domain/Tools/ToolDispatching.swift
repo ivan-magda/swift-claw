@@ -40,8 +40,6 @@ public struct ToolDispatchOutcome: Sendable, Equatable {
   public let observation: ToolObservation
   public let argsRedacted: String
   public let pendingApproval: ToolApprovalRequest?
-  /// The recorded ask-tier/trifecta action to suspend on (§5.2). Rides alongside `pendingApproval`
-  /// until Task 24 retires the ephemeral flow.
   public let requiresApproval: RecordedToolAction?
   public let consumedGrant: Bool
 
