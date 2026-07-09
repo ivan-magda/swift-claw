@@ -130,11 +130,13 @@ public enum ApprovalNonce {
   public static func generate() -> String {
     var generator = SystemRandomNumberGenerator()
     var bytes = Data(capacity: 16)
+
     for _ in 0..<2 {
       withUnsafeBytes(of: generator.next()) { word in
         bytes.append(contentsOf: word)
       }
     }
+
     return bytes.base64EncodedString()
       .replacingOccurrences(of: "+", with: "-")
       .replacingOccurrences(of: "/", with: "_")
@@ -147,7 +149,9 @@ public enum ApprovalNonce {
 public enum ApprovalArgsHash {
   public static func sha256Hex(_ canonicalArgsJSON: String) -> String {
     SHA256.hash(data: Data(canonicalArgsJSON.utf8))
-      .map { byte in String(format: "%02x", byte) }
+      .map { byte in
+        String(format: "%02x", byte)
+      }
       .joined()
   }
 }
