@@ -34,9 +34,11 @@ jobs:
         run: swift test
 
   # docs/TESTING.md single-core convention: cooperative-scheduler races and deadlocks in the
-  # approval suites only discriminate when the runtime has one lane. A one-thread cooperative pool
-  # (SWIFT_MAX_CONCURRENCY_THREADS=1) reproduces that deterministically without pinning the build
-  # itself to one core the way a docker --cpuset-cpus=0 run would.
+  # approval suites only discriminate when the runtime has one lane. LIBDISPATCH_COOPERATIVE_POOL_STRICT=1
+  # forces the Swift default executor's cooperative pool to a single worker regardless of core count,
+  # reproducing that deterministically without pinning the build itself to one core the way a docker
+  # --cpuset-cpus=0 run would (SWIFT_MAX_CONCURRENCY_THREADS is not honored by the runtime — it caps
+  # at core count, not one, so it gives no single-lane discrimination).
   test-linux-single-core:
     runs-on: ubuntu-24.04-arm
     container: swift:6.3-noble
@@ -56,7 +58,7 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
       - name: Run the concurrency-sensitive suites on one cooperative thread
         env:
-          SWIFT_MAX_CONCURRENCY_THREADS: "1"
+          LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
         run: swift test --filter 'CommandApprovalCancelSignalRaceTests|ApprovalExpiryServiceTests|ApprovalWaiterTests|ApprovalBootReconcilerTests'
 
   test-macos:
