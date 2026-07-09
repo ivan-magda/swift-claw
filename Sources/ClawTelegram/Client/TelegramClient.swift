@@ -93,7 +93,6 @@ public struct TelegramClient: TelegramTransport {
 
   public func answerCallbackQuery(id: String, text: String?) async throws {
     let request = AnswerCallbackQueryRequest(callbackQueryId: id, text: text)
-    // Telegram always returns `true`; decode as Bool like sendChatAction and discard it.
     let _: Bool = try await callMethod(
       "answerCallbackQuery",
       body: request,
@@ -111,8 +110,6 @@ public struct TelegramClient: TelegramTransport {
       messageId: messageId,
       replyMarkup: replyMarkup.flatMap(JSONValue.parse)
     )
-    // The result is `Message | true` depending on the target; decode permissively as JSONValue so
-    // a Message-shaped success does not surface as a spurious decoding error.
     let _: JSONValue = try await callMethod(
       "editMessageReplyMarkup",
       body: request,
@@ -247,8 +244,6 @@ private struct SendMessageRequest: Encodable {
   let chatId: Int64
   let text: String
   let linkPreviewOptions: LinkPreviewOptions
-  // The button keyboard, already parsed from its JSON string. Its keys (inline_keyboard,
-  // callback_data) are lowercase snake_case, so `.convertToSnakeCase` passes them through as-is.
   let replyMarkup: JSONValue?
 }
 
