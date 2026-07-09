@@ -310,8 +310,16 @@ private extension RunCommand {
       logger: logger
     )
 
+    let approvalExpiry = ApprovalExpiryService(
+      approvals: stores.approvals,
+      coordinator: approvalCoordinator,
+      now: { Date() },
+      sleep: { try await Task.sleep(for: $0) },
+      logger: logger
+    )
+
     return Daemon(
-      services: [poller, dispatcher, scheduler],
+      services: [poller, dispatcher, scheduler, approvalExpiry],
       boot: bootSequence(
         transport: transport,
         stores: stores,
