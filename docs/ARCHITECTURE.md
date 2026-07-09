@@ -49,7 +49,7 @@
               └────────────────────┘   └──────────────────────────┘
                          │
               ┌──────────▼───────────────┐
-              │ ExecutionBackend (sandbox)│  [Inc5]
+              │ ExecutionBackend (sandbox)│  [Inc5b]
               │ apple/container (macOS)   │
               │ microVM/Podman (Linux)    │
               └───────────────────────────┘
@@ -82,7 +82,7 @@ clawd
 | `ClawTelegram` | lib | Thin Bot API client over AsyncHTTPClient; long-poll loop; envelope normalization; **`sendRichMessage` (markdown) + plain `sendMessage` fallback**; `sendChatAction`. (Escaping/splitter live in `ClawCore`.) | `TelegramClient`, `TelegramLongPoller`, `MessageEnvelope`, `InputRichMessage` |
 | `ClawLLM` | lib | OpenAI-compatible Chat Completions client + OpenAI-shaped message model; usage/cost; retries; **SSE streaming (v1)**. | `OpenAICompatibleProvider`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolCall`, `Usage`, `CostTable`, `SSEParser` |
 | `ClawWorkspace` | lib | Identity/memory files (`SOUL/AGENTS/USER/TOOLS/MEMORY.md`, `memory/*.md`, `skills/*`), Yams frontmatter, caps + untrusted-tier injection. | `WorkspaceStore`, `WorkspaceFile`, `MemoryDoc`, `FrontmatterParser` |
-| `ClawTools` | lib | Tool registry + read-only tools (v1); policy gate + approval orchestration arrive in the P-tools phase (Inc 5). | `ToolRegistry`, `ToolContext`; `WebSearchTool`, `WebFetchTool`, `FileReadTool` (v1); `PolicyGate`, `ApprovalCoordinator` [Inc5] |
+| `ClawTools` | lib | Tool registry + read-only tools (v1); policy gate + approval orchestration arrive in the P-tools phase (Inc 5a). | `ToolRegistry`, `ToolContext`; `WebSearchTool`, `WebFetchTool`, `FileReadTool` (v1); `PolicyGate`, `ApprovalCoordinator` [Inc5a] |
 | `ClawAgent` | lib | Agent runtime: context assembly, the run loop, budgets, cancellation, the per-session lane. | `AgentRuntime`, `ContextBuilder`, `RunBudget`, `SessionActor` |
 | `ClawGateway` | lib | Wiring: `ServiceGroup`, Services, routing, access control, session resolution, outbox dispatch, shutdown. | `Gateway`, `TelegramPollerService`, `SchedulerService` [Inc4], `Router`, `AccessControl`, `RateLimiter`, `OutboxDispatcher` |
 | `clawd` | exe | Thin entry: load config + secrets → acquire startup lock → build ServiceGroup → run. | `main` |
@@ -191,7 +191,7 @@ TelegramPollerService loop:
          a. ContextBuilder.assemble(...)        [§9 budgeted; truncation markers]
          b. TelegramClient.sendChatAction(typing)   [re-issued ~4s if blocking]
          c. (budget check) LLMProvider.complete / stream(messages)
-         d. (Inc 5) tool calls → PolicyGate → run safe / request approval
+         d. (Inc 5a) tool calls → PolicyGate → run safe / request approval
          e. persist assistant message (db.write)   [COMMIT before send — §6.4]
          f. enqueue outbound chunks (outbox) → OutboxDispatcher sends (§6.4)
          g. recordUsage + appendAudit (db.write)
@@ -203,7 +203,7 @@ TelegramPollerService loop:
 >
 > **Poison-update policy.** If normalization of one update throws, advance the offset *past* it (never wedge the poller on one bad update), log it, and increment a `dropped_updates` counter surfaced in doctor.
 
-### 6.2 Tool & approval flow (Inc 5)
+### 6.2 Tool & approval flow (Inc 5a/5b)
 
 ```
 model proposes tool_call
@@ -216,7 +216,7 @@ model proposes tool_call
                         ├─ approve  (callback path — §6.5) → re-validate args-hash +
                         │            policy_version → execute ORIGINALLY-RECORDED args
                         ├─ reject   → cancel safely
-                        └─ expire (60s ticker) → DENY (terminal)
+                        └─ expire (approval-expiry ticker, default 1h) → DENY (terminal)
        • dangerous  → refuse unless explicitly enabled in config
        • LETHAL-TRIFECTA GATE (§12): if session.tainted && privileged/egress action,
          FORCE the approval path in code regardless of the tool's own tier.
@@ -233,7 +233,7 @@ SchedulerService ticks every 60s
        └─ confirm-before-arm: a NEW LLM-parsed schedule requires owner confirmation
        └─ run as a reduced-privilege agent turn (no auto-approval; default-DENY — in
           Inc 4, pre-approval-FSM, any would-park approval outcome is an IMMEDIATE
-          audited DENY with no pending state; when Inc 5's FSM lands the same branch
+          audited DENY with no pending state; when Inc 5a's FSM lands the same branch
           becomes park-with-timeout → EXPIRED → DENY; may not ingest untrusted web
           content while holding high-sensitivity memory; own daily spend budget)
        └─ deliver result to owner's Telegram DM (via outbox)
@@ -270,7 +270,7 @@ OutboxDispatcher:
 
 **Ordering invariant:** the inbound message + the run row **COMMIT before** the outbound reply is sent. So a disk-full/crash stops the turn before an unrecoverable side effect.
 
-### 6.5 Callback (approval) path (Inc 5)
+### 6.5 Callback (approval) path (Inc 5a)
 
 `callback_query` updates arrive through the **same untrusted `getUpdates` stream** as messages but bypass §6.1 message ordering (they are callbacks). They MUST:
 
@@ -279,7 +279,7 @@ OutboxDispatcher:
 - carry a `callback_id` that is a **≥128-bit single-use RANDOM nonce bound to the session** — NOT a sequential/PK/counter value;
 - get the same audit + rate-limit treatment as messages;
 - re-validate the stored canonical-args hash **and** `policy_version` at execution (an approval granted under an old policy cannot execute under a changed one);
-- on expiry → DENY, enforced by the 60s ticker (`PENDING → EXPIRED → DENY`).
+- on expiry → DENY, enforced by the approval-expiry ticker (default 1h window, configurable via `approval_expiry`) (`PENDING → EXPIRED → DENY`).
 
 ## 7. Persistence & data model
 
@@ -303,7 +303,7 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `memory_items` | 3 | type, content, source/provenance, ts, importance, sensitivity (durable facts; `confidence` deferred, `visibility`→`sensitivity` — Inc 3a) | `session_id → sessions.id` (nullable) |
 | `scheduled_jobs` | 4 | `owner_chat_id` (set in code at arm time), `label`, `prompt` (owner-authored, trusted, frozen at confirm), `recurrence` (`{"schema_version":1,"rule":<RecurrenceRule JSON>}`; NULL ⇔ one-shot), `timezone` (IANA), materialized `next_occurrence` (advanced only inside the claim; NULL once terminal; partial index `(status, next_occurrence)`), `last_fired_at`, status FSM `ACTIVE\|PAUSED\|COMPLETED\|CANCELLED`, `session_id` (the job's dedicated session `sched:job:<id>`, NULL until first fire), `created_ts`/`updated_ts` | `session_id → sessions.id` |
 | `scheduler_state` | 4 | single row (`id = 1` CHECK): `last_tick_at`, `last_misfire_at`, `last_misfire_skipped_count`, `last_heartbeat_at`, `heartbeat_count_day` (day string in `CLAW_TIMEZONE` — the cap boundary aligns with quiet hours, not UTC), `heartbeat_count`; `due_count` is computed by query, never stored | — |
-| `approvals` | 5 | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, ownerUserId, random callback nonce**, expiry | `approvals.run_id → runs.id` |
+| `approvals` | 5a | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, ownerUserId, random callback nonce**, expiry | `approvals.run_id → runs.id` |
 
 `runs.state = AWAITING_APPROVAL` references `approvals.id` as the **one** canonical source of truth for "blocked on approval" (no ambiguous dual flags).
 
@@ -311,7 +311,7 @@ Synthetic session keys (Inc 4): `sched:job:<id>` (one dedicated session per sche
 
 ### 7.2 Audit (Inc 1) — ordinary append-only, NOT tamper-evident
 
-The audit table is an **ordinary append-only** record — genuinely useful for "why did it do that." **Hash-chaining / tamper-evidence / an `audit verify` tool are dropped from v1.** In-DB hash-chaining is *not* tamper-evident against the real threat (a same-host/compromised daemon can recompute and re-seal the chain), so v1 does not claim it. If integrity is added later (Inc 5), it MUST use an **external anchor** (sign chain checkpoints with a key outside the daemon's writable scope and/or emit the head hash to an append-only off-daemon sink) and the audit row MUST be written in the **same transaction as the side effect**. Do not claim "tamper-evident" without an external anchor.
+The audit table is an **ordinary append-only** record — genuinely useful for "why did it do that." **Hash-chaining / tamper-evidence / an `audit verify` tool are dropped from v1.** In-DB hash-chaining is *not* tamper-evident against the real threat (a same-host/compromised daemon can recompute and re-seal the chain), so v1 does not claim it. If integrity is added later (post-v1), it MUST use an **external anchor** (sign chain checkpoints with a key outside the daemon's writable scope and/or emit the head hash to an append-only off-daemon sink) and the audit row MUST be written in the **same transaction as the side effect**. Do not claim "tamper-evident" without an external anchor.
 
 ### 7.3 FTS5 + data lifecycle
 
@@ -420,19 +420,20 @@ v1 ships **read-only tools only**: `web_search`, `web_fetch`, workspace **file R
 | Class | Examples | Default tier | Approval |
 |---|---|---|---|
 | Read-only / idempotent / low blast | `web_search`, `web_fetch`, file READ | `safe` | none (but exfil gate applies) |
-| Writes | file write, memory write | `ask` | per-action approval (Inc 5) |
-| Shell / exec | `execute_code` | `dangerous` | approval + sandbox (Inc 5) |
+| Writes | file write, memory write | `ask` | per-action approval (Inc 5a) |
+| Shell / exec | `execute_code` | `dangerous` | approval + sandbox (Inc 5b) |
 | Egress-from-sandbox | opted-in network in an exec run | `dangerous` | approval; run is `canExfiltrate=true` |
 
-(Inc 5) **Registry** of < 20 narrow, typed tools (not a generic shell), each with input/output schemas, declared `RiskLevel`, timeout, sandbox requirement, audit behavior. The **`PolicyGate`** evaluates every proposed call before dispatch, independent of the model, and re-validates the approved action against the originally-approved canonical action + `policy_version` at execution. File tools are workspace-scoped: every path is resolved to its **canonical real path** (`realpath`, after `..` and symlink resolution) and **asserted to lie within the workspace root** — a tested invariant covering both the link and its final target — with size-capped output and secret redaction. Tool annotations are non-authoritative UX hints; the code gate is authoritative. (Batch approval + a time-boxed auto-approve toggle are deferred to the P-tools phase.)
+(Inc 5a) **Registry** of < 20 narrow, typed tools (not a generic shell), each with input/output schemas, declared `RiskLevel`, timeout, sandbox requirement, audit behavior. The **`PolicyGate`** evaluates every proposed call before dispatch, independent of the model, and re-validates the approved action against the originally-approved canonical action + `policy_version` at execution. File tools are workspace-scoped: every path is resolved to its **canonical real path** (`realpath`, after `..` and symlink resolution) and **asserted to lie within the workspace root** — a tested invariant covering both the link and its final target — with size-capped output and secret redaction. Tool annotations are non-authoritative UX hints; the code gate is authoritative. (Batch approval + a time-boxed auto-approve toggle are deferred to the P-tools phase.)
 
-## 11. Approval system (Inc 5)
+## 11. Approval system (Inc 5a)
 
 A **state machine** persisted in `approvals` so it survives restart. See §7.1 columns and the **ApprovalState FSM table** in §19.1. Requesting an approval **suspends the run to a durable checkpoint** (`runs.state = AWAITING_APPROVAL`, persisted) — a restart resumes the exact pending action rather than re-running the turn. Key contracts:
 
 - **Bound to the exact action** (tool + fully-resolved target + canonical args); executes the **recorded** args (never a fresh model turn); a past approval is **never** cached into a future auto-run.
 - **Callback auth** (§6.5): same default-deny check; `callback.from.id == approval.ownerUserId`; ≥128-bit single-use random nonce; re-validate args-hash + `policy_version`.
-- **Expiry → DENY** (terminal), enforced by the 60s ticker.
+- **Expiry → DENY** (terminal). Expiry is a **liveness / bounded-state control, not an attacker defense** — the single owner is the only approver, so the timer blocks no third party; its job is to guarantee a parked approval **self-resolves** instead of pinning a run (and its session lane) forever, with DENY as the fail-closed default direction. Default window **1h**, configurable via `approval_expiry`; enforced by a periodic expiry ticker and the boot reconciliation sweep (§19.1).
+- **Escaping a pending approval:** a plain message **queues** behind it (strict FIFO — it never supersedes, §5.1); to abandon the parked action before expiry the owner uses `/stop` (cancel) or `/new` (reset + detaint), both of which resolve `AWAITING_APPROVAL` (§19.1). Otherwise silence rides out to `EXPIRED → DENY`.
 - **Approval prompt contract:** show the **fully-resolved canonical target** (absolute path after symlink/`..` resolution; full URL incl. query/body, **never model-truncated**), a **TAINT banner** when the originating turn ingested untrusted content, and human-meaningful **blast radius** (create vs overwrite; egress yes/no). Redaction hides **secrets**, not the destination fields the owner needs to judge risk.
 
 ## 12. Security & trust model
@@ -442,12 +443,12 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **Boundary:** numeric Telegram user ID, default-deny, enforced before any LLM/tool/expensive work; fail-closed on internal error. No username path anywhere (identity-rebinding CVE class).
 - **Instruction hierarchy (in code):** system/security policy > developer config > identity files (SOUL/AGENTS/TOOLS) > user task > tool observations > retrieved/inbound content > durable memory (MEMORY.md/USER.md — untrusted tier). Durable memory never sits at the system tier.
 - **Lethal trifecta = ENFORCED GATE, not a flag.** Taint is a **sticky, persisted session property**: `session.tainted = true` once ANY untrusted content is ingested — meaning **external/tool/retrieved content** (web/file/tool output, Inc 3b+). **Durable memory (MEMORY/USER/`memory_items`) is untrusted-*labeled* data that sets `hasPrivateDataAccess` but does NOT itself taint the session** (Inc 3a). When `tainted` **and** a privileged/egress action is proposed → the runtime **FORCES the approval path** (or requires `/new`), **in code**, independent of the tool's own risk tier. Compaction/rolling-summary **preserves the untrusted provenance marker**. Taint persists on every commit path of a run that ingested untrusted content, including degraded and failed turns; a `/new`-superseded run does not re-taint the fresh window.
-- **Exfiltration.** `canExfiltrate` covers **every** outbound network sink — the **LLM provider endpoint** AND `http_fetch` — not just "a different chat." Once `hasIngestedUntrusted && hasPrivateDataAccess`: a subsequent `http_fetch` **requires approval** showing the full resolved URL (incl. query/body); fetch args containing substrings of `MEMORY.md`/`USER.md` or secret-shaped tokens are **blocked by `redact()` before dispatch**; `base_url` is pinned/allowlisted (documented trust dependency); high-sensitivity memory is **not auto-injected** into a turn that already ingested untrusted content. There is **no** "reply to owner DM ⇒ exfil-free" exemption. **v1's "gated by approval" is the ephemeral text approval** (Inc 3b): an in-memory single-slot pending entry whose `yes` arms a one-turn grant bound to the exact approved action (tool + canonical target; for `web_fetch`, the canonical URL); anything else — including restart — denies. The durable approval FSM, callback auth, and nonces remain Inc 5. The exfiltration trifecta's private-data leg is evaluated per turn (context assembly plus in-run reads); private content that entered persisted history via an earlier run's tool observation is not counted by later turns, so if the memory file is over-cap (omitted from assembly) and the turn performs no private read, a remembered private substring can egress without approval — accepted for v1, the session-persisted private-data flag belongs to Increment 5's durable approval work. **Outbound sinks are classified:** pinned trusted egress (the LLM `base_url` and the search endpoint — owner-configured and pinned, their providers see model-authored content under their ToS) is protected by the arg guard and config pinning, not approval; arbitrary-destination egress (`web_fetch`) additionally requires the trifecta approval. The owner explicitly accepts the search provider seeing model-authored queries.
+- **Exfiltration.** `canExfiltrate` covers **every** outbound network sink — the **LLM provider endpoint** AND `http_fetch` — not just "a different chat." Once `hasIngestedUntrusted && hasPrivateDataAccess`: a subsequent `http_fetch` **requires approval** showing the full resolved URL (incl. query/body); fetch args containing substrings of `MEMORY.md`/`USER.md` or secret-shaped tokens are **blocked by `redact()` before dispatch**; `base_url` is pinned/allowlisted (documented trust dependency); high-sensitivity memory is **not auto-injected** into a turn that already ingested untrusted content. There is **no** "reply to owner DM ⇒ exfil-free" exemption. **v1's "gated by approval" is the ephemeral text approval** (Inc 3b): an in-memory single-slot pending entry whose `yes` arms a one-turn grant bound to the exact approved action (tool + canonical target; for `web_fetch`, the canonical URL); anything else — including restart — denies. The durable approval FSM, callback auth, and nonces remain Inc 5a. The exfiltration trifecta's private-data leg is evaluated per turn (context assembly plus in-run reads); private content that entered persisted history via an earlier run's tool observation is not counted by later turns, so if the memory file is over-cap (omitted from assembly) and the turn performs no private read, a remembered private substring can egress without approval — accepted for v1, the session-persisted private-data flag belongs to Inc 5a's durable approval work. **Outbound sinks are classified:** pinned trusted egress (the LLM `base_url` and the search endpoint — owner-configured and pinned, their providers see model-authored content under their ToS) is protected by the arg guard and config pinning, not approval; arbitrary-destination egress (`web_fetch`) additionally requires the trifecta approval. The owner explicitly accepts the search provider seeing model-authored queries.
 - **`/new`** = fresh conversation window AND **detaint** ("clears anything the bot read from web/files this session"). **Durable memory PERSISTS by design**; forgetting facts is a separate confirm-gated `/memory delete`.
 - **Prompt injection:** assume no reliable model-level fix; mitigate by least-privilege + approvals + blast-radius caps + the taint gate, not a classifier. Delimit/spotlight untrusted content; strip invisible/zero-width/bidi chars; tool output can never change system instructions.
 - **Secrets:** never in replies or logs. **Exact-value redaction** of the loaded secret values (bot token, api keys, age-decrypted material) is the **PRIMARY** mechanism at both the log boundary and the outbound-reply boundary (the values are already in memory — cheap, deterministic); pattern-based scanning is **secondary** defense-in-depth. The gateway owns the destination chat id; outbound controls strip auto-fetching image/link elements.
 
-## 13. Execution / sandbox architecture (Inc 5)
+## 13. Execution / sandbox architecture (Inc 5b)
 
 - **`ExecutionBackend` protocol** (`Sendable`), driven via `swiftlang/swift-subprocess`:
   - **macOS:** `ContainerBackend` shells out to the `apple/container` CLI — **VM-per-container** via Virtualization.framework (a container escape needs a *hypervisor* escape).
@@ -462,12 +463,12 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 - **`Calendar.RecurrenceRule`** (in-toolchain, DST/TZ-correct, `Sendable`/`Codable`) + a ~150-line custom 60s ticker.
 - Jobs persisted in `scheduled_jobs`; **fire-once-per-occurrence**; **one authoritative overlap guard = atomic DB CLAIM (PENDING→RUNNING)**, not flock. Due-time computed against **wall clock** (clock-gap-robust), with a catch-up cap (§6.3). (Reconciliation, Inc 4: the research corpus suggests actor-lock *plus* flock as overlap guards — rejected; the atomic claim is the ONE guard, and the §4 startup flock already covers the second-process case.)
-- Scheduled runs are **reduced-privilege** agent runs (confirm-before-arm, no auto-approval, default-DENY — in Inc 4 (pre-approval-FSM) an immediate audited DENY with no pending state; with Inc 5's FSM the same branch becomes park-with-timeout → EXPIRED → DENY — own daily budget); delivery routed to the owner's DM via the outbox; audit on create/execute/cancel/fail. NL → schedule via an LLM parse step that requires owner confirmation; the parse obeys turn spend discipline — day-cap preflight before the call, a run-less `provider_usage` row after (`run_id NULL`), and a 30 s deadline so the poller is never blinded. Attack-case to test: a self-scheduling injection cannot create a recurring fetch-and-follow C2 loop.
+- Scheduled runs are **reduced-privilege** agent runs (confirm-before-arm, no auto-approval, default-DENY — in Inc 4 (pre-approval-FSM) an immediate audited DENY with no pending state; with Inc 5a's FSM the same branch becomes park-with-timeout → EXPIRED → DENY — own daily budget); delivery routed to the owner's DM via the outbox; audit on create/execute/cancel/fail. NL → schedule via an LLM parse step that requires owner confirmation; the parse obeys turn spend discipline — day-cap preflight before the call, a run-less `provider_usage` row after (`run_id NULL`), and a 30 s deadline so the poller is never blinded. Attack-case to test: a self-scheduling injection cannot create a recurring fetch-and-follow C2 loop.
 - `getUpdates` recovery is pinned: socket read timeout = long-poll timeout + 10 s; backoff-reconnect on timeout/network error. Scheduler-side gap recovery is lateness-based (§6.3's catch-up table) — no wake detection. Doctor exposes `last_tick_at`.
 
 ## 15. Configuration & secrets
 
-- **Config:** a typed `AppConfig` (validated at load); env/`.env` for development; an invalid config is **rejected and preserved** — the offending file is moved aside as `config.toml.rejected.<timestamp>` and the last-known-good config is kept, never silently overwritten or partially applied; **`doctor --check-config` validates without starting the daemon**; config-validation and secret-load failures are **distinct non-retryable exit codes**. `max_tokens` MUST be a bounded non-null value — **doctor rejects a config with null `max_tokens`** (§5.3).
+- **Config:** a typed `AppConfig` (validated at load); env/`.env` for development; an invalid config is **rejected and preserved** — the offending file is moved aside as `config.toml.rejected.<timestamp>` and the last-known-good config is kept, never silently overwritten or partially applied; **`doctor --check-config` validates without starting the daemon**; config-validation and secret-load failures are **distinct non-retryable exit codes**. `max_tokens` MUST be a bounded non-null value — **doctor rejects a config with null `max_tokens`** (§5.3). **`approval_expiry`** (Inc 5a) is a bounded duration with a validated floor/ceiling (default **1h**) — how long a pending approval waits before `EXPIRED → DENY` (§11/§19.1).
 - **Onboarding / first-run:** the owner ID enters the default-deny allowlist via the **config file in v1**. An UNKNOWN sender's `/start` may echo **THAT sender's own numeric ID** (so they can self-allowlist) but **never reveals allowlist contents** and **never itself grants access**. A doctor check confirms **"at least one owner is allowlisted."** Pairing (later) = a high-entropy single-use expiring rate-limited audited secret provisioned out-of-band; pairing writes go through the same audited, idempotent allowlist path.
 - **Secrets:** a `SecretStore` protocol. **Not the macOS Keychain** (a launchd daemon can't use the Data-Protection keychain; the System keychain is root-only/deprecation-flagged). Implementation: **sops + age** at rest, decrypted to memory at startup; `swift-crypto` AES-GCM for any in-process needs. The age identity lives outside the repo, `0600`. Dev fallback: `0600` `.env` / env vars (clearly warned).
 
@@ -509,7 +510,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 | LLM provider | **OpenAI-compatible** contract + `LLMProvider` protocol; single-provider v1 | swap providers/models via config; pinned/allowlisted `base_url` | native Anthropic adapter later | Med |
 | Web search backend | Exa (`https://api.exa.ai/search`) behind `SearchProviding` [Inc 3b] | pinned trusted endpoint, documented trust dependency like `base_url` (Exa may use query input/output to provide/improve its services) | unconfigured `Secrets.searchApiKey` ⇒ tool absent, doctor reports info not error | Low |
 | HTTP/SSE | AsyncHTTPClient + small SSE parser (**streaming in v1**) | URLSession can't stream SSE on Linux | — | Low |
-| Sandbox | `apple/container` (macOS) + microVM/Podman (Linux) behind `ExecutionBackend` [Inc 5] | hardware-virt boundary for untrusted code | colima (weaker, older-macOS) | Med |
+| Sandbox | `apple/container` (macOS) + microVM/Podman (Linux) behind `ExecutionBackend` [Inc 5b] | hardware-virt boundary for untrusted code | colima (weaker, older-macOS) | Med |
 | Secrets | `SecretStore` over sops+age + swift-crypto | daemon can't use macOS Keychain; portable | 0600 env file (dev) | Low |
 | Scheduling | `Calendar.RecurrenceRule` + custom ticker/store [Inc 4]; **raises the platform floor to macOS 15** | in-toolchain, DST-correct; Codable round-trip + DST suite pinned as toolchain-drift tripwires | SwifCron (vendored) | Low |
 | Concurrency | std-lib actors + stored `currentTurn` Task handle (await-to-order, cancel-to-supersede) | per-session lanes without an external queue lib | `dfed/swift-async-queue` (escape hatch only) | Low |
@@ -556,10 +557,10 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 | (none) | request created (PENDING row, nonce, ownerUserId) | PENDING |
 | PENDING | valid callback (auth + nonce + args-hash + policy_version OK) | APPROVED |
 | PENDING | reject callback | REJECTED |
-| PENDING | 60s ticker / boot sweep finds expired | EXPIRED → DENY (terminal) |
+| PENDING | expiry ticker / boot sweep finds age > `approval_expiry` (default 1h) | EXPIRED → DENY (terminal) |
 | PENDING | run CANCELLED/SUPERSEDED | resolved (no orphan) |
 
-**Boot reconciliation sweep:** any `RUNNING` at boot → `FAILED` (or re-enqueue if idempotent via the outbox); any expired `AWAITING_APPROVAL` → DENY; an `updated_ts` **lease** on `RUNNING` rows distinguishes stuck from in-flight; the 60s ticker enforces approval expiry `PENDING → EXPIRED → DENY`.
+**Boot reconciliation sweep:** any `RUNNING` at boot → `FAILED` (or re-enqueue if idempotent via the outbox); any expired `AWAITING_APPROVAL` → DENY; an `updated_ts` **lease** on `RUNNING` rows distinguishes stuck from in-flight; the expiry ticker (default 1h window, `approval_expiry`) enforces approval expiry `PENDING → EXPIRED → DENY`.
 
 ## 20. Roadmap (technical increments)
 
@@ -572,7 +573,8 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 | **2** | Streaming + per-session lane | **SSE → `sendRichMessageDraft` (streaming rich drafts, finalized via `sendRichMessage`)**; per-session **Task-chaining** lane; a second message queues in order; `/stop` cancels; `/new` resets+detaints; `SecretStore` (no plaintext on disk). |
 | **3** | Memory & workspace + read-only tools | Workspace files injected at the **untrusted tier** (budgeted, caps, flush-before-compact); durable facts on confirm; `memory_items` + **FTS5 recall** across restarts; `/memory`; `web_search`/`web_fetch` + file READ at **`safe`** tier with the **exfil gate**. |
 | **4** | Scheduler & proactive | "Every weekday 07:00 Europe/Berlin…" fires once per occurrence across restarts/DST; **confirm-before-arm**; reduced-privilege runs; clock-gap catch-up cap; delivery via outbox; opt-in heartbeat with quiet hours. *(Scope reconciliation: the external research roadmap bundles memory/workspace into its "Increment 4" — this repo shipped those in Inc 3a; this increment is scheduler/proactive only.)* |
-| **5** | Write/shell tools + policy + approvals + sandbox | A consequential tool requires explicit approval (**callback auth + ≥128-bit nonce + FSM**); a **forged or third-party callback cannot approve**; untrusted code runs in a per-exec disposable VM (no host FS/network by default); the **enforced lethal-trifecta gate** forces approval on a tainted privileged action. |
+| **5a** | Approval fabric + write tools | *Prep first: add `approval-requested/granted/denied` audit cases + a per-run prompt/workspace fingerprint for `policy_version` to bind to.* Then a consequential **write** tool (`file_write`/`memory_write`, `ask` tier) requires explicit approval via the **durable FSM** (**callback auth + ≥128-bit nonce + suspend-to-`AWAITING_APPROVAL` + boot reconciliation + expiry ticker**); a **forged or third-party callback cannot approve**; the **enforced lethal-trifecta gate** (upgraded from Inc 3b's ephemeral grant to the durable FSM) forces approval on a tainted privileged/egress action. **No virtualization.** |
+| **5b** | Sandbox + code execution | Built on 5a's approval fabric: untrusted code (`execute_code`, `dangerous` tier) runs in a **per-exec disposable VM** (no host FS/network by default) behind approval; the staging path is gated like the file tools; an opted-in-egress run is `canExfiltrate=true`. **Prereqs:** resolve the Linux backend (§21) + pin the base image + add a sandbox check to doctor. |
 | **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (systemd); the **macOS + Linux GRDB+FTS5 build+test CI gate already landed early** (`ci.yml`, §17), so the remainder here is the **musl Static Linux SDK → distroless packaging, which stays deferred/optional** (§17/§18 escape hatch). |
 
 *(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards.)*
@@ -581,7 +583,7 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 
 Genuinely-open (decided ones have moved into the body above):
 
-- **Linux sandbox backend:** Podman+microVM vs gVisor `runsc` (decide before Inc 5).
+- **Linux sandbox backend:** Podman+microVM vs gVisor `runsc` (decide before Inc 5b).
 - MCP transport on Linux: custom AHC SSE transport vs Stdio-only.
 - Rolling summary vs aggressive compaction + just-in-time retrieval (treat rolling summary as one strategy; keep out-of-window references).
 
