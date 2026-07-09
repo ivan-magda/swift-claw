@@ -80,11 +80,13 @@ public struct ApprovalCallbackHandler: Sendable {
   /// the shared `processed_updates` claim and skipped.
   public func handle(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {
     let noticeChatId = callback.chatId ?? callback.fromUserId
+
     do throws(RoutingHalt) {
       try await replies.claimUpdate(updateId: updateId, chatId: noticeChatId)
     } catch {
       return error.outcome
     }
+
     return await resolve(callback)
   }
 }
@@ -115,6 +117,7 @@ private extension ApprovalCallbackHandler {
     guard callback.fromUserId == approval.ownerUserId else {
       return await denyAuth(callback, approval: approval)
     }
+
     return await commitResolution(callback, approval: approval, approve: parsed.approve)
   }
 }
@@ -127,10 +130,10 @@ private extension ApprovalCallbackHandler {
     approval: Approval,
     approve: Bool
   ) async -> HandleOutcome {
-    guard approve else {
-      return await commitDeny(callback, approval: approval)
+    if approve {
+      return await commitApprove(callback, approval: approval)
     }
-    return await commitApprove(callback, approval: approval)
+    return await commitDeny(callback, approval: approval)
   }
 
   func commitApprove(_ callback: RawCallback, approval: Approval) async -> HandleOutcome {
@@ -140,6 +143,7 @@ private extension ApprovalCallbackHandler {
     } catch {
       return await storeFailure(callback, error)
     }
+
     let outcome: ApprovalApproveOutcome
     do {
       outcome = try approvals.approve(
@@ -150,6 +154,7 @@ private extension ApprovalCallbackHandler {
     } catch {
       return await storeFailure(callback, error)
     }
+
     switch outcome {
     case .approved:
       await coordinator.signal(approvalId: approval.id, .approved)
@@ -173,9 +178,11 @@ private extension ApprovalCallbackHandler {
     } catch {
       return await storeFailure(callback, error)
     }
+
     if denied {
       await coordinator.signal(approvalId: approval.id, .denied(.expired))
     }
+
     return await finish(callback, toast: Self.expiredToast)
   }
 
@@ -186,11 +193,13 @@ private extension ApprovalCallbackHandler {
     } catch {
       return await storeFailure(callback, error)
     }
+
     guard denied else {
       // A racing resolver (ticker/duplicate) already won; nothing to signal, answer neutrally.
       return await finish(callback, toast: Self.alreadyHandledToast)
     }
     await coordinator.signal(approvalId: approval.id, .denied(.rejected))
+
     return await finish(callback, toast: Self.deniedToast)
   }
 }
@@ -211,11 +220,13 @@ private extension ApprovalCallbackHandler {
       sessionId: approval?.sessionId,
       ts: now()
     )
+
     do {
       try audit.appendAudit(event)
     } catch {
       logger.error("failed to audit forbidden callback: \(error)")
     }
+
     return await finish(callback, toast: Self.neutralToast)
   }
 
