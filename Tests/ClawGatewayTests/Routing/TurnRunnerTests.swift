@@ -91,6 +91,48 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
   func runsHealth(now: Date) throws -> RunsHealth {
     try base.runsHealth(now: now)
   }
+
+  func completeApprovedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    try base.completeApprovedObservation(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      content: content,
+      now: now
+    )
+  }
+
+  func applyApprovedMemoryWrite(
+    runId: Int64,
+    observationMessageId: Int64,
+    item: NewMemoryItem,
+    observationContent: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    try base.applyApprovedMemoryWrite(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      item: item,
+      observationContent: observationContent,
+      now: now
+    )
+  }
+
+  func resumeUsage(runId: Int64) throws -> ResumeUsage {
+    try base.resumeUsage(runId: runId)
+  }
+
+  func runOrigin(runId: Int64) throws -> RunOrigin? {
+    try base.runOrigin(runId: runId)
+  }
+
+  func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
+    try base.failRunStalePolicy(runId: runId, sessionId: sessionId, now: now)
+  }
 }
 
 /// Delegates to the real run store but flips the active run to CANCELLED immediately before the
@@ -148,6 +190,48 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   func runsHealth(now: Date) throws -> RunsHealth {
     try base.runsHealth(now: now)
   }
+
+  func completeApprovedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    try base.completeApprovedObservation(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      content: content,
+      now: now
+    )
+  }
+
+  func applyApprovedMemoryWrite(
+    runId: Int64,
+    observationMessageId: Int64,
+    item: NewMemoryItem,
+    observationContent: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    try base.applyApprovedMemoryWrite(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      item: item,
+      observationContent: observationContent,
+      now: now
+    )
+  }
+
+  func resumeUsage(runId: Int64) throws -> ResumeUsage {
+    try base.resumeUsage(runId: runId)
+  }
+
+  func runOrigin(runId: Int64) throws -> RunOrigin? {
+    try base.runOrigin(runId: runId)
+  }
+
+  func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
+    try base.failRunStalePolicy(runId: runId, sessionId: sessionId, now: now)
+  }
 }
 
 /// A `RunStore` whose first write reports a full disk, to exercise the storage-full rethrow.
@@ -181,6 +265,32 @@ struct DiskFullRuns: RunStore {
       lastSuccessAt: nil,
       consecutiveFailures: 0
     )
+  }
+  func completeApprovedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    throw StoreError.diskFull
+  }
+  func applyApprovedMemoryWrite(
+    runId: Int64,
+    observationMessageId: Int64,
+    item: NewMemoryItem,
+    observationContent: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    throw StoreError.diskFull
+  }
+  func resumeUsage(runId: Int64) throws -> ResumeUsage {
+    throw StoreError.diskFull
+  }
+  func runOrigin(runId: Int64) throws -> RunOrigin? {
+    throw StoreError.diskFull
+  }
+  func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
+    throw StoreError.diskFull
   }
 }
 
