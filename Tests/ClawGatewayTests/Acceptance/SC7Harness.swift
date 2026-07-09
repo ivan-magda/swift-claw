@@ -268,6 +268,7 @@ func makeSC7Harness(
       jobs: stores.scheduledJobs,
       commands: stores.scheduleCommands
     ),
+    coordinator: ApprovalCoordinator(),
     now: { clock.now },
     logger: logger
   )

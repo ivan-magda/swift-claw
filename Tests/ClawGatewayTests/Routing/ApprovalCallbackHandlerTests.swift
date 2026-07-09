@@ -208,6 +208,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       approvalCallbacks: wireHandler ? handler : nil,
+      coordinator: coordinator,
       logger: TestLog.silent
     )
     return Harness(

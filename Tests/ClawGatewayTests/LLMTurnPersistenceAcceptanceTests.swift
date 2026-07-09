@@ -376,6 +376,7 @@ func makeStack(
     turnRunner: turnRunner,
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
+    coordinator: ApprovalCoordinator(),
     logger: logger
   )
 
@@ -464,6 +465,7 @@ func makeStreamingStack(
     turnRunner: turnRunner,
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
+    coordinator: ApprovalCoordinator(),
     logger: logger
   )
   let dispatcher = OutboxDispatcher(
@@ -548,6 +550,7 @@ func makeStopNewStack(
     turnRunner: turnRunner,
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
+    coordinator: ApprovalCoordinator(),
     logger: logger
   )
 

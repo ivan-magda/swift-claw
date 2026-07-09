@@ -60,6 +60,7 @@ import Testing
         jobs: ScheduledJobStoreGRDB(writer: queue),
         commands: ScheduleCommandStoreGRDB(writer: queue)
       ),
+      coordinator: ApprovalCoordinator(),
       now: { Self.fixedNow },
       logger: TestLog.silent
     )
