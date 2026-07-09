@@ -3,11 +3,43 @@ public struct RawUpdate: Sendable, Equatable {
   public let updateId: Int64
   public let message: RawMessage?
   public let editedMessage: RawMessage?
+  public let callback: RawCallback?
 
-  public init(updateId: Int64, message: RawMessage?, editedMessage: RawMessage?) {
+  public init(
+    updateId: Int64,
+    message: RawMessage?,
+    editedMessage: RawMessage?,
+    callback: RawCallback? = nil
+  ) {
     self.updateId = updateId
     self.message = message
     self.editedMessage = editedMessage
+    self.callback = callback
+  }
+}
+
+/// A tapped inline button, wire-agnostic like `RawUpdate` (ClawCore never imports the Telegram JSON
+/// model). `chatId`/`messageId` come from the prompt message (`callback.message`) and drive the
+/// keyboard-disarm edit; `data` is the raw `callback_data` parsed by `ApprovalKeyboard`.
+public struct RawCallback: Sendable, Equatable {
+  public let callbackId: String
+  public let fromUserId: Int64
+  public let chatId: Int64?
+  public let messageId: Int64?
+  public let data: String?
+
+  public init(
+    callbackId: String,
+    fromUserId: Int64,
+    chatId: Int64?,
+    messageId: Int64?,
+    data: String?
+  ) {
+    self.callbackId = callbackId
+    self.fromUserId = fromUserId
+    self.chatId = chatId
+    self.messageId = messageId
+    self.data = data
   }
 }
 

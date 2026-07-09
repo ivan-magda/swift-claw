@@ -110,14 +110,23 @@ struct TUpdate: Decodable {
   let edited_message: TMessage?
   let callback_query: TCallbackQuery?
 
-  // The button tap is decoded here so the client + tests have the wire surface; it is mapped into
-  // the wire-agnostic RawUpdate once that type gains its callback field (the intake half lands
-  // with the router's callback branch).
+  // The button tap decodes here and maps into the wire-agnostic RawUpdate.callback; chat/message
+  // ids come from the prompt message (callback_query.message), which Telegram always includes for
+  // an inline-keyboard tap.
   func toRawUpdate() -> RawUpdate {
     RawUpdate(
       updateId: update_id,
       message: message?.toRawMessage(),
-      editedMessage: edited_message?.toRawMessage()
+      editedMessage: edited_message?.toRawMessage(),
+      callback: callback_query.map { query in
+        RawCallback(
+          callbackId: query.id,
+          fromUserId: query.from.id,
+          chatId: query.message?.chat.id,
+          messageId: query.message?.message_id,
+          data: query.data
+        )
+      }
     )
   }
 }

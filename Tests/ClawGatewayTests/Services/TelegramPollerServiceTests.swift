@@ -125,6 +125,22 @@ private actor BlockingTurnRunner: TurnDispatching {
     try await task.value  // returns promptly, no throw
   }
 
+  @Test func requestsCallbackQueryUpdates() async throws {
+    // given — an idle poller (no batches) so it only long-polls
+    let stack = try makeStack(batches: [], allowed: [42])
+
+    // when
+    let task = Task { try await stack.poller.run() }
+    await stack.transport.waitForPolls(atLeast: 1)
+    task.cancel()
+    try await task.value
+
+    // then — callback_query rides the same allowed_updates as messages/edits (spec §6.1)
+    #expect(
+      await stack.transport.lastAllowedUpdates == ["message", "edited_message", "callback_query"]
+    )
+  }
+
   @Test func cursorAdvancesAfterEnqueueWithoutWaitingForTurnCompletion() async throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()

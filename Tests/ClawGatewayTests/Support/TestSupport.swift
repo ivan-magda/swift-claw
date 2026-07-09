@@ -70,6 +70,7 @@ actor RecordingTransport: TelegramTransport {
   private(set) var drafts: [DraftRecord] = []
   private(set) var sendAttempts = 0
   private(set) var pollCount = 0
+  private(set) var lastAllowedUpdates: [String] = []
   private var batches: [[RawUpdate]]
   private let onExhausted: TelegramError?
   private let sendError: TelegramError?
@@ -106,6 +107,7 @@ actor RecordingTransport: TelegramTransport {
     allowedUpdates: [String]
   ) async throws -> [RawUpdate] {
     pollCount += 1
+    lastAllowedUpdates = allowedUpdates
     resumeWaiters(.poll, reached: pollCount)
     if batches.isEmpty {
       if let onExhausted {
