@@ -35,4 +35,203 @@ import Testing
     #expect(text.contains("file_write"))
     #expect(text.contains("/workspace/notes/plan.md"))
   }
+
+  private func recorded(
+    tool: String,
+    target: String,
+    reason: ApprovalReason,
+    blastRadius: String,
+    preview: String? = nil,
+    warnings: [String] = []
+  ) -> RecordedToolAction {
+    RecordedToolAction(
+      tool: tool,
+      canonicalArgsJSON: "{}",
+      argsHash: "hash16hash16hash",
+      canonicalTarget: target,
+      reason: reason,
+      presentation: ToolApprovalPresentation(
+        blastRadius: blastRadius,
+        contentPreview: preview,
+        warnings: warnings
+      )
+    )
+  }
+
+  @Test func richPromptCarriesToolFullTargetAndBlastRadius() {
+    // given
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "file_write",
+        target: "/workspace/notes/plan.md",
+        reason: .askTier,
+        blastRadius: "create, 1.2 KB"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let text = ToolApprovalPrompt.text(for: input)
+
+    // then — structural fields only (TESTING §7.2): tool, fully-resolved target, blast radius
+    #expect(text.contains("file_write"))
+    #expect(text.contains("/workspace/notes/plan.md"))
+    #expect(text.contains("create, 1.2 KB"))
+  }
+
+  @Test func fullyResolvedUrlTargetIsNeverTruncated() {
+    // given — a long URL with a query string (§5.4: full URL, never model-truncated)
+    let target = "https://example.com/a/b/c?token=abcdefghijklmnop&next=2&page=3"
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "web_fetch",
+        target: target,
+        reason: .exfilTrifecta,
+        blastRadius: "egress to example.com"
+      ),
+      taintBanner: true,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let text = ToolApprovalPrompt.text(for: input)
+
+    // then
+    #expect(text.contains(target))
+  }
+
+  @Test func taintBannerAppearsOnlyWhenSet() {
+    // given
+    let withTaint = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "file_write",
+        target: "/w/a.md",
+        reason: .askTier,
+        blastRadius: "create, 3 B"
+      ),
+      taintBanner: true,
+      privilegedFileBanner: false
+    )
+    let withoutTaint = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "file_write",
+        target: "/w/a.md",
+        reason: .askTier,
+        blastRadius: "create, 3 B"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when / then — the TAINT marker is present exactly when the originating turn ingested
+    // untrusted content
+    #expect(ToolApprovalPrompt.text(for: withTaint).contains("TAINT"))
+    #expect(ToolApprovalPrompt.text(for: withoutTaint).contains("TAINT") == false)
+  }
+
+  @Test func privilegedFileBannerAppearsOnlyWhenSet() {
+    // given
+    let privileged = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "file_write",
+        target: "/w/MEMORY.md",
+        reason: .askTier,
+        blastRadius: "overwrite, 40 B"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: true
+    )
+    let ordinary = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "file_write",
+        target: "/w/notes.md",
+        reason: .askTier,
+        blastRadius: "overwrite, 40 B"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when / then — §5.4 privileged-file warning (SOUL/AGENTS/USER/MEMORY .md)
+    #expect(ToolApprovalPrompt.text(for: privileged).contains("PRIVILEGED"))
+    #expect(ToolApprovalPrompt.text(for: ordinary).contains("PRIVILEGED") == false)
+  }
+
+  @Test func contentPreviewRendersWhenPresentAndIsOmittedWhenNil() {
+    // given — the preview is already size-capped + secret-redacted by the tool (§5.4)
+    let withPreview = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "file_write",
+        target: "/w/a.md",
+        reason: .askTier,
+        blastRadius: "create, 5 B",
+        preview: "hello"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+    let withoutPreview = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "web_fetch",
+        target: "https://x.example/y",
+        reason: .exfilTrifecta,
+        blastRadius: "egress to x.example",
+        preview: nil
+      ),
+      taintBanner: true,
+      privilegedFileBanner: false
+    )
+
+    // when / then
+    #expect(ToolApprovalPrompt.text(for: withPreview).contains("hello"))
+    #expect(ToolApprovalPrompt.text(for: withoutPreview).contains("Preview") == false)
+  }
+
+  @Test func memoryWriteScanWarningsSurfaceInThePrompt() {
+    // given
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "memory_write",
+        target: "memory_item:fact:0123456789abcdef",
+        reason: .askTier,
+        blastRadius: "fact, normal",
+        preview: "the note text",
+        warnings: ["looks like a secret", "instruction-shaped text"]
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let text = ToolApprovalPrompt.text(for: input)
+
+    // then — each scan warning is shown so the owner can judge before approving
+    #expect(text.contains("looks like a secret"))
+    #expect(text.contains("instruction-shaped text"))
+  }
+
+  @Test func richPromptRendersForEveryApprovalReason() {
+    // given — the renderer is exhaustive over ApprovalReason; this pins that both reasons produce
+    // owner-facing copy carrying the target at runtime (the compile-time guarantee is the switch)
+    for reason in [ApprovalReason.askTier, ApprovalReason.exfilTrifecta] {
+      let input = ToolApprovalPrompt.Input(
+        recorded: recorded(
+          tool: "file_write",
+          target: "/w/target-\(reason.rawValue).md",
+          reason: reason,
+          blastRadius: "create, 1 B"
+        ),
+        taintBanner: false,
+        privilegedFileBanner: false
+      )
+
+      // when
+      let text = ToolApprovalPrompt.text(for: input)
+
+      // then
+      #expect(text.isEmpty == false)
+      #expect(text.contains("/w/target-\(reason.rawValue).md"))
+    }
+  }
 }
