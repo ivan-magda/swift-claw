@@ -8,8 +8,6 @@ public enum ApprovalKeyboard {
   public static let approveVerdict = "y"
   public static let denyVerdict = "n"
 
-  /// The callback_data namespace. "apr:" + a 22-char base64url nonce + ":y" is 28 bytes — well
-  /// under Telegram's 64-byte cap (spec §4.6).
   private static let prefix = "apr"
 
   public static func callbackData(nonce: String, verdict: String) -> String {
@@ -29,20 +27,21 @@ public enum ApprovalKeyboard {
       + "]]}"
   }
 
-  /// Structural validation only — the §6.2 chain still verifies the nonce against the store, the
-  /// owner binding, the args-hash, and the policy_version. A colon anywhere but the two framing
-  /// separators (a nonce never contains one) fails the exact-three-parts guard.
   public static func parse(_ callbackData: String) -> (nonce: String, approve: Bool)? {
-    let parts = callbackData.split(separator: ":", omittingEmptySubsequences: false).map(
-      String.init
-    )
+    let parts =
+      callbackData
+      .split(separator: ":", omittingEmptySubsequences: false)
+      .map(String.init)
+
     guard parts.count == 3, parts[0] == prefix else {
       return nil
     }
+
     let nonce = parts[1]
     guard nonce.isEmpty == false else {
       return nil
     }
+
     switch parts[2] {
     case approveVerdict:
       return (nonce, true)
