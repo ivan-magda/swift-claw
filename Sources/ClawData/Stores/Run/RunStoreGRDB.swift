@@ -685,7 +685,9 @@ extension RunStoreGRDB {
   /// The parked-observation body (§5.3). A resolution overwrites it in place with the real result.
   static let placeholderObservationContent = "awaiting owner approval"
 
-  static func transitionRun(
+  // `public`: Task 16 test fixtures outside this module (ClawGatewayTests, via plain `import
+  // ClawData`) drive suspended-run fixtures through the real reducer instead of hand-rolling state.
+  public static func transitionRun(
     _ db: Database,
     runId: Int64,
     event: RunEvent,
