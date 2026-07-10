@@ -70,7 +70,6 @@ let package = Package(
       ]
     ),
     .target(name: "ClawTools", dependencies: ["ClawCore"]),
-    // Deterministic test fakes shared across suites (never linked into `clawd`).
     .target(name: "ClawTestSupport"),
     .target(
       name: "ClawGateway",
