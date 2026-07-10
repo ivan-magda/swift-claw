@@ -5,7 +5,7 @@ import Testing
 @testable import ClawTools
 
 @Suite struct MemoryWriteToolTests {
-  private let tool = MemoryWriteTool()
+  private let tool = MemoryWriteTool(redactor: SecretRedactor(secretValues: []))
 
   private func arguments(_ json: String) -> JSONValue {
     JSONValue.parse(json) ?? .null
@@ -60,6 +60,29 @@ import Testing
     #expect(presentation.warnings == ["possible secret-shaped text"])
     #expect(presentation.blastRadius.contains("kind reference"))
     #expect(presentation.blastRadius.contains("sensitivity normal"))
+  }
+
+  @Test func presentationRedactsConfiguredSecretValuesFromThePreview() {
+    // given — the proposed text embeds an exact loaded secret (§12: exact-value redaction at the
+    // outbound-reply boundary); the preview is otherwise verbatim
+    let redactingTool = MemoryWriteTool(
+      redactor: SecretRedactor(secretValues: ["tg-bot-token-123"])
+    )
+    let callArguments = arguments(
+      #"{"text":"the bot token is tg-bot-token-123 on the pi","kind":"reference"}"#
+    )
+
+    // when
+    let presentation = redactingTool.approvalPresentation(
+      arguments: callArguments,
+      canonicalTarget: "memory_item:reference:0000000000000000"
+    )
+
+    // then
+    #expect(
+      presentation.contentPreview
+        == "the bot token is \(SecretRedactor.replacement) on the pi"
+    )
   }
 
   @Test func executeIsAFailClosedStubOffTheApprovalPath() async {

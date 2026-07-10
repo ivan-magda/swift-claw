@@ -11,7 +11,11 @@ public struct MemoryWriteTool: Tool {
   /// §5.4: the preview stays owner-readable, never a wall of text.
   static let previewCapGraphemes = 400
 
-  public init() {}
+  private let redactor: SecretRedactor
+
+  public init(redactor: SecretRedactor) {
+    self.redactor = redactor
+  }
 
   public var definition: ToolDefinition {
     ToolDefinition(
@@ -79,10 +83,11 @@ public struct MemoryWriteTool: Tool {
         sensitivity \(request.item.sensitivity.rawValue), \
         importance \(MemoryWriteArguments.importanceLabel(request.item.importance))
         """,
-      // §8.2: the preview is the capped VERBATIM normalized text — the owner judges exactly
-      // what would be stored; the scan warnings flag secret/instruction shapes, never hide them.
+      // §8.2: the preview is the capped normalized text so the owner judges exactly what would
+      // be stored — except exact loaded secret values, which §12 bars from every outbound reply;
+      // the scan warnings still flag secret/instruction SHAPES rather than hiding them.
       contentPreview: ToolOutputCap.cap(
-        request.item.text,
+        redactor.redact(request.item.text),
         maxGraphemes: Self.previewCapGraphemes
       ),
       warnings: request.warnings.map(\.confirmationSummary)

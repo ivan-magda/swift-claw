@@ -380,7 +380,7 @@ private extension RunCommand {
     var tools: [any Tool] = [
       FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
       FileWriteTool(workspaceRoot: workspace.root, redactor: redactor),
-      MemoryWriteTool(),
+      MemoryWriteTool(redactor: redactor),
       WebFetchTool(http: toolExecutor, resolver: SystemAddressResolver(), redactor: redactor),
     ]
 
