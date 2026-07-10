@@ -9,7 +9,9 @@ import Testing
 // internal db-scoped static, not `public`, so a plain `import ClawData` can't reach it.
 @testable import ClawData
 
-@Suite struct ApprovalBootReconcilerTests {
+// The time limit converts a rendezvous regression (a park that never happens) into a bounded
+// failure — the spy's continuation waits would otherwise hang the whole test run silently.
+@Suite(.timeLimit(.minutes(1))) struct ApprovalBootReconcilerTests {
   /// Records every `park` and models the real waiter: it registers with the coordinator and awaits
   /// resolution, so the lane stays held until the row resolves. All rendezvous are continuation-based
   /// (never a sleep or a spin) so the suite is deterministic at nproc=1.
@@ -154,23 +156,36 @@ import Testing
       expiresTs: Date
     ) throws -> Int64 {
       let canonicalArgsJSON = #"{"path":"/w/plan.md"}"#
-      let newApproval = NewApproval(
-        runId: runId,
-        sessionId: 1,
-        tool: "file_write",
-        canonicalArgsJSON: canonicalArgsJSON,
-        canonicalTarget: "/w/plan.md",
-        argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
-        policyVersion: "pv16",
-        ownerUserId: 7,
-        nonce: nonce,
-        observationMessageId: 1,
-        toolCallId: "c1",
-        reason: .askTier,
-        createdTs: createdTs,
-        expiresTs: expiresTs
-      )
-      return try queue.write { db in try ApprovalStoreGRDB.insertApproval(db, newApproval) }
+      // Production's suspend commit always inserts the placeholder observation row the approval
+      // points back at (§5.3), and `unresolvedAtBoot`'s crash-window arm keys on that placeholder
+      // still being unfilled — a dangling observation id would make the row invisible at boot.
+      return try queue.write { db in
+        try db.execute(
+          sql: """
+            INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+            VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
+            """,
+          arguments: [runId, RunStoreGRDB.placeholderObservationContent, Date()]
+        )
+        let observationMessageId = db.lastInsertedRowID
+        let newApproval = NewApproval(
+          runId: runId,
+          sessionId: 1,
+          tool: "file_write",
+          canonicalArgsJSON: canonicalArgsJSON,
+          canonicalTarget: "/w/plan.md",
+          argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
+          policyVersion: "pv16",
+          ownerUserId: 7,
+          nonce: nonce,
+          observationMessageId: observationMessageId,
+          toolCallId: "c1",
+          reason: .askTier,
+          createdTs: createdTs,
+          expiresTs: expiresTs
+        )
+        return try ApprovalStoreGRDB.insertApproval(db, newApproval)
+      }
     }
 
     func audits() throws -> [(action: String, decision: String)] {

@@ -150,13 +150,25 @@ public struct ApprovalStoreGRDB: ApprovalStore {
 
   public func unresolvedAtBoot() throws -> [Approval] {
     try database.readMapping { db in
+      // The resolved-states arm is the §6.5 crash-window belt: the CAS committed but the waiter's
+      // observation/run commit did not — recognizable by the observation row STILL being the
+      // placeholder. Without that condition, a run parked on its SECOND approval would return its
+      // first, already-executed row too, and boot would replay the recorded action.
       try Self.fetchApprovals(
         db,
         whereClause: """
           state = ?
-          OR (state IN (?, ?, ?) AND EXISTS (
-            SELECT 1 FROM runs WHERE runs.id = approvals.run_id AND runs.state = ?
-          ))
+          OR (state IN (?, ?, ?)
+            AND EXISTS (
+              SELECT 1 FROM runs WHERE runs.id = approvals.run_id AND runs.state = ?
+            )
+            AND EXISTS (
+              SELECT 1 FROM messages
+              WHERE messages.id = approvals.observation_message_id
+                AND messages.run_id = approvals.run_id
+                AND messages.role = 'tool'
+                AND messages.content = ?
+            ))
           """,
         arguments: [
           ApprovalState.pending.rawValue,
@@ -164,6 +176,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           ApprovalState.rejected.rawValue,
           ApprovalState.expired.rawValue,
           RunState.awaitingApproval.rawValue,
+          RunStoreGRDB.placeholderObservationContent,
         ]
       )
     }

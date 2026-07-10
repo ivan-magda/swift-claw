@@ -94,6 +94,12 @@ public struct FileWriteTool: Tool {
       if exists, overwriteFlag(arguments) == false {
         return .refused(reason: "\(path) already exists; pass overwrite: true to replace it.")
       }
+      if exists == false, overwriteFlag(arguments) {
+        // The flag must match the approved mode: the prompt would say "create", but the recorded
+        // overwrite:true would take the replacing rename(2) branch at execution — a file that
+        // appeared during the approval window would be clobbered under a create-shaped approval.
+        return .refused(reason: "\(path) does not exist; drop overwrite: true to create it.")
+      }
       return .resolved(target)
     }
   }

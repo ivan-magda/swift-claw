@@ -81,12 +81,14 @@ extension RunStoreGRDB {
     now: Date
   ) throws -> RunCommitResult {
     try database.writeMapping { db in
-      // Exactly-once (§6.3): the run flips AWAITING_APPROVAL → RUNNING through the reducer. A
-      // duplicate resume finds the run already RUNNING (or terminal) and no-ops — the observation
-      // (and, for memory_write, the fused insert) never double-apply. This is equivalent to the
-      // spec's "observation still placeholder" guard because the placeholder is only ever filled
-      // inside this same transaction.
-      guard try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
+      // Exactly-once (§6.3) needs BOTH guards. The placeholder check is per-approval: once the
+      // run suspends a second time it is AWAITING_APPROVAL again, so the state flip alone would
+      // let a replay of an already-executed approval commit and steal the new approval's park.
+      // The state flip stays as the FSM-legal transition for the genuine resume.
+      guard
+        try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId),
+        try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil
+      else {
         return .ignored
       }
       try Self.fillApprovedObservation(
@@ -107,12 +109,17 @@ extension RunStoreGRDB {
     now: Date
   ) throws -> RunCommitResult {
     try database.writeMapping { db in
-      guard try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
+      guard
+        try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId),
+        try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil
+      else {
         return .ignored
       }
       // §6.3 exactly-once: the item insert shares this transaction with the observation fill, both
-      // gated by the AWAITING_APPROVAL → RUNNING flip above (D10 — the same db-scoped static
-      // `applyRemember` uses; MemoryStore.append would open its own txn and could not fuse).
+      // gated by the placeholder + AWAITING_APPROVAL → RUNNING guards above (D10 — the same
+      // db-scoped static `applyRemember` uses; MemoryStore.append would open its own txn and
+      // could not fuse). The placeholder guard is what makes a replay after a SECOND suspend in
+      // the same run a no-op — the state flip alone would re-arm.
       _ = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
       try Self.fillApprovedObservation(
         db,
@@ -195,6 +202,26 @@ extension RunStoreGRDB {
       )
       return true
     }
+  }
+
+  /// The per-approval half of the exactly-once guard: true while the approval's reserved
+  /// observation row still carries the placeholder content, i.e. no resume commit has landed for
+  /// THIS approval. Same row scoping as `fillApprovedObservation`.
+  static func observationIsPlaceholder(
+    _ db: Database,
+    runId: Int64,
+    messageId: Int64
+  ) throws -> Bool {
+    try Bool.fetchOne(
+      db,
+      sql: """
+        SELECT EXISTS(
+          SELECT 1 FROM messages
+          WHERE id = ? AND run_id = ? AND role = 'tool' AND content = ?
+        )
+        """,
+      arguments: [messageId, runId, placeholderObservationContent]
+    ) ?? false
   }
 
   /// UPDATEs the reserved placeholder observation row in place with the resolved result. Scoped to

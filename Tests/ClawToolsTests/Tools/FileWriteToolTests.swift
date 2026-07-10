@@ -88,6 +88,24 @@ import Testing
     #expect(resolution == .resolved(canonicalRoot + "/plan.md"))
   }
 
+  @Test func overwriteTrueOnAMissingTargetRefusesAtGateTime() throws {
+    // given — nothing exists at the path, so the prompt would render "create"; a recorded
+    // overwrite:true would let execute take the replacing rename(2) branch if a file appeared
+    // during the approval window, silently widening the approved blast radius (§10.2)
+    let root = try makeWorkspace()
+
+    // when / then — the flag must match the approved mode: no target, no overwrite
+    guard
+      case .refused(let reason) = makeTool(root: root).canonicalTarget(
+        arguments: args(path: "fresh.md", content: "new", overwrite: true)
+      )
+    else {
+      Issue.record("expected overwrite: true on a missing target to refuse at gate time")
+      return
+    }
+    #expect(reason.contains("does not exist"))
+  }
+
   @Test func oversizedContentRefusesAtGateTime() throws {
     // given
     let huge = String(repeating: "a", count: FileWriteTool.maxContentBytes + 1)

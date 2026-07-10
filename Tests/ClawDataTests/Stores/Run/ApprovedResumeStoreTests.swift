@@ -182,6 +182,87 @@ import Testing
     #expect(memoryCount == 1)
   }
 
+  /// Re-suspends the fixture's run on a SECOND placeholder (the multi-suspend shape: approve #1,
+  /// resume, propose another gated call) and returns the new placeholder's message id.
+  private func suspendAgain(_ env: Fixture) throws -> Int64 {
+    try env.queue.write { db -> Int64 in
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c2')
+          """,
+        arguments: [env.sessionId, env.runId, Self.placeholder, Date()]
+      )
+      let messageId = db.lastInsertedRowID
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: env.runId,
+        event: .suspendForApproval,
+        now: Date()
+      )
+      return messageId
+    }
+  }
+
+  @Test func replayAfterASecondSuspendIsIgnoredAndLeavesTheRunParked() throws {
+    // given — approval #1 fully resumed, then the run suspends again on approval #2: the run is
+    // AWAITING_APPROVAL once more, so the AWAITING→RUNNING flip alone would let a boot replay of
+    // #1 commit and steal #2's park
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.completeApprovedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      content: "first",
+      now: Date()
+    )
+    let secondPlaceholderId = try suspendAgain(env)
+
+    // when — a boot replay re-runs approval #1's commit against its already-filled observation
+    let replay = try env.runs.completeApprovedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      content: "replayed",
+      now: Date()
+    )
+
+    // then — ignored: run STILL parked for #2, #1's observation untouched, #2's placeholder intact
+    #expect(replay == .ignored)
+    #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == "first")
+    #expect(try messageContent(env.queue, secondPlaceholderId) == Self.placeholder)
+  }
+
+  @Test func memoryWriteReplayAfterASecondSuspendIsIgnoredAndLeavesTheRunParked() throws {
+    // given — the fused memory write committed once, then the run suspends again
+    let env = try makeSuspendedFixture()
+    let item = NewMemoryItem(text: "the plan is ready", kind: .project, sessionId: env.sessionId)
+    _ = try env.runs.applyApprovedMemoryWrite(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      item: item,
+      observationContent: "Saved.",
+      now: Date()
+    )
+    _ = try suspendAgain(env)
+
+    // when — a boot replay re-runs the fused write for the resolved approval
+    let replay = try env.runs.applyApprovedMemoryWrite(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      item: item,
+      observationContent: "Saved again.",
+      now: Date()
+    )
+
+    // then — ignored: no second memory row, run still parked for the new approval
+    #expect(replay == .ignored)
+    #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
+    let memoryCount = try env.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
+    }
+    #expect(memoryCount == 1)
+  }
+
   @Test func resumeUsageDerivesCountersFromPersistedRows() throws {
     // given — the fixture already has one assistant row and one tool row; add usage + a second
     // assistant/tool pair so the counts and sums are unambiguous (D4)
