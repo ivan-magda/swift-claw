@@ -12,33 +12,6 @@ import ClawWorkspace
 import Foundation
 import Logging
 
-/// Breaks the `turnRunner` ⇄ `approvalWaiter` construction cycle: `TurnRunner` needs a `parker`,
-/// and the real parker (the waiter) needs `turnRunner` as its dispatcher. Adopted once during
-/// composition, before the service group starts.
-actor DeferredApprovalParker: ApprovalParking {
-  private var wrapped: (any ApprovalParking)?
-
-  func adopt(_ parker: any ApprovalParking) {
-    wrapped = parker
-  }
-
-  func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    revalidatePolicyOnApprove: Bool
-  ) async {
-    await wrapped?.park(
-      approvalId: approvalId,
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
-      revalidatePolicyOnApprove: revalidatePolicyOnApprove
-    )
-  }
-}
-
 struct RunCommand: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "run",
@@ -55,6 +28,7 @@ struct RunCommand: AsyncParsableCommand {
     defer { lock.release() }
 
     let stores = try Self.openStoresOrExit(config: config, logger: logger)
+    try Self.ensureWorkspaceDirectoryOrExit(config: config)
 
     // Shared HTTP client for both Telegram and the LLM; gzip decompression is a client-wide toggle
     // (the executor only advertises `accept-encoding`), so it's configured here at the root.
@@ -167,6 +141,19 @@ private extension RunCommand {
         Data("another clawd is already running for this state root\n".utf8)
       )
       throw ExitCode(ClawExitCode.alreadyRunning.rawValue)
+    }
+  }
+
+  static func ensureWorkspaceDirectoryOrExit(config: AppConfig) throws {
+    let workspace = FileSystemWorkspace(
+      root: config.stateRoot.appendingPathComponent(StateFile.workspace, isDirectory: true)
+    )
+
+    do {
+      try workspace.ensureRootExists()
+    } catch {
+      FileHandle.standardError.write(Data("workspace error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.configInvalid.rawValue)
     }
   }
 

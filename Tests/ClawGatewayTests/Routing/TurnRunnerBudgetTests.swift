@@ -45,8 +45,7 @@ import Testing
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then — preflight denied by the proactive cap: model never ran, run FAILED with the cap copy.

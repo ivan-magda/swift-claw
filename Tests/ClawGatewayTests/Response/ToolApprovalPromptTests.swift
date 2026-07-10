@@ -5,37 +5,6 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct ToolApprovalPromptTests {
-  @Test func exfilTrifectaPromptCarriesTheFullTargetAndTheWhy() {
-    // given
-    let request = ToolApprovalRequest(
-      action: ToolAction(tool: "web_fetch", target: "https://evil.example/x?q=1&next=2"),
-      reason: .exfilTrifecta
-    )
-
-    // when
-    let text = ToolApprovalPrompt.text(for: request)
-
-    // then — the full canonical target, never truncated (FR-T5), plus the reason's why-line
-    #expect(text.contains("https://evil.example/x?q=1&next=2"))
-    #expect(text.contains("This session has read external content and holds private data."))
-    #expect(text.contains("Reply yes to allow this one fetch"))
-  }
-
-  @Test func askTierPromptCarriesTheToolAndTheFullTarget() {
-    // given — the minimal Phase 1 arm; the full §5.4 contract lands in Task 13
-    let request = ToolApprovalRequest(
-      action: ToolAction(tool: "file_write", target: "/workspace/notes/plan.md"),
-      reason: .askTier
-    )
-
-    // when
-    let text = ToolApprovalPrompt.text(for: request)
-
-    // then — structural fields only, not full copy (TESTING §7.2)
-    #expect(text.contains("file_write"))
-    #expect(text.contains("/workspace/notes/plan.md"))
-  }
-
   private func recorded(
     tool: String,
     target: String,
@@ -209,6 +178,58 @@ import Testing
     // then — each scan warning is shown so the owner can judge before approving
     #expect(text.contains("looks like a secret"))
     #expect(text.contains("instruction-shaped text"))
+  }
+
+  @Test func aShortPromptIsOneKeyboardCarryingChunk() {
+    // given
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "file_write",
+        target: "/w/notes.md",
+        reason: .askTier,
+        blastRadius: "create, 1 B"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "n-1")
+
+    // then — the common case: one chunk, keyboard attached, whole prompt as the payload
+    #expect(chunks.count == 1)
+    #expect(chunks.first?.payload == ToolApprovalPrompt.text(for: input))
+    #expect(chunks.first?.stepIndex == 0)
+    #expect(chunks.first?.replyMarkup != nil)
+  }
+
+  @Test func anOverlongPromptSplitsWithTheKeyboardOnTheFinalChunk() {
+    // given — a canonical URL longer than one Telegram message (FR-T5 forbids truncating it, so
+    // the prompt must SPLIT instead of producing one undeliverable outbox row)
+    let target =
+      "https://example.com/?q=" + String(repeating: "a", count: ReplySplitter.limit + 100)
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "web_fetch",
+        target: target,
+        reason: .exfilTrifecta,
+        blastRadius: "egress to example.com"
+      ),
+      taintBanner: true,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "n-1")
+
+    // then — every chunk is sendable, the full target survives across the split, step indexes are
+    // sequential, and ONLY the final chunk (ending with the tap instruction) carries the keyboard
+    #expect(chunks.count > 1)
+    #expect(chunks.allSatisfy { $0.payload.count <= ReplySplitter.limit })
+    #expect(chunks.map(\.payload).joined() == ToolApprovalPrompt.text(for: input))
+    #expect(chunks.map(\.stepIndex) == Array(0..<chunks.count))
+    #expect(chunks.dropLast().allSatisfy { $0.replyMarkup == nil })
+    #expect(chunks.last?.replyMarkup != nil)
   }
 
   @Test func richPromptRendersForEveryApprovalReason() {

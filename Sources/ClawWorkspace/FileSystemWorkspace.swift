@@ -33,6 +33,14 @@ public struct FileSystemWorkspace: WorkspaceReading {
     self.root = root
   }
 
+  public func ensureRootExists() throws {
+    try FileManager.default.createDirectory(
+      at: root,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+  }
+
   public func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
     loadFile(at: root.appendingPathComponent(file.relativePath), maxGraphemes: maxGraphemes)
   }

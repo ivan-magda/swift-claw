@@ -2,15 +2,15 @@ import ClawCore
 import Foundation
 
 /// Spec §9.1 steps (2)-(3): the unconditional arg-guard tier, the trifecta condition, the tier-3
-/// disk-time substring check, and the web_fetch grant/approval decision. Pure — every input
+/// disk-time substring check, and the web_fetch approval decision. Pure — every input
 /// arrives via the call/context; tier-3 texts via the injected loader (disk at gate time).
 public struct ToolPolicyGate: Sendable {
   public enum Verdict: Sendable, Equatable {
     /// `action` is the gate-resolved canonical action for `.arbitraryDestination` tools — the
     /// dispatcher hands its target into `execute` so the tool acts on exactly the form the gate
     /// authorized; `nil` for the other classes.
-    case allow(argsRedacted: String, consumedGrant: Bool, action: ToolAction?)
-    case block(payload: ToolPayload, argsRedacted: String, pendingApproval: ToolApprovalRequest?)
+    case allow(argsRedacted: String, action: ToolAction?)
+    case block(payload: ToolPayload, argsRedacted: String)
     /// An ask-tier action (§4.3/§5.1) parked for the owner's durable approval. Carries the recorded
     /// canonical args the §5.3 suspend commit persists and the §6.3 resume replays.
     case requireApproval(recorded: RecordedToolAction)
@@ -32,6 +32,10 @@ public struct ToolPolicyGate: Sendable {
     // (1) ask-tier is evaluated FIRST, before the egress fast-path (§4.3/§5.1): an ask-tier tool
     // reaches the durable approval arm regardless of egress class — an ask-tier file_write has
     // egress `.none` yet must still park for the owner's decision.
+    // INVARIANT: this arm returns before the unconditional/conditional arg-guard and redaction
+    // tiers run, which is safe ONLY while every ask-tier tool is `.none`-egress (nothing leaves
+    // the host). An ask-tier tool WITH egress must move this arm below those tiers or re-run
+    // them inside `evaluateAskTier`.
     if tool.definition.riskLevel == .ask {
       return evaluateAskTier(call: call, tool: tool, context: context)
     }
@@ -40,7 +44,6 @@ public struct ToolPolicyGate: Sendable {
     guard tool.definition.egressClass != .none else {
       return .allow(
         argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
-        consumedGrant: false,
         action: nil
       )
     }
@@ -51,9 +54,12 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
     }
 
-    // (4) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run)  [rev.1 H1]
+    // (4) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run ∪ session)
     let tainted = context.sessionTainted || context.runIngestedUntrusted
-    let privateData = context.assemblyPrivateData || context.runPrivateData
+    // §4.5/§5.1: three private-data sources — the per-assembly leg, the run-local leg, and the
+    // persisted session flag that survives a window roll (the §12 over-cap gap).
+    let privateData =
+      context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
     guard tainted && privateData else {
       return resolveAndAllow(call: call, tool: tool, argsRedacted: unconditional.redactedArgs)
     }
@@ -67,35 +73,40 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
     }
 
-    // (5) the arbitrary-destination egress class (§18-H): grant match or approval
+    // (5) trifecta arm — DURABLE (§5.1/§8.3): a would-park action suspends onto the approval
+    // fabric via `.requireApproval`. Non-interactive runs take the SAME park (→ EXPIRED → DENY),
+    // never an immediate gate DENY. Recorded-args execution subsumes the retired one-turn grant.
     let action: ToolAction?
     switch resolveAction(call: call, tool: tool) {
     case .action(let resolved):
       action = resolved
     case .blocked(let payload):
-      return .block(payload: payload, argsRedacted: conditional.redactedArgs, pendingApproval: nil)
+      return .block(payload: payload, argsRedacted: conditional.redactedArgs)
     }
     guard let action else {
-      return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: false, action: nil)
+      return .allow(argsRedacted: conditional.redactedArgs, action: nil)
     }
 
-    if context.grant?.action == action {
-      return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: true, action: action)
-    }
-
-    if context.nonInteractive {
-      return nonInteractiveDeny(
-        call: call,
-        action: action,
+    guard context.approvalAlreadyPending == false else {
+      // §5.2: one pending approval per run — a further gated call observes the block, never a
+      // second suspend.
+      return .block(
+        payload: ToolPayload(
+          content: "blocked: an approval is already pending",
+          status: .blockedPendingApproval,
+          ingestedUntrusted: false
+        ),
         argsRedacted: conditional.redactedArgs
       )
     }
 
-    return trifectaApprovalBlock(
-      action: action,
-      argsRedacted: conditional.redactedArgs,
-      approvalAlreadyPending: context.approvalAlreadyPending
+    let recorded = recordedAction(
+      call: call,
+      tool: tool,
+      target: action.target,
+      reason: .exfilTrifecta
     )
+    return .requireApproval(recorded: recorded)
   }
 
   /// The §9.1 audit rendering, exposed so the dispatcher's pre-gate error paths (unknown tool,
@@ -152,8 +163,7 @@ public struct ToolPolicyGate: Sendable {
         status: .blockedArgs,
         ingestedUntrusted: false
       ),
-      argsRedacted: argsRedacted,
-      pendingApproval: nil
+      argsRedacted: argsRedacted
     )
   }
 }
@@ -162,55 +172,14 @@ public struct ToolPolicyGate: Sendable {
 
 private extension ToolPolicyGate {
   /// The no-trifecta path: the action still resolves (or fails closed) so the dispatcher gets the
-  /// gate-authorized canonical target, but no grant is consumed and no approval parks.
+  /// gate-authorized canonical target, but no approval parks.
   func resolveAndAllow(call: ToolCall, tool: any Tool, argsRedacted: String) -> Verdict {
     switch resolveAction(call: call, tool: tool) {
     case .action(let action):
-      return .allow(argsRedacted: argsRedacted, consumedGrant: false, action: action)
+      return .allow(argsRedacted: argsRedacted, action: action)
     case .blocked(let payload):
-      return .block(payload: payload, argsRedacted: argsRedacted, pendingApproval: nil)
+      return .block(payload: payload, argsRedacted: argsRedacted)
     }
-  }
-
-  /// §10 (D5): a non-interactive run never parks an approval — would-park becomes an
-  /// immediate audited DENY, surfaced in the delivered result as a plain-language note. No
-  /// pending entry ⇒ no dangling confirmation can bind to the owner's next unrelated "yes"
-  /// (§16 case 3).
-  func nonInteractiveDeny(call: ToolCall, action: ToolAction, argsRedacted: String) -> Verdict {
-    .block(
-      payload: ToolPayload(
-        content: """
-          skipped \(call.name) of \(action.target) — it needs your approval; \
-          run it interactively.
-          """,
-        status: .error,
-        ingestedUntrusted: false
-      ),
-      argsRedacted: argsRedacted,
-      pendingApproval: nil
-    )
-  }
-
-  func trifectaApprovalBlock(
-    action: ToolAction,
-    argsRedacted: String,
-    approvalAlreadyPending: Bool
-  ) -> Verdict {
-    .block(
-      payload: ToolPayload(
-        content: """
-          BLOCKED_PENDING_APPROVAL: this fetch needs the owner's approval because \
-          this session has read external content and holds private data. \
-          Explain briefly why you want to fetch it and finish your reply.
-          """,
-        status: .blockedPendingApproval,
-        ingestedUntrusted: false
-      ),
-      argsRedacted: argsRedacted,
-      pendingApproval: approvalAlreadyPending
-        ? nil
-        : ToolApprovalRequest(action: action, reason: .exfilTrifecta)
-    )
   }
 }
 
@@ -251,8 +220,7 @@ private extension ToolPolicyGate {
           status: .blockedPendingApproval,
           ingestedUntrusted: false
         ),
-        argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
-        pendingApproval: nil
+        argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
       )
     }
 
@@ -295,8 +263,7 @@ private extension ToolPolicyGate {
   func askTierBlock(reason: String, call: ToolCall) -> Verdict {
     .block(
       payload: ToolPayload(content: reason, status: .error, ingestedUntrusted: false),
-      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
-      pendingApproval: nil
+      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
     )
   }
 
@@ -360,11 +327,10 @@ public struct GatedToolDispatcher: ToolDispatching {
     }
     // (2)/(3) the gate
     switch gate.evaluate(call: call, tool: tool, context: context) {
-    case .block(let payload, let argsRedacted, let pendingApproval):
+    case .block(let payload, let argsRedacted):
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
-        argsRedacted: argsRedacted,
-        pendingApproval: pendingApproval
+        argsRedacted: argsRedacted
       )
     case .requireApproval(let recorded):
       // The recorded action rides the outcome to the loop (Task 12), which sets the pending action
@@ -381,7 +347,7 @@ public struct GatedToolDispatcher: ToolDispatching {
         argsRedacted: gate.renderRedacted(argsJSON: call.argumentsJSON),
         requiresApproval: recorded
       )
-    case .allow(let argsRedacted, let consumedGrant, let action):
+    case .allow(let argsRedacted, let action):
       // (4) execute under the tool's own timeout, on the gate-resolved canonical target
       let payload = await executeWithTimeout(
         tool: tool,
@@ -390,8 +356,7 @@ public struct GatedToolDispatcher: ToolDispatching {
       )
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
-        argsRedacted: argsRedacted,
-        consumedGrant: consumedGrant
+        argsRedacted: argsRedacted
       )
     }
   }

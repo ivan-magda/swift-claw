@@ -23,7 +23,7 @@ import Testing
       chatId: 7,
       buildResult: makeBuildResult(),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0,
       carryOver: carryOver
@@ -47,7 +47,7 @@ import Testing
       chatId: 7,
       buildResult: makeBuildResult(),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )

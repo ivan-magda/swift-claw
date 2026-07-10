@@ -44,7 +44,7 @@ extension RunCommand {
     )
 
     let workspace = FileSystemWorkspace(
-      root: deps.config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
+      root: deps.config.stateRoot.appendingPathComponent(StateFile.workspace, isDirectory: true)
     )
     let agentStack = makeAgentStack(
       deps: deps,
@@ -58,7 +58,7 @@ extension RunCommand {
       coordination: coordination,
       agentStack: agentStack
     )
-    let approvalFabric = await makeApprovalFabric(
+    let approvalFabric = makeApprovalFabric(
       deps: deps,
       coordination: coordination,
       agentStack: agentStack,
@@ -157,7 +157,6 @@ private extension RunCommand {
       agent: agentStack.agent,
       budget: deps.config.budget,
       contextBuilder: agentStack.contextBuilder,
-      pendingConfirmations: coordination.pendingConfirmations,
       notifyOutbox: { outboxSignal.poke() },
       breaker: BudgetBreaker(budget: deps.config.budget),
       delivery: deps.transport,
@@ -175,7 +174,7 @@ private extension RunCommand {
     coordination: TurnCoordination,
     agentStack: AgentStack,
     turnRunner: TurnRunner
-  ) async -> ApprovalFabric {
+  ) -> ApprovalFabric {
     let contextBuilder = agentStack.contextBuilder
     let approvedExecutor = ApprovedActionExecutor(
       tools: agentStack.toolDispatcher.toolsByName,
@@ -195,7 +194,7 @@ private extension RunCommand {
       now: { Date() },
       logger: deps.logger
     )
-    await coordination.deferredParker.adopt(approvalWaiter)
+    coordination.deferredParker.adopt(approvalWaiter)
 
     let handler = ApprovalCallbackHandler.make(
       processed: deps.stores.processed,
@@ -380,6 +379,8 @@ private extension RunCommand {
 
     var tools: [any Tool] = [
       FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
+      FileWriteTool(workspaceRoot: workspace.root, redactor: redactor),
+      MemoryWriteTool(redactor: redactor),
       WebFetchTool(http: toolExecutor, resolver: SystemAddressResolver(), redactor: redactor),
     ]
 
@@ -591,6 +592,7 @@ private extension RunCommand {
   ) -> @Sendable () async -> Void {
     let reconciler = ApprovalBootReconciler(
       approvals: stores.approvals,
+      runs: stores.runs,
       lanes: lanes,
       coordinator: coordinator,
       waiter: waiter,

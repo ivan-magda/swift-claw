@@ -94,7 +94,7 @@ import Testing
       chatId: 7,
       buildResult: makeBuildResult(),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -145,7 +145,7 @@ import Testing
       chatId: 7,
       buildResult: makeBuildResult(),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -181,7 +181,7 @@ import Testing
       chatId: 7,
       buildResult: makeBuildResult(hasPrivateDataAccess: true),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -209,7 +209,7 @@ import Testing
       chatId: 7,
       buildResult: makeBuildResult(hasPrivateDataAccess: false),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )

@@ -1,5 +1,6 @@
 import ClawCore
 import Logging
+import Synchronization
 
 /// The process-local resolution of a durable approval. The `approvals` row stays the source of
 /// truth; this only wakes the held lane.
@@ -70,6 +71,40 @@ public protocol ApprovalParking: Sendable {
     chatId: Int64,
     revalidatePolicyOnApprove: Bool
   ) async
+}
+
+/// Breaks the `turnRunner` ⇄ `approvalWaiter` construction cycle: `TurnRunner` needs a `parker`,
+/// and the real parker (the waiter) needs `turnRunner` as its dispatcher. Adopted once during
+/// composition, before the service group (or the first test update) runs.
+public final class DeferredApprovalParker: ApprovalParking {
+  private let wrapped = Mutex<(any ApprovalParking)?>(nil)
+
+  public init() {}
+
+  public func adopt(_ parker: any ApprovalParking) {
+    wrapped.withLock { boxed in
+      boxed = parker
+    }
+  }
+
+  public func park(
+    approvalId: Int64,
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    revalidatePolicyOnApprove: Bool
+  ) async {
+    let parker = wrapped.withLock { boxed in
+      boxed
+    }
+    await parker?.park(
+      approvalId: approvalId,
+      runId: runId,
+      sessionId: sessionId,
+      chatId: chatId,
+      revalidatePolicyOnApprove: revalidatePolicyOnApprove
+    )
+  }
 }
 
 /// Phase 2 placeholder: HOLDS the session lane by awaiting the coordinator, then returns without

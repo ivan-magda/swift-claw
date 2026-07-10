@@ -19,19 +19,34 @@ import Testing
 /// races the later signal. When the nil-resume wins, `park` exits early and never fills the
 /// placeholder — a dangling "awaiting owner approval" tool_call is left on the now-terminal run.
 ///
-/// To make the nil-resume win the race deterministically, the session carries extra cancellable
-/// runs: the parked run has the lowest id, so `/stop`//`new` cancel it FIRST (spawning its detached
-/// cancel task) while its `signal` is deferred behind every other run's `lane.cancel` hop. Under one
-/// cooperative thread (`SWIFT_MAX_CONCURRENCY_THREADS=1`, the project's nproc=1 convention for
-/// concurrency tests) that head start lets `cancelWaiter` reach the coordinator before the signal, so
-/// the pre-fix code leaves the placeholder dangling. On a multi-threaded scheduler the atomic
-/// `signal` wins, so the pre-fix bug does not surface there. The fixed ordering signals before any
-/// cancel, so the fill lands on every cycle under either scheduler.
+/// To make the nil-resume win the race deterministically the session carries padding: `paddingRuns`
+/// extra cancellable runs, each with its own PENDING approval, plus the real parked run/approval.
+/// The parked run has the lowest run id and the real approval the HIGHEST approval id (padding is
+/// seeded first), which stretches the deferral window each command opens between spawning the
+/// detached `cancelWaiter` and delivering the real signal:
+///
+/// - `/stop` cancels the parked run FIRST (lowest id, ascending order) — spawning its detached
+///   cancel task — then makes one `await lane.cancel` hop per padding run before the signal loop.
+/// - `/new` cancels the whole lane in one `cancelAll()`, so it has no per-run cancel loop; instead
+///   the real approval (highest id) is signalled LAST, deferred behind one `await coordinator.signal`
+///   hop per padding approval.
+///
+/// Either way the detached `cancelWaiter` gets a long head start, so under one cooperative thread
+/// (`SWIFT_MAX_CONCURRENCY_THREADS=1`, the project's nproc=1 convention for concurrency tests) it
+/// reaches the coordinator before the signal and the pre-fix code leaves the placeholder dangling on
+/// essentially every cycle. On a multi-threaded scheduler the atomic `signal` wins, so the pre-fix
+/// bug does not surface there. The fixed ordering signals before any cancel, so the fill lands on
+/// every cycle under either scheduler.
 @Suite struct CommandApprovalCancelSignalRaceTests {
-  /// Extra cancellable runs queued ahead of the parked approval's signal in the command's cancel
-  /// loop — they defer the signal enough for the parked run's detached cancel task to win the
-  /// pre-fix race under cooperative FIFO scheduling.
-  private static let paddingRuns = 64
+  /// Extra cancellable runs (each carrying a PENDING approval) that pad the command's cancel loop
+  /// (`/stop`) and signal loop (`/new`), deferring the real approval's signal long enough for the
+  /// detached cancel task to win the pre-fix race under cooperative scheduling. Sized so both
+  /// commands catch the pre-fix bug on ~99% of cycles at nproc=1 (empirically measured).
+  private static let paddingRuns = 96
+
+  /// Cycles per test. With ~99% per-cycle catch a dozen would already be decisive; 20 keeps a wide
+  /// margin against scheduler variance across machines while staying well under the old 40.
+  private static let cycles = 20
 
   // MARK: - Doubles
 
@@ -86,7 +101,7 @@ import Testing
   func liveStopFillsTheParkedObservationAndFreesTheLaneEveryCycle() async throws {
     // The pre-fix (cancel-then-signal) ordering fails this: the parked waiter's nil-resume wins the
     // race and skips the fill. The fixed ordering fills the observation on every cycle.
-    for cycle in 0..<40 {
+    for cycle in 0..<Self.cycles {
       // given / when
       let observation = try await runLiveCommandCycle(command: "/stop")
 
@@ -101,7 +116,7 @@ import Testing
 
   @Test(.timeLimit(.minutes(1)))
   func liveNewFillsTheParkedObservationAndFreesTheLaneEveryCycle() async throws {
-    for cycle in 0..<40 {
+    for cycle in 0..<Self.cycles {
       // given / when
       let observation = try await runLiveCommandCycle(command: "/new")
 
@@ -195,6 +210,11 @@ private extension CommandApprovalCancelSignalRaceTests {
     let sessionId = try #require(claim.sessionId)
     let runId = try #require(claim.runId)
     _ = try #require(try runs.pickUp(runId: runId, now: Date()))
+
+    // Padding is seeded BEFORE the real approval so the real approval holds the HIGHEST approval id
+    // and is therefore signalled LAST (`resolvePendingApprovals` orders by id ASC) — see below.
+    try seedPadding(queue: queue, sessionId: sessionId)
+
     let observationMessageId = try seedParkedApproval(
       queue: queue,
       sessionId: sessionId,
@@ -203,8 +223,6 @@ private extension CommandApprovalCancelSignalRaceTests {
     let approvalId = try queue.read { db in
       try #require(try Int64.fetchOne(db, sql: "SELECT id FROM approvals WHERE nonce = 'nonce-a'"))
     }
-
-    try seedPaddingRuns(sessions: sessions, runs: runs, chatId: chatId)
 
     let coordinator = ApprovalCoordinator()
     let lanes = SessionLaneRegistry()
@@ -238,27 +256,46 @@ private extension CommandApprovalCancelSignalRaceTests {
     )
   }
 
-  /// Extra RUNNING runs in the same session. They carry no approval, so they only pad the command's
-  /// cancel loop, deferring the parked approval's signal behind their `lane.cancel` hops.
-  func seedPaddingRuns(
-    sessions: SessionMessageStoreGRDB,
-    runs: RunStoreGRDB,
-    chatId: Int64
-  ) throws {
-    for index in 0..<Self.paddingRuns {
-      let paddingClaim = try sessions.claimAndPersistInbound(
-        InboundMessage(
-          updateId: Int64(1_000 + index),
-          sessionKey: SessionKey.telegramDM(chatId: chatId),
-          chatId: chatId,
-          userId: chatId,
-          text: "padding \(index)",
-          isEdited: false,
-          ts: Date()
+  /// Extra RUNNING runs, each carrying its own PENDING approval, in the same session. They pad BOTH
+  /// deferral windows the pre-fix bug races against:
+  ///
+  /// - `/stop` loops `for runId in cancelledRunIds { await lane.cancel(runId) }`, so each padding
+  ///   RUN adds one no-op `lane.cancel` await hop before the signal loop.
+  /// - `/new` calls `lane.cancelAll()` once (no per-run loop), so runs alone can't defer its signal.
+  ///   Instead each padding APPROVAL adds one `await coordinator.signal` hop to the signal loop; the
+  ///   real approval has the highest id (seeded last) so it is signalled LAST, deferred behind all
+  ///   of them — long enough for the parked waiter's detached cancel task to win the race.
+  ///
+  /// The command path reads only their `id`/`state`, so they are inserted raw in a SINGLE
+  /// transaction — the old per-run `claimAndPersistInbound` + `pickUp` path cost two write
+  /// transactions each and dominated the fixture's setup time.
+  func seedPadding(queue: DatabaseQueue, sessionId: Int64) throws {
+    let now = Date()
+    let argsJSON = #"{"path":"/w/pad.md"}"#
+    let argsHash = ApprovalArgsHash.sha256Hex(argsJSON)
+    try queue.write { db in
+      for index in 0..<Self.paddingRuns {
+        try db.execute(
+          sql: """
+            INSERT INTO runs(session_id, state, created_ts, updated_ts)
+            VALUES (?, ?, ?, ?)
+            """,
+          arguments: [sessionId, RunState.running.rawValue, now, now]
         )
-      )
-      let paddingRunId = try #require(paddingClaim.runId)
-      _ = try #require(try runs.pickUp(runId: paddingRunId, now: Date()))
+        let paddingRunId = db.lastInsertedRowID
+        try db.execute(
+          sql: """
+            INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+              args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+              reason, created_ts, expires_ts)
+            VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/pad.md', ?, 'pv', 42, ?, 0, ?,
+              'ask_tier', 1782000000, 1782003600)
+            """,
+          arguments: [
+            paddingRunId, sessionId, argsJSON, argsHash, "pad-\(index)", "pad-c\(index)",
+          ]
+        )
+      }
     }
   }
 

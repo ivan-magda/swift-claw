@@ -1,15 +1,10 @@
 import ClawCore
 import Foundation
 
-#if canImport(Glibc)
-  import Glibc
-#else
-  import Darwin
-#endif
-
-/// Workspace file READ (§7.1). Containment (FR-T4): resolve the joined path to its canonical
-/// real path (`realpath` — symlinks and `..` fully resolved) and assert the canonical workspace
-/// root is a path-component prefix of the FINAL target.
+/// Workspace file READ (§7.1). Containment (FR-T4) lives in `WorkspacePathContainment`: the
+/// joined path is resolved to its canonical real path (`realpath` — symlinks and `..` fully
+/// resolved) and the canonical workspace root must be a path-component prefix of the FINAL
+/// target.
 public struct FileReadTool: Tool {
   private let workspaceRoot: URL
   private let redactor: SecretRedactor
@@ -58,19 +53,15 @@ public struct FileReadTool: Tool {
     else {
       return errorPayload("file_read needs a non-empty \"path\" argument.")
     }
-    guard path.hasPrefix("/") == false else {
-      return errorPayload("Absolute paths are not allowed; use a workspace-relative path.")
-    }
-
-    guard let canonicalRoot = Self.canonicalPath(workspaceRoot.path) else {
+    guard let canonicalRoot = WorkspacePathContainment.canonicalPath(workspaceRoot.path) else {
       return errorPayload("The workspace root is unavailable.")
     }
-    let joined = workspaceRoot.appendingPathComponent(path).path
-    guard let canonicalTarget = Self.canonicalPath(joined) else {
-      return errorPayload("No file exists at \(path).")
-    }
-    guard Self.isContained(target: canonicalTarget, root: canonicalRoot) else {
-      return errorPayload("That path resolves outside the workspace, so I can't read it.")
+    let canonicalTarget: String
+    switch WorkspacePathContainment.resolveExisting(path: path, root: workspaceRoot.path) {
+    case .refused(let reason):
+      return errorPayload(reason)
+    case .resolved(let resolved):
+      canonicalTarget = resolved
     }
 
     guard let data = FileManager.default.contents(atPath: canonicalTarget) else {
@@ -91,22 +82,6 @@ public struct FileReadTool: Tool {
       ingestedUntrusted: true,  // a workspace file can be a downloaded artifact (FR-O3)
       readPrivateData: readPrivateData
     )
-  }
-
-  // MARK: - Load-bearing
-
-  /// `realpath(3)`: nil when the path (or any component) does not exist.
-  private static func canonicalPath(_ path: String) -> String? {
-    guard let resolved = realpath(path, nil) else {
-      return nil
-    }
-    defer { free(resolved) }
-    return String(cString: resolved)
-  }
-
-  /// Path-COMPONENT prefix, not string prefix — `/a/bc` must not count as inside `/a/b`.
-  private static func isContained(target: String, root: String) -> Bool {
-    target == root || target.hasPrefix(root + "/")
   }
 
   private func errorPayload(_ reason: String) -> ToolPayload {

@@ -72,9 +72,14 @@ struct SC7Harness {
     return try pool.read { database in
       try Row.fetchAll(
         database,
-        sql: "SELECT action, tool, decision FROM audit_events ORDER BY id"
+        sql: "SELECT actor, action, tool, decision FROM audit_events ORDER BY id"
       ).map { row in
-        AuditRow(action: row["action"], tool: row["tool"], decision: row["decision"])
+        AuditRow(
+          actor: row["actor"],
+          action: row["action"],
+          tool: row["tool"],
+          decision: row["decision"]
+        )
       }
     }
   }
@@ -233,11 +238,12 @@ func makeSC7Harness(
     agent: agent,
     budget: .default,
     contextBuilder: contextBuilder,
-    pendingConfirmations: registry,
     notifyOutbox: {},
     breaker: withBreaker ? BudgetBreaker(budget: .default) : nil,
     delivery: withBreaker ? transport : nil,
     now: { clock.now },
+    // Inert on purpose: the SC7 assertions never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: logger
   )
 

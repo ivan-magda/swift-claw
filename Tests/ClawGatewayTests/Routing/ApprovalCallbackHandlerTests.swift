@@ -274,10 +274,13 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     let callback = try #require(update.callback)
     let outcome = await harness.handler.handle(callback, updateId: update.updateId)
 
-    // then
+    // then — actor is `system`, not `owner`: owner-attribution requires the RESOLVED approval row
+    // (`approval?.ownerUserId == callback.fromUserId` in denyAuth), and an unknown nonce resolves
+    // no row — the handler has no other owner identity, so even the owner's own tap is unattributed
     #expect(outcome == .processed)
     #expect(harness.approvals.approveCalls.isEmpty)
     #expect(harness.audit.events.first?.decision == "forbidden")
+    #expect(harness.audit.events.first?.actor == .system)
     #expect(await harness.callbacks.answers.count == 1)
   }
 

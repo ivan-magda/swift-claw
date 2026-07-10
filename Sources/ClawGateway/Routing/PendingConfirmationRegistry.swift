@@ -8,13 +8,12 @@ public enum CommandConfirmation: Sendable, Equatable {
   case scheduleArm(ValidatedSchedule)
 }
 
-/// What the confirmation slot can hold. Command confirmations resolve through the yes/no
-/// commit/cancel switch; a tool approval resolves by dispatching the reply as an ordinary
-/// persisted turn (§14). Two types, so each resolver switch is exhaustive over only the cases
-/// it can legally see — no "unreachable by ordering" arms.
+/// What the confirmation slot can hold: only owner COMMAND confirmations (`/remember`,
+/// `/memory delete`, schedule confirm-before-arm) still resolve through the ephemeral yes/no
+/// commit/cancel switch. Tool approvals are durable now (Inc 5a) — a parked run lives in the
+/// `approvals` table and resolves by authenticated button callback, never by a plain text reply.
 public enum PendingConfirmation: Sendable, Equatable {
   case command(CommandConfirmation)
-  case toolApproval(ToolApprovalRequest)
 }
 
 public actor PendingConfirmationRegistry {

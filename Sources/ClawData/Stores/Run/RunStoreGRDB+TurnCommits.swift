@@ -15,6 +15,9 @@ extension RunStoreGRDB {
         if turn.setTainted, currentState == .cancelled {
           try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
         }
+        if turn.setPrivateData, currentState == .cancelled {
+          try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
+        }
         return try Self.recordTerminalUsageIfNeeded(
           db,
           usage: turn.usage,
@@ -48,6 +51,9 @@ extension RunStoreGRDB {
       guard currentState == .running else {
         if turn.setTainted, currentState == .cancelled {
           try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+        }
+        if turn.setPrivateData, currentState == .cancelled {
+          try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
         }
         if let usage = turn.usage {
           return try Self.recordTerminalUsageIfNeeded(
@@ -83,10 +89,21 @@ extension RunStoreGRDB {
         try Self.updateRunUsage(db, usage: usage, now: now)
       }
 
-      _ = try Self.insertOutbox(db, runId: turn.runId, chunk: turn.chunk, now: now)
+      // Same collision guard as the completed path: a degraded RESUME must not silently drop
+      // its owner-facing reply against the run's already-enqueued approval prompt.
+      let stepBase = try Self.nextOutboxStepBase(db, runId: turn.runId)
+      _ = try Self.insertOutbox(
+        db,
+        runId: turn.runId,
+        chunk: Self.shiftedChunk(turn.chunk, by: stepBase),
+        now: now
+      )
 
       if turn.setTainted {
         try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+      }
+      if turn.setPrivateData {
+        try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
       }
 
       return .committed
@@ -142,12 +159,21 @@ private extension RunStoreGRDB {
     )
     try insertUsage(db, usage)
 
+    let stepBase = try nextOutboxStepBase(db, runId: turn.runId)
     for chunk in turn.chunks {
-      _ = try insertOutbox(db, runId: turn.runId, chunk: chunk, now: now)
+      _ = try insertOutbox(
+        db,
+        runId: turn.runId,
+        chunk: shiftedChunk(chunk, by: stepBase),
+        now: now
+      )
     }
 
     if turn.setTainted {
       try setSessionTainted(db, sessionId: turn.sessionId, now: now)
+    }
+    if turn.setPrivateData {
+      try setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
     }
   }
 

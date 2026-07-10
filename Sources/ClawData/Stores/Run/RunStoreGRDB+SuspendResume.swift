@@ -74,45 +74,88 @@ extension RunStoreGRDB {
 // MARK: - Approved Resume (Task 16)
 
 extension RunStoreGRDB {
-  public func completeApprovedObservation(
+  /// The shared claim body (§6.3/§6.6): exactly-once needs BOTH guards. The placeholder check is
+  /// per-approval — once the run suspends a second time it is AWAITING_APPROVAL again, so the
+  /// state flip alone would let a replay of an already-executed approval commit and steal the new
+  /// approval's park. A failed state flip with the placeholder intact means `/stop`//`new` drove
+  /// the run terminal after the approve CAS: resolve the placeholder in the SAME txn (history
+  /// never dangles) and tell the caller nothing may execute.
+  static func claimResume(
+    _ db: Database,
     runId: Int64,
     observationMessageId: Int64,
-    content: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws -> ApprovedExecutionClaim {
+    guard try observationIsPlaceholder(db, runId: runId, messageId: observationMessageId) else {
+      return .alreadyResumed
+    }
+    guard try transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
+      try fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: notResumableObservationContent
+      )
+      return .runNotResumable
+    }
+    return .committed
+  }
+
+  public func claimApprovedExecution(
+    runId: Int64,
+    observationMessageId: Int64,
+    notResumableObservationContent: String,
+    now: Date
+  ) throws -> ApprovedExecutionClaim {
     try database.writeMapping { db in
-      // Exactly-once (§6.3): the run flips AWAITING_APPROVAL → RUNNING through the reducer. A
-      // duplicate resume finds the run already RUNNING (or terminal) and no-ops — the observation
-      // (and, for memory_write, the fused insert) never double-apply. This is equivalent to the
-      // spec's "observation still placeholder" guard because the placeholder is only ever filled
-      // inside this same transaction.
-      guard try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
-        return .ignored
-      }
+      try Self.claimResume(
+        db,
+        runId: runId,
+        observationMessageId: observationMessageId,
+        notResumableObservationContent: notResumableObservationContent,
+        now: now
+      )
+    }
+  }
+
+  public func fillClaimedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String
+  ) throws {
+    try database.writeMapping { db in
       try Self.fillApprovedObservation(
         db,
         runId: runId,
         messageId: observationMessageId,
         content: content
       )
-      return .committed
     }
   }
 
-  public func applyApprovedMemoryWrite(
+  public func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws -> ApprovedExecutionClaim {
     try database.writeMapping { db in
-      guard try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
-        return .ignored
+      let claim = try Self.claimResume(
+        db,
+        runId: runId,
+        observationMessageId: observationMessageId,
+        notResumableObservationContent: notResumableObservationContent,
+        now: now
+      )
+      guard claim == .committed else {
+        return claim
       }
       // §6.3 exactly-once: the item insert shares this transaction with the observation fill, both
-      // gated by the AWAITING_APPROVAL → RUNNING flip above (D10 — the same db-scoped static
-      // `applyRemember` uses; MemoryStore.append would open its own txn and could not fuse).
+      // gated by the claim guards above (D10 — the same db-scoped static `applyRemember` uses;
+      // MemoryStore.append would open its own txn and could not fuse).
       _ = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
       try Self.fillApprovedObservation(
         db,
@@ -176,11 +219,23 @@ extension RunStoreGRDB {
     }
   }
 
-  public func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
+  public func failRunStalePolicy(
+    runId: Int64,
+    sessionId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    now: Date
+  ) throws -> Bool {
     try database.writeMapping { db in
       guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
         return false
       }
+      try Self.fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: observationContent
+      )
       try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
       try AuditLogGRDB.insertAudit(
         db,
@@ -195,6 +250,26 @@ extension RunStoreGRDB {
       )
       return true
     }
+  }
+
+  /// The per-approval half of the exactly-once guard: true while the approval's reserved
+  /// observation row still carries the placeholder content, i.e. no resume commit has landed for
+  /// THIS approval. Same row scoping as `fillApprovedObservation`.
+  static func observationIsPlaceholder(
+    _ db: Database,
+    runId: Int64,
+    messageId: Int64
+  ) throws -> Bool {
+    try Bool.fetchOne(
+      db,
+      sql: """
+        SELECT EXISTS(
+          SELECT 1 FROM messages
+          WHERE id = ? AND run_id = ? AND role = 'tool' AND content = ?
+        )
+        """,
+      arguments: [messageId, runId, placeholderObservationContent]
+    ) ?? false
   }
 
   /// UPDATEs the reserved placeholder observation row in place with the resolved result. Scoped to
@@ -288,7 +363,10 @@ private extension RunStoreGRDB {
   }
 
   /// Stamp the new approval id onto the button-carrying chunk so `markSent` can link
-  /// `prompt_message_id` (Task 10); explanation chunks keep their nil approval_id.
+  /// `prompt_message_id` (Task 10); explanation chunks keep their nil approval_id. The chunks are
+  /// re-based past the run's already-enqueued deliveries: a SECOND suspend in one run (approve →
+  /// resume → another gated proposal) would otherwise collide with the first prompt's dedup key
+  /// and be dropped silently — the run would park with no prompt for the owner to answer.
   static func enqueuePromptChunks(
     _ db: Database,
     runId: Int64,
@@ -296,6 +374,7 @@ private extension RunStoreGRDB {
     approvalId: Int64,
     now: Date
   ) throws {
+    let stepBase = try nextOutboxStepBase(db, runId: runId)
     for chunk in chunks {
       let linked = OutboxChunk(
         stepIndex: chunk.stepIndex,
@@ -305,16 +384,7 @@ private extension RunStoreGRDB {
         approvalId: chunk.replyMarkup != nil ? approvalId : chunk.approvalId,
         replyMarkup: chunk.replyMarkup
       )
-      _ = try insertOutbox(db, runId: runId, chunk: linked, now: now)
+      _ = try insertOutbox(db, runId: runId, chunk: shiftedChunk(linked, by: stepBase), now: now)
     }
-  }
-
-  /// §4.5 set-leg: the sticky private-data flag rides the suspend commit from its first landing
-  /// (D6). The read-leg, gate-leg, and `/new` clear land in Task 23 — this is set-only.
-  static func setSessionPrivateData(_ db: Database, sessionId: Int64, now: Date) throws {
-    try db.execute(
-      sql: "UPDATE sessions SET has_private_data = 1, updated_ts = ? WHERE id = ?",
-      arguments: [now, sessionId]
-    )
   }
 }

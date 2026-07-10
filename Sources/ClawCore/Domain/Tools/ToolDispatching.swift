@@ -7,54 +7,45 @@ public struct ToolDispatchContext: Sendable, Equatable {
   public let runIngestedUntrusted: Bool
   public let assemblyPrivateData: Bool
   public let runPrivateData: Bool
-  public let grant: OneTurnGrant?
+  /// §4.5: the persisted `sessions.has_private_data` flag. The trifecta private-data leg is
+  /// `assemblyPrivateData ∪ runPrivateData ∪ sessionHasPrivateData`, so the gate stays armed after
+  /// the context window rolls past the private read that first set it (closes the §12 over-cap gap).
+  public let sessionHasPrivateData: Bool
   public let approvalAlreadyPending: Bool
-  /// True for scheduled/heartbeat runs (§10): the gate converts every would-park approval
-  /// outcome into an immediate audited DENY. No default — every construction site decides
-  /// explicitly (secure-by-default; a forgotten site is a compile error, not a privilege grant).
-  public let nonInteractive: Bool
 
   public init(
     sessionTainted: Bool,
     runIngestedUntrusted: Bool,
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
-    grant: OneTurnGrant?,
-    approvalAlreadyPending: Bool,
-    nonInteractive: Bool
+    sessionHasPrivateData: Bool,
+    approvalAlreadyPending: Bool
   ) {
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
     self.assemblyPrivateData = assemblyPrivateData
     self.runPrivateData = runPrivateData
-    self.grant = grant
+    self.sessionHasPrivateData = sessionHasPrivateData
     self.approvalAlreadyPending = approvalAlreadyPending
-    self.nonInteractive = nonInteractive
   }
 }
 
 /// One dispatched call's full result: the observation, the audit-safe args rendering (§9.1 —
-/// matched spans replaced, never the secret), the first-trip approval request, and whether the
-/// grant was consumed.
+/// matched spans replaced, never the secret), and the recorded action when the gate parked the
+/// call for the owner's durable approval.
 public struct ToolDispatchOutcome: Sendable, Equatable {
   public let observation: ToolObservation
   public let argsRedacted: String
-  public let pendingApproval: ToolApprovalRequest?
   public let requiresApproval: RecordedToolAction?
-  public let consumedGrant: Bool
 
   public init(
     observation: ToolObservation,
     argsRedacted: String,
-    pendingApproval: ToolApprovalRequest? = nil,
-    requiresApproval: RecordedToolAction? = nil,
-    consumedGrant: Bool = false
+    requiresApproval: RecordedToolAction? = nil
   ) {
     self.observation = observation
     self.argsRedacted = argsRedacted
-    self.pendingApproval = pendingApproval
     self.requiresApproval = requiresApproval
-    self.consumedGrant = consumedGrant
   }
 }
 

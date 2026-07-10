@@ -57,24 +57,23 @@ public enum ToolApprovalPrompt {
     return lines.joined(separator: "\n")
   }
 
-  /// The retired Inc 3b ephemeral trifecta prompt (§9.2), still rendered by `TurnRunner`'s
-  /// pending-approval path (`TurnRunner.swift:212`) until Task 24 deletes the ephemeral flow. Kept
-  /// exhaustive over `ApprovalReason` so it compiles alongside the durable renderer.
-  public static func text(for request: ToolApprovalRequest) -> String {
-    switch request.reason {
-    case .exfilTrifecta:
-      """
-      ⚠ I want to fetch
-      \(request.action.target)
-      This session has read external content and holds private data.
-      Reply yes to allow this one fetch; anything else cancels.
-      """
-    case .askTier:
-      """
-      ⚠ I want to run \(request.action.tool) on
-      \(request.action.target)
-      This action changes state and needs your explicit approval.
-      """
+  /// The prompt as ready-to-enqueue outbox chunks. One chunk in the common case; a prompt that
+  /// exceeds a single Telegram message (an FR-T5 never-truncated URL can be arbitrarily long)
+  /// splits grapheme-safely instead of parking one undeliverable row that would stall the shared
+  /// outbox. The inline keyboard rides the FINAL chunk — the one ending with the tap instruction —
+  /// and the suspend commit stamps `approval_id` onto exactly that keyboard-carrying chunk
+  /// (`enqueuePromptChunks`), so button disarm keeps working across a split.
+  public static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
+    let parts = ReplySplitter.split(text: text(for: input))
+    return parts.enumerated().map { index, payload in
+      OutboxChunk(
+        stepIndex: index,
+        chatId: chatId,
+        payload: payload,
+        payloadHash: ContentHash.fnv1a(payload),
+        approvalId: nil,
+        replyMarkup: index == parts.count - 1 ? ApprovalKeyboard.markup(nonce: nonce) : nil
+      )
     }
   }
 }

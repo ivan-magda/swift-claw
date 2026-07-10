@@ -5,13 +5,11 @@ import Logging
 
 /// Injected behind a protocol so the router/poller tests stay decoupled from the real provider.
 public protocol TurnDispatching: Sendable {
-  // swiftlint:disable:next function_parameter_count
   func run(
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64,
-    grant: OneTurnGrant?
+    triggerMessageId: Int64
   ) async throws
   /// Continues a run the approval waiter already flipped AWAITING_APPROVAL → RUNNING: no pick-up,
   /// context bound to the filled observation row, budget counters carried over (§6.3).
@@ -37,9 +35,6 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  /// One approval slot per session; a `.completed` run that tripped an approval gate parks its
-  /// request here (only after its commit wins arbitration) so a later `yes` can arm the grant.
-  private let pendingConfirmations: PendingConfirmationRegistry
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until Task 6 wires the dispatcher.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that
@@ -69,12 +64,14 @@ public struct TurnRunner: TurnDispatching {
     agent: AgentRuntime,
     budget: RunBudget,
     contextBuilder: ContextBuilder,
-    pendingConfirmations: PendingConfirmationRegistry,
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     delivery: (any MessageDelivery)? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
-    parker: any ApprovalParking = InertApprovalParker(coordinator: ApprovalCoordinator()),
+    // No default: an ask-tier suspend parks the lane on this seam, and a composition site that
+    // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
+    // would hold that lane forever. Every caller chooses its parker explicitly.
+    parker: any ApprovalParking,
     approvalExpirySeconds: Int = 3600,
     logger: Logger
   ) {
@@ -85,7 +82,6 @@ public struct TurnRunner: TurnDispatching {
     self.agent = agent
     self.budget = budget
     self.contextBuilder = contextBuilder
-    self.pendingConfirmations = pendingConfirmations
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.delivery = delivery
@@ -99,8 +95,7 @@ public struct TurnRunner: TurnDispatching {
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64,
-    grant: OneTurnGrant?
+    triggerMessageId: Int64
   ) async throws {
     guard !Task.isCancelled else {
       return
@@ -150,7 +145,7 @@ public struct TurnRunner: TurnDispatching {
       chatId: chatId,
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
-      grant: grant,
+      sessionHasPrivateData: inputs.snapshot.hasPrivateData,
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
       origin: origin,
@@ -218,7 +213,7 @@ public struct TurnRunner: TurnDispatching {
         chatId: chatId,
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
-        grant: nil,
+        sessionHasPrivateData: inputs.snapshot.hasPrivateData,
         todayTokens: inputs.todayTokens,
         todayUSD: inputs.todayUSD,
         origin: origin,
@@ -334,12 +329,7 @@ private extension TurnRunner {
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
-    // The deterministic approval prompt (D7) is APPENDED after the model's reply; overflow owner
-    // notices keep their PREPEND slot (rev.1 L1). Delivery-only — never stored as history.
-    let appendedNotices =
-      outcome.pendingApproval.map { approval in
-        [ToolApprovalPrompt.text(for: approval)]
-      } ?? []
+    let appendedNotices: [String] = []
     // Spec §12 ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
     // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
     let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
@@ -362,16 +352,12 @@ private extension TurnRunner {
       usage: usage,
       chunks: chunks,
       exchanges: outcome.exchanges,
-      setTainted: outcome.ingestedUntrusted
+      setTainted: outcome.ingestedUntrusted,
+      setPrivateData: outcome.hadPrivateData
     )
 
     switch try runs.commitAssistantTurn(turn, now: context.committedAt) {
     case .committed:
-      // Park ONLY after the commit won arbitration — a superseded run must not leave a live
-      // approval behind. One slot per session: parking replaces (deny-by-default holds).
-      if let approval = outcome.pendingApproval {
-        await pendingConfirmations.park(.toolApproval(approval), sessionId: context.sessionId)
-      }
       try auditCompleted(content: content, suppressedAck: suppressHeartbeatAck, in: context)
       notifyOutbox()
       await notifyDailyCapIfTripped(
@@ -434,6 +420,7 @@ private extension TurnRunner {
       usage: usage,
       exchanges: outcome.exchanges,
       setTainted: outcome.ingestedUntrusted,
+      setPrivateData: outcome.hadPrivateData,
       message: ownerVisiblePayload(
         reply: Degradation.message(for: kind),
         ownerNotices: context.ownerNotices
@@ -463,6 +450,7 @@ private extension TurnRunner {
       usage: nil,
       exchanges: outcome.exchanges,
       setTainted: outcome.ingestedUntrusted,
+      setPrivateData: outcome.hadPrivateData,
       message: ownerVisiblePayload(
         reply: Degradation.budget(cap: cap),
         ownerNotices: context.ownerNotices
@@ -489,6 +477,7 @@ private extension TurnRunner {
     usage: ProviderUsage?,
     exchanges: [ToolExchange],
     setTainted: Bool,
+    setPrivateData: Bool,
     message: String,
     action: AuditAction,
     decision: String,
@@ -509,7 +498,8 @@ private extension TurnRunner {
         usage: usage,
         chunk: chunk,
         exchanges: exchanges,
-        setTainted: setTainted
+        setTainted: setTainted,
+        setPrivateData: setPrivateData
       ),
       now: committedAt
     )
@@ -547,6 +537,8 @@ private extension TurnRunner {
       usage: nil,
       exchanges: [],
       setTainted: setTainted,
+      // No turn ran on this path, so no private-data leg is known.
+      setPrivateData: false,
       message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
       action: .turnDegraded,
       decision: DegradationKind.contextUnavailable.rawValue,

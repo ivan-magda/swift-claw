@@ -16,8 +16,7 @@ private actor BlockingTurnRunner: TurnDispatching {
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64,
-    grant: OneTurnGrant?
+    triggerMessageId: Int64
   ) async throws {
     callCount += 1
     started?.resume()

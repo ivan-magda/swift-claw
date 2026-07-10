@@ -274,7 +274,8 @@ import Testing
       history: [StoredMessage(role: .user, content: "hello", provenance: .trusted)],
       historyMessageIds: [1],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when — nothing private exists yet

@@ -31,6 +31,15 @@ import Testing
     }
   }
 
+  /// Scripts the executor seam directly: the commit outcome the waiter must branch on.
+  private struct ScriptedExecutor: ApprovedActionExecuting {
+    let commit: ApprovedCommitOutcome
+
+    func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
+      ApprovedExecutionOutcome(observationContent: "scripted", commit: commit)
+    }
+  }
+
   /// Records `resume` calls; `run` is unused on the waiter path.
   private actor ResumeRecorder: TurnDispatching {
     struct ResumeCall: Sendable, Equatable {
@@ -44,8 +53,7 @@ import Testing
       runId: Int64,
       sessionId: Int64,
       chatId: Int64,
-      triggerMessageId: Int64,
-      grant: OneTurnGrant?
+      triggerMessageId: Int64
     ) async throws {}
 
     func resume(
@@ -167,18 +175,20 @@ import Testing
     turns: ResumeRecorder,
     delivery: RecordingDelivery,
     callbacks: RecordingCallbacks,
-    currentPolicyVersion: @escaping @Sendable () throws -> String = { "pv" }
+    currentPolicyVersion: @escaping @Sendable () throws -> String = { "pv" },
+    executor: (any ApprovedActionExecuting)? = nil
   ) -> ApprovalWaiter {
     ApprovalWaiter(
       approvals: env.approvals,
       runs: env.runs,
       coordinator: coordinator,
-      executor: ApprovedActionExecutor(
-        tools: ["file_write": StubTool(toolName: "file_write", result: "Wrote 12 B.")],
-        runs: env.runs,
-        now: { Date() },
-        logger: Logger(label: "test")
-      ),
+      executor: executor
+        ?? ApprovedActionExecutor(
+          tools: ["file_write": StubTool(toolName: "file_write", result: "Wrote 12 B.")],
+          runs: env.runs,
+          now: { Date() },
+          logger: Logger(label: "test")
+        ),
       turns: turns,
       delivery: delivery,
       callbacks: callbacks,
@@ -250,6 +260,116 @@ import Testing
     #expect(await callbacks.disarmed == [env.promptMessageId])
   }
 
+  @Test func aStoreFailedCommitNotifiesTheOwnerAndLeavesTheRunAwaiting() async throws {
+    // given — the executor reports the commit threw at the store seam (NOT a duplicate resume)
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks,
+      executor: ScriptedExecutor(commit: .storeFailed)
+    )
+
+    // when
+    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then — no continuation, the owner is told, the buttons disarm, and the run STAYS
+    // AWAITING_APPROVAL with the row APPROVED, so the boot crash-window path recovers the pair
+    // after a restart (ApprovalBootReconcilerTests.approvedAwaitingRunReParksUnderCrashWindow-
+    // Revalidation covers that recovery leg)
+    #expect(try runState(env) == RunState.awaitingApproval.rawValue)
+    #expect(try approvalState(env) == ApprovalState.approved.rawValue)
+    #expect(await turns.resumeCalls.isEmpty)
+    #expect(
+      await delivery.texts == [
+        "The approved action could not be recorded; it will be retried after a restart."
+      ]
+    )
+    #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
+  @Test func aRunNotResumableOutcomeDisarmsWithoutNoticeOrResume() async throws {
+    // given — /stop won the claim race after the approve CAS; the executor reported it
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks,
+      executor: ScriptedExecutor(commit: .runNotResumable)
+    )
+
+    // when
+    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then — no continuation and NO extra owner notice (the /stop//`new` ack already covered
+    // it); the buttons still disarm
+    #expect(await turns.resumeCalls.isEmpty)
+    #expect(await delivery.texts.isEmpty)
+    #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
+  @Test func aRecordFailedOutcomeTellsTheOwnerTheActionRan() async throws {
+    // given — the tool executed but recording its result threw; the copy must NOT promise a retry
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks,
+      executor: ScriptedExecutor(commit: .recordFailed)
+    )
+
+    // when
+    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then
+    #expect(await turns.resumeCalls.isEmpty)
+    #expect(
+      await delivery.texts == [
+        "The approved action ran, but I couldn't record its result; a restart will settle things."
+      ]
+    )
+    #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
   @Test func bootRevalidationOnPolicyMismatchFailsTheRunAndLeavesTheRowApproved() async throws {
     // given — the recorded policy_version no longer matches the current one (§6.5 crash window)
     let env = try makeApprovedFixture(policyVersion: "pv-old")
@@ -277,11 +397,21 @@ import Testing
     )
 
     // then — the RUN fails, the row stays APPROVED (the one granted-then-denied pair), no resume,
-    // and the owner gets a plain-language notice
+    // the owner gets a plain-language notice, and the placeholder observation is RESOLVED — left
+    // dangling it would assert a pending approval to every later turn and false-trigger the boot
+    // claimed-window settlement on the next restart
     #expect(try runState(env) == RunState.failed.rawValue)
     #expect(try approvalState(env) == ApprovalState.approved.rawValue)
     #expect(await turns.resumeCalls.isEmpty)
     #expect(await delivery.texts.isEmpty == false)
+    let observation = try await env.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT content FROM messages WHERE id = ?",
+        arguments: [env.observationMessageId]
+      )
+    }
+    #expect(observation == "The approval was voided because the policy changed before it ran.")
     let auditDecision = try await env.queue.read { db in
       try String.fetchOne(
         db,

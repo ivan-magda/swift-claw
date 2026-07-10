@@ -200,7 +200,6 @@ import Testing
     #expect(calls.count == 1)
     let call = try #require(calls.first)
     #expect(call.chatId == 42)
-    #expect(call.grant == nil)
     let job = try #require(try harness.jobs.job(id: seeded.id))
     #expect(job.nextOccurrence == Self.nextDailyFire)
     let reply = await harness.transport.sent.last?.text ?? ""

@@ -40,21 +40,17 @@ public struct TurnOutcome: Sendable {
   /// commit path persists it as `setPrivateData`; the suspend commit (Task 14) is its first
   /// consumer, the rest of the §4.5 lifecycle lands in Task 23 (D6).
   public let hadPrivateData: Bool
-  /// A gate trip awaiting the owner's approval, if this run tripped one (§9).
-  public let pendingApproval: ToolApprovalRequest?
 
   public init(
     result: TurnResult,
     exchanges: [ToolExchange] = [],
     ingestedUntrusted: Bool = false,
-    hadPrivateData: Bool = false,
-    pendingApproval: ToolApprovalRequest? = nil
+    hadPrivateData: Bool = false
   ) {
     self.result = result
     self.exchanges = exchanges
     self.ingestedUntrusted = ingestedUntrusted
     self.hadPrivateData = hadPrivateData
-    self.pendingApproval = pendingApproval
   }
 }
 
@@ -121,7 +117,7 @@ public struct AgentRuntime: Sendable {
     chatId: Int64,
     buildResult: BuildResult,
     sessionTainted: Bool,
-    grant: OneTurnGrant?,
+    sessionHasPrivateData: Bool,
     todayTokens: Int,
     todayUSD: Double,
     origin: RunOrigin = .interactive,
@@ -149,9 +145,7 @@ public struct AgentRuntime: Sendable {
     var ingestedUntrusted = false
     var runPrivateData = false
 
-    var pendingApproval: ToolApprovalRequest?
     var pendingSuspension: PendingToolAction?
-    var remainingGrant = grant
 
     // Seeded from the carried-over usage (nil = a fresh run; §6.3 continuation carries the run's
     // persisted totals so the tool-call / token / USD caps keep counting across the suspension).
@@ -168,8 +162,7 @@ public struct AgentRuntime: Sendable {
         result: result,
         exchanges: exchanges,
         ingestedUntrusted: ingestedUntrusted,
-        hadPrivateData: buildResult.hasPrivateDataAccess || runPrivateData,
-        pendingApproval: pendingApproval
+        hadPrivateData: buildResult.hasPrivateDataAccess || runPrivateData
       )
     }
 
@@ -313,9 +306,8 @@ public struct AgentRuntime: Sendable {
           runIngestedUntrusted: ingestedUntrusted,
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
-          grant: remainingGrant,
-          approvalAlreadyPending: pendingApproval != nil || pendingSuspension != nil,
-          nonInteractive: origin != .interactive
+          sessionHasPrivateData: sessionHasPrivateData,
+          approvalAlreadyPending: pendingSuspension != nil
         )
 
         guard let toolDispatcher else {
@@ -357,12 +349,6 @@ public struct AgentRuntime: Sendable {
         }
         if dispatched.observation.readPrivateData {
           runPrivateData = true  // rev.1 H1
-        }
-        if dispatched.consumedGrant {
-          remainingGrant = nil  // single-use
-        }
-        if pendingApproval == nil, let request = dispatched.pendingApproval {
-          pendingApproval = request  // first trip parks; later trips are observation-only
         }
       }
 

@@ -171,8 +171,7 @@ private struct HeartbeatWorkspace: WorkspaceReading {
           runId: 901,
           sessionId: 501,
           chatId: 777,
-          triggerMessageId: 301,
-          grant: nil
+          triggerMessageId: 301
         )
     )
   }

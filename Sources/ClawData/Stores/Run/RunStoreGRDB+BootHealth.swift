@@ -53,21 +53,31 @@ extension RunStoreGRDB {
           noticeChatId = SessionKey.chatId(from: sessionKey)
         }
 
-        let sentCount =
-          try Int.fetchOne(
-            db,
-            sql: """
-              SELECT COUNT(*) FROM outbound_deliveries
-              WHERE run_id = ? AND status = 'SENT'
-              """,
-            arguments: [runId]
-          ) ?? 0
-        guard sentCount == 0, let chatId = noticeChatId else {
+        // Suppress the notice only when the owner already saw a genuine REPLY. The newest SENT
+        // row decides: an approval-prompt keyboard chunk (approval_id set) means the run
+        // suspended, was approved, and died before its continuation replied — the owner has
+        // heard nothing since tapping Approve, so the notice must still fire. (A RUNNING orphan
+        // can never trail a delivered reply mid-prompt: the keyboard chunk is the prompt's final
+        // step and must be SENT before the owner can approve at all.)
+        let newestSent = try Row.fetchOne(
+          db,
+          sql: """
+            SELECT approval_id FROM outbound_deliveries
+            WHERE run_id = ? AND status = 'SENT'
+            ORDER BY step_index DESC LIMIT 1
+            """,
+          arguments: [runId]
+        )
+        let ownerSawAReply = newestSent != nil && (newestSent?["approval_id"] as Int64?) == nil
+        guard ownerSawAReply == false, let chatId = noticeChatId else {
           continue
         }
 
+        // Re-based like every commit-time enqueue: a run that suspended before the crash already
+        // holds its approval prompt at step 0, and a raw step-0 notice would be dropped silently
+        // by the dedup key.
         let chunk = OutboxChunk(
-          stepIndex: 0,
+          stepIndex: try Self.nextOutboxStepBase(db, runId: runId),
           chatId: chatId,
           payload: degradationText,
           payloadHash: ContentHash.fnv1a(degradationText)
@@ -78,6 +88,52 @@ extension RunStoreGRDB {
       }
 
       return replies
+    }
+  }
+
+  public func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
+    runId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    noticeChatId: Int64,
+    noticeText: String,
+    now: Date
+  ) throws -> ClaimedApprovalBootOutcome {
+    try database.writeMapping { db in
+      guard
+        try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId)
+      else {
+        return .alreadyResolved
+      }
+      let state = try String.fetchOne(
+        db,
+        sql: "SELECT state FROM runs WHERE id = ?",
+        arguments: [runId]
+      )
+      if state == RunState.awaitingApproval.rawValue {
+        return .reparkForReplay
+      }
+
+      // Claimed, outcome unknown — settle in place. The run is normally already FAILED (the
+      // orphan sweep runs first); the transition covers a sweep that missed it and no-ops on any
+      // terminal state.
+      if try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil {
+        try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+      }
+      try Self.fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: observationContent
+      )
+      let chunk = OutboxChunk(
+        stepIndex: try Self.nextOutboxStepBase(db, runId: runId),
+        chatId: noticeChatId,
+        payload: noticeText,
+        payloadHash: ContentHash.fnv1a(noticeText)
+      )
+      _ = try Self.insertOutbox(db, runId: runId, chunk: chunk, now: now)
+      return .settled
     }
   }
 

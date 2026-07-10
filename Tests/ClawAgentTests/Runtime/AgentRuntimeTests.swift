@@ -24,7 +24,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -58,7 +58,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -96,7 +96,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -128,7 +128,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -161,7 +161,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 999_999,
       todayUSD: 0
     )
@@ -200,7 +200,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -237,7 +237,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -263,7 +263,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -290,7 +290,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -324,7 +324,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )

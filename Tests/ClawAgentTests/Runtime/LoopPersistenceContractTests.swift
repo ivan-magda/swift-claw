@@ -14,7 +14,7 @@ import Testing
       chatId: 1,
       buildResult: makeBuildResult(),
       sessionTainted: false,
-      grant: nil,
+      sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
     )

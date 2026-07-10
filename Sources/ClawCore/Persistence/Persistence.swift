@@ -37,6 +37,33 @@ public enum RunCommitResult: Sendable, Equatable {
   case ignored
 }
 
+/// Outcome of the pre-execution claim at the approved-resume seam (§6.3/§6.6). The claim is what
+/// makes an approved external write and a `/stop`//`new` cancellation mutually exclusive: both
+/// contend on the run row's FSM transition, so exactly one side ever owns the effect.
+public enum ApprovedExecutionClaim: Sendable, Equatable {
+  /// The AWAITING_APPROVAL → RUNNING flip committed; the caller now owns the execution.
+  case committed
+  /// The observation is no longer the placeholder — a duplicate signal is replaying an
+  /// already-executed resume. Nothing to do.
+  case alreadyResumed
+  /// The run reached a terminal state (`/stop`, `/new`) before the claim. Nothing may execute;
+  /// the placeholder observation was resolved with the not-run note in the claim's transaction.
+  case runNotResumable
+}
+
+/// Boot triage of an APPROVED approval whose observation is still the placeholder (§6.5/§6.6).
+public enum ClaimedApprovalBootOutcome: Sendable, Equatable {
+  /// The run is still AWAITING_APPROVAL: the crash landed between the approve CAS and the
+  /// execution claim, nothing ran — the §6.5 belt re-parks a waiter to replay the recorded action.
+  case reparkForReplay
+  /// The claim committed but the result record never landed (crash mid-execution): the run is
+  /// terminal (or was failed here), the placeholder was resolved with the unknown-outcome note,
+  /// and the owner notice was enqueued — all in one transaction.
+  case settled
+  /// The observation already holds a real result; nothing to do.
+  case alreadyResolved
+}
+
 public enum Provenance: String, Sendable, Equatable {
   case trusted
   case untrusted
@@ -156,17 +183,22 @@ public struct SessionContextSnapshot: Sendable, Equatable {
   public let historyMessageIds: [Int64]
   public let windowStartMessageId: Int64?
   public let isTainted: Bool
+  /// §4.5: the persisted private-data flag, fed into the trifecta gate's private-data leg so the
+  /// exfil gate stays armed even after the window rolls past the private read that set it.
+  public let hasPrivateData: Bool
 
   public init(
     history: [StoredMessage],
     historyMessageIds: [Int64],
     windowStartMessageId: Int64?,
-    isTainted: Bool
+    isTainted: Bool,
+    hasPrivateData: Bool
   ) {
     self.history = history
     self.historyMessageIds = historyMessageIds
     self.windowStartMessageId = windowStartMessageId
     self.isTainted = isTainted
+    self.hasPrivateData = hasPrivateData
   }
 }
 
@@ -290,6 +322,8 @@ public struct AssistantTurn: Sendable, Equatable {
   public let chunks: [OutboxChunk]
   public let exchanges: [ToolExchange]
   public let setTainted: Bool
+  /// §4.5 sticky private-data flag — persisted like `setTainted`, on every commit path.
+  public let setPrivateData: Bool
 
   public init(
     runId: Int64,
@@ -299,7 +333,8 @@ public struct AssistantTurn: Sendable, Equatable {
     usage: ProviderUsage,
     chunks: [OutboxChunk],
     exchanges: [ToolExchange] = [],
-    setTainted: Bool = false
+    setTainted: Bool = false,
+    setPrivateData: Bool = false
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -309,6 +344,7 @@ public struct AssistantTurn: Sendable, Equatable {
     self.chunks = chunks
     self.exchanges = exchanges
     self.setTainted = setTainted
+    self.setPrivateData = setPrivateData
   }
 }
 
@@ -320,6 +356,8 @@ public struct DegradedTurn: Sendable, Equatable {
   public let chunk: OutboxChunk
   public let exchanges: [ToolExchange]
   public let setTainted: Bool
+  /// §4.5 sticky private-data flag — persisted like `setTainted`, incl. on the failure path.
+  public let setPrivateData: Bool
 
   public init(
     runId: Int64,
@@ -328,7 +366,8 @@ public struct DegradedTurn: Sendable, Equatable {
     usage: ProviderUsage?,
     chunk: OutboxChunk,
     exchanges: [ToolExchange] = [],
-    setTainted: Bool = false
+    setTainted: Bool = false,
+    setPrivateData: Bool = false
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -337,6 +376,7 @@ public struct DegradedTurn: Sendable, Equatable {
     self.chunk = chunk
     self.exchanges = exchanges
     self.setTainted = setTainted
+    self.setPrivateData = setPrivateData
   }
 }
 

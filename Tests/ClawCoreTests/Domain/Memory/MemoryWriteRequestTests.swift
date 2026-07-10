@@ -84,6 +84,35 @@ import Testing
     #expect(request.confirmationText.contains("Warnings: possible secret-shaped text"))
   }
 
+  @Test func defaultsPreserveTheRememberCallSiteVerbatim() throws {
+    // given / when — no new arguments: the /remember flow must be byte-identical
+    let request = try MemoryWriteBuilder.build(rawText: "likes tea", kind: .user, sessionId: 3)
+
+    // then
+    #expect(request.item.source == .owner)
+    #expect(request.item.importance == .normal)
+    #expect(request.item.sensitivity == .normal)
+    #expect(request.confirmationText.contains("Reply yes to save, no to cancel."))
+  }
+
+  @Test func parameterizedBuildCarriesSourceImportanceAndSensitivity() throws {
+    // given / when — the memory_write call shape (§8.2)
+    let request = try MemoryWriteBuilder.build(
+      rawText: "prefers metric units",
+      kind: .user,
+      sessionId: nil,
+      source: .assistant,
+      importance: .high,
+      sensitivity: .high
+    )
+
+    // then — normalization and scans are the same code path; only the item fields move
+    #expect(request.item.source == .assistant)
+    #expect(request.item.importance == .high)
+    #expect(request.item.sensitivity == .high)
+    #expect(request.item.text == "prefers metric units")
+  }
+
   @Test func buildsOwnerNormalImportanceMemoryItem() throws {
     // given / when
     let request = try MemoryWriteBuilder.build(

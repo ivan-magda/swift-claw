@@ -9,7 +9,9 @@ import Testing
 // internal db-scoped static, not `public`, so a plain `import ClawData` can't reach it.
 @testable import ClawData
 
-@Suite struct ApprovalBootReconcilerTests {
+// The time limit converts a rendezvous regression (a park that never happens) into a bounded
+// failure — the spy's continuation waits would otherwise hang the whole test run silently.
+@Suite(.timeLimit(.minutes(1))) struct ApprovalBootReconcilerTests {
   /// Records every `park` and models the real waiter: it registers with the coordinator and awaits
   /// resolution, so the lane stays held until the row resolves. All rendezvous are continuation-based
   /// (never a sleep or a spin) so the suite is deterministic at nproc=1.
@@ -76,7 +78,10 @@ import Testing
       }
     }
 
+    private(set) var parkCallCount = 0
+
     private func deliver(_ call: Call) {
+      parkCallCount += 1
       if callWaiters.isEmpty {
         bufferedCalls.append(call)
       } else {
@@ -128,6 +133,7 @@ import Testing
     func reconciler(now instant: Date) -> ApprovalBootReconciler {
       ApprovalBootReconciler(
         approvals: store,
+        runs: RunStoreGRDB(writer: queue),
         lanes: lanes,
         coordinator: coordinator,
         waiter: spy,
@@ -154,23 +160,36 @@ import Testing
       expiresTs: Date
     ) throws -> Int64 {
       let canonicalArgsJSON = #"{"path":"/w/plan.md"}"#
-      let newApproval = NewApproval(
-        runId: runId,
-        sessionId: 1,
-        tool: "file_write",
-        canonicalArgsJSON: canonicalArgsJSON,
-        canonicalTarget: "/w/plan.md",
-        argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
-        policyVersion: "pv16",
-        ownerUserId: 7,
-        nonce: nonce,
-        observationMessageId: 1,
-        toolCallId: "c1",
-        reason: .askTier,
-        createdTs: createdTs,
-        expiresTs: expiresTs
-      )
-      return try queue.write { db in try ApprovalStoreGRDB.insertApproval(db, newApproval) }
+      // Production's suspend commit always inserts the placeholder observation row the approval
+      // points back at (§5.3), and `unresolvedAtBoot`'s crash-window arm keys on that placeholder
+      // still being unfilled — a dangling observation id would make the row invisible at boot.
+      return try queue.write { db in
+        try db.execute(
+          sql: """
+            INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+            VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
+            """,
+          arguments: [runId, RunStoreGRDB.placeholderObservationContent, Date()]
+        )
+        let observationMessageId = db.lastInsertedRowID
+        let newApproval = NewApproval(
+          runId: runId,
+          sessionId: 1,
+          tool: "file_write",
+          canonicalArgsJSON: canonicalArgsJSON,
+          canonicalTarget: "/w/plan.md",
+          argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
+          policyVersion: "pv16",
+          ownerUserId: 7,
+          nonce: nonce,
+          observationMessageId: observationMessageId,
+          toolCallId: "c1",
+          reason: .askTier,
+          createdTs: createdTs,
+          expiresTs: expiresTs
+        )
+        return try ApprovalStoreGRDB.insertApproval(db, newApproval)
+      }
     }
 
     func audits() throws -> [(action: String, decision: String)] {
@@ -206,6 +225,51 @@ import Testing
       coordinator: coordinator,
       spy: ParkingSpy(coordinator: coordinator)
     )
+  }
+
+  @Test func approvedClaimedRunIsSettledInPlaceWithoutAPark() async throws {
+    // given — the §6.6 claimed crash window after the orphan sweep: the claim committed and the
+    // process died before the result record, so boot finds run FAILED + APPROVED row + placeholder
+    let env = try makeFixture()
+    let claimedRun = try env.seedRun(state: RunState.failed.rawValue)
+    let now = Date(timeIntervalSince1970: 1_782_000_000)
+    let approvalId = try env.insertApproval(
+      runId: claimedRun,
+      nonce: "n-claimed",
+      createdTs: now,
+      expiresTs: now.addingTimeInterval(3600)
+    )
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'APPROVED' WHERE id = ?",
+        arguments: [approvalId]
+      )
+    }
+
+    // when
+    await env.reconciler(now: now).reconcile()
+
+    // then — settled in place, NO waiter park (there is nothing to resume): the placeholder is
+    // resolved with the unknown-outcome note and the owner notice is enqueued UNCONDITIONALLY —
+    // the run's sent approval prompt suppresses the generic degradation notice, so this is the
+    // only signal the owner gets
+    #expect(await env.spy.parkCallCount == 0)
+    let observation = try await env.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT content FROM messages WHERE run_id = ?",
+        arguments: [claimedRun]
+      )
+    }
+    #expect(observation?.contains("restarted") == true)
+    let notice = try await env.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT payload FROM outbound_deliveries WHERE run_id = ? AND status = 'PENDING'",
+        arguments: [claimedRun]
+      )
+    }
+    #expect(notice?.contains("file_write") == true)
   }
 
   @Test func terminalRunPendingApprovalIsResolvedWithNoOrphan() async throws {

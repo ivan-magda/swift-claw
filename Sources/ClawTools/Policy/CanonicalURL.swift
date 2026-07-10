@@ -9,8 +9,8 @@ public enum CanonicalURLError: Error, Sendable, Equatable {
 }
 
 /// The §9.2 canonical form — ONE algorithm serving both the owner's approval display and the
-/// grant's exact-match key, plus the full pre-dispatch URL policy (scheme/port/userinfo/IDN), so
-/// a URL can never win approval at gate time and then be refused at dispatch time.
+/// approval's exact-match target, plus the full pre-dispatch URL policy (scheme/port/userinfo/
+/// IDN), so a URL can never win approval at gate time and then be refused at dispatch time.
 public enum CanonicalURL {
   public static func canonicalize(_ raw: String) -> Result<String, CanonicalURLError> {
     guard

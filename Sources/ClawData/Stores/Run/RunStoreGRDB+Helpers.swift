@@ -188,9 +188,43 @@ extension RunStoreGRDB {
     return db.changesCount > 0
   }
 
+  /// A run's earlier commits may already occupy outbox steps (the §5.3 suspend prompt at step 0),
+  /// and `dedup_key` is `runId:stepIndex` under INSERT OR IGNORE — a colliding chunk would be
+  /// dropped SILENTLY. Every later enqueue therefore extends the run's delivery sequence from
+  /// this base (0 for an ordinary run, so the plain path is untouched).
+  static func nextOutboxStepBase(_ db: Database, runId: Int64) throws -> Int {
+    try Int.fetchOne(
+      db,
+      sql: "SELECT COALESCE(MAX(step_index) + 1, 0) FROM outbound_deliveries WHERE run_id = ?",
+      arguments: [runId]
+    ) ?? 0
+  }
+
+  /// The same chunk re-based into the run's delivery sequence (identity when `base == 0`).
+  static func shiftedChunk(_ chunk: OutboxChunk, by base: Int) -> OutboxChunk {
+    guard base > 0 else {
+      return chunk
+    }
+    return OutboxChunk(
+      stepIndex: chunk.stepIndex + base,
+      chatId: chunk.chatId,
+      payload: chunk.payload,
+      payloadHash: chunk.payloadHash,
+      approvalId: chunk.approvalId,
+      replyMarkup: chunk.replyMarkup
+    )
+  }
+
   static func setSessionTainted(_ db: Database, sessionId: Int64, now: Date) throws {
     try db.execute(
       sql: "UPDATE sessions SET tainted = 1, updated_ts = ? WHERE id = ?",
+      arguments: [now, sessionId]
+    )
+  }
+
+  static func setSessionPrivateData(_ db: Database, sessionId: Int64, now: Date) throws {
+    try db.execute(
+      sql: "UPDATE sessions SET has_private_data = 1, updated_ts = ? WHERE id = ?",
       arguments: [now, sessionId]
     )
   }

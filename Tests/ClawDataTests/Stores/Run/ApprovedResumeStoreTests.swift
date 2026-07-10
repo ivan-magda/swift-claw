@@ -83,48 +83,203 @@ import Testing
     }
   }
 
-  @Test func completeApprovedObservationFillsInPlaceAndResumesTheRun() throws {
+  @Test func claimApprovedExecutionFlipsTheRunAndLeavesThePlaceholder() throws {
     // given
     let env = try makeSuspendedFixture()
 
-    // when
-    let result = try env.runs.completeApprovedObservation(
+    // when — the claim is the pre-execution half: it must NOT touch the observation
+    let claim = try env.runs.claimApprovedExecution(
       runId: env.runId,
       observationMessageId: env.observationMessageId,
-      content: "Wrote 12 B to /w/plan.md (created).",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
-    // then — the placeholder is updated in place (same row id) and the run is RUNNING again
-    #expect(result == .committed)
-    #expect(
-      try messageContent(env.queue, env.observationMessageId)
-        == "Wrote 12 B to /w/plan.md (created)."
-    )
+    // then — the run is RUNNING (so /stop can no longer cancel-race the external write) and the
+    // placeholder still awaits the real result
+    #expect(claim == .committed)
     #expect(try runState(env.queue, env.runId) == RunState.running.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == Self.placeholder)
   }
 
-  @Test func completeApprovedObservationIsExactlyOnce() throws {
-    // given — a first resume already flipped the run to RUNNING
+  @Test func claimApprovedExecutionOnACancelledRunFillsTheCancellationNote() throws {
+    // given — /stop cancelled the run after the Approve callback CAS'd the row APPROVED
     let env = try makeSuspendedFixture()
-    _ = try env.runs.completeApprovedObservation(
+    try env.queue.write { db in
+      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .cancel, now: Date())
+    }
+
+    // when
+    let claim = try env.runs.claimApprovedExecution(
       runId: env.runId,
       observationMessageId: env.observationMessageId,
-      content: "first",
+      notResumableObservationContent: "The session was stopped before this action ran.",
       now: Date()
     )
 
-    // when — a duplicate signal re-runs the same method
-    let second = try env.runs.completeApprovedObservation(
+    // then — no claim (the caller must not execute), the run stays terminal, and the placeholder
+    // is resolved in the SAME transaction so history never dangles
+    #expect(claim == .runNotResumable)
+    #expect(try runState(env.queue, env.runId) == RunState.cancelled.rawValue)
+    #expect(
+      try messageContent(env.queue, env.observationMessageId)
+        == "The session was stopped before this action ran."
+    )
+  }
+
+  @Test func claimApprovedExecutionAfterTheObservationResolvedIsAlreadyResumed() throws {
+    // given — a first claim + fill completed the resume
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
       runId: env.runId,
       observationMessageId: env.observationMessageId,
-      content: "second",
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    try env.runs.fillClaimedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      content: "first"
+    )
+
+    // when — a duplicate signal replays the claim against the filled observation
+    let replay = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
-    // then — the run is no longer AWAITING, so the reducer no-ops and the content is unchanged
-    #expect(second == .ignored)
+    // then — recognized as already executed, nothing overwritten
+    #expect(replay == .alreadyResumed)
     #expect(try messageContent(env.queue, env.observationMessageId) == "first")
+  }
+
+  private func outboxPayloads(_ queue: DatabaseQueue, _ runId: Int64) throws -> [String] {
+    try queue.read { db in
+      try String.fetchAll(
+        db,
+        sql: """
+          SELECT payload FROM outbound_deliveries
+          WHERE run_id = ? AND status = 'PENDING' ORDER BY step_index
+          """,
+        arguments: [runId]
+      )
+    }
+  }
+
+  @Test func settleClaimedApprovalAtBootFailsTheRunFillsAndNotifies() throws {
+    // given — the claim committed (run RUNNING) and the process died before the result record
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+
+    // when
+    let outcome = try env.runs.settleClaimedApprovalAtBoot(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "Outcome unknown; the daemon restarted mid-action.",
+      noticeChatId: 7,
+      noticeText: "I restarted while running an approved action.",
+      now: Date()
+    )
+
+    // then — one fused txn: run FAILED, placeholder resolved truthfully, owner notice enqueued
+    #expect(outcome == .settled)
+    #expect(try runState(env.queue, env.runId) == RunState.failed.rawValue)
+    #expect(
+      try messageContent(env.queue, env.observationMessageId)
+        == "Outcome unknown; the daemon restarted mid-action."
+    )
+    #expect(
+      try outboxPayloads(env.queue, env.runId) == ["I restarted while running an approved action."]
+    )
+  }
+
+  @Test func settleClaimedApprovalAtBootOnAnOrphanFailedRunStillFillsAndNotifies() throws {
+    // given — the boot orphan sweep already failed the claimed run before the approval reconciler
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    try env.queue.write { db in
+      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .fail, now: Date())
+    }
+
+    // when
+    let outcome = try env.runs.settleClaimedApprovalAtBoot(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "Outcome unknown.",
+      noticeChatId: 7,
+      noticeText: "Please verify the action.",
+      now: Date()
+    )
+
+    // then — the sweep's transition stands; fill + notice still land
+    #expect(outcome == .settled)
+    #expect(try runState(env.queue, env.runId) == RunState.failed.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == "Outcome unknown.")
+    #expect(try outboxPayloads(env.queue, env.runId) == ["Please verify the action."])
+  }
+
+  @Test func settleClaimedApprovalAtBootLeavesAnAwaitingRunForTheReplayBelt() throws {
+    // given — no claim committed: the §6.5 crash window (granted before the crash, never executed)
+    let env = try makeSuspendedFixture()
+
+    // when
+    let outcome = try env.runs.settleClaimedApprovalAtBoot(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "Outcome unknown.",
+      noticeChatId: 7,
+      noticeText: "Please verify the action.",
+      now: Date()
+    )
+
+    // then — nothing written: the caller re-parks the waiter to replay the recorded action
+    #expect(outcome == .reparkForReplay)
+    #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == Self.placeholder)
+    #expect(try outboxPayloads(env.queue, env.runId).isEmpty)
+  }
+
+  @Test func settleClaimedApprovalAtBootIsANoOpOnceTheObservationResolved() throws {
+    // given — the resume completed before the restart; the observation holds the real result
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    try env.runs.fillClaimedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      content: "Wrote 12 B."
+    )
+
+    // when
+    let outcome = try env.runs.settleClaimedApprovalAtBoot(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "Outcome unknown.",
+      noticeChatId: 7,
+      noticeText: "Please verify the action.",
+      now: Date()
+    )
+
+    // then — the recorded result is never overwritten and no notice is sent
+    #expect(outcome == .alreadyResolved)
+    #expect(try messageContent(env.queue, env.observationMessageId) == "Wrote 12 B.")
+    #expect(try outboxPayloads(env.queue, env.runId).isEmpty)
   }
 
   @Test func applyApprovedMemoryWriteFusesTheInsertWithTheObservationFill() throws {
@@ -138,6 +293,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved to memory as project.",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
@@ -162,6 +318,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved.",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
@@ -171,11 +328,132 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved again.",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
-    // then — the guard on the AWAITING→RUNNING flip means NO second memory row (§6.3 exactly-once)
-    #expect(second == .ignored)
+    // then — the placeholder guard means NO second memory row (§6.3 exactly-once)
+    #expect(second == .alreadyResumed)
+    let memoryCount = try env.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
+    }
+    #expect(memoryCount == 1)
+  }
+
+  @Test func applyApprovedMemoryWriteOnACancelledRunFillsTheCancellationNote() throws {
+    // given — /stop drove the run terminal after the approve CAS
+    let env = try makeSuspendedFixture()
+    try env.queue.write { db in
+      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .cancel, now: Date())
+    }
+    let item = NewMemoryItem(text: "never stored", kind: .user, sessionId: env.sessionId)
+
+    // when
+    let claim = try env.runs.applyApprovedMemoryWrite(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      item: item,
+      observationContent: "Saved.",
+      notResumableObservationContent: "The session was stopped before this action ran.",
+      now: Date()
+    )
+
+    // then — no insert, the run stays terminal, and the placeholder resolves truthfully
+    #expect(claim == .runNotResumable)
+    let memoryCount = try env.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
+    }
+    #expect(memoryCount == 0)
+    #expect(try runState(env.queue, env.runId) == RunState.cancelled.rawValue)
+    #expect(
+      try messageContent(env.queue, env.observationMessageId)
+        == "The session was stopped before this action ran."
+    )
+  }
+
+  /// Re-suspends the fixture's run on a SECOND placeholder (the multi-suspend shape: approve #1,
+  /// resume, propose another gated call) and returns the new placeholder's message id.
+  private func suspendAgain(_ env: Fixture) throws -> Int64 {
+    try env.queue.write { db -> Int64 in
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c2')
+          """,
+        arguments: [env.sessionId, env.runId, Self.placeholder, Date()]
+      )
+      let messageId = db.lastInsertedRowID
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: env.runId,
+        event: .suspendForApproval,
+        now: Date()
+      )
+      return messageId
+    }
+  }
+
+  @Test func replayAfterASecondSuspendIsIgnoredAndLeavesTheRunParked() throws {
+    // given — approval #1 fully resumed, then the run suspends again on approval #2: the run is
+    // AWAITING_APPROVAL once more, so the AWAITING→RUNNING flip alone would let a boot replay of
+    // #1 commit and steal #2's park
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    try env.runs.fillClaimedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      content: "first"
+    )
+    let secondPlaceholderId = try suspendAgain(env)
+
+    // when — a boot replay re-runs approval #1's claim against its already-filled observation
+    let replay = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+
+    // then — recognized as executed: run STILL parked for #2, #1's observation untouched, #2's
+    // placeholder intact
+    #expect(replay == .alreadyResumed)
+    #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == "first")
+    #expect(try messageContent(env.queue, secondPlaceholderId) == Self.placeholder)
+  }
+
+  @Test func memoryWriteReplayAfterASecondSuspendIsIgnoredAndLeavesTheRunParked() throws {
+    // given — the fused memory write committed once, then the run suspends again
+    let env = try makeSuspendedFixture()
+    let item = NewMemoryItem(text: "the plan is ready", kind: .project, sessionId: env.sessionId)
+    _ = try env.runs.applyApprovedMemoryWrite(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      item: item,
+      observationContent: "Saved.",
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    _ = try suspendAgain(env)
+
+    // when — a boot replay re-runs the fused write for the resolved approval
+    let replay = try env.runs.applyApprovedMemoryWrite(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      item: item,
+      observationContent: "Saved again.",
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+
+    // then — recognized as executed: no second memory row, run still parked for the new approval
+    #expect(replay == .alreadyResumed)
+    #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
     let memoryCount = try env.queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
     }
@@ -238,7 +516,7 @@ import Testing
     #expect(try env.runs.runOrigin(runId: 9999) == nil)
   }
 
-  @Test func failRunStalePolicyFailsTheRunAndAuditsTheDenial() throws {
+  @Test func failRunStalePolicyFailsTheRunFillsTheObservationAndAuditsTheDenial() throws {
     // given
     let env = try makeSuspendedFixture()
 
@@ -246,12 +524,20 @@ import Testing
     let failed = try env.runs.failRunStalePolicy(
       runId: env.runId,
       sessionId: env.sessionId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "The approval was voided because the policy changed before it ran.",
       now: Date()
     )
 
-    // then — run FAILED, and an approvalDenied/stale_policy audit rode the same transaction (§6.5)
+    // then — one txn: run FAILED, the placeholder resolved (a dangling "awaiting owner approval"
+    // would both mislead later turns and false-trigger the boot claimed-window settlement), and
+    // the approvalDenied/stale_policy audit
     #expect(failed)
     #expect(try runState(env.queue, env.runId) == RunState.failed.rawValue)
+    #expect(
+      try messageContent(env.queue, env.observationMessageId)
+        == "The approval was voided because the policy changed before it ran."
+    )
     let auditDecision = try env.queue.read { db in
       try String.fetchOne(
         db,

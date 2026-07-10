@@ -39,11 +39,31 @@ import Testing
     }
   }
 
+  /// Inserts an observation row for the run: placeholder content models a crash-window row
+  /// (waiter commit never landed); any other content models an already-executed approval.
+  private func seedObservation(
+    _ queue: DatabaseQueue,
+    runId: Int64,
+    content: String = "awaiting owner approval"
+  ) throws -> Int64 {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          """,
+        arguments: [runId, content, Date()]
+      )
+      return db.lastInsertedRowID
+    }
+  }
+
   private func makeNewApproval(
     runId: Int64,
     nonce: String = "nonce-a",
     canonicalArgsJSON: String = #"{"path":"/w/plan.md"}"#,
     policyVersion: String = "pv16",
+    observationMessageId: Int64 = 1,
     createdTs: Date,
     expiresTs: Date
   ) -> NewApproval {
@@ -57,7 +77,7 @@ import Testing
       policyVersion: policyVersion,
       ownerUserId: 7,
       nonce: nonce,
-      observationMessageId: 1,
+      observationMessageId: observationMessageId,
       toolCallId: "c1",
       reason: .askTier,
       createdTs: createdTs,
@@ -403,6 +423,7 @@ extension ApprovalStoreGRDBTests {
       makeNewApproval(
         runId: crashRun,
         nonce: "n-crash",
+        observationMessageId: try seedObservation(env.queue, runId: crashRun),
         createdTs: now,
         expiresTs: now.addingTimeInterval(3600)
       )
@@ -430,6 +451,98 @@ extension ApprovalStoreGRDBTests {
     #expect(Set(unresolved.map(\.id)) == Set([pendingId, crashId]))
   }
 
+  @Test func unresolvedAtBootReturnsApprovedClaimedRowsWhoseRunLeftAwaiting() throws {
+    // given — the claimed crash window: the approve CAS and the execution claim committed (run
+    // flipped off AWAITING, later orphan-failed at boot) but the result record never landed, so
+    // the observation is still the placeholder. A filled twin on the same shape must stay excluded.
+    let env = try makeFixture()
+    let claimedRun = try seedRun(env.queue, state: .failed)
+    let recordedRun = try seedRun(env.queue, state: .failed)
+    let now = Date()
+    let claimedId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: claimedRun,
+        nonce: "n-claimed",
+        observationMessageId: try seedObservation(env.queue, runId: claimedRun),
+        createdTs: now,
+        expiresTs: now.addingTimeInterval(3600)
+      )
+    )
+    let recordedId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: recordedRun,
+        nonce: "n-recorded",
+        observationMessageId: try seedObservation(
+          env.queue,
+          runId: recordedRun,
+          content: "Wrote 12 B to /w/plan.md (created)."
+        ),
+        createdTs: now,
+        expiresTs: now.addingTimeInterval(3600)
+      )
+    )
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'APPROVED' WHERE id IN (?, ?)",
+        arguments: [claimedId, recordedId]
+      )
+    }
+
+    // when
+    let unresolved = try env.store.unresolvedAtBoot()
+
+    // then — the claimed row surfaces for boot settlement; the recorded one is already done
+    #expect(unresolved.map(\.id) == [claimedId])
+  }
+
+  @Test func unresolvedAtBootExcludesResolvedRowsWhoseObservationIsFilled() throws {
+    // given — the multi-suspend shape: ONE run, approval #1 APPROVED with its observation already
+    // filled (executed before the restart), approval #2 PENDING on a fresh placeholder. Re-parking
+    // #1 would re-execute its recorded action and steal #2's park (§6.5 is for crash windows only).
+    let env = try makeFixture()
+    let run = try seedRun(env.queue, state: .awaitingApproval)
+    let now = Date()
+    let executedId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: run,
+        nonce: "n-executed",
+        observationMessageId: try seedObservation(
+          env.queue,
+          runId: run,
+          content: "Wrote 12 B to /w/plan.md (created)."
+        ),
+        createdTs: now,
+        expiresTs: now.addingTimeInterval(3600)
+      )
+    )
+    // Resolve #1 BEFORE inserting #2 — the UNIQUE partial index allows one PENDING row per run.
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'APPROVED' WHERE id = ?",
+        arguments: [executedId]
+      )
+    }
+    let parkedId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: run,
+        nonce: "n-parked",
+        observationMessageId: try seedObservation(env.queue, runId: run),
+        createdTs: now,
+        expiresTs: now.addingTimeInterval(3600)
+      )
+    )
+
+    // when
+    let unresolved = try env.store.unresolvedAtBoot()
+
+    // then — only the still-parked placeholder approval comes back
+    #expect(unresolved.map(\.id) == [parkedId])
+  }
+
   @Test func unresolvedAtBootReturnsDeniedRowsOnlyOnAwaitingRuns() throws {
     // given — the deny-side crash window: REJECTED and EXPIRED rows whose run is still
     // AWAITING_APPROVAL (the deny CAS committed, the waiter's run-fail commit did not), plus the
@@ -445,6 +558,7 @@ extension ApprovalStoreGRDBTests {
       makeNewApproval(
         runId: rejectedAwaitingRun,
         nonce: "n-rej-awaiting",
+        observationMessageId: try seedObservation(env.queue, runId: rejectedAwaitingRun),
         createdTs: now,
         expiresTs: now.addingTimeInterval(3600)
       )
@@ -454,6 +568,7 @@ extension ApprovalStoreGRDBTests {
       makeNewApproval(
         runId: expiredAwaitingRun,
         nonce: "n-exp-awaiting",
+        observationMessageId: try seedObservation(env.queue, runId: expiredAwaitingRun),
         createdTs: now.addingTimeInterval(-7200),
         expiresTs: now.addingTimeInterval(-60)
       )

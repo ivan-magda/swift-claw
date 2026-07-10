@@ -99,9 +99,9 @@ struct ScriptedAskTool: Tool {
     // the durable OUTBOX — this harness wires no `OutboxDispatcher`, so nothing is sent over the
     // `RecordingTransport`; existing SC3 assertions read `stores.outbox.pendingOutbound()` too.
     await coordinator.signal(approvalId: approvalId, .denied(.cancelled))
-    _ = try await pollUntil(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
       let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
-      return payloads.contains { payload in payload.contains("second turn done") } ? true : nil
+      return payloads.contains { payload in payload.contains("second turn done") }
     }
 
     // then — the parked exchange is still assembly-visible: the anchor + its (placeholder) tool row

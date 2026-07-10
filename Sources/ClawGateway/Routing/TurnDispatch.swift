@@ -15,8 +15,7 @@ struct TurnDispatch: Sendable {
   func dispatch(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    text: String,
-    grant: OneTurnGrant? = nil
+    text: String
   ) async throws(RoutingHalt) -> HandleOutcome {
     let inbound = InboundMessage(
       updateId: rawUpdate.updateId,
@@ -61,7 +60,6 @@ struct TurnDispatch: Sendable {
       sessionId: sessionId,
       chatId: message.chatId,
       triggerMessageId: triggerMessageId,
-      grant: grant,
       log: runLog
     )
 

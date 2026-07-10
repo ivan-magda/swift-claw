@@ -103,11 +103,39 @@ private extension ApprovalWaiter {
     }
 
     let outcome = await executor.executeApproved(approval)
-    guard outcome.commit == .committed else {
+    switch outcome.commit {
+    case .ignored:
       // A duplicate signal already resumed the run; do not run the continuation twice.
-      logger.debug("approved resume for run \(runId) was a no-op (\(outcome.commit))")
+      logger.debug("approved resume for run \(runId) was a no-op (duplicate signal)")
       await disarm(approval, chatId: chatId)
       return
+    case .runNotResumable:
+      // `/stop`//`new` drove the run terminal after the approve CAS: nothing executed, the claim
+      // txn resolved the observation, and the command already acked the owner — just disarm.
+      logger.debug("approved action for run \(runId) skipped; the run was cancelled first")
+      await disarm(approval, chatId: chatId)
+      return
+    case .storeFailed:
+      // The pre-execution claim threw at the store seam — nothing ran. Leave the run
+      // AWAITING_APPROVAL so the §6.5 boot crash-window path (APPROVED row + AWAITING run)
+      // recovers it, and tell the owner instead of going silent. Never args/content in this log.
+      logger.error(
+        "approved claim store-failed (tool \(approval.tool), approval \(approval.id)); run left AWAITING_APPROVAL for boot recovery"
+      )
+      await notifyOwner(chatId: chatId, text: Self.storeFailureNotice)
+      await disarm(approval, chatId: chatId)
+      return
+    case .recordFailed:
+      // The action EXECUTED but its result could not be recorded. Never promise a retry — the
+      // side effect already happened; the claimed RUNNING run settles via the boot orphan sweep.
+      logger.error(
+        "approved result record-failed (tool \(approval.tool), approval \(approval.id)); run left RUNNING for the boot orphan sweep"
+      )
+      await notifyOwner(chatId: chatId, text: Self.recordFailureNotice)
+      await disarm(approval, chatId: chatId)
+      return
+    case .committed:
+      break
     }
 
     await turns.resume(
@@ -133,6 +161,8 @@ private extension ApprovalWaiter {
       _ = try runs.failRunStalePolicy(
         runId: approval.runId,
         sessionId: approval.sessionId,
+        observationMessageId: approval.observationMessageId,
+        observationContent: Self.deniedObservationContent(for: .stalePolicy),
         now: now()
       )
     } catch {
@@ -225,6 +255,12 @@ private extension ApprovalWaiter {
 private extension ApprovalWaiter {
   static let stalePolicyNotice =
     "My instructions or tools changed since you were asked, so I can't run that now — please re-run."
+
+  static let storeFailureNotice =
+    "The approved action could not be recorded; it will be retried after a restart."
+
+  static let recordFailureNotice =
+    "The approved action ran, but I couldn't record its result; a restart will settle things."
 
   func loadApproval(_ id: Int64) -> Approval? {
     do {

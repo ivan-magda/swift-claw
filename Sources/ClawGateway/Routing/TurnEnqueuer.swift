@@ -18,7 +18,6 @@ struct TurnEnqueuer: Sendable {
     sessionId: Int64,
     chatId: Int64,
     triggerMessageId: Int64,
-    grant: OneTurnGrant?,
     log: Logger? = nil
   ) async {
     let runLog = log ?? logger
@@ -31,8 +30,7 @@ struct TurnEnqueuer: Sendable {
           runId: runId,
           sessionId: sessionId,
           chatId: chatId,
-          triggerMessageId: triggerMessageId,
-          grant: grant
+          triggerMessageId: triggerMessageId
         )
       } catch StoreError.diskFull {
         runLog.error("run \(runId) stopped by storage full after enqueue")
@@ -49,8 +47,7 @@ struct TurnEnqueuer: Sendable {
       runId: fire.runId,
       sessionId: fire.sessionId,
       chatId: fire.ownerChatId,
-      triggerMessageId: fire.triggerMessageId,
-      grant: nil
+      triggerMessageId: fire.triggerMessageId
     )
   }
 }

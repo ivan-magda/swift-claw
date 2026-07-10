@@ -21,6 +21,7 @@ import Logging
 /// disarm; the reconciler only orchestrates.
 public struct ApprovalBootReconciler: Sendable {
   private let approvals: any ApprovalStore
+  private let runs: any RunStore
   private let lanes: SessionLaneRegistry
   private let coordinator: ApprovalCoordinator
   private let waiter: any ApprovalParking
@@ -29,6 +30,7 @@ public struct ApprovalBootReconciler: Sendable {
 
   public init(
     approvals: any ApprovalStore,
+    runs: any RunStore,
     lanes: SessionLaneRegistry,
     coordinator: ApprovalCoordinator,
     waiter: any ApprovalParking,
@@ -36,6 +38,7 @@ public struct ApprovalBootReconciler: Sendable {
     logger: Logger
   ) {
     self.approvals = approvals
+    self.runs = runs
     self.lanes = lanes
     self.coordinator = coordinator
     self.waiter = waiter
@@ -73,16 +76,68 @@ public struct ApprovalBootReconciler: Sendable {
   }
 }
 
+// MARK: - Claimed-Window Copy
+
+extension ApprovalBootReconciler {
+  /// The synthetic observation for an action claimed before a crash — the honest answer is that
+  /// the outcome is unknowable, never "it ran" or "it didn't".
+  static let claimedCrashObservation =
+    "The daemon restarted while this approved action was executing; whether it completed is unknown."
+
+  /// The owner DM for the same window. Tool name only — the canonical target can be arbitrarily
+  /// long (FR-T5) and this notice is a single outbox row.
+  static func claimedCrashNotice(tool: String) -> String {
+    "I restarted while running the approved \(tool) action and can't confirm whether it completed — please check before asking again."
+  }
+}
+
 // MARK: - Per-Row Re-Park
 
 private extension ApprovalBootReconciler {
+  /// Triage for an APPROVED row (§6.6): if the execution claim committed before the crash (the
+  /// run left AWAITING_APPROVAL), the external effect may or may not have happened — the store
+  /// settles it in place (truthful observation + unconditional owner notice) and nothing parks.
+  /// Only a still-parked run returns true and takes the §6.5 replay belt.
+  func approvedRowNeedsReplayPark(_ approval: Approval, now instant: Date) -> Bool {
+    let settlement: ClaimedApprovalBootOutcome
+    do {
+      settlement = try runs.settleClaimedApprovalAtBoot(
+        runId: approval.runId,
+        observationMessageId: approval.observationMessageId,
+        observationContent: Self.claimedCrashObservation,
+        noticeChatId: approval.ownerUserId,
+        noticeText: Self.claimedCrashNotice(tool: approval.tool),
+        now: instant
+      )
+    } catch {
+      logger.error("boot approvals: claimed-window triage failed for \(approval.id): \(error)")
+      return false
+    }
+    switch settlement {
+    case .settled:
+      logger.warning(
+        "boot approvals: settled approval \(approval.id) claimed before the crash (outcome unknown)"
+      )
+      return false
+    case .alreadyResolved:
+      logger.debug("boot approvals: approval \(approval.id) already carries its result")
+      return false
+    case .reparkForReplay:
+      return true
+    }
+  }
+
   func reparkOne(_ approval: Approval, now instant: Date) async {
     let revalidate: Bool
 
     switch approval.state {
     case .approved:
-      // §6.5 crash window: granted before the crash. Buffer the approval signal and re-park under
-      // re-validation so the waiter rechecks policy_version before executing the recorded action.
+      guard approvedRowNeedsReplayPark(approval, now: instant) else {
+        return
+      }
+      // §6.5 crash window: granted before the crash, never claimed. Buffer the approval signal and
+      // re-park under re-validation so the waiter rechecks policy_version before executing the
+      // recorded action.
       await coordinator.signal(approvalId: approval.id, .approved)
       revalidate = true
     case .pending where approval.expiresTs <= instant:

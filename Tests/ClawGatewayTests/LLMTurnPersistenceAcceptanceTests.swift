@@ -356,10 +356,11 @@ func makeStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer, workspace: workspace),
-    pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
+    // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: logger
   )
 
@@ -446,10 +447,11 @@ func makeStreamingStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer),
-    pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
+    // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: logger
   )
   let router = MessageRouter(
@@ -530,10 +532,11 @@ func makeStopNewStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer),
-    pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
+    // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: logger
   )
 

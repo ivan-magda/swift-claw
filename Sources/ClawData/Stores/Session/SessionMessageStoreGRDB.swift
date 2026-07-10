@@ -121,18 +121,21 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     try database.readMapping { db in
       let session = try Row.fetchOne(
         db,
-        sql: "SELECT window_start_message_id, tainted FROM sessions WHERE id = ?",
+        sql: "SELECT window_start_message_id, tainted, has_private_data FROM sessions WHERE id = ?",
         arguments: [sessionId]
       )
 
       let windowStartMessageId: Int64?
       let isTainted: Bool
+      let hasPrivateData: Bool
       if let session {
         windowStartMessageId = session["window_start_message_id"]
         isTainted = session["tainted"]
+        hasPrivateData = session["has_private_data"]
       } else {
         windowStartMessageId = nil
         isTainted = false
+        hasPrivateData = false
       }
 
       // The window is bounded by CONVERSATIONAL rows (rev.1 H2): find the id of the `limit`-th
@@ -174,7 +177,8 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         history: history,
         historyMessageIds: messageIds,
         windowStartMessageId: windowStartMessageId,
-        isTainted: isTainted
+        isTainted: isTainted,
+        hasPrivateData: hasPrivateData
       )
     }
   }
@@ -185,8 +189,9 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
-  /// Resets the context window boundary to the current message high-water mark and clears the
-  /// taint flag atomically. Reused inside existing transactions (e.g. `CommandStoreGRDB`).
+  /// Resets the context window boundary to the current message high-water mark and clears both
+  /// sticky flags (taint, private data) atomically. Reused inside existing transactions
+  /// (e.g. `CommandStoreGRDB`).
   static func resetWindowAndDetaint(_ db: Database, sessionId: Int64, now: Date) throws {
     // The boundary and detaint must move atomically so `/new` cannot expose a mixed session state.
     let boundary =
@@ -199,7 +204,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     try db.execute(
       sql: """
         UPDATE sessions
-        SET window_start_message_id = ?, tainted = 0, updated_ts = ?
+        SET window_start_message_id = ?, tainted = 0, has_private_data = 0, updated_ts = ?
         WHERE id = ?
         """,
       arguments: [boundary, now, sessionId]
