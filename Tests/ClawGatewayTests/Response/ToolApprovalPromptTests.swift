@@ -180,6 +180,58 @@ import Testing
     #expect(text.contains("instruction-shaped text"))
   }
 
+  @Test func aShortPromptIsOneKeyboardCarryingChunk() {
+    // given
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "file_write",
+        target: "/w/notes.md",
+        reason: .askTier,
+        blastRadius: "create, 1 B"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "n-1")
+
+    // then — the common case: one chunk, keyboard attached, whole prompt as the payload
+    #expect(chunks.count == 1)
+    #expect(chunks.first?.payload == ToolApprovalPrompt.text(for: input))
+    #expect(chunks.first?.stepIndex == 0)
+    #expect(chunks.first?.replyMarkup != nil)
+  }
+
+  @Test func anOverlongPromptSplitsWithTheKeyboardOnTheFinalChunk() {
+    // given — a canonical URL longer than one Telegram message (FR-T5 forbids truncating it, so
+    // the prompt must SPLIT instead of producing one undeliverable outbox row)
+    let target =
+      "https://example.com/?q=" + String(repeating: "a", count: ReplySplitter.limit + 100)
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "web_fetch",
+        target: target,
+        reason: .exfilTrifecta,
+        blastRadius: "egress to example.com"
+      ),
+      taintBanner: true,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "n-1")
+
+    // then — every chunk is sendable, the full target survives across the split, step indexes are
+    // sequential, and ONLY the final chunk (ending with the tap instruction) carries the keyboard
+    #expect(chunks.count > 1)
+    #expect(chunks.allSatisfy { $0.payload.count <= ReplySplitter.limit })
+    #expect(chunks.map(\.payload).joined() == ToolApprovalPrompt.text(for: input))
+    #expect(chunks.map(\.stepIndex) == Array(0..<chunks.count))
+    #expect(chunks.dropLast().allSatisfy { $0.replyMarkup == nil })
+    #expect(chunks.last?.replyMarkup != nil)
+  }
+
   @Test func richPromptRendersForEveryApprovalReason() {
     // given — the renderer is exhaustive over ApprovalReason; this pins that both reasons produce
     // owner-facing copy carrying the target at runtime (the compile-time guarantee is the switch)

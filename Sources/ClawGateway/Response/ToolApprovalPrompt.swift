@@ -56,6 +56,26 @@ public enum ToolApprovalPrompt {
 
     return lines.joined(separator: "\n")
   }
+
+  /// The prompt as ready-to-enqueue outbox chunks. One chunk in the common case; a prompt that
+  /// exceeds a single Telegram message (an FR-T5 never-truncated URL can be arbitrarily long)
+  /// splits grapheme-safely instead of parking one undeliverable row that would stall the shared
+  /// outbox. The inline keyboard rides the FINAL chunk — the one ending with the tap instruction —
+  /// and the suspend commit stamps `approval_id` onto exactly that keyboard-carrying chunk
+  /// (`enqueuePromptChunks`), so button disarm keeps working across a split.
+  public static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
+    let parts = ReplySplitter.split(text: text(for: input))
+    return parts.enumerated().map { index, payload in
+      OutboxChunk(
+        stepIndex: index,
+        chatId: chatId,
+        payload: payload,
+        payloadHash: ContentHash.fnv1a(payload),
+        approvalId: nil,
+        replyMarkup: index == parts.count - 1 ? ApprovalKeyboard.markup(nonce: nonce) : nil
+      )
+    }
+  }
 }
 
 // MARK: - Prompt Composition

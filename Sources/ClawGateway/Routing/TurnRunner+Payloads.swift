@@ -77,30 +77,23 @@ extension TurnRunner {
     }
   }
 
-  /// One outbox chunk carrying the §5.4 prompt text plus the inline keyboard (`replyMarkup`); the
-  /// store stamps its `approval_id` after inserting the row.
+  /// The §5.4 prompt as outbox chunks — split at the Telegram message limit with the inline
+  /// keyboard on the final chunk; the store stamps `approval_id` onto that keyboard-carrying row.
   func approvalPromptChunks(
     pending: PendingToolAction,
     outcome: TurnOutcome,
     chatId: Int64,
     nonce: String
   ) -> [OutboxChunk] {
-    let input = ToolApprovalPrompt.Input(
-      recorded: pending.recorded,
-      taintBanner: outcome.ingestedUntrusted,
-      privilegedFileBanner: Self.isPrivilegedFile(pending.recorded.canonicalTarget)
+    ToolApprovalPrompt.chunks(
+      for: ToolApprovalPrompt.Input(
+        recorded: pending.recorded,
+        taintBanner: outcome.ingestedUntrusted,
+        privilegedFileBanner: Self.isPrivilegedFile(pending.recorded.canonicalTarget)
+      ),
+      chatId: chatId,
+      nonce: nonce
     )
-    let text = ToolApprovalPrompt.text(for: input)
-    return [
-      OutboxChunk(
-        stepIndex: 0,
-        chatId: chatId,
-        payload: text,
-        payloadHash: ContentHash.fnv1a(text),
-        approvalId: nil,
-        replyMarkup: ApprovalKeyboard.markup(nonce: nonce)
-      )
-    ]
   }
 
   /// §5.4 privileged-file banner: the owner-editable prompt files. Basename match on the resolved
