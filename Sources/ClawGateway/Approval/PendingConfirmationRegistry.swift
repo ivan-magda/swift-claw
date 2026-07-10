@@ -1,7 +1,7 @@
 import ClawCore
 import Foundation
 
-/// A parked command effect awaiting the owner's yes/no (single slot per session, §9).
+/// A parked command effect awaiting the owner's yes/no (single slot per session).
 public enum CommandConfirmation: Sendable, Equatable {
   case rememberWrite(MemoryWriteRequest)
   case deleteItem(id: Int64)
@@ -10,7 +10,7 @@ public enum CommandConfirmation: Sendable, Equatable {
 
 /// What the confirmation slot can hold: only owner COMMAND confirmations (`/remember`,
 /// `/memory delete`, schedule confirm-before-arm) still resolve through the ephemeral yes/no
-/// commit/cancel switch. Tool approvals are durable now (Inc 5a) — a parked run lives in the
+/// commit/cancel switch. Tool approvals are durable now — a parked run lives in the
 /// `approvals` table and resolves by authenticated button callback, never by a plain text reply.
 public enum PendingConfirmation: Sendable, Equatable {
   case command(CommandConfirmation)

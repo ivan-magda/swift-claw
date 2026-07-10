@@ -1,7 +1,7 @@
 import Crypto
 import Foundation
 
-/// The per-run prompt/workspace fingerprint approvals bind to (spec §3.2). `policy_version` =
+/// The per-run prompt/workspace fingerprint approvals bind to. `policy_version` =
 /// `combined(...)` = first 16 hex of SHA-256 over an order-pinned, length-prefixed concatenation of
 /// the policy-relevant inputs at run start. Each part is length-prefixed so boundaries cannot be
 /// confused ("ab"+"c" ≠ "a"+"bc"). Secret values are NEVER hashed — only surface/config identity.
@@ -26,7 +26,7 @@ public enum PolicyFingerprint {
     }.joined()
   }
 
-  /// Input classes 2–3 (§3.2): the tool-registry surface (sorted by name — each tool contributes
+  /// The static inputs: the tool-registry surface (sorted by name — each tool contributes
   /// name, canonical `.sortedKeys` parameter JSON, `riskLevel.rawValue`, and the egress label),
   /// then the llm base URL, the search-endpoint presence, and the canonical workspace root. Computed
   /// once at the composition root and injected into `ContextBuilder`.
@@ -62,7 +62,7 @@ public enum PolicyFingerprint {
   }
 
   /// The combined fingerprint stored as `policy_version`: first 16 hex of the digest over the
-  /// static sub-hash followed by the class-1 prompt materials in the pinned order
+  /// static sub-hash followed by the prompt materials in the pinned order
   /// [systemPrompt, soulText, agentsText, toolsText]. A missing/unreadable file folds in as "".
   public static func combined(staticSubhash: String, promptMaterials: [String]) -> String {
     String(hash(parts: [staticSubhash] + promptMaterials).prefix(16))

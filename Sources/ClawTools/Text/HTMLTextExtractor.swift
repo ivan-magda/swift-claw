@@ -1,6 +1,6 @@
 import Foundation
 
-/// A deliberately naive pure-Swift HTML-to-text strip (§7.2): drop script/style/comments, strip
+/// A deliberately naive pure-Swift HTML-to-text strip: drop script/style/comments, strip
 /// tags, decode a minimal entity set, collapse whitespace. Readability extraction is out of scope.
 ///
 /// Implemented as a single **linear** left-to-right scan — deliberately not a backtracking regex

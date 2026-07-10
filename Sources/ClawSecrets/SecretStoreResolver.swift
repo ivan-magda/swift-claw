@@ -23,7 +23,7 @@ public struct ResolvedSecretStore: Sendable {
   }
 }
 
-/// Fail-closed backend selection (spec §3.2, review #9). If **either** `secrets.enc` or `secret.key`
+/// Fail-closed backend selection. If **either** `secrets.enc` or `secret.key`
 /// is present, the encrypted backend is **required** (both must exist and decrypt, else exit 11) — we
 /// never silently fall back to env when an encrypted setup is partially present. The env fallback
 /// (+ warn) is used **only** when *neither* encrypted artifact exists.

@@ -104,7 +104,7 @@ private extension Command {
   }
 }
 
-/// Parsed `/schedule` arguments (spec §9). Bare `/schedule` and `/schedule list` both list;
+/// Parsed `/schedule` arguments. Bare `/schedule` and `/schedule list` both list;
 /// anything else is the NL create text, passed verbatim to the parse call.
 public enum ScheduleCommand: Sendable, Equatable {
   case list

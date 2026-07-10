@@ -1,9 +1,9 @@
-/// The inline-keyboard envelope for a durable approval (§4.6/§5.4). `callback_data` is the only
+/// The inline-keyboard envelope for a durable approval. `callback_data` is the only
 /// state Telegram echoes back on a tap, so it carries just the single-use nonce and the verdict —
 /// never the approval `id` (opaque and unguessable). `markup` is a DETERMINISTIC JSON string (no
 /// clock, no randomness) so the outbox row it lands in is reproducible; `parse` is STRICT — only
 /// "apr:<nonce>:y" / "apr:<nonce>:n" survive, so a malformed or forged shape is dropped before the
-/// §6.2 auth chain ever runs.
+/// auth chain ever runs.
 public enum ApprovalKeyboard {
   public static let approveVerdict = "y"
   public static let denyVerdict = "n"
@@ -16,7 +16,7 @@ public enum ApprovalKeyboard {
 
   /// Deterministic by construction: a fixed (sorted) key order, no whitespace, no Date or random.
   /// The nonce is base64url (`[A-Za-z0-9-_]`) and the verdicts/labels are ASCII, so nothing here
-  /// needs JSON escaping. The client decodes this String to an object for the request body (§4.1).
+  /// needs JSON escaping. The client decodes this String to an object for the request body.
   public static func markup(nonce: String) -> String {
     let approve = callbackData(nonce: nonce, verdict: approveVerdict)
     let deny = callbackData(nonce: nonce, verdict: denyVerdict)

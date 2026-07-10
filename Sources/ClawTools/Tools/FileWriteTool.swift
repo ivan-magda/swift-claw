@@ -7,18 +7,18 @@ import Foundation
   import Darwin
 #endif
 
-/// Workspace file WRITE (spec §8.1) — the first ask-tier tool: every call suspends the run to a
-/// durable approval, and `execute` runs only on the approval waiter with the RECORDED args
-/// (§6.3) — re-validated against the live filesystem at execution time (ARCHITECTURE §10.2),
-/// never through the dispatcher's abandon-on-timeout race (§6.6). The write is atomic:
-/// a temp file in the target's own directory + `rename(2)`, so a crash in any window leaves the
-/// previous file intact. Privileged files (SOUL/AGENTS/USER/MEMORY .md) are writable — the §5.4
-/// prompt banner flags them; refusing them in code was explicitly rejected (spec §12 item 8).
+/// Workspace file WRITE — the first ask-tier tool: every call suspends the run to a durable
+/// approval, and `execute` runs only on the approval waiter with the RECORDED args —
+/// re-validated against the live filesystem at execution time, never through the dispatcher's
+/// abandon-on-timeout race. The write is atomic: a temp file in the target's own directory +
+/// `rename(2)`, so a crash in any window leaves the previous file intact. Privileged files
+/// (SOUL/AGENTS/USER/MEMORY .md) are writable — the prompt banner flags them; refusing them in
+/// code was explicitly rejected.
 public struct FileWriteTool: Tool {
   /// Refuse absurd payloads before they ever reach an approval prompt. 256 KiB covers any sane
   /// note/config write; a named constant so tests assert the code's own number.
   public static let maxContentBytes = 256 * 1024
-  /// §5.4: the preview stays owner-readable, never a wall of text.
+  /// The preview stays owner-readable, never a wall of text.
   static let previewCapGraphemes = 400
 
   private let workspaceRoot: URL
@@ -61,7 +61,7 @@ public struct FileWriteTool: Tool {
 
   public var timeout: Duration { .seconds(10) }
 
-  /// Gate-time resolution (§4.3): the approval binds to the fully-resolved contained path.
+  /// Gate-time resolution: the approval binds to the fully-resolved contained path.
   /// Overwrite policy and the size cap refuse HERE — a doomed write must never park an approval.
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     guard
@@ -126,10 +126,10 @@ public struct FileWriteTool: Tool {
     )
   }
 
-  /// Runs ONLY on the approval waiter with the RECORDED args (§6.3). The approval may be up to
-  /// an hour stale, so this re-validates before touching the disk (ARCHITECTURE §10.2): the
-  /// path must re-resolve to the exact canonical target the owner approved, and a
-  /// create-approved write must still be a create at commit time.
+  /// Runs ONLY on the approval waiter with the RECORDED args. The approval may be up to an hour
+  /// stale, so this re-validates before touching the disk: the path must re-resolve to the
+  /// exact canonical target the owner approved, and a create-approved write must still be a
+  /// create at commit time.
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     guard let approvedTarget = canonicalTarget else {
       return errorPayload("file_write was dispatched without a gate-resolved target.")
@@ -204,11 +204,11 @@ extension FileWriteTool {
     let code: Int32
   }
 
-  /// The target appeared between approval and execution of a CREATE-approved write (§10.2
-  /// re-validation): the owner approved "create", so replacing is off the table — fail closed.
+  /// The target appeared between approval and execution of a CREATE-approved write: the owner
+  /// approved "create", so replacing is off the table — fail closed.
   struct CreateCollision: Error {}
 
-  /// Step 1 of the §6.6 atomic write, split from step 2 so the crash-window invariant is
+  /// Step 1 of the atomic write, split from step 2 so the crash-window invariant is
   /// testable: the temp file lives NEXT TO the target (same directory ⇒ same volume ⇒
   /// `rename(2)` is atomic), inside the workspace by construction.
   static func stageTemporary(content: Data, target: String) throws -> String {
@@ -263,7 +263,7 @@ private extension FileWriteTool {
 
 // MARK: - Byte Formatting
 
-/// Owner-facing byte counts for the §5.4 blast radius ("340 B", "1.2 KB").
+/// Owner-facing byte counts for the approval blast radius ("340 B", "1.2 KB").
 enum ByteCount {
   static func text(_ bytes: Int) -> String {
     guard bytes >= 1024 else {

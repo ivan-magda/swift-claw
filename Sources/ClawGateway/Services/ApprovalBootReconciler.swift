@@ -3,19 +3,19 @@ import ClawCore
 import Foundation
 import Logging
 
-// `ApprovalParking` is already declared in `ApprovalCoordinator.swift` (Task 14) and `ApprovalWaiter`
-// already conforms to it (Task 16, Step 20) — both in this same `ClawGateway` module. Do NOT
+// `ApprovalParking` is already declared in `ApprovalCoordinator.swift` and `ApprovalWaiter`
+// already conforms to it — both in this same `ClawGateway` module. Do NOT
 // redeclare the protocol or re-add the conformance here: a second `public protocol ApprovalParking`
 // is an "invalid redeclaration" build error, and a second `extension ApprovalWaiter: ApprovalParking`
 // is a redundant conformance. The reconciler just USES the existing protocol as its `waiter`
 // dependency type — it is already the single `park` method the boot path needs, so no narrowing is
 // required. In tests the boot spy conforms to that same existing protocol.
 
-/// §7 boot reconciliation for the approval fabric — the restart entry point of the §5.5 single
+/// Boot reconciliation for the approval fabric — the restart entry point of the single
 /// execution locus. It never transitions a run row directly: it cleans terminal-run orphans, then
 /// per unresolved approval either re-parks a waiter on the session lane (unexpired PENDING),
 /// CAS-expires + signals a denial for the parked waiter to consume (expired PENDING), re-parks
-/// under the §6.5 crash-window belt (APPROVED row on an AWAITING_APPROVAL run), or re-buffers the
+/// under the crash-window belt (APPROVED row on an AWAITING_APPROVAL run), or re-buffers the
 /// already-committed denial (REJECTED/EXPIRED row on an AWAITING_APPROVAL run — the deny-side
 /// crash window). The parked waiter performs every run transition, owner notice, and button
 /// disarm; the reconciler only orchestrates.
@@ -85,7 +85,7 @@ extension ApprovalBootReconciler {
     "The daemon restarted while this approved action was executing; whether it completed is unknown."
 
   /// The owner DM for the same window. Tool name only — the canonical target can be arbitrarily
-  /// long (FR-T5) and this notice is a single outbox row.
+  /// long and this notice is a single outbox row.
   static func claimedCrashNotice(tool: String) -> String {
     "I restarted while running the approved \(tool) action and can't confirm whether it completed — please check before asking again."
   }
@@ -94,10 +94,10 @@ extension ApprovalBootReconciler {
 // MARK: - Per-Row Re-Park
 
 private extension ApprovalBootReconciler {
-  /// Triage for an APPROVED row (§6.6): if the execution claim committed before the crash (the
+  /// Triage for an APPROVED row: if the execution claim committed before the crash (the
   /// run left AWAITING_APPROVAL), the external effect may or may not have happened — the store
   /// settles it in place (truthful observation + unconditional owner notice) and nothing parks.
-  /// Only a still-parked run returns true and takes the §6.5 replay belt.
+  /// Only a still-parked run returns true and takes the replay belt.
   func approvedRowNeedsReplayPark(_ approval: Approval, now instant: Date) -> Bool {
     let settlement: ClaimedApprovalBootOutcome
     do {
@@ -135,13 +135,13 @@ private extension ApprovalBootReconciler {
       guard approvedRowNeedsReplayPark(approval, now: instant) else {
         return
       }
-      // §6.5 crash window: granted before the crash, never claimed. Buffer the approval signal and
+      // Crash window: granted before the crash, never claimed. Buffer the approval signal and
       // re-park under re-validation so the waiter rechecks policy_version before executing the
       // recorded action.
       await coordinator.signal(approvalId: approval.id, .approved)
       revalidate = true
     case .pending where approval.expiresTs <= instant:
-      // §6.4 expiry: CAS PENDING→EXPIRED (+ approvalDenied/expired audit) here, then let the parked
+      // Expiry: CAS PENDING→EXPIRED (+ approvalDenied/expired audit) here, then let the parked
       // waiter consume the buffered denial and drive the run AWAITING_APPROVAL→FAILED.
       do {
         // Nothing races the boot sweep, so a lost CAS should be impossible; still signal so the
@@ -156,10 +156,10 @@ private extension ApprovalBootReconciler {
       await coordinator.signal(approvalId: approval.id, .denied(.expired))
       revalidate = false
     case .pending:
-      // Unexpired: re-park so buttons and the FIFO queue-behind contract survive restart (§5.5).
+      // Unexpired: re-park so buttons and the FIFO queue-behind contract survive restart.
       revalidate = false
     case .rejected:
-      // Deny-side twin of the §6.5 crash window: the deny CAS (+ its audit) committed but the
+      // Deny-side twin of the crash window: the deny CAS (+ its audit) committed but the
       // process died before the waiter's observation-fill/run-fail commit. Never re-CAS or
       // re-audit — just re-buffer the denial so the re-parked waiter finalizes the run
       // AWAITING_APPROVAL→FAILED. The original decision (owner reject vs stale policy) is not

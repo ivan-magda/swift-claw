@@ -1,7 +1,7 @@
 import ClawCore
 import Foundation
 
-/// Workspace file READ (§7.1). Containment (FR-T4) lives in `WorkspacePathContainment`: the
+/// Workspace file READ. Containment lives in `WorkspacePathContainment`: the
 /// joined path is resolved to its canonical real path (`realpath` — symlinks and `..` fully
 /// resolved) and the canonical workspace root must be a path-component prefix of the FINAL
 /// target.
@@ -43,7 +43,7 @@ public struct FileReadTool: Tool {
   public var timeout: Duration { .seconds(5) }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
-    nil  // nothing egresses; containment is enforced inside execute (FR-T4)
+    nil  // nothing egresses; containment is enforced inside execute
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
@@ -79,7 +79,7 @@ public struct FileReadTool: Tool {
     return ToolPayload(
       content: ToolOutputCap.cap(redacted, maxGraphemes: outputCapGraphemes),
       status: .ok,
-      ingestedUntrusted: true,  // a workspace file can be a downloaded artifact (FR-O3)
+      ingestedUntrusted: true,  // a workspace file can be a downloaded artifact
       readPrivateData: readPrivateData
     )
   }

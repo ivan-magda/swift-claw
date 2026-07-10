@@ -4,7 +4,7 @@ import Logging
 
 /// The one place a durable PENDING run becomes lane work (inbound turns, /runnow, the scheduler
 /// tick). The lane closure cannot rethrow and `TurnDispatching.run` resolves every failure
-/// in-band except `StoreError.diskFull` (D1), so this body is the single spelling of that
+/// in-band except `StoreError.diskFull`, so this body is the single spelling of that
 /// contract.
 struct TurnEnqueuer: Sendable {
   let lanes: SessionLaneRegistry
@@ -41,7 +41,7 @@ struct TurnEnqueuer: Sendable {
   }
 
   /// A claimed scheduler/run-now fire is a first-class lane citizen — ordered and cancellable
-  /// like any turn (D1).
+  /// like any turn.
   func enqueue(fire: ClaimedFire) async {
     await enqueue(
       runId: fire.runId,

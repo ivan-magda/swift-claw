@@ -1,15 +1,15 @@
 import Foundation
 
 /// The per-call policy inputs the gate reads. Taint and private-data are each the OR of the
-/// persisted/assembly flag and the run-local flag (§9.1: `(session ∪ run)` / `(assembly ∪ run)`).
+/// persisted/assembly flag and the run-local flag (`(session ∪ run)` / `(assembly ∪ run)`).
 public struct ToolDispatchContext: Sendable, Equatable {
   public let sessionTainted: Bool
   public let runIngestedUntrusted: Bool
   public let assemblyPrivateData: Bool
   public let runPrivateData: Bool
-  /// §4.5: the persisted `sessions.has_private_data` flag. The trifecta private-data leg is
+  /// The persisted `sessions.has_private_data` flag. The trifecta private-data leg is
   /// `assemblyPrivateData ∪ runPrivateData ∪ sessionHasPrivateData`, so the gate stays armed after
-  /// the context window rolls past the private read that first set it (closes the §12 over-cap gap).
+  /// the context window rolls past the private read that first set it.
   public let sessionHasPrivateData: Bool
   public let approvalAlreadyPending: Bool
 
@@ -30,8 +30,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
   }
 }
 
-/// One dispatched call's full result: the observation, the audit-safe args rendering (§9.1 —
-/// matched spans replaced, never the secret), and the recorded action when the gate parked the
+/// One dispatched call's full result: the observation, the audit-safe args rendering (matched
+/// spans replaced, never the secret), and the recorded action when the gate parked the
 /// call for the owner's durable approval.
 public struct ToolDispatchOutcome: Sendable, Equatable {
   public let observation: ToolObservation

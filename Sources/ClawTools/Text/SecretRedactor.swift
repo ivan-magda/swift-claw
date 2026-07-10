@@ -1,7 +1,7 @@
 import Foundation
 
-/// Exact-value secret redaction for tool OUTPUT (`file_read` §7.1; `web_fetch` extracted text,
-/// rev.1 L5). The replacement token matches the arg guard's audit rendering vocabulary.
+/// Exact-value secret redaction for tool OUTPUT (`file_read`; `web_fetch` extracted text).
+/// The replacement token matches the arg guard's audit rendering vocabulary.
 public struct SecretRedactor: Sendable {
   public static let replacement = "[REDACTED:secret-value]"
 

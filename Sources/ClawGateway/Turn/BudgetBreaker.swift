@@ -3,12 +3,12 @@ import Foundation
 
 /// Post-commit daily kill-switch. The *refusal* lives in `provider_usage` (durable across restart,
 /// enforced by the pre-call `BudgetGate`); this actor only owns the once-per-UTC-day owner DM, which
-/// is in-memory by design (D4) — a missed DM after a crash is acceptable, a missed refusal is not.
+/// is in-memory by design — a missed DM after a crash is acceptable, a missed refusal is not.
 public actor BudgetBreaker {
   private let budget: RunBudget
   /// The UTC day whose trip has already been DMed; resets implicitly when `now` rolls to a new day.
   private var notifiedDay: Date?
-  /// The UTC day whose PROACTIVE-cap trip has already been DMed (spec §11) — a second latch
+  /// The UTC day whose PROACTIVE-cap trip has already been DMed — a second latch
   /// beside the global one, so a proactive trip and a global trip each notify at most once/day.
   private var notifiedProactiveDay: Date?
 

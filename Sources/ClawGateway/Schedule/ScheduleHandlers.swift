@@ -2,9 +2,9 @@ import ClawCore
 import Foundation
 import Logging
 
-/// The /schedule family (spec §7–§9): create parses ONE draft and parks it; list is read-only;
+/// The /schedule family: create parses ONE draft and parks it; list is read-only;
 /// pause/resume/runnow/cancel claim the update BEFORE their effect so a redelivered command
-/// applies once (§5.4). Occurrence anchoring is `schedule.policy`'s — never recomputed here.
+/// applies once. Occurrence anchoring is `schedule.policy`'s — never recomputed here.
 struct ScheduleHandlers: Sendable {
   let schedule: ScheduleSurface
   let sessionMessages: any SessionMessageStore
@@ -14,7 +14,7 @@ struct ScheduleHandlers: Sendable {
   let now: @Sendable () -> Date
   let logger: Logger
 
-  /// `/schedule <text>` (spec §7/§8): claim the update, run the ONE parse call, validate
+  /// `/schedule <text>`: claim the update, run the ONE parse call, validate
   /// deterministically, park the validated draft, and send the gateway-authored confirm prompt.
   /// Nothing is armed here; every failure is a plain-language reply and parks nothing.
   func create(
@@ -40,7 +40,7 @@ struct ScheduleHandlers: Sendable {
 
     switch await schedule.parser.parse(ownerText: text, sessionId: sessionId) {
     case .providerUnavailable:
-      // DEG-01: an LLM/API failure degrades exactly like any turn; nothing armed.
+      // An LLM/API failure degrades exactly like any turn; nothing armed.
       return await replies.sendCommandAck(
         updateId: rawUpdate.updateId,
         chatId: message.chatId,
@@ -69,7 +69,7 @@ struct ScheduleHandlers: Sendable {
           text: problem.ownerReply
         )
       case .success(let validated):
-        // Single slot per session: a second /schedule visibly displaces the older draft (§9).
+        // Single slot per session: a second /schedule visibly displaces the older draft.
         await pendingConfirmations.park(.command(.scheduleArm(validated)), sessionId: sessionId)
         return await replies.sendCommandAck(
           updateId: rawUpdate.updateId,
@@ -87,7 +87,7 @@ struct ScheduleHandlers: Sendable {
     }
   }
 
-  /// `/schedule list` (spec §9): read-only, deduped via the canned-reply claim like
+  /// `/schedule list`: read-only, deduped via the canned-reply claim like
   /// `CommandHandlers.memoryReview`.
   func list(rawUpdate: RawUpdate, chatId: Int64) async throws(RoutingHalt) -> HandleOutcome {
     let jobs = try await replies.perform(
@@ -161,8 +161,8 @@ struct ScheduleHandlers: Sendable {
     }
     try await replies.claimUpdate(updateId: rawUpdate.updateId, chatId: message.chatId)
 
-    // The CALLER recomputes next-from-now (preamble contract): occurrences inside the paused
-    // window are skipped, never caught up (§5.4). No race with the ticker: the row is PAUSED
+    // The CALLER recomputes next-from-now: occurrences inside the paused
+    // window are skipped, never caught up. No race with the ticker: the row is PAUSED
     // until `resume` commits, and the ticker's scan predicate excludes PAUSED.
     let job = try await replies.perform(
       "resume lookup",
@@ -234,7 +234,7 @@ struct ScheduleHandlers: Sendable {
     }
 
     // The fused fireNow already created the session, trigger message, PENDING run, and
-    // jobExecuted audit; TurnEnqueuer gives the run ordering and cancellability (D1).
+    // jobExecuted audit; TurnEnqueuer gives the run ordering and cancellability.
     await enqueuer.enqueue(fire: fire)
 
     return await replies.sendCommandAck(
@@ -280,8 +280,8 @@ struct ScheduleHandlers: Sendable {
 
 private extension ScheduleHandlers {
   /// The list's next-fire column: the stored `next_occurrence`, which is itself
-  /// calculator-produced — materialized at arm time and advanced only inside the claim (§4.1) —
-  /// so the list can never disagree with what actually fires (spec §9's single-source rule),
+  /// calculator-produced — materialized at arm time and advanced only inside the claim —
+  /// so the list can never disagree with what actually fires,
   /// including everyNMinutes phase. Non-ACTIVE rows show none.
   func displayNextFire(_ job: ScheduledJob) -> Date? {
     if job.status == .active {

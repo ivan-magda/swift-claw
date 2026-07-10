@@ -1,9 +1,9 @@
 import Crypto
 import Foundation
 
-/// Why a non-approve resolution happened — the audit `decision` column vocabulary (spec §3.1).
-/// Typed so no call site writes a magic decision string (preamble deviation D9); the persisted
-/// column stays free-text and carries these rawValues.
+/// Why a non-approve resolution happened — the audit `decision` column vocabulary.
+/// Typed so no call site writes a magic decision string; the persisted column stays free-text
+/// and carries these rawValues.
 public enum ApprovalDecision: String, Sendable, Equatable {
   case rejected
   case expired
@@ -12,7 +12,7 @@ public enum ApprovalDecision: String, Sendable, Equatable {
   case stalePolicy = "stale_policy"
 }
 
-/// One `approvals` row (spec §4.1).
+/// One `approvals` row.
 public struct Approval: Sendable, Equatable {
   public let id: Int64
   public let runId: Int64
@@ -23,7 +23,7 @@ public struct Approval: Sendable, Equatable {
   public let canonicalTarget: String
   public let argsHash: String  // SHA-256 hex of canonicalArgsJSON
   public let policyVersion: String
-  public let ownerUserId: Int64  // the run's delivery chat id (§4.4)
+  public let ownerUserId: Int64  // the run's delivery chat id
   public let nonce: String
   public let observationMessageId: Int64
   public let toolCallId: String
@@ -145,7 +145,7 @@ public enum ApprovalNonce {
 }
 
 /// The single canonical args digest: computed when an action is recorded and recomputed inside
-/// the approve CAS (spec §6.2 step 5). One helper so the two computations can never diverge.
+/// the approve CAS. One helper so the two computations can never diverge.
 public enum ApprovalArgsHash {
   public static func sha256Hex(_ canonicalArgsJSON: String) -> String {
     SHA256.hash(data: Data(canonicalArgsJSON.utf8))
@@ -156,9 +156,9 @@ public enum ApprovalArgsHash {
   }
 }
 
-/// §6.3 budget carry-over, derived from persisted rows (preamble deviation D4): rounds and tool
-/// calls counted from the run's messages, tokens/USD summed over provider_usage. Defined here so
-/// the `RunStore` seam can name it; produced by Phase 3's `resumeUsage`.
+/// Budget carry-over, derived from persisted rows: rounds and tool calls counted from the run's
+/// messages, tokens/USD summed over provider_usage. Defined here so the `RunStore` seam can name
+/// it; produced by `resumeUsage`.
 public struct ResumeUsage: Sendable, Equatable {
   public let rounds: Int
   public let toolCalls: Int

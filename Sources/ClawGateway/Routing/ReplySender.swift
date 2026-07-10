@@ -103,7 +103,7 @@ struct ReplySender: Sendable {
   }
 
   /// Best-effort "storage full" notice (the send may still succeed — a full disk doesn't break
-  /// the network) and the signal for the poller to back off without advancing the offset (F23).
+  /// the network) and the signal for the poller to back off without advancing the offset.
   func storageFull(chatId: Int64) async -> HandleOutcome {
     do {
       _ = try await delivery.sendMessage(chatId: chatId, text: Degradation.storageFull)

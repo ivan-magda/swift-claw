@@ -11,11 +11,11 @@ public enum RunEvent: Sendable, Equatable {
   case cancel
   /// `/new` terminates the running turn and any queued turns from the old conversation window.
   case supersede
-  /// The gate demanded an approval mid-turn (§5.3 suspend commit).
+  /// The gate demanded an approval mid-turn (suspend commit).
   case suspendForApproval
-  /// A valid owner approval resolved the row; the waiter resumes the turn (§6.3).
+  /// A valid owner approval resolved the row; the waiter resumes the turn.
   case resumeApproved
-  /// Reject/expiry resolved the row against the run (§6.4).
+  /// Reject/expiry resolved the row against the run.
   case resolveDenied
 }
 

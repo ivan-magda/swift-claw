@@ -29,7 +29,7 @@ public struct Daemon: Sendable {
 
   public func run() async throws {
     // One-shot boot reconciliation before serving: register the command menu and sweep orphaned
-    // runs (F22), so Telegram's state and the run table match this process before any update lands.
+    // runs, so Telegram's state and the run table match this process before any update lands.
     await boot()
 
     // ServiceLifecycle logs the whole service graph at debug/trace. Floor its logger at .info so a

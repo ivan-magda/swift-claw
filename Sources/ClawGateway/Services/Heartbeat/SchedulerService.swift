@@ -4,14 +4,14 @@ import Foundation
 import Logging
 import ServiceLifecycle
 
-/// The 60 s wall-clock ticker (spec §5): scans due jobs, claims each through the store's fused
-/// compare-and-advance (the ONE overlap guard — §5.2), applies the misfire table (§5.3), and
+/// The 60 s wall-clock ticker: scans due jobs, claims each through the store's fused
+/// compare-and-advance (the ONE overlap guard), applies the misfire table, and
 /// enqueues claimed fires onto their job session's lane. Tick-level mutual exclusion is
 /// structural: one instance, one sequential loop; cross-process exclusion is the startup flock.
 public struct SchedulerService: Service {
-  /// The tick grain (spec §5.3, pinned — not config): coarse enough to be negligible load, fine
-  /// enough that an on-time fire lands within a minute of its occurrence. The misfire table's
-  /// "lateness ≤ grain ⇒ on time" row is defined against this constant.
+  /// The tick grain (ARCHITECTURE.md §6.3, pinned — not config): coarse enough to be negligible
+  /// load, fine enough that an on-time fire lands within a minute of its occurrence. The misfire
+  /// table's "lateness ≤ grain ⇒ on time" row is defined against this constant.
   public static let tickInterval: Duration = .seconds(60)
 
   private let jobs: any ScheduledJobStore
@@ -54,7 +54,7 @@ public struct SchedulerService: Service {
   public func run() async throws {
     logger.info("scheduler starting")
     await cancelWhenGracefulShutdown {
-      // Tick immediately on start (restart recovery — §5.1), then sleep between ticks.
+      // Tick immediately on start (restart recovery), then sleep between ticks.
       while !Task.isCancelled {
         await tick()
         do {
@@ -100,7 +100,7 @@ private extension SchedulerService {
   /// details, never control flow), so a months-old due date cannot enumerate unbounded dates.
   static let misfireCountLimit = 1_000
 
-  /// The §5.3 lateness table for one due job — all wall clock, never tick counts.
+  /// The misfire lateness table for one due job — all wall clock, never tick counts.
   func fire(job: ScheduledJob, tickTime: Date) async {
     guard let due = job.nextOccurrence else {
       return  // dueJobs' predicate makes this unreachable; defensive, never crash the ticker
@@ -186,7 +186,7 @@ private extension SchedulerService {
   /// text (never silent truncation) and the beat skips before any LLM cost.
   static let heartbeatFileCapGraphemes = 2_200
 
-  /// The spec §12 fire condition: enabled ∧ interval elapsed ∧ outside quiet hours ∧ under the
+  /// The heartbeat fire condition: enabled ∧ interval elapsed ∧ outside quiet hours ∧ under the
   /// daily cap ∧ HEARTBEAT.md usable. "Due" = enabled ∧ interval elapsed; only a DUE beat that
   /// skips is audited, so the audit trail stays quiet tick-to-tick.
   func heartbeatIfDue(tickTime: Date) async {
@@ -220,7 +220,7 @@ private extension SchedulerService {
       return
     }
 
-    // The cap's day boundary is the CLAW_TIMEZONE day string, aligned with quiet hours (§4.3);
+    // The cap's day boundary is the CLAW_TIMEZONE day string, aligned with quiet hours;
     // a stale stamp means the counter rolled over.
     let day = SchedulerHealth.dayString(for: tickTime, timezone: heartbeat.timezone)
     if state.heartbeatCountDay == day, state.heartbeatCount >= heartbeat.maxPerDay {
@@ -231,7 +231,7 @@ private extension SchedulerService {
     let checklist = workspace.load(file: .heartbeat, maxGraphemes: Self.heartbeatFileCapGraphemes)
     let usableText = checklist.text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard checklist.outcome == .present, usableText.isEmpty == false else {
-      // BEFORE any LLM cost (spec §12)
+      // BEFORE any LLM cost
       await auditHeartbeatSkip(reason: .emptyFile, at: tickTime)
       return
     }
@@ -252,8 +252,8 @@ private extension SchedulerService {
 
   /// A skip changes no durable state, so its audit row stands alone (no co-transaction to
   /// ride). Deduped per EPISODE: a due heartbeat that keeps skipping for the same reason
-  /// audits once, not once per 60 s tick — spec §12's "audit stays quiet tick-to-tick" (an
-  /// 11-hour quiet window must not write ~660 identical rows).
+  /// audits once, not once per 60 s tick — an 11-hour quiet window must not write ~660
+  /// identical rows.
   func auditHeartbeatSkip(reason: HeartbeatSkipReason, at tickTime: Date) async {
     guard await skipEpisode.begin(reason) else {
       return  // same episode as the previous tick — already audited

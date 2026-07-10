@@ -1,7 +1,7 @@
 import ClawCore
 import Foundation
 
-/// The renderer's belt-and-braces guard (rev.1 H2): drops tool rows with no owning anchor and
+/// The renderer's belt-and-braces guard: drops tool rows with no owning anchor and
 /// any anchor whose observations are incomplete, so a malformed history (crash, partial commit)
 /// can never become a wire-protocol 400. The LOAD seam already bounds windows by conversational
 /// rows; no-orphan holds only because BOTH seams enforce it.

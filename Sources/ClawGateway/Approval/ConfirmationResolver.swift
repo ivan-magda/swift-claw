@@ -2,7 +2,7 @@ import ClawCore
 import Foundation
 import Logging
 
-/// Intercepts plain text while a confirmation is parked for the session (§9/§14). The session
+/// Intercepts plain text while a confirmation is parked for the session. The session
 /// lookup is read-only and fails closed: with the lookup down we cannot prove whether a parked
 /// "yes" should be intercepted, so nothing is claimed and the update is retried instead.
 struct ConfirmationResolver: Sendable {
@@ -147,7 +147,7 @@ private extension ConfirmationResolver {
       return (result.newlyClaimed, MemoryReplies.deleted(id: itemId))
     case .scheduleArm(let validated):
       // owner_chat_id is set HERE, in code, from the arming chat — never model- or
-      // prompt-controlled (spec §4.1). The insert is the exact parked draft (§8, no re-parse).
+      // prompt-controlled. The insert is the exact parked draft (no re-parse).
       let newJob = NewScheduledJob(
         ownerChatId: chatId,
         label: validated.label,

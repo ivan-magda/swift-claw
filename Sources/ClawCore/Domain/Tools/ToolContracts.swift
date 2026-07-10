@@ -122,7 +122,7 @@ extension JSONValue {
   }
 }
 
-/// How a tool's arguments can leave the machine (§18-H's sink classification). Declared on the
+/// How a tool's arguments can leave the machine (the sink classification). Declared on the
 /// contract — with no default — so a new tool cannot compile without classifying itself; the
 /// gate consumes this declaration instead of a name set, making a forgotten classification a
 /// compile error rather than a silent arg-guard bypass.
@@ -145,9 +145,9 @@ public enum CanonicalTargetResolution: Sendable, Equatable {
   case refused(reason: String)
 }
 
-/// The declared risk tier the gate enforces (ARCHITECTURE §10.2): `safe` executes untapped,
-/// `ask` requires a per-action durable approval (Inc 5a), `dangerous` is refused unless
-/// explicitly config-enabled (vacuous until Inc 5b). No default anywhere — a new tool cannot
+/// The declared risk tier the gate enforces: `safe` executes untapped, `ask` requires a
+/// per-action durable approval, `dangerous` is refused unless explicitly config-enabled.
+/// No default anywhere — a new tool cannot
 /// compile without classifying itself, mirroring `ToolEgressClass`.
 public enum RiskLevel: String, Sendable, Equatable {
   case safe
@@ -188,11 +188,11 @@ public enum ToolObservationStatus: String, Sendable, Equatable {
   case blockedPendingApproval = "blocked_pending_approval"
 }
 
-/// What a tool returns, sans call identity — the dispatcher stamps identity (settles spec §20-6).
+/// What a tool returns, sans call identity — the dispatcher stamps identity.
 /// `readPrivateData` is true only for a `file_read` whose canonical target is MEMORY.md/USER.md
-/// (rev.1 H1 — the run-local private-data signal).
+/// (the run-local private-data signal).
 public struct ToolPayload: Sendable, Equatable {
-  public let content: String  // already output-capped (§15)
+  public let content: String  // already output-capped
   public let status: ToolObservationStatus
   public let ingestedUntrusted: Bool  // true on any successful web/file read
   public let readPrivateData: Bool
@@ -211,7 +211,7 @@ public struct ToolPayload: Sendable, Equatable {
 }
 
 /// The uniform result of one dispatched call — success and failure are both observations
-/// (failures-as-observations, §19 ARCHITECTURE), never a thrown error crossing the loop.
+/// (failures-as-observations), never a thrown error crossing the loop.
 public struct ToolObservation: Sendable, Equatable {
   public let callId: String
   public let toolName: String
@@ -266,7 +266,7 @@ public protocol Tool: Sendable {
   /// exactly what was authorized, never re-derive it; `nil` for the other classes.
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
 
-  /// The §5.4 prompt inputs for an ask-tier or trifecta approval, produced at gate time on the
+  /// The prompt inputs for an ask-tier or trifecta approval, produced at gate time on the
   /// gate-resolved `canonicalTarget`. The default is a generic egress presentation; write tools
   /// override with blast radius, a redacted preview, and any scan warnings.
   func approvalPresentation(
@@ -288,7 +288,7 @@ extension Tool {
   }
 }
 
-/// The search seam (D2). One v1 impl: ExaSearchProvider (§7.4, research-settled).
+/// The search seam. One v1 impl: ExaSearchProvider.
 public protocol SearchProviding: Sendable {
   func search(query: String, count: Int) async throws -> [SearchResult]
 }

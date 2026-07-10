@@ -1,7 +1,7 @@
 import Foundation
 
 /// The pinned spend bounds for one run and one day. All fields are config-overridable; the
-/// hard offline failsafe is `dayTokenCeiling` (D1), derived so the three pricing numbers can
+/// hard offline failsafe is `dayTokenCeiling`, derived so the three pricing numbers can
 /// never drift out of sync. USD caps are the user-facing limits, enforced when a price is known.
 public struct RunBudget: Sendable, Equatable {
   public let maxInputTokens: Int
@@ -10,7 +10,7 @@ public struct RunBudget: Sendable, Equatable {
   public let retryBudget: Int
   public let perRunUSD: Double
   public let perDayUSD: Double
-  /// The nested proactive (scheduled + heartbeat) daily pool (S3). Always intended < perDayUSD —
+  /// The nested proactive (scheduled + heartbeat) daily pool. Always intended < perDayUSD —
   /// the global cap stays the household kill-switch; this bounds unattended spend alone.
   public let proactivePerDayUSD: Double
   public let referenceUSDPerToken: Double
@@ -74,8 +74,8 @@ public enum BudgetDecision: Sendable, Equatable {
   case deny(cap: String)
 }
 
-/// Offline, pre-call spend gate. Reads today's running totals (derived from `provider_usage`,
-/// D4) and this run's estimate, and refuses before any provider call when a cap is met.
+/// Offline, pre-call spend gate. Reads today's running totals (derived from `provider_usage`)
+/// and this run's estimate, and refuses before any provider call when a cap is met.
 public struct BudgetGate: Sendable {
   /// The cap name a proactive trip emits. TurnRunner keys the once-per-UTC-day owner DM on it,
   /// so it is a single named definition, not a call-site string.
@@ -92,10 +92,10 @@ public struct BudgetGate: Sendable {
     self.budget = budget
   }
 
-  /// Deny when any spend bound is met. The offline-guaranteed token failsafe (D1) is checked
+  /// Deny when any spend bound is met. The offline-guaranteed token failsafe is checked
   /// before the best-effort USD caps, so it still trips when no price is known (`estimatedCostUSD`
   /// defaults to 0). Global checks run first, unchanged order — then, iff the run is proactive
-  /// (`origin != .interactive`), the nested proactive pool is consulted (spec §11).
+  /// (`origin != .interactive`), the nested proactive pool is consulted.
   public func preflight(
     todayTokens: Int,
     todayUSD: Double,

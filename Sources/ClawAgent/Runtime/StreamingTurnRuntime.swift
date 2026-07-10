@@ -198,7 +198,7 @@ private extension StreamingTurnRuntime {
   }
 
   /// Awaits the sink but abandons it at `draftSendDeadline`: turn completion must never wedge on
-  /// a stalled draft POST (spec §12 #14). Task groups always await their children, so the
+  /// a stalled draft POST. Task groups always await their children, so the
   /// send/deadline pair is deliberately unstructured — first to finish wins, termination cancels
   /// both, and an abandoned send is harmless (the draft is ephemeral, best-effort UX).
   func sendDraftBounded(_ markdown: String, chatId: Int64, draftId: Int64) async {

@@ -2,8 +2,7 @@ import ClawCore
 import Foundation
 
 /// One exchange-grouping unit: an assistant anchor (`tool_calls`) plus its tool rows, or a single
-/// plain conversational message. §12's atomic droppable unit — never a partial exchange on the
-/// wire.
+/// plain conversational message. The atomic droppable unit — never a partial exchange on the wire.
 private struct HistoryGroup {
   let id: String
   let messages: [StoredMessage]
@@ -245,8 +244,8 @@ private extension ContextBuilder {
     return section(id: .history, cap: cap, units: units)
   }
 
-  /// Groups sanitized history so each exchange is ONE unit (§12 atomic droppable units). Group
-  /// ids are stable per assembly ("history-<index of the group's first row>").
+  /// Groups sanitized history so each exchange is ONE atomic droppable unit. Group ids are stable
+  /// per assembly ("history-<index of the group's first row>").
   func historyGroups(from history: [StoredMessage]) -> [HistoryGroup] {
     let sanitized = HistoryHygiene.sanitize(history)
     var groups: [HistoryGroup] = []
@@ -372,11 +371,12 @@ private extension ContextBuilder {
 // MARK: - Policy Fingerprint
 
 public extension ContextBuilder {
-  /// The class-1 prompt materials in the §3.2 pinned order, RAW (pre "## path" wrapping), folded
-  /// into the injected static sub-hash. Reused verbatim at pick-up (the persisted `policy_version`,
-  /// stamped by `TurnRunner`) and at callback resolution (Phase 3 recompute) so the two can never
-  /// diverge. `public` because `TurnRunner` (ClawGateway) stamps with it cross-module and `assemble`
-  /// returns it — a `private` helper would be invisible to both the stamp seam and `@testable`.
+  /// The system-tier prompt materials in the pinned order (ARCHITECTURE.md §11), RAW (pre "## path"
+  /// wrapping), folded into the injected static sub-hash. Reused verbatim at pick-up (the
+  /// persisted `policy_version`, stamped by `TurnRunner`) and recomputed at callback resolution so
+  /// the two can never diverge. `public` because `TurnRunner` (ClawGateway) stamps with it
+  /// cross-module and `assemble` returns it — a `private` helper would be invisible to both the
+  /// stamp seam and `@testable`.
   func currentPolicyVersion() -> String {
     PolicyFingerprint.combined(
       staticSubhash: policyStaticSubhash,
@@ -391,8 +391,8 @@ public extension ContextBuilder {
 }
 
 private extension ContextBuilder {
-  /// The uncapped raw file text for a system-tier prompt file; missing/unreadable folds in as ""
-  /// (spec §3.2). Uncapped because these files load uncapped in `buildFixedSections`.
+  /// The uncapped raw file text for a system-tier prompt file; missing/unreadable folds in as "".
+  /// Uncapped because these files load uncapped in `buildFixedSections`.
   func rawPromptText(_ file: WorkspaceFile) -> String {
     let loadedFile = workspace.load(file: file, maxGraphemes: nil)
     switch loadedFile.outcome {
@@ -486,7 +486,7 @@ private extension ContextBuilder {
   }
 
   /// The one render seam for both native assistant anchors (with decoded `toolCalls`) and fenced
-  /// tool rows (labeled by the owning anchor's tool name, §12). Kept groups come from the fitter
+  /// tool rows (labeled by the owning anchor's tool name). Kept groups come from the fitter
   /// verbatim — one `SectionUnit` per group — so this only re-expands each surviving group's rows.
   func fittedHistoryMessages(
     fitted: [FittedSection],

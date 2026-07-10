@@ -130,7 +130,7 @@ public struct SSEParser: Sendable {
     return events
   }
 
-  /// Fragments assembled in index order — emitted only on `.finished` (D5). Drops any
+  /// Fragments assembled in index order — emitted only on `.finished`. Drops any
   /// accumulator that never received an id/name (malformed stream) and defaults empty
   /// arguments to `"{}"`, mirroring the blocking path's `parse(result:)` (same rule, two seams).
   private var assembledToolCalls: [ToolCall] {

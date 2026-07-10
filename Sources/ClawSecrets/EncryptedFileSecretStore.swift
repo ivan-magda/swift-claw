@@ -11,7 +11,7 @@ import Foundation
 /// Encrypted-at-rest secrets over swift-crypto AES-GCM. The on-disk envelope is
 /// `[1-byte version] + AES.GCM.SealedBox.combined` (12-byte random nonce ‖ ciphertext ‖ 16-byte tag);
 /// the version byte is bound as **AEAD associated data**, so it can't be swapped without failing
-/// authentication. The 256-bit key is 32 random bytes in `secret.key` (safe-opened in Task 03).
+/// authentication. The 256-bit key is 32 random bytes in `secret.key` (safe-opened by `openKey`).
 public struct EncryptedFileSecretStore: SecretStore {
   /// Current envelope version. Single-version today; bound as AAD so a future multi-version world
   /// dispatches on it AND authenticates it.

@@ -1,9 +1,9 @@
 import Foundation
 
-// MARK: - The §7 draft DSL (Codable mirror of the model's JSON)
+// MARK: - Draft DSL (Codable mirror of the model's JSON)
 
-/// The constrained draft the parse LLM must emit (spec §7). Never stored: code validates it and
-/// code constructs the stored rule (D2/D11) — the model never authors a `RecurrenceRule`.
+/// The constrained draft the parse LLM must emit. Never stored: code validates it and
+/// code constructs the stored rule — the model never authors a `RecurrenceRule`.
 public struct ScheduleDraft: Sendable, Equatable, Codable {
   public let label: String
   public let prompt: String
@@ -51,8 +51,8 @@ public enum DraftScheduleKind: String, Sendable, Equatable, Codable {
 
 // MARK: - Validation output
 
-/// Deterministic validation output (spec §7): the exact thing parked, displayed, and armed. The
-/// arm commit inserts FROM this value, never a re-parse (kills the display/arm TOCTOU, §8).
+/// Deterministic validation output: the exact thing parked, displayed, and armed. The
+/// arm commit inserts FROM this value, never a re-parse (kills the display/arm TOCTOU).
 public struct ValidatedSchedule: Sendable, Equatable {
   public let label: String
   public let prompt: String
@@ -78,8 +78,8 @@ public struct ValidatedSchedule: Sendable, Equatable {
   }
 }
 
-/// Every way a draft can fail deterministic validation (spec §7). Each case carries the
-/// plain-language owner reply WITH an example rephrase — the reply is part of the §7 contract,
+/// Every way a draft can fail deterministic validation. Each case carries the
+/// plain-language owner reply WITH an example rephrase — the reply is part of the contract,
 /// so it lives on the type and is tested, never improvised at a call site.
 public enum ScheduleDraftProblem: Error, Sendable, Equatable {
   case emptyLabel
@@ -220,7 +220,7 @@ private extension RecurrenceWords {
 
 // MARK: - Validator
 
-/// Deterministic §7 validation plus the ONLY draft → `Calendar.RecurrenceRule` mapping
+/// Deterministic validation plus the ONLY draft → `Calendar.RecurrenceRule` mapping
 /// (exhaustive switch). Pure: fixed inputs and an injected `now` produce a fixed
 /// `ValidatedSchedule`; the calculator is the same one the ticker uses, so the previewed first
 /// fire and the armed `next_occurrence` agree by construction.
@@ -330,7 +330,7 @@ private extension ScheduleDraftValidator {
     }
   }
 
-  /// The exhaustive draft → rule mapping (spec §7). Every rule pins `seconds: [0]` so fires
+  /// The exhaustive draft → rule mapping. Every rule pins `seconds: [0]` so fires
   /// land on the minute regardless of when validation ran.
   func buildRule(
     _ schedule: DraftSchedule,
@@ -459,7 +459,7 @@ private extension ScheduleDraftValidator {
 
       resolved = instant
     } else {
-      // Omitted date ⇒ the next instant matching HH:MM in the zone (spec §7).
+      // Omitted date ⇒ the next instant matching HH:MM in the zone.
       var match = DateComponents()
       match.hour = clock.hour
       match.minute = clock.minute

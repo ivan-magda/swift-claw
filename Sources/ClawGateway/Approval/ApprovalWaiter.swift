@@ -2,13 +2,13 @@ import ClawCore
 import Foundation
 import Logging
 
-/// The single execution locus (§5.5): the parked task that turns a coordinator resolution signal
-/// into the §6.3 approve resume or the §6.4 deny finalization. Resolvers (callback handler, ticker,
-/// command path) only CAS the durable row and `signal` the coordinator; the waiter — always running
-/// on the session lane via `SessionActor.enqueue`, at suspend time (Task 14) and boot re-park
-/// (Task 19) — performs the observation update, run transition, owner notice, and button disarm.
+/// The single execution locus: the parked task that turns a coordinator resolution signal into
+/// the approve resume or the deny finalization. Resolvers (callback handler, ticker, command
+/// path) only CAS the durable row and `signal` the coordinator; the waiter — always running on
+/// the session lane via `SessionActor.enqueue`, at suspend time and boot re-park — performs the
+/// observation update, run transition, owner notice, and button disarm.
 ///
-/// Conforms to the Task-14 `ApprovalParking` seam (which refines `Sendable`) so `TurnRunner` can
+/// Conforms to the `ApprovalParking` seam (which refines `Sendable`) so `TurnRunner` can
 /// hold it as `parker`; the `park` signature is exactly the protocol requirement.
 public struct ApprovalWaiter: ApprovalParking {
   private let approvals: any ApprovalStore
@@ -47,7 +47,7 @@ public struct ApprovalWaiter: ApprovalParking {
   }
 
   /// Awaits the coordinator resolution (buffered if it already landed), then runs the resume/deny
-  /// steps. `revalidatePolicyOnApprove` is true ONLY for the §6.5 boot crash-window re-park.
+  /// steps. `revalidatePolicyOnApprove` is true ONLY for the boot crash-window re-park.
   public func park(
     approvalId: Int64,
     runId: Int64,
@@ -57,7 +57,7 @@ public struct ApprovalWaiter: ApprovalParking {
   ) async {
     guard let signal = await coordinator.awaitResolution(approvalId: approvalId) else {
       // Cancelled while parked (graceful shutdown / lane cancel) with no resolution: exit cleanly.
-      // The durable approval row is untouched; Task 19 boot re-park rebuilds the hold on restart.
+      // The durable approval row is untouched; the boot re-park rebuilds the hold on restart.
       logger.debug("approval \(approvalId) park cancelled before resolution; exiting cleanly")
       return
     }
@@ -117,7 +117,7 @@ private extension ApprovalWaiter {
       return
     case .storeFailed:
       // The pre-execution claim threw at the store seam — nothing ran. Leave the run
-      // AWAITING_APPROVAL so the §6.5 boot crash-window path (APPROVED row + AWAITING run)
+      // AWAITING_APPROVAL so the boot crash-window path (APPROVED row + AWAITING run)
       // recovers it, and tell the owner instead of going silent. Never args/content in this log.
       logger.error(
         "approved claim store-failed (tool \(approval.tool), approval \(approval.id)); run left AWAITING_APPROVAL for boot recovery"
@@ -173,12 +173,12 @@ private extension ApprovalWaiter {
   }
 }
 
-// MARK: - Deny Half (§6.4)
+// MARK: - Deny Half
 
 extension ApprovalWaiter {
-  /// The §6.4 deny/cancel/expiry half: the resolver (callback handler, ticker, `/stop`//`new`, or
-  /// boot sweep) has ALREADY CAS'd the row and signalled the coordinator (D3 — the audit rode that
-  /// CAS). The waiter — the single execution locus (§5.5) — now (1) fills the placeholder
+  /// The deny/cancel/expiry half: the resolver (callback handler, ticker, `/stop`//`new`, or
+  /// boot sweep) has ALREADY CAS'd the row and signalled the coordinator (the audit rode that
+  /// CAS). The waiter — the single execution locus — now (1) fills the placeholder
   /// observation in place so history never holds a dangling tool_call, (2) drives the run to its
   /// terminal state, (3) sends the plain-language owner notice for a reject/expiry (the `/stop`//
   /// `new` command already acked the owner), and (4) disarms the buttons. Steps 3–4 are best-effort
@@ -227,7 +227,7 @@ extension ApprovalWaiter {
 // MARK: - Deny Copy
 
 private extension ApprovalWaiter {
-  /// The synthetic tool-observation content (§6.4) — what the model sees for the un-run call, so
+  /// The synthetic tool-observation content — what the model sees for the un-run call, so
   /// the next assembly explains the missing result instead of exposing a dangling proposal.
   static func deniedObservationContent(for decision: ApprovalDecision) -> String {
     switch decision {
@@ -239,7 +239,7 @@ private extension ApprovalWaiter {
     }
   }
 
-  /// The plain-language owner DM for a reject/expiry (§6.4). Cancel/supersede are covered by the
+  /// The plain-language owner DM for a reject/expiry. Cancel/supersede are covered by the
   /// `/stop`//`new` command ack, so no notice is sent for those.
   static func ownerNotice(for decision: ApprovalDecision) -> String {
     switch decision {

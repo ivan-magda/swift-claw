@@ -2,7 +2,7 @@ import ClawCore
 import Foundation
 import Logging
 
-/// Outcome of the one NL → draft parse call (spec §7). Failure shapes are typed so the router
+/// Outcome of the one NL → draft parse call. Failure shapes are typed so the router
 /// picks the right plain-language reply; nothing is ever armed on any failure path.
 public enum ScheduleDraftParseResult: Sendable, Equatable {
   case draft(ScheduleDraft)
@@ -19,8 +19,8 @@ public protocol ScheduleDraftParsing: Sendable {
 }
 
 /// The ONE LLM call in the `/schedule` flow: a system-authored prompt at the trusted tier turns
-/// the owner's text — input DATA, never instructions to obey — into the §7 draft DSL. The call
-/// obeys the same spend discipline as a turn (§5.3/§6): day-cap preflight before issuing,
+/// the owner's text — input DATA, never instructions to obey — into the draft DSL. The call
+/// obeys the same spend discipline as a turn: day-cap preflight before issuing,
 /// a durable `provider_usage` row after (run-less — `runId: nil`), and a deadline race so the
 /// poller (which awaits `router.handle`) is never blinded by a provider brownout.
 public struct ScheduleDraftParser: ScheduleDraftParsing {
@@ -88,7 +88,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       maxOutputTokens: Self.maxParseOutputTokens
     )
 
-    // Day-cap preflight (§5.3): the token breaker runs before EVERY provider call, command
+    // Day-cap preflight: the token breaker runs before EVERY provider call, command
     // parses included. A failed totals read fails closed — no spend without working accounting.
     let todayTokens: Int
     let todayUSD: Double
@@ -124,13 +124,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     do {
       response = try await completeBounded(request: request)
     } catch is ParseDeadlineExceeded {
-      // The request may still be billing server-side; debit the estimate (§15) so the day cap
+      // The request may still be billing server-side; debit the estimate so the day cap
       // sees the spend, exactly like a deadline-hit turn.
       record(estimatedFor: request, sessionId: sessionId)
       return .providerUnavailable
     } catch ProviderError.retryable, ProviderError.connectFailed {
       // Exhausted retries / transport failure: parity with a turn's `degradedForCaughtError`
-      // (§15) — debit an estimate so a provider brownout still moves the day cap, rather than
+      // — debit an estimate so a provider brownout still moves the day cap, rather than
       // letting repeated `/schedule` attempts re-issue the call with the totals frozen.
       record(estimatedFor: request, sessionId: sessionId)
       return .providerUnavailable
@@ -218,7 +218,7 @@ private extension ScheduleDraftParser {
     do {
       try usageStore.recordUsage(usage)
     } catch {
-      // The spend already happened and no further call follows, so unlike the mid-run rule (§6)
+      // The spend already happened and no further call follows, so unlike the mid-run rule
       // there is nothing left to halt; surface the accounting gap instead of failing the parse.
       logger.warning("schedule parse: usage write failed: \(error)")
     }
@@ -231,7 +231,7 @@ private extension ScheduleDraftParser {
   /// Marker thrown by the deadline child; maps to the estimated-debit degradation path.
   struct ParseDeadlineExceeded: Error {}
 
-  /// Races the provider call against `parseDeadlineSeconds` (the turn runtimes' pattern, §6.6).
+  /// Races the provider call against `parseDeadlineSeconds` (the turn runtimes' pattern).
   /// Cancellation propagates promptly: `complete`'s HTTP call and backoff sleeps both observe it.
   func completeBounded(request: ChatRequest) async throws -> ChatResponse {
     try await withThrowingTaskGroup(of: ChatResponse.self) { group in

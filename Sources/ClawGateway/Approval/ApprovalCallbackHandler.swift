@@ -2,9 +2,9 @@ import ClawCore
 import Foundation
 import Logging
 
-/// §6.2 fail-closed callback auth chain. Every failure is audited (`messageIn`/`forbidden`, D8) and
+/// The fail-closed callback auth chain. Every failure is audited (`messageIn`/`forbidden`) and
 /// answered with a neutral toast, and the approval row is left untouched. A valid owner tap CASes the
-/// durable row and signals the coordinator — the waiter (Tasks 16/17) performs the resume/deny. The
+/// durable row and signals the coordinator — the waiter performs the resume/deny. The
 /// handler itself only claims, authorizes, CASes, signals, and toasts; it never touches the
 /// observation row, the run state, or the button keyboard.
 public struct ApprovalCallbackHandler: Sendable {
@@ -20,7 +20,7 @@ public struct ApprovalCallbackHandler: Sendable {
 
   // Module-internal init: `ReplySender`/`RoutingHalt` are internal to `ClawGateway`, so a `public`
   // init would not compile ("parameter uses an internal type"). The daemon composes the handler
-  // through the public `make(...)` factory below — Task 16's `makeDaemon` injects the result into the
+  // through the public `make(...)` factory below — `makeDaemon` injects the result into the
   // production `MessageRouter` via `approvalCallbacks`; tests reach the init directly through
   // `@testable import ClawGateway`. The `handle(_:updateId:)` surface stays public.
   init(
@@ -47,7 +47,7 @@ public struct ApprovalCallbackHandler: Sendable {
 
   /// Composition factory for the `clawd` module. `ReplySender` and the init are `ClawGateway`-internal,
   /// so the daemon cannot call the init directly; this builds the internal `ReplySender` from public
-  /// ingredients and returns the composed handler. Task 16's `makeDaemon` calls it and injects the
+  /// ingredients and returns the composed handler. `makeDaemon` calls it and injects the
   /// result into the production `MessageRouter` via `approvalCallbacks`.
   public static func make(  // swiftlint:disable:this function_parameter_count
     processed: any ProcessedUpdateStore,
@@ -74,7 +74,7 @@ public struct ApprovalCallbackHandler: Sendable {
     )
   }
 
-  /// §6.2 step 1 (claim) then the auth chain. Returns a `HandleOutcome` so the poller's
+  /// Step 1 (claim), then the auth chain. Returns a `HandleOutcome` so the poller's
   /// cursor-advance semantics are identical to the message path: a redelivered update is deduped by
   /// the shared `processed_updates` claim and skipped.
   public func handle(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {
@@ -169,7 +169,7 @@ private extension ApprovalCallbackHandler {
   }
 
   /// The approve CAS found the row already past its deadline: route it through the deny path so the
-  /// waiter fails the run exactly as the ticker would (spec §6.2 step 5 / §6.4).
+  /// waiter fails the run exactly as the ticker would.
   func commitExpiry(_ callback: RawCallback, approval: Approval) async -> HandleOutcome {
     let denied: Bool
     do {
@@ -206,7 +206,7 @@ private extension ApprovalCallbackHandler {
 // MARK: - Fail-closed helpers
 
 private extension ApprovalCallbackHandler {
-  /// An auth failure is an access event, not an approval decision (D8): audit `messageIn`/
+  /// An auth failure is an access event, not an approval decision: audit `messageIn`/
   /// `forbidden` (actor `owner` only when the sender IS the owner, else `system`), answer a neutral
   /// toast, leave the row untouched.
   func denyAuth(_ callback: RawCallback, approval: Approval?) async -> HandleOutcome {
@@ -231,8 +231,8 @@ private extension ApprovalCallbackHandler {
 
   /// A transient store failure after the claim: the update is already consumed, so a re-poll would
   /// only hit the duplicate claim. Fail closed — no CAS means no execution — and leave the PENDING
-  /// row for the expiry ticker or a fresh owner tap. Because the row is still tappable, §9 answers
-  /// "try again" (not the neutral "no longer available" copy). The spinner is still stopped.
+  /// row for the expiry ticker or a fresh owner tap. Because the row is still tappable, the toast
+  /// says "try again" (not the neutral "no longer available" copy). The spinner is still stopped.
   func storeFailure(_ callback: RawCallback, _ error: any Error) async -> HandleOutcome {
     logger.error("callback resolution store failure: \(error)")
     return await finish(callback, toast: Self.retryToast)

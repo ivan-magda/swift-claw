@@ -92,6 +92,33 @@ Each unit answers: *what does it do, how is it used, what does it depend on.* `C
 
 `SearchProviding` is a `ClawCore` protocol; the default backend is Exa (`https://api.exa.ai/search`, a pinned trusted endpoint and documented trust dependency like `base_url`, including Exa's right to use query input/output to provide/improve its services). `Secrets.searchApiKey` keys it; unconfigured means the tool is absent and doctor reports info, not an error.
 
+### 3.1 Code map — where each section lives in the code
+
+The durable spec→code link runs **from this document to the code**, by stable symbol name (symbol
+names are refactoring-tracked; line numbers and section coordinates are not). Code comments do not
+cite section numbers back; where a constant or case would read as a bug without a pointer, the full
+form `ARCHITECTURE.md §N` is used, sparingly.
+
+| Spec section | Implementing symbols (target) |
+|---|---|
+| §4 Process & runtime | `RunCommand`, `EnvironmentLoader`, `DaemonBuilder` (clawd); `Daemon`, `InstanceLock`, `DeveloperLogging` (ClawGateway) |
+| §5 Per-session lane | `SessionLaneRegistry`, `SessionActor` (ClawAgent); `TurnEnqueuer`, `TurnDispatch` (ClawGateway) |
+| §5.3 Run budget | `RunBudget` (ClawCore); `BudgetBreaker` (ClawGateway) |
+| §6.1 Inbound lifecycle | `MessageRouter`, `AccessControl`, `TurnRunner` (ClawGateway); `SessionMessageStore.claimAndPersistInbound` (ClawCore/ClawData) |
+| §6.2/§6.5 Tool & approval flow | `ToolPolicyGate`, `GatedToolDispatcher` (ClawTools); `ApprovalWaiter`, `ApprovedActionExecutor`, `ApprovalCallbackHandler`, `ApprovalCoordinator`, `DeferredApprovalParker`, `ApprovalBootReconciler`, `ApprovalExpiryService` (ClawGateway) |
+| §6.3/§14 Scheduler | `SchedulerService`, `HeartbeatSettings`, `ScheduleSurface`, `ScheduleDraftParser` (ClawGateway); `OccurrenceCalculator`, `OccurrencePolicy`, `ScheduleDraft` (ClawCore) |
+| §6.4 Transactional outbox | `OutboxDispatcher`, `OutboxSignal`, `ReplySender` (ClawGateway); `OutboxStore` (ClawCore); `OutboxStoreGRDB`, `OutboxDedupKey` (ClawData); `ReplySplitter`, `ContentHash` (ClawCore) |
+| §7 Persistence | store protocols under `ClawCore/Persistence/`; `ClawDatabase` (migrator + `classifyError`), `MappedDatabase`, `…GRDB` stores (ClawData) |
+| §8 LLM provider | `LLMProvider`, `ChatRequest`/`ChatResponse`, `CostResolver`, `UsageResolver` (ClawCore); `OpenAICompatibleProvider`, `SSEParser`, `PriceFileLoader` (ClawLLM) |
+| §9 Memory & context | `ContextBuilder`, `BudgetFitter`, `MemoryRanker`, `RecallCutoff`, `HistoryHygiene`, `LabeledContextFactory` (ClawAgent); `WorkspaceReading` (ClawCore); `FileSystemWorkspace` (ClawWorkspace) |
+| §10 Tool system & policy | `ToolRegistry`, `FileReadTool`, `FileWriteTool`, `MemoryWriteTool`, `WebFetchTool`, `WebSearchTool`, `WorkspacePathContainment` (ClawTools); `Tool`, `ToolDefinition`, `RiskLevel`, `ToolDispatching` (ClawCore) |
+| §11 Approval system | `Approval`, `ApprovalFSM`, `PendingToolAction`, `RecordedToolAction` (ClawCore); `ApprovalStoreGRDB` (ClawData); the §6.2/§6.5 gateway symbols above |
+| §12 Security & trust | `SecretRedactor`, `SSRFGuard`, `ExfilArgGuard`, `CanonicalURL`, `ToolOutputCap` (ClawTools); `ContextTier` provenance labels and `LabeledContext` (ClawCore) |
+| §15 Config & secrets | `AppConfig`, `QuietHours`, `SecretStore` seam (ClawCore); `EncryptedFileSecretStore`, `EnvSecretStore`, `SecretStoreResolver` (ClawSecrets) |
+| §16 Observability | `DoctorReport`, `SchedulerHealth`, `ApprovalsHealthRows` (ClawGateway); `ApprovalsHealth`, `RunsHealth`, `AuditLog` (ClawCore); `AuditLogGRDB` (ClawData) |
+| §19 Error taxonomy | `ClawCore/Errors/` (`ClawExitCode`, `ConfigError`, `TelegramError`, `StoreError`, `ProviderError`); `ClawDatabase.classifyError` → `throws(StoreError)` seam (ClawData) |
+| §19.1 Run/approval FSM | `RunFSM`, `ApprovalFSM` (ClawCore) |
+
 ## 4. Process & runtime model
 
 - Built on **`swift-service-lifecycle` `ServiceGroup`** (SSWG) over SwiftNIO. The daemon is a **process supervisor**, not a web framework — no listen socket by default (long-polling is outbound), which is the better secure-by-default posture.

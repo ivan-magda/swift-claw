@@ -3,7 +3,7 @@ import Foundation
 /// A daily suppression window in minutes-of-day, evaluated in a caller-supplied timezone.
 /// The window is half-open `[start, end)` and may cross midnight (e.g. 22:00-09:00).
 /// `start == end` is rejected at parse: a zero-width window would silently mean "never quiet"
-/// or "always quiet" depending on reading — spec §12 makes it a config error instead.
+/// or "always quiet" depending on reading — it is a config error instead.
 public struct QuietHours: Sendable, Equatable {
   public let startMinuteOfDay: Int
   public let endMinuteOfDay: Int
@@ -54,7 +54,7 @@ public struct QuietHours: Sendable, Equatable {
   }
 
   private static func minuteOfDay(_ text: String) -> Int? {
-    // Fail-closed HH:MM grammar (spec §13): exactly two ASCII digits per field. "9:00",
+    // Fail-closed HH:MM grammar: exactly two ASCII digits per field. "9:00",
     // "09:0", and "+09:00" are config ERRORS — `Int(_:)` alone would accept all three.
     let pieces = text.split(separator: ":", omittingEmptySubsequences: false)
 

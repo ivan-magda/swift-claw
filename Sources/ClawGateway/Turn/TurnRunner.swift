@@ -12,7 +12,7 @@ public protocol TurnDispatching: Sendable {
     triggerMessageId: Int64
   ) async throws
   /// Continues a run the approval waiter already flipped AWAITING_APPROVAL → RUNNING: no pick-up,
-  /// context bound to the filled observation row, budget counters carried over (§6.3).
+  /// context bound to the filled observation row, budget counters carried over.
   func resume(runId: Int64, sessionId: Int64, chatId: Int64, contextBoundMessageId: Int64) async
 }
 
@@ -35,10 +35,10 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  /// Pokes the outbox dispatcher to drain after a commit. A no-op until Task 6 wires the dispatcher.
+  /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that
-  /// don't exercise the breaker (the DM is best-effort and out-of-band from the durable outbox, D4).
+  /// don't exercise the breaker (the DM is best-effort and out-of-band from the durable outbox).
   private let breaker: BudgetBreaker?
   private let delivery: (any MessageDelivery)?
   /// The turn's clock. Sourcing the budget "today" window from an injected now (defaulting to the
@@ -46,14 +46,14 @@ public struct TurnRunner: TurnDispatching {
   /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
   private let now: @Sendable () -> Date
   private let logger: Logger
-  /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's resolution
-  /// (§5.5). Phase 2 uses `InertApprovalParker`; Phase 3 swaps in `ApprovalWaiter`.
+  /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's
+  /// resolution.
   private let parker: any ApprovalParking
-  /// Seconds a suspended approval stays live (spec §4.6). Injected so the commit's `expires_ts` is
-  /// deterministic under test.
+  /// Seconds a suspended approval stays live (ARCHITECTURE.md §11). Injected so the commit's
+  /// `expires_ts` is deterministic under test.
   private let approvalExpirySeconds: Int
 
-  /// Most-recent messages pulled for context; `ContextBuilder` then caps by grapheme budget (§9).
+  /// Most-recent messages pulled for context; `ContextBuilder` then caps by grapheme budget.
   private static let historyLimit = 50
 
   public init(
@@ -102,7 +102,7 @@ public struct TurnRunner: TurnDispatching {
     }
 
     let now = now()
-    // §3.2: the fingerprint is computed from the same builder inputs `assemble` will use and
+    // The fingerprint is computed from the same builder inputs `assemble` will use and
     // stamped in the same UPDATE that flips PENDING→RUNNING, so an approval this run creates binds
     // to the exact prompt/tool/config surface in force at run start.
     let policyVersion = contextBuilder.currentPolicyVersion()
@@ -137,7 +137,7 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    // Real session taint (§10): the gate reads `(session ∪ run)`, so a session already tainted by a
+    // Real session taint: the gate reads `(session ∪ run)`, so a session already tainted by a
     // prior turn keeps the exfil gate armed from this run's very first tool call.
     let outcome = try await agent.runTurn(
       runId: runId,
@@ -162,9 +162,10 @@ public struct TurnRunner: TurnDispatching {
     )
   }
 
-  /// The §6.3 continuation, identical to `run` except: no `pickUp` (the waiter already flipped
-  /// AWAITING_APPROVAL → RUNNING via the executor), the context bound is the FILLED observation
-  /// row's message id (the trigger id would exclude the partial exchange), and `runTurn` is seeded
+  /// The post-approval continuation, identical to `run` except: no `pickUp` (the waiter already
+  /// flipped AWAITING_APPROVAL → RUNNING via the executor), the context bound is the FILLED
+  /// observation row's message id (the trigger id would exclude the partial exchange), and
+  /// `runTurn` is seeded
   /// with the run's carried-over budget counters. Non-throwing: it runs on the session lane inside
   /// the waiter's `park`, so every failure resolves in-band (a build/turn failure fails the run so
   /// the lane frees).
@@ -257,8 +258,8 @@ private extension TurnRunner {
       limit: Self.historyLimit
     )
     let totals = try usageStore.todayTokensAndCost(now: clock)
-    // The proactive pool is one aggregate over scheduled + heartbeat (spec §11); interactive
-    // runs never pay for the extra query.
+    // The proactive pool is one aggregate over scheduled + heartbeat; interactive runs never
+    // pay for the extra query.
     let proactiveTodayUSD: Double
     if origin == .interactive {
       proactiveTodayUSD = 0
@@ -277,7 +278,7 @@ private extension TurnRunner {
   }
 
   /// `resume`'s shared failure tail: every pre-commit failure fails the run in-band (best-effort)
-  /// so the lane frees — `resume` is non-throwing by contract (§6.3).
+  /// so the lane frees — `resume` is non-throwing by contract.
   func failResume(runId: Int64, stage: String, error: any Error) {
     logger.error("resume \(stage) failed for run \(runId): \(error)")
     try? runs.failRun(runId: runId, now: now())
@@ -330,7 +331,7 @@ private extension TurnRunner {
     in context: CommitContext
   ) async throws {
     let appendedNotices: [String] = []
-    // Spec §12 ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
+    // Ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
     // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
     let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
     let chunks =
@@ -377,7 +378,7 @@ private extension TurnRunner {
   }
 
   /// Audit tail for a committed `.completed` turn: the turn row, plus the heartbeat
-  /// delivered/suppressed marker (spec §12) when the run is a heartbeat.
+  /// delivered/suppressed marker when the run is a heartbeat.
   func auditCompleted(content: String, suppressedAck: Bool, in context: CommitContext) throws {
     try audit.appendAudit(
       turnAudit(
@@ -550,7 +551,8 @@ private extension TurnRunner {
 // MARK: - Suspend Commit
 
 private extension TurnRunner {
-  /// Persists the §5.3 checkpoint, drains the prompt, then HOLDS the lane on the durable approval.
+  /// Persists the suspend checkpoint, drains the prompt, then HOLDS the lane on the durable
+  /// approval.
   /// A lost-arbitration race (a /stop//new already terminated the run) or a write fault rolls the
   /// commit back — there is nothing to park, so the turn simply ends (in-band, no throw escapes).
   func suspendForApproval(
@@ -616,7 +618,7 @@ private extension TurnRunner {
     }
 
     notifyOutbox()
-    // Holds THIS lane Task until the approval resolves; the Phase 3 waiter performs the resume/deny.
+    // Holds THIS lane Task until the approval resolves; the waiter performs the resume/deny.
     await parker.park(
       approvalId: receipt.approvalId,
       runId: context.runId,
@@ -633,7 +635,7 @@ private extension TurnRunner {
   /// Post-commit daily kill-switch. Reads today's totals (durable, from `provider_usage`) and asks
   /// the breaker whether to DM the owner — `shouldNotifyTrip` is idempotent per UTC day, so calling
   /// this from both the `.completed` and `.degraded` branches still yields at most one DM. The DM and
-  /// its audit are best-effort (`try?`): a failed send is acceptable (D4), unlike a failed refusal.
+  /// its audit are best-effort (`try?`): a failed send is acceptable, unlike a failed refusal.
   func notifyDailyCapIfTripped(
     chatId: Int64,
     runId: Int64,
@@ -670,7 +672,7 @@ private extension TurnRunner {
     )
   }
 
-  /// Post-commit proactive-cap owner DM (§11): once per UTC day via the breaker's second latch.
+  /// Post-commit proactive-cap owner DM: once per UTC day via the breaker's second latch.
   /// The trip itself is already durable (the run FAILED with the cap named); DM + audit are
   /// best-effort, mirroring `notifyDailyCapIfTripped`.
   func notifyProactiveCapIfTripped(

@@ -14,7 +14,7 @@ public enum RunState: String, Sendable, Equatable {
   /// Terminal cancellation requested by `/new`; queued turns are superseded too.
   case superseded = "SUPERSEDED"
   /// Suspended to a durable checkpoint: an `approvals` row is the one source of truth for
-  /// "blocked on approval" (ARCHITECTURE §7.1); resolved by callback, ticker, boot, or command.
+  /// "blocked on approval"; resolved by callback, ticker, boot, or command.
   case awaitingApproval = "AWAITING_APPROVAL"
 }
 
@@ -37,7 +37,7 @@ public enum RunCommitResult: Sendable, Equatable {
   case ignored
 }
 
-/// Outcome of the pre-execution claim at the approved-resume seam (§6.3/§6.6). The claim is what
+/// Outcome of the pre-execution claim at the approved-resume seam. The claim is what
 /// makes an approved external write and a `/stop`//`new` cancellation mutually exclusive: both
 /// contend on the run row's FSM transition, so exactly one side ever owns the effect.
 public enum ApprovedExecutionClaim: Sendable, Equatable {
@@ -51,10 +51,10 @@ public enum ApprovedExecutionClaim: Sendable, Equatable {
   case runNotResumable
 }
 
-/// Boot triage of an APPROVED approval whose observation is still the placeholder (§6.5/§6.6).
+/// Boot triage of an APPROVED approval whose observation is still the placeholder.
 public enum ClaimedApprovalBootOutcome: Sendable, Equatable {
   /// The run is still AWAITING_APPROVAL: the crash landed between the approve CAS and the
-  /// execution claim, nothing ran — the §6.5 belt re-parks a waiter to replay the recorded action.
+  /// execution claim, nothing ran — the boot belt re-parks a waiter to replay the recorded action.
   case reparkForReplay
   /// The claim committed but the result record never landed (crash mid-execution): the run is
   /// terminal (or was failed here), the placeholder was resolved with the unknown-outcome note,
@@ -86,7 +86,7 @@ public enum SessionKey {
   private static let dmPrefix = "tg:dm:"
   private static let jobPrefix = "sched:job:"
 
-  /// The heartbeat's dedicated persistent session (spec D3 symmetry). No chat id in the key —
+  /// The heartbeat's dedicated persistent session. No chat id in the key —
   /// the delivery target is resolved from config, so `chatId(from:)` stays nil by design.
   public static let heartbeat = "sched:heartbeat"
 
@@ -94,7 +94,7 @@ public enum SessionKey {
     "\(dmPrefix)\(chatId)"
   }
 
-  /// A job's dedicated session, created lazily at first fire (spec D3). No chat id in the key —
+  /// A job's dedicated session, created lazily at first fire. No chat id in the key —
   /// the delivery target is `scheduled_jobs.owner_chat_id`, so `chatId(from:)` stays nil by design.
   public static func scheduledJob(id: Int64) -> String {
     "\(jobPrefix)\(id)"
@@ -183,7 +183,7 @@ public struct SessionContextSnapshot: Sendable, Equatable {
   public let historyMessageIds: [Int64]
   public let windowStartMessageId: Int64?
   public let isTainted: Bool
-  /// §4.5: the persisted private-data flag, fed into the trifecta gate's private-data leg so the
+  /// The persisted private-data flag, fed into the trifecta gate's private-data leg so the
   /// exfil gate stays armed even after the window rolls past the private read that set it.
   public let hasPrivateData: Bool
 
@@ -322,7 +322,7 @@ public struct AssistantTurn: Sendable, Equatable {
   public let chunks: [OutboxChunk]
   public let exchanges: [ToolExchange]
   public let setTainted: Bool
-  /// §4.5 sticky private-data flag — persisted like `setTainted`, on every commit path.
+  /// Sticky private-data flag — persisted like `setTainted`, on every commit path.
   public let setPrivateData: Bool
 
   public init(
@@ -356,7 +356,7 @@ public struct DegradedTurn: Sendable, Equatable {
   public let chunk: OutboxChunk
   public let exchanges: [ToolExchange]
   public let setTainted: Bool
-  /// §4.5 sticky private-data flag — persisted like `setTainted`, incl. on the failure path.
+  /// Sticky private-data flag — persisted like `setTainted`, incl. on the failure path.
   public let setPrivateData: Bool
 
   public init(
@@ -473,9 +473,9 @@ public struct RunsHealth: Sendable, Equatable {
   }
 }
 
-/// Doctor snapshot of the approvals table (spec §4.6): how many owner decisions are outstanding
+/// Doctor snapshot of the approvals table: how many owner decisions are outstanding
 /// and how long the oldest one has waited. `oldestPendingAgeSeconds` is nil when nothing is
-/// pending. The ClawGateway renderer (Task 07) compares the age against `approval_expiry`.
+/// pending. The ClawGateway renderer compares the age against `approval_expiry`.
 public struct ApprovalsHealth: Sendable, Equatable {
   public let pendingCount: Int
   public let oldestPendingAgeSeconds: Int?

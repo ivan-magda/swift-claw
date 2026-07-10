@@ -68,8 +68,8 @@ struct InputRichMessage: Encodable {
   let markdown: String
 }
 
-/// Bot API 7.0+ `link_preview_options` (ARCHITECTURE §12: outbound controls strip auto-fetching
-/// link elements). Sent unconditionally disabled so Telegram's servers never fetch a URL embedded
+/// Bot API 7.0+ `link_preview_options` (outbound controls strip auto-fetching link elements).
+/// Sent unconditionally disabled so Telegram's servers never fetch a URL embedded
 /// in outbound text — including attacker-chosen URLs quoted back in a tool-approval prompt.
 struct LinkPreviewOptions: Encodable {
   let isDisabled: Bool
@@ -94,8 +94,8 @@ struct TCallbackQuery: Decodable {
 
 /// The inline-keyboard wire shape Telegram expects inside `reply_markup`:
 /// `{"inline_keyboard":[[{"text":…,"callback_data":…}]]}`. This is the authoritative shape the
-/// approval keyboard's JSON string (Task 13) must reproduce; the client sends the string parsed to
-/// a `JSONValue`, so these Encodable types are the contract, not the send path.
+/// approval keyboard's JSON string must reproduce; the client sends the string parsed to a
+/// `JSONValue`, so these Encodable types are the contract, not the send path.
 struct TInlineKeyboardButton: Encodable {
   let text: String
   let callback_data: String

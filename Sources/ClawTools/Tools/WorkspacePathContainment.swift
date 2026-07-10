@@ -6,9 +6,9 @@ import Foundation
   import Darwin
 #endif
 
-/// Shared realpath-based workspace containment (spec §8.1 / FR-T4), extracted from
-/// `FileReadTool` and extended for file CREATION so `file_write` resolves the same invariant at
-/// gate time. Containment is path-COMPONENT prefix, never string prefix.
+/// Shared realpath-based workspace containment, extracted from `FileReadTool` and extended for
+/// file CREATION so `file_write` resolves the same invariant at gate time. Containment is
+/// path-COMPONENT prefix, never string prefix.
 public enum WorkspacePathContainment {
   public enum Resolution: Sendable, Equatable {
     case resolved(String)
@@ -37,7 +37,7 @@ public enum WorkspacePathContainment {
     return .resolved(target)
   }
 
-  /// §8.1 creation mode: canonicalize the deepest EXISTING ancestor (asserting containment at
+  /// Creation mode: canonicalize the deepest EXISTING ancestor (asserting containment at
   /// every resolved step — a mid-path symlink may jump anywhere), then validate each remaining
   /// to-be-created component. `.`/`..` are refused outright for writes: new components cannot be
   /// realpath-resolved, so lexical dot-traversal is never trusted.

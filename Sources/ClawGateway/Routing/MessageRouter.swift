@@ -116,8 +116,8 @@ public struct MessageRouter: Sendable {
 private extension MessageRouter {
   func route(rawUpdate: RawUpdate) async throws(RoutingHalt) -> HandleOutcome {
     // A callback-only update normalizes to nil (no message/edited_message); without this branch it
-    // would .skipped and the cursor would advance past it (spec §6.1). The handler runs the §6.2
-    // chain and returns a real HandleOutcome, so cursor semantics are unchanged.
+    // would .skipped and the cursor would advance past it. The handler returns a real
+    // HandleOutcome, so cursor semantics are unchanged.
     if let callback = rawUpdate.callback {
       guard let approvalCallbacks else {
         logger.debug("callback update \(rawUpdate.updateId) with no approval handler, skipping")
@@ -242,7 +242,7 @@ private extension MessageRouter {
     }
   }
 
-  /// Plain text first offers itself to any parked confirmation for the session (§9/§14); only an
+  /// Plain text first offers itself to any parked confirmation for the session; only an
   /// unclaimed message becomes a durable turn.
   func routePlain(
     _ text: String,

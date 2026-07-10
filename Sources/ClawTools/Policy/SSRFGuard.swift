@@ -30,8 +30,8 @@ public enum ResolvedAddress: Sendable, Equatable {
   }
 }
 
-/// FR-T8's pure classifier: is this address safe to connect to from the daemon? The blocklist is
-/// a pinned table (spec §7.2); every range has a test row. IPv4-mapped IPv6 is unwrapped and the
+/// The pure classifier: is this address safe to connect to from the daemon? The blocklist is
+/// a pinned table; every range has a test row. IPv4-mapped IPv6 is unwrapped and the
 /// embedded v4 re-checked.
 public enum SSRFGuard {
   public static func isPublic(_ address: ResolvedAddress) -> Bool {
@@ -136,7 +136,7 @@ private extension SSRFGuard {
   }
 }
 
-/// The DNS seam (§20 item 4): keeps `SSRFGuard` pure and lets fetch tests script resolutions.
+/// The DNS seam: keeps `SSRFGuard` pure and lets fetch tests script resolutions.
 public protocol AddressResolving: Sendable {
   func resolve(host: String) async throws -> [ResolvedAddress]
 }

@@ -11,7 +11,7 @@ public enum ApprovalSignal: Sendable, Equatable {
 
 /// Process-local coordinator between a resolver (callback/ticker/command/boot) and the ONE lane
 /// waiter parked on an approval. Signal buffering closes the race where a resolution lands between
-/// the suspend commit and the waiter's registration (§5.5): a signal with no waiter is retained and
+/// the suspend commit and the waiter's registration: a signal with no waiter is retained and
 /// delivered on the next `awaitResolution`.
 public actor ApprovalCoordinator {
   private var waiters: [Int64: CheckedContinuation<ApprovalSignal?, Never>] = [:]
@@ -22,7 +22,7 @@ public actor ApprovalCoordinator {
   /// One waiter per approval id. A buffered signal (resolver won the race) returns immediately.
   /// Returns `nil` when the awaiting task is cancelled before a signal arrives (graceful shutdown /
   /// lane cancel): the continuation is resumed and its slot cleared so nothing leaks, and the
-  /// durable row is left untouched for Task 19 boot re-park to rebuild.
+  /// durable row is left untouched for boot re-park to rebuild.
   public func awaitResolution(approvalId: Int64) async -> ApprovalSignal? {
     if let signal = buffered.removeValue(forKey: approvalId) {
       return signal
@@ -59,10 +59,9 @@ public actor ApprovalCoordinator {
   }
 }
 
-/// The seam `TurnRunner` (suspend) and boot re-park (Task 19) hand the lane hold to. `ApprovalWaiter`
-/// (Tasks 16/19) is the real conformer — it awaits the coordinator, then performs the §6.3 resume or
-/// §6.4 deny. Kept a protocol so Phase 2 wires the placeholder below without a forward dependency on
-/// the Phase 3 waiter.
+/// The seam `TurnRunner` (suspend) and boot re-park hand the lane hold to. `ApprovalWaiter` is the
+/// real conformer — it awaits the coordinator, then performs the resume or deny. Kept a protocol so
+/// the placeholder below can be wired without a forward dependency on the real waiter.
 public protocol ApprovalParking: Sendable {
   func park(
     approvalId: Int64,
@@ -107,10 +106,10 @@ public final class DeferredApprovalParker: ApprovalParking {
   }
 }
 
-/// Phase 2 placeholder: HOLDS the session lane by awaiting the coordinator, then returns without
-/// resuming. Production Phase 2 registers no ask-tier tool, so `park` is never reached in
-/// production; the real resume/deny is `ApprovalWaiter` (Tasks 16/19), which replaces this at the
-/// composition root.
+/// Placeholder: HOLDS the session lane by awaiting the coordinator, then returns without
+/// resuming. The real resume/deny is `ApprovalWaiter`, which replaces this at the composition
+/// root; until it is wired, production registers no ask-tier tool, so `park` is never reached in
+/// production.
 public struct InertApprovalParker: ApprovalParking {
   private let coordinator: ApprovalCoordinator
   private let logger: Logger
@@ -129,7 +128,7 @@ public struct InertApprovalParker: ApprovalParking {
   ) async {
     let signal = await coordinator.awaitResolution(approvalId: approvalId)
     logger.debug(
-      "approval \(approvalId) resolved as \(String(describing: signal)); Phase 3 waiter completes the run"
+      "approval \(approvalId) resolved as \(String(describing: signal)); the waiter completes the run"
     )
   }
 }

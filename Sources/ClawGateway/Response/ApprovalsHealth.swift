@@ -1,6 +1,6 @@
 import ClawCore
 
-/// Renders doctor's approvals health rows from the persisted `approvals` table (spec §4.6). Pure
+/// Renders doctor's approvals health rows from the persisted `approvals` table. Pure
 /// so the rendering is unit-testable; doctor is a separate process, so only persisted state is
 /// visible to it — the count/age arrive from `ApprovalStore.approvalsHealth` at call time.
 ///
@@ -20,7 +20,7 @@ public enum ApprovalsHealthRows {
   public static func rows(health: ApprovalsHealth, approvalExpirySeconds: Int) -> [Row] {
     // Oldest pending age shown against the expiry window (age/expiry), mirroring the
     // heartbeat.today "count/cap" idiom — a row nearing the cap flags a stuck approval before the
-    // ticker sweeps it (spec §4.6).
+    // ticker sweeps it.
     let oldestAge =
       health.oldestPendingAgeSeconds.map { age in "\(age)/\(approvalExpirySeconds)" } ?? "none"
 

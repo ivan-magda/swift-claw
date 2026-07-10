@@ -136,7 +136,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
     status == 408 || status == 429 || (500..<600).contains(status)
   }
 
-  /// Reasoning models reject sampling params; detection is forward-looking (Inc 1 sends none).
+  /// Reasoning models reject sampling params; detection is forward-looking (none are sent yet).
   static func isReasoningModel(_ model: String) -> Bool {
     model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4") || model.hasPrefix("o-")
       || model.contains("reasoning")

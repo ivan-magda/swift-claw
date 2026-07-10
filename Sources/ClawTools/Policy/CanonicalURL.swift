@@ -8,7 +8,7 @@ public enum CanonicalURLError: Error, Sendable, Equatable {
   case unsupportedPort(Int)
 }
 
-/// The §9.2 canonical form — ONE algorithm serving both the owner's approval display and the
+/// The canonical form — ONE algorithm serving both the owner's approval display and the
 /// approval's exact-match target, plus the full pre-dispatch URL policy (scheme/port/userinfo/
 /// IDN), so a URL can never win approval at gate time and then be refused at dispatch time.
 public enum CanonicalURL {
@@ -56,7 +56,7 @@ public enum CanonicalURL {
     let rawPath = components.percentEncodedPath
     let path = rawPath.isEmpty ? "/" : normalizeEscapeHex(rawPath)
     let querySuffix = components.percentEncodedQuery.map { query in
-      "?" + normalizeEscapeHex(query)  // byte-for-byte after the one pass (rev.1 M2)
+      "?" + normalizeEscapeHex(query)  // byte-for-byte after the one pass
     }
 
     return .success("\(scheme)://\(host)\(portSuffix)\(path)\(querySuffix ?? "")")

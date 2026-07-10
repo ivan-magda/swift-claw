@@ -4,8 +4,8 @@ public enum CommandReplies {
   public static let freshConversation =
     "Started a fresh conversation — earlier context cleared."
 
-  /// The owner manual, including the parked-entry interaction rules (spec §9, stated verbatim
-  /// as owner-visible text): slash commands bypass confirmation resolution entirely; only the
+  /// The owner manual, including the parked-entry interaction rules (stated verbatim as
+  /// owner-visible text): slash commands bypass confirmation resolution entirely; only the
   /// next plain text resolves a parked entry; /new clears it; a second /schedule displaces it;
   /// /stop and /new act on the interactive session only.
   public static let help = """

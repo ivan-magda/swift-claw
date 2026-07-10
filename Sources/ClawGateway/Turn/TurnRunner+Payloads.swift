@@ -50,8 +50,8 @@ extension TurnRunner {
     )
   }
 
-  /// Assembles the owner-visible payload: overflow notices PREPEND (rev.1 L1), the approval
-  /// prompt APPENDS. Single-part payloads (the common case) pass through unchanged.
+  /// Assembles the owner-visible payload: overflow notices PREPEND, the approval prompt APPENDS.
+  /// Single-part payloads (the common case) pass through unchanged.
   func ownerVisiblePayload(
     reply: String,
     ownerNotices: [String],
@@ -77,7 +77,7 @@ extension TurnRunner {
     }
   }
 
-  /// The §5.4 prompt as outbox chunks — split at the Telegram message limit with the inline
+  /// The approval prompt as outbox chunks — split at the Telegram message limit with the inline
   /// keyboard on the final chunk; the store stamps `approval_id` onto that keyboard-carrying row.
   func approvalPromptChunks(
     pending: PendingToolAction,
@@ -96,8 +96,8 @@ extension TurnRunner {
     )
   }
 
-  /// §5.4 privileged-file banner: the owner-editable prompt files. Basename match on the resolved
-  /// canonical target.
+  /// Privileged-file banner: the owner-editable prompt files, per ARCHITECTURE.md §11. Basename
+  /// match on the resolved canonical target.
   static func isPrivilegedFile(_ canonicalTarget: String) -> Bool {
     let privileged: Set<String> = ["SOUL.md", "AGENTS.md", "USER.md", "MEMORY.md"]
     return privileged.contains((canonicalTarget as NSString).lastPathComponent)

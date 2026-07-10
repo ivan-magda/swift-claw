@@ -1,6 +1,6 @@
 import Foundation
 
-/// The exact concrete action an approval is bound to — FR-T5's "tool + fully-resolved target".
+/// The exact concrete action an approval is bound to — the tool plus its fully-resolved target.
 /// `target` is the canonical, owner-visible form of what the tool will act on (for `web_fetch`,
 /// the canonical URL). Approvals match on EXACT equality of the whole action, so an approval for
 /// one tool can never authorize another.
@@ -23,9 +23,9 @@ public enum ApprovalReason: String, Sendable, Equatable {
   case askTier = "ask_tier"
 }
 
-/// The §5.4 tool-specific prompt inputs, produced at gate time by the tool that will act. The gate
-/// records them so the durable prompt (Task 13) never re-derives blast radius from a stale or
-/// unparsed argument form.
+/// The tool-specific prompt inputs, produced at gate time by the tool that will act. The gate
+/// records them so the durable prompt never re-derives blast radius from a stale or unparsed
+/// argument form.
 public struct ToolApprovalPresentation: Sendable, Equatable {
   /// e.g. "create, 1.2 KB" / "overwrite, 340 B" / "egress to <host>".
   public let blastRadius: String
@@ -41,13 +41,13 @@ public struct ToolApprovalPresentation: Sendable, Equatable {
   }
 }
 
-/// Everything the §5.3 suspend commit records and the approval binds to. The recorded canonical
-/// args are what execute at resume time (§6.3) — never a fresh model turn.
+/// Everything the suspend commit records and the approval binds to. The recorded canonical
+/// args are what execute at resume time — never a fresh model turn.
 public struct RecordedToolAction: Sendable, Equatable {
   public let tool: String
   /// Canonical (sorted-keys) JSON of the call arguments.
   public let canonicalArgsJSON: String
-  /// SHA-256 hex of `canonicalArgsJSON`; the approve CAS recomputes and compares it (§6.2 step 5).
+  /// SHA-256 hex of `canonicalArgsJSON`; the approve CAS recomputes and compares it.
   public let argsHash: String
   public let canonicalTarget: String
   public let reason: ApprovalReason
@@ -70,10 +70,10 @@ public struct RecordedToolAction: Sendable, Equatable {
   }
 }
 
-/// The ask-tier proposal that parked a run (§5.2): the `tool_call_id` its placeholder observation
-/// answers, plus the recorded canonical action the approval binds to and the waiter later replays
-/// (§6.3). `RecordedToolAction` is Equatable, so `TurnResult.suspended` stays Equatable. Lives in
-/// ClawCore so the §5.3 suspend commit (`RunStore`) and its GRDB store can bind to it without a
+/// The ask-tier proposal that parked a run: the `tool_call_id` its placeholder observation
+/// answers, plus the recorded canonical action the approval binds to and the waiter later
+/// replays. `RecordedToolAction` is Equatable, so `TurnResult.suspended` stays Equatable. Lives
+/// in ClawCore so the suspend commit (`RunStore`) and its GRDB store can bind to it without a
 /// dependency on ClawAgent.
 public struct PendingToolAction: Sendable, Equatable {
   public let toolCallId: String

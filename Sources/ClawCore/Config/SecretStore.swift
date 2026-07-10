@@ -1,14 +1,14 @@
 import Foundation
 
 /// The secrets seam. Secrets load **once at startup** into an immutable `Sendable` value so they
-/// cross actor/task boundaries freely (impl-grounding §3.5). The concrete stores live in `ClawSecrets`.
+/// cross actor/task boundaries freely. The concrete stores live in `ClawSecrets`.
 public protocol SecretStore: Sendable {
   func loadSecrets() throws -> Secrets
 }
 
 /// The loaded secrets. These values feed the exact-value redactors: `TelegramClient` (bot token),
-/// `OpenAICompatibleProvider` (LLM key), and — from 3b — the ClawTools `SecretRedactor` and the
-/// search client (`searchApiKey`).
+/// `OpenAICompatibleProvider` (LLM key), and the ClawTools `SecretRedactor` and the search
+/// client (`searchApiKey`).
 public struct Secrets: Sendable, Equatable {
   public let telegramBotToken: String
   public let llmApiKey: String?

@@ -1,8 +1,8 @@
 import ClawCore
 import Foundation
 
-/// Thin wrapper over `SearchProviding` (§7.3). The query egresses to the owner-pinned search
-/// endpoint (trusted-egress class, §18-H): covered by the arg guard, not the trifecta approval.
+/// Thin wrapper over `SearchProviding`. The query egresses to the owner-pinned search
+/// endpoint (trusted-egress class): covered by the arg guard, not the trifecta approval.
 public struct WebSearchTool: Tool {
   static let defaultCount = 5
   static let countRange = 1...10

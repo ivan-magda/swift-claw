@@ -1,7 +1,7 @@
 import Crypto
 import Foundation
 
-/// The ONE decoder for `memory_write` tool arguments (§8.2), shared by the gate-time tool
+/// The ONE decoder for `memory_write` tool arguments, shared by the gate-time tool
 /// (ClawTools) and the approval waiter's rebuild (ClawGateway) — both sides run this exact
 /// derivation, so the stored item can never drift from what the owner approved. Lives in
 /// ClawCore because ClawGateway never imports ClawTools (module DAG).
@@ -72,7 +72,7 @@ public enum MemoryWriteArguments {
     }
   }
 
-  /// The §8.2 canonical target: `memory_item:<kind>:<hash16>`, hash16 = first 16 hex chars of
+  /// The canonical target: `memory_item:<kind>:<hash16>`, hash16 = first 16 hex chars of
   /// SHA-256 over the NORMALIZED stored text — the identity the approval binds to.
   public static func canonicalTarget(for request: MemoryWriteRequest) -> String {
     let digest = SHA256.hash(data: Data(request.item.text.utf8))

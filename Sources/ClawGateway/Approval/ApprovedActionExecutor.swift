@@ -3,7 +3,7 @@ import Foundation
 import Logging
 
 /// Executes an APPROVED action from its recorded canonical args and commits the observation/run
-/// transition (§6.3/§6.6). No gate re-trip, no model turn — grant semantics are gone; this is
+/// transition. No gate re-trip, no model turn — grant semantics are gone; this is
 /// recorded-args execution. Tools are held by name as ClawCore `Tool`s: the executor never imports
 /// `ClawTools`; the composition root injects the same instances the dispatcher uses.
 public protocol ApprovedActionExecuting: Sendable {
@@ -19,7 +19,7 @@ public enum ApprovedCommitOutcome: Sendable, Equatable {
   /// A duplicate signal already resumed the run; nothing left to do.
   case ignored
   /// The pre-execution claim threw at the store seam — nothing ran. The run is still
-  /// `AWAITING_APPROVAL`, so the §6.5 boot crash-window path (APPROVED row + AWAITING run)
+  /// `AWAITING_APPROVAL`, so the boot crash-window path (APPROVED row + AWAITING run)
   /// retries it after a restart.
   case storeFailed
   /// The action EXECUTED, then recording its result threw. The run stays claimed RUNNING for the
@@ -45,7 +45,7 @@ public struct ApprovedExecutionOutcome: Sendable, Equatable {
 
 public struct ApprovedActionExecutor: ApprovedActionExecuting {
   /// `memory_write`'s side effect is a DB insert that must FUSE with the observation update for
-  /// exactly-once (D10), so it never runs the tool's `execute`; every other write tool claims the
+  /// exactly-once, so it never runs the tool's `execute`; every other write tool claims the
   /// run first, executes its recorded args, then records the result.
   private static let memoryWriteToolName = "memory_write"
 
@@ -83,7 +83,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 
 private extension ApprovedActionExecutor {
   func executeGenericWrite(_ approval: Approval) async -> ApprovedExecutionOutcome {
-    // Claim BEFORE the external effect (§6.6): the AWAITING→RUNNING flip and a `/stop`//`new`
+    // Claim BEFORE the external effect: the AWAITING→RUNNING flip and a `/stop`//`new`
     // cancellation contend on the same run row, so exactly one side wins — an approved write can
     // never land after the owner cancelled the run.
     let claim: ApprovedExecutionClaim
@@ -135,7 +135,7 @@ private extension ApprovedActionExecutor {
       logger.error("approved action \(approval.tool) has no registered tool or unparsable args")
       return "That action could not run because its tool is no longer available."
     }
-    // §6.6: run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
+    // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
     // abandon-on-timeout race, so the observation is always truthful (file_write is atomic).
     let payload = await tool.execute(
       arguments: arguments,
@@ -163,7 +163,7 @@ private extension ApprovedActionExecutor {
       )
     }
 
-    // §6.3 exactly-once: the item rebuilt with the SAME decoder the gate used, then insert +
+    // Exactly-once: the item rebuilt with the SAME decoder the gate used, then insert +
     // observation update in ONE fused transaction; the placeholder guard inside
     // applyApprovedMemoryWrite makes a crash-window re-run a no-op.
     let content = """

@@ -1,8 +1,7 @@
 import Foundation
 
-/// FR-T6's blocking arg guard — the §9.1 pinned contract (review H4). Pure: secrets are injected
-/// at construction; tier-3 file texts are injected per evaluation (the GATE loads them from disk
-/// at evaluation time, rev.1 H1).
+/// The blocking arg guard. Pure: secrets are injected at construction; tier-3 file texts are
+/// injected per evaluation (the GATE loads them from disk at evaluation time).
 public struct ExfilArgGuard: Sendable {
   public struct Verdict: Sendable, Equatable {
     public let blockedRule: String?
@@ -84,7 +83,7 @@ public struct ExfilArgGuard: Sendable {
 
   // MARK: - Audit rendering
 
-  /// The §9.1 rendering pass on its own — used for ALLOWED calls' audit rows too, so an audit row
+  /// The rendering pass on its own — used for ALLOWED calls' audit rows too, so an audit row
   /// can never re-contain a secret whatever the verdict.
   public func renderRedacted(argsJSON: String) -> String {
     var rendered = argsJSON
@@ -105,8 +104,8 @@ public struct ExfilArgGuard: Sendable {
 
   // MARK: - Load-bearing helpers
 
-  /// Normalization order (review H4): NFC first, then ≤2 percent-decode passes; match the raw
-  /// string AND every decoded stage (belt-and-braces). Decoding is best-effort (M1): a stray
+  /// Normalization order: NFC first, then ≤2 percent-decode passes; match the raw
+  /// string AND every decoded stage (belt-and-braces). Decoding is best-effort: a stray
   /// malformed escape like `%ZZ` must NOT abandon the whole pass and let a well-formed encoded
   /// secret elsewhere in the string slip through unchecked.
   static func matchCandidates(_ argsJSON: String) -> [String] {
@@ -132,7 +131,7 @@ public struct ExfilArgGuard: Sendable {
   /// A best-effort percent decoder: decode every valid `%XX` escape and preserve everything else
   /// (a lone `%`, `%` not followed by two hex digits) verbatim. Unlike `removingPercentEncoding`,
   /// which returns nil for the ENTIRE string on any malformed escape, this recovers the decodable
-  /// spans so an appended `%ZZ` can't shield an encoded secret (M1). Returns nil only when nothing
+  /// spans so an appended `%ZZ` can't shield an encoded secret. Returns nil only when nothing
   /// was decoded (so the caller stops the pass loop).
   static func bestEffortPercentDecode(_ text: String) -> String? {
     let scalars = Array(text.unicodeScalars)
@@ -200,7 +199,7 @@ public struct ExfilArgGuard: Sendable {
     return matches
   }
 
-  /// The deterministic stand-in for entropy (§9.1): ≥1 digit AND both letter cases.
+  /// The deterministic, pinned stand-in for an entropy measure: ≥1 digit AND both letter cases.
   static func looksHighEntropy(_ token: String) -> Bool {
     token.contains(where: \.isNumber)
       && token.contains(where: \.isUppercase)
@@ -212,7 +211,7 @@ public struct ExfilArgGuard: Sendable {
   /// row must never re-contain the matched material.
   private func blockedVerdict(rule: String, raw: String, spans: [String]) -> Verdict {
     // Full sweep first so a SECOND loaded secret or shaped token in the same args can never
-    // survive into the audit row (§9.1 — the row must never re-contain matched material).
+    // survive into the audit row — the row must never re-contain matched material.
     var rendered = renderRedacted(argsJSON: raw)
     for span in spans where rendered.contains(span) {
       // Tier-3 private-file windows aren't covered by renderRedacted; redact them explicitly.

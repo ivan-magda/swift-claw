@@ -1,5 +1,5 @@
-/// The minimal built-in system prompt for Inc 1 (trusted tier). Replaced by SOUL/AGENTS files
-/// in Inc 3; the untrusted-tier wrapper is not exercised until then.
+/// The minimal built-in system prompt (trusted tier). Replaced by SOUL/AGENTS files once those
+/// land; the untrusted-tier wrapper is not exercised until then.
 public enum SystemPrompt {
   public static let minimal = """
     You are a helpful personal assistant for a single owner, reached over Telegram. \
