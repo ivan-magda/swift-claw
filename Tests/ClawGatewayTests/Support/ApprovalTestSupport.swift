@@ -2,11 +2,48 @@ import ClawCore
 import ClawData
 import Foundation
 import GRDB
+import Testing
+
+@testable import ClawGateway
 
 // Shared approval-fabric acceptance helpers (Tasks 21–25). Assertions read raw rows on a FRESH
 // pool — the SC3 `AuditRow` idiom — so they bind to the durable schema, not to store internals.
 // The `callback_query` update fixture lives in `ApprovalCallbackHandlerTests.swift`
 // (`callbackUpdate`), already visible target-wide.
+
+/// Suspends a real `file_write` proposal to a PENDING approval and returns the harness + row —
+/// the shared fixture of the Task 25 acceptance suites (matrix + done-when).
+func suspendFileWrite() async throws -> (SC3Harness, ApprovalRowSnapshot) {
+  // given
+  let harness = try makeSC3Harness(
+    scripts: [
+      [
+        toolCallResponse([
+          ToolCall(
+            id: "w1",
+            name: "file_write",
+            argumentsJSON: #"{"path":"notes/plan.md","content":"hello fabric","overwrite":false}"#
+          )
+        ]),
+        okResponse(content: "Saved the plan."),
+      ]
+    ],
+    httpResponses: [:]
+  )
+  _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
+  let approval = try #require(
+    await pollUntil(timeout: .seconds(10)) {
+      try fetchApprovals(databasePath: harness.databasePath).first
+    }
+  )
+  #expect(approval.state == ApprovalState.pending.rawValue)
+  return (harness, approval)
+}
+
+/// The owner-side Approve callback payload for a parked approval's nonce.
+func approveData(_ nonce: String) -> String {
+  ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.approveVerdict)
+}
 
 /// One `approvals` row projected for acceptance assertions.
 struct ApprovalRowSnapshot: Sendable, Equatable {
