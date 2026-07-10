@@ -27,6 +27,22 @@ public enum ResolvedAddress: Sendable, Equatable {
 
     return nil
   }
+
+  /// Whether `host` names an IP address directly rather than a DNS host — including the legacy
+  /// numeric IPv4 spellings (`inet_aton`: bare 32-bit integer, `0x…` hex, octal, short-dotted)
+  /// that strict `parse`/`inet_pton` reject yet `getaddrinfo` still resolves locally without a DNS
+  /// query. Callers keep every such literal on the pure SSRF blocklist: a fake-IP resolver never
+  /// rewrites a literal, so one must never receive a fake-IP egress widening.
+  public static func denotesIPLiteral(host: String) -> Bool {
+    if parse(host) != nil {
+      return true
+    }
+
+    var v4Address = in_addr()
+    return host.withCString { pointer in
+      inet_aton(pointer, &v4Address) != 0
+    }
+  }
 }
 
 extension ResolvedAddress: CustomStringConvertible {

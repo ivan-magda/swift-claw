@@ -53,13 +53,15 @@ import Testing
     tools: [ToolDefinition] = [],
     llm: String = "https://llm.example",
     search: Bool = false,
-    root: String = "/workspace"
+    root: String = "/workspace",
+    exempt: [CIDR] = []
   ) -> String {
     PolicyFingerprint.staticSubhash(
       tools: tools,
       llmBaseURL: llm,
       searchEndpointPresent: search,
-      workspaceRoot: root
+      workspaceRoot: root,
+      webFetchExemptCIDRs: exempt
     )
   }
 
@@ -133,6 +135,24 @@ import Testing
   @Test func workspaceRootIsAnInputClass() {
     // given / when / then — the canonical workspace root is a hashed config class (§3.2)
     #expect(subhash(root: "/a") != subhash(root: "/b"))
+  }
+
+  @Test func webFetchExemptCIDRsAreAnInputClass() throws {
+    // given — the SSRF exemption list is egress policy; changing it must void an outstanding
+    // web_fetch approval (else a pending action resolves under a policy that was not in force)
+    let pool = try #require(CIDR.parse("198.18.0.0/15"))
+
+    // when / then — presence changes the hash; absence is the strict default
+    #expect(subhash(exempt: []) != subhash(exempt: [pool]))
+  }
+
+  @Test func webFetchExemptCIDRsAreOrderIndependent() throws {
+    // given — config list order is arbitrary; two owners with the same set must share a policy
+    let poolV4 = try #require(CIDR.parse("198.18.0.0/15"))
+    let poolV6 = try #require(CIDR.parse("fc00::/18"))
+
+    // when / then
+    #expect(subhash(exempt: [poolV4, poolV6]) == subhash(exempt: [poolV6, poolV4]))
   }
 
   // MARK: - combined

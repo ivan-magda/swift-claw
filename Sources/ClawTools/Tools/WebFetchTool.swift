@@ -161,8 +161,9 @@ private extension WebFetchTool {
 
     // The widenings below apply to resolved hostnames only: a fake-IP resolver never rewrites
     // a literal, and pool addresses recycle, so a literal target inside the pool is meaningless.
-    // Literals stay on the pure blocklist.
-    if ResolvedAddress.parse(host) != nil {
+    // Literals stay on the pure blocklist — including the legacy numeric spellings getaddrinfo
+    // resolves without DNS (http://3323068500/), which strict IP-literal parsing would miss.
+    if ResolvedAddress.denotesIPLiteral(host: host) {
       guard addresses.allSatisfy({ address in SSRFGuard.isPublic(address) }) else {
         return refusalPayload("Refused: \(host) is a private or reserved address.")
       }

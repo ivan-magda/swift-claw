@@ -445,6 +445,28 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     #expect(await http.requestedURLs.isEmpty)
   }
 
+  @Test func legacyNumericLiteralStaysRefusedEvenWhenFakeIPConfirmed() async throws {
+    // given — the integer spelling of 198.18.0.84 (http://3323068500/); strict inet_pton rejects
+    // it but getaddrinfo resolves it into the pool. It must still count as a literal (pure
+    // blocklist), not ride either widening, even with the probe active AND the pool exempted
+    let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let poolBlock = try #require(CIDR.parse("198.18.0.0/15"))
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["3323068500": [fakeIPAddress]]),
+      exemptCIDRs: [poolBlock],
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .active(sample: fakeIPAddress))
+    )
+
+    // when
+    let payload = await fetch(tool, url: "http://3323068500/page")
+
+    // then
+    #expect(payload.status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+  }
+
   @Test func literalPublicAddressURLStillFetches() async throws {
     // given — the literal carve-out must not over-block: a public literal is ordinary egress
     let http = ScriptedHTTP(responses: [

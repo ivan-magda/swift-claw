@@ -93,9 +93,9 @@ extension DaemonBuilder {
   }
 
   /// Static sub-hash (classes 2–3): the same tool surface the gate enforces, plus the pinned
-  /// egress/policy config. Secret values are never hashed — only the base URL, search presence,
-  /// and workspace root identity. Injected into `ContextBuilder`, which folds in the class-1 prompt
-  /// materials and returns the combined `policy_version`.
+  /// egress/policy config — the base URL, search presence, workspace root identity, and the
+  /// web_fetch SSRF exemption list. Secret values are never hashed. Injected into `ContextBuilder`,
+  /// which folds in the class-1 prompt materials and returns the combined `policy_version`.
   func policyStaticSubhash(
     toolDispatcher: GatedToolDispatcher,
     workspace: FileSystemWorkspace
@@ -104,7 +104,8 @@ extension DaemonBuilder {
       tools: toolDispatcher.definitions,
       llmBaseURL: config.llm.baseURL,
       searchEndpointPresent: secrets.searchApiKey != nil,
-      workspaceRoot: workspace.root.path
+      workspaceRoot: workspace.root.path,
+      webFetchExemptCIDRs: config.webFetchExemptCIDRs
     )
   }
 }
