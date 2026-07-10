@@ -151,7 +151,10 @@ private extension ApprovedActionExecutor {
       )
     } catch {
       logger.error("applyApprovedMemoryWrite failed for run \(approval.runId): \(error)")
-      return ApprovedExecutionOutcome(observationContent: content, commit: .storeFailed)
+      return ApprovedExecutionOutcome(
+        observationContent: "The memory item could not be recorded.",
+        commit: .storeFailed
+      )
     }
   }
 }

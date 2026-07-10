@@ -124,7 +124,7 @@ The lane mechanism is explicit:
   ```
 
 - **Default = strict FIFO queue per session.** A plain inbound message **QUEUES** behind the current turn. Cross-session work runs concurrently; within a session, strictly ordered and non-interleaved. User-facing contract: two quick messages produce two in-order, non-interleaved replies.
-- **Only `/stop` and `/new` SUPERSEDE.** `/stop` cancels the current turn cooperatively (`RunState → CANCELLED`). `/new` resets the session window, detaints it, and cancels the current turn (`RunState → SUPERSEDED`). A plain message never supersedes. `/new` resolves any pending durable approval as `superseded` (audited, §11) and still clears the session's pending memory-kind command confirmation entry. `/new` also clears `sessions.has_private_data` in the same detaint transaction (Inc 5a, §12).
+- **Only `/stop` and `/new` SUPERSEDE.** `/stop` cancels the current turn cooperatively (`RunState → CANCELLED`). `/new` resets the session window, detaints it, and cancels the current turn (`RunState → SUPERSEDED`). A plain message never supersedes. `/new` resolves any pending durable approval as `superseded` (audited, §11) and still clears the session's pending command confirmation entry. `/new` also clears `sessions.has_private_data` in the same detaint transaction (Inc 5a, §12).
 - **Cancellation semantics.** Cancellation threads through the run loop and (Inc 2+) streaming + tool execution via structured concurrency (`withThrowingTaskGroup`, cancellation handlers). On cancel: stop further LLM/tool work; any already-sent Telegram chunks remain (they are committed side effects, recorded in the outbox); no orphan `AWAITING_APPROVAL` row is left (the reconciliation sweep / FSM resolves it — §7).
 
 ### 5.2 Dependencies and state
