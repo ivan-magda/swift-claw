@@ -33,6 +33,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
       root
       .appendingPathComponent("memory", isDirectory: true)
       .appendingPathComponent("\(day).md")
+
     return loadFile(at: fileURL, maxGraphemes: maxGraphemes)
   }
 
@@ -119,6 +120,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
         result[key] = stringValue
       }
     }
+
     return result
   }
 
@@ -135,6 +137,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
         return false
       }
     }
+
     return true
   }
 
@@ -146,7 +149,8 @@ public struct FileSystemWorkspace: WorkspaceReading {
       return .missing
     }
 
-    guard let rawData = try? Data(contentsOf: fileURL),
+    guard
+      let rawData = try? Data(contentsOf: fileURL),
       let text = String(data: rawData, encoding: .utf8)
     else {
       return LoadedFile(outcome: .unreadable, text: "", graphemeCount: 0)
