@@ -12,6 +12,7 @@ import Testing
 
 /// One durable audit row, projected to the columns the acceptance clauses assert over.
 struct AuditRow: Sendable, Equatable {
+  let actor: String
   let action: String
   let tool: String?
   let decision: String
@@ -88,9 +89,14 @@ struct SC3Harness {
     return try pool.read { database in
       try Row.fetchAll(
         database,
-        sql: "SELECT action, tool, decision FROM audit_events ORDER BY id"
+        sql: "SELECT actor, action, tool, decision FROM audit_events ORDER BY id"
       ).map { row in
-        AuditRow(action: row["action"], tool: row["tool"], decision: row["decision"])
+        AuditRow(
+          actor: row["actor"],
+          action: row["action"],
+          tool: row["tool"],
+          decision: row["decision"]
+        )
       }
     }
   }

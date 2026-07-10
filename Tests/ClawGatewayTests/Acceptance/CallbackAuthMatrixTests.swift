@@ -31,7 +31,8 @@ import Testing
     )
 
     // then — the row is untouched, nothing executed, and the attempt is a forbidden ACCESS event
-    // (not an approval decision); the callback is answered with a neutral toast (A4, secondary)
+    // (not an approval decision) attributed to `system` — a stranger's tap is never owner-attributed;
+    // the callback is answered with a neutral toast (A4, secondary)
     #expect(
       try fetchApprovals(databasePath: harness.databasePath).map(\.state)
         == [ApprovalState.pending.rawValue]
@@ -45,6 +46,7 @@ import Testing
     #expect(
       audits.contains { row in
         row.action == AuditAction.messageIn.rawValue && row.decision == "forbidden"
+          && row.actor == AuditActor.system.rawValue
       }
     )
     #expect(try grantAudited(harness) == false)
@@ -64,16 +66,22 @@ import Testing
       rawUpdate: callbackUpdate(id: 2, from: 8, data: approveData(approval.nonce))
     )
 
-    // then — owner-binding fails closed: row untouched, forbidden access event, no grant
+    // then — owner-binding fails closed: row untouched, run still parked, forbidden access event
+    // attributed to `system` (the resolved row's owner is 7, not the sender), no grant
     #expect(
       try fetchApprovals(databasePath: harness.databasePath).map(\.state)
         == [ApprovalState.pending.rawValue]
+    )
+    #expect(
+      try runState(databasePath: harness.databasePath, runId: approval.runId)
+        == RunState.awaitingApproval.rawValue
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
     let audits = try harness.auditRows()
     #expect(
       audits.contains { row in
         row.action == AuditAction.messageIn.rawValue && row.decision == "forbidden"
+          && row.actor == AuditActor.system.rawValue
       }
     )
     #expect(try grantAudited(harness) == false)
@@ -88,16 +96,24 @@ import Testing
       rawUpdate: callbackUpdate(id: 2, from: 7, data: approveData("AAAAAAAAAAAAAAAAAAAAAA"))
     )
 
-    // then — nothing resolves; the real row stays PENDING; audited forbidden
+    // then — nothing resolves; the real row stays PENDING and the run stays parked; audited
+    // forbidden with actor `system`: owner-attribution requires the RESOLVED approval row
+    // (`approval.ownerUserId == sender`, the handler's only owner identity), and an unknown nonce
+    // resolves no row — so even the owner's tap audits as `system` here (Task 15 denyAuth contract)
     #expect(
       try fetchApprovals(databasePath: harness.databasePath).map(\.state)
         == [ApprovalState.pending.rawValue]
+    )
+    #expect(
+      try runState(databasePath: harness.databasePath, runId: approval.runId)
+        == RunState.awaitingApproval.rawValue
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
     let audits = try harness.auditRows()
     #expect(
       audits.contains { row in
         row.action == AuditAction.messageIn.rawValue && row.decision == "forbidden"
+          && row.actor == AuditActor.system.rawValue
       }
     )
     #expect(try grantAudited(harness) == false)
