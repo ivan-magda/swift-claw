@@ -422,6 +422,48 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     #expect(await http.requestedURLs.isEmpty)
   }
 
+  @Test func literalBenchmarkAddressStaysRefusedEvenWithBothWideningsAvailable() async throws {
+    // given — a literal-IP URL inside the pool, with the probe confirming fake-IP mode AND an
+    // exempt CIDR covering the block: the widenings apply to resolved hostnames only (a fake-IP
+    // resolver never rewrites a literal, and pool addresses recycle, so a literal target is
+    // meaningless there)
+    let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let poolBlock = try #require(CIDR.parse("198.18.0.0/15"))
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: [:]),
+      exemptCIDRs: [poolBlock],
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .active(sample: fakeIPAddress))
+    )
+
+    // when
+    let payload = await fetch(tool, url: "https://198.18.0.84/page")
+
+    // then — refused although BOTH widenings would cover a hostname resolving to this address
+    #expect(payload.status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+  }
+
+  @Test func literalPublicAddressURLStillFetches() async throws {
+    // given — the literal carve-out must not over-block: a public literal is ordinary egress
+    let http = ScriptedHTTP(responses: [
+      "https://93.184.216.34/page": htmlResult("<html><body><p>by address</p></body></html>")
+    ])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: [:]),
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .inactive)
+    )
+
+    // when
+    let payload = await fetch(tool, url: "https://93.184.216.34/page")
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.content.contains("by address"))
+  }
+
   @Test func redirectHopIntoBenchmarkRangeFollowsWhenConfirmed() async throws {
     // given — the per-hop policy re-runs on redirect targets; a confirmed fake-IP answer on
     // hop 2 is followed like any public address

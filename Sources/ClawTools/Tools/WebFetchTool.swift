@@ -159,6 +159,16 @@ private extension WebFetchTool {
       return refusalPayload("Refused: \(host) resolves to a private or reserved address.")
     }
 
+    // The widenings below apply to resolved hostnames only: a fake-IP resolver never rewrites
+    // a literal, and pool addresses recycle, so a literal target inside the pool is meaningless.
+    // Literals stay on the pure blocklist.
+    if ResolvedAddress.parse(host) != nil {
+      guard addresses.allSatisfy({ address in SSRFGuard.isPublic(address) }) else {
+        return refusalPayload("Refused: \(host) is a private or reserved address.")
+      }
+      return nil
+    }
+
     let refusable = addresses.filter { address in
       SSRFGuard.isPublic(address) == false
         && exemptCIDRs.contains { cidr in cidr.contains(address) } == false
