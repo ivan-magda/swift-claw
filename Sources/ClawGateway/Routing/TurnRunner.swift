@@ -150,6 +150,7 @@ public struct TurnRunner: TurnDispatching {
       chatId: chatId,
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
+      sessionHasPrivateData: inputs.snapshot.hasPrivateData,
       grant: grant,
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
@@ -218,6 +219,7 @@ public struct TurnRunner: TurnDispatching {
         chatId: chatId,
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
+        sessionHasPrivateData: inputs.snapshot.hasPrivateData,
         grant: nil,
         todayTokens: inputs.todayTokens,
         todayUSD: inputs.todayUSD,
@@ -362,7 +364,8 @@ private extension TurnRunner {
       usage: usage,
       chunks: chunks,
       exchanges: outcome.exchanges,
-      setTainted: outcome.ingestedUntrusted
+      setTainted: outcome.ingestedUntrusted,
+      setPrivateData: outcome.hadPrivateData
     )
 
     switch try runs.commitAssistantTurn(turn, now: context.committedAt) {
@@ -434,6 +437,7 @@ private extension TurnRunner {
       usage: usage,
       exchanges: outcome.exchanges,
       setTainted: outcome.ingestedUntrusted,
+      setPrivateData: outcome.hadPrivateData,
       message: ownerVisiblePayload(
         reply: Degradation.message(for: kind),
         ownerNotices: context.ownerNotices
@@ -463,6 +467,7 @@ private extension TurnRunner {
       usage: nil,
       exchanges: outcome.exchanges,
       setTainted: outcome.ingestedUntrusted,
+      setPrivateData: outcome.hadPrivateData,
       message: ownerVisiblePayload(
         reply: Degradation.budget(cap: cap),
         ownerNotices: context.ownerNotices
@@ -489,6 +494,7 @@ private extension TurnRunner {
     usage: ProviderUsage?,
     exchanges: [ToolExchange],
     setTainted: Bool,
+    setPrivateData: Bool,
     message: String,
     action: AuditAction,
     decision: String,
@@ -509,7 +515,8 @@ private extension TurnRunner {
         usage: usage,
         chunk: chunk,
         exchanges: exchanges,
-        setTainted: setTainted
+        setTainted: setTainted,
+        setPrivateData: setPrivateData
       ),
       now: committedAt
     )
@@ -547,6 +554,8 @@ private extension TurnRunner {
       usage: nil,
       exchanges: [],
       setTainted: setTainted,
+      // No turn ran on this path, so no private-data leg is known.
+      setPrivateData: false,
       message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
       action: .turnDegraded,
       decision: DegradationKind.contextUnavailable.rawValue,

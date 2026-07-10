@@ -38,7 +38,8 @@ struct FullSessions: SessionMessageStore {
       history: [],
       historyMessageIds: [],
       windowStartMessageId: nil,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
   }
   func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {}

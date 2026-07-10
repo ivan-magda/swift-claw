@@ -156,17 +156,22 @@ public struct SessionContextSnapshot: Sendable, Equatable {
   public let historyMessageIds: [Int64]
   public let windowStartMessageId: Int64?
   public let isTainted: Bool
+  /// §4.5: the persisted private-data flag, fed into the trifecta gate's private-data leg so the
+  /// exfil gate stays armed even after the window rolls past the private read that set it.
+  public let hasPrivateData: Bool
 
   public init(
     history: [StoredMessage],
     historyMessageIds: [Int64],
     windowStartMessageId: Int64?,
-    isTainted: Bool
+    isTainted: Bool,
+    hasPrivateData: Bool
   ) {
     self.history = history
     self.historyMessageIds = historyMessageIds
     self.windowStartMessageId = windowStartMessageId
     self.isTainted = isTainted
+    self.hasPrivateData = hasPrivateData
   }
 }
 
@@ -290,6 +295,8 @@ public struct AssistantTurn: Sendable, Equatable {
   public let chunks: [OutboxChunk]
   public let exchanges: [ToolExchange]
   public let setTainted: Bool
+  /// §4.5 sticky private-data flag — persisted like `setTainted`, on every commit path.
+  public let setPrivateData: Bool
 
   public init(
     runId: Int64,
@@ -299,7 +306,8 @@ public struct AssistantTurn: Sendable, Equatable {
     usage: ProviderUsage,
     chunks: [OutboxChunk],
     exchanges: [ToolExchange] = [],
-    setTainted: Bool = false
+    setTainted: Bool = false,
+    setPrivateData: Bool = false
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -309,6 +317,7 @@ public struct AssistantTurn: Sendable, Equatable {
     self.chunks = chunks
     self.exchanges = exchanges
     self.setTainted = setTainted
+    self.setPrivateData = setPrivateData
   }
 }
 
@@ -320,6 +329,8 @@ public struct DegradedTurn: Sendable, Equatable {
   public let chunk: OutboxChunk
   public let exchanges: [ToolExchange]
   public let setTainted: Bool
+  /// §4.5 sticky private-data flag — persisted like `setTainted`, incl. on the failure path.
+  public let setPrivateData: Bool
 
   public init(
     runId: Int64,
@@ -328,7 +339,8 @@ public struct DegradedTurn: Sendable, Equatable {
     usage: ProviderUsage?,
     chunk: OutboxChunk,
     exchanges: [ToolExchange] = [],
-    setTainted: Bool = false
+    setTainted: Bool = false,
+    setPrivateData: Bool = false
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -337,6 +349,7 @@ public struct DegradedTurn: Sendable, Equatable {
     self.chunk = chunk
     self.exchanges = exchanges
     self.setTainted = setTainted
+    self.setPrivateData = setPrivateData
   }
 }
 

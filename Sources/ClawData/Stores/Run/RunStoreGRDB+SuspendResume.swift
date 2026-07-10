@@ -312,13 +312,4 @@ private extension RunStoreGRDB {
       _ = try insertOutbox(db, runId: runId, chunk: shiftedChunk(linked, by: stepBase), now: now)
     }
   }
-
-  /// §4.5 set-leg: the sticky private-data flag rides the suspend commit from its first landing
-  /// (D6). The read-leg, gate-leg, and `/new` clear land in Task 23 — this is set-only.
-  static func setSessionPrivateData(_ db: Database, sessionId: Int64, now: Date) throws {
-    try db.execute(
-      sql: "UPDATE sessions SET has_private_data = 1, updated_ts = ? WHERE id = ?",
-      arguments: [now, sessionId]
-    )
-  }
 }

@@ -27,7 +27,8 @@ struct ContextBuilderTests {
       ],
       historyMessageIds: [10, 11],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when
@@ -70,7 +71,8 @@ struct ContextBuilderTests {
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when
@@ -97,7 +99,8 @@ struct ContextBuilderTests {
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when
@@ -149,7 +152,8 @@ struct ContextBuilderTests {
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when
@@ -178,7 +182,8 @@ struct ContextBuilderTests {
       history: [StoredMessage(role: .user, content: "question", provenance: .trusted)],
       historyMessageIds: [44],
       windowStartMessageId: 0,
-      isTainted: true
+      isTainted: true,
+      hasPrivateData: false
     )
 
     // when
@@ -216,7 +221,8 @@ struct ContextBuilderTests {
       ],
       historyMessageIds: [10, 11, 12],
       windowStartMessageId: 7,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when
@@ -254,7 +260,8 @@ struct ContextBuilderTests {
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when
@@ -289,7 +296,8 @@ struct ContextBuilderTests {
       ],
       historyMessageIds: [1, 2, 3],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when
@@ -320,7 +328,8 @@ struct ContextBuilderTests {
       ],
       historyMessageIds: [1, 2, 3],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when
@@ -351,7 +360,8 @@ struct ContextBuilderTests {
       ],
       historyMessageIds: [7],
       windowStartMessageId: 0,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
 
     // when

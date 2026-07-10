@@ -19,6 +19,7 @@ import Testing
       chatId: 1,
       buildResult: buildResult,
       sessionTainted: sessionTainted,
+      sessionHasPrivateData: false,
       grant: grant,
       todayTokens: 0,
       todayUSD: 0,

@@ -7,11 +7,15 @@ public struct ToolDispatchContext: Sendable, Equatable {
   public let runIngestedUntrusted: Bool
   public let assemblyPrivateData: Bool
   public let runPrivateData: Bool
+  /// §4.5: the persisted `sessions.has_private_data` flag. The trifecta private-data leg is
+  /// `assemblyPrivateData ∪ runPrivateData ∪ sessionHasPrivateData`, so the gate stays armed after
+  /// the context window rolls past the private read that first set it (closes the §12 over-cap gap).
+  public let sessionHasPrivateData: Bool
   public let grant: OneTurnGrant?
   public let approvalAlreadyPending: Bool
-  /// True for scheduled/heartbeat runs (§10): the gate converts every would-park approval
-  /// outcome into an immediate audited DENY. No default — every construction site decides
-  /// explicitly (secure-by-default; a forgotten site is a compile error, not a privilege grant).
+  /// True for scheduled/heartbeat runs. As of §5.1 the gate treats these IDENTICALLY to interactive
+  /// runs — a would-park trifecta action suspends onto the durable approval fabric (park-with-
+  /// timeout → EXPIRED → DENY), never an immediate gate DENY.
   public let nonInteractive: Bool
 
   public init(
@@ -19,6 +23,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     runIngestedUntrusted: Bool,
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
+    sessionHasPrivateData: Bool,
     grant: OneTurnGrant?,
     approvalAlreadyPending: Bool,
     nonInteractive: Bool
@@ -27,6 +32,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.runIngestedUntrusted = runIngestedUntrusted
     self.assemblyPrivateData = assemblyPrivateData
     self.runPrivateData = runPrivateData
+    self.sessionHasPrivateData = sessionHasPrivateData
     self.grant = grant
     self.approvalAlreadyPending = approvalAlreadyPending
     self.nonInteractive = nonInteractive

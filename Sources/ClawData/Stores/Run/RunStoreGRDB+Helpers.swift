@@ -221,4 +221,11 @@ extension RunStoreGRDB {
       arguments: [now, sessionId]
     )
   }
+
+  static func setSessionPrivateData(_ db: Database, sessionId: Int64, now: Date) throws {
+    try db.execute(
+      sql: "UPDATE sessions SET has_private_data = 1, updated_ts = ? WHERE id = ?",
+      arguments: [now, sessionId]
+    )
+  }
 }

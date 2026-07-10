@@ -121,6 +121,7 @@ public struct AgentRuntime: Sendable {
     chatId: Int64,
     buildResult: BuildResult,
     sessionTainted: Bool,
+    sessionHasPrivateData: Bool,
     grant: OneTurnGrant?,
     todayTokens: Int,
     todayUSD: Double,
@@ -313,6 +314,7 @@ public struct AgentRuntime: Sendable {
           runIngestedUntrusted: ingestedUntrusted,
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
+          sessionHasPrivateData: sessionHasPrivateData,
           grant: remainingGrant,
           approvalAlreadyPending: pendingApproval != nil || pendingSuspension != nil,
           nonInteractive: origin != .interactive

@@ -71,7 +71,8 @@ import Testing
       history: history,
       historyMessageIds: Array(1...Int64(history.count)),
       windowStartMessageId: nil,
-      isTainted: false
+      isTainted: false,
+      hasPrivateData: false
     )
   }
 

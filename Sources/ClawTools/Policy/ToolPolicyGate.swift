@@ -51,9 +51,12 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
     }
 
-    // (4) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run)  [rev.1 H1]
+    // (4) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run ∪ session)
     let tainted = context.sessionTainted || context.runIngestedUntrusted
-    let privateData = context.assemblyPrivateData || context.runPrivateData
+    // §4.5/§5.1: three private-data sources — the per-assembly leg, the run-local leg, and the
+    // persisted session flag that survives a window roll (the §12 over-cap gap).
+    let privateData =
+      context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
     guard tainted && privateData else {
       return resolveAndAllow(call: call, tool: tool, argsRedacted: unconditional.redactedArgs)
     }
@@ -67,7 +70,9 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
     }
 
-    // (5) the arbitrary-destination egress class (§18-H): grant match or approval
+    // (5) trifecta arm — DURABLE (§5.1/§8.3): a would-park action suspends onto the approval
+    // fabric via `.requireApproval`. Non-interactive runs take the SAME park (→ EXPIRED → DENY),
+    // never an immediate gate DENY. Recorded-args execution subsumes the retired one-turn grant.
     let action: ToolAction?
     switch resolveAction(call: call, tool: tool) {
     case .action(let resolved):
@@ -79,23 +84,27 @@ public struct ToolPolicyGate: Sendable {
       return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: false, action: nil)
     }
 
-    if context.grant?.action == action {
-      return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: true, action: action)
-    }
-
-    if context.nonInteractive {
-      return nonInteractiveDeny(
-        call: call,
-        action: action,
-        argsRedacted: conditional.redactedArgs
+    guard context.approvalAlreadyPending == false else {
+      // §5.2: one pending approval per run — a further gated call observes the block, never a
+      // second suspend.
+      return .block(
+        payload: ToolPayload(
+          content: "blocked: an approval is already pending",
+          status: .blockedPendingApproval,
+          ingestedUntrusted: false
+        ),
+        argsRedacted: conditional.redactedArgs,
+        pendingApproval: nil
       )
     }
 
-    return trifectaApprovalBlock(
-      action: action,
-      argsRedacted: conditional.redactedArgs,
-      approvalAlreadyPending: context.approvalAlreadyPending
+    let recorded = recordedAction(
+      call: call,
+      tool: tool,
+      target: action.target,
+      reason: .exfilTrifecta
     )
+    return .requireApproval(recorded: recorded)
   }
 
   /// The §9.1 audit rendering, exposed so the dispatcher's pre-gate error paths (unknown tool,
@@ -170,47 +179,6 @@ private extension ToolPolicyGate {
     case .blocked(let payload):
       return .block(payload: payload, argsRedacted: argsRedacted, pendingApproval: nil)
     }
-  }
-
-  /// §10 (D5): a non-interactive run never parks an approval — would-park becomes an
-  /// immediate audited DENY, surfaced in the delivered result as a plain-language note. No
-  /// pending entry ⇒ no dangling confirmation can bind to the owner's next unrelated "yes"
-  /// (§16 case 3).
-  func nonInteractiveDeny(call: ToolCall, action: ToolAction, argsRedacted: String) -> Verdict {
-    .block(
-      payload: ToolPayload(
-        content: """
-          skipped \(call.name) of \(action.target) — it needs your approval; \
-          run it interactively.
-          """,
-        status: .error,
-        ingestedUntrusted: false
-      ),
-      argsRedacted: argsRedacted,
-      pendingApproval: nil
-    )
-  }
-
-  func trifectaApprovalBlock(
-    action: ToolAction,
-    argsRedacted: String,
-    approvalAlreadyPending: Bool
-  ) -> Verdict {
-    .block(
-      payload: ToolPayload(
-        content: """
-          BLOCKED_PENDING_APPROVAL: this fetch needs the owner's approval because \
-          this session has read external content and holds private data. \
-          Explain briefly why you want to fetch it and finish your reply.
-          """,
-        status: .blockedPendingApproval,
-        ingestedUntrusted: false
-      ),
-      argsRedacted: argsRedacted,
-      pendingApproval: approvalAlreadyPending
-        ? nil
-        : ToolApprovalRequest(action: action, reason: .exfilTrifecta)
-    )
   }
 }
 
