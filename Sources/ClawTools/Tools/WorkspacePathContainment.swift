@@ -66,11 +66,13 @@ public enum WorkspacePathContainment {
       guard let resolvedCandidate = canonicalPath(candidate) else {
         break  // first non-existing component — everything from here is to-be-created
       }
+
       guard isContained(target: resolvedCandidate, root: canonicalRoot) else {
         return .refused(
           reason: "That path resolves outside the workspace, so I can't write it."
         )
       }
+
       resolvedPrefix = resolvedCandidate
       index += 1
     }
