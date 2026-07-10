@@ -59,9 +59,9 @@ public struct MemoryWriteTool: Tool {
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     switch MemoryWriteArguments.parse(arguments, sessionId: nil) {
     case .invalid(let reason):
-      return .refused(reason: reason)
+      .refused(reason: reason)
     case .parsed(let request):
-      return .resolved(MemoryWriteArguments.canonicalTarget(for: request))
+      .resolved(MemoryWriteArguments.canonicalTarget(for: request))
     }
   }
 
@@ -69,7 +69,8 @@ public struct MemoryWriteTool: Tool {
     arguments: JSONValue,
     canonicalTarget: String
   ) -> ToolApprovalPresentation {
-    guard case .parsed(let request) = MemoryWriteArguments.parse(arguments, sessionId: nil)
+    guard
+      case .parsed(let request) = MemoryWriteArguments.parse(arguments, sessionId: nil)
     else {
       return ToolApprovalPresentation(
         blastRadius: "memory item",
@@ -77,6 +78,7 @@ public struct MemoryWriteTool: Tool {
         warnings: []
       )
     }
+
     return ToolApprovalPresentation(
       blastRadius: """
         memory item, kind \(request.item.kind.rawValue), \
