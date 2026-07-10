@@ -43,7 +43,9 @@ config.*.rejected.*
 # in-repo profile or local run.
 .swift-claw/
 .swift-claw-*/
-workspace/
+# Root-anchored: an unanchored `workspace/` would also swallow Sources/ClawCore/Workspace/
+# (case-insensitive FS).
+/workspace/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

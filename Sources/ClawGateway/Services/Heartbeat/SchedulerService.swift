@@ -1,6 +1,5 @@
 import ClawAgent
 import ClawCore
-import ClawWorkspace
 import Foundation
 import Logging
 import ServiceLifecycle

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import ClawWorkspace
+@testable import ClawCore
 
 @Suite struct WorkspaceValuesTests {
   @Test func workspaceFileRelativePathsMatchKnownFilenames() {

@@ -1,10 +1,10 @@
 import Foundation
 
-/// The result of loading a workspace file in the grapheme domain (spec §6, §6.1, §12).
+/// The result of loading a workspace file in the grapheme domain.
 public struct LoadedFile: Sendable, Equatable {
   /// What happened, so the caller can apply the right policy. `ClawWorkspace` decides none of it:
-  /// `.present` -> usable; `.overCap` -> omit + owner notice (§6.1); `.missing` -> omit silently
-  /// (normal, §6); `.unreadable` -> omit + log (§12).
+  /// `.present` -> usable; `.overCap` -> omit + owner notice; `.missing` -> omit silently
+  /// (normal); `.unreadable` -> omit + log.
   public enum Outcome: Sendable, Equatable {
     case present
     case overCap
@@ -20,7 +20,7 @@ public struct LoadedFile: Sendable, Equatable {
   public let text: String
 
   /// Original grapheme length before any cap check. Non-zero on `.present` and `.overCap`; drives
-  /// the §6.1 "N/cap" owner notice. Zero on `.missing`/`.unreadable`.
+  /// the "N/cap" owner notice. Zero on `.missing`/`.unreadable`.
   public let graphemeCount: Int
 
   public init(outcome: Outcome, text: String, graphemeCount: Int) {
@@ -29,6 +29,6 @@ public struct LoadedFile: Sendable, Equatable {
     self.graphemeCount = graphemeCount
   }
 
-  /// A file that does not exist: normal, omit silently, never throws (spec §6).
+  /// A file that does not exist: normal, omit silently, never throws.
   public static let missing = LoadedFile(outcome: .missing, text: "", graphemeCount: 0)
 }

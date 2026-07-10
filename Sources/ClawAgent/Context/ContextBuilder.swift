@@ -1,5 +1,4 @@
 import ClawCore
-import ClawWorkspace
 import Foundation
 
 /// One exchange-grouping unit: an assistant anchor (`tool_calls`) plus its tool rows, or a single

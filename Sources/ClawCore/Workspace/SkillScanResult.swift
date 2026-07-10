@@ -1,14 +1,13 @@
-import ClawCore
 import Foundation
 
-/// A non-fatal diagnostic from a workspace scan, for the consuming layer to log (spec §6.2, §12).
+/// A non-fatal diagnostic from a workspace scan, for the consuming layer to log.
 /// `ClawWorkspace` is pure I/O and owns no logger.
 public enum WorkspaceWarning: Sendable, Equatable {
   /// `skills/<skill>/SKILL.md` exists but is unusable (no `---` fence, malformed YAML, or missing
   /// `name`/`description`).
   case invalidSkillManifest(skill: String)
 
-  /// `skills/` exists but could not be listed (a §12 context-read failure, distinct from a missing
+  /// `skills/` exists but could not be listed (a context-read failure, distinct from a missing
   /// `skills/` directory, which is normal and silent).
   case unreadableSkillsDirectory
 }
