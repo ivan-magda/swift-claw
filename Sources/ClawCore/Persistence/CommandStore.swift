@@ -49,10 +49,16 @@ public struct NewCommandResult: Sendable, Equatable {
 public protocol CommandStore: Sendable {
   /// Atomic `/stop`: claim update + resolve session + every PENDING/RUNNING→CANCELLED + one
   /// audit row per cancelled run, in one write.
-  func applyStop(updateId: Int64, sessionKey: String, now: Date) throws(StoreError)
-    -> StopCommandResult
+  func applyStop(
+    updateId: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> StopCommandResult
   /// Atomic `/new`: claim update + resolve session + RUNNING/PENDING→SUPERSEDED +
   /// resetWindowAndDetaint + audit in one write.
-  func applyNew(updateId: Int64, sessionKey: String, now: Date) throws(StoreError)
-    -> NewCommandResult
+  func applyNew(
+    updateId: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> NewCommandResult
 }

@@ -13,8 +13,11 @@ public struct ScheduleArmResult: Sendable, Equatable {
 public protocol ScheduleCommandStore: Sendable {
   /// Atomic confirmed arm: claim update + insert job + jobCreated audit in one write.
   /// The inserted job is the exact parked draft — the caller never re-parses (TOCTOU kill).
-  func applyArm(updateId: Int64, job: NewScheduledJob, now: Date) throws(StoreError)
-    -> ScheduleArmResult
+  func applyArm(
+    updateId: Int64,
+    job: NewScheduledJob,
+    now: Date
+  ) throws(StoreError) -> ScheduleArmResult
 }
 
 public struct ClaimedFire: Sendable, Equatable {
@@ -71,7 +74,11 @@ public protocol ScheduledJobStore: Sendable {
   /// ACTIVE→PAUSED, idempotent.
   func pause(id: Int64, now: Date) throws(StoreError) -> ScheduledJob?
   /// PAUSED→ACTIVE; the caller recomputes next_occurrence from now.
-  func resume(id: Int64, nextOccurrence: Date?, now: Date) throws(StoreError) -> ScheduledJob?
+  func resume(
+    id: Int64,
+    nextOccurrence: Date?,
+    now: Date
+  ) throws(StoreError) -> ScheduledJob?
   /// ACTIVE|PAUSED→CANCELLED, next NULL, row retained.
   func cancel(id: Int64, now: Date) throws(StoreError) -> ScheduledJob?
 

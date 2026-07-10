@@ -7,12 +7,17 @@ public enum CommandClaim: Sendable, Equatable {
 
 public protocol SessionMessageStore: Sendable {
   func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64
-  func claimCommandUpdate(updateId: Int64, sessionKey: String, now: Date) throws(StoreError)
-    -> CommandClaim
+  func claimCommandUpdate(
+    updateId: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> CommandClaim
   func findSession(sessionKey: String) throws(StoreError) -> Int64?
   /// Fused transaction: claim the update, upsert the session, insert the user message, create the
   /// PENDING run, and stamp its trigger message in one write. Duplicates create nothing.
-  func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult
+  func claimAndPersistInbound(
+    _ inbound: InboundMessage
+  ) throws(StoreError) -> ClaimResult
   /// Context returned oldest-first and bounded to the message this run is answering.
   func loadContext(
     sessionId: Int64,

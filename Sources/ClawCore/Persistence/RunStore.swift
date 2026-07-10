@@ -73,21 +73,37 @@ public protocol RunStore: Sendable {
   /// the run is absent or no longer pending (one query, no separate origin read). `policyVersion`
   /// is stamped onto `runs.policy_version` in the SAME UPDATE as the flip; nil records no
   /// fingerprint.
-  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin?
+  func pickUp(
+    runId: Int64,
+    policyVersion: String?,
+    now: Date
+  ) throws(StoreError) -> RunOrigin?
   /// Atomicity: assistant message + run→DONE + provider_usage + outbox chunk(s) in ONE txn,
   /// committed before any send. If cancellation/supersede already won, records usage only.
-  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult
+  func commitAssistantTurn(
+    _ turn: AssistantTurn,
+    now: Date
+  ) throws(StoreError) -> RunCommitResult
   /// Failure/degradation commit: executed exchange rows + provider_usage + run→FAILED +
   /// degradation outbox in ONE txn. If cancellation/supersede already won, records usage when
   /// present but writes no reply and no exchanges.
-  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult
+  func commitDegradedTurn(
+    _ turn: DegradedTurn,
+    now: Date
+  ) throws(StoreError) -> RunCommitResult
   /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING.
   func failRun(runId: Int64, now: Date) throws(StoreError)
   /// Terminates the current RUNNING turn for `/stop`; returns the affected run, if any.
-  func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws(StoreError)
-    -> Int64?
+  func cancelActiveRun(
+    sessionId: Int64,
+    reason: CancelReason,
+    now: Date
+  ) throws(StoreError) -> Int64?
   /// Terminates RUNNING and queued PENDING turns for `/new`.
-  func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64]
+  func supersedeSessionRuns(
+    sessionId: Int64,
+    now: Date
+  ) throws(StoreError) -> [Int64]
   /// Boot sweep: every PENDING/RUNNING orphan → FAILED (+ jobFailed for job runs), one
   /// degradation notice per run that never delivered. `heartbeatNoticeChatId` is the
   /// config-resolved owner DM for crashed heartbeat runs — their synthetic
@@ -127,8 +143,11 @@ public protocol RunStore: Sendable {
   /// Approve resume, post-execution half: UPDATE the claimed placeholder observation in place
   /// with the tool's real result. Only ever called after `claimApprovedExecution` returned
   /// `.committed` for the same ids.
-  func fillClaimedObservation(runId: Int64, observationMessageId: Int64, content: String)
-    throws(StoreError)
+  func fillClaimedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String
+  ) throws(StoreError)
   /// memory_write fused path (exactly-once): the memory item insert (via
   /// `MemoryStoreGRDB.insertItem`) and the observation UPDATE share ONE txn, gated by the SAME
   /// placeholder + AWAITING_APPROVAL → RUNNING guards as `claimApprovedExecution` — the side

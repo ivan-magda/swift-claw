@@ -18,8 +18,11 @@ public protocol ApprovalStore: Sendable {
   /// `ApprovalArgsHash.sha256Hex(canonicalArgsJSON)`, and storedPolicyVersion ==
   /// `currentPolicyVersion`. All satisfied → APPROVED + `approvalGranted`. Hash/version mismatch
   /// → REJECTED + decision `stale_policy` + `approvalDenied`, returns `.stalePolicy`.
-  func approve(id: Int64, currentPolicyVersion: String, now: Date) throws(StoreError)
-    -> ApprovalApproveOutcome
+  func approve(
+    id: Int64,
+    currentPolicyVersion: String,
+    now: Date
+  ) throws(StoreError) -> ApprovalApproveOutcome
   /// CAS PENDING→(EXPIRED when decision is `.expired`, else REJECTED) + `approvalDenied` audit in
   /// the same txn. false when the row is no longer PENDING (a racing resolver won).
   func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool
