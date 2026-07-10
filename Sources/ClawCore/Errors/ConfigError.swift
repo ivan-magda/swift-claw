@@ -1,12 +1,3 @@
-/// Distinct, non-zero process exit codes so a deterministic startup failure backs off
-/// under the supervisor instead of hot-looping.
-public enum ClawExitCode: Int32, Sendable {
-  case configInvalid = 10
-  case secretLoadFailed = 11
-  case alreadyRunning = 12
-  case storeError = 13
-}
-
 public enum ConfigError: Error, Sendable, Equatable {
   case invalidAllowlist(String)
   case unwritableStateRoot(String)
@@ -39,21 +30,4 @@ public enum ConfigError: Error, Sendable, Equatable {
     case .heartbeatOwnerUnresolved: ClawExitCode.configInvalid.rawValue
     }
   }
-}
-
-/// `conflict409` and `floodControl` are first-class so the poller can react distinctly
-/// (loud-and-back-off vs. honor retry-after).
-public enum TelegramError: Error, Sendable, Equatable {
-  case conflict409(description: String)
-  case floodControl(retryAfter: Int)
-  case apiError(code: Int, description: String)
-  case transport(String)
-  case decoding(String)
-}
-
-public enum StoreError: Error, Sendable, Equatable {
-  case openFailed(String)
-  case migrationFailed(String)
-  case unexpected(String)
-  case diskFull
 }
