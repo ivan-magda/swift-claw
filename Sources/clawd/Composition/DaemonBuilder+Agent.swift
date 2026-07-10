@@ -22,8 +22,10 @@ extension DaemonBuilder {
     OpenAICompatibleProvider(
       config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
       http: executor,
-      sleep: { try await Task.sleep(for: .seconds($0)) },
-      jitter: { Double.random(in: 0...$0) },
+      clock: ContinuousClock(),
+      jitter: { cap in
+        Duration.seconds(Double.random(in: 0...(cap / .seconds(1))))
+      },
       logger: logger
     )
   }
@@ -100,7 +102,7 @@ extension DaemonBuilder {
       usageStore: stores.usage,
       auditLog: stores.audit,
       logger: logger,
-      sleep: { try await Task.sleep(for: $0) }
+      clock: ContinuousClock()
     )
   }
 }

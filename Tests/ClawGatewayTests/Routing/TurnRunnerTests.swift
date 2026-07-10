@@ -617,7 +617,7 @@ func makeEnv(
     model: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
-    sleep: { try await Task.sleep(for: $0) }
+    clock: ContinuousClock()
   )
 
   let runner = TurnRunner(

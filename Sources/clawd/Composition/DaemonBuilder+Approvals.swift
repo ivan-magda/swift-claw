@@ -90,7 +90,7 @@ extension DaemonBuilder {
       approvals: stores.approvals,
       coordinator: coordination.approvalCoordinator,
       now: { Date() },
-      sleep: { try await Task.sleep(for: $0) },
+      clock: ContinuousClock(),
       logger: logger
     )
     // The real waiter is returned so boot re-park parks the SAME instance the callback

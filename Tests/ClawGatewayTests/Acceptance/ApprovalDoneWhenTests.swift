@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -265,7 +266,7 @@ import Testing
       approvals: harness.stores.approvals,
       coordinator: harness.coordinator,
       now: { Date(timeIntervalSinceNow: 100_000) },
-      sleep: { _ in throw CancellationError() },
+      clock: ScriptedClock { _ in throw CancellationError() },
       logger: TestLog.silent
     )
     try? await ticker.run()

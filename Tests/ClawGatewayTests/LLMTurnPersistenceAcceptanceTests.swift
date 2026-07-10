@@ -345,7 +345,7 @@ func makeStack(
     model: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
-    sleep: { try await Task.sleep(for: $0) }
+    clock: ContinuousClock()
   )
 
   let turnRunner = TurnRunner(
@@ -437,7 +437,7 @@ func makeStreamingStack(
     model: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
-    sleep: { try await Task.sleep(for: $0) }
+    clock: ContinuousClock()
   )
   let turnRunner = TurnRunner(
     sessionMessages: sessionMessages,
@@ -521,7 +521,7 @@ func makeStopNewStack(
     model: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
-    sleep: { try await Task.sleep(for: $0) }
+    clock: ContinuousClock()
   )
 
   let turnRunner = TurnRunner(

@@ -70,6 +70,8 @@ let package = Package(
       ]
     ),
     .target(name: "ClawTools", dependencies: ["ClawCore"]),
+    // Deterministic test fakes shared across suites (never linked into `clawd`).
+    .target(name: "ClawTestSupport"),
     .target(
       name: "ClawGateway",
       dependencies: [
@@ -114,23 +116,26 @@ let package = Package(
     .testTarget(
       name: "ClawLLMTests",
       dependencies: [
-        "ClawLLM", "ClawCore",
+        "ClawLLM", "ClawCore", "ClawTestSupport",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
     .testTarget(
       name: "ClawAgentTests",
       dependencies: [
-        "ClawAgent", "ClawCore", "ClawWorkspace",
+        "ClawAgent", "ClawCore", "ClawWorkspace", "ClawTestSupport",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
-    .testTarget(name: "ClawToolsTests", dependencies: ["ClawTools", "ClawCore"]),
+    .testTarget(
+      name: "ClawToolsTests",
+      dependencies: ["ClawTools", "ClawCore", "ClawTestSupport"]
+    ),
     .testTarget(
       name: "ClawGatewayTests",
       dependencies: [
         "ClawGateway", "ClawCore", "ClawData", "ClawAgent", "ClawTelegram", "ClawWorkspace",
-        "ClawTools",
+        "ClawTools", "ClawTestSupport",
       ]
     ),
   ]

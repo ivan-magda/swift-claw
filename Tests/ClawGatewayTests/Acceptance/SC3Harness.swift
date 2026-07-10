@@ -226,7 +226,7 @@ func makeSC3Harness(
     toolDispatcher: dispatcherOverride ?? dispatcher,
     usageStore: stores.usage,
     auditLog: stores.audit,
-    sleep: { duration in try await Task.sleep(for: duration) }
+    clock: ContinuousClock()
   )
 
   // 7. TurnRunner sharing the router's registry instance.

@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawTestSupport
 import ClawWorkspace
 import Foundation
 import Logging
@@ -255,7 +256,7 @@ private final class SleepRecorder: @unchecked Sendable {
       workspace: EmptyWorkspace(),
       audit: RecordingAuditLog(),
       now: { now },
-      sleep: { _ in },
+      clock: ScriptedClock { _ in },
       logger: TestLog.silent
     )
     return Fixture(service: service, store: store, runner: runner)
@@ -426,7 +427,7 @@ private final class SleepRecorder: @unchecked Sendable {
       workspace: EmptyWorkspace(),
       audit: RecordingAuditLog(),
       now: { Date(timeIntervalSince1970: 1_750_000_000) },
-      sleep: { duration in
+      clock: ScriptedClock { duration in
         recorder.append(duration)
         throw CancellationError()
       },

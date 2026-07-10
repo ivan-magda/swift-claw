@@ -73,7 +73,7 @@ public struct AgentRuntime: Sendable {
   /// business/security trail. Defaults to a no-op so tests stay silent unless they inject one.
   private let logger: Logger
   /// Injected so tests can make the deadline fire instantly with a no-op sleep.
-  private let sleep: @Sendable (Duration) async throws -> Void
+  private let clock: any Clock<Duration>
 
   public init(
     provider: any LLMProvider,
@@ -88,7 +88,7 @@ public struct AgentRuntime: Sendable {
     usageStore: any UsageStore,
     auditLog: any AuditLog,
     logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
-    sleep: @escaping @Sendable (Duration) async throws -> Void
+    clock: any Clock<Duration>
   ) {
     self.provider = provider
     self.typingIndicator = typingIndicator
@@ -102,7 +102,7 @@ public struct AgentRuntime: Sendable {
     self.usageStore = usageStore
     self.auditLog = auditLog
     self.logger = logger
-    self.sleep = sleep
+    self.clock = clock
   }
 
   // swiftlint:disable function_parameter_count function_body_length cyclomatic_complexity
@@ -552,7 +552,7 @@ private extension AgentRuntime {
       typingIndicator: typingIndicator,
       draftStreamer: draftStreamer,
       wallClockDeadlineSeconds: deadlineSeconds,
-      sleep: sleep
+      clock: clock
     )
     return try await runtime.run(chatId: chatId, draftId: draftId, request: request)
   }
@@ -566,7 +566,7 @@ private extension AgentRuntime {
       provider: provider,
       typingIndicator: typingIndicator,
       wallClockDeadlineSeconds: deadlineSeconds,
-      sleep: sleep
+      clock: clock
     )
     return try await runtime.run(chatId: chatId, request: request)
   }

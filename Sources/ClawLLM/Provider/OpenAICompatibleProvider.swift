@@ -8,8 +8,8 @@ import Logging
 public struct OpenAICompatibleProvider: LLMProvider {
   private let config: LLMConfig
   private let http: any HTTPExecuting & HTTPStreaming
-  private let sleep: @Sendable (Double) async throws -> Void
-  private let jitter: @Sendable (Double) -> Double
+  private let clock: any Clock<Duration>
+  private let jitter: @Sendable (Duration) -> Duration
   /// Developer-facing diagnostics (swift-log). Lines self-tag `[ClawLLM]` via the source module; a
   /// no-op default keeps tests silent unless they inject one. Carries no run id by design — the
   /// per-turn correlation lives in `AgentRuntime`, so the `LLMProvider` contract stays unchanged.
@@ -18,13 +18,13 @@ public struct OpenAICompatibleProvider: LLMProvider {
   public init(
     config: LLMConfig,
     http: any HTTPExecuting & HTTPStreaming,
-    sleep: @escaping @Sendable (Double) async throws -> Void,
-    jitter: @escaping @Sendable (Double) -> Double,
+    clock: any Clock<Duration>,
+    jitter: @escaping @Sendable (Duration) -> Duration,
     logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
   ) {
     self.config = config
     self.http = http
-    self.sleep = sleep
+    self.clock = clock
     self.jitter = jitter
     self.logger = logger
   }
@@ -59,7 +59,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
         logger.notice(
           "chat transport error (attempt \(attempt)/\(config.retryBudget)); retrying: \(message)"
         )
-        try await backoff(attempt: attempt, retryAfterSeconds: nil)
+        try await backoff(attempt: attempt, retryAfter: nil)
         continue
       }
 
@@ -78,7 +78,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
       logger.notice(
         "chat retryable status \(result.statusCode) (attempt \(attempt)/\(config.retryBudget)); retrying"
       )
-      try await backoff(attempt: attempt, retryAfterSeconds: retryAfterSeconds(from: result))
+      try await backoff(attempt: attempt, retryAfter: retryAfterDelay(from: result))
     }
   }
 
@@ -286,20 +286,21 @@ private extension OpenAICompatibleProvider {
   static let baseBackoffSeconds = 0.5
   static let maxBackoffSeconds = 30.0
 
-  func retryAfterSeconds(from result: HTTPResult) -> Double? {
+  func retryAfterDelay(from result: HTTPResult) -> Duration? {
     if let milliseconds = result.getHeader(for: "retry-after-ms").flatMap(Double.init) {
-      return milliseconds / 1000
+      return .milliseconds(milliseconds)
     }
-    return result.getHeader(for: "retry-after").flatMap(Double.init)
+    return result.getHeader(for: "retry-after").flatMap(Double.init).map { .seconds($0) }
   }
 
-  func backoff(attempt: Int, retryAfterSeconds: Double?) async throws {
-    if let retryAfter = retryAfterSeconds {
-      try await sleep(retryAfter)
+  func backoff(attempt: Int, retryAfter: Duration?) async throws {
+    if let retryAfter {
+      try await clock.sleep(for: retryAfter)
       return
     }
-    let exponential = Self.baseBackoffSeconds * pow(2, Double(attempt - 1))
-    try await sleep(jitter(min(exponential, Self.maxBackoffSeconds)))
+    let exponentialSeconds = Self.baseBackoffSeconds * pow(2, Double(attempt - 1))
+    let capped = Duration.seconds(min(exponentialSeconds, Self.maxBackoffSeconds))
+    try await clock.sleep(for: jitter(capped))
   }
 }
 

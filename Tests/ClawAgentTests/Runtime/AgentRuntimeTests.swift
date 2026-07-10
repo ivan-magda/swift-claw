@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Testing
 
 @testable import ClawAgent
@@ -310,7 +311,7 @@ struct AgentRuntimeTests {
     // given — the provider hangs; a no-op sleep makes the 180s deadline fire immediately.
     let runtime = makeRuntime(
       provider: HangingProvider(),
-      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) }
+      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
     )
 
     // when

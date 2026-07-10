@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -17,7 +18,9 @@ import Testing
         requestTimeoutSeconds: 5
       ),
       http: UnusedHTTP(),
-      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) },
+      clock: ScriptedClock { _ in
+        try? await Task.sleep(for: .milliseconds(1))
+      },
       jitter: { $0 }
     )
   }

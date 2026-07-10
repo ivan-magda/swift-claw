@@ -294,16 +294,16 @@ public struct GatedToolDispatcher: ToolDispatching {
   private let registry: ToolRegistry
   private let gate: ToolPolicyGate
   /// Injected so tests drive the timeout race deterministically (same seam as `AgentRuntime`).
-  private let sleep: @Sendable (Duration) async throws -> Void
+  private let clock: any Clock<Duration>
 
   public init(
     registry: ToolRegistry,
     gate: ToolPolicyGate,
-    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    clock: any Clock<Duration> = ContinuousClock()
   ) {
     self.registry = registry
     self.gate = gate
-    self.sleep = sleep
+    self.clock = clock
   }
 
   public var definitions: [ToolDefinition] {
@@ -385,8 +385,8 @@ public struct GatedToolDispatcher: ToolDispatching {
         )
         continuation.finish()
       }
-      let timeoutTask = Task { [sleep] in
-        try? await sleep(tool.timeout)
+      let timeoutTask = Task { [clock] in
+        try? await clock.sleep(for: tool.timeout)
         continuation.yield(timeoutPayload)
         continuation.finish()
       }

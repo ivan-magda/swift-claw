@@ -285,7 +285,7 @@ func makeRuntime(
   toolDispatcher: (any ToolDispatching)? = nil,
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
-  sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+  clock: any Clock<Duration> = ContinuousClock()
 ) -> AgentRuntime {
   AgentRuntime(
     provider: provider,
@@ -298,7 +298,7 @@ func makeRuntime(
     toolDispatcher: toolDispatcher,
     usageStore: usageStore,
     auditLog: auditLog,
-    sleep: sleep
+    clock: clock
   )
 }
 

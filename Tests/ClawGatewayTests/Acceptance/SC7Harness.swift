@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import ClawTools
 import ClawWorkspace
 import Foundation
@@ -222,7 +223,7 @@ func makeSC7Harness(
     toolDispatcher: dispatcherOverride ?? dispatcher,
     usageStore: stores.usage,
     auditLog: stores.audit,
-    sleep: { duration in try await Task.sleep(for: duration) }
+    clock: ContinuousClock()
   )
 
   // 7. TurnRunner sharing the router's registry; the breaker+transport pair only for clause 9.
@@ -290,7 +291,7 @@ func makeSC7Harness(
     workspace: workspace,
     audit: stores.audit,
     now: { clock.now },
-    sleep: { _ in },
+    clock: ScriptedClock { _ in },
     logger: logger
   )
 

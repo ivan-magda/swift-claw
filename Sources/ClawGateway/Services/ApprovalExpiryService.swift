@@ -21,20 +21,20 @@ public struct ApprovalExpiryService: Service {
   private let approvals: any ApprovalStore
   private let coordinator: ApprovalCoordinator
   private let now: @Sendable () -> Date
-  private let sleep: @Sendable (Duration) async throws -> Void
+  private let clock: any Clock<Duration>
   private let logger: Logger
 
   public init(
     approvals: any ApprovalStore,
     coordinator: ApprovalCoordinator,
     now: @escaping @Sendable () -> Date,
-    sleep: @escaping @Sendable (Duration) async throws -> Void,
+    clock: any Clock<Duration>,
     logger: Logger
   ) {
     self.approvals = approvals
     self.coordinator = coordinator
     self.now = now
-    self.sleep = sleep
+    self.clock = clock
     self.logger = logger
   }
 
@@ -46,7 +46,7 @@ public struct ApprovalExpiryService: Service {
       while !Task.isCancelled {
         await tick()
         do {
-          try await sleep(Self.tickInterval)
+          try await clock.sleep(for: Self.tickInterval)
         } catch {
           break
         }

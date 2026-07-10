@@ -54,7 +54,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   private let usageResolver = UsageResolver()
 
   private let now: @Sendable () -> Date
-  private let sleep: @Sendable (Duration) async throws -> Void
+  private let clock: any Clock<Duration>
 
   private let logger: Logger
 
@@ -65,7 +65,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     budget: RunBudget,
     costResolver: CostResolver,
     now: @escaping @Sendable () -> Date = { Date() },
-    sleep: @escaping @Sendable (Duration) async throws -> Void,
+    clock: any Clock<Duration>,
     logger: Logger
   ) {
     self.provider = provider
@@ -74,7 +74,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     self.gate = BudgetGate(budget: budget)
     self.costResolver = costResolver
     self.now = now
-    self.sleep = sleep
+    self.clock = clock
     self.logger = logger
   }
 
@@ -241,7 +241,7 @@ private extension ScheduleDraftParser {
         try await provider.complete(request: request)
       }
       group.addTask {
-        try await sleep(.seconds(Self.parseDeadlineSeconds))
+        try await clock.sleep(for: .seconds(Self.parseDeadlineSeconds))
         throw ParseDeadlineExceeded()
       }
 

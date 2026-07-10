@@ -22,7 +22,7 @@ public struct SchedulerService: Service {
   private let workspace: any WorkspaceReading
   private let audit: any AuditLog
   private let now: @Sendable () -> Date
-  private let sleep: @Sendable (Duration) async throws -> Void
+  private let clock: any Clock<Duration>
   private let logger: Logger
   private let skipEpisode = HeartbeatSkipEpisode()
 
@@ -36,7 +36,7 @@ public struct SchedulerService: Service {
     workspace: any WorkspaceReading,
     audit: any AuditLog,
     now: @escaping @Sendable () -> Date,
-    sleep: @escaping @Sendable (Duration) async throws -> Void,
+    clock: any Clock<Duration>,
     logger: Logger
   ) {
     self.jobs = jobs
@@ -46,7 +46,7 @@ public struct SchedulerService: Service {
     self.workspace = workspace
     self.audit = audit
     self.now = now
-    self.sleep = sleep
+    self.clock = clock
     self.logger = logger
     self.enqueuer = TurnEnqueuer(lanes: lanes, turns: turns, logger: logger)
   }
@@ -58,7 +58,7 @@ public struct SchedulerService: Service {
       while !Task.isCancelled {
         await tick()
         do {
-          try await sleep(Self.tickInterval)
+          try await clock.sleep(for: Self.tickInterval)
         } catch {
           break
         }

@@ -22,7 +22,7 @@ extension DaemonBuilder {
         usageStore: stores.usage,
         budget: config.budget,
         costResolver: costResolver,
-        sleep: { try await Task.sleep(for: $0) },
+        clock: ContinuousClock(),
         logger: logger
       ),
       validator: ScheduleDraftValidator(
@@ -55,7 +55,7 @@ extension DaemonBuilder {
       workspace: workspace,
       audit: stores.audit,
       now: { Date() },
-      sleep: { try await Task.sleep(for: $0) },
+      clock: ContinuousClock(),
       logger: logger
     )
     return (scheduler, heartbeatSettings.ownerChatId)

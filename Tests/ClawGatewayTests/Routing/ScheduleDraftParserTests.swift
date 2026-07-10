@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -31,7 +32,7 @@ import Testing
   private func makeFixture(
     provider: any LLMProvider,
     budget: RunBudget = .default,
-    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    clock: any Clock<Duration> = ContinuousClock()
   ) throws -> Fixture {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -53,7 +54,7 @@ import Testing
       usageStore: UsageStoreGRDB(writer: queue),
       budget: budget,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
-      sleep: sleep,
+      clock: clock,
       logger: TestLog.silent
     )
     return Fixture(parser: parser, sessionId: claim.sessionId ?? 0, queue: queue)
@@ -210,7 +211,7 @@ import Testing
 
   @Test func deadlineWinsOverAHungProviderAndDebitsAnEstimate() async throws {
     // given — an instant deadline child: the injected sleep returns immediately
-    let fixture = try makeFixture(provider: HangingProvider(), sleep: { _ in })
+    let fixture = try makeFixture(provider: HangingProvider(), clock: ScriptedClock { _ in })
 
     // when
     let result = await fixture.parser.parse(

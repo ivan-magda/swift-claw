@@ -43,20 +43,20 @@ struct StreamingTurnRuntime: Sendable {
   private let typingIndicator: any TypingIndicator
   private let draftStreamer: any RichDraftStreaming
   private let wallClockDeadlineSeconds: Int
-  private let sleep: @Sendable (Duration) async throws -> Void
+  private let clock: any Clock<Duration>
 
   init(
     provider: any LLMProvider,
     typingIndicator: any TypingIndicator,
     draftStreamer: any RichDraftStreaming,
     wallClockDeadlineSeconds: Int,
-    sleep: @escaping @Sendable (Duration) async throws -> Void
+    clock: any Clock<Duration>
   ) {
     self.provider = provider
     self.typingIndicator = typingIndicator
     self.draftStreamer = draftStreamer
     self.wallClockDeadlineSeconds = wallClockDeadlineSeconds
-    self.sleep = sleep
+    self.clock = clock
   }
 
   func run(
@@ -77,7 +77,7 @@ struct StreamingTurnRuntime: Sendable {
         return nil
       }
       group.addTask {
-        try await sleep(.seconds(wallClockDeadlineSeconds))
+        try await clock.sleep(for: .seconds(wallClockDeadlineSeconds))
         throw AgentRuntime.DeadlineExceeded()
       }
 
@@ -181,7 +181,7 @@ private extension StreamingTurnRuntime {
       }
 
       do {
-        try await sleep(Self.probeInterval)
+        try await clock.sleep(for: Self.probeInterval)
       } catch {
         return
       }
@@ -209,7 +209,7 @@ private extension StreamingTurnRuntime {
         continuation.finish()
       }
       let deadlineTask = Task {
-        try? await sleep(Self.draftSendDeadline)
+        try? await clock.sleep(for: Self.draftSendDeadline)
         continuation.yield()
         continuation.finish()
       }

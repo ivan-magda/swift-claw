@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -109,7 +110,7 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
       approvals: store,
       coordinator: coordinator,
       now: { now },
-      sleep: { _ in
+      clock: ScriptedClock { _ in
         try? await Task.sleep(for: .milliseconds(1))
         throw CancellationError()
       },
@@ -250,7 +251,7 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
       approvals: store,
       coordinator: ApprovalCoordinator(),
       now: { Date(timeIntervalSince1970: 1_782_003_600) },
-      sleep: { duration in
+      clock: ScriptedClock { duration in
         try? await Task.sleep(for: .milliseconds(1))
         recorder.append(duration)
         throw CancellationError()
