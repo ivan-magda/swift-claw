@@ -60,7 +60,12 @@ extension DaemonBuilder {
       FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
       FileWriteTool(workspaceRoot: workspace.root, redactor: redactor),
       MemoryWriteTool(redactor: redactor),
-      WebFetchTool(http: toolExecutor, resolver: SystemAddressResolver(), redactor: redactor),
+      WebFetchTool(
+        http: toolExecutor,
+        resolver: SystemAddressResolver(),
+        redactor: redactor,
+        exemptCIDRs: config.webFetchExemptCIDRs
+      ),
     ]
 
     if let searchApiKey = secrets.searchApiKey {

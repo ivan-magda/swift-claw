@@ -1,3 +1,4 @@
+import ClawCore
 import Foundation
 import Testing
 
@@ -61,6 +62,21 @@ import Testing
 
     // when / then
     #expect(SSRFGuard.isPublic(address), "\(text) must be allowed")
+  }
+
+  @Test func benchmarkRangeMatchesTheBlocklistBenchmarkingRow() throws {
+    // given — the pinned handle the fake-IP relaxation and doctor key on
+    let range = SSRFGuard.benchmarkRange
+
+    // when / then — its bounds agree with what the blocklist refuses
+    let firstAddress = try #require(ResolvedAddress.parse("198.18.0.0"))
+    let lastAddress = try #require(ResolvedAddress.parse("198.19.255.255"))
+    let belowAddress = try #require(ResolvedAddress.parse("198.17.255.255"))
+    let aboveAddress = try #require(ResolvedAddress.parse("198.20.0.0"))
+    #expect(range.contains(firstAddress) && SSRFGuard.isPublic(firstAddress) == false)
+    #expect(range.contains(lastAddress) && SSRFGuard.isPublic(lastAddress) == false)
+    #expect(range.contains(belowAddress) == false)
+    #expect(range.contains(aboveAddress) == false)
   }
 
   @Test func parseRejectsGarbage() {

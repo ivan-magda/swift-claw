@@ -81,6 +81,11 @@ Machine-readable output:
 Healthy output shows `OK` on `config` and `backend=encrypted` (or
 `backend=env (WARN: plaintext)` before sealing).
 
+Running a fake-IP VPN/proxy (sing-box / Clash / Surge-style)? The `dns.fake_ip`
+row reports whether a canary probe sees your DNS answered from `198.18.0.0/15`.
+`web_fetch` auto-allows probe-confirmed answers in that range; for a non-default
+pool set `CLAW_WEBFETCH_EXEMPT_CIDRS` (see `.env.example`).
+
 ---
 
 ## Secrets
