@@ -151,6 +151,7 @@ private extension RunCommand {
       FileHandle.standardError.write(Data("database error: \(error)\n".utf8))
       throw ExitCode(ClawExitCode.storeError.rawValue)
     }
+
     do {
       // Additive only — removing an ID from config doesn't revoke it. Revocation is deferred
       // to pairing, which needs an audited remove path, not a config-mirroring reconcile.
@@ -158,6 +159,7 @@ private extension RunCommand {
     } catch {
       logger.error("failed to seed allowlist: \(error)")
     }
+
     return stores
   }
 
