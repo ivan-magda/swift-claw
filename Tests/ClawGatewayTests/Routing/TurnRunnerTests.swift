@@ -136,6 +136,24 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     )
   }
 
+  func settleClaimedApprovalAtBoot(
+    runId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    noticeChatId: Int64,
+    noticeText: String,
+    now: Date
+  ) throws -> ClaimedApprovalBootOutcome {
+    try base.settleClaimedApprovalAtBoot(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      observationContent: observationContent,
+      noticeChatId: noticeChatId,
+      noticeText: noticeText,
+      now: now
+    )
+  }
+
   func resumeUsage(runId: Int64) throws -> ResumeUsage {
     try base.resumeUsage(runId: runId)
   }
@@ -265,6 +283,24 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     )
   }
 
+  func settleClaimedApprovalAtBoot(
+    runId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    noticeChatId: Int64,
+    noticeText: String,
+    now: Date
+  ) throws -> ClaimedApprovalBootOutcome {
+    try base.settleClaimedApprovalAtBoot(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      observationContent: observationContent,
+      noticeChatId: noticeChatId,
+      noticeText: noticeText,
+      now: now
+    )
+  }
+
   func resumeUsage(runId: Int64) throws -> ResumeUsage {
     try base.resumeUsage(runId: runId)
   }
@@ -345,6 +381,16 @@ struct DiskFullRuns: RunStore {
     notResumableObservationContent: String,
     now: Date
   ) throws -> ApprovedExecutionClaim {
+    throw StoreError.diskFull
+  }
+  func settleClaimedApprovalAtBoot(
+    runId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    noticeChatId: Int64,
+    noticeText: String,
+    now: Date
+  ) throws -> ClaimedApprovalBootOutcome {
     throw StoreError.diskFull
   }
   func resumeUsage(runId: Int64) throws -> ResumeUsage {

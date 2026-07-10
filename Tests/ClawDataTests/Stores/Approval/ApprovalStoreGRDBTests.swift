@@ -451,6 +451,52 @@ extension ApprovalStoreGRDBTests {
     #expect(Set(unresolved.map(\.id)) == Set([pendingId, crashId]))
   }
 
+  @Test func unresolvedAtBootReturnsApprovedClaimedRowsWhoseRunLeftAwaiting() throws {
+    // given — the claimed crash window: the approve CAS and the execution claim committed (run
+    // flipped off AWAITING, later orphan-failed at boot) but the result record never landed, so
+    // the observation is still the placeholder. A filled twin on the same shape must stay excluded.
+    let env = try makeFixture()
+    let claimedRun = try seedRun(env.queue, state: .failed)
+    let recordedRun = try seedRun(env.queue, state: .failed)
+    let now = Date()
+    let claimedId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: claimedRun,
+        nonce: "n-claimed",
+        observationMessageId: try seedObservation(env.queue, runId: claimedRun),
+        createdTs: now,
+        expiresTs: now.addingTimeInterval(3600)
+      )
+    )
+    let recordedId = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: recordedRun,
+        nonce: "n-recorded",
+        observationMessageId: try seedObservation(
+          env.queue,
+          runId: recordedRun,
+          content: "Wrote 12 B to /w/plan.md (created)."
+        ),
+        createdTs: now,
+        expiresTs: now.addingTimeInterval(3600)
+      )
+    )
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'APPROVED' WHERE id IN (?, ?)",
+        arguments: [claimedId, recordedId]
+      )
+    }
+
+    // when
+    let unresolved = try env.store.unresolvedAtBoot()
+
+    // then — the claimed row surfaces for boot settlement; the recorded one is already done
+    #expect(unresolved.map(\.id) == [claimedId])
+  }
+
   @Test func unresolvedAtBootExcludesResolvedRowsWhoseObservationIsFilled() throws {
     // given — the multi-suspend shape: ONE run, approval #1 APPROVED with its observation already
     // filled (executed before the restart), approval #2 PENDING on a fresh placeholder. Re-parking

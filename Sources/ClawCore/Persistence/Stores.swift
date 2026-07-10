@@ -295,6 +295,21 @@ public protocol RunStore: Sendable {
     notResumableObservationContent: String,
     now: Date
   ) throws -> ApprovedExecutionClaim
+  /// Boot settlement of the claimed crash window (§6.6): an APPROVED approval whose observation
+  /// is still the placeholder but whose run left AWAITING_APPROVAL means the pre-execution claim
+  /// committed and the process died before the result record — whether the external effect landed
+  /// is unknowable, so no replay. One txn: fail the run if it is not already terminal, resolve the
+  /// placeholder with `observationContent`, and enqueue `noticeText` for the owner UNCONDITIONALLY
+  /// (the generic boot degradation notice is suppressed for runs that already delivered their
+  /// approval prompt, so this is the owner's only signal).
+  func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
+    runId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    noticeChatId: Int64,
+    noticeText: String,
+    now: Date
+  ) throws -> ClaimedApprovalBootOutcome
   /// Task 16 §6.3 budget carry-over inputs (D4): rounds = COUNT(role='assistant'),
   /// toolCalls = COUNT(role='tool') for the run; tokens/costUSD summed over `provider_usage`.
   func resumeUsage(runId: Int64) throws -> ResumeUsage

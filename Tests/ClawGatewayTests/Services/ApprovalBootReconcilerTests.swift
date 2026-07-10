@@ -78,7 +78,10 @@ import Testing
       }
     }
 
+    private(set) var parkCallCount = 0
+
     private func deliver(_ call: Call) {
+      parkCallCount += 1
       if callWaiters.isEmpty {
         bufferedCalls.append(call)
       } else {
@@ -130,6 +133,7 @@ import Testing
     func reconciler(now instant: Date) -> ApprovalBootReconciler {
       ApprovalBootReconciler(
         approvals: store,
+        runs: RunStoreGRDB(writer: queue),
         lanes: lanes,
         coordinator: coordinator,
         waiter: spy,
@@ -221,6 +225,51 @@ import Testing
       coordinator: coordinator,
       spy: ParkingSpy(coordinator: coordinator)
     )
+  }
+
+  @Test func approvedClaimedRunIsSettledInPlaceWithoutAPark() async throws {
+    // given — the §6.6 claimed crash window after the orphan sweep: the claim committed and the
+    // process died before the result record, so boot finds run FAILED + APPROVED row + placeholder
+    let env = try makeFixture()
+    let claimedRun = try env.seedRun(state: RunState.failed.rawValue)
+    let now = Date(timeIntervalSince1970: 1_782_000_000)
+    let approvalId = try env.insertApproval(
+      runId: claimedRun,
+      nonce: "n-claimed",
+      createdTs: now,
+      expiresTs: now.addingTimeInterval(3600)
+    )
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE approvals SET state = 'APPROVED' WHERE id = ?",
+        arguments: [approvalId]
+      )
+    }
+
+    // when
+    await env.reconciler(now: now).reconcile()
+
+    // then — settled in place, NO waiter park (there is nothing to resume): the placeholder is
+    // resolved with the unknown-outcome note and the owner notice is enqueued UNCONDITIONALLY —
+    // the run's sent approval prompt suppresses the generic degradation notice, so this is the
+    // only signal the owner gets
+    #expect(await env.spy.parkCallCount == 0)
+    let observation = try await env.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT content FROM messages WHERE run_id = ?",
+        arguments: [claimedRun]
+      )
+    }
+    #expect(observation?.contains("restarted") == true)
+    let notice = try await env.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT payload FROM outbound_deliveries WHERE run_id = ? AND status = 'PENDING'",
+        arguments: [claimedRun]
+      )
+    }
+    #expect(notice?.contains("file_write") == true)
   }
 
   @Test func terminalRunPendingApprovalIsResolvedWithNoOrphan() async throws {

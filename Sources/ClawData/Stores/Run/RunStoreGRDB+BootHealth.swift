@@ -84,6 +84,52 @@ extension RunStoreGRDB {
     }
   }
 
+  public func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
+    runId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    noticeChatId: Int64,
+    noticeText: String,
+    now: Date
+  ) throws -> ClaimedApprovalBootOutcome {
+    try database.writeMapping { db in
+      guard
+        try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId)
+      else {
+        return .alreadyResolved
+      }
+      let state = try String.fetchOne(
+        db,
+        sql: "SELECT state FROM runs WHERE id = ?",
+        arguments: [runId]
+      )
+      if state == RunState.awaitingApproval.rawValue {
+        return .reparkForReplay
+      }
+
+      // Claimed, outcome unknown — settle in place. The run is normally already FAILED (the
+      // orphan sweep runs first); the transition covers a sweep that missed it and no-ops on any
+      // terminal state.
+      if try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil {
+        try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+      }
+      try Self.fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: observationContent
+      )
+      let chunk = OutboxChunk(
+        stepIndex: try Self.nextOutboxStepBase(db, runId: runId),
+        chatId: noticeChatId,
+        payload: noticeText,
+        payloadHash: ContentHash.fnv1a(noticeText)
+      )
+      _ = try Self.insertOutbox(db, runId: runId, chunk: chunk, now: now)
+      return .settled
+    }
+  }
+
   public func runsHealth(now: Date) throws -> RunsHealth {
     try database.readMapping { db in
       let activeStates = [

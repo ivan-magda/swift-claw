@@ -451,6 +451,16 @@ import Testing
     ) throws -> SuspendedCommitReceipt {
       throw StoreError.unexpected("unused in this fixture")
     }
+    func settleClaimedApprovalAtBoot(
+      runId: Int64,
+      observationMessageId: Int64,
+      observationContent: String,
+      noticeChatId: Int64,
+      noticeText: String,
+      now: Date
+    ) throws -> ClaimedApprovalBootOutcome {
+      throw StoreError.unexpected("unused in this fixture")
+    }
     func resumeUsage(runId: Int64) throws -> ResumeUsage {
       throw StoreError.unexpected("unused in this fixture")
     }

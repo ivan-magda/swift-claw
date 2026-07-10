@@ -49,6 +49,7 @@ struct SC3Harness {
   func runBootReconciliation() async {
     await ApprovalBootReconciler(
       approvals: stores.approvals,
+      runs: stores.runs,
       lanes: lanes,
       coordinator: coordinator,
       waiter: waiter,

@@ -51,6 +51,19 @@ public enum ApprovedExecutionClaim: Sendable, Equatable {
   case runNotResumable
 }
 
+/// Boot triage of an APPROVED approval whose observation is still the placeholder (§6.5/§6.6).
+public enum ClaimedApprovalBootOutcome: Sendable, Equatable {
+  /// The run is still AWAITING_APPROVAL: the crash landed between the approve CAS and the
+  /// execution claim, nothing ran — the §6.5 belt re-parks a waiter to replay the recorded action.
+  case reparkForReplay
+  /// The claim committed but the result record never landed (crash mid-execution): the run is
+  /// terminal (or was failed here), the placeholder was resolved with the unknown-outcome note,
+  /// and the owner notice was enqueued — all in one transaction.
+  case settled
+  /// The observation already holds a real result; nothing to do.
+  case alreadyResolved
+}
+
 public enum Provenance: String, Sendable, Equatable {
   case trusted
   case untrusted

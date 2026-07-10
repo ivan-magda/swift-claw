@@ -155,6 +155,133 @@ import Testing
     #expect(try messageContent(env.queue, env.observationMessageId) == "first")
   }
 
+  private func outboxPayloads(_ queue: DatabaseQueue, _ runId: Int64) throws -> [String] {
+    try queue.read { db in
+      try String.fetchAll(
+        db,
+        sql: """
+          SELECT payload FROM outbound_deliveries
+          WHERE run_id = ? AND status = 'PENDING' ORDER BY step_index
+          """,
+        arguments: [runId]
+      )
+    }
+  }
+
+  @Test func settleClaimedApprovalAtBootFailsTheRunFillsAndNotifies() throws {
+    // given — the claim committed (run RUNNING) and the process died before the result record
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+
+    // when
+    let outcome = try env.runs.settleClaimedApprovalAtBoot(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "Outcome unknown; the daemon restarted mid-action.",
+      noticeChatId: 7,
+      noticeText: "I restarted while running an approved action.",
+      now: Date()
+    )
+
+    // then — one fused txn: run FAILED, placeholder resolved truthfully, owner notice enqueued
+    #expect(outcome == .settled)
+    #expect(try runState(env.queue, env.runId) == RunState.failed.rawValue)
+    #expect(
+      try messageContent(env.queue, env.observationMessageId)
+        == "Outcome unknown; the daemon restarted mid-action."
+    )
+    #expect(
+      try outboxPayloads(env.queue, env.runId) == ["I restarted while running an approved action."]
+    )
+  }
+
+  @Test func settleClaimedApprovalAtBootOnAnOrphanFailedRunStillFillsAndNotifies() throws {
+    // given — the boot orphan sweep already failed the claimed run before the approval reconciler
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    try env.queue.write { db in
+      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .fail, now: Date())
+    }
+
+    // when
+    let outcome = try env.runs.settleClaimedApprovalAtBoot(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "Outcome unknown.",
+      noticeChatId: 7,
+      noticeText: "Please verify the action.",
+      now: Date()
+    )
+
+    // then — the sweep's transition stands; fill + notice still land
+    #expect(outcome == .settled)
+    #expect(try runState(env.queue, env.runId) == RunState.failed.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == "Outcome unknown.")
+    #expect(try outboxPayloads(env.queue, env.runId) == ["Please verify the action."])
+  }
+
+  @Test func settleClaimedApprovalAtBootLeavesAnAwaitingRunForTheReplayBelt() throws {
+    // given — no claim committed: the §6.5 crash window (granted before the crash, never executed)
+    let env = try makeSuspendedFixture()
+
+    // when
+    let outcome = try env.runs.settleClaimedApprovalAtBoot(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "Outcome unknown.",
+      noticeChatId: 7,
+      noticeText: "Please verify the action.",
+      now: Date()
+    )
+
+    // then — nothing written: the caller re-parks the waiter to replay the recorded action
+    #expect(outcome == .reparkForReplay)
+    #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == Self.placeholder)
+    #expect(try outboxPayloads(env.queue, env.runId).isEmpty)
+  }
+
+  @Test func settleClaimedApprovalAtBootIsANoOpOnceTheObservationResolved() throws {
+    // given — the resume completed before the restart; the observation holds the real result
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    try env.runs.fillClaimedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      content: "Wrote 12 B."
+    )
+
+    // when
+    let outcome = try env.runs.settleClaimedApprovalAtBoot(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "Outcome unknown.",
+      noticeChatId: 7,
+      noticeText: "Please verify the action.",
+      now: Date()
+    )
+
+    // then — the recorded result is never overwritten and no notice is sent
+    #expect(outcome == .alreadyResolved)
+    #expect(try messageContent(env.queue, env.observationMessageId) == "Wrote 12 B.")
+    #expect(try outboxPayloads(env.queue, env.runId).isEmpty)
+  }
+
   @Test func applyApprovedMemoryWriteFusesTheInsertWithTheObservationFill() throws {
     // given
     let env = try makeSuspendedFixture()
