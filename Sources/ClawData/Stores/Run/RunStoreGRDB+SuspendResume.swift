@@ -74,52 +74,88 @@ extension RunStoreGRDB {
 // MARK: - Approved Resume (Task 16)
 
 extension RunStoreGRDB {
-  public func completeApprovedObservation(
+  /// The shared claim body (§6.3/§6.6): exactly-once needs BOTH guards. The placeholder check is
+  /// per-approval — once the run suspends a second time it is AWAITING_APPROVAL again, so the
+  /// state flip alone would let a replay of an already-executed approval commit and steal the new
+  /// approval's park. A failed state flip with the placeholder intact means `/stop`//`new` drove
+  /// the run terminal after the approve CAS: resolve the placeholder in the SAME txn (history
+  /// never dangles) and tell the caller nothing may execute.
+  static func claimResume(
+    _ db: Database,
     runId: Int64,
     observationMessageId: Int64,
-    content: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws -> ApprovedExecutionClaim {
+    guard try observationIsPlaceholder(db, runId: runId, messageId: observationMessageId) else {
+      return .alreadyResumed
+    }
+    guard try transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
+      try fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: notResumableObservationContent
+      )
+      return .runNotResumable
+    }
+    return .committed
+  }
+
+  public func claimApprovedExecution(
+    runId: Int64,
+    observationMessageId: Int64,
+    notResumableObservationContent: String,
+    now: Date
+  ) throws -> ApprovedExecutionClaim {
     try database.writeMapping { db in
-      // Exactly-once (§6.3) needs BOTH guards. The placeholder check is per-approval: once the
-      // run suspends a second time it is AWAITING_APPROVAL again, so the state flip alone would
-      // let a replay of an already-executed approval commit and steal the new approval's park.
-      // The state flip stays as the FSM-legal transition for the genuine resume.
-      guard
-        try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId),
-        try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil
-      else {
-        return .ignored
-      }
+      try Self.claimResume(
+        db,
+        runId: runId,
+        observationMessageId: observationMessageId,
+        notResumableObservationContent: notResumableObservationContent,
+        now: now
+      )
+    }
+  }
+
+  public func fillClaimedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String
+  ) throws {
+    try database.writeMapping { db in
       try Self.fillApprovedObservation(
         db,
         runId: runId,
         messageId: observationMessageId,
         content: content
       )
-      return .committed
     }
   }
 
-  public func applyApprovedMemoryWrite(
+  public func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws -> ApprovedExecutionClaim {
     try database.writeMapping { db in
-      guard
-        try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId),
-        try Self.transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil
-      else {
-        return .ignored
+      let claim = try Self.claimResume(
+        db,
+        runId: runId,
+        observationMessageId: observationMessageId,
+        notResumableObservationContent: notResumableObservationContent,
+        now: now
+      )
+      guard claim == .committed else {
+        return claim
       }
       // §6.3 exactly-once: the item insert shares this transaction with the observation fill, both
-      // gated by the placeholder + AWAITING_APPROVAL → RUNNING guards above (D10 — the same
-      // db-scoped static `applyRemember` uses; MemoryStore.append would open its own txn and
-      // could not fuse). The placeholder guard is what makes a replay after a SECOND suspend in
-      // the same run a no-op — the state flip alone would re-arm.
+      // gated by the claim guards above (D10 — the same db-scoped static `applyRemember` uses;
+      // MemoryStore.append would open its own txn and could not fuse).
       _ = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
       try Self.fillApprovedObservation(
         db,

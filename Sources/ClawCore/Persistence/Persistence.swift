@@ -37,6 +37,20 @@ public enum RunCommitResult: Sendable, Equatable {
   case ignored
 }
 
+/// Outcome of the pre-execution claim at the approved-resume seam (§6.3/§6.6). The claim is what
+/// makes an approved external write and a `/stop`//`new` cancellation mutually exclusive: both
+/// contend on the run row's FSM transition, so exactly one side ever owns the effect.
+public enum ApprovedExecutionClaim: Sendable, Equatable {
+  /// The AWAITING_APPROVAL → RUNNING flip committed; the caller now owns the execution.
+  case committed
+  /// The observation is no longer the placeholder — a duplicate signal is replaying an
+  /// already-executed resume. Nothing to do.
+  case alreadyResumed
+  /// The run reached a terminal state (`/stop`, `/new`) before the claim. Nothing may execute;
+  /// the placeholder observation was resolved with the not-run note in the claim's transaction.
+  case runNotResumable
+}
+
 public enum Provenance: String, Sendable, Equatable {
   case trusted
   case untrusted

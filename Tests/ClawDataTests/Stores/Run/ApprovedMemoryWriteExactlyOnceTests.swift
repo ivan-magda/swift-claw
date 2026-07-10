@@ -82,6 +82,7 @@ import Testing
       observationMessageId: receipt.observationMessageId,
       item: item,
       observationContent: "Saved memory item.",
+      notResumableObservationContent: "stopped",
       now: now
     )
     let second = try runs.applyApprovedMemoryWrite(
@@ -89,6 +90,7 @@ import Testing
       observationMessageId: receipt.observationMessageId,
       item: item,
       observationContent: "Saved memory item.",
+      notResumableObservationContent: "stopped",
       now: now
     )
 

@@ -83,47 +83,75 @@ import Testing
     }
   }
 
-  @Test func completeApprovedObservationFillsInPlaceAndResumesTheRun() throws {
+  @Test func claimApprovedExecutionFlipsTheRunAndLeavesThePlaceholder() throws {
     // given
     let env = try makeSuspendedFixture()
 
-    // when
-    let result = try env.runs.completeApprovedObservation(
+    // when — the claim is the pre-execution half: it must NOT touch the observation
+    let claim = try env.runs.claimApprovedExecution(
       runId: env.runId,
       observationMessageId: env.observationMessageId,
-      content: "Wrote 12 B to /w/plan.md (created).",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
-    // then — the placeholder is updated in place (same row id) and the run is RUNNING again
-    #expect(result == .committed)
-    #expect(
-      try messageContent(env.queue, env.observationMessageId)
-        == "Wrote 12 B to /w/plan.md (created)."
-    )
+    // then — the run is RUNNING (so /stop can no longer cancel-race the external write) and the
+    // placeholder still awaits the real result
+    #expect(claim == .committed)
     #expect(try runState(env.queue, env.runId) == RunState.running.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == Self.placeholder)
   }
 
-  @Test func completeApprovedObservationIsExactlyOnce() throws {
-    // given — a first resume already flipped the run to RUNNING
+  @Test func claimApprovedExecutionOnACancelledRunFillsTheCancellationNote() throws {
+    // given — /stop cancelled the run after the Approve callback CAS'd the row APPROVED
     let env = try makeSuspendedFixture()
-    _ = try env.runs.completeApprovedObservation(
+    try env.queue.write { db in
+      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .cancel, now: Date())
+    }
+
+    // when
+    let claim = try env.runs.claimApprovedExecution(
       runId: env.runId,
       observationMessageId: env.observationMessageId,
-      content: "first",
+      notResumableObservationContent: "The session was stopped before this action ran.",
       now: Date()
     )
 
-    // when — a duplicate signal re-runs the same method
-    let second = try env.runs.completeApprovedObservation(
+    // then — no claim (the caller must not execute), the run stays terminal, and the placeholder
+    // is resolved in the SAME transaction so history never dangles
+    #expect(claim == .runNotResumable)
+    #expect(try runState(env.queue, env.runId) == RunState.cancelled.rawValue)
+    #expect(
+      try messageContent(env.queue, env.observationMessageId)
+        == "The session was stopped before this action ran."
+    )
+  }
+
+  @Test func claimApprovedExecutionAfterTheObservationResolvedIsAlreadyResumed() throws {
+    // given — a first claim + fill completed the resume
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
       runId: env.runId,
       observationMessageId: env.observationMessageId,
-      content: "second",
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    try env.runs.fillClaimedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      content: "first"
+    )
+
+    // when — a duplicate signal replays the claim against the filled observation
+    let replay = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
-    // then — the run is no longer AWAITING, so the reducer no-ops and the content is unchanged
-    #expect(second == .ignored)
+    // then — recognized as already executed, nothing overwritten
+    #expect(replay == .alreadyResumed)
     #expect(try messageContent(env.queue, env.observationMessageId) == "first")
   }
 
@@ -138,6 +166,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved to memory as project.",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
@@ -162,6 +191,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved.",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
@@ -171,15 +201,47 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved again.",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
-    // then — the guard on the AWAITING→RUNNING flip means NO second memory row (§6.3 exactly-once)
-    #expect(second == .ignored)
+    // then — the placeholder guard means NO second memory row (§6.3 exactly-once)
+    #expect(second == .alreadyResumed)
     let memoryCount = try env.queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
     }
     #expect(memoryCount == 1)
+  }
+
+  @Test func applyApprovedMemoryWriteOnACancelledRunFillsTheCancellationNote() throws {
+    // given — /stop drove the run terminal after the approve CAS
+    let env = try makeSuspendedFixture()
+    try env.queue.write { db in
+      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .cancel, now: Date())
+    }
+    let item = NewMemoryItem(text: "never stored", kind: .user, sessionId: env.sessionId)
+
+    // when
+    let claim = try env.runs.applyApprovedMemoryWrite(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      item: item,
+      observationContent: "Saved.",
+      notResumableObservationContent: "The session was stopped before this action ran.",
+      now: Date()
+    )
+
+    // then — no insert, the run stays terminal, and the placeholder resolves truthfully
+    #expect(claim == .runNotResumable)
+    let memoryCount = try env.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
+    }
+    #expect(memoryCount == 0)
+    #expect(try runState(env.queue, env.runId) == RunState.cancelled.rawValue)
+    #expect(
+      try messageContent(env.queue, env.observationMessageId)
+        == "The session was stopped before this action ran."
+    )
   }
 
   /// Re-suspends the fixture's run on a SECOND placeholder (the multi-suspend shape: approve #1,
@@ -209,24 +271,30 @@ import Testing
     // AWAITING_APPROVAL once more, so the AWAITING→RUNNING flip alone would let a boot replay of
     // #1 commit and steal #2's park
     let env = try makeSuspendedFixture()
-    _ = try env.runs.completeApprovedObservation(
+    _ = try env.runs.claimApprovedExecution(
       runId: env.runId,
       observationMessageId: env.observationMessageId,
-      content: "first",
+      notResumableObservationContent: "stopped",
       now: Date()
+    )
+    try env.runs.fillClaimedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      content: "first"
     )
     let secondPlaceholderId = try suspendAgain(env)
 
-    // when — a boot replay re-runs approval #1's commit against its already-filled observation
-    let replay = try env.runs.completeApprovedObservation(
+    // when — a boot replay re-runs approval #1's claim against its already-filled observation
+    let replay = try env.runs.claimApprovedExecution(
       runId: env.runId,
       observationMessageId: env.observationMessageId,
-      content: "replayed",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
-    // then — ignored: run STILL parked for #2, #1's observation untouched, #2's placeholder intact
-    #expect(replay == .ignored)
+    // then — recognized as executed: run STILL parked for #2, #1's observation untouched, #2's
+    // placeholder intact
+    #expect(replay == .alreadyResumed)
     #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
     #expect(try messageContent(env.queue, env.observationMessageId) == "first")
     #expect(try messageContent(env.queue, secondPlaceholderId) == Self.placeholder)
@@ -241,6 +309,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved.",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
     _ = try suspendAgain(env)
@@ -251,11 +320,12 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved again.",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
 
-    // then — ignored: no second memory row, run still parked for the new approval
-    #expect(replay == .ignored)
+    // then — recognized as executed: no second memory row, run still parked for the new approval
+    #expect(replay == .alreadyResumed)
     #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
     let memoryCount = try env.queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")

@@ -301,6 +301,75 @@ import Testing
     #expect(await callbacks.disarmed == [env.promptMessageId])
   }
 
+  @Test func aRunNotResumableOutcomeDisarmsWithoutNoticeOrResume() async throws {
+    // given — /stop won the claim race after the approve CAS; the executor reported it
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks,
+      executor: ScriptedExecutor(commit: .runNotResumable)
+    )
+
+    // when
+    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then — no continuation and NO extra owner notice (the /stop//`new` ack already covered
+    // it); the buttons still disarm
+    #expect(await turns.resumeCalls.isEmpty)
+    #expect(await delivery.texts.isEmpty)
+    #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
+  @Test func aRecordFailedOutcomeTellsTheOwnerTheActionRan() async throws {
+    // given — the tool executed but recording its result threw; the copy must NOT promise a retry
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks,
+      executor: ScriptedExecutor(commit: .recordFailed)
+    )
+
+    // when
+    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then
+    #expect(await turns.resumeCalls.isEmpty)
+    #expect(
+      await delivery.texts == [
+        "The approved action ran, but I couldn't record its result; a restart will settle things."
+      ]
+    )
+    #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
   @Test func bootRevalidationOnPolicyMismatchFailsTheRunAndLeavesTheRowApproved() async throws {
     // given — the recorded policy_version no longer matches the current one (§6.5 crash window)
     let env = try makeApprovedFixture(policyVersion: "pv-old")

@@ -267,25 +267,34 @@ public protocol RunStore: Sendable {
     commit: SuspendedTurnCommit,
     now: Date
   ) throws -> SuspendedCommitReceipt
-  /// Task 16 approve resume (file_write / web_fetch): one txn, guarded on the AWAITING_APPROVAL →
-  /// RUNNING flip (which is exactly-once — a duplicate signal finds the run already RUNNING and
-  /// no-ops). UPDATEs the placeholder observation in place with the tool's real result.
-  func completeApprovedObservation(
+  /// Approve resume, pre-execution half (file_write / web_fetch): one txn, guarded on the
+  /// placeholder check (per-approval exactly-once) and the AWAITING_APPROVAL → RUNNING flip. The
+  /// caller executes the recorded action ONLY on `.committed` — claiming BEFORE the external
+  /// effect is what stops a write from landing after `/stop`//`new` drove the run terminal. On
+  /// `.runNotResumable` the placeholder is resolved with `notResumableObservationContent` in the
+  /// same txn so history never dangles.
+  func claimApprovedExecution(
     runId: Int64,
     observationMessageId: Int64,
-    content: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult
-  /// Task 16 memory_write fused path (§6.3 exactly-once): the SAME txn additionally inserts the
-  /// memory item (via `MemoryStoreGRDB.insertItem`) BEFORE the observation UPDATE, both gated by
-  /// the AWAITING_APPROVAL → RUNNING flip.
-  func applyApprovedMemoryWrite(
+  ) throws -> ApprovedExecutionClaim
+  /// Approve resume, post-execution half: UPDATE the claimed placeholder observation in place
+  /// with the tool's real result. Only ever called after `claimApprovedExecution` returned
+  /// `.committed` for the same ids.
+  func fillClaimedObservation(runId: Int64, observationMessageId: Int64, content: String) throws
+  /// Task 16 memory_write fused path (§6.3 exactly-once): the memory item insert (via
+  /// `MemoryStoreGRDB.insertItem`) and the observation UPDATE share ONE txn, gated by the SAME
+  /// placeholder + AWAITING_APPROVAL → RUNNING guards as `claimApprovedExecution` — the side
+  /// effect is in-DB, so claim and effect fuse instead of splitting.
+  func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult
+  ) throws -> ApprovedExecutionClaim
   /// Task 16 §6.3 budget carry-over inputs (D4): rounds = COUNT(role='assistant'),
   /// toolCalls = COUNT(role='tool') for the run; tokens/costUSD summed over `provider_usage`.
   func resumeUsage(runId: Int64) throws -> ResumeUsage

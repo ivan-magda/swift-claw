@@ -92,17 +92,29 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.runsHealth(now: now)
   }
 
-  func completeApprovedObservation(
+  func claimApprovedExecution(
     runId: Int64,
     observationMessageId: Int64,
-    content: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
-    try base.completeApprovedObservation(
+  ) throws -> ApprovedExecutionClaim {
+    try base.claimApprovedExecution(
       runId: runId,
       observationMessageId: observationMessageId,
-      content: content,
+      notResumableObservationContent: notResumableObservationContent,
       now: now
+    )
+  }
+
+  func fillClaimedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String
+  ) throws {
+    try base.fillClaimedObservation(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      content: content
     )
   }
 
@@ -111,13 +123,15 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws -> ApprovedExecutionClaim {
     try base.applyApprovedMemoryWrite(
       runId: runId,
       observationMessageId: observationMessageId,
       item: item,
       observationContent: observationContent,
+      notResumableObservationContent: notResumableObservationContent,
       now: now
     )
   }
@@ -207,17 +221,29 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.runsHealth(now: now)
   }
 
-  func completeApprovedObservation(
+  func claimApprovedExecution(
     runId: Int64,
     observationMessageId: Int64,
-    content: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
-    try base.completeApprovedObservation(
+  ) throws -> ApprovedExecutionClaim {
+    try base.claimApprovedExecution(
       runId: runId,
       observationMessageId: observationMessageId,
-      content: content,
+      notResumableObservationContent: notResumableObservationContent,
       now: now
+    )
+  }
+
+  func fillClaimedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String
+  ) throws {
+    try base.fillClaimedObservation(
+      runId: runId,
+      observationMessageId: observationMessageId,
+      content: content
     )
   }
 
@@ -226,13 +252,15 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws -> ApprovedExecutionClaim {
     try base.applyApprovedMemoryWrite(
       runId: runId,
       observationMessageId: observationMessageId,
       item: item,
       observationContent: observationContent,
+      notResumableObservationContent: notResumableObservationContent,
       now: now
     )
   }
@@ -298,12 +326,15 @@ struct DiskFullRuns: RunStore {
       consecutiveFailures: 0
     )
   }
-  func completeApprovedObservation(
+  func claimApprovedExecution(
     runId: Int64,
     observationMessageId: Int64,
-    content: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws -> ApprovedExecutionClaim {
+    throw StoreError.diskFull
+  }
+  func fillClaimedObservation(runId: Int64, observationMessageId: Int64, content: String) throws {
     throw StoreError.diskFull
   }
   func applyApprovedMemoryWrite(
@@ -311,8 +342,9 @@ struct DiskFullRuns: RunStore {
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    notResumableObservationContent: String,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws -> ApprovedExecutionClaim {
     throw StoreError.diskFull
   }
   func resumeUsage(runId: Int64) throws -> ResumeUsage {

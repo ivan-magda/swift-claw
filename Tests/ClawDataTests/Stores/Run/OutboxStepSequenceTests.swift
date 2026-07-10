@@ -112,15 +112,20 @@ import Testing
     guard case .approved = outcome else {
       throw StoreError.unexpected("fixture approve CAS did not apply: \(outcome)")
     }
-    let resumed = try fixture.runs.completeApprovedObservation(
+    let claimed = try fixture.runs.claimApprovedExecution(
       runId: fixture.runId,
       observationMessageId: receipt.observationMessageId,
-      content: "wrote it",
+      notResumableObservationContent: "stopped",
       now: Date()
     )
-    guard resumed == .committed else {
-      throw StoreError.unexpected("fixture resume did not commit: \(resumed)")
+    guard claimed == .committed else {
+      throw StoreError.unexpected("fixture resume claim did not commit: \(claimed)")
     }
+    try fixture.runs.fillClaimedObservation(
+      runId: fixture.runId,
+      observationMessageId: receipt.observationMessageId,
+      content: "wrote it"
+    )
     return receipt
   }
 
