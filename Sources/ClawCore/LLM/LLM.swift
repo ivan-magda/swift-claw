@@ -122,22 +122,10 @@ extension LLMProvider {
   }
 }
 
-/// Provider failures tagged for the retry classifier and the degradation UX.
-/// retryable = 408 / 429 / 5xx (incl. 529) mid-exchange or transport; terminal = 400 / 401 / 403 /
-/// 404 / 413 / 422; rejected = a retryable-class status on the STREAM RESPONSE HEAD before any SSE
-/// bytes — the server answered with an error and generated nothing, so a re-issue is
-/// double-charge-safe (unlike `.retryable` from a stream, where generation may have started).
-public enum ProviderError: Error, Sendable, Equatable {
-  case connectFailed(message: String)
-  case retryable(status: Int?, message: String)
-  case rejected(status: Int, message: String)
-  case terminal(status: Int?, message: String)
-}
-
 // MARK: - Configuration
 
 /// Which JSON key carries the output cap. Default `max_completion_tokens`; older local
-/// servers need `max_tokens` (F17), switchable via `CLAW_LLM_MAX_TOKENS_FIELD`.
+/// servers need `max_tokens`, switchable via `CLAW_LLM_MAX_TOKENS_FIELD`.
 public enum MaxTokensField: String, Sendable, Equatable {
   case maxCompletionTokens = "max_completion_tokens"
   case maxTokens = "max_tokens"
@@ -224,12 +212,12 @@ public struct PriceTable: Sendable, Equatable {
 
 // MARK: - Token estimation
 
-/// Offline, conservative token estimation in the **token domain** (distinct from the §9
+/// Offline, conservative token estimation in the **token domain** (distinct from the
 /// grapheme-domain assembly cap). A double-ceil of `graphemes / 4 * 1.25` rounds the estimate
-/// up at each step; `graphemeBudget` is its inverse (rounds down) for the §9 assembly cap.
+/// up at each step; `graphemeBudget` is its inverse (rounds down) for the assembly cap.
 public enum TokenEstimator {
   /// Estimated input tokens, summed per message so each message's rounding adds headroom.
-  /// Re-sent assistant `tool_calls` (name + arguments JSON) are counted too (rev.1 L3).
+  /// Re-sent assistant `tool_calls` (name + arguments JSON) are counted too.
   public static func estimateInputTokens(_ messages: [ChatMessage]) -> Int {
     messages.reduce(0) { running, message in
       running + estimateTokens(forText: message.content) + toolCallTokens(for: message)
@@ -253,7 +241,7 @@ public enum TokenEstimator {
     estimateInputTokens(messages) + maxOutput
   }
 
-  /// Inverse of input-token estimation: the max graphemes that fit a token budget (§9 cap).
+  /// Inverse of input-token estimation: the max graphemes that fit a token budget.
   public static func graphemeBudget(forInputTokens inputTokens: Int) -> Int {
     Int(floor(Double(inputTokens) / 1.25)) * 4
   }
@@ -278,7 +266,7 @@ public struct ResolvedCost: Sendable, Equatable {
   }
 }
 
-/// Best-effort USD cost — never a silent $0 (D1 / F19). The first known source wins:
+/// Best-effort USD cost — never a silent $0. The first known source wins:
 /// provider-returned (incl. a confirmed $0) → vendored price-file (incl. a free model's $0) →
 /// reference-rate heuristic. Only the heuristic is `isEstimated`, and only it is floored at
 /// `heuristicFloorUSD`, so a *guessed* cost is never recorded as $0.
@@ -332,7 +320,7 @@ public struct ResolvedUsage: Sendable, Equatable {
 
 /// Reconciles the token counts to record. Peer to `CostResolver` (counts vs. price): provider-
 /// returned usage is truth; a provider that omits it (some local servers do) is estimated rather
-/// than recorded as zero, so the hard daily token breaker (§5.3) can still account for the call.
+/// than recorded as zero, so the hard daily token breaker can still account for the call.
 public struct UsageResolver: Sendable {
   public init() {}
 

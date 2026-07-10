@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -21,18 +22,18 @@ private final class RecordingApprovalStore: ApprovalStore, @unchecked Sendable {
     return sweepCount
   }
 
-  func sweepExpired(now: Date) throws -> [Approval] {
+  func sweepExpired(now: Date) throws(StoreError) -> [Approval] {
     lock.lock()
     defer { lock.unlock() }
     sweepCount += 1
     return []
   }
 
-  func approval(nonce: String) throws -> Approval? {
+  func approval(nonce: String) throws(StoreError) -> Approval? {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
-  func approval(id: Int64) throws -> Approval? {
+  func approval(id: Int64) throws(StoreError) -> Approval? {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
@@ -40,23 +41,23 @@ private final class RecordingApprovalStore: ApprovalStore, @unchecked Sendable {
     id: Int64,
     currentPolicyVersion: String,
     now: Date
-  ) throws -> ApprovalApproveOutcome {
+  ) throws(StoreError) -> ApprovalApproveOutcome {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
-  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws -> Bool {
+  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
-  func unresolvedAtBoot() throws -> [Approval] {
+  func unresolvedAtBoot() throws(StoreError) -> [Approval] {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
-  func resolveOrphans(now: Date) throws -> Int {
+  func resolveOrphans(now: Date) throws(StoreError) -> Int {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
-  func approvalsHealth(now: Date) throws -> ApprovalsHealth {
+  func approvalsHealth(now: Date) throws(StoreError) -> ApprovalsHealth {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 }
@@ -109,7 +110,7 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
       approvals: store,
       coordinator: coordinator,
       now: { now },
-      sleep: { _ in
+      clock: ScriptedClock { _ in
         try? await Task.sleep(for: .milliseconds(1))
         throw CancellationError()
       },
@@ -250,7 +251,7 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
       approvals: store,
       coordinator: ApprovalCoordinator(),
       now: { Date(timeIntervalSince1970: 1_782_003_600) },
-      sleep: { duration in
+      clock: ScriptedClock { duration in
         try? await Task.sleep(for: .milliseconds(1))
         recorder.append(duration)
         throw CancellationError()

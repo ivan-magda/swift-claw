@@ -15,7 +15,7 @@ public struct RetrieverGRDB: Retriever {
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int
-  ) throws -> [RecallHit] {
+  ) throws(StoreError) -> [RecallHit] {
     // A tokenless query (empty/punctuation) yields nil -> zero results; never raw-interpolate text.
     guard let pattern = FTS5Pattern(matchingAnyTokenIn: query) else {
       return []
@@ -34,7 +34,7 @@ public struct RetrieverGRDB: Retriever {
       var arguments: StatementArguments = [pattern]
 
       if let windowStart = windowStartMessageId {
-        // Dedup against the current session's in-window range (spec §10.2).
+        // Dedup against the current session's in-window range.
         sql += "\n  AND NOT (m.session_id = ? AND m.id >= ?)"
         arguments += [currentSessionId, windowStart]
       }

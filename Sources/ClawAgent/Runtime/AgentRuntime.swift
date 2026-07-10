@@ -2,13 +2,13 @@ import ClawCore
 import Foundation
 import Logging
 
-/// Why a turn produced no usable answer. Maps to a plain-language degradation reply (§7); the
+/// Why a turn produced no usable answer. Maps to a plain-language degradation reply; the
 /// stable `rawValue` is what the audit log records, so it survives case renames.
 public enum DegradationKind: String, Sendable, Equatable {
   case providerUnavailable
   case outputTruncated
   case contextUnavailable
-  case accountingFailed  // NEW (§6 — usage-write failure mid-run)
+  case accountingFailed  // usage-write failure mid-run
 }
 
 /// The outcome of one orchestrated turn. `runTurn` never throws — every failure becomes one of
@@ -21,24 +21,23 @@ public enum TurnResult: Sendable, Equatable {
   case degraded(DegradationKind, usage: ProviderUsage?)
   /// The offline budget gate refused before any provider call; `cap` names the tripped limit.
   case budgetStopped(cap: String)
-  /// The batch drained after an ask-tier proposal recorded its action (§5.2); the gateway commits
+  /// The batch drained after an ask-tier proposal recorded its action; the gateway commits
   /// the durable suspend checkpoint. `usage` is the suspending round-trip's reconciled row — it was
-  /// already recorded mid-loop, so the suspend commit (Task 14) must NOT re-debit it.
+  /// already recorded mid-loop, so the suspend commit must NOT re-debit it.
   case suspended(pending: PendingToolAction, usage: ProviderUsage)
 }
 
-/// The outcome of the bounded agentic loop (§6): the terminal `TurnResult` plus everything the
+/// The outcome of the bounded agentic loop: the terminal `TurnResult` plus everything the
 /// gateway needs to persist and gate the next turn.
 public struct TurnOutcome: Sendable {
   public let result: TurnResult
-  /// Every round-trip that proposed tool calls, to persist (§11).
+  /// Every round-trip that proposed tool calls, to persist.
   public let exchanges: [ToolExchange]
-  /// Taint signal: any executed observation ingested untrusted content this run (§10).
+  /// Taint signal: any executed observation ingested untrusted content this run.
   public let ingestedUntrusted: Bool
-  /// Private-data signal (§4.5): the assembly flag (fitted USER/MEMORY sections) OR any executed
+  /// Private-data signal: the assembly flag (fitted USER/MEMORY sections) OR any executed
   /// observation that read private data this run — `assemblyPrivateData ∪ runPrivateData`. Every
-  /// commit path persists it as `setPrivateData`; the suspend commit (Task 14) is its first
-  /// consumer, the rest of the §4.5 lifecycle lands in Task 23 (D6).
+  /// commit path persists it as `setPrivateData`.
   public let hadPrivateData: Bool
 
   public init(
@@ -55,7 +54,7 @@ public struct TurnOutcome: Sendable {
 }
 
 /// The pure orchestration of one blocking turn: preflight → typing + wall-clock deadline →
-/// provider call → classify. No persistence or sending (the gateway owns that in Task 5); all
+/// provider call → classify. No persistence or sending (the gateway owns that); all
 /// collaborators are injected `ClawCore` protocols so tests drive it with mocks.
 public struct AgentRuntime: Sendable {
   private let provider: any LLMProvider
@@ -72,8 +71,8 @@ public struct AgentRuntime: Sendable {
   /// Developer-facing diagnostics (swift-log). Distinct from `auditLog`, which is the durable
   /// business/security trail. Defaults to a no-op so tests stay silent unless they inject one.
   private let logger: Logger
-  /// Injected so tests can make the deadline fire instantly with a no-op sleep.
-  private let sleep: @Sendable (Duration) async throws -> Void
+  /// Injected so tests can script pacing (deadline, backoff) instead of waiting on wall-clock.
+  private let clock: any Clock<Duration>
 
   public init(
     provider: any LLMProvider,
@@ -88,7 +87,7 @@ public struct AgentRuntime: Sendable {
     usageStore: any UsageStore,
     auditLog: any AuditLog,
     logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
-    sleep: @escaping @Sendable (Duration) async throws -> Void
+    clock: any Clock<Duration>
   ) {
     self.provider = provider
     self.typingIndicator = typingIndicator
@@ -102,14 +101,14 @@ public struct AgentRuntime: Sendable {
     self.usageStore = usageStore
     self.auditLog = auditLog
     self.logger = logger
-    self.sleep = sleep
+    self.clock = clock
   }
 
   // swiftlint:disable function_parameter_count function_body_length cyclomatic_complexity
-  /// The bounded agentic loop (spec §6): one context assembly, then up to `maxTurns` round-trips
+  /// The bounded agentic loop: one context assembly, then up to `maxTurns` round-trips
   /// with per-round-trip budget preflight, gated tool dispatch, and immediate usage/audit writes.
-  /// DELIBERATE SOFTENING of Inc 1's "no persistence here": `usageStore`/`auditLog` are injected
-  /// so mid-run rows survive a crash (D6/review H1). Throws ONLY `StoreError.diskFull`; every
+  /// A DELIBERATE SOFTENING of "no persistence here": `usageStore`/`auditLog` are injected
+  /// so mid-run rows survive a crash. Throws ONLY `StoreError.diskFull`; every
   /// other failure resolves in-band to a `TurnResult`.
   public func runTurn(
     runId: Int64,
@@ -147,7 +146,7 @@ public struct AgentRuntime: Sendable {
 
     var pendingSuspension: PendingToolAction?
 
-    // Seeded from the carried-over usage (nil = a fresh run; §6.3 continuation carries the run's
+    // Seeded from the carried-over usage (nil = a fresh run; a continuation carries the run's
     // persisted totals so the tool-call / token / USD caps keep counting across the suspension).
     var proposedToolCalls = carryOver?.toolCalls ?? 0
     var recordedRunTokens = carryOver?.tokens ?? 0
@@ -170,13 +169,13 @@ public struct AgentRuntime: Sendable {
     // `runTurn` entry above; only the round count needs to account for rounds already consumed.
     let priorRounds = carryOver?.rounds ?? 0
     for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
-      // Per-round-trip preflight (§6.2): day totals at run start + everything this run recorded.
+      // Per-round-trip preflight: day totals at run start + everything this run recorded.
       let inputTokens = TokenEstimator.estimateInputTokens(wire)
       // The loop is the one component that grows provider input (proposals + fenced
-      // observations, §6.5) and nothing re-fits the wire mid-run — without this check the
+      // observations) and nothing re-fits the wire mid-run — without this check the
       // provider's context window is the de facto enforcement: an HTTP 400 classified terminal,
       // surfacing as an undiagnosable "provider unavailable". `budget.maxInputTokens` otherwise
-      // binds only at assembly (§9), which cannot see mid-run growth.
+      // binds only at assembly, which cannot see mid-run growth.
       if inputTokens > budget.maxInputTokens {
         return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
       }
@@ -190,7 +189,7 @@ public struct AgentRuntime: Sendable {
         ),
         providerCost: nil
       ).costUSD
-      // The run-accumulated per-run check (§15) lives here, not in BudgetGate (see preamble).
+      // The run-accumulated per-run check lives here, not in BudgetGate.
       if recordedRunUSD + estimatedCost > budget.perRunUSD {
         return outcome(.budgetStopped(cap: "per-run spend"))
       }
@@ -249,7 +248,7 @@ public struct AgentRuntime: Sendable {
       } catch {
         // Streaming can partially deliver before a terminal error, so its terminal case still debits
         // an ESTIMATED row (`degradedForStreamingError`); the typing path debits nil for a terminal
-        // (`degradedForCaughtError`). §15 estimated-debit rule; keeps
+        // (`degradedForCaughtError`). Keeps
         // `terminalStreamFailureDegradesAndDebitsTheEstimate` green and both helpers live.
         turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
         let degradation =
@@ -259,15 +258,15 @@ public struct AgentRuntime: Sendable {
         return outcome(degradation)
       }
 
-      // No proposals → the terminal round-trip; its usage row rides the atomic commit (D6).
+      // No proposals → the terminal round-trip; its usage row rides the atomic commit.
       guard response.toolCalls.isEmpty == false else {
         return outcome(
           classify(response: response, context: wire, runId: runId, sessionId: sessionId)
         )
       }
 
-      // Intermediate round-trip: record its usage row IMMEDIATELY (D6). Spend that cannot be
-      // recorded must stop being spent (§6 — review H2).
+      // Intermediate round-trip: record its usage row IMMEDIATELY. Spend that cannot be
+      // recorded must stop being spent.
       let intermediate = usageRow(for: response, context: wire, runId: runId, sessionId: sessionId)
       do {
         try usageStore.recordUsage(intermediate)
@@ -280,13 +279,13 @@ public struct AgentRuntime: Sendable {
       recordedRunTokens += intermediate.promptTokens + intermediate.completionTokens
       recordedRunUSD += intermediate.costUSD
 
-      // Tool dispatch. The typing indicator is the progress signal between round-trips (§13).
+      // Tool dispatch. The typing indicator is the progress signal between round-trips.
       await typingIndicator.sendTyping(chatId: chatId)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
         proposedToolCalls += 1
         guard proposedToolCalls <= budget.maxToolCalls else {
-          // Mid-batch cap (rev.1 L4): the under-cap prefix ran; the first over-cap proposal ends
+          // Mid-batch cap: the under-cap prefix ran; the first over-cap proposal ends
           // the run. Executed observations in this batch are lost with the budget-stopped commit;
           // the taint flag still persists.
           return outcome(.budgetStopped(cap: "per-run tool-call"))
@@ -330,11 +329,11 @@ public struct AgentRuntime: Sendable {
           "tool \(call.name) done decision=\(dispatched.observation.status.rawValue) bytes=\(dispatched.observation.content.utf8.count) ms=\(Self.millis(ContinuousClock.now - toolStart))"
         )
 
-        // §5.2 durable suspend: the FIRST ask-tier proposal records its action and parks the run.
+        // Durable suspend: the FIRST ask-tier proposal records its action and parks the run.
         // The tool did NOT execute — its placeholder observation row and the approvalRequested
-        // audit both ride the suspend commit (§5.3 / Task 14), so skip both the toolCall audit and
+        // audit both ride the suspend commit, so skip both the toolCall audit and
         // the observation append here. Later gated calls in the batch see approvalAlreadyPending
-        // (Step 5) and return a blocked observation instead (requiresApproval nil), which appends
+        // and return a blocked observation instead (requiresApproval nil), which appends
         // normally below.
         if pendingSuspension == nil, let recordedAction = dispatched.requiresApproval {
           pendingSuspension = PendingToolAction(toolCallId: call.id, recorded: recordedAction)
@@ -345,14 +344,14 @@ public struct AgentRuntime: Sendable {
 
         observations.append(dispatched.observation)
         if dispatched.observation.ingestedUntrusted {
-          ingestedUntrusted = true  // visible to the very next proposed call (§6.5)
+          ingestedUntrusted = true  // visible to the very next proposed call
         }
         if dispatched.observation.readPrivateData {
-          runPrivateData = true  // rev.1 H1
+          runPrivateData = true
         }
       }
 
-      // Grow the wire array with the exchange (D3); observations enter FENCED (§12).
+      // Grow the wire array with the exchange; observations enter FENCED.
       wire.append(
         ChatMessage(role: .assistant, content: response.content, toolCalls: response.toolCalls)
       )
@@ -377,7 +376,7 @@ public struct AgentRuntime: Sendable {
         )
       )
 
-      // §5.2: the batch has drained. If an ask-tier proposal parked, return the suspend result now.
+      // The batch has drained. If an ask-tier proposal parked, return the suspend result now.
       // `intermediate` is THIS round-trip's already-recorded usage (recorded above via
       // `usageStore.recordUsage`); the exchange above carries the assistant anchor + completed
       // observations, and the parked call's placeholder is reserved at the suspend commit.
@@ -442,7 +441,7 @@ private extension AgentRuntime {
 // MARK: - Round-Trip Recording
 
 private extension AgentRuntime {
-  /// One audit row per dispatch, written immediately, blocked calls included (FR-T1/§6). Audit is
+  /// One audit row per dispatch, written immediately, blocked calls included. Audit is
   /// observability, not a gate: a non-diskFull failure logs and the run continues.
   func recordToolAudit(
     for call: ToolCall,
@@ -503,7 +502,7 @@ private extension AgentRuntime {
 // MARK: - Provider Round Trip
 
 private extension AgentRuntime {
-  /// One provider round-trip inside the SHARED wall-clock window (§6.6): streaming when enabled,
+  /// One provider round-trip inside the SHARED wall-clock window: streaming when enabled,
   /// falling back to typing on a connect failure or a clean pre-stream rejection, else plain typing.
   /// `deadlineSeconds` is the REMAINING run budget, not a fresh 180 s. Throws the provider/deadline
   /// error; the loop maps it.
@@ -530,7 +529,7 @@ private extension AgentRuntime {
       )
     } catch ProviderError.connectFailed, ProviderError.rejected {
       // connectFailed: nothing was transmitted. rejected: the head carried an error status before
-      // any SSE bytes, so the server generated nothing — the Inc 2 no-double-issue rationale does
+      // any SSE bytes, so the server generated nothing — the no-double-issue rationale does
       // not apply. Either way one blocking attempt is safe; `complete` brings its own retry
       // budget, backoff, and Retry-After handling, all inside the remaining wall-clock window.
       return try await runTypingTurn(
@@ -552,7 +551,7 @@ private extension AgentRuntime {
       typingIndicator: typingIndicator,
       draftStreamer: draftStreamer,
       wallClockDeadlineSeconds: deadlineSeconds,
-      sleep: sleep
+      clock: clock
     )
     return try await runtime.run(chatId: chatId, draftId: draftId, request: request)
   }
@@ -566,7 +565,7 @@ private extension AgentRuntime {
       provider: provider,
       typingIndicator: typingIndicator,
       wallClockDeadlineSeconds: deadlineSeconds,
-      sleep: sleep
+      clock: clock
     )
     return try await runtime.run(chatId: chatId, request: request)
   }
@@ -660,7 +659,7 @@ private extension AgentRuntime {
   /// The pre-call estimated `ProviderUsage` debited when no real usage exists (deadline /
   /// exhausted retries): prompt from context, completion reserved at the output cap, cost via the
   /// best-effort tier. No provider cost exists for a call that never returned, so the resolver's
-  /// heuristic tier carries USD (floored, never a silent $0 — D1/F19); the row is an estimate.
+  /// heuristic tier carries USD (floored, never a silent $0); the row is an estimate.
   func estimatedDebit(
     context: [ChatMessage],
     runId: Int64,

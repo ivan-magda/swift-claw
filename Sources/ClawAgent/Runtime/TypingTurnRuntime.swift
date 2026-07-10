@@ -9,18 +9,18 @@ struct TypingTurnRuntime: Sendable {
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
   private let wallClockDeadlineSeconds: Int
-  private let sleep: @Sendable (Duration) async throws -> Void
+  private let clock: any Clock<Duration>
 
   init(
     provider: any LLMProvider,
     typingIndicator: any TypingIndicator,
     wallClockDeadlineSeconds: Int,
-    sleep: @escaping @Sendable (Duration) async throws -> Void
+    clock: any Clock<Duration>
   ) {
     self.provider = provider
     self.typingIndicator = typingIndicator
     self.wallClockDeadlineSeconds = wallClockDeadlineSeconds
-    self.sleep = sleep
+    self.clock = clock
   }
 
   /// Races three children: the provider call, a typing loop re-issued every 4 seconds, and a
@@ -37,13 +37,13 @@ struct TypingTurnRuntime: Sendable {
         try await provider.complete(request: request)
       }
       group.addTask {
-        try await sleep(.seconds(wallClockDeadlineSeconds))
+        try await clock.sleep(for: .seconds(wallClockDeadlineSeconds))
         throw AgentRuntime.DeadlineExceeded()
       }
       group.addTask {
         while !Task.isCancelled {
           await typingIndicator.sendTyping(chatId: chatId)
-          try await sleep(Self.typingReissueInterval)
+          try await clock.sleep(for: Self.typingReissueInterval)
         }
         return nil
       }

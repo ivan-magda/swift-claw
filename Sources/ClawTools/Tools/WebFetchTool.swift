@@ -1,10 +1,10 @@
 import ClawCore
 import Foundation
 
-/// GET-only public-web fetch (§7.2). Redirects are followed MANUALLY (the injected client never
+/// GET-only public-web fetch. Redirects are followed MANUALLY (the injected client never
 /// auto-follows): per hop the host is resolved and every address asserted public, so a redirect
 /// into a private range is refused regardless of where the chain started. Resolve-then-connect
-/// TOCTOU (DNS rebinding) is the documented v1 residual (§20 item 3).
+/// TOCTOU (DNS rebinding) is the documented v1 residual.
 public struct WebFetchTool: Tool {
   static let contentTypeAllowlistPrefixes = ["text/"]
   static let contentTypeAllowlistExact = [
@@ -68,7 +68,7 @@ public struct WebFetchTool: Tool {
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    // The gate resolved and authorized exactly this canonical URL (§9.1); re-deriving it here
+    // The gate resolved and authorized exactly this canonical URL; re-deriving it here
     // could drift byte-for-byte from what the owner approved.
     guard let canonicalTarget else {
       return errorPayload("web_fetch was dispatched without a gate-resolved URL.")
@@ -206,7 +206,7 @@ private extension WebFetchTool {
 
     let extracted =
       mediaType.contains("html") ? HTMLTextExtractor.extractText(fromHTML: bodyText) : bodyText
-    let redacted = redactor.redact(extracted)  // rev.1 L5 — same pass as file_read
+    let redacted = redactor.redact(extracted)  // same pass as file_read
 
     return ToolPayload(
       content: ToolOutputCap.cap(redacted, maxGraphemes: outputCapGraphemes),

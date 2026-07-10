@@ -1,10 +1,10 @@
 import ClawCore
 import Foundation
 
-/// Owner-facing copy for `/remember` and `/memory` (spec §8.3/§9): terse, mobile-first, provenance
-/// on the line. Pure rendering - no store or transport knowledge.
+/// Owner-facing copy for `/remember` and `/memory`: terse, mobile-first, provenance on the line.
+/// Pure rendering - no store or transport knowledge.
 public enum MemoryReplies {
-  /// A screenful on mobile; the review list never tries to show everything (spec §9).
+  /// A screenful on mobile; the review list never tries to show everything.
   public static let reviewListLimit = 20
 
   static let snippetCapGraphemes = 60
@@ -20,7 +20,7 @@ public enum MemoryReplies {
   public static let nothingToSave = "No savable text."
   public static let cancelled = "Cancelled."
 
-  /// Terminal owner-write failure copy (spec §12): the pending intent was cleared; re-issue.
+  /// Terminal owner-write failure copy: the pending intent was cleared; re-issue.
   public static let saveFailed =
     "Couldn't save it. Nothing was written. Run /remember again."
   public static let deleteFailed =
@@ -50,8 +50,8 @@ public enum MemoryReplies {
     return "No memories yet. Use /remember to save one."
   }
 
-  /// Grouped by kind (declaration order), each line `id · «short text» · source · date · ⚠`
-  /// (spec §9). Items keep the store's most-recent-first order within their group.
+  /// Grouped by kind (declaration order), each line `id · «short text» · source · date · ⚠`.
+  /// Items keep the store's most-recent-first order within their group.
   public static func reviewList(items: [MemoryItem]) -> String {
     let limitedItems = Array(items.prefix(reviewListLimit))
     var lines: [String] = []
@@ -71,7 +71,7 @@ public enum MemoryReplies {
     return lines.joined(separator: "\n")
   }
 
-  /// Full text and full provenance: kind, source, session, created, sensitivity (spec §9).
+  /// Full text and full provenance: kind, source, session, created, sensitivity.
   public static func showItem(_ item: MemoryItem) -> String {
     let sessionText = item.sessionId.map(String.init) ?? "none"
     let lines = [

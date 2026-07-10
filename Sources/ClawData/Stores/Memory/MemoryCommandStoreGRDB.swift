@@ -22,7 +22,7 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
     updateId: Int64,
     item: NewMemoryItem,
     now: Date
-  ) throws -> MemoryCommandResult {
+  ) throws(StoreError) -> MemoryCommandResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
@@ -57,7 +57,7 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
     updateId: Int64,
     itemId: Int64,
     now: Date
-  ) throws -> MemoryCommandResult {
+  ) throws(StoreError) -> MemoryCommandResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,

@@ -1,19 +1,19 @@
 import ClawCore
 import Foundation
 
-/// The deterministic, gateway-authored approval prompt (D7/§5.4). Every owner-visible field is
-/// authored HERE, never by the model, and the fully-resolved canonical target is never truncated
-/// (FR-T5). Delivery-only: joined into the outbox payload, never stored as assistant history.
+/// The deterministic, gateway-authored approval prompt. Every owner-visible field is
+/// authored HERE, never by the model, and the fully-resolved canonical target is never
+/// truncated. Delivery-only: joined into the outbox payload, never stored as assistant history.
 /// Exhaustive over `ApprovalReason` — a new approval kind cannot compile without owner-facing copy.
 public enum ToolApprovalPrompt {
-  /// Everything the §5.4 durable-approval prompt renders. The banners are decided by the suspend
-  /// commit (Task 14) from the originating turn's taint state and the target's identity; the
+  /// Everything the durable-approval prompt renders. The banners are decided by the suspend
+  /// commit from the originating turn's taint state and the target's identity; the
   /// renderer stays a pure function of its input.
   public struct Input: Sendable, Equatable {
     public let recorded: RecordedToolAction
-    /// The originating turn ingested untrusted content (§5.4 TAINT banner).
+    /// The originating turn ingested untrusted content (TAINT banner).
     public let taintBanner: Bool
-    /// The canonical target is SOUL/AGENTS/USER/MEMORY .md (§5.4 privileged-file banner).
+    /// The canonical target is SOUL/AGENTS/USER/MEMORY .md (privileged-file banner).
     public let privilegedFileBanner: Bool
 
     public init(recorded: RecordedToolAction, taintBanner: Bool, privilegedFileBanner: Bool) {
@@ -23,7 +23,7 @@ public enum ToolApprovalPrompt {
     }
   }
 
-  /// The §5.4 durable-approval prompt: a reason-keyed headline, the taint banner, the
+  /// The durable-approval prompt: a reason-keyed headline, the taint banner, the
   /// fully-resolved target, blast radius, the privileged-file banner, a size-capped
   /// secret-redacted preview, and scan warnings — assembled in a fixed order so the owner can
   /// judge risk at a glance.
@@ -34,7 +34,7 @@ public enum ToolApprovalPrompt {
     if input.taintBanner {
       lines.append(taintBannerText)
     }
-    // Fully resolved, never truncated (FR-T5): absolute path after symlink/`..` resolution, or
+    // Fully resolved, never truncated: absolute path after symlink/`..` resolution, or
     // the full URL including query.
     lines.append("Target: \(recorded.canonicalTarget)")
     lines.append("Effect: \(recorded.presentation.blastRadius)")
@@ -58,7 +58,7 @@ public enum ToolApprovalPrompt {
   }
 
   /// The prompt as ready-to-enqueue outbox chunks. One chunk in the common case; a prompt that
-  /// exceeds a single Telegram message (an FR-T5 never-truncated URL can be arbitrarily long)
+  /// exceeds a single Telegram message (a never-truncated URL can be arbitrarily long)
   /// splits grapheme-safely instead of parking one undeliverable row that would stall the shared
   /// outbox. The inline keyboard rides the FINAL chunk — the one ending with the tap instruction —
   /// and the suspend commit stamps `approval_id` onto exactly that keyboard-carrying chunk

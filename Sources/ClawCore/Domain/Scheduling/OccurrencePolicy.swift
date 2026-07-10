@@ -1,6 +1,6 @@
 import Foundation
 
-/// Use-case anchoring policy over `OccurrenceCalculator` (spec §5.3/§5.4/§8): each method names
+/// Use-case anchoring policy over `OccurrenceCalculator`: each method names
 /// one moment the system asks "what fires next / what fires now" and pins that moment's anchor
 /// and cutoff, so the confirm preview, arm, resume, tick advance, and misfire coalesce can never
 /// drift apart. The calculator answers "which instants match the rule"; this type answers "which
@@ -35,13 +35,13 @@ public struct OccurrencePolicy: Sendable {
   }
 
   /// The fire time to arm with. Anchoring on the parked `firstOccurrence` (not arm-time `now`)
-  /// keeps the previewed everyNMinutes phase intact (preamble deviation #1: phase-continuous
-  /// from preview through every fire) — mirroring `resumeOccurrence`, which anchors on the
-  /// stored occurrence rather than `now` for the same reason. `after: nowDate` still does the
-  /// M1 job: it skips any occurrence already past by confirm time, so a draft confirmed long
-  /// after its preview can't arm an already-past occurrence (a one-shot would silently misfire
-  /// to COMPLETED; a recurring one would fire immediately). This re-runs the SAME parked rule —
-  /// not a re-parse (§8): label/prompt/rule/timezone are still the parked draft's. Returns nil
+  /// keeps the previewed everyNMinutes phase intact (phase-continuous from preview through
+  /// every fire) — mirroring `resumeOccurrence`, which anchors on the stored occurrence rather
+  /// than `now` for the same reason. `after: nowDate` still does its job: it skips any
+  /// occurrence already past by confirm time, so a draft confirmed long after its preview
+  /// can't arm an already-past occurrence (a one-shot would silently misfire to COMPLETED; a
+  /// recurring one would fire immediately). This re-runs the SAME parked rule — not a
+  /// re-parse: label/prompt/rule/timezone are still the parked draft's. Returns nil
   /// when nothing valid remains to arm: a one-shot whose instant has passed, or (pathological)
   /// a rule with no upcoming occurrence.
   public func armOccurrence(for validated: ValidatedSchedule, at nowDate: Date) -> Date? {
@@ -66,7 +66,7 @@ public struct OccurrencePolicy: Sendable {
   /// stored instant if still ahead, else nothing left to fire. Anchor = the stale stored next
   /// (pause leaves next_occurrence untouched): the recompute stays on the armed chain —
   /// everyNMinutes keeps its phase — while `after: nowDate` skips everything inside the paused
-  /// window (§5.4: pause = "be quiet", never catch up).
+  /// window (pause = "be quiet", never catch up).
   public func resumeOccurrence(for job: ScheduledJob, from nowDate: Date) -> Date? {
     guard
       let envelope = job.recurrence,
@@ -107,7 +107,7 @@ public struct OccurrencePolicy: Sendable {
     }
   }
 
-  /// Coalesce (§5.3): N missed occurrences inside the catch-up window fire ONCE, at the latest
+  /// Coalesce: N missed occurrences inside the catch-up window fire ONCE, at the latest
   /// missed occurrence ≤ `atOrBefore`; the claim's CAS still matches the stored due. Anchor =
   /// the stored due: every advance stays on the chain the confirm preview showed (for
   /// everyNMinutes the phase is due + k·N; time-of-day rules are anchor-inert). A one-shot has

@@ -120,14 +120,14 @@ struct EmptyWorkspace: WorkspaceReading {
 
 /// A memory store with nothing stored: `fetchRanked` always returns empty.
 struct EmptyMemoryStore: MemoryStore {
-  func append(_ newItem: NewMemoryItem, now: Date) throws -> MemoryItem {
+  func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
     throw StoreError.unexpected("not used")
   }
 
-  func list(kind: MemoryKind?, limit: Int) throws -> [MemoryItem] { [] }
-  func get(id: Int64) throws -> MemoryItem? { nil }
-  func delete(id: Int64) throws -> Bool { false }
-  func fetchRanked(excludeSensitive: Bool, limit: Int) throws -> [MemoryItem] { [] }
+  func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
+  func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
+  func delete(id: Int64) throws(StoreError) -> Bool { false }
+  func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
 }
 
 /// A retriever with no recall corpus: always returns no hits.
@@ -138,7 +138,7 @@ struct EmptyRetriever: Retriever {
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int
-  ) throws -> [RecallHit] { [] }
+  ) throws(StoreError) -> [RecallHit] { [] }
 }
 
 /// A `ContextBuilder` over the empty collaborators: assembles the trigger-bounded history with no
@@ -166,7 +166,7 @@ final class RecordingAuditLog: AuditLog, @unchecked Sendable {
     return recorded
   }
 
-  func appendAudit(_ event: AuditEvent) throws {
+  func appendAudit(_ event: AuditEvent) throws(StoreError) {
     lock.lock()
     defer { lock.unlock() }
     recorded.append(event)

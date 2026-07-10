@@ -5,8 +5,8 @@ import GRDB
 // MARK: - Cross-Store Run Helpers
 
 extension RunStoreGRDB {
-  /// FR-C4/spec §14: when a run that belongs to a scheduled job reaches FAILED, `jobFailed`
-  /// rides the SAME transaction as the state flip (house rule). No-op for job-less runs.
+  /// When a run that belongs to a scheduled job reaches FAILED, `jobFailed` rides the SAME
+  /// transaction as the state flip (house rule). No-op for job-less runs.
   static func appendJobFailedIfJobRun(_ db: Database, runId: Int64, now: Date) throws {
     let row = try Row.fetchOne(
       db,
@@ -93,8 +93,8 @@ extension RunStoreGRDB {
     return affected
   }
 
-  // `public`: Task 16 test fixtures outside this module (ClawGatewayTests, via plain `import
-  // ClawData`) drive suspended-run fixtures through the real reducer instead of hand-rolling state.
+  // `public`: test fixtures outside this module (ClawGatewayTests, via plain `import ClawData`)
+  // drive suspended-run fixtures through the real reducer instead of hand-rolling state.
   public static func transitionRun(
     _ db: Database,
     runId: Int64,
@@ -109,7 +109,7 @@ extension RunStoreGRDB {
       return nil
     }
 
-    // The fingerprint rides the state flip in one UPDATE (spec §3.2); a nil leaves the column
+    // The fingerprint rides the state flip in one UPDATE; a nil leaves the column
     // untouched so resolution/deny transitions never disturb the stamped value.
     if let policyVersion {
       try db.execute(
@@ -188,7 +188,7 @@ extension RunStoreGRDB {
     return db.changesCount > 0
   }
 
-  /// A run's earlier commits may already occupy outbox steps (the §5.3 suspend prompt at step 0),
+  /// A run's earlier commits may already occupy outbox steps (the suspend prompt at step 0),
   /// and `dedup_key` is `runId:stepIndex` under INSERT OR IGNORE — a colliding chunk would be
   /// dropped SILENTLY. Every later enqueue therefore extends the run's delivery sequence from
   /// this base (0 for an ordinary run, so the plain path is untouched).

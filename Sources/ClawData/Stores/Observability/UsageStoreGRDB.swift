@@ -9,13 +9,13 @@ public struct UsageStoreGRDB: UsageStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func recordUsage(_ usage: ProviderUsage) throws {
+  public func recordUsage(_ usage: ProviderUsage) throws(StoreError) {
     try database.writeMapping { db in
       try RunStoreGRDB.insertUsage(db, usage)
     }
   }
 
-  public func todayTokensAndCost(now: Date) throws -> (tokens: Int, costUSD: Double) {
+  public func todayTokensAndCost(now: Date) throws(StoreError) -> (tokens: Int, costUSD: Double) {
     let dayStart = now.startOfUTCDay
     return try database.readMapping { db in
       // GRDB stores Date as a UTC "yyyy-MM-dd HH:mm:ss.SSS" string, so `ts >= ?` is a correct
@@ -41,7 +41,7 @@ public struct UsageStoreGRDB: UsageStore {
   public func todayTokensAndCost(
     origins: [RunOrigin],
     now: Date
-  ) throws -> (tokens: Int, costUSD: Double) {
+  ) throws(StoreError) -> (tokens: Int, costUSD: Double) {
     guard origins.isEmpty == false else {
       return (0, 0)
     }
@@ -73,7 +73,7 @@ public struct UsageStoreGRDB: UsageStore {
     }
   }
 
-  public func costSourceMix(now: Date) throws -> [CostSource: Int] {
+  public func costSourceMix(now: Date) throws(StoreError) -> [CostSource: Int] {
     let dayStart = now.startOfUTCDay
     return try database.readMapping { db in
       let rows = try Row.fetchAll(

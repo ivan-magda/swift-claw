@@ -9,13 +9,13 @@ public struct MemoryStoreGRDB: MemoryStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func append(_ newItem: NewMemoryItem, now: Date) throws -> MemoryItem {
+  public func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
     try database.writeMapping { db in
       try Self.insertItem(db, item: newItem, now: now)
     }
   }
 
-  public func list(kind: MemoryKind?, limit: Int) throws -> [MemoryItem] {
+  public func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] {
     try database.readMapping { db in
       let rows: [Row]
       if let kind {
@@ -40,7 +40,7 @@ public struct MemoryStoreGRDB: MemoryStore {
     }
   }
 
-  public func get(id: Int64) throws -> MemoryItem? {
+  public func get(id: Int64) throws(StoreError) -> MemoryItem? {
     try database.readMapping { db in
       guard
         let row = try Row.fetchOne(
@@ -55,16 +55,16 @@ public struct MemoryStoreGRDB: MemoryStore {
     }
   }
 
-  public func delete(id: Int64) throws -> Bool {
+  public func delete(id: Int64) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       try db.execute(sql: "DELETE FROM memory_items WHERE id = ?", arguments: [id])
       return db.changesCount > 0
     }
   }
 
-  public func fetchRanked(excludeSensitive: Bool, limit: Int) throws -> [MemoryItem] {
+  public func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] {
     try database.readMapping { db in
-      // Pure SQL ordering; the grapheme/budget fill is MemoryRanker's job (spec §10.1).
+      // Pure SQL ordering; the grapheme/budget fill is MemoryRanker's job.
       let sensitivityFilter = excludeSensitive ? "WHERE sensitivity = 'normal'" : ""
       let rows = try Row.fetchAll(
         db,
@@ -113,7 +113,7 @@ public struct MemoryStoreGRDB: MemoryStore {
   /// Decodes a `memory_items` row, failing **closed** on any unrecognized persisted enum value: a
   /// corrupted `sensitivity`/`source` must not silently become the permissive `.normal`/`.owner`
   /// and falsify the taint guard or `/memory` provenance. Context reads degrade by omitting the row
-  /// at the assembler boundary (Plan 5), not by inventing a value here.
+  /// at the assembler boundary, not by inventing a value here.
   static func decodeItem(_ row: Row) throws -> MemoryItem {
     let rowId: Int64 = row["id"]
 

@@ -2,10 +2,10 @@ import ClawCore
 import Foundation
 import GRDB
 
-// MARK: - Suspend Commit (§5.3)
+// MARK: - Suspend Commit
 
 extension RunStoreGRDB {
-  /// The parked-observation body (§5.3). A resolution overwrites it in place with the real result.
+  /// The parked-observation body. A resolution overwrites it in place with the real result.
   static let placeholderObservationContent = "awaiting owner approval"
 
   public func commitSuspendedTurn(
@@ -13,7 +13,7 @@ extension RunStoreGRDB {
     sessionId: Int64,
     commit: SuspendedTurnCommit,
     now: Date
-  ) throws -> SuspendedCommitReceipt {
+  ) throws(StoreError) -> SuspendedCommitReceipt {
     try database.writeMapping { db in
       guard
         try Self.transitionRun(db, runId: runId, event: .suspendForApproval, now: now) != nil
@@ -71,10 +71,10 @@ extension RunStoreGRDB {
   }
 }
 
-// MARK: - Approved Resume (Task 16)
+// MARK: - Approved Resume
 
 extension RunStoreGRDB {
-  /// The shared claim body (§6.3/§6.6): exactly-once needs BOTH guards. The placeholder check is
+  /// The shared claim body: exactly-once needs BOTH guards. The placeholder check is
   /// per-approval — once the run suspends a second time it is AWAITING_APPROVAL again, so the
   /// state flip alone would let a replay of an already-executed approval commit and steal the new
   /// approval's park. A failed state flip with the placeholder intact means `/stop`//`new` drove
@@ -107,7 +107,7 @@ extension RunStoreGRDB {
     observationMessageId: Int64,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim {
+  ) throws(StoreError) -> ApprovedExecutionClaim {
     try database.writeMapping { db in
       try Self.claimResume(
         db,
@@ -123,7 +123,7 @@ extension RunStoreGRDB {
     runId: Int64,
     observationMessageId: Int64,
     content: String
-  ) throws {
+  ) throws(StoreError) {
     try database.writeMapping { db in
       try Self.fillApprovedObservation(
         db,
@@ -141,7 +141,7 @@ extension RunStoreGRDB {
     observationContent: String,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim {
+  ) throws(StoreError) -> ApprovedExecutionClaim {
     try database.writeMapping { db in
       let claim = try Self.claimResume(
         db,
@@ -153,9 +153,9 @@ extension RunStoreGRDB {
       guard claim == .committed else {
         return claim
       }
-      // §6.3 exactly-once: the item insert shares this transaction with the observation fill, both
-      // gated by the claim guards above (D10 — the same db-scoped static `applyRemember` uses;
-      // MemoryStore.append would open its own txn and could not fuse).
+      // Exactly-once: the item insert shares this transaction with the observation fill, both
+      // gated by the claim guards above — the same db-scoped static `applyRemember` uses;
+      // MemoryStore.append would open its own txn and could not fuse.
       _ = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
       try Self.fillApprovedObservation(
         db,
@@ -167,7 +167,7 @@ extension RunStoreGRDB {
     }
   }
 
-  public func resumeUsage(runId: Int64) throws -> ResumeUsage {
+  public func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
     try database.readMapping { db in
       let rounds =
         try Int.fetchOne(
@@ -200,7 +200,7 @@ extension RunStoreGRDB {
     }
   }
 
-  public func runOrigin(runId: Int64) throws -> RunOrigin? {
+  public func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     try database.readMapping { db in
       let rawOrigin = try String.fetchOne(
         db,
@@ -225,7 +225,7 @@ extension RunStoreGRDB {
     observationMessageId: Int64,
     observationContent: String,
     now: Date
-  ) throws -> Bool {
+  ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
         return false
@@ -318,7 +318,7 @@ private extension RunStoreGRDB {
       )
     }
     // The PLACEHOLDER pins rowid adjacency: a real `tool` row satisfying the anchor's expected
-    // tool_call_id so `HistoryHygiene` keeps the exchange while parked (§5.3). Resolution UPDATEs
+    // tool_call_id so `HistoryHygiene` keeps the exchange while parked. Resolution UPDATEs
     // it in place (v4 FTS triggers cover the edit).
     try db.execute(
       sql: """
@@ -331,7 +331,7 @@ private extension RunStoreGRDB {
     )
     let observationMessageId = db.lastInsertedRowID
 
-    // policy_version copied from the run row IN-txn (§3.2); empty when unstamped.
+    // policy_version copied from the run row IN-txn; empty when unstamped.
     let policyVersion =
       try String.fetchOne(
         db,
@@ -363,7 +363,7 @@ private extension RunStoreGRDB {
   }
 
   /// Stamp the new approval id onto the button-carrying chunk so `markSent` can link
-  /// `prompt_message_id` (Task 10); explanation chunks keep their nil approval_id. The chunks are
+  /// `prompt_message_id`; explanation chunks keep their nil approval_id. The chunks are
   /// re-based past the run's already-enqueued deliveries: a SECOND suspend in one run (approve →
   /// resume → another gated proposal) would otherwise collide with the first prompt's dedup key
   /// and be dropped silently — the run would park with no prompt for the owner to answer.

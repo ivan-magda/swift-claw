@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -518,7 +519,7 @@ struct WriteLikeTool: Tool {
   private func makeDispatcher(
     tools: [any Tool],
     privateFiles: [String] = [],
-    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    clock: any Clock<Duration> = ContinuousClock()
   ) -> GatedToolDispatcher {
     GatedToolDispatcher(
       registry: ToolRegistry(tools: tools),
@@ -526,7 +527,7 @@ struct WriteLikeTool: Tool {
         argGuard: ExfilArgGuard(secretValues: []),
         privateFileLoader: { privateFiles }
       ),
-      sleep: sleep
+      clock: clock
     )
   }
 
@@ -699,7 +700,10 @@ struct WriteLikeTool: Tool {
     // given — a tool that never returns and ignores cancellation; the injected sleep makes the
     // timeout arm fire immediately, so no wall clock is involved on the green path
     let release = WedgeRelease()
-    let dispatcher = makeDispatcher(tools: [WedgedTool(release: release)], sleep: { _ in })
+    let dispatcher = makeDispatcher(
+      tools: [WedgedTool(release: release)],
+      clock: ScriptedClock { _ in }
+    )
 
     // when — under group-await semantics this call would NEVER return (the group awaits the
     // wedged child); the time limit converts that hang into a failure

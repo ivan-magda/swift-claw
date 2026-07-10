@@ -1,5 +1,5 @@
-/// The four durable approval states (ARCHITECTURE §7.1) — never a fifth: a `/stop`//`new`
-/// resolution lands in REJECTED and the audit `decision` records why (spec §4.2, preamble).
+/// The four durable approval states — never a fifth: a `/stop`//`new`
+/// resolution lands in REJECTED and the audit `decision` records why.
 public enum ApprovalState: String, Sendable, Equatable {
   case pending = "PENDING"
   case approved = "APPROVED"
@@ -8,7 +8,7 @@ public enum ApprovalState: String, Sendable, Equatable {
 }
 
 public enum ApprovalEvent: Sendable, Equatable {
-  /// A valid callback: auth + nonce + args-hash + policy_version all OK (§19.1 approve guard).
+  /// A valid callback: auth + nonce + args-hash + policy_version all OK (the approve guard).
   case approve
   /// Owner deny, stale-policy deny, or run cancel/supersede — the audit decision says why.
   case reject
@@ -16,8 +16,8 @@ public enum ApprovalEvent: Sendable, Equatable {
   case expire
 }
 
-/// ARCHITECTURE §19.1's ApprovalState table. Exhaustive switch, no default arm; nil = illegal
-/// (a resolved row never moves again — that is the single-use guarantee's substrate).
+/// The ApprovalState table from ARCHITECTURE.md §19.1. Exhaustive switch, no default arm; nil =
+/// illegal (a resolved row never moves again — that is the single-use guarantee's substrate).
 public enum ApprovalFSM {
   public static func reduce(state: ApprovalState, on event: ApprovalEvent) -> ApprovalState? {
     switch (state, event) {

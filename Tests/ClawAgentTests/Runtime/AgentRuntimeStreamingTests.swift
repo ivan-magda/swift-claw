@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -519,7 +520,7 @@ func waitForTurnResult(
       provider: provider,
       typing: typing,
       streamingEnabled: true,
-      sleep: tickYieldingSleep
+      clock: ScriptedClock(tickYieldingSleep)
     )
 
     // when
@@ -569,7 +570,7 @@ func waitForTurnResult(
       typing: typing,
       drafts: drafts,
       streamingEnabled: true,
-      sleep: compressedSleep
+      clock: ScriptedClock(compressedSleep)
     )
 
     // when
@@ -606,7 +607,7 @@ func waitForTurnResult(
       provider: provider,
       drafts: drafts,
       streamingEnabled: true,
-      sleep: draftDeadlineParkingSleep
+      clock: ScriptedClock(draftDeadlineParkingSleep)
     )
     let flag = CompletionFlag()
 
@@ -656,7 +657,7 @@ func waitForTurnResult(
         provider: provider,
         drafts: drafts,
         streamingEnabled: true,
-        sleep: compressedSleep
+        clock: ScriptedClock(compressedSleep)
       )
 
       // when
@@ -856,7 +857,7 @@ func waitForTurnResult(
       provider: provider,
       drafts: drafts,
       streamingEnabled: true,
-      sleep: compressedSleep
+      clock: ScriptedClock(compressedSleep)
     )
 
     // when
@@ -965,7 +966,7 @@ func waitForTurnResult(
     let runtime = makeRuntime(
       provider: provider,
       streamingEnabled: true,
-      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) }
+      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
     )
 
     // when
@@ -993,7 +994,7 @@ func waitForTurnResult(
     let runtime = makeRuntime(
       provider: provider,
       streamingEnabled: true,
-      sleep: { _ in try? await Task.sleep(for: .milliseconds(1)) }
+      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
     )
 
     // when

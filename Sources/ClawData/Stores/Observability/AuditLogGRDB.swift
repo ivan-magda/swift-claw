@@ -9,7 +9,7 @@ public struct AuditLogGRDB: AuditLog {
     database = MappedDatabase(writer: writer)
   }
 
-  public func appendAudit(_ event: AuditEvent) throws {
+  public func appendAudit(_ event: AuditEvent) throws(StoreError) {
     try database.writeMapping { db in
       try Self.insertAudit(db, event)
     }

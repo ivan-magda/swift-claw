@@ -30,10 +30,10 @@ public struct OutboxSignal: Sendable {
 }
 
 /// Drains `PENDING` `outbound_deliveries` rows and delivers each at-least-once, recording the
-/// returned `telegram_message_id` on success (§6.4). It drains once on boot — recovering rows a
+/// returned `telegram_message_id` on success. It drains once on boot — recovering rows a
 /// prior run committed but never sent (a crash between commit and send) — then again on every poke
 /// the `TurnRunner` fires after a commit. Delivery is `sendRichMessage` with a plain `sendMessage`
-/// fallback on any rich-send error (§6.4 / F8).
+/// fallback on any rich-send error.
 public struct OutboxDispatcher: Service {
   private let outbox: any OutboxStore
   private let delivery: any MessageDelivery
@@ -79,7 +79,7 @@ public struct OutboxDispatcher: Service {
     }
 
     for row in pendingRows {
-      // Stop promptly on graceful shutdown: leave the rest PENDING for boot recovery (F22) rather
+      // Stop promptly on graceful shutdown: leave the rest PENDING for boot recovery rather
       // than starting new sends while the task is unwinding.
       if Task.isCancelled { break }
 
@@ -93,8 +93,8 @@ public struct OutboxDispatcher: Service {
         // Recoverable: leave this row and any later ones PENDING and stop, so a multi-chunk reply
         // redelivers in order on the next drain rather than racing later chunks ahead of this one.
         // A row that *permanently* fails to send therefore stalls itself and every later row on
-        // every drain — there is no hot-retry and no attempt cap in Inc 1; a dead-letter path is a
-        // later increment. Tolerable here because the only recipient is the owner's own DM.
+        // every drain — there is no hot-retry, attempt cap, or dead-letter path yet. Tolerable
+        // here because the only recipient is the owner's own DM.
         logger.warning(
           "outbox send failed for run \(row.runId) step \(row.stepIndex); leaving it and later rows for the next drain: \(error)"
         )
@@ -124,7 +124,7 @@ public struct OutboxDispatcher: Service {
   /// Delivers one row, returning the Telegram `message_id` so the caller can record it via `markSent`.
   ///
   /// Sends the payload as rich markdown; on **any** rich-send error it re-sends the same payload as
-  /// plain `sendMessage` so a malformed-markdown reply still lands (F8, "no formatting errors").
+  /// plain `sendMessage` so a malformed-markdown reply still lands.
   /// `replyMarkup` (the inline keyboard) rides both the rich send and the plain fallback, so a
   /// degraded delivery never drops the approval keyboard. A failure of the plain fallback itself
   /// propagates — the row stays PENDING for the next drain.

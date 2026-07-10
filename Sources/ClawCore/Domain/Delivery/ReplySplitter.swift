@@ -4,7 +4,7 @@
 /// boundary, and only happens when the text actually exceeds the limit — at or under it the text
 /// passes through unchanged. Empty input yields no chunks (never a zero-length send).
 public enum ReplySplitter {
-  /// Telegram's per-message character ceiling for the rich send path (D2).
+  /// Telegram's per-message character ceiling for the rich send path.
   public static let limit = 32_768
 
   public static func split(text: String, limit: Int = limit) -> [String] {

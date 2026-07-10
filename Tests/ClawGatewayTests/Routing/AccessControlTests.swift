@@ -6,21 +6,21 @@ import Testing
 private struct StubAllowlist: AllowlistStore {
   let allowed: Set<Int64>
 
-  func seedAllowlist(userIds: [Int64]) throws {}
+  func seedAllowlist(userIds: [Int64]) throws(StoreError) {}
 
-  func allowlistContains(userId: Int64) throws -> Bool { allowed.contains(userId) }
+  func allowlistContains(userId: Int64) throws(StoreError) -> Bool { allowed.contains(userId) }
 
-  func allowlistCount() throws -> Int { allowed.count }
+  func allowlistCount() throws(StoreError) -> Int { allowed.count }
 }
 
 private struct ThrowingAllowlist: AllowlistStore {
-  struct Boom: Error {}
+  func seedAllowlist(userIds: [Int64]) throws(StoreError) { throw StoreError.unexpected("boom") }
 
-  func seedAllowlist(userIds: [Int64]) throws { throw Boom() }
+  func allowlistContains(userId: Int64) throws(StoreError) -> Bool {
+    throw StoreError.unexpected("boom")
+  }
 
-  func allowlistContains(userId: Int64) throws -> Bool { throw Boom() }
-
-  func allowlistCount() throws -> Int { throw Boom() }
+  func allowlistCount() throws(StoreError) -> Int { throw StoreError.unexpected("boom") }
 }
 
 @Suite struct AccessControlTests {

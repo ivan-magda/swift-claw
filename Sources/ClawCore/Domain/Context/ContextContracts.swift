@@ -118,7 +118,7 @@ public struct BuildResult: Sendable, Equatable {
   public let messages: [ChatMessage]
   public let ownerNotices: [String]
   public let hasPrivateDataAccess: Bool
-  /// The per-run prompt/workspace fingerprint (spec §3.2); "" only for test doubles that do not
+  /// The per-run prompt/workspace fingerprint; "" only for test doubles that do not
   /// exercise the approval fabric — `ContextBuilder.assemble` always sets the real value.
   public let policyVersion: String
 

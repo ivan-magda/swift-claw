@@ -344,7 +344,7 @@ private extension AppConfig {
       key: EnvKey.heartbeatEnabled,
       default: false
     )
-    // Spec §12: the heartbeat delivers to the config-resolved owner DM (and the same target
+    // The heartbeat delivers to the config-resolved owner DM (and the same target
     // serves the boot-reconcile crash notice). Enabling it without exactly one allowlisted id
     // is a config ERROR (fail closed at load + doctor --check-config), never a runtime guess.
     if enabled, allowlist.count != 1 {
@@ -466,10 +466,11 @@ private extension AppConfig {
 // MARK: - Approval Parsing
 
 private extension AppConfig {
-  /// Seconds a pending tool approval stays live before auto-deny (spec §4.6). Absent/blank falls
-  /// back to the default; a present value must be an integer within `[floor, ceiling]`, else it
-  /// fails closed with the dedicated `invalidApprovalExpiry` case — the scheduling vocabulary
-  /// deliberately is NOT reused (§4.6: "a new `ConfigError` case").
+  /// Seconds a pending tool approval stays live before auto-deny; the 1-hour default and the
+  /// [floor, ceiling] bounds are spec-pinned (ARCHITECTURE.md §15). Absent/blank falls back to
+  /// the default; a present value
+  /// must be an integer within `[floor, ceiling]`, else it fails closed with the dedicated
+  /// `invalidApprovalExpiry` case — the scheduling vocabulary deliberately is NOT reused.
   static func parseApprovalExpiry(_ raw: String?) throws -> Int {
     let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
     guard !trimmed.isEmpty else {

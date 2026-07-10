@@ -1,14 +1,14 @@
 import Foundation
 
-/// Which pathway created a run. The single discriminator driving reduced privilege (spec §10),
-/// the proactive budget (§11), and doctor metrics; persisted via rawValue in `runs.origin`.
+/// Which pathway created a run. The single discriminator driving reduced privilege, the
+/// proactive budget, and doctor metrics; persisted via rawValue in `runs.origin`.
 public enum RunOrigin: String, Sendable, Equatable {
   case interactive
   case scheduled
   case heartbeat
 }
 
-/// The scheduled-job status FSM (spec §4.1). `completed`/`cancelled` are terminal; terminal rows
+/// The scheduled-job status FSM. `completed`/`cancelled` are terminal; terminal rows
 /// keep `next_occurrence = NULL` so the ticker's partial index never sees them.
 public enum ScheduledJobStatus: String, Sendable, Equatable {
   case active = "ACTIVE"
@@ -17,7 +17,7 @@ public enum ScheduledJobStatus: String, Sendable, Equatable {
   case cancelled = "CANCELLED"
 }
 
-/// The stored recurrence wrapper (spec D2): `{"schema_version":1,"rule":<RecurrenceRule JSON>}`.
+/// The stored recurrence wrapper: `{"schema_version":1,"rule":<RecurrenceRule JSON>}`.
 public struct RecurrenceEnvelope: Sendable, Equatable, Codable {
   public static let currentSchemaVersion = 1
 
@@ -35,7 +35,7 @@ public struct RecurrenceEnvelope: Sendable, Equatable, Codable {
   }
 
   /// The pinned storage encoding. `.sortedKeys` makes the stored JSON deterministic, which is
-  /// what gives the byte-for-byte round-trip tripwire (spec §17) its teeth.
+  /// what gives the byte-for-byte round-trip tripwire its teeth.
   public func encodedJSON() throws -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -48,7 +48,7 @@ public struct RecurrenceEnvelope: Sendable, Equatable, Codable {
   }
 }
 
-/// One row of `scheduled_jobs` (spec §4.1).
+/// One row of `scheduled_jobs`.
 public struct ScheduledJob: Sendable, Equatable {
   public let id: Int64
   public let ownerChatId: Int64
@@ -93,7 +93,7 @@ public struct ScheduledJob: Sendable, Equatable {
 }
 
 /// The arm-time insert payload. `ownerChatId` is set in code from the arming chat — never
-/// model- or prompt-controlled (spec §4.1).
+/// model- or prompt-controlled.
 public struct NewScheduledJob: Sendable, Equatable {
   public let ownerChatId: Int64
   public let label: String
@@ -119,7 +119,7 @@ public struct NewScheduledJob: Sendable, Equatable {
   }
 }
 
-/// The single `scheduler_state` row (spec §4.3) — doctor is a separate process, so only
+/// The single `scheduler_state` row — doctor is a separate process, so only
 /// persisted state is visible to it.
 public struct SchedulerState: Sendable, Equatable {
   public let lastTickAt: Date?

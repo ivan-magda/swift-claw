@@ -66,17 +66,16 @@ let package = Package(
       name: "ClawAgent",
       dependencies: [
         "ClawCore",
-        "ClawWorkspace",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
     .target(name: "ClawTools", dependencies: ["ClawCore"]),
+    .target(name: "ClawTestSupport"),
     .target(
       name: "ClawGateway",
       dependencies: [
         "ClawCore",
         "ClawAgent",
-        "ClawWorkspace",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "UnixSignals", package: "swift-service-lifecycle"),
         .product(name: "Logging", package: "swift-log"),
@@ -116,23 +115,26 @@ let package = Package(
     .testTarget(
       name: "ClawLLMTests",
       dependencies: [
-        "ClawLLM", "ClawCore",
+        "ClawLLM", "ClawCore", "ClawTestSupport",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
     .testTarget(
       name: "ClawAgentTests",
       dependencies: [
-        "ClawAgent", "ClawCore", "ClawWorkspace",
+        "ClawAgent", "ClawCore", "ClawWorkspace", "ClawTestSupport",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
-    .testTarget(name: "ClawToolsTests", dependencies: ["ClawTools", "ClawCore"]),
+    .testTarget(
+      name: "ClawToolsTests",
+      dependencies: ["ClawTools", "ClawCore", "ClawTestSupport"]
+    ),
     .testTarget(
       name: "ClawGatewayTests",
       dependencies: [
         "ClawGateway", "ClawCore", "ClawData", "ClawAgent", "ClawTelegram", "ClawWorkspace",
-        "ClawTools",
+        "ClawTools", "ClawTestSupport",
       ]
     ),
   ]

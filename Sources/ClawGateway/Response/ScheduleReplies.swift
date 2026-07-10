@@ -1,11 +1,11 @@
 import ClawCore
 import Foundation
 
-/// Owner-facing copy for the scheduling surface (spec §8/§9): the confirm prompt shows the
-/// parked draft VERBATIM and never model-truncated (FR-T5 discipline), and every fire time is
-/// rendered in the job's own timezone. Pure rendering — no store or transport knowledge.
+/// Owner-facing copy for the scheduling surface: the confirm prompt shows the parked draft
+/// VERBATIM and never model-truncated, and every fire time is rendered in the job's own
+/// timezone. Pure rendering — no store or transport knowledge.
 public enum ScheduleReplies {
-  /// Pinned by the preamble: the confirm prompt previews the next 3 fire times.
+  /// The confirm prompt previews the next 3 fire times.
   public static let confirmPreviewCount = 3
 
   static let exampleLine =
@@ -19,7 +19,7 @@ public enum ScheduleReplies {
     "No schedules yet. \(exampleLine)"
   }
 
-  /// Terminal arm failure (the 3a saveFailed pattern): the pending intent was cleared; re-issue.
+  /// Terminal arm failure: the pending intent was cleared; re-issue.
   public static let armFailed =
     "Couldn't arm the schedule. Nothing was created. Run /schedule again."
 

@@ -9,7 +9,7 @@ public struct ProcessedUpdateStoreGRDB: ProcessedUpdateStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func claimUpdate(updateId: Int64) throws -> Bool {
+  public func claimUpdate(updateId: Int64) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       try Self.claimUpdate(db: db, updateId: updateId, claimedAt: Date())
     }

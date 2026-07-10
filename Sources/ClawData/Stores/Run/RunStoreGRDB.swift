@@ -22,7 +22,11 @@ public struct RunStoreGRDB: RunStore {
 // MARK: - Run Lifecycle
 
 extension RunStoreGRDB {
-  public func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
+  public func pickUp(
+    runId: Int64,
+    policyVersion: String?,
+    now: Date
+  ) throws(StoreError) -> RunOrigin? {
     try database.writeMapping { db in
       guard
         try Self.transitionRun(
@@ -56,7 +60,7 @@ extension RunStoreGRDB {
     sessionId: Int64,
     reason: CancelReason,
     now: Date
-  ) throws -> Int64? {
+  ) throws(StoreError) -> Int64? {
     try database.writeMapping { db in
       guard let runId = try Self.fetchActiveRunId(db, sessionId: sessionId) else {
         return nil
@@ -75,13 +79,13 @@ extension RunStoreGRDB {
     }
   }
 
-  public func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] {
+  public func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] {
     try database.writeMapping { db in
       try Self.supersedeRuns(db, sessionId: sessionId, now: now)
     }
   }
 
-  public func failRun(runId: Int64, now: Date) throws {
+  public func failRun(runId: Int64, now: Date) throws(StoreError) {
     try database.writeMapping { db in
       guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
         return
@@ -96,9 +100,9 @@ extension RunStoreGRDB {
     content: String,
     cancel: CancelReason?,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws(StoreError) -> RunCommitResult {
     try database.writeMapping { db in
-      // Fill the placeholder observation in place (§6.4): both `ContextBuilder.historyGroups` and
+      // Fill the placeholder observation in place: both `ContextBuilder.historyGroups` and
       // `HistoryHygiene` require every anchor's tool rows to be answered, so a dangling
       // "awaiting owner approval" row would drop the whole exchange from the next assembly. The
       // UPDATE is by message id — idempotent on a boot re-park, and correct for the /stop//new

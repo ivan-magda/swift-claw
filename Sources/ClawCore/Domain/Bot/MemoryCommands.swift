@@ -1,6 +1,6 @@
 import Foundation
 
-/// Parsed `/remember [<kind>:] <text>` arguments (spec §8.3). The kind prefix must be a whole
+/// Parsed `/remember [<kind>:] <text>` arguments. The kind prefix must be a whole
 /// `MemoryKind` name (any case) followed by a colon; any other leading `word:` stays part of the
 /// fact text under the default `user` kind.
 public enum RememberCommand: Sendable, Equatable {
@@ -32,7 +32,7 @@ public enum RememberCommand: Sendable, Equatable {
   }
 }
 
-/// Parsed `/memory` arguments (spec §9). Bare `/memory` defaults to review; direct read commands
+/// Parsed `/memory` arguments. Bare `/memory` defaults to review; direct read commands
 /// stay typed so routing never has to recover intent from raw strings.
 public enum MemoryCommand: Sendable, Equatable {
   case review

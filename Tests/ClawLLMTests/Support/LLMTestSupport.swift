@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -146,12 +147,14 @@ func makeProvider(
   config: LLMConfig,
   http: any HTTPExecuting & HTTPStreaming,
   recorder: SleepRecorder = SleepRecorder(),
-  jitter: @escaping @Sendable (Double) -> Double = { _ in 0 }
+  jitter: @escaping @Sendable (Duration) -> Duration = { _ in .zero }
 ) -> OpenAICompatibleProvider {
   OpenAICompatibleProvider(
     config: config,
     http: http,
-    sleep: { seconds in await recorder.record(seconds) },
+    clock: ScriptedClock { delay in
+      await recorder.record(delay / .seconds(1))
+    },
     jitter: jitter
   )
 }

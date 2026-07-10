@@ -1,17 +1,17 @@
 import Foundation
 
-/// Spec §12 ack suppression, in code: a heartbeat result counts as an ack ONLY when it carries the
-/// `HEARTBEAT_OK` token as a leading and/or trailing marker AND the surviving remainder is trivial
-/// padding. Such a result is dropped before delivery — no outbox rows, audited `heartbeatSuppressed`.
-/// The token is required: heartbeats are an opt-in alerting feature, so a concise reply that lacks
-/// the token is treated as an owner-relevant alert and must deliver, never be silently suppressed.
+/// Ack suppression: a heartbeat result counts as an ack ONLY when it carries the `HEARTBEAT_OK`
+/// token as a leading and/or trailing marker AND the surviving remainder is trivial padding. Such
+/// a result is dropped before delivery — no outbox rows, audited `heartbeatSuppressed`. The token
+/// is required: heartbeats are an opt-in alerting feature, so a concise reply that lacks the
+/// token is treated as an owner-relevant alert and must deliver, never be silently suppressed.
 enum HeartbeatAck {
   static let token = "HEARTBEAT_OK"
 
-  /// 300 chars (pinned compile-time, spec §13 — not config): generous enough for model politeness
-  /// wrapped around the ack token, far below any owner-meaningful report. This is the cap on the
-  /// remainder that survives AFTER a leading/trailing token has been stripped; it only ever applies
-  /// once the token has been confirmed present.
+  /// 300 chars (pinned compile-time — not config): generous enough for
+  /// model politeness wrapped around the ack token, far below any owner-meaningful report. This is
+  /// the cap on the remainder that survives AFTER a leading/trailing token has been stripped; it
+  /// only ever applies once the token has been confirmed present.
   static let maxAckChars = 300
 
   /// A heartbeat reply is an ack only when the `HEARTBEAT_OK` token appears as a standalone leading

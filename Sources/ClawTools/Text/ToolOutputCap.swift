@@ -1,8 +1,8 @@
 import Foundation
 
-/// The shared per-tool output cap (§15): 25 000 tokens enforced in the grapheme domain as
-/// 80 000 graphemes (`TokenEstimator.graphemeBudget(forInputTokens: 25_000)`), cut with the
-/// same literal marker `BudgetFitter` uses.
+/// The shared per-tool output cap (ARCHITECTURE.md §5.3): 25 000 tokens enforced in the grapheme
+/// domain as 80 000 graphemes (`TokenEstimator.graphemeBudget(forInputTokens: 25_000)`), cut
+/// with the same literal marker `BudgetFitter` uses.
 public enum ToolOutputCap {
   public static let maxGraphemes = 80_000
   public static let truncationMarker = "…[truncated]"

@@ -3,7 +3,7 @@ import Foundation
 
 /// Renders doctor's scheduler/heartbeat rows from persisted `scheduler_state` + config. Pure so
 /// the rendering is unit-testable; doctor is a separate process, so ONLY persisted state is
-/// visible to it (D8) — `dueCount` arrives from a live query at call time, never from storage.
+/// visible to it — `dueCount` arrives from a live query at call time, never from storage.
 public enum SchedulerHealth {
   public struct Row: Sendable, Equatable {
     public let key: String
@@ -61,7 +61,7 @@ public enum SchedulerHealth {
       timezone: snapshot.timezone,
       now: snapshot.now
     )
-    // Spec §11: a proactive-cap trip is visible here even while global spend is under its cap.
+    // A proactive-cap trip is visible here even while global spend is under its cap.
     let proactiveSpend =
       snapshot.proactiveTodayUSD.map { spent in USD.display(spent) } ?? "unknown"
 
@@ -85,8 +85,8 @@ public enum SchedulerHealth {
     ]
   }
 
-  /// The stored day counter counts for "today" only when its day stamp (kept in CLAW_TIMEZONE,
-  /// §4.3 — the cap's day boundary aligns with quiet hours, not UTC) matches now's local day; a
+  /// The stored day counter counts for "today" only when its day stamp (kept in CLAW_TIMEZONE —
+  /// the cap's day boundary aligns with quiet hours, not UTC) matches now's local day; a
   /// stale stamp reads as zero, matching the cap's rollover semantics.
   static func heartbeatCountToday(state: SchedulerState, timezone: TimeZone, now: Date) -> Int {
     guard state.heartbeatCountDay == dayString(for: now, timezone: timezone) else {

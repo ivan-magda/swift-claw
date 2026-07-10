@@ -7,8 +7,8 @@ public enum SearchError: Error, Sendable, Equatable {
   case transport(String)
 }
 
-/// The one v1 `SearchProviding` impl (D2 — research-settled). POST /search with `x-api-key`;
-/// snippet = highlights[0] → summary → text prefix → "" (§7.4). No internal retries — a failure
+/// The one v1 `SearchProviding` impl. POST /search with `x-api-key`;
+/// snippet = highlights[0] → summary → text prefix → "". No internal retries — a failure
 /// becomes an observation and the MODEL may re-try, bounded by maxToolCalls.
 public struct ExaSearchProvider: SearchProviding {
   public static let defaultEndpoint = "https://api.exa.ai/search"
@@ -79,7 +79,7 @@ public struct ExaSearchProvider: SearchProviding {
   // MARK: - Load-bearing
 
   /// Terminal = 400/401/402/403/404/409/422; retryable-class = 429/500/502/503 (and any other
-  /// 5xx, conservatively). Verified against the live Exa error doc 2026-07-03 (spec §7.4).
+  /// 5xx, conservatively). Verified against the live Exa error doc 2026-07-03.
   private func classify(status: Int, body: Data) -> SearchError {
     let raw = String(data: body, encoding: .utf8) ?? ""
     let message = redact(raw.isEmpty ? "HTTP \(status)" : raw)
@@ -94,7 +94,7 @@ public struct ExaSearchProvider: SearchProviding {
     return .retryable(status: status, message: message)
   }
 
-  /// The search key joins the exact-value redaction set of its own client (§5).
+  /// The search key joins the exact-value redaction set of its own client.
   private func redact(_ message: String) -> String {
     if apiKey.isEmpty {
       return message

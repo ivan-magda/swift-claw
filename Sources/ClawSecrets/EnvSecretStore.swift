@@ -1,8 +1,8 @@
 import ClawCore
 import Foundation
 
-/// The §15-sanctioned dev fallback: reads the plaintext env vars (Inc 1 behavior) and **warns
-/// loudly** that secrets are plaintext. Selected only when no encrypted artifact exists (resolver).
+/// The sanctioned dev fallback: reads the plaintext env vars and **warns loudly** that secrets
+/// are plaintext. Selected only when no encrypted artifact exists (resolver).
 public struct EnvSecretStore: SecretStore {
   public enum EnvKey {
     public static let botToken = "CLAW_TELEGRAM_BOT_TOKEN"

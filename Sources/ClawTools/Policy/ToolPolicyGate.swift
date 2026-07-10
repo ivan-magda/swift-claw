@@ -1,8 +1,8 @@
 import ClawCore
 import Foundation
 
-/// Spec §9.1 steps (2)-(3): the unconditional arg-guard tier, the trifecta condition, the tier-3
-/// disk-time substring check, and the web_fetch approval decision. Pure — every input
+/// The unconditional arg-guard tier, the trifecta condition, the tier-3 disk-time substring
+/// check, and the web_fetch approval decision. Pure — every input
 /// arrives via the call/context; tier-3 texts via the injected loader (disk at gate time).
 public struct ToolPolicyGate: Sendable {
   public enum Verdict: Sendable, Equatable {
@@ -11,8 +11,8 @@ public struct ToolPolicyGate: Sendable {
     /// authorized; `nil` for the other classes.
     case allow(argsRedacted: String, action: ToolAction?)
     case block(payload: ToolPayload, argsRedacted: String)
-    /// An ask-tier action (§4.3/§5.1) parked for the owner's durable approval. Carries the recorded
-    /// canonical args the §5.3 suspend commit persists and the §6.3 resume replays.
+    /// An ask-tier action parked for the owner's durable approval. Carries the recorded
+    /// canonical args the suspend commit persists and the resume replays.
     case requireApproval(recorded: RecordedToolAction)
   }
 
@@ -29,7 +29,7 @@ public struct ToolPolicyGate: Sendable {
     tool: any Tool,
     context: ToolDispatchContext
   ) -> Verdict {
-    // (1) ask-tier is evaluated FIRST, before the egress fast-path (§4.3/§5.1): an ask-tier tool
+    // (1) ask-tier is evaluated FIRST, before the egress fast-path: an ask-tier tool
     // reaches the durable approval arm regardless of egress class — an ask-tier file_write has
     // egress `.none` yet must still park for the owner's decision.
     // INVARIANT: this arm returns before the unconditional/conditional arg-guard and redaction
@@ -48,7 +48,7 @@ public struct ToolPolicyGate: Sendable {
       )
     }
 
-    // (3) unconditional tier — BLOCKING per FR-T6, every egress class
+    // (3) unconditional tier — BLOCKING, every egress class
     let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
     if let rule = unconditional.blockedRule {
       return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
@@ -56,15 +56,15 @@ public struct ToolPolicyGate: Sendable {
 
     // (4) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run ∪ session)
     let tainted = context.sessionTainted || context.runIngestedUntrusted
-    // §4.5/§5.1: three private-data sources — the per-assembly leg, the run-local leg, and the
-    // persisted session flag that survives a window roll (the §12 over-cap gap).
+    // Three private-data sources — the per-assembly leg, the run-local leg, and the
+    // persisted session flag that survives a window roll (the over-cap gap).
     let privateData =
       context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
     guard tainted && privateData else {
       return resolveAndAllow(call: call, tool: tool, argsRedacted: unconditional.redactedArgs)
     }
 
-    // (4a) conditional tier — redaction-block WINS over approval (FR-T6); disk at gate time
+    // (4a) conditional tier — redaction-block WINS over approval; disk at gate time
     let conditional = argGuard.evaluateConditional(
       argsJSON: call.argumentsJSON,
       privateFileTexts: privateFileLoader()
@@ -73,7 +73,7 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
     }
 
-    // (5) trifecta arm — DURABLE (§5.1/§8.3): a would-park action suspends onto the approval
+    // (5) trifecta arm — DURABLE: a would-park action suspends onto the approval
     // fabric via `.requireApproval`. Non-interactive runs take the SAME park (→ EXPIRED → DENY),
     // never an immediate gate DENY. Recorded-args execution subsumes the retired one-turn grant.
     let action: ToolAction?
@@ -88,7 +88,7 @@ public struct ToolPolicyGate: Sendable {
     }
 
     guard context.approvalAlreadyPending == false else {
-      // §5.2: one pending approval per run — a further gated call observes the block, never a
+      // One pending approval per run — a further gated call observes the block, never a
       // second suspend.
       return .block(
         payload: ToolPayload(
@@ -109,7 +109,7 @@ public struct ToolPolicyGate: Sendable {
     return .requireApproval(recorded: recorded)
   }
 
-  /// The §9.1 audit rendering, exposed so the dispatcher's pre-gate error paths (unknown tool,
+  /// The audit rendering, exposed so the dispatcher's pre-gate error paths (unknown tool,
   /// malformed args) can redact their args too — the `argsRedacted` seam field must never carry a
   /// raw secret, whatever the outcome.
   public func renderRedacted(argsJSON: String) -> String {
@@ -158,7 +158,7 @@ public struct ToolPolicyGate: Sendable {
   private func blockedArgs(rule: String, argsRedacted: String) -> Verdict {
     .block(
       payload: ToolPayload(
-        // Names the rule CLASS, never the matched text (§9.1)
+        // Names the rule CLASS, never the matched text
         content: "Blocked: the arguments matched the \(rule) rule and were not sent anywhere.",
         status: .blockedArgs,
         ingestedUntrusted: false
@@ -186,7 +186,7 @@ private extension ToolPolicyGate {
 // MARK: - Ask-tier approval
 
 private extension ToolPolicyGate {
-  /// §4.3/§5.1(a): an ask-tier tool MUST resolve a canonical target regardless of egress class —
+  /// An ask-tier tool MUST resolve a canonical target regardless of egress class —
   /// the approval binds to the resolved form. Malformed args or a `.refused` resolution block as
   /// they do for web_fetch; a `nil` resolution is a contract violation and fails CLOSED.
   func evaluateAskTier(
@@ -211,7 +211,7 @@ private extension ToolPolicyGate {
       )
     }
 
-    // The run holds one approval slot (§5.2): a further ask-tier call while one is pending gets the
+    // The run holds one approval slot: a further ask-tier call while one is pending gets the
     // blocked observation, never a second park.
     guard context.approvalAlreadyPending == false else {
       return .block(
@@ -228,9 +228,9 @@ private extension ToolPolicyGate {
     return .requireApproval(recorded: recorded)
   }
 
-  /// Phase 4 Task 23 (assumption A1) reuses this to record the trifecta action too. Canonicalizes
+  /// Records the trifecta action as well as the ask-tier one. Canonicalizes
   /// the call arguments to sorted-keys JSON, hashes via `ApprovalArgsHash`, and asks the tool for
-  /// its §5.4 presentation on the gate-resolved target.
+  /// its presentation on the gate-resolved target.
   func recordedAction(
     call: ToolCall,
     tool: any Tool,
@@ -288,29 +288,29 @@ private extension ToolPolicyGate {
   }
 }
 
-/// §9.1's full per-call order behind the loop's `ToolDispatching` seam: (0) lookup → (1) parse →
-/// (2)/(3) gate → (4) execute under the tool's own timeout. Audit is the LOOP's job (§6).
+/// The full per-call order behind the loop's `ToolDispatching` seam: (0) lookup → (1) parse →
+/// (2)/(3) gate → (4) execute under the tool's own timeout. Audit is the LOOP's job.
 public struct GatedToolDispatcher: ToolDispatching {
   private let registry: ToolRegistry
   private let gate: ToolPolicyGate
   /// Injected so tests drive the timeout race deterministically (same seam as `AgentRuntime`).
-  private let sleep: @Sendable (Duration) async throws -> Void
+  private let clock: any Clock<Duration>
 
   public init(
     registry: ToolRegistry,
     gate: ToolPolicyGate,
-    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    clock: any Clock<Duration> = ContinuousClock()
   ) {
     self.registry = registry
     self.gate = gate
-    self.sleep = sleep
+    self.clock = clock
   }
 
   public var definitions: [ToolDefinition] {
     registry.definitions
   }
 
-  /// The same name-keyed catalog `dispatch` gates through, surfaced so Task 16's composition root
+  /// The same name-keyed catalog `dispatch` gates through, surfaced so the composition root
   /// can build `ApprovedActionExecutor` against the identical tool instances.
   public var toolsByName: [String: any Tool] {
     registry.toolsByName
@@ -333,8 +333,8 @@ public struct GatedToolDispatcher: ToolDispatching {
         argsRedacted: argsRedacted
       )
     case .requireApproval(let recorded):
-      // The recorded action rides the outcome to the loop (Task 12), which sets the pending action
-      // and returns `.suspended`. The observation is the placeholder the §5.3 suspend commit
+      // The recorded action rides the outcome to the loop, which sets the pending action
+      // and returns `.suspended`. The observation is the placeholder the suspend commit
       // persists in place and updates at resolution — the pending call itself does not execute now.
       return ToolDispatchOutcome(
         observation: ToolObservation(
@@ -366,7 +366,7 @@ public struct GatedToolDispatcher: ToolDispatching {
   /// syscall, hung I/O — would otherwise hold the strict-FIFO session lane hostage far past its
   /// declared timeout, beyond `/stop`'s reach. The abandoned execute task keeps running detached
   /// until its I/O returns; today's tools are read-only, so a post-timeout side effect is
-  /// harmless — Inc 5's write tools must revisit this contract explicitly.
+  /// harmless — write tools must revisit this contract explicitly.
   private func executeWithTimeout(
     tool: any Tool,
     arguments: JSONValue,
@@ -385,8 +385,8 @@ public struct GatedToolDispatcher: ToolDispatching {
         )
         continuation.finish()
       }
-      let timeoutTask = Task { [sleep] in
-        try? await sleep(tool.timeout)
+      let timeoutTask = Task { [clock] in
+        try? await clock.sleep(for: tool.timeout)
         continuation.yield(timeoutPayload)
         continuation.finish()
       }

@@ -1,14 +1,10 @@
 import ArgumentParser
 import AsyncHTTPClient
-import ClawAgent
 import ClawCore
 import ClawData
 import ClawGateway
-import ClawLLM
-import ClawSecrets
 import ClawTelegram
 import ClawTools
-import ClawWorkspace
 import Foundation
 import Logging
 
@@ -37,7 +33,7 @@ struct RunCommand: AsyncParsableCommand {
     let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: httpConfig)
     let executor = AsyncHTTPExecutor(client: httpClient)
 
-    // Tool fetches get a DEDICATED client with redirects disabled (§7.2/§20-3): AsyncHTTPClient
+    // Tool fetches get a DEDICATED client with redirects disabled: AsyncHTTPClient
     // configures redirect behavior per client, and the Telegram/LLM client must keep its defaults.
     var toolHTTPConfig = HTTPClient.Configuration()
     toolHTTPConfig.redirectConfiguration = .disallow
@@ -49,20 +45,18 @@ struct RunCommand: AsyncParsableCommand {
     let toolExecutor = AsyncHTTPExecutor(client: toolHTTPClient)
 
     let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
-    let botUsername = await fetchBotUsername(transport: transport, logger: logger)
+    let botUsername = await Self.fetchBotUsername(transport: transport, logger: logger)
 
-    let daemon = await makeDaemon(
-      deps: DaemonDependencies(
-        config: config,
-        secrets: secrets,
-        stores: stores,
-        executor: executor,
-        toolExecutor: toolExecutor,
-        transport: transport,
-        botUsername: botUsername,
-        logger: logger
-      )
-    )
+    let daemon = await DaemonBuilder(
+      config: config,
+      secrets: secrets,
+      stores: stores,
+      executor: executor,
+      toolExecutor: toolExecutor,
+      transport: transport,
+      botUsername: botUsername,
+      logger: logger
+    ).build()
 
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
     var runFailure: Error?
@@ -108,7 +102,7 @@ private extension RunCommand {
   /// error's distinct code so the supervisor backs off instead of hot-looping.
   static func loadConfigOrExit() throws -> AppConfig {
     do {
-      return try AppConfig.load(environment: ProcessInfo.processInfo.environment)
+      return try EnvironmentLoader.loadConfig()
     } catch let error as ConfigError {
       FileHandle.standardError.write(Data("config error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
@@ -117,13 +111,8 @@ private extension RunCommand {
 
   /// Loads secrets via the fail-closed resolver; a secret-load failure exits 11 (non-retryable).
   static func loadSecretsOrExit(config: AppConfig) throws -> Secrets {
-    let resolution = SecretStoreResolver.resolve(
-      stateRoot: config.stateRoot,
-      environment: ProcessInfo.processInfo.environment
-    )
-
     do {
-      return try resolution.store.loadSecrets()
+      return try EnvironmentLoader.loadSecrets(config: config)
     } catch let error as SecretStoreError {
       FileHandle.standardError.write(Data("secret error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
@@ -145,12 +134,8 @@ private extension RunCommand {
   }
 
   static func ensureWorkspaceDirectoryOrExit(config: AppConfig) throws {
-    let workspace = FileSystemWorkspace(
-      root: config.stateRoot.appendingPathComponent(StateFile.workspace, isDirectory: true)
-    )
-
     do {
-      try workspace.ensureRootExists()
+      try EnvironmentLoader.ensureWorkspaceDirectory(config: config)
     } catch {
       FileHandle.standardError.write(Data("workspace error: \(error)\n".utf8))
       throw ExitCode(ClawExitCode.configInvalid.rawValue)
@@ -161,20 +146,31 @@ private extension RunCommand {
   static func openStoresOrExit(config: AppConfig, logger: Logger) throws -> ClawStores {
     let stores: ClawStores
     do {
-      stores = try ClawDatabase.openStores(
-        path: config.stateRoot.appendingPathComponent(StateFile.database).path
-      )
+      stores = try EnvironmentLoader.openStores(config: config)
     } catch {
       FileHandle.standardError.write(Data("database error: \(error)\n".utf8))
       throw ExitCode(ClawExitCode.storeError.rawValue)
     }
+
     do {
       // Additive only — removing an ID from config doesn't revoke it. Revocation is deferred
-      // to pairing (§17), which needs an audited remove path, not a config-mirroring reconcile.
+      // to pairing, which needs an audited remove path, not a config-mirroring reconcile.
       try stores.allowlist.seedAllowlist(userIds: Array(config.allowlist))
     } catch {
       logger.error("failed to seed allowlist: \(error)")
     }
+
     return stores
+  }
+
+  static func fetchBotUsername(transport: TelegramClient, logger: Logger) async -> String? {
+    do {
+      return try await transport.getMe().username
+    } catch {
+      logger.warning(
+        "failed to fetch bot identity; command mentions will require bare commands: \(error)"
+      )
+      return nil
+    }
   }
 }

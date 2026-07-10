@@ -158,8 +158,8 @@ import Testing
       suspendCommitFault: { throw InjectedFault() }
     )
 
-    // when / then — the whole checkpoint rolls back
-    #expect(throws: InjectedFault.self) {
+    // when / then — the whole checkpoint rolls back (the fault surfaces classified at the seam)
+    #expect(throws: StoreError.self) {
       _ = try runs.commitSuspendedTurn(
         runId: fixture.runId,
         sessionId: fixture.sessionId,

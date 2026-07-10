@@ -24,7 +24,7 @@ public enum Importance: Int, Sendable, Equatable, Comparable, CaseIterable {
 
 public enum MemorySource: String, Sendable, Equatable {
   case owner
-  /// A `memory_write` tool call the owner approved (§8.2) — distinct from `.owner` so review
+  /// A `memory_write` tool call the owner approved — distinct from `.owner` so review
   /// surfaces and future policy can tell owner-typed facts from assistant-proposed ones.
   /// `MemoryStoreGRDB.decodeItem` stays fail-closed for any OTHER unrecognized string.
   case assistant

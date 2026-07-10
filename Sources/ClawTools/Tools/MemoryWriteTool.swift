@@ -1,14 +1,14 @@
 import ClawCore
 import Foundation
 
-/// Durable-memory WRITE (spec §8.2, ask tier): the model proposes one `memory_items` row and the
+/// Durable-memory WRITE (ask tier): the model proposes one `memory_items` row and the
 /// owner approves via the durable fabric. The actual insert happens on the approval waiter in
-/// ONE transaction with the observation update (`applyApprovedMemoryWrite`, exactly-once —
-/// §6.3), so `execute` here is a fail-closed stub, never a write path. All argument decoding is
+/// ONE transaction with the observation update (`applyApprovedMemoryWrite`, exactly-once),
+/// so `execute` here is a fail-closed stub, never a write path. All argument decoding is
 /// the shared `MemoryWriteArguments` (ClawCore), the same derivation the waiter rebuilds from
 /// the recorded canonical args.
 public struct MemoryWriteTool: Tool {
-  /// §5.4: the preview stays owner-readable, never a wall of text.
+  /// Pinned cap: the preview stays owner-readable, never a wall of text.
   static let previewCapGraphemes = 400
 
   private let redactor: SecretRedactor
@@ -85,8 +85,8 @@ public struct MemoryWriteTool: Tool {
         sensitivity \(request.item.sensitivity.rawValue), \
         importance \(MemoryWriteArguments.importanceLabel(request.item.importance))
         """,
-      // §8.2: the preview is the capped normalized text so the owner judges exactly what would
-      // be stored — except exact loaded secret values, which §12 bars from every outbound reply;
+      // The preview is the capped normalized text so the owner judges exactly what would be
+      // stored — except exact loaded secret values, which are barred from every outbound reply;
       // the scan warnings still flag secret/instruction SHAPES rather than hiding them.
       contentPreview: ToolOutputCap.cap(
         redactor.redact(request.item.text),
@@ -98,7 +98,7 @@ public struct MemoryWriteTool: Tool {
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     // Ask-tier means the gate never allows a direct dispatch; the approved insert runs fused
-    // with the observation update on the waiter (§6.3). Reaching this body is a wiring bug.
+    // with the observation update on the waiter. Reaching this body is a wiring bug.
     ToolPayload(
       content: "memory_write executes only through the owner-approval resume path.",
       status: .error,

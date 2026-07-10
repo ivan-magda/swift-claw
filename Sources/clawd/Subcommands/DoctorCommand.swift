@@ -28,7 +28,7 @@ struct DoctorCommand: AsyncParsableCommand {
     // Config/secret is checked first and printed first if it errored.
     let config: AppConfig
     do {
-      config = try AppConfig.load(environment: ProcessInfo.processInfo.environment)
+      config = try EnvironmentLoader.loadConfig()
     } catch let error as ConfigError {
       report.add(key: "config", value: "FAIL: \(error)", ok: false)
       emit(report)
@@ -81,7 +81,7 @@ private extension DoctorCommand {
     report.add(key: "sched.timezone", value: config.timezone.identifier)
     report.add(key: "sched.catchup_max_age_min", value: "\(config.schedCatchUpMaxAgeMinutes)")
     report.add(key: "sched.min_interval_min", value: "\(config.schedMinIntervalMinutes)")
-    // Warn-not-fail (spec §13): a proactive cap at/above the global cap is legal but inert —
+    // Warn-not-fail: a proactive cap at/above the global cap is legal but inert —
     // the household kill-switch dominates.
     let proactiveNote =
       config.proactivePerDayUSD >= config.budget.perDayUSD
@@ -99,9 +99,7 @@ private extension DoctorCommand {
 
   func addDatabaseRows(to report: inout DoctorReport, config: AppConfig) {
     do {
-      let stores = try ClawDatabase.openStores(
-        path: config.stateRoot.appendingPathComponent(StateFile.database).path
-      )
+      let stores = try EnvironmentLoader.openStores(config: config)
       report.add(key: "db.writable", value: "true")
 
       let owners = (try? stores.allowlist.allowlistCount()) ?? -1
@@ -118,15 +116,11 @@ private extension DoctorCommand {
 
   /// Best-effort connectivity check (only if a token is available).
   func addConnectivityRows(to report: inout DoctorReport, config: AppConfig) async {
-    let secretStore = SecretStoreResolver.resolve(
-      stateRoot: config.stateRoot,
-      environment: ProcessInfo.processInfo.environment
-    ).store
-    guard let secrets = try? secretStore.loadSecrets() else {
+    guard let secrets = try? EnvironmentLoader.loadSecrets(config: config) else {
       return
     }
 
-    // Info, never a failed check: unconfigured search just means the tool is absent (§7.3).
+    // Info, never a failed check: unconfigured search just means the tool is absent.
     report.add(
       key: "web_search",
       value: secrets.searchApiKey != nil
@@ -218,7 +212,7 @@ private extension DoctorCommand {
   }
 
   func addStorageRows(to report: inout DoctorReport, config: AppConfig) {
-    let dbPath = config.stateRoot.appendingPathComponent(StateFile.database).path
+    let dbPath = EnvironmentLoader.databasePath(config: config)
     let walBytes =
       (try? FileManager.default.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int) ?? 0
     report.add(key: "db.wal_size", value: "\(walBytes)")

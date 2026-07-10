@@ -5,7 +5,10 @@ import GRDB
 // MARK: - Turn Commits
 
 extension RunStoreGRDB {
-  public func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
+  public func commitAssistantTurn(
+    _ turn: AssistantTurn,
+    now: Date
+  ) throws(StoreError) -> RunCommitResult {
     try database.writeMapping { db in
       guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
         return .ignored
@@ -42,7 +45,10 @@ extension RunStoreGRDB {
     }
   }
 
-  public func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult {
+  public func commitDegradedTurn(
+    _ turn: DegradedTurn,
+    now: Date
+  ) throws(StoreError) -> RunCommitResult {
     try database.writeMapping { db in
       guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
         return .ignored
@@ -71,7 +77,7 @@ extension RunStoreGRDB {
       }
       try Self.appendJobFailedIfJobRun(db, runId: turn.runId, now: now)
 
-      // Executed tool work survives the failure commit: the same §11 rows the success
+      // Executed tool work survives the failure commit: the same rows the success
       // path writes, so the next turn's context and the per-dispatch audit trail agree on what
       // actually ran.
       for exchange in turn.exchanges {
@@ -220,7 +226,7 @@ private extension RunStoreGRDB {
   }
 
   /// Writes one exchange as rows: the assistant anchor (tool_calls JSON, trusted) then each
-  /// observation (raw content, untrusted, tool_call_id) — spec §11 row shapes.
+  /// observation (raw content, untrusted, tool_call_id).
   static func insertExchangeRows(
     _ db: Database,
     sessionId: Int64,

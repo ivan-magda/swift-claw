@@ -160,7 +160,7 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
   private let lock = NSLock()
   private var _recorded: [ProviderUsage] = []
   private let failOnWrite: Int?
-  private let thrown: any Error
+  private let thrown: StoreError
 
   var recorded: [ProviderUsage] {
     lock.lock()
@@ -168,12 +168,12 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
     return _recorded
   }
 
-  init(failOnWrite: Int? = nil, thrown: any Error = StoreError.unexpected("scripted")) {
+  init(failOnWrite: Int? = nil, thrown: StoreError = StoreError.unexpected("scripted")) {
     self.failOnWrite = failOnWrite
     self.thrown = thrown
   }
 
-  func recordUsage(_ usage: ProviderUsage) throws {
+  func recordUsage(_ usage: ProviderUsage) throws(StoreError) {
     lock.lock()
     defer { lock.unlock() }
     if let failOnWrite, _recorded.count + 1 == failOnWrite {
@@ -182,18 +182,18 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
     _recorded.append(usage)
   }
 
-  func todayTokensAndCost(now: Date) throws -> (tokens: Int, costUSD: Double) {
+  func todayTokensAndCost(now: Date) throws(StoreError) -> (tokens: Int, costUSD: Double) {
     (0, 0)
   }
 
   func todayTokensAndCost(
     origins: [RunOrigin],
     now: Date
-  ) throws -> (tokens: Int, costUSD: Double) {
+  ) throws(StoreError) -> (tokens: Int, costUSD: Double) {
     (0, 0)
   }
 
-  func costSourceMix(now: Date) throws -> [CostSource: Int] {
+  func costSourceMix(now: Date) throws(StoreError) -> [CostSource: Int] {
     [:]
   }
 }
@@ -203,7 +203,7 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
 final class RecordingAuditLog: AuditLog, @unchecked Sendable {
   private let lock = NSLock()
   private var _events: [AuditEvent] = []
-  private let thrown: (any Error)?
+  private let thrown: StoreError?
 
   var events: [AuditEvent] {
     lock.lock()
@@ -211,11 +211,11 @@ final class RecordingAuditLog: AuditLog, @unchecked Sendable {
     return _events
   }
 
-  init(thrown: (any Error)? = nil) {
+  init(thrown: StoreError? = nil) {
     self.thrown = thrown
   }
 
-  func appendAudit(_ event: AuditEvent) throws {
+  func appendAudit(_ event: AuditEvent) throws(StoreError) {
     lock.lock()
     defer { lock.unlock() }
     if let thrown {
@@ -244,14 +244,14 @@ struct EmptyWorkspace: WorkspaceReading {
 /// A memory store with nothing stored: `fetchRanked` always returns empty, other members are
 /// unused by history-rendering tests.
 struct EmptyMemoryStore: MemoryStore {
-  func append(_ newItem: NewMemoryItem, now: Date) throws -> MemoryItem {
+  func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
     throw StoreError.unexpected("not used")
   }
 
-  func list(kind: MemoryKind?, limit: Int) throws -> [MemoryItem] { [] }
-  func get(id: Int64) throws -> MemoryItem? { nil }
-  func delete(id: Int64) throws -> Bool { false }
-  func fetchRanked(excludeSensitive: Bool, limit: Int) throws -> [MemoryItem] { [] }
+  func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
+  func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
+  func delete(id: Int64) throws(StoreError) -> Bool { false }
+  func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
 }
 
 /// A retriever with no recall corpus: always returns no hits.
@@ -262,16 +262,10 @@ struct EmptyRetriever: Retriever {
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int
-  ) throws -> [RecallHit] { [] }
+  ) throws(StoreError) -> [RecallHit] { [] }
 }
 
 // MARK: - Builders
-
-/// A real sleep honoring the requested duration — the default so an instant provider wins the
-/// race and the deadline never fires. The deadline test overrides it with `{ _ in }`.
-let realSleep: @Sendable (Duration) async throws -> Void = { duration in
-  try await Task.sleep(for: duration)
-}
 
 func makeCostResolver(
   priceTable: PriceTable = .empty,
@@ -291,7 +285,7 @@ func makeRuntime(
   toolDispatcher: (any ToolDispatching)? = nil,
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
-  sleep: @escaping @Sendable (Duration) async throws -> Void = realSleep
+  clock: any Clock<Duration> = ContinuousClock()
 ) -> AgentRuntime {
   AgentRuntime(
     provider: provider,
@@ -304,7 +298,7 @@ func makeRuntime(
     toolDispatcher: toolDispatcher,
     usageStore: usageStore,
     auditLog: auditLog,
-    sleep: sleep
+    clock: clock
   )
 }
 

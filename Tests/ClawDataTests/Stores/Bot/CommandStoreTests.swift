@@ -198,8 +198,8 @@ import Testing
     )
     let now = Date(timeIntervalSince1970: 400)
 
-    // when
-    #expect(throws: InjectedCrash.self) {
+    // when — the injected crash surfaces classified at the seam, never as its raw type
+    #expect(throws: StoreError.self) {
       try crashingStore.applyStop(updateId: 400, sessionKey: env.sessionKey, now: now)
     }
 

@@ -1,7 +1,7 @@
 import ClawCore
 import Foundation
 
-/// The heartbeat's startup-resolved dependency bundle (spec §12). Resolved ONCE from `AppConfig`
+/// The heartbeat's startup-resolved dependency bundle. Resolved ONCE from `AppConfig`
 /// at the composition root — `SchedulerService` never reads config. `ownerChatId` is the
 /// config-derived delivery target; `AppConfig.load` rejects enabled-without-one-owner, so a nil
 /// target on an enabled bundle is unreachable in a validly-booted daemon (the tick branch still
@@ -30,7 +30,7 @@ public struct HeartbeatSettings: Sendable, Equatable {
     self.timezone = timezone
   }
 
-  /// The spec §13 defaults with the heartbeat OFF — the safe bundle for tests and for any
+  /// The spec defaults with the heartbeat OFF — the safe bundle for tests and any
   /// composition that does not heartbeat.
   public static let disabled = HeartbeatSettings(
     enabled: false,
@@ -53,9 +53,9 @@ public struct HeartbeatSettings: Sendable, Equatable {
   }
 }
 
-/// The fixed gateway-authored heartbeat prompt (spec §12). The contract sentence is pinned
-/// verbatim; the checklist is appended as untrusted-tier DATA — the store persists the combined
-/// trigger at provenance 'untrusted' (Phase 1 pin), so file content can never gain trust here.
+/// The fixed gateway-authored heartbeat prompt. The contract sentence is pinned verbatim; the
+/// checklist is appended as untrusted-tier DATA — the store persists the combined trigger at
+/// provenance 'untrusted', so file content can never gain trust here.
 enum HeartbeatTemplate {
   static let contractSentence = """
     Review the checklist below. If something needs the owner's attention, say it concisely. \

@@ -49,7 +49,7 @@ import Testing
       toolDispatcher: dispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,
-      sleep: { duration in try await Task.sleep(for: duration) }
+      clock: ContinuousClock()
     )
     let runner = TurnRunner(
       sessionMessages: stores.sessionMessages,

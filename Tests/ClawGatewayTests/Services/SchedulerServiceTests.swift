@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawTestSupport
 import ClawWorkspace
 import Foundation
 import Logging
@@ -84,7 +85,7 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     return recordedHeartbeats
   }
 
-  func dueJobs(now: Date) throws -> [ScheduledJob] {
+  func dueJobs(now: Date) throws(StoreError) -> [ScheduledJob] {
     lock.lock()
     defer { lock.unlock() }
     // Mirrors the store contract: status='ACTIVE' AND next_occurrence <= now.
@@ -99,7 +100,7 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     fireAt: Date,
     nextOccurrence: Date?,
     now: Date
-  ) throws -> ClaimedFire? {
+  ) throws(StoreError) -> ClaimedFire? {
     lock.lock()
     defer { lock.unlock() }
     recordedClaims.append(
@@ -114,7 +115,7 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     nextOccurrence: Date?,
     skippedCount: Int,
     now: Date
-  ) throws -> Bool {
+  ) throws(StoreError) -> Bool {
     lock.lock()
     defer { lock.unlock() }
     recordedSkips.append(
@@ -123,38 +124,38 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     return true
   }
 
-  func recordTick(at tickTime: Date) throws {
+  func recordTick(at tickTime: Date) throws(StoreError) {
     lock.lock()
     defer { lock.unlock() }
     recordedTicks.append(tickTime)
   }
 
   // Unused by the ticker — loud if the service ever starts calling them.
-  func create(_ job: NewScheduledJob, now: Date) throws -> ScheduledJob {
+  func create(_ job: NewScheduledJob, now: Date) throws(StoreError) -> ScheduledJob {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
-  func job(id: Int64) throws -> ScheduledJob? { nil }
+  func job(id: Int64) throws(StoreError) -> ScheduledJob? { nil }
 
-  func listAll() throws -> [ScheduledJob] { [] }
+  func listAll() throws(StoreError) -> [ScheduledJob] { [] }
 
-  func fireNow(jobId: Int64, now: Date) throws -> ClaimedFire? {
+  func fireNow(jobId: Int64, now: Date) throws(StoreError) -> ClaimedFire? {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
-  func pause(id: Int64, now: Date) throws -> ScheduledJob? {
+  func pause(id: Int64, now: Date) throws(StoreError) -> ScheduledJob? {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
-  func resume(id: Int64, nextOccurrence: Date?, now: Date) throws -> ScheduledJob? {
+  func resume(id: Int64, nextOccurrence: Date?, now: Date) throws(StoreError) -> ScheduledJob? {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
-  func cancel(id: Int64, now: Date) throws -> ScheduledJob? {
+  func cancel(id: Int64, now: Date) throws(StoreError) -> ScheduledJob? {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
-  func schedulerState() throws -> SchedulerState {
+  func schedulerState() throws(StoreError) -> SchedulerState {
     lock.lock()
     defer { lock.unlock() }
     return cannedState
@@ -165,7 +166,7 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     ownerChatId: Int64,
     now: Date,
     day: String
-  ) throws -> ClaimedFire {
+  ) throws(StoreError) -> ClaimedFire {
     lock.lock()
     defer { lock.unlock() }
     recordedHeartbeats.append(HeartbeatCall(prompt: prompt, ownerChatId: ownerChatId, day: day))
@@ -255,7 +256,7 @@ private final class SleepRecorder: @unchecked Sendable {
       workspace: EmptyWorkspace(),
       audit: RecordingAuditLog(),
       now: { now },
-      sleep: { _ in },
+      clock: ScriptedClock { _ in },
       logger: TestLog.silent
     )
     return Fixture(service: service, store: store, runner: runner)
@@ -426,7 +427,7 @@ private final class SleepRecorder: @unchecked Sendable {
       workspace: EmptyWorkspace(),
       audit: RecordingAuditLog(),
       now: { Date(timeIntervalSince1970: 1_750_000_000) },
-      sleep: { duration in
+      clock: ScriptedClock { duration in
         recorder.append(duration)
         throw CancellationError()
       },

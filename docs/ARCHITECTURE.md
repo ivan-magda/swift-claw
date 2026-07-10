@@ -61,7 +61,7 @@ State root: `~/.swift-claw/` (DB, secrets, logs) + `~/.swift-claw/workspace/` (i
 
 ## 3. Component architecture (modules)
 
-SwiftPM package `swift-claw`. Module prefix `Claw`; daemon binary `clawd`. The dependency graph is a **layered DAG**, not a star: stores are reached through **protocols declared in `ClawCore`**, so `ClawAgent` and `ClawGateway` depend only on `ClawCore` for persistence (concrete `ClawData` is injected at the composition root in `clawd`).
+SwiftPM package `swift-claw`. Module prefix `Claw`; daemon binary `clawd`. The dependency graph is a **layered DAG**, not a star: stores are reached through **protocols declared in `ClawCore`**, so `ClawAgent` and `ClawGateway` depend only on `ClawCore` for persistence (concrete `ClawData` is injected at the composition root in `clawd`). The rule generalizes: **seams live in `ClawCore`, implementations in sibling targets, composed at `clawd`** — e.g. `WorkspaceReading` is a `ClawCore` protocol; concrete `FileSystemWorkspace` (`ClawWorkspace`) is injected at the root.
 
 ```
 clawd
@@ -77,7 +77,7 @@ clawd
 
 | Target | Kind | Responsibility | Key types |
 |---|---|---|---|
-| `ClawCore` | lib | Pure domain: value types, config model, **error taxonomy** (§19), **store protocols**, tool/provider/transport/sandbox protocols, the shared **HTTP seam** (`HTTPExecuting`/`HTTPResult`, request + response headers — F16), and the 32 768-char `ReplySplitter`. No I/O. | `IncomingMessage`, `SessionKey`, `Principal`, `AppConfig`, `RunState`, `ApprovalState`, `RiskLevel`, `RunBudget`, `HTTPResult`, `ReplySplitter`, error taxonomy types; protocols: `LLMProvider`, `ChannelIntake`, `MessageDelivery`, `TelegramTransport` (composite), `HTTPExecuting`, `SecretStore`, `ExecutionBackend`, `Tool`, `SearchProviding`, `MessageStore`, `SessionStore`, `RunStore`, `AllowlistStore`, `UpdateCursorStore`, `OutboxStore`, `UsageStore`, `AuditLog`, `MemoryStore`, `ApprovalStore` |
+| `ClawCore` | lib | Pure domain: value types, config model, **error taxonomy** (§19), **store protocols**, tool/provider/transport/sandbox protocols, the shared **HTTP seam** (`HTTPExecuting`/`HTTPResult`, request + response headers — F16), and the 32 768-char `ReplySplitter`. No I/O. | `IncomingMessage`, `SessionKey`, `Principal`, `AppConfig`, `RunState`, `ApprovalState`, `RiskLevel`, `RunBudget`, `HTTPResult`, `ReplySplitter`, error taxonomy types; protocols: `LLMProvider`, `ChannelIntake`, `MessageDelivery`, `TelegramTransport` (composite), `HTTPExecuting`, `SecretStore`, `ExecutionBackend`, `Tool`, `SearchProviding`, `MessageStore`, `SessionStore`, `RunStore`, `AllowlistStore`, `UpdateCursorStore`, `OutboxStore`, `UsageStore`, `AuditLog`, `MemoryStore`, `ApprovalStore`, `WorkspaceReading` (+ its value types `WorkspaceFile`, `LoadedFile`, `SkillScanResult`) |
 | `ClawData` | lib | GRDB persistence: schema, `DatabaseMigrator`, store implementations. WAL. **Thin `Sendable` wrappers over `any DatabaseWriter`** (not actors guarding the pool); relies on GRDB serialization. | `Database`, concrete `…Store` types conforming to the `ClawCore` protocols |
 | `ClawTelegram` | lib | Thin Bot API client over AsyncHTTPClient; long-poll loop; envelope normalization; **`sendRichMessage` (markdown) + plain `sendMessage` fallback**; `sendChatAction`. (Escaping/splitter live in `ClawCore`.) | `TelegramClient`, `TelegramLongPoller`, `MessageEnvelope`, `InputRichMessage` |
 | `ClawLLM` | lib | OpenAI-compatible Chat Completions client + OpenAI-shaped message model; usage/cost; retries; **SSE streaming (v1)**. | `OpenAICompatibleProvider`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolCall`, `Usage`, `CostTable`, `SSEParser` |
@@ -91,6 +91,33 @@ clawd
 Each unit answers: *what does it do, how is it used, what does it depend on.* `ClawCore` depends on nothing, so the domain, protocols, and error taxonomy are trivially unit-testable.
 
 `SearchProviding` is a `ClawCore` protocol; the default backend is Exa (`https://api.exa.ai/search`, a pinned trusted endpoint and documented trust dependency like `base_url`, including Exa's right to use query input/output to provide/improve its services). `Secrets.searchApiKey` keys it; unconfigured means the tool is absent and doctor reports info, not an error.
+
+### 3.1 Code map — where each section lives in the code
+
+The durable spec→code link runs **from this document to the code**, by stable symbol name (symbol
+names are refactoring-tracked; line numbers and section coordinates are not). Code comments do not
+cite section numbers back; where a constant or case would read as a bug without a pointer, the full
+form `ARCHITECTURE.md §N` is used, sparingly.
+
+| Spec section | Implementing symbols (target) |
+|---|---|
+| §4 Process & runtime | `RunCommand`, `EnvironmentLoader`, `DaemonBuilder` (clawd); `Daemon`, `InstanceLock`, `DeveloperLogging` (ClawGateway) |
+| §5 Per-session lane | `SessionLaneRegistry`, `SessionActor` (ClawAgent); `TurnEnqueuer`, `TurnDispatch` (ClawGateway) |
+| §5.3 Run budget | `RunBudget` (ClawCore); `BudgetBreaker` (ClawGateway) |
+| §6.1 Inbound lifecycle | `MessageRouter`, `AccessControl`, `TurnRunner` (ClawGateway); `SessionMessageStore.claimAndPersistInbound` (ClawCore/ClawData) |
+| §6.2/§6.5 Tool & approval flow | `ToolPolicyGate`, `GatedToolDispatcher` (ClawTools); `ApprovalWaiter`, `ApprovedActionExecutor`, `ApprovalCallbackHandler`, `ApprovalCoordinator`, `DeferredApprovalParker`, `ApprovalBootReconciler`, `ApprovalExpiryService` (ClawGateway) |
+| §6.3/§14 Scheduler | `SchedulerService`, `HeartbeatSettings`, `ScheduleSurface`, `ScheduleDraftParser` (ClawGateway); `OccurrenceCalculator`, `OccurrencePolicy`, `ScheduleDraft` (ClawCore) |
+| §6.4 Transactional outbox | `OutboxDispatcher`, `OutboxSignal`, `ReplySender` (ClawGateway); `OutboxStore` (ClawCore); `OutboxStoreGRDB`, `OutboxDedupKey` (ClawData); `ReplySplitter`, `ContentHash` (ClawCore) |
+| §7 Persistence | store protocols under `ClawCore/Persistence/`; `ClawDatabase` (migrator + `classifyError`), `MappedDatabase`, `…GRDB` stores (ClawData) |
+| §8 LLM provider | `LLMProvider`, `ChatRequest`/`ChatResponse`, `CostResolver`, `UsageResolver` (ClawCore); `OpenAICompatibleProvider`, `SSEParser`, `PriceFileLoader` (ClawLLM) |
+| §9 Memory & context | `ContextBuilder`, `BudgetFitter`, `MemoryRanker`, `RecallCutoff`, `HistoryHygiene`, `LabeledContextFactory` (ClawAgent); `WorkspaceReading` (ClawCore); `FileSystemWorkspace` (ClawWorkspace) |
+| §10 Tool system & policy | `ToolRegistry`, `FileReadTool`, `FileWriteTool`, `MemoryWriteTool`, `WebFetchTool`, `WebSearchTool`, `WorkspacePathContainment` (ClawTools); `Tool`, `ToolDefinition`, `RiskLevel`, `ToolDispatching` (ClawCore) |
+| §11 Approval system | `Approval`, `ApprovalFSM`, `PendingToolAction`, `RecordedToolAction` (ClawCore); `ApprovalStoreGRDB` (ClawData); the §6.2/§6.5 gateway symbols above |
+| §12 Security & trust | `SecretRedactor`, `SSRFGuard`, `ExfilArgGuard`, `CanonicalURL`, `ToolOutputCap` (ClawTools); `ContextTier` provenance labels and `LabeledContext` (ClawCore) |
+| §15 Config & secrets | `AppConfig`, `QuietHours`, `SecretStore` seam (ClawCore); `EncryptedFileSecretStore`, `EnvSecretStore`, `SecretStoreResolver` (ClawSecrets) |
+| §16 Observability | `DoctorReport`, `SchedulerHealth`, `ApprovalsHealthRows` (ClawGateway); `ApprovalsHealth`, `RunsHealth`, `AuditLog` (ClawCore); `AuditLogGRDB` (ClawData) |
+| §19 Error taxonomy | `ClawCore/Errors/` (`ClawExitCode`, `ConfigError`, `TelegramError`, `StoreError`, `ProviderError`); `ClawDatabase.classifyError` → `throws(StoreError)` seam (ClawData) |
+| §19.1 Run/approval FSM | `RunFSM`, `ApprovalFSM` (ClawCore) |
 
 ## 4. Process & runtime model
 
