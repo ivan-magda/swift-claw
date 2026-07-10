@@ -180,6 +180,7 @@ func makeSC3Harness(
     [
       FileReadTool(workspaceRoot: workspaceRoot, redactor: redactor),
       FileWriteTool(workspaceRoot: workspaceRoot, redactor: redactor),
+      MemoryWriteTool(),
       WebFetchTool(http: http, resolver: resolver, redactor: redactor),
       WebSearchTool(search: ExaSearchProvider(apiKey: "exa-key", http: http)),
     ] + extraTools

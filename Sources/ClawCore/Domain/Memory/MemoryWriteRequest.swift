@@ -38,7 +38,10 @@ public enum MemoryWriteBuilder {
   public static func build(
     rawText: String,
     kind: MemoryKind,
-    sessionId: Int64?
+    sessionId: Int64?,
+    source: MemorySource = .owner,
+    importance: Importance = .normal,
+    sensitivity: Sensitivity = .normal
   ) throws -> MemoryWriteRequest {
     let normalizedText = (rawText as NSString).precomposedStringWithCanonicalMapping
     let storedText = stripBlockedControls(from: normalizedText).trimmingCharacters(
@@ -53,9 +56,9 @@ public enum MemoryWriteBuilder {
     let item = NewMemoryItem(
       text: storedText,
       kind: kind,
-      sensitivity: .normal,
-      importance: .normal,
-      source: .owner,
+      sensitivity: sensitivity,
+      importance: importance,
+      source: source,
       sessionId: sessionId
     )
 

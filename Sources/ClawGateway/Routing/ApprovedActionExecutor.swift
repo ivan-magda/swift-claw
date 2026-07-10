@@ -101,7 +101,13 @@ private extension ApprovedActionExecutor {
 
 private extension ApprovedActionExecutor {
   func applyMemoryWrite(_ approval: Approval) -> ApprovedExecutionOutcome {
-    guard let item = Self.rebuildMemoryItem(from: approval) else {
+    guard
+      let arguments = JSONValue.parse(approval.canonicalArgsJSON),
+      case .parsed(let request) = MemoryWriteArguments.parse(
+        arguments,
+        sessionId: approval.sessionId
+      )
+    else {
       logger.error("memory_write approval \(approval.id) has unreadable recorded args")
       let content = "That memory could not be saved because its details were unreadable."
       return ApprovedExecutionOutcome(
@@ -110,12 +116,18 @@ private extension ApprovedActionExecutor {
       )
     }
 
-    let content = "Saved to memory as \(item.kind.rawValue)."
+    // §6.3 exactly-once: the item rebuilt with the SAME decoder the gate used, then insert +
+    // observation update in ONE fused transaction; the placeholder guard inside
+    // applyApprovedMemoryWrite makes a crash-window re-run a no-op.
+    let content = """
+      Saved memory item (kind \(request.item.kind.rawValue), \
+      \(MemoryWriteArguments.canonicalTarget(for: request))).
+      """
     do {
       let commit = try runs.applyApprovedMemoryWrite(
         runId: approval.runId,
         observationMessageId: approval.observationMessageId,
-        item: item,
+        item: request.item,
         observationContent: content,
         now: now()
       )
@@ -124,32 +136,5 @@ private extension ApprovedActionExecutor {
       logger.error("applyApprovedMemoryWrite failed for run \(approval.runId): \(error)")
       return ApprovedExecutionOutcome(observationContent: content, commit: .ignored)
     }
-  }
-
-  /// Rebuilds the `NewMemoryItem` from the recorded canonical args. The args were already
-  /// normalized + scanned at gate time (Task 22), so no re-normalization here.
-  static func rebuildMemoryItem(from approval: Approval) -> NewMemoryItem? {
-    guard
-      let object = JSONValue.parse(approval.canonicalArgsJSON)?.objectValue,
-      let text = object["text"]?.stringValue,
-      let kindRaw = object["kind"]?.stringValue,
-      let kind = MemoryKind(rawValue: kindRaw)
-    else {
-      return nil
-    }
-    let importance =
-      object["importance"]?.numberValue.flatMap { Importance(rawValue: Int($0)) } ?? .normal
-    let sensitivity =
-      object["sensitivity"]?.stringValue.flatMap(Sensitivity.init(rawValue:)) ?? .normal
-    // Task 22 flips `source` to `.assistant` (the case does not exist yet in Phase 3) and unifies
-    // this decode with the shared `MemoryWriteArguments` decoder (Task 22 owns that unification).
-    return NewMemoryItem(
-      text: text,
-      kind: kind,
-      sensitivity: sensitivity,
-      importance: importance,
-      source: .owner,
-      sessionId: approval.sessionId
-    )
   }
 }
