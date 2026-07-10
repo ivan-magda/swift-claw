@@ -67,9 +67,9 @@ import Testing
     #expect(items.count == 1)
     #expect(items.first?["source"] == "assistant")
     #expect(items.first?["kind"] == "reference")
-    _ = try await pollUntil(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
-        == RunState.done.rawValue ? true : nil
+        == RunState.done.rawValue
     }
   }
 }

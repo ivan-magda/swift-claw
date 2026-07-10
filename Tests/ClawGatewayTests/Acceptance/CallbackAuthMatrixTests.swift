@@ -128,9 +128,9 @@ import Testing
       rawUpdate: callbackUpdate(id: 2, from: 7, data: approveData(approval.nonce))
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: harness.databasePath).first?.state
-          == ApprovalState.approved.rawValue ? true : nil
+          == ApprovalState.approved.rawValue
       }
     )
 
@@ -168,15 +168,15 @@ import Testing
     // then — the approve CAS sees an expired row and routes to the deny path: EXPIRED → run FAILED,
     // audited approval_denied/expired; the recorded args never execute
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: harness.databasePath).first?.state
-          == ApprovalState.expired.rawValue ? true : nil
+          == ApprovalState.expired.rawValue
       }
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: harness.databasePath, runId: approval.runId)
-          == RunState.failed.rawValue ? true : nil
+          == RunState.failed.rawValue
       }
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
@@ -212,15 +212,15 @@ import Testing
     // then — the approve guard commits PENDING → REJECTED / stale_policy; run FAILED; neither the
     // originally-recorded target nor the re-proposed variant is ever written
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: harness.databasePath).first?.state
-          == ApprovalState.rejected.rawValue ? true : nil
+          == ApprovalState.rejected.rawValue
       }
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: harness.databasePath, runId: approval.runId)
-          == RunState.failed.rawValue ? true : nil
+          == RunState.failed.rawValue
       }
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
@@ -252,9 +252,9 @@ import Testing
 
     // then — recomputed policy_version ≠ stored → REJECTED / stale_policy; no write
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: harness.databasePath).first?.state
-          == ApprovalState.rejected.rawValue ? true : nil
+          == ApprovalState.rejected.rawValue
       }
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)

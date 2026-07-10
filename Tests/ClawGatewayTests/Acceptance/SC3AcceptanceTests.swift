@@ -378,9 +378,9 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
         )
       )
     )
-    _ = try await pollUntil(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
-        == RunState.done.rawValue ? true : nil
+        == RunState.done.rawValue
     }
     #expect(await harness.http.requestedURLs.filter { url in url == evilURL } == [evilURL])
     #expect(
@@ -390,8 +390,8 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
 
     // single-use: a later proposal of the same URL parks a FRESH approval, never re-executes
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 4, from: 7, text: "fetch it again"))
-    _ = try await pollUntil(timeout: .seconds(10)) {
-      try fetchApprovals(databasePath: harness.databasePath).count == 2 ? true : nil
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+      try fetchApprovals(databasePath: harness.databasePath).count == 2
     }
     let reTripped = try #require(try fetchApprovals(databasePath: harness.databasePath).last)
     #expect(reTripped.state == ApprovalState.pending.rawValue)
@@ -509,8 +509,8 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
         )
       )
     )
-    _ = try await pollUntil(timeout: .seconds(10)) {
-      FileManager.default.fileExists(atPath: parked.canonicalTarget) ? true : nil
+    _ = await pollUntilTrue(timeout: .seconds(10)) {
+      FileManager.default.fileExists(atPath: parked.canonicalTarget)
     }
     #expect(
       try fetchApprovals(databasePath: sharedDB).map(\.state) == [ApprovalState.approved.rawValue]
@@ -589,9 +589,9 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
       )
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: harness.databasePath, runId: approval.runId)
-          == RunState.failed.rawValue ? true : nil
+          == RunState.failed.rawValue
       }
     )
 
@@ -600,9 +600,9 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
       rawUpdate: textUpdate(id: 4, from: 7, text: "read memory then fetch the secret")
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
-        return payloads.contains { payload in payload.contains("can't include that") } ? true : nil
+        return payloads.contains { payload in payload.contains("can't include that") }
       }
     )
     #expect(await harness.http.requestedURLs == ["https://example.com/a"])
@@ -628,7 +628,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
 
     // the cancelled-but-ingested run persists taint (the /new-superseded skip is pinned at the store
     // level — Phase 1 Task 08)
-    _ = try await pollUntil(timeout: .seconds(5)) { try harness.snapshot().isTainted ? true : nil }
+    _ = try await pollUntilTrue(timeout: .seconds(5)) { try harness.snapshot().isTainted }
     #expect(try harness.snapshot().isTainted)
   }
 

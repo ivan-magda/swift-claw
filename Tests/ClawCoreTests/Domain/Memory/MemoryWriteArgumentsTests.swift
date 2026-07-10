@@ -85,7 +85,7 @@ import Testing
     #expect(plainTarget.hasPrefix("memory_item:user:"))
     let hash16 = plainTarget.split(separator: ":").last.map(String.init) ?? ""
     #expect(hash16.count == 16)
-    try #expect(hash16.allSatisfy(\.isHexDigit))
+    #expect(hash16.allSatisfy { character in character.isHexDigit })
   }
 
   @Test func assistantSourceRawValueIsStable() {

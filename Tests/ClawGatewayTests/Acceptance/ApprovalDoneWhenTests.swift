@@ -70,22 +70,119 @@ import Testing
 
     // then — the boot-parked waiter resumes: the recorded bytes land, run → DONE, row → APPROVED
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
-        FileManager.default.fileExists(atPath: approval.canonicalTarget) ? true : nil
+      await pollUntilTrue(timeout: .seconds(10)) {
+        FileManager.default.fileExists(atPath: approval.canonicalTarget)
       }
     )
     #expect(
       try String(contentsOfFile: approval.canonicalTarget, encoding: .utf8) == "hello fabric"
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: restarted.databasePath, runId: approval.runId)
-          == RunState.done.rawValue ? true : nil
+          == RunState.done.rawValue
       }
     )
     #expect(
       try fetchApprovals(databasePath: restarted.databasePath).map(\.state)
         == [ApprovalState.approved.rawValue]
+    )
+  }
+
+  @Test func restartWhileASecondApprovalIsParkedDoesNotReplayTheFirst() async throws {
+    // given — one run, two sequential ask-tier writes: approve #1, the resumed turn proposes #2
+    // and parks again. Approval #1 is APPROVED with its observation filled; only #2 is unresolved.
+    let harness = try makeSC3Harness(
+      scripts: [
+        [
+          toolCallResponse([
+            ToolCall(
+              id: "w1",
+              name: "file_write",
+              argumentsJSON: #"{"path":"notes/plan.md","content":"hello fabric"}"#
+            )
+          ]),
+          toolCallResponse([
+            ToolCall(
+              id: "w2",
+              name: "file_write",
+              argumentsJSON: #"{"path":"notes/second.md","content":"second file"}"#
+            )
+          ]),
+        ]
+      ],
+      httpResponses: [:]
+    )
+    _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write both"))
+    let firstApproval = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        try fetchApprovals(databasePath: harness.databasePath).first
+      }
+    )
+    _ = await harness.router.handle(
+      rawUpdate: callbackUpdate(id: 2, from: 7, data: approveData(firstApproval.nonce))
+    )
+    let approvals = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        let rows = try fetchApprovals(databasePath: harness.databasePath)
+        return rows.count == 2 ? rows : nil
+      }
+    )
+    #expect(
+      approvals.map(\.state)
+        == [ApprovalState.approved.rawValue, ApprovalState.pending.rawValue]
+    )
+    let secondApproval = approvals[1]
+    // The owner edits the first file while approval #2 sits parked across the restart.
+    try Data("owner edited since".utf8).write(
+      to: URL(fileURLWithPath: firstApproval.canonicalTarget)
+    )
+
+    // when — restart + boot reconciliation while #2 is parked
+    let restarted = try await restart(
+      harness,
+      scripts: [[okResponse(content: "Both written.")]]
+    )
+
+    // then — boot must NOT replay resolved approval #1: the run stays parked for #2, and the
+    // owner's edit survives (a replay would re-execute the recorded rename over it)
+    #expect(
+      try runState(databasePath: restarted.databasePath, runId: firstApproval.runId)
+        == RunState.awaitingApproval.rawValue
+    )
+    #expect(
+      try String(contentsOfFile: firstApproval.canonicalTarget, encoding: .utf8)
+        == "owner edited since"
+    )
+
+    // when — the owner approves #2 on the restarted process
+    _ = await restarted.router.handle(
+      rawUpdate: callbackUpdate(id: 3, from: 7, data: approveData(secondApproval.nonce))
+    )
+
+    // then — #2 executes and the run completes (the old replay flipped the run RUNNING at boot,
+    // which swallowed this approval as a duplicate and left the run stuck)
+    _ = try #require(
+      await pollUntilTrue(timeout: .seconds(10)) {
+        FileManager.default.fileExists(atPath: secondApproval.canonicalTarget)
+      }
+    )
+    #expect(
+      try String(contentsOfFile: secondApproval.canonicalTarget, encoding: .utf8) == "second file"
+    )
+    _ = try #require(
+      await pollUntilTrue(timeout: .seconds(10)) {
+        try runState(databasePath: restarted.databasePath, runId: firstApproval.runId)
+          == RunState.done.rawValue
+      }
+    )
+    #expect(
+      try String(contentsOfFile: firstApproval.canonicalTarget, encoding: .utf8)
+        == "owner edited since"
+    )
+    #expect(
+      try fetchApprovals(databasePath: restarted.databasePath).map(\.state)
+        == [ApprovalState.approved.rawValue, ApprovalState.approved.rawValue]
     )
   }
 
@@ -135,15 +232,15 @@ import Testing
 
     // then — the expired PENDING row sweeps to EXPIRED → run FAILED, audited expired; no write
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: restarted.databasePath).first?.state
-          == ApprovalState.expired.rawValue ? true : nil
+          == ApprovalState.expired.rawValue
       }
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: restarted.databasePath, runId: approval.runId)
-          == RunState.failed.rawValue ? true : nil
+          == RunState.failed.rawValue
       }
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
@@ -175,15 +272,15 @@ import Testing
 
     // then — the swept row resolves EXPIRED and the parked waiter fails the run (EXPIRED → DENY)
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: harness.databasePath).first?.state
-          == ApprovalState.expired.rawValue ? true : nil
+          == ApprovalState.expired.rawValue
       }
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: harness.databasePath, runId: approval.runId)
-          == RunState.failed.rawValue ? true : nil
+          == RunState.failed.rawValue
       }
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
@@ -208,15 +305,15 @@ import Testing
     // then — approval → REJECTED (decision cancelled), run → CANCELLED, no orphan PENDING row,
     // no write
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: harness.databasePath).first?.state
-          == ApprovalState.rejected.rawValue ? true : nil
+          == ApprovalState.rejected.rawValue
       }
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: harness.databasePath, runId: approval.runId)
-          == RunState.cancelled.rawValue ? true : nil
+          == RunState.cancelled.rawValue
       }
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
@@ -241,15 +338,15 @@ import Testing
 
     // then — approval → REJECTED (decision superseded), run → SUPERSEDED, no orphan, flag cleared
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: harness.databasePath).first?.state
-          == ApprovalState.rejected.rawValue ? true : nil
+          == ApprovalState.rejected.rawValue
       }
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: harness.databasePath, runId: approval.runId)
-          == RunState.superseded.rawValue ? true : nil
+          == RunState.superseded.rawValue
       }
     )
     #expect(
@@ -276,15 +373,15 @@ import Testing
 
     // then — identical to the pre-restart path: REJECTED (cancelled), run CANCELLED, no orphan
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try fetchApprovals(databasePath: restarted.databasePath).first?.state
-          == ApprovalState.rejected.rawValue ? true : nil
+          == ApprovalState.rejected.rawValue
       }
     )
     _ = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntilTrue(timeout: .seconds(10)) {
         try runState(databasePath: restarted.databasePath, runId: approval.runId)
-          == RunState.cancelled.rawValue ? true : nil
+          == RunState.cancelled.rawValue
       }
     )
     #expect(try noOrphanPendingApproval(databasePath: restarted.databasePath))

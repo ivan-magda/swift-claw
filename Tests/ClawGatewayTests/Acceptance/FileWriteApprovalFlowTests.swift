@@ -63,15 +63,15 @@ import Testing
     )
 
     // then — the RECORDED args executed; run resumed and completed; audit trail complete
-    _ = try await pollUntil(timeout: .seconds(10)) {
-      FileManager.default.fileExists(atPath: approval.canonicalTarget) ? true : nil
+    _ = await pollUntilTrue(timeout: .seconds(10)) {
+      FileManager.default.fileExists(atPath: approval.canonicalTarget)
     }
     #expect(
       try String(contentsOfFile: approval.canonicalTarget, encoding: .utf8) == "hello fabric"
     )
-    _ = try await pollUntil(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
-        == RunState.done.rawValue ? true : nil
+        == RunState.done.rawValue
     }
     let resolved = try fetchApprovals(databasePath: harness.databasePath)
     #expect(resolved.map(\.state) == [ApprovalState.approved.rawValue])
@@ -118,13 +118,13 @@ import Testing
     )
 
     // then — REJECTED row, FAILED run, no file, owner notice, audit decision "rejected"
-    _ = try await pollUntil(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
       try fetchApprovals(databasePath: harness.databasePath).first?.state
-        == ApprovalState.rejected.rawValue ? true : nil
+        == ApprovalState.rejected.rawValue
     }
-    _ = try await pollUntil(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
-        == RunState.failed.rawValue ? true : nil
+        == RunState.failed.rawValue
     }
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
     let audits = try harness.auditRows()

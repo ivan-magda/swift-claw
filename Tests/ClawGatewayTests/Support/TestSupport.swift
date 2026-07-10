@@ -398,6 +398,17 @@ func pollUntil<Value>(
   }
 }
 
+/// `pollUntil` for truth-valued probes: polls until the probe is true or the ceiling elapses and
+/// returns whether it ever became true. Keeps `#require`/`#expect` call sites unambiguous — a
+/// `Bool?` inside `#require` is ambiguous between optional-unwrap and is-true semantics.
+func pollUntilTrue(
+  timeout: Duration = acceptancePollCeiling,
+  interval: Duration = .milliseconds(10),
+  _ probe: () throws -> Bool
+) async rethrows -> Bool {
+  try await pollUntil(timeout: timeout, interval: interval) { try probe() ? true : nil } ?? false
+}
+
 /// Scripted draft parser: returns results in order (last one sticks), records every owner text.
 actor FakeDraftParser: ScheduleDraftParsing {
   private var results: [ScheduleDraftParseResult]

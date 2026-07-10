@@ -81,9 +81,9 @@ import Testing
     )
 
     // then — the recorded fetch runs and the run resumes to DONE; audit trail complete
-    _ = try await pollUntil(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue(timeout: .seconds(10)) {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
-        == RunState.done.rawValue ? true : nil
+        == RunState.done.rawValue
     }
     let resolved = try fetchApprovals(databasePath: harness.databasePath)
     #expect(resolved.map(\.state) == [ApprovalState.approved.rawValue])
