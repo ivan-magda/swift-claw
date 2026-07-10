@@ -288,7 +288,10 @@ private extension RunStoreGRDB {
   }
 
   /// Stamp the new approval id onto the button-carrying chunk so `markSent` can link
-  /// `prompt_message_id` (Task 10); explanation chunks keep their nil approval_id.
+  /// `prompt_message_id` (Task 10); explanation chunks keep their nil approval_id. The chunks are
+  /// re-based past the run's already-enqueued deliveries: a SECOND suspend in one run (approve →
+  /// resume → another gated proposal) would otherwise collide with the first prompt's dedup key
+  /// and be dropped silently — the run would park with no prompt for the owner to answer.
   static func enqueuePromptChunks(
     _ db: Database,
     runId: Int64,
@@ -296,6 +299,7 @@ private extension RunStoreGRDB {
     approvalId: Int64,
     now: Date
   ) throws {
+    let stepBase = try nextOutboxStepBase(db, runId: runId)
     for chunk in chunks {
       let linked = OutboxChunk(
         stepIndex: chunk.stepIndex,
@@ -305,7 +309,7 @@ private extension RunStoreGRDB {
         approvalId: chunk.replyMarkup != nil ? approvalId : chunk.approvalId,
         replyMarkup: chunk.replyMarkup
       )
-      _ = try insertOutbox(db, runId: runId, chunk: linked, now: now)
+      _ = try insertOutbox(db, runId: runId, chunk: shiftedChunk(linked, by: stepBase), now: now)
     }
   }
 
