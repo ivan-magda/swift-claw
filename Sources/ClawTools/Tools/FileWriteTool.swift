@@ -70,9 +70,11 @@ public struct FileWriteTool: Tool {
     else {
       return .refused(reason: "file_write needs a non-empty \"path\" argument.")
     }
+
     guard let content = arguments.objectValue?["content"]?.stringValue else {
       return .refused(reason: "file_write needs a \"content\" argument.")
     }
+
     guard content.utf8.count <= Self.maxContentBytes else {
       return .refused(
         reason: """
@@ -88,18 +90,22 @@ public struct FileWriteTool: Tool {
     case .resolved(let target):
       var isDirectory = ObjCBool(false)
       let exists = FileManager.default.fileExists(atPath: target, isDirectory: &isDirectory)
+
       if exists, isDirectory.boolValue {
         return .refused(reason: "\(path) is a directory, so I can't write a file there.")
       }
+
       if exists, overwriteFlag(arguments) == false {
         return .refused(reason: "\(path) already exists; pass overwrite: true to replace it.")
       }
+
       if exists == false, overwriteFlag(arguments) {
         // The flag must match the approved mode: the prompt would say "create", but the recorded
         // overwrite:true would take the replacing rename(2) branch at execution — a file that
         // appeared during the approval window would be clobbered under a create-shaped approval.
         return .refused(reason: "\(path) does not exist; drop overwrite: true to create it.")
       }
+
       return .resolved(target)
     }
   }
@@ -128,6 +134,7 @@ public struct FileWriteTool: Tool {
     guard let approvedTarget = canonicalTarget else {
       return errorPayload("file_write was dispatched without a gate-resolved target.")
     }
+
     guard
       let path = arguments.objectValue?["path"]?.stringValue,
       let content = arguments.objectValue?["content"]?.stringValue
@@ -155,7 +162,9 @@ public struct FileWriteTool: Tool {
         atPath: (target as NSString).deletingLastPathComponent,
         withIntermediateDirectories: true
       )
+
       let tempPath = try Self.stageTemporary(content: Data(content.utf8), target: target)
+
       if overwriting {
         try Self.commitRename(tempPath: tempPath, target: target)
       } else {
