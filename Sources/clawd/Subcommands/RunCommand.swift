@@ -28,6 +28,7 @@ struct RunCommand: AsyncParsableCommand {
     defer { lock.release() }
 
     let stores = try Self.openStoresOrExit(config: config, logger: logger)
+    try Self.ensureWorkspaceDirectoryOrExit(config: config)
 
     // Shared HTTP client for both Telegram and the LLM; gzip decompression is a client-wide toggle
     // (the executor only advertises `accept-encoding`), so it's configured here at the root.
@@ -140,6 +141,19 @@ private extension RunCommand {
         Data("another clawd is already running for this state root\n".utf8)
       )
       throw ExitCode(ClawExitCode.alreadyRunning.rawValue)
+    }
+  }
+
+  static func ensureWorkspaceDirectoryOrExit(config: AppConfig) throws {
+    let workspace = FileSystemWorkspace(
+      root: config.stateRoot.appendingPathComponent(StateFile.workspace, isDirectory: true)
+    )
+
+    do {
+      try workspace.ensureRootExists()
+    } catch {
+      FileHandle.standardError.write(Data("workspace error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.configInvalid.rawValue)
     }
   }
 

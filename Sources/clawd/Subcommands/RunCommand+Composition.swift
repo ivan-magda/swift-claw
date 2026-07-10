@@ -44,7 +44,7 @@ extension RunCommand {
     )
 
     let workspace = FileSystemWorkspace(
-      root: deps.config.stateRoot.appendingPathComponent("workspace", isDirectory: true)
+      root: deps.config.stateRoot.appendingPathComponent(StateFile.workspace, isDirectory: true)
     )
     let agentStack = makeAgentStack(
       deps: deps,
