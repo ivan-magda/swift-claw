@@ -162,8 +162,20 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.runOrigin(runId: runId)
   }
 
-  func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
-    try base.failRunStalePolicy(runId: runId, sessionId: sessionId, now: now)
+  func failRunStalePolicy(
+    runId: Int64,
+    sessionId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    now: Date
+  ) throws -> Bool {
+    try base.failRunStalePolicy(
+      runId: runId,
+      sessionId: sessionId,
+      observationMessageId: observationMessageId,
+      observationContent: observationContent,
+      now: now
+    )
   }
 
   func resolveDeniedObservation(
@@ -309,8 +321,20 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.runOrigin(runId: runId)
   }
 
-  func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
-    try base.failRunStalePolicy(runId: runId, sessionId: sessionId, now: now)
+  func failRunStalePolicy(
+    runId: Int64,
+    sessionId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    now: Date
+  ) throws -> Bool {
+    try base.failRunStalePolicy(
+      runId: runId,
+      sessionId: sessionId,
+      observationMessageId: observationMessageId,
+      observationContent: observationContent,
+      now: now
+    )
   }
 
   func resolveDeniedObservation(
@@ -399,7 +423,13 @@ struct DiskFullRuns: RunStore {
   func runOrigin(runId: Int64) throws -> RunOrigin? {
     throw StoreError.diskFull
   }
-  func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
+  func failRunStalePolicy(
+    runId: Int64,
+    sessionId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    now: Date
+  ) throws -> Bool {
     throw StoreError.diskFull
   }
   func resolveDeniedObservation(

@@ -465,7 +465,13 @@ import Testing
       throw StoreError.unexpected("unused in this fixture")
     }
     func runOrigin(runId: Int64) throws -> RunOrigin? { nil }
-    func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool { false }
+    func failRunStalePolicy(
+      runId: Int64,
+      sessionId: Int64,
+      observationMessageId: Int64,
+      observationContent: String,
+      now: Date
+    ) throws -> Bool { false }
     func resolveDeniedObservation(
       runId: Int64,
       observationMessageId: Int64,

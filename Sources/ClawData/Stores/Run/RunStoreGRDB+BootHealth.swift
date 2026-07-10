@@ -53,16 +53,23 @@ extension RunStoreGRDB {
           noticeChatId = SessionKey.chatId(from: sessionKey)
         }
 
-        let sentCount =
-          try Int.fetchOne(
-            db,
-            sql: """
-              SELECT COUNT(*) FROM outbound_deliveries
-              WHERE run_id = ? AND status = 'SENT'
-              """,
-            arguments: [runId]
-          ) ?? 0
-        guard sentCount == 0, let chatId = noticeChatId else {
+        // Suppress the notice only when the owner already saw a genuine REPLY. The newest SENT
+        // row decides: an approval-prompt keyboard chunk (approval_id set) means the run
+        // suspended, was approved, and died before its continuation replied — the owner has
+        // heard nothing since tapping Approve, so the notice must still fire. (A RUNNING orphan
+        // can never trail a delivered reply mid-prompt: the keyboard chunk is the prompt's final
+        // step and must be SENT before the owner can approve at all.)
+        let newestSent = try Row.fetchOne(
+          db,
+          sql: """
+            SELECT approval_id FROM outbound_deliveries
+            WHERE run_id = ? AND status = 'SENT'
+            ORDER BY step_index DESC LIMIT 1
+            """,
+          arguments: [runId]
+        )
+        let ownerSawAReply = newestSent != nil && (newestSent?["approval_id"] as Int64?) == nil
+        guard ownerSawAReply == false, let chatId = noticeChatId else {
           continue
         }
 

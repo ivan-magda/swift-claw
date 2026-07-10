@@ -219,11 +219,23 @@ extension RunStoreGRDB {
     }
   }
 
-  public func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool {
+  public func failRunStalePolicy(
+    runId: Int64,
+    sessionId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    now: Date
+  ) throws -> Bool {
     try database.writeMapping { db in
       guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
         return false
       }
+      try Self.fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: observationContent
+      )
       try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
       try AuditLogGRDB.insertAudit(
         db,

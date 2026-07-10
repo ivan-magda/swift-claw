@@ -315,10 +315,19 @@ public protocol RunStore: Sendable {
   func resumeUsage(runId: Int64) throws -> ResumeUsage
   /// Task 16: the run's origin, read WITHOUT a re-pick-up (the resume path never re-flips PENDING).
   func runOrigin(runId: Int64) throws -> RunOrigin?
-  /// Task 16 §6.5 crash-window belt: fail the run (AWAITING_APPROVAL → FAILED) and append the
-  /// `approvalDenied`/`stale_policy` audit in ONE txn, while the approval row stays APPROVED — the
-  /// one documented granted-then-denied pair. Returns false when the run was not AWAITING.
-  func failRunStalePolicy(runId: Int64, sessionId: Int64, now: Date) throws -> Bool
+  /// Task 16 §6.5 crash-window belt: fail the run (AWAITING_APPROVAL → FAILED), resolve the
+  /// placeholder observation with `observationContent` (left dangling it would assert a pending
+  /// approval to every later assembly and false-trigger the boot claimed-window settlement), and
+  /// append the `approvalDenied`/`stale_policy` audit — ONE txn, while the approval row stays
+  /// APPROVED (the one documented granted-then-denied pair). Returns false when the run was not
+  /// AWAITING.
+  func failRunStalePolicy(
+    runId: Int64,
+    sessionId: Int64,
+    observationMessageId: Int64,
+    observationContent: String,
+    now: Date
+  ) throws -> Bool
   /// §6.4 deny/cancel resolution: fill the placeholder observation row in place with the synthetic
   /// denial `content` so persisted history never holds a dangling tool_call, then drive the run to
   /// its terminal state. `cancel == nil` is the owner-deny / expiry path

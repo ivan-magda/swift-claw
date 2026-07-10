@@ -397,11 +397,21 @@ import Testing
     )
 
     // then — the RUN fails, the row stays APPROVED (the one granted-then-denied pair), no resume,
-    // and the owner gets a plain-language notice
+    // the owner gets a plain-language notice, and the placeholder observation is RESOLVED — left
+    // dangling it would assert a pending approval to every later turn and false-trigger the boot
+    // claimed-window settlement on the next restart
     #expect(try runState(env) == RunState.failed.rawValue)
     #expect(try approvalState(env) == ApprovalState.approved.rawValue)
     #expect(await turns.resumeCalls.isEmpty)
     #expect(await delivery.texts.isEmpty == false)
+    let observation = try await env.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT content FROM messages WHERE id = ?",
+        arguments: [env.observationMessageId]
+      )
+    }
+    #expect(observation == "The approval was voided because the policy changed before it ran.")
     let auditDecision = try await env.queue.read { db in
       try String.fetchOne(
         db,

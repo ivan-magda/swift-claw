@@ -161,6 +161,8 @@ private extension ApprovalWaiter {
       _ = try runs.failRunStalePolicy(
         runId: approval.runId,
         sessionId: approval.sessionId,
+        observationMessageId: approval.observationMessageId,
+        observationContent: Self.deniedObservationContent(for: .stalePolicy),
         now: now()
       )
     } catch {

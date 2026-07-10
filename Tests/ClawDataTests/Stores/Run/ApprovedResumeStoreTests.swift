@@ -516,7 +516,7 @@ import Testing
     #expect(try env.runs.runOrigin(runId: 9999) == nil)
   }
 
-  @Test func failRunStalePolicyFailsTheRunAndAuditsTheDenial() throws {
+  @Test func failRunStalePolicyFailsTheRunFillsTheObservationAndAuditsTheDenial() throws {
     // given
     let env = try makeSuspendedFixture()
 
@@ -524,12 +524,20 @@ import Testing
     let failed = try env.runs.failRunStalePolicy(
       runId: env.runId,
       sessionId: env.sessionId,
+      observationMessageId: env.observationMessageId,
+      observationContent: "The approval was voided because the policy changed before it ran.",
       now: Date()
     )
 
-    // then — run FAILED, and an approvalDenied/stale_policy audit rode the same transaction (§6.5)
+    // then — one txn: run FAILED, the placeholder resolved (a dangling "awaiting owner approval"
+    // would both mislead later turns and false-trigger the boot claimed-window settlement), and
+    // the approvalDenied/stale_policy audit
     #expect(failed)
     #expect(try runState(env.queue, env.runId) == RunState.failed.rawValue)
+    #expect(
+      try messageContent(env.queue, env.observationMessageId)
+        == "The approval was voided because the policy changed before it ran."
+    )
     let auditDecision = try env.queue.read { db in
       try String.fetchOne(
         db,
