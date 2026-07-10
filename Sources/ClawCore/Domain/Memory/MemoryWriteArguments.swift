@@ -18,6 +18,7 @@ public enum MemoryWriteArguments {
     else {
       return .invalid(reason: "memory_write needs a non-empty \"text\" argument.")
     }
+
     guard
       let rawKind = arguments.objectValue?["kind"]?.stringValue,
       let kind = MemoryKind(rawValue: rawKind)
