@@ -31,6 +31,15 @@ import Testing
     }
   }
 
+  /// Scripts the executor seam directly: the commit outcome the waiter must branch on.
+  private struct ScriptedExecutor: ApprovedActionExecuting {
+    let commit: ApprovedCommitOutcome
+
+    func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
+      ApprovedExecutionOutcome(observationContent: "scripted", commit: commit)
+    }
+  }
+
   /// Records `resume` calls; `run` is unused on the waiter path.
   private actor ResumeRecorder: TurnDispatching {
     struct ResumeCall: Sendable, Equatable {
@@ -166,18 +175,20 @@ import Testing
     turns: ResumeRecorder,
     delivery: RecordingDelivery,
     callbacks: RecordingCallbacks,
-    currentPolicyVersion: @escaping @Sendable () throws -> String = { "pv" }
+    currentPolicyVersion: @escaping @Sendable () throws -> String = { "pv" },
+    executor: (any ApprovedActionExecuting)? = nil
   ) -> ApprovalWaiter {
     ApprovalWaiter(
       approvals: env.approvals,
       runs: env.runs,
       coordinator: coordinator,
-      executor: ApprovedActionExecutor(
-        tools: ["file_write": StubTool(toolName: "file_write", result: "Wrote 12 B.")],
-        runs: env.runs,
-        now: { Date() },
-        logger: Logger(label: "test")
-      ),
+      executor: executor
+        ?? ApprovedActionExecutor(
+          tools: ["file_write": StubTool(toolName: "file_write", result: "Wrote 12 B.")],
+          runs: env.runs,
+          now: { Date() },
+          logger: Logger(label: "test")
+        ),
       turns: turns,
       delivery: delivery,
       callbacks: callbacks,
@@ -244,6 +255,47 @@ import Testing
     #expect(
       await turns.resumeCalls == [
         .init(runId: env.runId, contextBoundMessageId: env.observationMessageId)
+      ]
+    )
+    #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
+  @Test func aStoreFailedCommitNotifiesTheOwnerAndLeavesTheRunAwaiting() async throws {
+    // given — the executor reports the commit threw at the store seam (NOT a duplicate resume)
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks,
+      executor: ScriptedExecutor(commit: .storeFailed)
+    )
+
+    // when
+    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then — no continuation, the owner is told, the buttons disarm, and the run STAYS
+    // AWAITING_APPROVAL with the row APPROVED, so the boot crash-window path recovers the pair
+    // after a restart (ApprovalBootReconcilerTests.approvedAwaitingRunReParksUnderCrashWindow-
+    // Revalidation covers that recovery leg)
+    #expect(try runState(env) == RunState.awaitingApproval.rawValue)
+    #expect(try approvalState(env) == ApprovalState.approved.rawValue)
+    #expect(await turns.resumeCalls.isEmpty)
+    #expect(
+      await delivery.texts == [
+        "The approved action could not be recorded; it will be retried after a restart."
       ]
     )
     #expect(await callbacks.disarmed == [env.promptMessageId])

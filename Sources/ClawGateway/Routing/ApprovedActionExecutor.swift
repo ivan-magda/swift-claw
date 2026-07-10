@@ -10,14 +10,27 @@ public protocol ApprovedActionExecuting: Sendable {
   func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome
 }
 
+/// How the executor's durable commit landed. Distinct from the store seam's `RunCommitResult`
+/// because a THROWN store error is not a duplicate signal: the waiter must leave the run
+/// `AWAITING_APPROVAL` and tell the owner, never treat the failure as an already-performed resume.
+public enum ApprovedCommitOutcome: Sendable, Equatable {
+  /// This call performed the resume commit.
+  case committed
+  /// A duplicate signal already resumed the run; nothing left to do.
+  case ignored
+  /// The commit threw at the store seam. The run is still `AWAITING_APPROVAL`, so the §6.5 boot
+  /// crash-window path (APPROVED row + AWAITING run) recovers it after a restart.
+  case storeFailed
+}
+
 public struct ApprovedExecutionOutcome: Sendable, Equatable {
   /// What the placeholder observation now says (the waiter forwards nothing — the executor already
   /// committed it; this is returned for logging/assertions).
   public let observationContent: String
   /// `.committed` when this call performed the resume; `.ignored` when a duplicate already did.
-  public let commit: RunCommitResult
+  public let commit: ApprovedCommitOutcome
 
-  public init(observationContent: String, commit: RunCommitResult) {
+  public init(observationContent: String, commit: ApprovedCommitOutcome) {
     self.observationContent = observationContent
     self.commit = commit
   }
@@ -82,17 +95,18 @@ private extension ApprovedActionExecutor {
     )
   }
 
-  func commitObservation(_ approval: Approval, content: String) -> RunCommitResult {
+  func commitObservation(_ approval: Approval, content: String) -> ApprovedCommitOutcome {
     do {
-      return try runs.completeApprovedObservation(
+      let commit = try runs.completeApprovedObservation(
         runId: approval.runId,
         observationMessageId: approval.observationMessageId,
         content: content,
         now: now()
       )
+      return commit == .committed ? .committed : .ignored
     } catch {
       logger.error("completeApprovedObservation failed for run \(approval.runId): \(error)")
-      return .ignored
+      return .storeFailed
     }
   }
 }
@@ -131,10 +145,13 @@ private extension ApprovedActionExecutor {
         observationContent: content,
         now: now()
       )
-      return ApprovedExecutionOutcome(observationContent: content, commit: commit)
+      return ApprovedExecutionOutcome(
+        observationContent: content,
+        commit: commit == .committed ? .committed : .ignored
+      )
     } catch {
       logger.error("applyApprovedMemoryWrite failed for run \(approval.runId): \(error)")
-      return ApprovedExecutionOutcome(observationContent: content, commit: .ignored)
+      return ApprovedExecutionOutcome(observationContent: content, commit: .storeFailed)
     }
   }
 }

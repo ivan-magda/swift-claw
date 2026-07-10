@@ -126,10 +126,14 @@ import Testing
     )
   }
 
-  private func makeExecutor(_ env: Fixture, tools: [any Tool]) -> ApprovedActionExecutor {
+  private func makeExecutor(
+    _ env: Fixture,
+    tools: [any Tool],
+    runs: (any RunStore)? = nil
+  ) -> ApprovedActionExecutor {
     ApprovedActionExecutor(
       tools: Dictionary(uniqueKeysWithValues: tools.map { ($0.definition.name, $0) }),
-      runs: env.runs,
+      runs: runs ?? env.runs,
       now: { Date() },
       logger: Logger(label: "test")
     )
@@ -219,6 +223,51 @@ import Testing
     }
     #expect(memoryCount == 1)
     #expect(try messageContent(env)?.contains("project") == true)
+  }
+
+  @Test func aThrowingObservationCommitSurfacesStoreFailedNotIgnored() async throws {
+    // given — the store throws at the commit seam (DiskFullRuns); the durable DB is untouched
+    let env = try makeSuspendedFixture()
+    let executor = makeExecutor(
+      env,
+      tools: [RecordingWriteTool(toolName: "file_write", result: "Wrote 12 B to /w/plan.md.")],
+      runs: DiskFullRuns()
+    )
+
+    // when
+    let outcome = await executor.executeApproved(
+      approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
+    )
+
+    // then — a store failure is DISTINCT from a duplicate resume: the waiter must not read it as
+    // "already resumed"; the run stays AWAITING_APPROVAL for the §6.5 boot crash-window recovery
+    #expect(outcome.commit == .storeFailed)
+    #expect(try runState(env) == RunState.awaitingApproval.rawValue)
+    #expect(try messageContent(env) == "awaiting owner approval")
+  }
+
+  @Test func aThrowingMemoryWriteCommitSurfacesStoreFailedNotIgnored() async throws {
+    // given — the fused memory_write commit throws at the store seam
+    let env = try makeSuspendedFixture()
+    let executor = makeExecutor(env, tools: [], runs: DiskFullRuns())
+
+    // when
+    let outcome = await executor.executeApproved(
+      approval(
+        env,
+        tool: "memory_write",
+        argsJSON: #"{"kind":"project","text":"the plan shipped"}"#,
+        target: "memory_item:project:abc123"
+      )
+    )
+
+    // then — same contract as the generic write: distinct failure signal, nothing committed
+    #expect(outcome.commit == .storeFailed)
+    #expect(try runState(env) == RunState.awaitingApproval.rawValue)
+    let memoryCount = try await env.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
+    }
+    #expect(memoryCount == 0)
   }
 
   @Test func aMissingToolStillResumesWithAnErrorObservation() async throws {

@@ -103,11 +103,24 @@ private extension ApprovalWaiter {
     }
 
     let outcome = await executor.executeApproved(approval)
-    guard outcome.commit == .committed else {
+    switch outcome.commit {
+    case .ignored:
       // A duplicate signal already resumed the run; do not run the continuation twice.
-      logger.debug("approved resume for run \(runId) was a no-op (\(outcome.commit))")
+      logger.debug("approved resume for run \(runId) was a no-op (duplicate signal)")
       await disarm(approval, chatId: chatId)
       return
+    case .storeFailed:
+      // The commit threw at the store seam — NOT a duplicate. Leave the run AWAITING_APPROVAL so
+      // the §6.5 boot crash-window path (APPROVED row + AWAITING run) recovers it, and tell the
+      // owner instead of going silent. Never args/content in this log.
+      logger.error(
+        "approved commit store-failed (tool \(approval.tool), approval \(approval.id)); run left AWAITING_APPROVAL for boot recovery"
+      )
+      await notifyOwner(chatId: chatId, text: Self.storeFailureNotice)
+      await disarm(approval, chatId: chatId)
+      return
+    case .committed:
+      break
     }
 
     await turns.resume(
@@ -225,6 +238,9 @@ private extension ApprovalWaiter {
 private extension ApprovalWaiter {
   static let stalePolicyNotice =
     "My instructions or tools changed since you were asked, so I can't run that now — please re-run."
+
+  static let storeFailureNotice =
+    "The approved action could not be recorded; it will be retried after a restart."
 
   func loadApproval(_ id: Int64) -> Approval? {
     do {
