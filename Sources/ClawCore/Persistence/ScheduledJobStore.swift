@@ -13,7 +13,7 @@ public struct ScheduleArmResult: Sendable, Equatable {
 public protocol ScheduleCommandStore: Sendable {
   /// Atomic confirmed arm: claim update + insert job + jobCreated audit in one write.
   /// The inserted job is the exact parked draft — the caller never re-parses (TOCTOU kill).
-  func applyArm(updateId: Int64, job: NewScheduledJob, now: Date) throws
+  func applyArm(updateId: Int64, job: NewScheduledJob, now: Date) throws(StoreError)
     -> ScheduleArmResult
 }
 
@@ -32,11 +32,11 @@ public struct ClaimedFire: Sendable, Equatable {
 }
 
 public protocol ScheduledJobStore: Sendable {
-  func create(_ job: NewScheduledJob, now: Date) throws -> ScheduledJob
-  func job(id: Int64) throws -> ScheduledJob?
-  func listAll() throws -> [ScheduledJob]
+  func create(_ job: NewScheduledJob, now: Date) throws(StoreError) -> ScheduledJob
+  func job(id: Int64) throws(StoreError) -> ScheduledJob?
+  func listAll() throws(StoreError) -> [ScheduledJob]
   // status='ACTIVE' AND next_occurrence <= now
-  func dueJobs(now: Date) throws -> [ScheduledJob]
+  func dueJobs(now: Date) throws(StoreError) -> [ScheduledJob]
 
   /// The whole fused fire transaction. `due` is the CAS predicate (the stored
   /// next_occurrence being claimed); `fireAt` is T_fire (== due on time, the latest missed
@@ -51,11 +51,11 @@ public protocol ScheduledJobStore: Sendable {
     fireAt: Date,
     nextOccurrence: Date?,
     now: Date
-  ) throws -> ClaimedFire?
+  ) throws(StoreError) -> ClaimedFire?
 
   /// Run-now: the same fused insert set with NO schedule advance. Requires
   /// status ACTIVE or PAUSED (nil otherwise). fireAt = now; jobExecuted audited in-txn.
-  func fireNow(jobId: Int64, now: Date) throws -> ClaimedFire?
+  func fireNow(jobId: Int64, now: Date) throws(StoreError) -> ClaimedFire?
 
   /// Misfire skip: advance next_occurrence past now with no run (nil ⇒ one-shot →
   /// COMPLETED), update scheduler_state.last_misfire_at / last_misfire_skipped_count, and
@@ -66,18 +66,18 @@ public protocol ScheduledJobStore: Sendable {
     nextOccurrence: Date?,
     skippedCount: Int,
     now: Date
-  ) throws -> Bool
+  ) throws(StoreError) -> Bool
 
   /// ACTIVE→PAUSED, idempotent.
-  func pause(id: Int64, now: Date) throws -> ScheduledJob?
+  func pause(id: Int64, now: Date) throws(StoreError) -> ScheduledJob?
   /// PAUSED→ACTIVE; the caller recomputes next_occurrence from now.
-  func resume(id: Int64, nextOccurrence: Date?, now: Date) throws -> ScheduledJob?
+  func resume(id: Int64, nextOccurrence: Date?, now: Date) throws(StoreError) -> ScheduledJob?
   /// ACTIVE|PAUSED→CANCELLED, next NULL, row retained.
-  func cancel(id: Int64, now: Date) throws -> ScheduledJob?
+  func cancel(id: Int64, now: Date) throws(StoreError) -> ScheduledJob?
 
-  func schedulerState() throws -> SchedulerState
+  func schedulerState() throws(StoreError) -> SchedulerState
   /// Upserts scheduler_state.last_tick_at.
-  func recordTick(at tickTime: Date) throws
+  func recordTick(at tickTime: Date) throws(StoreError)
 
   /// Heartbeat fire: creates/reuses the sched:heartbeat session, inserts the template
   /// trigger message + PENDING run (origin 'heartbeat', job_id NULL), and updates
@@ -87,5 +87,5 @@ public protocol ScheduledJobStore: Sendable {
     ownerChatId: Int64,
     now: Date,
     day: String
-  ) throws -> ClaimedFire
+  ) throws(StoreError) -> ClaimedFire
 }

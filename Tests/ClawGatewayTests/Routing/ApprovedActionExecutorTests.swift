@@ -89,7 +89,7 @@ import Testing
         (try? await queue.read { db in
           try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
         }) ?? "unreadable"
-      return ToolPayload(content: state ?? "absent", status: .ok, ingestedUntrusted: false)
+      return ToolPayload(content: state, status: .ok, ingestedUntrusted: false)
     }
   }
 
@@ -389,7 +389,7 @@ import Testing
       observationMessageId: Int64,
       notResumableObservationContent: String,
       now: Date
-    ) throws -> ApprovedExecutionClaim {
+    ) throws(StoreError) -> ApprovedExecutionClaim {
       try base.claimApprovedExecution(
         runId: runId,
         observationMessageId: observationMessageId,
@@ -402,7 +402,7 @@ import Testing
       runId: Int64,
       observationMessageId: Int64,
       content: String
-    ) throws {
+    ) throws(StoreError) {
       throw StoreError.diskFull
     }
 
@@ -413,28 +413,37 @@ import Testing
       observationContent: String,
       notResumableObservationContent: String,
       now: Date
-    ) throws -> ApprovedExecutionClaim {
+    ) throws(StoreError) -> ApprovedExecutionClaim {
       throw StoreError.diskFull
     }
 
-    func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? { nil }
-    func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
-      .ignored
-    }
-    func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult {
-      .ignored
-    }
-    func failRun(runId: Int64, now: Date) throws {}
-    func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? {
+    func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
       nil
     }
-    func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] { [] }
+    func commitAssistantTurn(
+      _ turn: AssistantTurn,
+      now: Date
+    ) throws(StoreError) -> RunCommitResult {
+      .ignored
+    }
+    func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
+      .ignored
+    }
+    func failRun(runId: Int64, now: Date) throws(StoreError) {}
+    func cancelActiveRun(
+      sessionId: Int64,
+      reason: CancelReason,
+      now: Date
+    ) throws(StoreError) -> Int64? {
+      nil
+    }
+    func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] { [] }
     func reconcileRunsAtBoot(
       now: Date,
       degradationText: String,
       heartbeatNoticeChatId: Int64?
-    ) throws -> [DegradationReply] { [] }
-    func runsHealth(now: Date) throws -> RunsHealth {
+    ) throws(StoreError) -> [DegradationReply] { [] }
+    func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
       RunsHealth(
         inFlight: 0,
         oldestRunAgeSeconds: nil,
@@ -448,7 +457,7 @@ import Testing
       sessionId: Int64,
       commit: SuspendedTurnCommit,
       now: Date
-    ) throws -> SuspendedCommitReceipt {
+    ) throws(StoreError) -> SuspendedCommitReceipt {
       throw StoreError.unexpected("unused in this fixture")
     }
     func settleClaimedApprovalAtBoot(
@@ -458,27 +467,27 @@ import Testing
       noticeChatId: Int64,
       noticeText: String,
       now: Date
-    ) throws -> ClaimedApprovalBootOutcome {
+    ) throws(StoreError) -> ClaimedApprovalBootOutcome {
       throw StoreError.unexpected("unused in this fixture")
     }
-    func resumeUsage(runId: Int64) throws -> ResumeUsage {
+    func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
       throw StoreError.unexpected("unused in this fixture")
     }
-    func runOrigin(runId: Int64) throws -> RunOrigin? { nil }
+    func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? { nil }
     func failRunStalePolicy(
       runId: Int64,
       sessionId: Int64,
       observationMessageId: Int64,
       observationContent: String,
       now: Date
-    ) throws -> Bool { false }
+    ) throws(StoreError) -> Bool { false }
     func resolveDeniedObservation(
       runId: Int64,
       observationMessageId: Int64,
       content: String,
       cancel: CancelReason?,
       now: Date
-    ) throws -> RunCommitResult { .ignored }
+    ) throws(StoreError) -> RunCommitResult { .ignored }
   }
 
   @Test func aMissingToolStillResumesWithAnErrorObservation() async throws {

@@ -137,8 +137,8 @@ import Testing
     let now = Date(timeIntervalSince1970: 400)
     let newItem = NewMemoryItem(text: "atomic", kind: .user, sessionId: nil)
 
-    // when
-    #expect(throws: InjectedCrash.self) {
+    // when — the injected crash surfaces classified at the seam, never as its raw type
+    #expect(throws: StoreError.self) {
       try crashing.applyRemember(updateId: 40, item: newItem, now: now)
     }
 
@@ -171,8 +171,8 @@ import Testing
     let updateId: Int64 = 50
     let now = Date(timeIntervalSince1970: 2)
 
-    // when
-    #expect(throws: InjectedCrash.self) {
+    // when — the injected crash surfaces classified at the seam, never as its raw type
+    #expect(throws: StoreError.self) {
       try crashing.applyForget(updateId: updateId, itemId: stored.id, now: now)
     }
 

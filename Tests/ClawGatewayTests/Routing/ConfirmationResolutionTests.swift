@@ -132,7 +132,7 @@ import Testing
         updateId: Int64,
         item: NewMemoryItem,
         now: Date
-      ) throws -> MemoryCommandResult {
+      ) throws(StoreError) -> MemoryCommandResult {
         throw StoreError.unexpected("commit lost")
       }
 
@@ -140,7 +140,7 @@ import Testing
         updateId: Int64,
         itemId: Int64,
         now: Date
-      ) throws -> MemoryCommandResult {
+      ) throws(StoreError) -> MemoryCommandResult {
         throw StoreError.unexpected("commit lost")
       }
     }
@@ -178,7 +178,7 @@ import Testing
         updateId: Int64,
         item: NewMemoryItem,
         now: Date
-      ) throws -> MemoryCommandResult {
+      ) throws(StoreError) -> MemoryCommandResult {
         throw StoreError.diskFull
       }
 
@@ -186,7 +186,7 @@ import Testing
         updateId: Int64,
         itemId: Int64,
         now: Date
-      ) throws -> MemoryCommandResult {
+      ) throws(StoreError) -> MemoryCommandResult {
         throw StoreError.diskFull
       }
     }
@@ -232,19 +232,23 @@ import Testing
 private struct FindSessionFailingSessions: SessionMessageStore {
   let inner: SessionMessageStoreGRDB
 
-  func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 {
+  func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64 {
     try inner.loadOrCreateSession(sessionKey: sessionKey, now: now)
   }
 
-  func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
+  func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
     try inner.claimAndPersistInbound(inbound)
   }
 
-  func claimCommandUpdate(updateId: Int64, sessionKey: String, now: Date) throws -> CommandClaim {
+  func claimCommandUpdate(
+    updateId: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> CommandClaim {
     try inner.claimCommandUpdate(updateId: updateId, sessionKey: sessionKey, now: now)
   }
 
-  func findSession(sessionKey: String) throws -> Int64? {
+  func findSession(sessionKey: String) throws(StoreError) -> Int64? {
     throw StoreError.unexpected("lookup lost")
   }
 
@@ -252,7 +256,7 @@ private struct FindSessionFailingSessions: SessionMessageStore {
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
-  ) throws -> [StoredMessage] {
+  ) throws(StoreError) -> [StoredMessage] {
     try inner.loadContext(sessionId: sessionId, throughMessageId: throughMessageId, limit: limit)
   }
 
@@ -260,7 +264,7 @@ private struct FindSessionFailingSessions: SessionMessageStore {
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
-  ) throws -> SessionContextSnapshot {
+  ) throws(StoreError) -> SessionContextSnapshot {
     try inner.loadContextSnapshot(
       sessionId: sessionId,
       throughMessageId: throughMessageId,
@@ -268,7 +272,7 @@ private struct FindSessionFailingSessions: SessionMessageStore {
     )
   }
 
-  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {
+  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {
     try inner.resetWindowAndDetaint(sessionId: sessionId, now: now)
   }
 }

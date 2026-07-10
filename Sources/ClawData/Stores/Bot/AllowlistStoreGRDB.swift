@@ -9,7 +9,7 @@ public struct AllowlistStoreGRDB: AllowlistStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func seedAllowlist(userIds: [Int64]) throws {
+  public func seedAllowlist(userIds: [Int64]) throws(StoreError) {
     try database.writeMapping { db in
       for userId in userIds {
         try db.execute(
@@ -20,7 +20,7 @@ public struct AllowlistStoreGRDB: AllowlistStore {
     }
   }
 
-  public func allowlistContains(userId: Int64) throws -> Bool {
+  public func allowlistContains(userId: Int64) throws(StoreError) -> Bool {
     try database.readMapping { db in
       try Bool.fetchOne(
         db,
@@ -30,7 +30,7 @@ public struct AllowlistStoreGRDB: AllowlistStore {
     }
   }
 
-  public func allowlistCount() throws -> Int {
+  public func allowlistCount() throws(StoreError) -> Int {
     try database.readMapping { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM allowlist") ?? 0
     }

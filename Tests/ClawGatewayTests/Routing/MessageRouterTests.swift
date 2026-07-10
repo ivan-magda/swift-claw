@@ -10,30 +10,34 @@ import Testing
 
 /// A `SessionMessageStore` whose persist reports a full disk, to drive the storage-full path.
 struct FullSessions: SessionMessageStore {
-  func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 {
+  func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64 {
     throw StoreError.diskFull
   }
-  func claimCommandUpdate(updateId: Int64, sessionKey: String, now: Date) throws -> CommandClaim {
+  func claimCommandUpdate(
+    updateId: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> CommandClaim {
     throw StoreError.diskFull
   }
-  func findSession(sessionKey: String) throws -> Int64? {
+  func findSession(sessionKey: String) throws(StoreError) -> Int64? {
     throw StoreError.diskFull
   }
-  func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
+  func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
     throw StoreError.diskFull
   }
   func loadContext(
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
-  ) throws -> [StoredMessage] {
+  ) throws(StoreError) -> [StoredMessage] {
     []
   }
   func loadContextSnapshot(
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
-  ) throws -> SessionContextSnapshot {
+  ) throws(StoreError) -> SessionContextSnapshot {
     SessionContextSnapshot(
       history: [],
       historyMessageIds: [],
@@ -42,7 +46,7 @@ struct FullSessions: SessionMessageStore {
       hasPrivateData: false
     )
   }
-  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {}
+  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {}
 }
 
 @Suite struct MessageRouterTests {

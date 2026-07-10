@@ -77,14 +77,14 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     return recordedDenyCalls
   }
 
-  func approval(nonce: String) throws -> Approval? { byNonce[nonce] }
-  func approval(id: Int64) throws -> Approval? { nil }
+  func approval(nonce: String) throws(StoreError) -> Approval? { byNonce[nonce] }
+  func approval(id: Int64) throws(StoreError) -> Approval? { nil }
 
   func approve(
     id: Int64,
     currentPolicyVersion: String,
     now: Date
-  ) throws -> ApprovalApproveOutcome {
+  ) throws(StoreError) -> ApprovalApproveOutcome {
     if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
     lock.lock()
     defer { lock.unlock() }
@@ -92,7 +92,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     return approveOutcome
   }
 
-  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws -> Bool {
+  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
     if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
     lock.lock()
     defer { lock.unlock() }
@@ -100,10 +100,10 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     return denyResult
   }
 
-  func sweepExpired(now: Date) throws -> [Approval] { [] }
-  func unresolvedAtBoot() throws -> [Approval] { [] }
-  func resolveOrphans(now: Date) throws -> Int { 0 }
-  func approvalsHealth(now: Date) throws -> ApprovalsHealth {
+  func sweepExpired(now: Date) throws(StoreError) -> [Approval] { [] }
+  func unresolvedAtBoot() throws(StoreError) -> [Approval] { [] }
+  func resolveOrphans(now: Date) throws(StoreError) -> Int { 0 }
+  func approvalsHealth(now: Date) throws(StoreError) -> ApprovalsHealth {
     throw StoreError.unexpected("approvalsHealth is not used by the callback handler")
   }
 }

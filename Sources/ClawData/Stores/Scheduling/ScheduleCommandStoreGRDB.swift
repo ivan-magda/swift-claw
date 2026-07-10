@@ -16,7 +16,7 @@ public struct ScheduleCommandStoreGRDB: ScheduleCommandStore {
     updateId: Int64,
     job: NewScheduledJob,
     now: Date
-  ) throws -> ScheduleArmResult {
+  ) throws(StoreError) -> ScheduleArmResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,

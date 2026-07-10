@@ -9,13 +9,16 @@ public struct OutboxStoreGRDB: OutboxStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func claimOutbound(runId: Int64, chunk: OutboxChunk) throws -> Bool {
+  public func claimOutbound(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       try RunStoreGRDB.insertOutbox(db, runId: runId, chunk: chunk, now: Date())
     }
   }
 
-  public func claimOutboundIfRunActive(runId: Int64, chunk: OutboxChunk) throws -> Bool {
+  public func claimOutboundIfRunActive(
+    runId: Int64,
+    chunk: OutboxChunk
+  ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       try db.execute(
         sql: """
@@ -47,7 +50,12 @@ public struct OutboxStoreGRDB: OutboxStore {
     }
   }
 
-  public func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64, now: Date) throws {
+  public func markSent(
+    runId: Int64,
+    stepIndex: Int,
+    telegramMessageId: Int64,
+    now: Date
+  ) throws(StoreError) {
     try database.writeMapping { db in
       let dedupKey = OutboxDedupKey.make(runId: runId, stepIndex: stepIndex)
       try db.execute(
@@ -57,7 +65,7 @@ public struct OutboxStoreGRDB: OutboxStore {
           """,
         arguments: [telegramMessageId, now, dedupKey]
       )
-      // §4.1: an approval-prompt delivery links its Telegram message to the approval so the
+      // An approval-prompt delivery links its Telegram message to the approval so the
       // buttons can later be disarmed. The write rides THIS transaction; a NULL approval_id makes
       // the subquery yield NULL, so `id = NULL` matches nothing and plain rows stay untouched.
       try db.execute(
@@ -70,7 +78,7 @@ public struct OutboxStoreGRDB: OutboxStore {
     }
   }
 
-  public func pendingOutbound() throws -> [OutboxRow] {
+  public func pendingOutbound() throws(StoreError) -> [OutboxRow] {
     try database.readMapping { db in
       try Row.fetchAll(
         db,

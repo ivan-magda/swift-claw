@@ -11,19 +11,24 @@ import Testing
 private struct MarkSentFailingOutbox: OutboxStore {
   let base: OutboxStoreGRDB
 
-  func claimOutbound(runId: Int64, chunk: OutboxChunk) throws -> Bool {
+  func claimOutbound(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool {
     try base.claimOutbound(runId: runId, chunk: chunk)
   }
 
-  func claimOutboundIfRunActive(runId: Int64, chunk: OutboxChunk) throws -> Bool {
+  func claimOutboundIfRunActive(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool {
     try base.claimOutboundIfRunActive(runId: runId, chunk: chunk)
   }
 
-  func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64, now: Date) throws {
+  func markSent(
+    runId: Int64,
+    stepIndex: Int,
+    telegramMessageId: Int64,
+    now: Date
+  ) throws(StoreError) {
     throw StoreError.diskFull
   }
 
-  func pendingOutbound() throws -> [OutboxRow] { try base.pendingOutbound() }
+  func pendingOutbound() throws(StoreError) -> [OutboxRow] { try base.pendingOutbound() }
 }
 
 /// Records the `replyMarkup` argument the dispatcher passes to each send overload. Implements the

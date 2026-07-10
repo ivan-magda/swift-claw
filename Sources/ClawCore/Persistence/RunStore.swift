@@ -73,21 +73,21 @@ public protocol RunStore: Sendable {
   /// the run is absent or no longer pending (one query, no separate origin read). `policyVersion`
   /// is stamped onto `runs.policy_version` in the SAME UPDATE as the flip; nil records no
   /// fingerprint.
-  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin?
+  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin?
   /// Atomicity: assistant message + run→DONE + provider_usage + outbox chunk(s) in ONE txn,
   /// committed before any send. If cancellation/supersede already won, records usage only.
-  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult
+  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult
   /// Failure/degradation commit: executed exchange rows + provider_usage + run→FAILED +
   /// degradation outbox in ONE txn. If cancellation/supersede already won, records usage when
   /// present but writes no reply and no exchanges.
-  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult
+  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult
   /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING.
-  func failRun(runId: Int64, now: Date) throws
+  func failRun(runId: Int64, now: Date) throws(StoreError)
   /// Terminates the current RUNNING turn for `/stop`; returns the affected run, if any.
-  func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws
+  func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws(StoreError)
     -> Int64?
   /// Terminates RUNNING and queued PENDING turns for `/new`.
-  func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64]
+  func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64]
   /// Boot sweep: every PENDING/RUNNING orphan → FAILED (+ jobFailed for job runs), one
   /// degradation notice per run that never delivered. `heartbeatNoticeChatId` is the
   /// config-resolved owner DM for crashed heartbeat runs — their synthetic
@@ -96,10 +96,10 @@ public protocol RunStore: Sendable {
     now: Date,
     degradationText: String,
     heartbeatNoticeChatId: Int64?
-  ) throws -> [DegradationReply]
+  ) throws(StoreError) -> [DegradationReply]
   /// Snapshot of run-table health: in-flight count, age of oldest running run, last
   /// success/failure timestamps, and count of consecutive failures at the head of the table.
-  func runsHealth(now: Date) throws -> RunsHealth
+  func runsHealth(now: Date) throws(StoreError) -> RunsHealth
   /// Suspend checkpoint — ONE txn (mirrors `commitAssistantTurn`): the anchor assistant row
   /// (content + tool_calls JSON), every completed observation, a real PLACEHOLDER observation row
   /// (role tool, the pending toolCallId, content "awaiting owner approval") to pin rowid adjacency,
@@ -111,7 +111,7 @@ public protocol RunStore: Sendable {
     sessionId: Int64,
     commit: SuspendedTurnCommit,
     now: Date
-  ) throws -> SuspendedCommitReceipt
+  ) throws(StoreError) -> SuspendedCommitReceipt
   /// Approve resume, pre-execution half (file_write / web_fetch): one txn, guarded on the
   /// placeholder check (per-approval exactly-once) and the AWAITING_APPROVAL → RUNNING flip. The
   /// caller executes the recorded action ONLY on `.committed` — claiming BEFORE the external
@@ -123,12 +123,12 @@ public protocol RunStore: Sendable {
     observationMessageId: Int64,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim
+  ) throws(StoreError) -> ApprovedExecutionClaim
   /// Approve resume, post-execution half: UPDATE the claimed placeholder observation in place
   /// with the tool's real result. Only ever called after `claimApprovedExecution` returned
   /// `.committed` for the same ids.
   func fillClaimedObservation(runId: Int64, observationMessageId: Int64, content: String)
-    throws
+    throws(StoreError)
   /// memory_write fused path (exactly-once): the memory item insert (via
   /// `MemoryStoreGRDB.insertItem`) and the observation UPDATE share ONE txn, gated by the SAME
   /// placeholder + AWAITING_APPROVAL → RUNNING guards as `claimApprovedExecution` — the side
@@ -140,7 +140,7 @@ public protocol RunStore: Sendable {
     observationContent: String,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim
+  ) throws(StoreError) -> ApprovedExecutionClaim
   /// Boot settlement of the claimed crash window: an APPROVED approval whose observation
   /// is still the placeholder but whose run left AWAITING_APPROVAL means the pre-execution claim
   /// committed and the process died before the result record — whether the external effect landed
@@ -155,12 +155,12 @@ public protocol RunStore: Sendable {
     noticeChatId: Int64,
     noticeText: String,
     now: Date
-  ) throws -> ClaimedApprovalBootOutcome
+  ) throws(StoreError) -> ClaimedApprovalBootOutcome
   /// Budget carry-over inputs: rounds = COUNT(role='assistant'),
   /// toolCalls = COUNT(role='tool') for the run; tokens/costUSD summed over `provider_usage`.
-  func resumeUsage(runId: Int64) throws -> ResumeUsage
+  func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage
   /// The run's origin, read WITHOUT a re-pick-up (the resume path never re-flips PENDING).
-  func runOrigin(runId: Int64) throws -> RunOrigin?
+  func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin?
   /// Stale-policy crash-window belt: fail the run (AWAITING_APPROVAL → FAILED), resolve the
   /// placeholder observation with `observationContent` (left dangling it would assert a pending
   /// approval to every later assembly and false-trigger the boot claimed-window settlement), and
@@ -173,7 +173,7 @@ public protocol RunStore: Sendable {
     observationMessageId: Int64,
     observationContent: String,
     now: Date
-  ) throws -> Bool
+  ) throws(StoreError) -> Bool
   /// Deny/cancel resolution: fill the placeholder observation row in place with the synthetic
   /// denial `content` so persisted history never holds a dangling tool_call, then drive the run to
   /// its terminal state. `cancel == nil` is the owner-deny / expiry path
@@ -187,13 +187,13 @@ public protocol RunStore: Sendable {
     content: String,
     cancel: CancelReason?,
     now: Date
-  ) throws -> RunCommitResult
+  ) throws(StoreError) -> RunCommitResult
 }
 
 public extension RunStore {
   /// The no-stamp pick-up (the resume path, which never re-stamps, and every non-interactive
   /// caller): PENDING → RUNNING without touching `runs.policy_version`.
-  func pickUp(runId: Int64, now: Date) throws -> RunOrigin? {
+  func pickUp(runId: Int64, now: Date) throws(StoreError) -> RunOrigin? {
     try pickUp(runId: runId, policyVersion: nil, now: now)
   }
 }

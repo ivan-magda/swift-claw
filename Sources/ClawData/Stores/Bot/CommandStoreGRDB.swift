@@ -22,7 +22,7 @@ public struct CommandStoreGRDB: CommandStore {
     updateId: Int64,
     sessionKey: String,
     now: Date
-  ) throws -> StopCommandResult {
+  ) throws(StoreError) -> StopCommandResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
@@ -99,7 +99,7 @@ public struct CommandStoreGRDB: CommandStore {
     updateId: Int64,
     sessionKey: String,
     now: Date
-  ) throws -> NewCommandResult {
+  ) throws(StoreError) -> NewCommandResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,

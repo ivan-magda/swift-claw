@@ -454,15 +454,15 @@ private final class FakeMemoryStore: MemoryStore, @unchecked Sendable {
     self.items = items
   }
 
-  func append(_ newItem: NewMemoryItem, now: Date) throws -> MemoryItem {
+  func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
     throw StoreError.unexpected("not used")
   }
 
-  func list(kind: MemoryKind?, limit: Int) throws -> [MemoryItem] { [] }
-  func get(id: Int64) throws -> MemoryItem? { nil }
-  func delete(id: Int64) throws -> Bool { false }
+  func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
+  func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
+  func delete(id: Int64) throws(StoreError) -> Bool { false }
 
-  func fetchRanked(excludeSensitive: Bool, limit: Int) throws -> [MemoryItem] {
+  func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] {
     fetchRankedCalls.append(excludeSensitive)
     return Array(items.prefix(limit))
   }
@@ -490,7 +490,7 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int
-  ) throws -> [RecallHit] {
+  ) throws(StoreError) -> [RecallHit] {
     calls.append(
       Call(
         query: query,

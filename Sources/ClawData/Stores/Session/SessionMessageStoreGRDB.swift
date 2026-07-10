@@ -9,7 +9,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 {
+  public func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64 {
     try database.writeMapping { db in
       try Self.upsertSession(db, sessionKey: sessionKey, now: now)
     }
@@ -19,7 +19,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     updateId: Int64,
     sessionKey: String,
     now: Date
-  ) throws -> CommandClaim {
+  ) throws(StoreError) -> CommandClaim {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
@@ -36,7 +36,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
-  public func findSession(sessionKey: String) throws -> Int64? {
+  public func findSession(sessionKey: String) throws(StoreError) -> Int64? {
     try database.readMapping { db in
       try Int64.fetchOne(
         db,
@@ -46,7 +46,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
-  public func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
+  public func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
@@ -66,7 +66,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
 
       let sessionId = try Self.upsertSession(db, sessionKey: inbound.sessionKey, now: inbound.ts)
       // Owner input is trusted-tier by definition; taint from tool/web output is tracked
-      // separately via session.tainted, not at the message row (ARCHITECTURE.md §12).
+      // separately via session.tainted, not at the message row.
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, role, content, provenance, ts)
@@ -105,7 +105,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
-  ) throws -> [StoredMessage] {
+  ) throws(StoreError) -> [StoredMessage] {
     try loadContextSnapshot(
       sessionId: sessionId,
       throughMessageId: throughMessageId,
@@ -117,7 +117,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
-  ) throws -> SessionContextSnapshot {
+  ) throws(StoreError) -> SessionContextSnapshot {
     try database.readMapping { db in
       let session = try Row.fetchOne(
         db,
@@ -138,7 +138,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         hasPrivateData = false
       }
 
-      // The window is bounded by CONVERSATIONAL rows (rev.1 H2): find the id of the `limit`-th
+      // The window is bounded by CONVERSATIONAL rows: find the id of the `limit`-th
       // newest user/assistant row, then load ALL rows from it through the trigger. Tool rows ride
       // along; the boundary is a conversational row by construction, so an exchange is always
       // included or excluded whole, and tool-row inflation can never evict conversation.
@@ -168,7 +168,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
 
       let history = try rows.map(Self.decodeStoredMessage)
 
-      // The new SELECT already returns `id`, so the id remap stays valid.
+      // The SELECT already returns `id`, so the id remap stays valid.
       let messageIds = rows.map { row in
         row["id"] as Int64
       }
@@ -183,7 +183,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
-  public func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {
+  public func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {
     try database.writeMapping { db in
       try Self.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
     }
@@ -212,7 +212,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   /// Upsert keyed on `session_key`; returns the row id. Reused inside `claimAndPersistInbound`'s
-  /// transaction so the session create stays in the one fused write (F4).
+  /// transaction so the session create stays in the one fused write.
   static func upsertSession(_ db: Database, sessionKey: String, now: Date) throws -> Int64 {
     try db.execute(
       sql: """
@@ -235,7 +235,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   }
 
   /// Decodes a `messages` row, failing **closed** on an unrecognized persisted enum value:
-  /// `provenance` is the §12 trust tier — a corrupted value must not silently become the
+  /// `provenance` is the trust tier — a corrupted value must not silently become the
   /// permissive `.trusted` and unfence content the moment assembly keys off it. Same rule as
   /// `MemoryStoreGRDB.decodeItem`.
   static func decodeStoredMessage(_ row: Row) throws -> StoredMessage {

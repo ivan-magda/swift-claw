@@ -252,15 +252,19 @@ public enum ClawDatabase {
   }
 
   /// Translates a raw GRDB/SQLite failure into a domain `StoreError` at the persistence seam (a
-  /// non-`DatabaseError` is already domain-typed and passes through). This is the single place
-  /// SQLite codes become typed errors (F23); the `default` arm keeps any raw `DatabaseError` from
-  /// leaking. Extend the `switch` to classify a new failure mode and every
-  /// `writeMapping`/`readMapping` call site picks it up with no call-site change. Matching on the
-  /// *primary* result code coarsely buckets the extended codes (`SQLITE_IOERR_*`, `SQLITE_BUSY_*`);
-  /// a `switch` (not a lookup table) keeps special-casing an extended code possible later.
-  public static func classifyError(_ error: any Error) -> any Error {
+  /// `StoreError` a store threw deliberately passes through unchanged). This is the single place
+  /// SQLite codes become typed errors; the `default` arm keeps any raw `DatabaseError` from
+  /// leaking, and the returned type makes `throws(StoreError)` seams compiler-checkable. Extend the
+  /// `switch` to classify a new failure mode and every `writeMapping`/`readMapping` call site picks
+  /// it up with no call-site change. Matching on the *primary* result code coarsely buckets the
+  /// extended codes (`SQLITE_IOERR_*`, `SQLITE_BUSY_*`); a `switch` (not a lookup table) keeps
+  /// special-casing an extended code possible later.
+  public static func classifyError(_ error: any Error) -> StoreError {
+    if let storeError = error as? StoreError {
+      return storeError
+    }
     guard let databaseError = error as? DatabaseError else {
-      return error
+      return StoreError.unexpected("\(error)")
     }
 
     switch databaseError.resultCode.primaryResultCode {

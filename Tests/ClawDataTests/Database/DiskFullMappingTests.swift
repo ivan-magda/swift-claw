@@ -13,7 +13,7 @@ import Testing
     let classified = ClawDatabase.classifyError(sqliteFull)
 
     // then
-    #expect(classified as? StoreError == .diskFull)
+    #expect(classified == .diskFull)
 
     // and the write seam surfaces the same typed error when a write throws SQLITE_FULL
     let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
@@ -32,10 +32,10 @@ import Testing
     // when
     let classified = ClawDatabase.classifyError(constraint)
 
-    // then — the contract: no raw DatabaseError leaks past a store. A non-diskFull SQLite code
-    // becomes StoreError.unexpected (carrying the original description for logs).
-    #expect(classified as? DatabaseError == nil)
-    guard case .unexpected = try #require(classified as? StoreError) else {
+    // then — the contract: no raw DatabaseError leaks past a store (the `StoreError` return type
+    // now holds it at compile time). A non-diskFull SQLite code becomes StoreError.unexpected
+    // (carrying the original description for logs).
+    guard case .unexpected = classified else {
       Issue.record("expected StoreError.unexpected, got \(classified)")
       return
     }
@@ -63,7 +63,7 @@ import Testing
     }
   }
 
-  @Test func passesNonDatabaseErrorsThroughUnchanged() throws {
+  @Test func passesStoreErrorsThroughUnchanged() throws {
     // given — an already-domain error must pass through, never be re-wrapped
     let domain = StoreError.unexpected("already typed")
 
@@ -71,6 +71,6 @@ import Testing
     let classified = ClawDatabase.classifyError(domain)
 
     // then
-    #expect(classified as? StoreError == .unexpected("already typed"))
+    #expect(classified == .unexpected("already typed"))
   }
 }

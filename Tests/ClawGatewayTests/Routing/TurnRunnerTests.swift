@@ -42,20 +42,20 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
   let base: RunStoreGRDB
   let sessionId: Int64
 
-  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
+  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
     try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
   }
 
-  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
+  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult {
     _ = try base.cancelActiveRun(sessionId: sessionId, reason: .cancelled, now: now)
     return try base.commitAssistantTurn(turn, now: now)
   }
 
-  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult {
+  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
     try base.commitDegradedTurn(turn, now: now)
   }
 
-  func failRun(runId: Int64, now: Date) throws {
+  func failRun(runId: Int64, now: Date) throws(StoreError) {
     try base.failRun(runId: runId, now: now)
   }
 
@@ -64,15 +64,19 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     sessionId: Int64,
     commit: SuspendedTurnCommit,
     now: Date
-  ) throws -> SuspendedCommitReceipt {
+  ) throws(StoreError) -> SuspendedCommitReceipt {
     try base.commitSuspendedTurn(runId: runId, sessionId: sessionId, commit: commit, now: now)
   }
 
-  func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? {
+  func cancelActiveRun(
+    sessionId: Int64,
+    reason: CancelReason,
+    now: Date
+  ) throws(StoreError) -> Int64? {
     try base.cancelActiveRun(sessionId: sessionId, reason: reason, now: now)
   }
 
-  func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] {
+  func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] {
     try base.supersedeSessionRuns(sessionId: sessionId, now: now)
   }
 
@@ -80,7 +84,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     now: Date,
     degradationText: String,
     heartbeatNoticeChatId: Int64?
-  ) throws -> [DegradationReply] {
+  ) throws(StoreError) -> [DegradationReply] {
     try base.reconcileRunsAtBoot(
       now: now,
       degradationText: degradationText,
@@ -88,7 +92,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     )
   }
 
-  func runsHealth(now: Date) throws -> RunsHealth {
+  func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
     try base.runsHealth(now: now)
   }
 
@@ -97,7 +101,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     observationMessageId: Int64,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim {
+  ) throws(StoreError) -> ApprovedExecutionClaim {
     try base.claimApprovedExecution(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -110,7 +114,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     runId: Int64,
     observationMessageId: Int64,
     content: String
-  ) throws {
+  ) throws(StoreError) {
     try base.fillClaimedObservation(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -125,7 +129,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     observationContent: String,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim {
+  ) throws(StoreError) -> ApprovedExecutionClaim {
     try base.applyApprovedMemoryWrite(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -143,7 +147,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     noticeChatId: Int64,
     noticeText: String,
     now: Date
-  ) throws -> ClaimedApprovalBootOutcome {
+  ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     try base.settleClaimedApprovalAtBoot(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -154,11 +158,11 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     )
   }
 
-  func resumeUsage(runId: Int64) throws -> ResumeUsage {
+  func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
     try base.resumeUsage(runId: runId)
   }
 
-  func runOrigin(runId: Int64) throws -> RunOrigin? {
+  func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     try base.runOrigin(runId: runId)
   }
 
@@ -168,7 +172,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     observationMessageId: Int64,
     observationContent: String,
     now: Date
-  ) throws -> Bool {
+  ) throws(StoreError) -> Bool {
     try base.failRunStalePolicy(
       runId: runId,
       sessionId: sessionId,
@@ -184,7 +188,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     content: String,
     cancel: CancelReason?,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws(StoreError) -> RunCommitResult {
     try base.resolveDeniedObservation(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -201,20 +205,20 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   let base: RunStoreGRDB
   let sessionId: Int64
 
-  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
+  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
     try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
   }
 
-  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult {
+  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult {
     try base.commitAssistantTurn(turn, now: now)
   }
 
-  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult {
+  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
     _ = try base.cancelActiveRun(sessionId: sessionId, reason: .cancelled, now: now)
     return try base.commitDegradedTurn(turn, now: now)
   }
 
-  func failRun(runId: Int64, now: Date) throws {
+  func failRun(runId: Int64, now: Date) throws(StoreError) {
     try base.failRun(runId: runId, now: now)
   }
 
@@ -223,15 +227,19 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     sessionId: Int64,
     commit: SuspendedTurnCommit,
     now: Date
-  ) throws -> SuspendedCommitReceipt {
+  ) throws(StoreError) -> SuspendedCommitReceipt {
     try base.commitSuspendedTurn(runId: runId, sessionId: sessionId, commit: commit, now: now)
   }
 
-  func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? {
+  func cancelActiveRun(
+    sessionId: Int64,
+    reason: CancelReason,
+    now: Date
+  ) throws(StoreError) -> Int64? {
     try base.cancelActiveRun(sessionId: sessionId, reason: reason, now: now)
   }
 
-  func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] {
+  func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] {
     try base.supersedeSessionRuns(sessionId: sessionId, now: now)
   }
 
@@ -239,7 +247,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     now: Date,
     degradationText: String,
     heartbeatNoticeChatId: Int64?
-  ) throws -> [DegradationReply] {
+  ) throws(StoreError) -> [DegradationReply] {
     try base.reconcileRunsAtBoot(
       now: now,
       degradationText: degradationText,
@@ -247,7 +255,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     )
   }
 
-  func runsHealth(now: Date) throws -> RunsHealth {
+  func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
     try base.runsHealth(now: now)
   }
 
@@ -256,7 +264,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     observationMessageId: Int64,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim {
+  ) throws(StoreError) -> ApprovedExecutionClaim {
     try base.claimApprovedExecution(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -269,7 +277,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     runId: Int64,
     observationMessageId: Int64,
     content: String
-  ) throws {
+  ) throws(StoreError) {
     try base.fillClaimedObservation(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -284,7 +292,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     observationContent: String,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim {
+  ) throws(StoreError) -> ApprovedExecutionClaim {
     try base.applyApprovedMemoryWrite(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -302,7 +310,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     noticeChatId: Int64,
     noticeText: String,
     now: Date
-  ) throws -> ClaimedApprovalBootOutcome {
+  ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     try base.settleClaimedApprovalAtBoot(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -313,11 +321,11 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     )
   }
 
-  func resumeUsage(runId: Int64) throws -> ResumeUsage {
+  func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
     try base.resumeUsage(runId: runId)
   }
 
-  func runOrigin(runId: Int64) throws -> RunOrigin? {
+  func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     try base.runOrigin(runId: runId)
   }
 
@@ -327,7 +335,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     observationMessageId: Int64,
     observationContent: String,
     now: Date
-  ) throws -> Bool {
+  ) throws(StoreError) -> Bool {
     try base.failRunStalePolicy(
       runId: runId,
       sessionId: sessionId,
@@ -343,7 +351,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     content: String,
     cancel: CancelReason?,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws(StoreError) -> RunCommitResult {
     try base.resolveDeniedObservation(
       runId: runId,
       observationMessageId: observationMessageId,
@@ -356,28 +364,36 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
 
 /// A `RunStore` whose first write reports a full disk, to exercise the storage-full rethrow.
 struct DiskFullRuns: RunStore {
-  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws -> RunOrigin? {
+  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
     throw StoreError.diskFull
   }
-  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws -> RunCommitResult { .ignored }
-  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws -> RunCommitResult { .ignored }
-  func failRun(runId: Int64, now: Date) throws {}
+  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult {
+    .ignored
+  }
+  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
+    .ignored
+  }
+  func failRun(runId: Int64, now: Date) throws(StoreError) {}
   func commitSuspendedTurn(
     runId: Int64,
     sessionId: Int64,
     commit: SuspendedTurnCommit,
     now: Date
-  ) throws -> SuspendedCommitReceipt {
+  ) throws(StoreError) -> SuspendedCommitReceipt {
     throw StoreError.diskFull
   }
-  func cancelActiveRun(sessionId: Int64, reason: CancelReason, now: Date) throws -> Int64? { nil }
-  func supersedeSessionRuns(sessionId: Int64, now: Date) throws -> [Int64] { [] }
+  func cancelActiveRun(
+    sessionId: Int64,
+    reason: CancelReason,
+    now: Date
+  ) throws(StoreError) -> Int64? { nil }
+  func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] { [] }
   func reconcileRunsAtBoot(
     now: Date,
     degradationText: String,
     heartbeatNoticeChatId: Int64?
-  ) throws -> [DegradationReply] { [] }
-  func runsHealth(now: Date) throws -> RunsHealth {
+  ) throws(StoreError) -> [DegradationReply] { [] }
+  func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
     RunsHealth(
       inFlight: 0,
       oldestRunAgeSeconds: nil,
@@ -391,10 +407,14 @@ struct DiskFullRuns: RunStore {
     observationMessageId: Int64,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim {
+  ) throws(StoreError) -> ApprovedExecutionClaim {
     throw StoreError.diskFull
   }
-  func fillClaimedObservation(runId: Int64, observationMessageId: Int64, content: String) throws {
+  func fillClaimedObservation(
+    runId: Int64,
+    observationMessageId: Int64,
+    content: String
+  ) throws(StoreError) {
     throw StoreError.diskFull
   }
   func applyApprovedMemoryWrite(
@@ -404,7 +424,7 @@ struct DiskFullRuns: RunStore {
     observationContent: String,
     notResumableObservationContent: String,
     now: Date
-  ) throws -> ApprovedExecutionClaim {
+  ) throws(StoreError) -> ApprovedExecutionClaim {
     throw StoreError.diskFull
   }
   func settleClaimedApprovalAtBoot(
@@ -414,13 +434,13 @@ struct DiskFullRuns: RunStore {
     noticeChatId: Int64,
     noticeText: String,
     now: Date
-  ) throws -> ClaimedApprovalBootOutcome {
+  ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     throw StoreError.diskFull
   }
-  func resumeUsage(runId: Int64) throws -> ResumeUsage {
+  func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
     throw StoreError.diskFull
   }
-  func runOrigin(runId: Int64) throws -> RunOrigin? {
+  func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     throw StoreError.diskFull
   }
   func failRunStalePolicy(
@@ -429,7 +449,7 @@ struct DiskFullRuns: RunStore {
     observationMessageId: Int64,
     observationContent: String,
     now: Date
-  ) throws -> Bool {
+  ) throws(StoreError) -> Bool {
     throw StoreError.diskFull
   }
   func resolveDeniedObservation(
@@ -438,7 +458,7 @@ struct DiskFullRuns: RunStore {
     content: String,
     cancel: CancelReason?,
     now: Date
-  ) throws -> RunCommitResult {
+  ) throws(StoreError) -> RunCommitResult {
     throw StoreError.diskFull
   }
 }
@@ -464,17 +484,21 @@ struct TurnRunnerWorkspace: WorkspaceReading {
 }
 
 struct SnapshotFailingSessionMessages: SessionMessageStore {
-  func loadOrCreateSession(sessionKey: String, now: Date) throws -> Int64 { 0 }
+  func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64 { 0 }
 
-  func claimCommandUpdate(updateId: Int64, sessionKey: String, now: Date) throws -> CommandClaim {
+  func claimCommandUpdate(
+    updateId: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> CommandClaim {
     .duplicate
   }
 
-  func findSession(sessionKey: String) throws -> Int64? {
+  func findSession(sessionKey: String) throws(StoreError) -> Int64? {
     nil
   }
 
-  func claimAndPersistInbound(_ inbound: InboundMessage) throws -> ClaimResult {
+  func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
     ClaimResult(
       newlyClaimed: false,
       sessionId: nil,
@@ -488,7 +512,7 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
-  ) throws -> [StoredMessage] {
+  ) throws(StoreError) -> [StoredMessage] {
     []
   }
 
@@ -496,11 +520,11 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
-  ) throws -> SessionContextSnapshot {
+  ) throws(StoreError) -> SessionContextSnapshot {
     throw StoreError.unexpected("snapshot read failed")
   }
 
-  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws {}
+  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {}
 }
 
 /// Shared `TurnRunner` test fixture, hoisted to file scope (out of `TurnRunnerTests`' body) so the

@@ -11,11 +11,11 @@ public struct MemoryCommandResult: Sendable, Equatable {
 }
 
 public protocol MemoryStore: Sendable {
-  func append(_ newItem: NewMemoryItem, now: Date) throws -> MemoryItem
-  func list(kind: MemoryKind?, limit: Int) throws -> [MemoryItem]
-  func get(id: Int64) throws -> MemoryItem?
-  func delete(id: Int64) throws -> Bool
-  func fetchRanked(excludeSensitive: Bool, limit: Int) throws -> [MemoryItem]
+  func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem
+  func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem]
+  func get(id: Int64) throws(StoreError) -> MemoryItem?
+  func delete(id: Int64) throws(StoreError) -> Bool
+  func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem]
 }
 
 public protocol MemoryCommandStore: Sendable {
@@ -24,9 +24,9 @@ public protocol MemoryCommandStore: Sendable {
     updateId: Int64,
     item: NewMemoryItem,
     now: Date
-  ) throws -> MemoryCommandResult
+  ) throws(StoreError) -> MemoryCommandResult
   /// Atomic confirmed delete: claim update + hard-delete memory item + audit in one write.
-  func applyForget(updateId: Int64, itemId: Int64, now: Date) throws
+  func applyForget(updateId: Int64, itemId: Int64, now: Date) throws(StoreError)
     -> MemoryCommandResult
 }
 
@@ -37,5 +37,5 @@ public protocol Retriever: Sendable {
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int
-  ) throws -> [RecallHit]
+  ) throws(StoreError) -> [RecallHit]
 }

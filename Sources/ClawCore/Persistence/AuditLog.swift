@@ -1,3 +1,3 @@
 public protocol AuditLog: Sendable {
-  func appendAudit(_ event: AuditEvent) throws
+  func appendAudit(_ event: AuditEvent) throws(StoreError)
 }

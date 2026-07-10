@@ -9,7 +9,7 @@ public struct UpdateCursorStoreGRDB: UpdateCursorStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func loadCursor() throws -> Int64? {
+  public func loadCursor() throws(StoreError) -> Int64? {
     try database.readMapping { db in
       try Int64.fetchOne(
         db,
@@ -18,7 +18,7 @@ public struct UpdateCursorStoreGRDB: UpdateCursorStore {
     }
   }
 
-  public func advanceCursor(to updateId: Int64) throws {
+  public func advanceCursor(to updateId: Int64) throws(StoreError) {
     try database.writeMapping { db in
       try db.execute(
         sql: """

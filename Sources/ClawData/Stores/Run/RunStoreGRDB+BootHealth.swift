@@ -9,12 +9,12 @@ extension RunStoreGRDB {
     now: Date,
     degradationText: String,
     heartbeatNoticeChatId: Int64?
-  ) throws -> [DegradationReply] {
+  ) throws(StoreError) -> [DegradationReply] {
     try database.writeMapping { db in
       // AWAITING_APPROVAL is deliberately excluded, not merely omitted: a suspended run is a live
       // durable checkpoint, not a crash orphan. The approval boot reconciliation
-      // (ApprovalBootReconciler, spec §7) owns those runs — re-parking the unexpired ones and running
-      // the per-row expiry check on the rest. Only true PENDING/RUNNING orphans fail here.
+      // (ApprovalBootReconciler) owns those runs — re-parking the unexpired ones and running the
+      // per-row expiry check on the rest. Only true PENDING/RUNNING orphans fail here.
       let orphanFailStates = [RunState.pending.rawValue, RunState.running.rawValue]
       let stale = try Row.fetchAll(
         db,
@@ -46,8 +46,8 @@ extension RunStoreGRDB {
             arguments: [jobId]
           )
         } else if sessionKey == SessionKey.heartbeat {
-          // Spec §12/A6: the heartbeat session has no chat id anywhere in the DB — the notice
-          // rides the config-derived owner target the boot caller resolved.
+          // The heartbeat session has no chat id anywhere in the DB — the notice rides the
+          // config-derived owner target the boot caller resolved.
           noticeChatId = heartbeatNoticeChatId
         } else {
           noticeChatId = SessionKey.chatId(from: sessionKey)
@@ -98,7 +98,7 @@ extension RunStoreGRDB {
     noticeChatId: Int64,
     noticeText: String,
     now: Date
-  ) throws -> ClaimedApprovalBootOutcome {
+  ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     try database.writeMapping { db in
       guard
         try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId)
@@ -137,7 +137,7 @@ extension RunStoreGRDB {
     }
   }
 
-  public func runsHealth(now: Date) throws -> RunsHealth {
+  public func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
     try database.readMapping { db in
       let activeStates = [
         RunState.pending.rawValue,

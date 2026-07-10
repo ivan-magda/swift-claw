@@ -3,14 +3,13 @@ import Foundation
 import GRDB
 
 /// GRDB implementation of `ScheduledJobStore`. Occurrence instants persist as UTC epoch-second
-/// INTEGERs (spec §4.1) so the fused claim's compare-and-advance is exact integer equality;
-/// callers pass whole-second `Date`s (`OccurrenceCalculator` emits whole seconds). The protocol
-/// conformance is declared once every method exists (end of this file's build-out); `Sendable`
-/// is declared NOW because Cycle B's task-group race test captures the store in `@Sendable`
-/// child tasks — strict concurrency rejects that until the conformance exists (the only stored
-/// property is the `Sendable` `MappedDatabase`). Method groups live in same-type extensions
-/// below purely to keep each extension's body under the project's `type_body_length` gate; the
-/// store is still one type with one stored property.
+/// INTEGERs so the fused claim's compare-and-advance is exact integer equality; callers pass
+/// whole-second `Date`s (`OccurrenceCalculator` emits whole seconds). `Sendable` is declared
+/// because the task-group race test captures the store in `@Sendable` child tasks — strict
+/// concurrency rejects that until the conformance exists (the only stored property is the
+/// `Sendable` `MappedDatabase`). Method groups live in same-type extensions below purely to
+/// keep each extension's body under the project's `type_body_length` gate; the store is still
+/// one type with one stored property.
 public struct ScheduledJobStoreGRDB: Sendable {
   private let database: MappedDatabase
 
@@ -22,14 +21,14 @@ public struct ScheduledJobStoreGRDB: Sendable {
 // MARK: - CRUD
 
 extension ScheduledJobStoreGRDB {
-  public func create(_ job: NewScheduledJob, now: Date) throws -> ScheduledJob {
+  public func create(_ job: NewScheduledJob, now: Date) throws(StoreError) -> ScheduledJob {
     try database.writeMapping { db in
       try Self.insertJob(db, job, now: now)
     }
   }
 
-  /// In-transaction insert, exposed so the Phase 3 arm commit can fuse update-claim + create +
-  /// jobCreated audit inside the command store's transaction (preamble note on `create`).
+  /// In-transaction insert, exposed so the arm commit can fuse update-claim + create +
+  /// jobCreated audit inside the command store's transaction.
   static func insertJob(_ db: Database, _ job: NewScheduledJob, now: Date) throws -> ScheduledJob {
     let recurrenceJSON: String?
     if let envelope = job.recurrence {
@@ -68,20 +67,20 @@ extension ScheduledJobStoreGRDB {
     return created
   }
 
-  public func job(id: Int64) throws -> ScheduledJob? {
+  public func job(id: Int64) throws(StoreError) -> ScheduledJob? {
     try database.readMapping { db in
       try Self.fetchJob(db, id: id)
     }
   }
 
-  public func listAll() throws -> [ScheduledJob] {
+  public func listAll() throws(StoreError) -> [ScheduledJob] {
     try database.readMapping { db in
       let rows = try Row.fetchAll(db, sql: "SELECT * FROM scheduled_jobs ORDER BY id ASC")
       return try rows.map { row in try Self.jobFromRow(row) }
     }
   }
 
-  public func dueJobs(now: Date) throws -> [ScheduledJob] {
+  public func dueJobs(now: Date) throws(StoreError) -> [ScheduledJob] {
     try database.readMapping { db in
       let rows = try Row.fetchAll(
         db,
@@ -153,7 +152,7 @@ extension ScheduledJobStoreGRDB {
   }
 }
 
-// MARK: - The fused claim (spec §5.2)
+// MARK: - Fused Claim
 
 extension ScheduledJobStoreGRDB {
   public func claimAndFire(
@@ -162,11 +161,11 @@ extension ScheduledJobStoreGRDB {
     fireAt: Date,
     nextOccurrence: Date?,
     now: Date
-  ) throws -> ClaimedFire? {
+  ) throws(StoreError) -> ClaimedFire? {
     try database.writeMapping { db in
-      // Step 1: the compare-and-advance. This IS the atomic claim of ARCHITECTURE §6.3/§14
-      // expressed on the occurrence: the WHERE arms (id, stored due, ACTIVE) make two racers
-      // for the same (job, due) structurally single-winner.
+      // Step 1: the compare-and-advance. This IS the atomic claim expressed on the occurrence:
+      // the WHERE arms (id, stored due, ACTIVE) make two racers for the same (job, due)
+      // structurally single-winner.
       if let nextOccurrence {
         try db.execute(
           sql: """
@@ -209,7 +208,7 @@ extension ScheduledJobStoreGRDB {
     }
   }
 
-  /// Steps 3-6 of the §5.2 transaction: lazy session, trigger message, PENDING run, audit.
+  /// Steps 3-6 of the fire transaction: lazy session, trigger message, PENDING run, audit.
   /// Shared verbatim by `fireNow` (which skips only step 1's advance).
   static func insertFireRows(_ db: Database, jobId: Int64, now: Date) throws -> ClaimedFire {
     guard
@@ -232,7 +231,7 @@ extension ScheduledJobStoreGRDB {
     )
 
     // Step 4: the trigger message — the owner's own confirmed text, frozen at arm time, so
-    // trusted-tier deliberately (spec §5.2; anything the RUN ingests stays untrusted).
+    // trusted-tier deliberately (anything the RUN ingests stays untrusted).
     try db.execute(
       sql: """
         INSERT INTO messages(session_id, role, content, provenance, ts)
@@ -272,10 +271,10 @@ extension ScheduledJobStoreGRDB {
   }
 }
 
-// MARK: - Run-now (spec §5.4) and misfire skip (spec §5.3)
+// MARK: - Run-Now and Misfire Skip
 
 extension ScheduledJobStoreGRDB {
-  public func fireNow(jobId: Int64, now: Date) throws -> ClaimedFire? {
+  public func fireNow(jobId: Int64, now: Date) throws(StoreError) -> ClaimedFire? {
     try database.writeMapping { db in
       let rawStatus = try String.fetchOne(
         db,
@@ -291,7 +290,7 @@ extension ScheduledJobStoreGRDB {
       }
 
       // A real fire for the bookkeeping (last_fired_at), but NO schedule advance and NO status
-      // change — /runnow on a PAUSED job tests it without unmuting it (spec §5.4).
+      // change — /runnow on a PAUSED job tests it without unmuting it.
       try db.execute(
         sql: "UPDATE scheduled_jobs SET last_fired_at = ?, updated_ts = ? WHERE id = ?",
         arguments: [Self.epoch(now), Self.epoch(now), jobId]
@@ -306,7 +305,7 @@ extension ScheduledJobStoreGRDB {
     nextOccurrence: Date?,
     skippedCount: Int,
     now: Date
-  ) throws -> Bool {
+  ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       // The same CAS predicate as the claim — a concurrently-mutated job means no skip.
       if let nextOccurrence {
@@ -368,10 +367,10 @@ extension ScheduledJobStoreGRDB {
   }
 }
 
-// MARK: - Scheduler state (spec §4.3)
+// MARK: - Scheduler State
 
 extension ScheduledJobStoreGRDB {
-  public func schedulerState() throws -> SchedulerState {
+  public func schedulerState() throws(StoreError) -> SchedulerState {
     try database.readMapping { db in
       guard
         let row = try Row.fetchOne(db, sql: "SELECT * FROM scheduler_state WHERE id = 1")
@@ -396,7 +395,7 @@ extension ScheduledJobStoreGRDB {
     }
   }
 
-  public func recordTick(at tickTime: Date) throws {
+  public func recordTick(at tickTime: Date) throws(StoreError) {
     try database.writeMapping { db in
       try db.execute(
         sql: """
@@ -409,10 +408,10 @@ extension ScheduledJobStoreGRDB {
   }
 }
 
-// MARK: - Owner verbs (spec §5.4; audits ride the status flip's transaction)
+// MARK: - Owner Verbs (audits ride the status flip's transaction)
 
 extension ScheduledJobStoreGRDB {
-  public func pause(id: Int64, now: Date) throws -> ScheduledJob? {
+  public func pause(id: Int64, now: Date) throws(StoreError) -> ScheduledJob? {
     try database.writeMapping { db in
       guard let current = try Self.fetchJob(db, id: id) else {
         return nil
@@ -421,7 +420,7 @@ extension ScheduledJobStoreGRDB {
       case .paused:
         return current  // idempotent re-pause: no write, no duplicate audit
       case .completed, .cancelled:
-        return nil  // terminal — the FSM has no exit (spec §4.1)
+        return nil  // terminal — the FSM has no exit
       case .active:
         break
       }
@@ -446,7 +445,11 @@ extension ScheduledJobStoreGRDB {
     }
   }
 
-  public func resume(id: Int64, nextOccurrence: Date?, now: Date) throws -> ScheduledJob? {
+  public func resume(
+    id: Int64,
+    nextOccurrence: Date?,
+    now: Date
+  ) throws(StoreError) -> ScheduledJob? {
     try database.writeMapping { db in
       guard let current = try Self.fetchJob(db, id: id) else {
         return nil
@@ -484,7 +487,7 @@ extension ScheduledJobStoreGRDB {
     }
   }
 
-  public func cancel(id: Int64, now: Date) throws -> ScheduledJob? {
+  public func cancel(id: Int64, now: Date) throws(StoreError) -> ScheduledJob? {
     try database.writeMapping { db in
       guard let current = try Self.fetchJob(db, id: id) else {
         return nil
@@ -538,7 +541,7 @@ extension ScheduledJobStoreGRDB {
   }
 }
 
-// MARK: - Heartbeat fire (spec §12; the gating lives in SchedulerService, Phase 4)
+// MARK: - Heartbeat Fire (the gating lives in SchedulerService)
 
 extension ScheduledJobStoreGRDB {
   public func fireHeartbeat(
@@ -546,7 +549,7 @@ extension ScheduledJobStoreGRDB {
     ownerChatId: Int64,
     now: Date,
     day: String
-  ) throws -> ClaimedFire {
+  ) throws(StoreError) -> ClaimedFire {
     try database.writeMapping { db in
       let sessionId = try SessionMessageStoreGRDB.upsertSession(
         db,
@@ -556,7 +559,7 @@ extension ScheduledJobStoreGRDB {
 
       // The gateway-authored template WRAPS HEARTBEAT.md content, so the combined trigger text
       // carries the untrusted tier — workspace-file data must never enter context as trusted
-      // (spec §12; contrast the scheduled-job trigger, which is pure owner-confirmed text).
+      // (contrast the scheduled-job trigger, which is pure owner-confirmed text).
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, role, content, provenance, ts)
@@ -616,8 +619,8 @@ extension ScheduledJobStoreGRDB {
 // MARK: - Fire-Row Helpers
 
 private extension ScheduledJobStoreGRDB {
-  /// Step 3: the job's dedicated session, created lazily on first fire (D3). The session row
-  /// stores NO chat id — the delivery target stays on the job row (spec §4.1).
+  /// Step 3: the job's dedicated session, created lazily on first fire. The session row
+  /// stores NO chat id — the delivery target stays on the job row.
   static func ensureJobSession(
     _ db: Database,
     jobId: Int64,
