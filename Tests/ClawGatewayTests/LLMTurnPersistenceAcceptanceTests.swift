@@ -359,6 +359,8 @@ func makeStack(
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
+    // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: logger
   )
 
@@ -448,6 +450,8 @@ func makeStreamingStack(
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
+    // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: logger
   )
   let router = MessageRouter(
@@ -531,6 +535,8 @@ func makeStopNewStack(
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
+    // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: logger
   )
 

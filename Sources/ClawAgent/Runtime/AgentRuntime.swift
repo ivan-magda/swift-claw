@@ -307,8 +307,7 @@ public struct AgentRuntime: Sendable {
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
           sessionHasPrivateData: sessionHasPrivateData,
-          approvalAlreadyPending: pendingSuspension != nil,
-          nonInteractive: origin != .interactive
+          approvalAlreadyPending: pendingSuspension != nil
         )
 
         guard let toolDispatcher else {

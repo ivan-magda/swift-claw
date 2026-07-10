@@ -62,8 +62,12 @@ public enum MemoryWriteArguments {
         sensitivity: sensitivity
       )
       return .parsed(request)
-    } catch {
+    } catch MemoryWriteBuildError.emptyAfterNormalization {
       return .invalid(reason: "Nothing savable remains after normalization.")
+    } catch {
+      // A future builder error must refuse with a truthful generic reason, never borrow the
+      // empty-after-normalization copy above.
+      return .invalid(reason: "memory_write could not build a savable item from those arguments.")
     }
   }
 

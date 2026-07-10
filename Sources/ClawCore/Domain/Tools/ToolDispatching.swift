@@ -12,10 +12,6 @@ public struct ToolDispatchContext: Sendable, Equatable {
   /// the context window rolls past the private read that first set it (closes the §12 over-cap gap).
   public let sessionHasPrivateData: Bool
   public let approvalAlreadyPending: Bool
-  /// True for scheduled/heartbeat runs. As of §5.1 the gate treats these IDENTICALLY to interactive
-  /// runs — a would-park trifecta action suspends onto the durable approval fabric (park-with-
-  /// timeout → EXPIRED → DENY), never an immediate gate DENY.
-  public let nonInteractive: Bool
 
   public init(
     sessionTainted: Bool,
@@ -23,8 +19,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
     sessionHasPrivateData: Bool,
-    approvalAlreadyPending: Bool,
-    nonInteractive: Bool
+    approvalAlreadyPending: Bool
   ) {
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
@@ -32,7 +27,6 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.runPrivateData = runPrivateData
     self.sessionHasPrivateData = sessionHasPrivateData
     self.approvalAlreadyPending = approvalAlreadyPending
-    self.nonInteractive = nonInteractive
   }
 }
 
@@ -43,18 +37,15 @@ public struct ToolDispatchOutcome: Sendable, Equatable {
   public let observation: ToolObservation
   public let argsRedacted: String
   public let requiresApproval: RecordedToolAction?
-  public let consumedGrant: Bool
 
   public init(
     observation: ToolObservation,
     argsRedacted: String,
-    requiresApproval: RecordedToolAction? = nil,
-    consumedGrant: Bool = false
+    requiresApproval: RecordedToolAction? = nil
   ) {
     self.observation = observation
     self.argsRedacted = argsRedacted
     self.requiresApproval = requiresApproval
-    self.consumedGrant = consumedGrant
   }
 }
 

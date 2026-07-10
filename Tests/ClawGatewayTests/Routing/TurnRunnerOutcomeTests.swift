@@ -60,6 +60,8 @@ import Testing
       budget: budget,
       contextBuilder: makeEmptyContextBuilder(),
       notifyOutbox: {},
+      // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
+      parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
       logger: TestLog.silent
     )
     return Fixture(

@@ -208,6 +208,29 @@ import Testing
     #expect(rows.contains(OutboxSnapshot(stepIndex: 2, payload: "reply two", approvalId: nil)))
   }
 
+  @Test func theBootCrashNoticeExtendsTheDeliverySequence() throws {
+    // given — the run suspended (prompt at step 0), resumed to RUNNING, then the process crashed
+    let fixture = try makeRunningFixture()
+    _ = try suspendApproveResume(fixture, nonce: "n1")
+
+    // when — boot reconciliation fails the RUNNING orphan and enqueues its crash notice
+    let replies = try fixture.runs.reconcileRunsAtBoot(
+      now: Date(),
+      degradationText: "the process restarted",
+      heartbeatNoticeChatId: nil
+    )
+
+    // then — the notice landed PAST the prompt (not silently dropped by the step-0 dedup key)
+    #expect(replies.map(\.runId) == [fixture.runId])
+    let rows = try outboxRows(fixture.queue)
+    #expect(rows.count == 2)
+    #expect(
+      rows.contains(
+        OutboxSnapshot(stepIndex: 1, payload: "the process restarted", approvalId: nil)
+      )
+    )
+  }
+
   @Test func aDegradedResumeReplyExtendsTheDeliverySequence() throws {
     // given — the run's approval prompt already occupies step 0
     let fixture = try makeRunningFixture()

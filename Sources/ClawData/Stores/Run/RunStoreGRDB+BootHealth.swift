@@ -66,8 +66,11 @@ extension RunStoreGRDB {
           continue
         }
 
+        // Re-based like every commit-time enqueue: a run that suspended before the crash already
+        // holds its approval prompt at step 0, and a raw step-0 notice would be dropped silently
+        // by the dedup key.
         let chunk = OutboxChunk(
-          stepIndex: 0,
+          stepIndex: try Self.nextOutboxStepBase(db, runId: runId),
           chatId: chatId,
           payload: degradationText,
           payloadHash: ContentHash.fnv1a(degradationText)

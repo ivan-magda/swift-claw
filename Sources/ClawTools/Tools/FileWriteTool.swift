@@ -159,7 +159,15 @@ public struct FileWriteTool: Tool {
       return errorPayload(
         "\(path) was created while the approval was pending; nothing was overwritten."
       )
+    } catch let failure as RenameFailed {
+      // The tool has no logger, so the errno rides the observation — a bare number leaks no path
+      // beyond the one already in the copy, and it is the only diagnostic the syscall left behind.
+      return errorPayload(
+        "The write failed (errno \(failure.code)); the previous file, if any, is untouched."
+      )
     } catch {
+      // Cocoa errors (staging/createDirectory) can embed temp paths in their descriptions, so the
+      // copy stays generic here.
       return errorPayload("The write failed; the previous file, if any, is untouched.")
     }
 

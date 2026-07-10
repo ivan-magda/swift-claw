@@ -500,6 +500,8 @@ func makeEnv(
     breaker: breaker,
     delivery: transport,
     now: now,
+    // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: TestLog.silent
   )
 

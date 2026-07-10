@@ -242,6 +242,8 @@ func makeSC7Harness(
     breaker: withBreaker ? BudgetBreaker(budget: .default) : nil,
     delivery: withBreaker ? transport : nil,
     now: { clock.now },
+    // Inert on purpose: the SC7 assertions never resolve approvals, so no turn may reach a park.
+    parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     logger: logger
   )
 

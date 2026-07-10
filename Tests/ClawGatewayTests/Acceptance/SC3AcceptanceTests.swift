@@ -315,6 +315,14 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     ToolCall(id: callId, name: "web_fetch", argumentsJSON: #"{"url":"\#(url)"}"#)
   }
 
+  /// Every run row's state, oldest first — the FIFO queue behind the parked lane in durable form.
+  private func runStates(databasePath: String) throws -> [String] {
+    let pool = try ClawDatabase.makePool(path: databasePath)
+    return try pool.read { database in
+      try String.fetchAll(database, sql: "SELECT state FROM runs ORDER BY id")
+    }
+  }
+
   // Clause 3 — trip → durable PENDING approval → the owner's button executes the RECORDED fetch
   // exactly once → a later re-proposal parks a FRESH approval (§17-3 on the §5.1 durable fabric).
   @Test func approvalLifecycleIsDurableAndSingleUse() async throws {
@@ -417,9 +425,24 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
 
     // when — the owner types "yes" instead of tapping the button
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 3, from: 7, text: "yes"))
-    try? await Task.sleep(for: .milliseconds(50))
 
-    // then — nothing executed; the approval stays PENDING and the run stays parked
+    // then — positive proof the "yes" was processed: it persisted as an ordinary THIRD run that
+    // queues FIFO behind the held lane (PlainReplyDoesNotApproveTests pins the same idiom)
+    let states = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        let observed = try runStates(databasePath: harness.databasePath)
+        return observed.count == 3 ? observed : nil
+      }
+    )
+    #expect(
+      states == [
+        RunState.done.rawValue,
+        RunState.awaitingApproval.rawValue,
+        RunState.pending.rawValue,
+      ]
+    )
+
+    // and — nothing executed; the approval stays PENDING and the run stays parked
     #expect(await harness.http.requestedURLs == egressBefore)
     #expect(
       try fetchApprovals(databasePath: harness.databasePath).map(\.state)

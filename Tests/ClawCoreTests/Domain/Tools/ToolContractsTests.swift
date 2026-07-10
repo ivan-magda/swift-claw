@@ -102,8 +102,7 @@ import Testing
       assemblyPrivateData: true,
       runPrivateData: false,
       sessionHasPrivateData: false,
-      approvalAlreadyPending: false,
-      nonInteractive: false
+      approvalAlreadyPending: false
     )
 
     // then

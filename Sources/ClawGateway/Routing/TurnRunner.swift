@@ -68,7 +68,10 @@ public struct TurnRunner: TurnDispatching {
     breaker: BudgetBreaker? = nil,
     delivery: (any MessageDelivery)? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
-    parker: any ApprovalParking = InertApprovalParker(coordinator: ApprovalCoordinator()),
+    // No default: an ask-tier suspend parks the lane on this seam, and a composition site that
+    // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
+    // would hold that lane forever. Every caller chooses its parker explicitly.
+    parker: any ApprovalParking,
     approvalExpirySeconds: Int = 3600,
     logger: Logger
   ) {

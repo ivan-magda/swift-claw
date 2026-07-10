@@ -9,7 +9,7 @@ public struct ToolPolicyGate: Sendable {
     /// `action` is the gate-resolved canonical action for `.arbitraryDestination` tools — the
     /// dispatcher hands its target into `execute` so the tool acts on exactly the form the gate
     /// authorized; `nil` for the other classes.
-    case allow(argsRedacted: String, consumedGrant: Bool, action: ToolAction?)
+    case allow(argsRedacted: String, action: ToolAction?)
     case block(payload: ToolPayload, argsRedacted: String)
     /// An ask-tier action (§4.3/§5.1) parked for the owner's durable approval. Carries the recorded
     /// canonical args the §5.3 suspend commit persists and the §6.3 resume replays.
@@ -32,6 +32,10 @@ public struct ToolPolicyGate: Sendable {
     // (1) ask-tier is evaluated FIRST, before the egress fast-path (§4.3/§5.1): an ask-tier tool
     // reaches the durable approval arm regardless of egress class — an ask-tier file_write has
     // egress `.none` yet must still park for the owner's decision.
+    // INVARIANT: this arm returns before the unconditional/conditional arg-guard and redaction
+    // tiers run, which is safe ONLY while every ask-tier tool is `.none`-egress (nothing leaves
+    // the host). An ask-tier tool WITH egress must move this arm below those tiers or re-run
+    // them inside `evaluateAskTier`.
     if tool.definition.riskLevel == .ask {
       return evaluateAskTier(call: call, tool: tool, context: context)
     }
@@ -40,7 +44,6 @@ public struct ToolPolicyGate: Sendable {
     guard tool.definition.egressClass != .none else {
       return .allow(
         argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
-        consumedGrant: false,
         action: nil
       )
     }
@@ -81,7 +84,7 @@ public struct ToolPolicyGate: Sendable {
       return .block(payload: payload, argsRedacted: conditional.redactedArgs)
     }
     guard let action else {
-      return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: false, action: nil)
+      return .allow(argsRedacted: conditional.redactedArgs, action: nil)
     }
 
     guard context.approvalAlreadyPending == false else {
@@ -173,7 +176,7 @@ private extension ToolPolicyGate {
   func resolveAndAllow(call: ToolCall, tool: any Tool, argsRedacted: String) -> Verdict {
     switch resolveAction(call: call, tool: tool) {
     case .action(let action):
-      return .allow(argsRedacted: argsRedacted, consumedGrant: false, action: action)
+      return .allow(argsRedacted: argsRedacted, action: action)
     case .blocked(let payload):
       return .block(payload: payload, argsRedacted: argsRedacted)
     }
@@ -344,7 +347,7 @@ public struct GatedToolDispatcher: ToolDispatching {
         argsRedacted: gate.renderRedacted(argsJSON: call.argumentsJSON),
         requiresApproval: recorded
       )
-    case .allow(let argsRedacted, let consumedGrant, let action):
+    case .allow(let argsRedacted, let action):
       // (4) execute under the tool's own timeout, on the gate-resolved canonical target
       let payload = await executeWithTimeout(
         tool: tool,
@@ -353,8 +356,7 @@ public struct GatedToolDispatcher: ToolDispatching {
       )
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
-        argsRedacted: argsRedacted,
-        consumedGrant: consumedGrant
+        argsRedacted: argsRedacted
       )
     }
   }
