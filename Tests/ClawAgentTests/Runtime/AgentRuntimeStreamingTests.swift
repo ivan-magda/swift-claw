@@ -477,7 +477,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hi"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -532,7 +531,6 @@ func waitForTurnResult(
         buildResult: self.singleUserBuildResult("hi"),
         sessionTainted: false,
         sessionHasPrivateData: false,
-        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
@@ -582,7 +580,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hi"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -622,7 +619,6 @@ func waitForTurnResult(
         buildResult: singleUserBuildResult("hi"),
         sessionTainted: false,
         sessionHasPrivateData: false,
-        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
@@ -672,7 +668,6 @@ func waitForTurnResult(
           buildResult: singleUserBuildResult("hi"),
           sessionTainted: false,
           sessionHasPrivateData: false,
-          grant: nil,
           todayTokens: 0,
           todayUSD: 0
         )
@@ -711,7 +706,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hi"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -751,7 +745,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hi"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -779,7 +772,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hi"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -805,7 +797,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hi"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -833,7 +824,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hi"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -878,7 +868,6 @@ func waitForTurnResult(
         buildResult: self.singleUserBuildResult("hi"),
         sessionTainted: false,
         sessionHasPrivateData: false,
-        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
@@ -907,7 +896,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hello world"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -932,7 +920,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hello world"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -959,7 +946,6 @@ func waitForTurnResult(
         buildResult: singleUserBuildResult("hello world"),
         sessionTainted: false,
         sessionHasPrivateData: false,
-        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )
@@ -990,7 +976,6 @@ func waitForTurnResult(
       buildResult: singleUserBuildResult("hello world"),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -1020,7 +1005,6 @@ func waitForTurnResult(
         buildResult: self.singleUserBuildResult("hello world"),
         sessionTainted: false,
         sessionHasPrivateData: false,
-        grant: nil,
         todayTokens: 0,
         todayUSD: 0
       )

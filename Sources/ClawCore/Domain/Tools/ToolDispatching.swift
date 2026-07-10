@@ -11,7 +11,6 @@ public struct ToolDispatchContext: Sendable, Equatable {
   /// `assemblyPrivateData ∪ runPrivateData ∪ sessionHasPrivateData`, so the gate stays armed after
   /// the context window rolls past the private read that first set it (closes the §12 over-cap gap).
   public let sessionHasPrivateData: Bool
-  public let grant: OneTurnGrant?
   public let approvalAlreadyPending: Bool
   /// True for scheduled/heartbeat runs. As of §5.1 the gate treats these IDENTICALLY to interactive
   /// runs — a would-park trifecta action suspends onto the durable approval fabric (park-with-
@@ -24,7 +23,6 @@ public struct ToolDispatchContext: Sendable, Equatable {
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
     sessionHasPrivateData: Bool,
-    grant: OneTurnGrant?,
     approvalAlreadyPending: Bool,
     nonInteractive: Bool
   ) {
@@ -33,32 +31,28 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.assemblyPrivateData = assemblyPrivateData
     self.runPrivateData = runPrivateData
     self.sessionHasPrivateData = sessionHasPrivateData
-    self.grant = grant
     self.approvalAlreadyPending = approvalAlreadyPending
     self.nonInteractive = nonInteractive
   }
 }
 
 /// One dispatched call's full result: the observation, the audit-safe args rendering (§9.1 —
-/// matched spans replaced, never the secret), the first-trip approval request, and whether the
-/// grant was consumed.
+/// matched spans replaced, never the secret), and the recorded action when the gate parked the
+/// call for the owner's durable approval.
 public struct ToolDispatchOutcome: Sendable, Equatable {
   public let observation: ToolObservation
   public let argsRedacted: String
-  public let pendingApproval: ToolApprovalRequest?
   public let requiresApproval: RecordedToolAction?
   public let consumedGrant: Bool
 
   public init(
     observation: ToolObservation,
     argsRedacted: String,
-    pendingApproval: ToolApprovalRequest? = nil,
     requiresApproval: RecordedToolAction? = nil,
     consumedGrant: Bool = false
   ) {
     self.observation = observation
     self.argsRedacted = argsRedacted
-    self.pendingApproval = pendingApproval
     self.requiresApproval = requiresApproval
     self.consumedGrant = consumedGrant
   }

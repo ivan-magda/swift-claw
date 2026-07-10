@@ -135,6 +135,7 @@ func makeSC3Harness(
   workspaceFiles: [String: String] = [:],
   registry: PendingConfirmationRegistry = PendingConfirmationRegistry(),
   databasePath: String? = nil,
+  workspaceRoot: URL? = nil,
   coordinator: ApprovalCoordinator = ApprovalCoordinator(),
   extraTools: [any Tool] = [],
   dispatcherOverride: (any ToolDispatching)? = nil
@@ -149,8 +150,11 @@ func makeSC3Harness(
   let stores = try ClawDatabase.openStores(path: resolvedDatabasePath)
   try stores.allowlist.seedAllowlist(userIds: [7])
 
-  // 2. Temp workspace dir; write `workspaceFiles` (relative path → content) into it.
-  let workspaceRoot = fileManager.temporaryDirectory
+  // 2. Temp workspace dir; write `workspaceFiles` (relative path → content) into it. Reuse
+  // `workspaceRoot` (with `databasePath`) to model a restart against the SAME disk (spec §17).
+  let workspaceRoot =
+    workspaceRoot
+    ?? fileManager.temporaryDirectory
     .appendingPathComponent("claw-sc3-ws-\(UUID().uuidString)", isDirectory: true)
   try fileManager.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
   for (relativePath, content) in workspaceFiles {
@@ -230,7 +234,6 @@ func makeSC3Harness(
     agent: agent,
     budget: .default,
     contextBuilder: contextBuilder,
-    pendingConfirmations: registry,
     notifyOutbox: {},
     parker: deferredParker,
     logger: logger

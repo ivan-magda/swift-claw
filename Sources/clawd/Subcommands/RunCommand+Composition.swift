@@ -157,7 +157,6 @@ private extension RunCommand {
       agent: agentStack.agent,
       budget: deps.config.budget,
       contextBuilder: agentStack.contextBuilder,
-      pendingConfirmations: coordination.pendingConfirmations,
       notifyOutbox: { outboxSignal.poke() },
       breaker: BudgetBreaker(budget: deps.config.budget),
       delivery: deps.transport,

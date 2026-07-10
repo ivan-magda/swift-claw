@@ -2,7 +2,7 @@ import ClawCore
 import Foundation
 
 /// Spec §9.1 steps (2)-(3): the unconditional arg-guard tier, the trifecta condition, the tier-3
-/// disk-time substring check, and the web_fetch grant/approval decision. Pure — every input
+/// disk-time substring check, and the web_fetch approval decision. Pure — every input
 /// arrives via the call/context; tier-3 texts via the injected loader (disk at gate time).
 public struct ToolPolicyGate: Sendable {
   public enum Verdict: Sendable, Equatable {
@@ -10,7 +10,7 @@ public struct ToolPolicyGate: Sendable {
     /// dispatcher hands its target into `execute` so the tool acts on exactly the form the gate
     /// authorized; `nil` for the other classes.
     case allow(argsRedacted: String, consumedGrant: Bool, action: ToolAction?)
-    case block(payload: ToolPayload, argsRedacted: String, pendingApproval: ToolApprovalRequest?)
+    case block(payload: ToolPayload, argsRedacted: String)
     /// An ask-tier action (§4.3/§5.1) parked for the owner's durable approval. Carries the recorded
     /// canonical args the §5.3 suspend commit persists and the §6.3 resume replays.
     case requireApproval(recorded: RecordedToolAction)
@@ -78,7 +78,7 @@ public struct ToolPolicyGate: Sendable {
     case .action(let resolved):
       action = resolved
     case .blocked(let payload):
-      return .block(payload: payload, argsRedacted: conditional.redactedArgs, pendingApproval: nil)
+      return .block(payload: payload, argsRedacted: conditional.redactedArgs)
     }
     guard let action else {
       return .allow(argsRedacted: conditional.redactedArgs, consumedGrant: false, action: nil)
@@ -93,8 +93,7 @@ public struct ToolPolicyGate: Sendable {
           status: .blockedPendingApproval,
           ingestedUntrusted: false
         ),
-        argsRedacted: conditional.redactedArgs,
-        pendingApproval: nil
+        argsRedacted: conditional.redactedArgs
       )
     }
 
@@ -161,8 +160,7 @@ public struct ToolPolicyGate: Sendable {
         status: .blockedArgs,
         ingestedUntrusted: false
       ),
-      argsRedacted: argsRedacted,
-      pendingApproval: nil
+      argsRedacted: argsRedacted
     )
   }
 }
@@ -171,13 +169,13 @@ public struct ToolPolicyGate: Sendable {
 
 private extension ToolPolicyGate {
   /// The no-trifecta path: the action still resolves (or fails closed) so the dispatcher gets the
-  /// gate-authorized canonical target, but no grant is consumed and no approval parks.
+  /// gate-authorized canonical target, but no approval parks.
   func resolveAndAllow(call: ToolCall, tool: any Tool, argsRedacted: String) -> Verdict {
     switch resolveAction(call: call, tool: tool) {
     case .action(let action):
       return .allow(argsRedacted: argsRedacted, consumedGrant: false, action: action)
     case .blocked(let payload):
-      return .block(payload: payload, argsRedacted: argsRedacted, pendingApproval: nil)
+      return .block(payload: payload, argsRedacted: argsRedacted)
     }
   }
 }
@@ -219,8 +217,7 @@ private extension ToolPolicyGate {
           status: .blockedPendingApproval,
           ingestedUntrusted: false
         ),
-        argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
-        pendingApproval: nil
+        argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
       )
     }
 
@@ -263,8 +260,7 @@ private extension ToolPolicyGate {
   func askTierBlock(reason: String, call: ToolCall) -> Verdict {
     .block(
       payload: ToolPayload(content: reason, status: .error, ingestedUntrusted: false),
-      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
-      pendingApproval: nil
+      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
     )
   }
 
@@ -328,11 +324,10 @@ public struct GatedToolDispatcher: ToolDispatching {
     }
     // (2)/(3) the gate
     switch gate.evaluate(call: call, tool: tool, context: context) {
-    case .block(let payload, let argsRedacted, let pendingApproval):
+    case .block(let payload, let argsRedacted):
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
-        argsRedacted: argsRedacted,
-        pendingApproval: pendingApproval
+        argsRedacted: argsRedacted
       )
     case .requireApproval(let recorded):
       // The recorded action rides the outcome to the loop (Task 12), which sets the pending action

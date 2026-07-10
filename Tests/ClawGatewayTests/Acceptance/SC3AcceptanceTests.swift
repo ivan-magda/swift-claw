@@ -431,6 +431,72 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     )
   }
 
+  // Restart re-parks a live approval (spec §6.5 / Task 19): the durable `approvals` row survives the
+  // process boundary, boot reconciliation re-parks the lane, and the owner's button still resolves.
+  @Test func restartReParksTheApproval() async throws {
+    let sharedDB = FileManager.default.temporaryDirectory
+      .appendingPathComponent("claw-sc3-\(UUID().uuidString).sqlite").path
+    let first = try makeSC3Harness(
+      scripts: [
+        [
+          toolCallResponse([
+            ToolCall(
+              id: "w1",
+              name: "file_write",
+              argumentsJSON: #"{"path":"notes/plan.md","content":"hello","overwrite":false}"#
+            )
+          ]),
+          okResponse(content: "saved"),
+        ]
+      ],
+      httpResponses: [:],
+      databasePath: sharedDB
+    )
+    _ = await first.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
+    let parked = try #require(
+      await pollUntil(timeout: .seconds(10)) {
+        try fetchApprovals(databasePath: sharedDB).first
+      }
+    )
+    #expect(parked.state == ApprovalState.pending.rawValue)
+
+    // restart: same DB and workspace, fresh coordinator/registry — boot reconciliation re-parks
+    // the lane
+    let second = try makeSC3Harness(
+      scripts: [[okResponse(content: "saved")]],
+      httpResponses: [:],
+      databasePath: sharedDB,
+      workspaceRoot: first.workspaceRoot
+    )
+    await second.runBootReconciliation()
+
+    // the row still PENDING after the restart — nothing denied it
+    #expect(
+      try fetchApprovals(databasePath: sharedDB).map(\.state) == [ApprovalState.pending.rawValue]
+    )
+
+    // and the owner's button resolves it against the re-parked lane
+    _ = await second.router.handle(
+      rawUpdate: callbackUpdate(
+        id: 2,
+        from: 7,
+        data: ApprovalKeyboard.callbackData(
+          nonce: parked.nonce,
+          verdict: ApprovalKeyboard.approveVerdict
+        )
+      )
+    )
+    _ = try await pollUntil(timeout: .seconds(10)) {
+      FileManager.default.fileExists(atPath: parked.canonicalTarget) ? true : nil
+    }
+    #expect(
+      try fetchApprovals(databasePath: sharedDB).map(\.state) == [ApprovalState.approved.rawValue]
+    )
+    #expect(
+      try String(contentsOfFile: parked.canonicalTarget, encoding: .utf8) == "hello"
+    )
+  }
+
   // Regression H1 — in-run private data (a disk read the assembly omitted) gates the fetch, and a
   // ≥16-grapheme on-disk-MEMORY substring is refused before egress (tier-3 reads disk, rev.1 H1).
   @Test func inRunPrivateDataGatesFetchAndBlocksArgs() async throws {

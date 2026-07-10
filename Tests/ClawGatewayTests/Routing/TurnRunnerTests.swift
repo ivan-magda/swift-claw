@@ -496,7 +496,6 @@ func makeEnv(
     agent: agent,
     budget: budget,
     contextBuilder: builder,
-    pendingConfirmations: PendingConfirmationRegistry(),
     notifyOutbox: {},
     breaker: breaker,
     delivery: transport,
@@ -566,8 +565,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then — FAILED with the named cap, the model never ran, one owner DM, one audit trip row
@@ -628,8 +626,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then — completes normally; the proactive pool binds proactive runs only
@@ -648,8 +645,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -678,8 +674,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -703,8 +698,7 @@ private func okResponse(content: String) -> ChatResponse {
         runId: env.runId,
         sessionId: env.sessionId,
         chatId: env.chatId,
-        triggerMessageId: env.triggerMessageId,
-        grant: nil
+        triggerMessageId: env.triggerMessageId
       )
     }
   }
@@ -722,8 +716,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -749,8 +742,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -800,8 +792,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: raced.runId,
       sessionId: raced.sessionId,
       chatId: raced.chatId,
-      triggerMessageId: raced.triggerMessageId,
-      grant: nil
+      triggerMessageId: raced.triggerMessageId
     )
 
     // then
@@ -825,8 +816,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -869,8 +859,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -892,8 +881,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -919,8 +907,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -958,8 +945,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then
@@ -985,8 +971,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then — DONE with ZERO outbox rows; suppressed audited on the same commit path
@@ -1013,8 +998,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then — delivered like any run, plus the heartbeatFired marker
@@ -1036,8 +1020,7 @@ private func okResponse(content: String) -> ChatResponse {
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId,
-      grant: nil
+      triggerMessageId: env.triggerMessageId
     )
 
     // then — delivered; no heartbeat audit rows of either kind

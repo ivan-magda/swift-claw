@@ -94,31 +94,20 @@ import Testing
     #expect(ToolObservationStatus.blockedPendingApproval.rawValue == "blocked_pending_approval")
   }
 
-  @Test func dispatchContextAndGrantAreValueTypes() {
-    // given
-    let grant = OneTurnGrant(
-      action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1")
-    )
-
-    // when
+  @Test func dispatchContextIsAValueType() {
+    // given / when — the per-call policy inputs are a Sendable value type (no grant since Inc 5a)
     let context = ToolDispatchContext(
       sessionTainted: true,
       runIngestedUntrusted: false,
       assemblyPrivateData: true,
       runPrivateData: false,
       sessionHasPrivateData: false,
-      grant: grant,
       approvalAlreadyPending: false,
       nonInteractive: false
     )
 
     // then
-    #expect(context.grant == grant)
-    let request = ToolApprovalRequest(
-      action: ToolAction(tool: "web_fetch", target: "https://x.example/"),
-      reason: .exfilTrifecta
-    )
-    #expect(request.action.target == "https://x.example/")
-    #expect(request.reason.rawValue == "exfil_trifecta")
+    #expect(context.sessionTainted)
+    #expect(context.approvalAlreadyPending == false)
   }
 }

@@ -10,7 +10,6 @@ struct ConfirmationResolver: Sendable {
   let pendingConfirmations: PendingConfirmationRegistry
   let memoryCommands: any MemoryCommandStore
   let schedule: ScheduleSurface
-  let turnDispatch: TurnDispatch
   let replies: ReplySender
   let now: @Sendable () -> Date
   let logger: Logger
@@ -34,22 +33,6 @@ struct ConfirmationResolver: Sendable {
 
     guard let entry = await pendingConfirmations.pending(sessionId: sessionId) else {
       return nil
-    }
-
-    // A tool approval differs from the memory-confirm flow: BOTH a confirm and a non-confirm
-    // reply become an ordinary persisted turn (never a command ack, §14).
-    if case .toolApproval(let request) = entry {
-      await pendingConfirmations.clear(sessionId: sessionId)
-      let grant: OneTurnGrant? =
-        ConfirmationReply.parse(text) == .confirm
-        ? OneTurnGrant(action: request.action)
-        : nil
-      return try await turnDispatch.dispatch(
-        rawUpdate: rawUpdate,
-        message: message,
-        text: text,
-        grant: grant
-      )
     }
 
     guard case .command(let confirmation) = entry else {

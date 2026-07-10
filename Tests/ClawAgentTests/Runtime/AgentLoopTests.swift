@@ -9,7 +9,6 @@ import Testing
     _ runtime: AgentRuntime,
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
-    grant: OneTurnGrant? = nil,
     origin: RunOrigin = .interactive,
     proactiveTodayUSD: Double = 0
   ) async throws -> TurnOutcome {
@@ -20,7 +19,6 @@ import Testing
       buildResult: buildResult,
       sessionTainted: sessionTainted,
       sessionHasPrivateData: false,
-      grant: grant,
       todayTokens: 0,
       todayUSD: 0,
       origin: origin,
@@ -245,81 +243,6 @@ import Testing
     #expect(records[0].context.runPrivateData == false)
     #expect(records[1].context.runIngestedUntrusted)
     #expect(records[1].context.runPrivateData)
-  }
-
-  @Test func grantThreadsIntoContextAndConsumesOnce() async throws {
-    // given
-    let grant = OneTurnGrant(
-      action: ToolAction(tool: "web_fetch", target: "https://example.com/a")
-    )
-    let provider = SequenceProvider([
-      toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2")]),
-      okResponse(),
-    ])
-    let dispatcher = ScriptedDispatcher { call, context in
-      var outcome = okOutcome()(call, context)
-      if call.id == "c1" {
-        outcome = ToolDispatchOutcome(
-          observation: outcome.observation,
-          argsRedacted: outcome.argsRedacted,
-          consumedGrant: true
-        )
-      }
-      return outcome
-    }
-    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
-
-    // when
-    _ = try await run(runtime, grant: grant)
-
-    // then — single-use: the second dispatch no longer sees the grant
-    let records = await dispatcher.records
-    #expect(records[0].context.grant == grant)
-    #expect(records[1].context.grant == nil)
-  }
-
-  @Test func firstApprovalTripParksLaterTripsAreObservationOnly() async throws {
-    // given
-    let firstRequest = ToolApprovalRequest(
-      action: ToolAction(tool: "web_fetch", target: "https://example.com/a"),
-      reason: .exfilTrifecta
-    )
-    let provider = SequenceProvider([
-      toolCallResponse([
-        fetchProposal(id: "c1"), fetchProposal(id: "c2", url: "https://example.com/b"),
-      ]),
-      okResponse(content: "explained why"),
-    ])
-    let dispatcher = ScriptedDispatcher { call, context in
-      ToolDispatchOutcome(
-        observation: ToolObservation(
-          callId: call.id,
-          toolName: call.name,
-          content: "BLOCKED_PENDING_APPROVAL",
-          status: .blockedPendingApproval,
-          ingestedUntrusted: false
-        ),
-        argsRedacted: call.argumentsJSON,
-        pendingApproval: context.approvalAlreadyPending
-          ? nil
-          : ToolApprovalRequest(
-            action: ToolAction(tool: "web_fetch", target: "https://example.com/a"),
-            reason: .exfilTrifecta
-          )
-      )
-    }
-    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
-
-    // when
-    let outcome = try await run(runtime)
-
-    // then — the run finishes with the model's explanation (D7) and ONE parked request
-    #expect(outcome.pendingApproval == firstRequest)
-    let records = await dispatcher.records
-    #expect(records[0].context.approvalAlreadyPending == false)
-    #expect(records[1].context.approvalAlreadyPending)
-    let completed = try requireCompleted(outcome.result)
-    #expect(completed.content == "explained why")
   }
 
   @Test func perRunSpendAccumulatesAcrossRoundTrips() async throws {

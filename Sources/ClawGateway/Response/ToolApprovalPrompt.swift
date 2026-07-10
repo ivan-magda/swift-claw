@@ -56,27 +56,6 @@ public enum ToolApprovalPrompt {
 
     return lines.joined(separator: "\n")
   }
-
-  /// The retired Inc 3b ephemeral trifecta prompt (§9.2), still rendered by `TurnRunner`'s
-  /// pending-approval path (`TurnRunner.swift:212`) until Task 24 deletes the ephemeral flow. Kept
-  /// exhaustive over `ApprovalReason` so it compiles alongside the durable renderer.
-  public static func text(for request: ToolApprovalRequest) -> String {
-    switch request.reason {
-    case .exfilTrifecta:
-      """
-      ⚠ I want to fetch
-      \(request.action.target)
-      This session has read external content and holds private data.
-      Reply yes to allow this one fetch; anything else cancels.
-      """
-    case .askTier:
-      """
-      ⚠ I want to run \(request.action.tool) on
-      \(request.action.target)
-      This action changes state and needs your explicit approval.
-      """
-    }
-  }
 }
 
 // MARK: - Prompt Composition

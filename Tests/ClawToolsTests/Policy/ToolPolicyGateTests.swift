@@ -111,7 +111,6 @@ struct WriteLikeTool: Tool {
     assemblyPrivate: Bool = false,
     runPrivate: Bool = false,
     sessionHasPrivate: Bool = false,
-    grant: OneTurnGrant? = nil,
     approvalPending: Bool = false,
     nonInteractive: Bool = false
   ) -> ToolDispatchContext {
@@ -121,7 +120,6 @@ struct WriteLikeTool: Tool {
       assemblyPrivateData: assemblyPrivate,
       runPrivateData: runPrivate,
       sessionHasPrivateData: sessionHasPrivate,
-      grant: grant,
       approvalAlreadyPending: approvalPending,
       nonInteractive: nonInteractive
     )
@@ -191,14 +189,14 @@ struct WriteLikeTool: Tool {
     )
 
     // then
-    guard case .block(let fetchPayload, let fetchRedacted, nil) = fetchVerdict else {
+    guard case .block(let fetchPayload, let fetchRedacted) = fetchVerdict else {
       Issue.record("expected block, got \(fetchVerdict)")
       return
     }
     #expect(fetchPayload.status == .blockedArgs)
     #expect(fetchPayload.content.contains("secret-value"))  // names the rule CLASS, never the text
     #expect(fetchRedacted.contains("s3cret-value-1") == false)
-    guard case .block(let searchPayload, _, nil) = searchVerdict else {
+    guard case .block(let searchPayload, _) = searchVerdict else {
       Issue.record("expected block, got \(searchVerdict)")
       return
     }
@@ -270,7 +268,7 @@ struct WriteLikeTool: Tool {
     )
 
     // then
-    guard case .block(let payload, _, nil) = verdict else {
+    guard case .block(let payload, _) = verdict else {
       Issue.record("expected block, got \(verdict)")
       return
     }
@@ -303,35 +301,11 @@ struct WriteLikeTool: Tool {
     #expect(recorded.tool == "web_fetch")
     #expect(recorded.canonicalTarget == "https://example.com/a?q=1")
     #expect(recorded.reason == .exfilTrifecta)
-    guard case .block(let laterPayload, _, nil) = later else {
+    guard case .block(let laterPayload, _) = later else {
       Issue.record("expected observation-only block")
       return
     }
     #expect(laterPayload.status == .blockedPendingApproval)
-  }
-
-  @Test func trifectaGrantShortCircuitIsRetiredTheDurableParkAlwaysWins() {
-    // given — a grant matching the exact canonical action (the retired ephemeral flow's key):
-    // recorded-args execution subsumed the one-turn grant, so the gate must ignore it and park
-    let gate = makeGate()
-    let grant = OneTurnGrant(
-      action: ToolAction(tool: "web_fetch", target: "https://example.com/a?q=1")
-    )
-
-    // when
-    let verdict = gate.evaluate(
-      call: fetchCall("https://Example.com/a?q=1"),  // canonicalizes to the grant key
-      tool: FetchLikeTool(),
-      context: makeContext(tainted: true, assemblyPrivate: true, grant: grant)
-    )
-
-    // then — no grant consumption; the durable approval parks regardless
-    guard case .requireApproval(let recorded) = verdict else {
-      Issue.record("expected requireApproval, got \(verdict)")
-      return
-    }
-    #expect(recorded.canonicalTarget == "https://example.com/a?q=1")
-    #expect(recorded.reason == .exfilTrifecta)
   }
 
   @Test func urlPolicyRefusalUnderTrifectaIsAnErrorBeforeAnyPrompt() {
@@ -343,7 +317,7 @@ struct WriteLikeTool: Tool {
     )
 
     // then — the gate now blocks on the tool's own resolution copy, on every path
-    guard case .block(let payload, _, nil) = verdict else {
+    guard case .block(let payload, _) = verdict else {
       Issue.record("expected block, got \(verdict)")
       return
     }
@@ -360,7 +334,7 @@ struct WriteLikeTool: Tool {
     )
 
     // then
-    guard case .block(let payload, _, nil) = verdict else {
+    guard case .block(let payload, _) = verdict else {
       Issue.record("expected block, got \(verdict)")
       return
     }
@@ -385,7 +359,7 @@ struct WriteLikeTool: Tool {
     )
 
     // then
-    guard case .block(let payload, _, nil) = argBlock else {
+    guard case .block(let payload, _) = argBlock else {
       Issue.record("expected blocked args, got \(argBlock)")
       return
     }
@@ -453,13 +427,12 @@ struct WriteLikeTool: Tool {
     )
 
     // then — a refusal blocks with the tool's copy; no approval is recorded (fail-closed, §4.3)
-    guard case .block(let payload, _, let pendingApproval) = verdict else {
+    guard case .block(let payload, _) = verdict else {
       Issue.record("expected block, got \(verdict)")
       return
     }
     #expect(payload.status == .error)
     #expect(payload.content == "path escapes the workspace.")
-    #expect(pendingApproval == nil)
   }
 
   @Test func askTierWithAPendingApprovalYieldsTheBlockedObservation() {
@@ -476,12 +449,11 @@ struct WriteLikeTool: Tool {
     )
 
     // then — further ask-tier calls observe the block, never a second park
-    guard case .block(let payload, _, let pendingApproval) = verdict else {
+    guard case .block(let payload, _) = verdict else {
       Issue.record("expected blocked observation, got \(verdict)")
       return
     }
     #expect(payload.status == .blockedPendingApproval)
-    #expect(pendingApproval == nil)
   }
 
   @Test func persistedPrivateDataFlagArmsTheTrifectaAndRequiresApproval() throws {
@@ -564,7 +536,7 @@ struct WriteLikeTool: Tool {
     let verdict = gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
 
     // then — a blocked observation, NOT a second .requireApproval
-    guard case .block(let payload, _, _) = verdict else {
+    guard case .block(let payload, _) = verdict else {
       Issue.record("expected .block, got \(verdict)")
       return
     }
@@ -586,12 +558,11 @@ struct WriteLikeTool: Tool {
     )
 
     // then
-    guard case .block(let payload, _, let pendingApproval) = verdict else {
+    guard case .block(let payload, _) = verdict else {
       Issue.record("expected block, got \(verdict)")
       return
     }
     #expect(payload.status == .blockedArgs)
-    #expect(pendingApproval == nil)
   }
 }
 
@@ -617,7 +588,6 @@ struct WriteLikeTool: Tool {
     assemblyPrivateData: false,
     runPrivateData: false,
     sessionHasPrivateData: false,
-    grant: nil,
     approvalAlreadyPending: false,
     nonInteractive: false
   )

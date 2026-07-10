@@ -297,8 +297,7 @@ private final class SleepRecorder: @unchecked Sendable {
           runId: 900,
           sessionId: 500,
           chatId: 42,
-          triggerMessageId: 300,
-          grant: nil
+          triggerMessageId: 300
         )
     )
   }

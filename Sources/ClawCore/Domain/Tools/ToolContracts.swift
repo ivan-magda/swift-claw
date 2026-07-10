@@ -257,7 +257,7 @@ public protocol Tool: Sendable {
   var timeout: Duration { get }
 
   /// The canonical, owner-visible target this call would act on — REQUIRED for
-  /// `.arbitraryDestination` tools (the gate keys grants/approvals on it and hands the resolved
+  /// `.arbitraryDestination` tools (the gate keys approvals on it and hands the resolved
   /// form to `execute`); `nil` for `.none`/`.fixedEndpoint` tools. No default implementation:
   /// every tool decides explicitly.
   func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution?

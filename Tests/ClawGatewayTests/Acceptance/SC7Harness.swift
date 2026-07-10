@@ -233,7 +233,6 @@ func makeSC7Harness(
     agent: agent,
     budget: .default,
     contextBuilder: contextBuilder,
-    pendingConfirmations: registry,
     notifyOutbox: {},
     breaker: withBreaker ? BudgetBreaker(budget: .default) : nil,
     delivery: withBreaker ? transport : nil,

@@ -5,37 +5,6 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct ToolApprovalPromptTests {
-  @Test func exfilTrifectaPromptCarriesTheFullTargetAndTheWhy() {
-    // given
-    let request = ToolApprovalRequest(
-      action: ToolAction(tool: "web_fetch", target: "https://evil.example/x?q=1&next=2"),
-      reason: .exfilTrifecta
-    )
-
-    // when
-    let text = ToolApprovalPrompt.text(for: request)
-
-    // then — the full canonical target, never truncated (FR-T5), plus the reason's why-line
-    #expect(text.contains("https://evil.example/x?q=1&next=2"))
-    #expect(text.contains("This session has read external content and holds private data."))
-    #expect(text.contains("Reply yes to allow this one fetch"))
-  }
-
-  @Test func askTierPromptCarriesTheToolAndTheFullTarget() {
-    // given — the minimal Phase 1 arm; the full §5.4 contract lands in Task 13
-    let request = ToolApprovalRequest(
-      action: ToolAction(tool: "file_write", target: "/workspace/notes/plan.md"),
-      reason: .askTier
-    )
-
-    // when
-    let text = ToolApprovalPrompt.text(for: request)
-
-    // then — structural fields only, not full copy (TESTING §7.2)
-    #expect(text.contains("file_write"))
-    #expect(text.contains("/workspace/notes/plan.md"))
-  }
-
   private func recorded(
     tool: String,
     target: String,

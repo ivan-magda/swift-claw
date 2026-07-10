@@ -5,13 +5,11 @@ import Logging
 
 /// Injected behind a protocol so the router/poller tests stay decoupled from the real provider.
 public protocol TurnDispatching: Sendable {
-  // swiftlint:disable:next function_parameter_count
   func run(
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64,
-    grant: OneTurnGrant?
+    triggerMessageId: Int64
   ) async throws
   /// Continues a run the approval waiter already flipped AWAITING_APPROVAL → RUNNING: no pick-up,
   /// context bound to the filled observation row, budget counters carried over (§6.3).
@@ -37,9 +35,6 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  /// One approval slot per session; a `.completed` run that tripped an approval gate parks its
-  /// request here (only after its commit wins arbitration) so a later `yes` can arm the grant.
-  private let pendingConfirmations: PendingConfirmationRegistry
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until Task 6 wires the dispatcher.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that
@@ -69,7 +64,6 @@ public struct TurnRunner: TurnDispatching {
     agent: AgentRuntime,
     budget: RunBudget,
     contextBuilder: ContextBuilder,
-    pendingConfirmations: PendingConfirmationRegistry,
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     delivery: (any MessageDelivery)? = nil,
@@ -85,7 +79,6 @@ public struct TurnRunner: TurnDispatching {
     self.agent = agent
     self.budget = budget
     self.contextBuilder = contextBuilder
-    self.pendingConfirmations = pendingConfirmations
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.delivery = delivery
@@ -99,8 +92,7 @@ public struct TurnRunner: TurnDispatching {
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
-    triggerMessageId: Int64,
-    grant: OneTurnGrant?
+    triggerMessageId: Int64
   ) async throws {
     guard !Task.isCancelled else {
       return
@@ -151,7 +143,6 @@ public struct TurnRunner: TurnDispatching {
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
       sessionHasPrivateData: inputs.snapshot.hasPrivateData,
-      grant: grant,
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
       origin: origin,
@@ -220,7 +211,6 @@ public struct TurnRunner: TurnDispatching {
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
         sessionHasPrivateData: inputs.snapshot.hasPrivateData,
-        grant: nil,
         todayTokens: inputs.todayTokens,
         todayUSD: inputs.todayUSD,
         origin: origin,
@@ -336,12 +326,7 @@ private extension TurnRunner {
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
-    // The deterministic approval prompt (D7) is APPENDED after the model's reply; overflow owner
-    // notices keep their PREPEND slot (rev.1 L1). Delivery-only — never stored as history.
-    let appendedNotices =
-      outcome.pendingApproval.map { approval in
-        [ToolApprovalPrompt.text(for: approval)]
-      } ?? []
+    let appendedNotices: [String] = []
     // Spec §12 ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
     // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
     let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
@@ -370,11 +355,6 @@ private extension TurnRunner {
 
     switch try runs.commitAssistantTurn(turn, now: context.committedAt) {
     case .committed:
-      // Park ONLY after the commit won arbitration — a superseded run must not leave a live
-      // approval behind. One slot per session: parking replaces (deny-by-default holds).
-      if let approval = outcome.pendingApproval {
-        await pendingConfirmations.park(.toolApproval(approval), sessionId: context.sessionId)
-      }
       try auditCompleted(content: content, suppressedAck: suppressHeartbeatAck, in: context)
       notifyOutbox()
       await notifyDailyCapIfTripped(

@@ -25,7 +25,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -60,7 +59,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -99,7 +97,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -132,7 +129,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -166,7 +162,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 999_999,
       todayUSD: 0
     )
@@ -206,7 +201,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -244,7 +238,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -271,7 +264,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -299,7 +291,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
@@ -334,7 +325,6 @@ struct AgentRuntimeTests {
       ),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )

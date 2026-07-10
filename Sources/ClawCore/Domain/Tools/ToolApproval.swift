@@ -1,9 +1,9 @@
 import Foundation
 
-/// The exact concrete action an approval and its grant are bound to — FR-T5's "tool +
-/// fully-resolved target". `target` is the canonical, owner-visible form of what the tool will
-/// act on (for `web_fetch`, the canonical URL). Grants match on EXACT equality of the whole
-/// action, so an approval for one tool can never authorize another.
+/// The exact concrete action an approval is bound to — FR-T5's "tool + fully-resolved target".
+/// `target` is the canonical, owner-visible form of what the tool will act on (for `web_fetch`,
+/// the canonical URL). Approvals match on EXACT equality of the whole action, so an approval for
+/// one tool can never authorize another.
 public struct ToolAction: Sendable, Equatable {
   public let tool: String
   public let target: String
@@ -21,29 +21,6 @@ public struct ToolAction: Sendable, Equatable {
 public enum ApprovalReason: String, Sendable, Equatable {
   case exfilTrifecta = "exfil_trifecta"
   case askTier = "ask_tier"
-}
-
-/// A gate trip awaiting the owner's ephemeral text approval (§9.2). Carries the action identity
-/// and reason only; the deterministic prompt text is authored in ClawGateway at the delivery
-/// seam (D7).
-public struct ToolApprovalRequest: Sendable, Equatable {
-  public let action: ToolAction
-  public let reason: ApprovalReason
-
-  public init(action: ToolAction, reason: ApprovalReason) {
-    self.action = action
-    self.reason = reason
-  }
-}
-
-/// The single-use, one-turn grant a `yes` arms: it authorizes exactly one future call whose
-/// action equals the approved one (grant semantics, not recorded-args replay).
-public struct OneTurnGrant: Sendable, Equatable {
-  public let action: ToolAction
-
-  public init(action: ToolAction) {
-    self.action = action
-  }
 }
 
 /// The §5.4 tool-specific prompt inputs, produced at gate time by the tool that will act. The gate

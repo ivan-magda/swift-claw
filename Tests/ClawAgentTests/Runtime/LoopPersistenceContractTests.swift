@@ -15,7 +15,6 @@ import Testing
       buildResult: makeBuildResult(),
       sessionTainted: false,
       sessionHasPrivateData: false,
-      grant: nil,
       todayTokens: 0,
       todayUSD: 0
     )
