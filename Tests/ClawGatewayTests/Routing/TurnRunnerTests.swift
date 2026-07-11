@@ -113,20 +113,21 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
   func fillClaimedObservation(
     runId: Int64,
     observationMessageId: Int64,
-    content: String
+    fill: ClaimedObservationFill
   ) throws(StoreError) {
     try base.fillClaimedObservation(
       runId: runId,
       observationMessageId: observationMessageId,
-      content: content
+      fill: fill
     )
   }
 
-  func applyApprovedMemoryWrite(
+  func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    audit: ApprovedExecutionAudit,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {
@@ -135,6 +136,7 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
       observationMessageId: observationMessageId,
       item: item,
       observationContent: observationContent,
+      audit: audit,
       notResumableObservationContent: notResumableObservationContent,
       now: now
     )
@@ -276,20 +278,21 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   func fillClaimedObservation(
     runId: Int64,
     observationMessageId: Int64,
-    content: String
+    fill: ClaimedObservationFill
   ) throws(StoreError) {
     try base.fillClaimedObservation(
       runId: runId,
       observationMessageId: observationMessageId,
-      content: content
+      fill: fill
     )
   }
 
-  func applyApprovedMemoryWrite(
+  func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    audit: ApprovedExecutionAudit,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {
@@ -298,6 +301,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
       observationMessageId: observationMessageId,
       item: item,
       observationContent: observationContent,
+      audit: audit,
       notResumableObservationContent: notResumableObservationContent,
       now: now
     )
@@ -413,15 +417,16 @@ struct DiskFullRuns: RunStore {
   func fillClaimedObservation(
     runId: Int64,
     observationMessageId: Int64,
-    content: String
+    fill: ClaimedObservationFill
   ) throws(StoreError) {
     throw StoreError.diskFull
   }
-  func applyApprovedMemoryWrite(
+  func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    audit: ApprovedExecutionAudit,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {

@@ -68,6 +68,48 @@ public struct SuspendedCommitReceipt: Sendable, Equatable {
   }
 }
 
+/// The safe, owner-facing rendering of an approved action for the `.toolCall` audit row: the tool
+/// name plus an already-redacted argument summary. The raw canonical arguments are never audited.
+public struct ApprovedExecutionAudit: Sendable, Equatable {
+  public let tool: String
+  public let argsRedacted: String
+
+  public init(tool: String, argsRedacted: String) {
+    self.tool = tool
+    self.argsRedacted = argsRedacted
+  }
+}
+
+/// Everything the post-execution resume persists for a claimed observation in ONE transaction: the
+/// observation `content` and its `status`, the state-guarded session provenance flags, and the
+/// `.toolCall` audit rendered from `audit`. `setTainted`/`setPrivateData` are applied only for a
+/// current or `/stop`-cancelled run; a superseded run keeps its flags off so the fresh window stays
+/// clean while its old transcript and audit still record what ran.
+public struct ClaimedObservationFill: Sendable, Equatable {
+  public let content: String
+  public let status: ToolObservationStatus
+  public let setTainted: Bool
+  public let setPrivateData: Bool
+  public let audit: ApprovedExecutionAudit
+  public let now: Date
+
+  public init(
+    content: String,
+    status: ToolObservationStatus,
+    setTainted: Bool,
+    setPrivateData: Bool,
+    audit: ApprovedExecutionAudit,
+    now: Date
+  ) {
+    self.content = content
+    self.status = status
+    self.setTainted = setTainted
+    self.setPrivateData = setPrivateData
+    self.audit = audit
+    self.now = now
+  }
+}
+
 public protocol RunStore: Sendable {
   /// PENDING → RUNNING through `RunFSM`, returning the run's origin in the same write; nil means
   /// the run is absent or no longer pending (one query, no separate origin read). `policyVersion`
@@ -140,23 +182,27 @@ public protocol RunStore: Sendable {
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim
-  /// Approve resume, post-execution half: UPDATE the claimed placeholder observation in place
-  /// with the tool's real result. Only ever called after `claimApprovedExecution` returned
-  /// `.committed` for the same ids.
+  /// Approve resume, post-execution half: UPDATE the claimed placeholder observation in place with
+  /// the tool's real result, apply the state-guarded taint/private-data provenance, and append the
+  /// `.toolCall` audit — all in ONE transaction, so a fault rolls back content, flags, and audit
+  /// together. Only ever called after `claimApprovedExecution` returned `.committed` for the same
+  /// ids.
   func fillClaimedObservation(
     runId: Int64,
     observationMessageId: Int64,
-    content: String
+    fill: ClaimedObservationFill
   ) throws(StoreError)
   /// memory_write fused path (exactly-once): the memory item insert (via
-  /// `MemoryStoreGRDB.insertItem`) and the observation UPDATE share ONE txn, gated by the SAME
-  /// placeholder + AWAITING_APPROVAL → RUNNING guards as `claimApprovedExecution` — the side
-  /// effect is in-DB, so claim and effect fuse instead of splitting.
+  /// `MemoryStoreGRDB.insertItem`), the observation UPDATE, and the `.toolCall` audit share ONE
+  /// txn, gated by the SAME placeholder + AWAITING_APPROVAL → RUNNING guards as
+  /// `claimApprovedExecution` — the side effect is in-DB, so claim and effect fuse instead of
+  /// splitting.
   func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    audit: ApprovedExecutionAudit,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim

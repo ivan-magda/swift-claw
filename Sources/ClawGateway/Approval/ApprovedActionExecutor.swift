@@ -54,6 +54,10 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
   static let notResumableObservationContent =
     "The run was stopped before this approved action executed; nothing ran."
 
+  /// Placeholder audit rendering while the exact-value redactor is not yet injected: the executor
+  /// never writes the approval's raw canonical arguments into the audit log.
+  private static let opaqueApprovedArguments = "[REDACTED:approved-arguments]"
+
   private let tools: [String: any Tool]
   private let runs: any RunStore
   private let now: @Sendable () -> Date
@@ -116,7 +120,17 @@ private extension ApprovedActionExecutor {
       try runs.fillClaimedObservation(
         runId: approval.runId,
         observationMessageId: approval.observationMessageId,
-        content: content
+        fill: ClaimedObservationFill(
+          content: content,
+          status: .ok,
+          setTainted: false,
+          setPrivateData: false,
+          audit: ApprovedExecutionAudit(
+            tool: approval.tool,
+            argsRedacted: Self.opaqueApprovedArguments
+          ),
+          now: now()
+        )
       )
     } catch {
       logger.error("recording the executed result failed for run \(approval.runId): \(error)")
@@ -176,6 +190,10 @@ private extension ApprovedActionExecutor {
         observationMessageId: approval.observationMessageId,
         item: request.item,
         observationContent: content,
+        audit: ApprovedExecutionAudit(
+          tool: approval.tool,
+          argsRedacted: Self.opaqueApprovedArguments
+        ),
         notResumableObservationContent: Self.notResumableObservationContent,
         now: now()
       )
@@ -226,7 +244,17 @@ private extension ApprovedActionExecutor {
       try runs.fillClaimedObservation(
         runId: approval.runId,
         observationMessageId: approval.observationMessageId,
-        content: content
+        fill: ClaimedObservationFill(
+          content: content,
+          status: .error,
+          setTainted: false,
+          setPrivateData: false,
+          audit: ApprovedExecutionAudit(
+            tool: approval.tool,
+            argsRedacted: Self.opaqueApprovedArguments
+          ),
+          now: now()
+        )
       )
       return ApprovedExecutionOutcome(observationContent: content, commit: .committed)
     } catch {

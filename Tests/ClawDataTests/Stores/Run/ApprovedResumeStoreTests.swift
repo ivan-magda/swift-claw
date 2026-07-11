@@ -18,7 +18,9 @@ import Testing
 
   /// A run suspended to AWAITING_APPROVAL through the real reducer, with an assistant anchor and a
   /// placeholder observation row persisted (the shape Task 14's `commitSuspendedTurn` leaves).
-  private func makeSuspendedFixture() throws -> Fixture {
+  private func makeSuspendedFixture(
+    claimedFillFault: @escaping @Sendable () throws -> Void = {}
+  ) throws -> Fixture {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     let sessions = SessionMessageStoreGRDB(writer: queue)
@@ -35,7 +37,11 @@ import Testing
     )
     let sessionId = try #require(claim.sessionId)
     let runId = try #require(claim.runId)
-    let runs = RunStoreGRDB(writer: queue)
+    let runs = RunStoreGRDB(
+      writer: queue,
+      suspendCommitFault: {},
+      claimedFillFault: claimedFillFault
+    )
     _ = try #require(try runs.pickUp(runId: runId, now: Date()))
 
     let observationMessageId = try queue.write { db -> Int64 in
@@ -81,6 +87,59 @@ import Testing
         arguments: [messageId]
       )
     }
+  }
+
+  private func sessionFlags(_ env: Fixture) throws -> (tainted: Bool, privateData: Bool) {
+    try env.queue.read { db in
+      let row = try #require(
+        try Row.fetchOne(
+          db,
+          sql: "SELECT tainted, has_private_data FROM sessions WHERE id = ?",
+          arguments: [env.sessionId]
+        )
+      )
+      return (row["tainted"], row["has_private_data"])
+    }
+  }
+
+  private func toolAuditRows(_ env: Fixture) throws -> [Row] {
+    try env.queue.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT actor, action, tool, args_redacted, result_size, decision, run_id, session_id, ts
+          FROM audit_events
+          WHERE run_id = ? AND action = ?
+          ORDER BY id
+          """,
+        arguments: [env.runId, AuditAction.toolCall.rawValue]
+      )
+    }
+  }
+
+  private func fill(
+    _ env: Fixture,
+    content: String,
+    status: ToolObservationStatus = .ok,
+    setTainted: Bool = false,
+    setPrivateData: Bool = false,
+    now: Date = Date(timeIntervalSince1970: 1_700_000_000)
+  ) throws {
+    try env.runs.fillClaimedObservation(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      fill: ClaimedObservationFill(
+        content: content,
+        status: status,
+        setTainted: setTainted,
+        setPrivateData: setPrivateData,
+        audit: ApprovedExecutionAudit(
+          tool: "file_write",
+          argsRedacted: #"{"path":"plan.md"}"#
+        ),
+        now: now
+      )
+    )
   }
 
   @Test func claimApprovedExecutionFlipsTheRunAndLeavesThePlaceholder() throws {
@@ -136,11 +195,7 @@ import Testing
       notResumableObservationContent: "stopped",
       now: Date()
     )
-    try env.runs.fillClaimedObservation(
-      runId: env.runId,
-      observationMessageId: env.observationMessageId,
-      content: "first"
-    )
+    try fill(env, content: "first")
 
     // when — a duplicate signal replays the claim against the filled observation
     let replay = try env.runs.claimApprovedExecution(
@@ -260,11 +315,7 @@ import Testing
       notResumableObservationContent: "stopped",
       now: Date()
     )
-    try env.runs.fillClaimedObservation(
-      runId: env.runId,
-      observationMessageId: env.observationMessageId,
-      content: "Wrote 12 B."
-    )
+    try fill(env, content: "Wrote 12 B.")
 
     // when
     let outcome = try env.runs.settleClaimedApprovalAtBoot(
@@ -293,6 +344,10 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved to memory as project.",
+      audit: ApprovedExecutionAudit(
+        tool: "memory_write",
+        argsRedacted: #"{"kind":"project","text":"[REDACTED]"}"#
+      ),
       notResumableObservationContent: "stopped",
       now: Date()
     )
@@ -307,6 +362,10 @@ import Testing
       try messageContent(env.queue, env.observationMessageId) == "Saved to memory as project."
     )
     #expect(try runState(env.queue, env.runId) == RunState.running.rawValue)
+    let audits = try toolAuditRows(env)
+    #expect(audits.count == 1)
+    #expect(audits[0]["tool"] == "memory_write")
+    #expect(audits[0]["decision"] == ToolObservationStatus.ok.rawValue)
   }
 
   @Test func applyApprovedMemoryWriteIsExactlyOnce() throws {
@@ -318,6 +377,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved.",
+      audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
       notResumableObservationContent: "stopped",
       now: Date()
     )
@@ -328,6 +388,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved again.",
+      audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
       notResumableObservationContent: "stopped",
       now: Date()
     )
@@ -354,6 +415,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved.",
+      audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
       notResumableObservationContent: "The session was stopped before this action ran.",
       now: Date()
     )
@@ -404,11 +466,7 @@ import Testing
       notResumableObservationContent: "stopped",
       now: Date()
     )
-    try env.runs.fillClaimedObservation(
-      runId: env.runId,
-      observationMessageId: env.observationMessageId,
-      content: "first"
-    )
+    try fill(env, content: "first")
     let secondPlaceholderId = try suspendAgain(env)
 
     // when — a boot replay re-runs approval #1's claim against its already-filled observation
@@ -436,6 +494,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved.",
+      audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
       notResumableObservationContent: "stopped",
       now: Date()
     )
@@ -447,6 +506,7 @@ import Testing
       observationMessageId: env.observationMessageId,
       item: item,
       observationContent: "Saved again.",
+      audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
       notResumableObservationContent: "stopped",
       now: Date()
     )
@@ -546,5 +606,141 @@ import Testing
       )
     }
     #expect(auditDecision == ApprovalDecision.stalePolicy.rawValue)
+  }
+
+  @Test func typedFillUpdatesObservationFlagsAndAuditInOneCommit() throws {
+    // given
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    let committedAt = Date(timeIntervalSince1970: 1_700_000_123)
+
+    // when
+    try fill(
+      env,
+      content: "sandbox output",
+      status: .blockedArgs,
+      setTainted: true,
+      setPrivateData: true,
+      now: committedAt
+    )
+
+    // then
+    #expect(try messageContent(env.queue, env.observationMessageId) == "sandbox output")
+    let flags = try sessionFlags(env)
+    #expect(flags.tainted)
+    #expect(flags.privateData)
+    let audits = try toolAuditRows(env)
+    #expect(audits.count == 1)
+    #expect(audits[0]["actor"] == AuditActor.assistant.rawValue)
+    #expect(audits[0]["tool"] == "file_write")
+    #expect(audits[0]["args_redacted"] == #"{"path":"plan.md"}"#)
+    #expect(audits[0]["result_size"] == Data("sandbox output".utf8).count)
+    #expect(audits[0]["decision"] == ToolObservationStatus.blockedArgs.rawValue)
+    #expect(audits[0]["run_id"] == env.runId)
+    #expect(audits[0]["session_id"] == env.sessionId)
+    let auditTimestamp: Date = audits[0]["ts"]
+    #expect(auditTimestamp == committedAt)
+  }
+
+  @Test func cancelledRunStillCommitsProvenanceFromACompletedAction() throws {
+    // given: the action claimed RUNNING, then /stop won while it executed
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    _ = try env.runs.cancelActiveRun(
+      sessionId: env.sessionId,
+      reason: .cancelled,
+      now: Date()
+    )
+
+    // when
+    try fill(env, content: "completed before cancellation", setTainted: true, setPrivateData: true)
+
+    // then
+    #expect(try runState(env.queue, env.runId) == RunState.cancelled.rawValue)
+    #expect(try sessionFlags(env).tainted)
+    #expect(try sessionFlags(env).privateData)
+    #expect(try toolAuditRows(env).count == 1)
+  }
+
+  @Test func supersededRunFillsAndAuditsWithoutRetainingOldWindowProvenance() throws {
+    // given: the action claimed RUNNING, then /new superseded and detainted the window
+    let env = try makeSuspendedFixture()
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+    _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
+
+    // when
+    try fill(env, content: "old-window output", setTainted: true, setPrivateData: true)
+
+    // then: old transcript/audit remain truthful; the fresh window stays clean
+    #expect(try runState(env.queue, env.runId) == RunState.superseded.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == "old-window output")
+    #expect(try sessionFlags(env).tainted == false)
+    #expect(try sessionFlags(env).privateData == false)
+    #expect(try toolAuditRows(env).count == 1)
+  }
+
+  @Test func fillFaultRollsBackContentFlagsAndAuditTogether() throws {
+    // given
+    let env = try makeSuspendedFixture(claimedFillFault: {
+      throw StoreError.unexpected("claimed fill fault")
+    })
+    _ = try env.runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: env.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: Date()
+    )
+
+    // when / then
+    #expect(throws: StoreError.unexpected("claimed fill fault")) {
+      try fill(env, content: "must roll back", setTainted: true, setPrivateData: true)
+    }
+    #expect(try messageContent(env.queue, env.observationMessageId) == Self.placeholder)
+    #expect(try sessionFlags(env).tainted == false)
+    #expect(try sessionFlags(env).privateData == false)
+    #expect(try toolAuditRows(env).isEmpty)
+  }
+
+  @Test func memoryFillFaultRollsBackClaimItemObservationAndAuditTogether() throws {
+    // given
+    let env = try makeSuspendedFixture(claimedFillFault: {
+      throw StoreError.unexpected("claimed fill fault")
+    })
+    let item = NewMemoryItem(text: "must not persist", kind: .project, sessionId: env.sessionId)
+
+    // when / then
+    #expect(throws: StoreError.unexpected("claimed fill fault")) {
+      try env.runs.applyApprovedMemoryWrite(
+        runId: env.runId,
+        observationMessageId: env.observationMessageId,
+        item: item,
+        observationContent: "must roll back",
+        audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
+        notResumableObservationContent: "stopped",
+        now: Date()
+      )
+    }
+    let memoryCount = try env.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
+    }
+    #expect(memoryCount == 0)
+    #expect(try runState(env.queue, env.runId) == RunState.awaitingApproval.rawValue)
+    #expect(try messageContent(env.queue, env.observationMessageId) == Self.placeholder)
+    #expect(try toolAuditRows(env).isEmpty)
   }
 }

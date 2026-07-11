@@ -401,16 +401,17 @@ import Testing
     func fillClaimedObservation(
       runId: Int64,
       observationMessageId: Int64,
-      content: String
+      fill: ClaimedObservationFill
     ) throws(StoreError) {
       throw StoreError.diskFull
     }
 
-    func applyApprovedMemoryWrite(
+    func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
       runId: Int64,
       observationMessageId: Int64,
       item: NewMemoryItem,
       observationContent: String,
+      audit: ApprovedExecutionAudit,
       notResumableObservationContent: String,
       now: Date
     ) throws(StoreError) -> ApprovedExecutionClaim {

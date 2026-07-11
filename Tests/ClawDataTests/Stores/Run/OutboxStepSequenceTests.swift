@@ -124,7 +124,14 @@ import Testing
     try fixture.runs.fillClaimedObservation(
       runId: fixture.runId,
       observationMessageId: receipt.observationMessageId,
-      content: "wrote it"
+      fill: ClaimedObservationFill(
+        content: "wrote it",
+        status: .ok,
+        setTainted: false,
+        setPrivateData: false,
+        audit: ApprovedExecutionAudit(tool: "file_write", argsRedacted: "{}"),
+        now: Date()
+      )
     )
     return receipt
   }

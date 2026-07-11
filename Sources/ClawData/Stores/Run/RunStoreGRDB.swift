@@ -5,17 +5,20 @@ import GRDB
 public struct RunStoreGRDB: RunStore {
   let database: MappedDatabase
   let suspendCommitFault: @Sendable () throws -> Void
+  let claimedFillFault: @Sendable () throws -> Void
 
   public init(writer: any DatabaseWriter) {
-    self.init(writer: writer, suspendCommitFault: {})
+    self.init(writer: writer, suspendCommitFault: {}, claimedFillFault: {})
   }
 
   init(
     writer: any DatabaseWriter,
-    suspendCommitFault: @escaping @Sendable () throws -> Void
+    suspendCommitFault: @escaping @Sendable () throws -> Void,
+    claimedFillFault: @escaping @Sendable () throws -> Void = {}
   ) {
     database = MappedDatabase(writer: writer)
     self.suspendCommitFault = suspendCommitFault
+    self.claimedFillFault = claimedFillFault
   }
 }
 
