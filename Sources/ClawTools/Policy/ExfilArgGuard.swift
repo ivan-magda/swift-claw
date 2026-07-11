@@ -9,11 +9,22 @@ public struct ExfilArgGuard: Sendable {
   }
 
   public struct PrivateTextIndex: Sendable {
-    private let windowsByFingerprint: [UInt64: [[Character]]]
+    /// A window's provenance: which normalized source it came from and where it starts. The
+    /// window graphemes themselves live once in `sources`, not copied per overlapping position.
+    private struct Window: Sendable {
+      let source: Int
+      let start: Int
+    }
+
+    /// Each source text normalized to NFC and stored ONCE, only for sources long enough to hold a
+    /// full window. Confirmation slices back into these rather than into duplicated window arrays.
+    private let sources: [[Character]]
+    private let windowsByFingerprint: [UInt64: [Window]]
 
     public init(texts: [String]) {
       let width = ExfilArgGuard.substringThresholdGraphemes
-      var indexed: [UInt64: [[Character]]] = [:]
+      var storedSources: [[Character]] = []
+      var indexed: [UInt64: [Window]] = [:]
 
       for text in texts {
         let characters = Array(text.precomposedStringWithCanonicalMapping)
@@ -21,12 +32,16 @@ public struct ExfilArgGuard: Sendable {
           continue
         }
 
+        let sourceIndex = storedSources.count
+        storedSources.append(characters)
+
         for start in 0...(characters.count - width) {
-          let window = Array(characters[start..<(start + width)])
-          indexed[ExfilArgGuard.windowFingerprint(window), default: []].append(window)
+          let fingerprint = ExfilArgGuard.windowFingerprint(characters[start..<(start + width)])
+          indexed[fingerprint, default: []].append(Window(source: sourceIndex, start: start))
         }
       }
 
+      sources = storedSources
       windowsByFingerprint = indexed
     }
 
@@ -40,11 +55,14 @@ public struct ExfilArgGuard: Sendable {
       for start in 0...(characters.count - width) {
         let candidate = characters[start..<(start + width)]
         let fingerprint = ExfilArgGuard.windowFingerprint(candidate)
-        guard let sourceWindows = windowsByFingerprint[fingerprint] else {
+        guard let windows = windowsByFingerprint[fingerprint] else {
           continue
         }
-        let matched = sourceWindows.contains { source in
-          candidate.elementsEqual(source)
+        // The fingerprint only narrows the set; confirm grapheme-for-grapheme so a hash
+        // collision can never false-block.
+        let matched = windows.contains { window in
+          let source = sources[window.source]
+          return candidate.elementsEqual(source[window.start..<(window.start + width)])
         }
         if matched {
           return String(candidate)
