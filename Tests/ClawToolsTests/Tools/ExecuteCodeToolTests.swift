@@ -710,3 +710,62 @@ extension ExecuteCodeToolTests {
     #expect(payload.readPrivateData)
   }
 }
+
+extension ExecuteCodeToolTests {
+  /// The audit path records `canonicalArgsJSON` verbatim and later redacts it with `ExfilArgGuard`.
+  /// For the largest legal payload — a full 16 KiB code body plus the maximum staged-file count —
+  /// the recorded JSON and its redaction must stay bounded (the regex shape-scan cannot explode),
+  /// the redactor must strip an embedded secret, and the recorded JSON must be deterministic and
+  /// structurally intact so the audit redacts exactly the action the approval stored.
+  @Test func maxPayloadAuditRedactionStaysBoundedDeterministicAndIntact() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let stagePaths = (0..<ExecuteCodeTool.maxStagedFiles).map { index in
+      "stage-\(index).txt"
+    }
+    for path in stagePaths {
+      try write(Data("x".utf8), relativePath: path, workspace: workspace)
+    }
+    let secret = "approval-secret-value"
+    let filler = String(repeating: "a", count: ExecuteCodeTool.maxCodeBytes - secret.utf8.count)
+    let code = secret + filler
+    let tool = makeTool(workspace: workspace)
+    let guardrail = ExfilArgGuard(secretValues: [secret])
+
+    // when
+    let action = try await prepared(
+      tool.prepareAction(arguments: arguments(code: code, stage: stagePaths))
+    )
+    let redacted = guardrail.renderRedacted(argsJSON: action.canonicalArgsJSON)
+    let replayed = try await prepared(
+      tool.prepareAction(arguments: arguments(code: code, stage: stagePaths))
+    )
+
+    // then
+    // (a) bounded: the 16 KiB body plus 16 stage objects of metadata stays comfortably under a
+    // ceiling derived from the tool's caps, and redaction only rewrites matched spans in place.
+    let recordedCeiling = ExecuteCodeTool.maxCodeBytes + ExecuteCodeTool.maxStagedFiles * 2048
+    #expect(code.utf8.count == ExecuteCodeTool.maxCodeBytes)
+    #expect(action.canonicalArgsJSON.utf8.count <= recordedCeiling)
+    #expect(redacted.utf8.count <= action.canonicalArgsJSON.utf8.count * 2)
+    // (a) the redactor completes and actually removes the embedded secret.
+    #expect(action.canonicalArgsJSON.contains(secret))
+    #expect(redacted.contains(secret) == false)
+    // (b) the redacted row is still structurally intact JSON with every stage entry present.
+    let decoded = try #require(JSONValue.parse(redacted)?.objectValue)
+    guard case .array(let stages) = decoded["stage"] else {
+      Issue.record("redacted stage was not an array")
+      return
+    }
+    #expect(stages.count == ExecuteCodeTool.maxStagedFiles)
+    for stage in stages {
+      let object = try #require(stage.objectValue)
+      #expect(object["path"] != nil)
+      #expect(object["realpath"] != nil)
+      #expect(object["bytes"]?.numberValue != nil)
+      #expect(object["sha256"]?.stringValue?.count == 64)
+    }
+    // (b) re-preparing the identical inputs records byte-identical canonical JSON.
+    #expect(replayed.canonicalArgsJSON == action.canonicalArgsJSON)
+  }
+}
