@@ -52,7 +52,7 @@ public struct FakeIPDetector: FakeIPDetecting {
       guard
         let addresses = try? await resolver.resolve(host: host),
         addresses.isEmpty == false,
-        addresses.allSatisfy({ address in SSRFGuard.benchmarkRange.contains(address) })
+        addresses.allSatisfy({ SSRFGuard.benchmarkRange.contains($0) })
       else {
         return .inactive
       }
@@ -62,6 +62,7 @@ public struct FakeIPDetector: FakeIPDetecting {
     guard let sample else {
       return .inactive
     }
+
     return .active(sample: sample)
   }
 }

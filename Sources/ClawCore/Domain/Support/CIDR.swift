@@ -69,6 +69,7 @@ private extension CIDR {
     if remainderBits > 0, fullBytes < 16 {
       masked[fullBytes] = bytes[fullBytes] & (~UInt8(0) << (8 - remainderBits))
     }
+
     return masked
   }
 }

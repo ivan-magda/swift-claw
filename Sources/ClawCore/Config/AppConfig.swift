@@ -31,7 +31,6 @@ public struct AppConfig: Sendable, Equatable {
     static let heartbeatMaxPerDay = "CLAW_HEARTBEAT_MAX_PER_DAY"
     static let approvalExpiry = "CLAW_APPROVAL_EXPIRY"
 
-    /// Public because web_fetch's refusal copy cites the key by name — one source for the string.
     public static let webFetchExemptCIDRs = "CLAW_WEBFETCH_EXEMPT_CIDRS"
   }
 
@@ -76,8 +75,6 @@ public struct AppConfig: Sendable, Equatable {
 
   public let approvalExpirySeconds: Int
 
-  /// Networks web_fetch may connect to even though the SSRF blocklist reserves them — the
-  /// owner's opt-in for a fake-IP VPN/proxy pool. Empty by default: fully strict.
   public let webFetchExemptCIDRs: [CIDR]
 
   public init(

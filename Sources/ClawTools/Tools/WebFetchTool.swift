@@ -66,6 +66,7 @@ public struct WebFetchTool: Tool {
     guard let rawURL = arguments.objectValue?["url"]?.stringValue, rawURL.isEmpty == false else {
       return .refused(reason: "web_fetch needs a non-empty \"url\" argument.")
     }
+
     switch CanonicalURL.canonicalize(rawURL) {
     case .success(let canonical):
       return .resolved(canonical)
@@ -165,7 +166,7 @@ private extension WebFetchTool {
     // Literals stay on the pure blocklist — including the legacy numeric spellings getaddrinfo
     // resolves without DNS (http://3323068500/), which strict IP-literal parsing would miss.
     if ResolvedAddress.denotesIPLiteral(host: host) {
-      guard addresses.allSatisfy({ address in SSRFGuard.isPublic(address) }) else {
+      guard addresses.allSatisfy({ SSRFGuard.isPublic($0) }) else {
         return refusalPayload("Refused: \(host) is a private or reserved address.")
       }
       return nil

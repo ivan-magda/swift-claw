@@ -53,9 +53,11 @@ extension ResolvedAddress: CustomStringConvertible {
     case .ipv4(let value):
       var raw = in_addr(s_addr: value.bigEndian)
       var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+
       guard inet_ntop(AF_INET, &raw, &buffer, socklen_t(INET_ADDRSTRLEN)) != nil else {
         return "invalid-ipv4"
       }
+
       return buffer.withUnsafeBufferPointer { pointer in
         guard let base = pointer.baseAddress else {
           return "invalid-ipv4"
@@ -66,14 +68,17 @@ extension ResolvedAddress: CustomStringConvertible {
       guard bytes.count == 16 else {
         return "invalid-ipv6"
       }
+
       var raw = in6_addr()
       withUnsafeMutableBytes(of: &raw) { destination in
         destination.copyBytes(from: bytes)
       }
+
       var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
       guard inet_ntop(AF_INET6, &raw, &buffer, socklen_t(INET6_ADDRSTRLEN)) != nil else {
         return "invalid-ipv6"
       }
+
       return buffer.withUnsafeBufferPointer { pointer in
         guard let base = pointer.baseAddress else {
           return "invalid-ipv6"
