@@ -168,8 +168,16 @@ Requirements tagged *(v1)* are part of the daily-driver milestone (§9); others 
 - **FR-C4.** Audit events for job create/execute/cancel/failure. Proactive runs have their own daily spend budget.
 
 ### 6.9 Execution / sandbox *(later phase)*
-- **FR-X1.** Shell/code execution runs inside a **hardware-virtualization sandbox** behind an `ExecutionBackend` protocol: `apple/container` on macOS, a microVM backend on Linux. One untrusted execution = one disposable, never-reused VM (scratch staged and destroyed per run).
-- **FR-X2.** Secure-by-default exec: no host bind-mounts, egress denied unless opted in, capabilities dropped, resource caps, deterministic timeouts. The staging path applies the same canonicalize + workspace-scope + secret-shaped-content checks as the file tools; an opted-in-egress exec run is treated as `canExfiltrate=true`.
+- **FR-X1.** Shell/code execution runs behind an `ExecutionBackend` protocol. Inc 5b supplies
+  `apple/container` on macOS 26+ arm64: one untrusted execution = one disposable, never-reused
+  hardware-virtualized VM. Linux gets a separately chosen backend in Inc 6; until a pinned
+  Linux-host spike proves a microVM-conformant design, the Linux choice remains open.
+- **FR-X2.** Secure-by-default exec exposes no live workspace, home, or ambient host bind mount.
+  Approved inputs are copied into one daemon-owned, per-execution ephemeral scratch directory and
+  that copy is the sole host mount, explicitly read-only. Egress is denied unless opted in;
+  capabilities are dropped; resource caps and deterministic timeouts are explicit. Staging applies
+  the same canonicalize + workspace-scope + secret-shaped-content checks as file tools and binds
+  realpath/bytes by SHA-256; opted-in egress is `canExfiltrate=true`.
 
 ### 6.10 Operator UX
 - **FR-O1.** *(commands land with their features)* Telegram command menu: at minimum `/start`, `/help`, `/status`, `/new`, `/stop`, `/cost` in v1; `/memory`, `/retry` in v1; `/model`, `/approve`, `/reject`, `/schedule`, `/cancel` as their features land.
@@ -213,7 +221,7 @@ Distilled from the verified best-practices research:
 | Phase | Capability | Headline outcome |
 |---|---|---|
 | **v1 — Daily driver** | §5.1, §5.2, §5.3 | Supervised default-deny Telegram DM → real OpenAI-compatible **streaming** LLM answer; persisted; multi-turn; per-session FIFO lane + `/stop` + `/new`; durable memory on confirm + FTS5 recall; read-only `web_search`/`web_fetch`/file-read (`safe`, exfil-gated); USD breaker; onboarding; non-text handling; graceful degradation; export/delete; `doctor`; survives restart. |
-| **P-tools** | §5.4 | Write/shell tools + in-code policy gate + Telegram approval flow (callback auth + nonce + FSM) + sandbox (`apple/container` / Linux microVM) + enforced lethal-trifecta gate. *Delivered in two increments — **5a** (approval fabric + write tools, no virtualization) then **5b** (sandbox + code execution); see [`ARCHITECTURE.md` §20].* |
+| **P-tools** | §5.4 | Write/shell tools + in-code policy gate + Telegram approval flow (callback auth + nonce + FSM) + sandbox (`apple/container` in Inc 5b on macOS 26 arm64; Linux backend in Inc 6) + enforced lethal-trifecta gate. *Delivered in two increments — **5a** (approval fabric + write tools, no virtualization) then **5b** (sandbox + code execution); see [`ARCHITECTURE.md` §20].* |
 | **P-schedule** | §5.5 | NL reminders; restart-safe DST-correct scheduler; confirm-before-arm; reduced-privilege proactive runs; opt-in heartbeat with quiet hours; delivery to DM. |
 | **P-portability** | — | Linux portability + deployment (static SDK, distroless/systemd, CI Linux gate). |
 | **Roadmap (later)** | — | Image/vision input; native Anthropic adapter (prompt caching); pairing flow; sqlite-vec recall (behind a protocol). |
@@ -245,13 +253,15 @@ Each criterion is backed by an **automated acceptance test** (per-requirement ve
 ## 12. Risks & open questions
 
 - **R1.** Telegram thin-client correctness (offset ordering, 409 conflict, 429 flood-control) — mitigated by the FR-G2 durability invariant + single-instance guard + typed 409 + tests.
-- **R2.** `apple/container` is macOS-26/Apple-Silicon-only — a Linux sandbox backend must be chosen before P-tools.
+- **R2.** `apple/container` is macOS-26/Apple-Silicon-only. Inc 5b therefore ships the macOS
+  backend only; Linux execution remains absent until Inc 6 resolves and proves its backend.
 - **R3.** OpenAI-compat shims lag native features (Anthropic prompt caching, some tool-calling quirks) — acceptable; the `LLMProvider` protocol leaves an escape hatch.
 - **R4.** `sqlite-vec` (vector search) requires a custom SQLite amalgamation + separate Linux re-validation — keep strictly behind a protocol and deferred; FTS5/BM25 is the v1 recall mechanism.
 - **R5.** Prompt injection has no reliable model-level fix — rely on least-privilege, the enforced trifecta gate, and approvals, not a classifier; the memory-write scan is defense-in-depth only.
 - **R6.** GRDB + FTS5 on Linux is contributor-supported (FTS5 may not be compiled into the platform SQLite) — mitigated by vendoring the SQLite amalgamation with FTS5 compiled in and a Linux CI job; risk is **Low (macOS) / Med (Linux until our own CI exists)**.
 - **OQ1.** HTML vs MarkdownV2 as the default Telegram parse mode (HTML is less 400-prone).
-- **OQ2.** Linux sandbox backend (P-tools): Podman + microVM vs gVisor `runsc`.
+- **OQ2.** Linux sandbox backend (Inc 6): KVM-backed microVM versus an explicitly amended
+  userspace-kernel profile, decided only after the pinned Linux-host spike.
 
 *(Resolved and removed from open questions: memory write policy = confirm-on-write; context counting unit = graphemes; memory caps = 2200/1375; error-on-overflow is the v1 contract.)*
 
