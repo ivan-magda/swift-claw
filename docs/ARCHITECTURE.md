@@ -83,6 +83,7 @@ clawd
 | `ClawLLM` | lib | OpenAI-compatible Chat Completions client + OpenAI-shaped message model; usage/cost; retries; **SSE streaming (v1)**. | `OpenAICompatibleProvider`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolCall`, `Usage`, `CostTable`, `SSEParser` |
 | `ClawWorkspace` | lib | Identity/memory files (`SOUL/AGENTS/USER/TOOLS/MEMORY.md`, `memory/*.md`, `skills/*`), Yams frontmatter, caps + untrusted-tier injection. | `WorkspaceStore`, `WorkspaceFile`, `MemoryDoc`, `FrontmatterParser` |
 | `ClawTools` | lib | Tool registry + read-only tools (v1); policy gate + approval orchestration arrive in the P-tools phase (Inc 5a). | `ToolRegistry`, `ToolContext`; `WebSearchTool`, `WebFetchTool`, `FileReadTool` (v1); `PolicyGate`, `ApprovalCoordinator` [Inc5a] |
+| `ClawExec` | lib | macOS 26 arm64 execution implementation: fixed-path swift-subprocess adapter, apple/container argv, disposable scratch, serialized VM lifecycle, probe/reap/canary maintenance. Linux supplies no backend until Inc 6. | `ContainerBackend`, `ExecSandboxSettings` |
 | `ClawAgent` | lib | Agent runtime: context assembly, the run loop, budgets, cancellation, the per-session lane. | `AgentRuntime`, `ContextBuilder`, `RunBudget`, `SessionActor` |
 | `ClawGateway` | lib | Wiring: `ServiceGroup`, Services, routing, access control, session resolution, outbox dispatch, shutdown. | `Gateway`, `TelegramPollerService`, `SchedulerService` [Inc4], `Router`, `AccessControl`, `RateLimiter`, `OutboxDispatcher` |
 | `clawd` | exe | Thin entry: load config + secrets → acquire startup lock → build ServiceGroup → run. | `main` |
@@ -114,6 +115,7 @@ form `ARCHITECTURE.md §N` is used, sparingly.
 | §10 Tool system & policy | `ToolRegistry`, `FileReadTool`, `FileWriteTool`, `MemoryWriteTool`, `WebFetchTool`, `WebSearchTool`, `WorkspacePathContainment` (ClawTools); `Tool`, `ToolDefinition`, `RiskLevel`, `ToolDispatching` (ClawCore) |
 | §11 Approval system | `Approval`, `ApprovalFSM`, `PendingToolAction`, `RecordedToolAction` (ClawCore); `ApprovalStoreGRDB` (ClawData); the §6.2/§6.5 gateway symbols above |
 | §12 Security & trust | `SecretRedactor`, `SSRFGuard`, `FakeIPDetector`, `ExfilArgGuard`, `CanonicalURL`, `ToolOutputCap` (ClawTools); `ContextTier` provenance labels, `LabeledContext`, and the `ResolvedAddress`/`CIDR` address vocabulary (ClawCore) |
+| §13 Execution / sandbox | `ExecutionBackend`, `SandboxMaintenance`, execution value types (ClawCore); `ExecuteCodeTool` (ClawTools); `ContainerBackend`, `ExecSandboxSettings` (ClawExec); `SandboxLifecycleService`, `SandboxHealthRows` (ClawGateway) |
 | §15 Config & secrets | `AppConfig`, `QuietHours`, `SecretStore` seam (ClawCore); `EncryptedFileSecretStore`, `EnvSecretStore`, `SecretStoreResolver` (ClawSecrets) |
 | §16 Observability | `DoctorReport`, `SchedulerHealth`, `ApprovalsHealthRows` (ClawGateway); `ApprovalsHealth`, `RunsHealth`, `AuditLog` (ClawCore); `AuditLogGRDB` (ClawData) |
 | §19 Error taxonomy | `ClawCore/Errors/` (`ClawExitCode`, `ConfigError`, `TelegramError`, `StoreError`, `ProviderError`); `ClawDatabase.classifyError` → `throws(StoreError)` seam (ClawData) |
@@ -244,7 +246,9 @@ model proposes tool_call
                         │            policy_version → execute ORIGINALLY-RECORDED args
                         ├─ reject   → cancel safely
                         └─ expire (approval-expiry ticker, default 1h) → DENY (terminal)
-       • dangerous  → refuse unless explicitly enabled in config
+       • dangerous  → absent from the registry unless explicitly enabled in config; once
+                        registered, ALWAYS suspend through ApprovalCoordinator (never auto-run),
+                        and execute only inside its declared sandbox after approval
        • LETHAL-TRIFECTA GATE (§12): if session.tainted && privileged/egress action,
          FORCE the approval path in code regardless of the tool's own tier.
   └─ AuditLog.append(actor, tool, args-redacted, decision, result-size, ts, run_id, session_id)
@@ -483,16 +487,55 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **Secrets:** never in replies or logs. **Exact-value redaction** of the loaded secret values (bot token, api keys, age-decrypted material) is the **PRIMARY** mechanism at both the log boundary and the outbound-reply boundary (the values are already in memory — cheap, deterministic); pattern-based scanning is **secondary** defense-in-depth. The gateway owns the destination chat id; outbound controls strip auto-fetching image/link elements.
 - **Accepted v1 limitation — `file_write` symlink TOCTOU.** `file_write` re-validates the approved path against the live filesystem at execution time (§10.2), but the directory creation, staging, and rename that follow are path-based, so a process racing the daemon on the same host could swap a parent directory for a symlink inside that window and redirect the write outside the workspace. This is **out of the v1 threat model** for the same reason §7 drops in-DB hash-chaining: a same-host attacker running as the daemon's user does not need the race — they can already write anywhere the daemon can. The four layers above defend against a subverted *model*, not a hostile co-resident process. If hardening is added later, bind the containment validation and the write to the same filesystem object (descriptor-relative, no-follow traversal; `openat2` + `RESOLVE_BENEATH` is Linux-only, Darwin needs a manual `O_NOFOLLOW` ancestor walk) — do not claim the race is closed without that.
 
-## 13. Execution / sandbox architecture (Inc 5b)
+## 13. Execution / sandbox architecture (Inc 5b macOS; Inc 6 Linux)
 
 - **`ExecutionBackend` protocol** (`Sendable`), driven via `swiftlang/swift-subprocess`:
-  - **macOS:** `ContainerBackend` shells out to the `apple/container` CLI — **VM-per-container** via Virtualization.framework (a container escape needs a *hypervisor* escape).
-  - **Linux:** `PodmanMicroVMBackend` (Podman/runc-in-microVM or gVisor `runsc`) behind the same protocol. (Backend choice is a genuinely open question — §21.)
-- **Isolation unit (explicit):** **one untrusted execution = one disposable, never-reused VM** with scratch staged and destroyed per run. The **warm pool amortizes only the boot of a fresh instance** — it never reuses an instance across jobs.
-- **Secure-by-default exec:** no host bind-mounts (stage inputs into a scratch dir), egress denied unless opted in, `--cap-drop ALL`, rootless, resource caps (≈1GB/4CPU), `--init` reaper, deterministic timeouts (stop-signal then SIGKILL), `closeAllUnknownFileDescriptors` on Linux.
-- **Staging is a gated data-crossing, not free:** apply the same canonicalize + workspace-scope + secret-shaped-content checks to the staging path as to FS tools (anti confused-deputy). When egress is opted in, treat the run as `canExfiltrate=true` and require approval if the session is tainted.
-- Prefer **shelling to the CLI** over embedding the pre-1.0 `containerization` library (looser coupling, separate process tree). Backend state lives in an `actor`.
-- **`sandbox-exec`/Seatbelt** only as defense-in-depth around the launcher — never the sole boundary.
+  - **macOS 26+ arm64 (Inc 5b):** `ContainerBackend` shells out to the fixed
+    `/usr/local/bin/container` apple/container CLI. Every container receives its own
+    Virtualization.framework VM; a container escape therefore still needs a hypervisor escape.
+  - **Linux (Inc 6):** the backend remains open behind the same protocol. A pinned Linux-host
+    spike must prove lifecycle, no-egress, opted-in egress, resource caps/cgroups, rootless
+    operation, and cleanup. If the selected backend is not a hardware-virtualized microVM, PRD
+    FR-X1 must be amended before implementation.
+- **Feature floor:** the package remains macOS 15 compatible, but `execute_code` is absent unless
+  the host is macOS 26 or newer on arm64. Linux, macOS 15, and Intel macOS fail closed and doctor
+  explains why. No macOS-15 degraded mode exists.
+- **Isolation unit:** one untrusted execution = one fresh disposable, never-reused VM. Scratch is
+  created and destroyed per run. No warm pool, snapshot clone, or interactive persistent session
+  ships in this increment.
+- **Secure-by-default launcher:** no live workspace, home, or ambient host path is mounted. The
+  sole host mount is the daemon-owned per-execution scratch directory containing bounded copies of
+  approved inputs; it is mounted at `/work` with the explicit `readonly` option. Every run uses a
+  read-only root filesystem plus `/tmp` tmpfs, `--cap-drop ALL`, `--init`, explicit CPU/memory caps,
+  a digest-pinned workload image, an explicit interpreter entrypoint, deterministic identity, and
+  unconditional cleanup. apple/container owns the init image: the backend resolves its exact
+  runtime reference, pulls it over HTTPS, passes it explicitly, and reports it as a
+  version-coupled trust dependency without claiming digest verification the CLI cannot expose.
+- **Network is explicit in both directions:** default execution emits
+  `--network none --no-dns`; owner-approved `network: true` emits `--network default`. Omitting
+  `--network` is forbidden because apple/container attaches the default network and grants full
+  egress. Networked execution is `canExfiltrate=true` and remains dangerous/approval-gated.
+- **Staging is a gated data crossing:** every source is an existing regular workspace-relative
+  file resolved through canonical realpath containment. The approval binds source path, realpath,
+  byte count, and SHA-256; execution re-resolves and re-hashes before copying. Code and every
+  staged file always pass exact-secret and secret-shape scanning; networked runs additionally pass
+  the MEMORY/USER substring tier.
+- **Backend state lives in an actor, but actor isolation is not a run limiter.** A stored `Task`
+  chain serializes the whole spawn → execution → cleanup operation across suspension points, so at
+  most one VM contributes its peak memory footprint.
+- **Timeout and output:** the program budget starts after spawn; the whole call returns within that
+  budget plus a 20-second teardown allowance. The launcher explicitly configures process-group
+  teardown, drains stdout/stderr concurrently, retains at most 1 MiB per stream while continuing
+  to drain, and then destroys the named container and scratch on every exit path.
+- **Maintenance and doctor:** `SandboxMaintenance.prepare()` reaps owned leftovers, pre-pulls the
+  pinned workload and exact runtime-owned init references, and boots a hardening canary. Any
+  failed host, version, digest, capability, network, resource, reaper, rootfs, staging, or
+  interpreter assertion keeps `execute_code` out of the registry. `shutdown()` cancels the
+  execution chain and reaps again.
+- **swift-subprocess is only a launcher.** It provides no isolation. Pin exact release 0.5.0, use
+  streaming capture and an explicit teardown sequence, and keep the hardware VM as the boundary.
+- `sandbox-exec`/Seatbelt may wrap the launcher only as optional defense-in-depth; it is never the
+  isolation boundary.
 
 ## 14. Scheduler architecture (Inc 4)
 
@@ -522,6 +565,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 | scheduler | `last_tick_at`, `due_count`, `last_misfire` |
 | runs | `in_flight`, `oldest_run_age`, `last_FAILED` |
 | spend | `today_usd`, `remaining_budget` (per-run + per-day) |
+| sandbox | `available`, `os_ok`, `engine_version`, `version_ok`, `image_digest_ok`, `caps_empty`, `net_isolated`, `caps_match`, `reaper_ok`, `rootfs_ro`, `staging_ro`, `interpreters_ok`, `last_error` |
 | config/secret | validation result — **printed first** if it errored |
 
 - **Audit:** ordinary append-only (§7.2) — useful for "why did it do that." No tamper-evidence claim in v1.
@@ -530,6 +574,8 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 ## 17. Deployment & portability
 
 - **Build:** SwiftPM (**platform floor macOS 15** — `Calendar.RecurrenceRule` requires it, Inc 4/§14); two release binaries: a **macOS-native `arm64` binary** and a **Linux `x86_64` binary built natively in the `swift:6.3-noble` container** with `--static-swift-stdlib` (the Swift runtime is bundled; the system `libsqlite3` is the sole external runtime dependency). A musl **Static Linux SDK** → fully-static/distroless image is deferred: GRDB v7 declares SQLite as a `.systemLibrary` and the musl SDK ships none, so a musl cross-compile can't link (see §18 Deployment escape hatch).
+`execute_code` has its own stricter runtime gate: macOS 26+ arm64. It stays absent on every other
+build; the portable `ExecutionBackend` types and all fake-backed tests still compile on Linux.
 - **Portability is enforced continuously:** a **GRDB + FTS5 build+test gate runs on both macOS and Linux on every PR** (`ci.yml`) — the portability gate is live, not deferred. Portable protocol seams + AsyncHTTPClient/OpenAI-compat choices are kept throughout; pragmatic macOS-native code is permitted behind a protocol and covered by the Linux CI gate.
 - **Supervise:** launchd plist (macOS) / systemd unit (Linux), with throttling (§4). Logs to stdout/stderr.
 - **CI:** the macOS + Linux **GRDB + FTS5 build+test gate** (`ci.yml`) runs on every PR and blocks merge; releases (`release.yml`) publish as **GitHub Releases with SHA256 checksums + build-provenance attestations**, not a container image.
@@ -611,8 +657,8 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 | **3** | Memory & workspace + read-only tools | Workspace files injected at the **untrusted tier** (budgeted, caps, flush-before-compact); durable facts on confirm; `memory_items` + **FTS5 recall** across restarts; `/memory`; `web_search`/`web_fetch` + file READ at **`safe`** tier with the **exfil gate**. |
 | **4** | Scheduler & proactive | "Every weekday 07:00 Europe/Berlin…" fires once per occurrence across restarts/DST; **confirm-before-arm**; reduced-privilege runs; clock-gap catch-up cap; delivery via outbox; opt-in heartbeat with quiet hours. *(Scope reconciliation: the external research roadmap bundles memory/workspace into its "Increment 4" — this repo shipped those in Inc 3a; this increment is scheduler/proactive only.)* |
 | **5a** | Approval fabric + write tools | *Prep first: add `approval-requested/granted/denied` audit cases + a per-run prompt/workspace fingerprint for `policy_version` to bind to.* Then a consequential **write** tool (`file_write`/`memory_write`, `ask` tier) requires explicit approval via the **durable FSM** (**callback auth + ≥128-bit nonce + suspend-to-`AWAITING_APPROVAL` + boot reconciliation + expiry ticker**); a **forged or third-party callback cannot approve**; the **enforced lethal-trifecta gate** (upgraded from Inc 3b's ephemeral grant to the durable FSM) forces approval on a tainted privileged/egress action. **No virtualization.** |
-| **5b** | Sandbox + code execution | Built on 5a's approval fabric: untrusted code (`execute_code`, `dangerous` tier) runs in a **per-exec disposable VM** (no host FS/network by default) behind approval; the staging path is gated like the file tools; an opted-in-egress run is `canExfiltrate=true`. **Prereqs:** resolve the Linux backend (§21) + pin the base image + add a sandbox check to doctor. |
-| **6** | Linux portability & deployment | Same source → running, supervised binary on a fresh Linux box (systemd); the **macOS + Linux GRDB+FTS5 build+test CI gate already landed early** (`ci.yml`, §17), so the remainder here is the **musl Static Linux SDK → distroless packaging, which stays deferred/optional** (§17/§18 escape hatch). |
+| **5b** | Sandbox + code execution (macOS) | Built on 5a's approval fabric: on macOS 26 arm64, untrusted code (`execute_code`, `dangerous`) runs in one fresh disposable apple/container VM behind exact-action approval. No live host path/network is exposed by default; staged copies are containment/secret/hash gated; opted-in egress is `canExfiltrate=true`; doctor fails closed. **Prerequisite:** verify and pin the workload image. |
+| **6** | Linux sandbox + portability & deployment | Resolve and implement the Linux `ExecutionBackend` after a pinned host spike and FR-X1 conformance/amendment; keep the existing macOS + Linux GRDB/FTS5 gate; complete the remaining supervised Linux packaging work. |
 
 *(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards.)*
 
@@ -620,7 +666,9 @@ Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**:
 
 Genuinely-open (decided ones have moved into the body above):
 
-- **Linux sandbox backend:** Podman+microVM vs gVisor `runsc` (decide before Inc 5b).
+- **Linux sandbox backend (decide before Inc 6):** KVM-backed microVM versus a documented PRD
+  amendment for a userspace-kernel profile; rootless Podman + gVisor remains only a candidate until
+  the pinned Linux-host spike proves its cgroup, network, and cleanup behavior.
 - MCP transport on Linux: custom AHC SSE transport vs Stdio-only.
 - Rolling summary vs aggressive compaction + just-in-time retrieval (treat rolling summary as one strategy; keep out-of-window references).
 

@@ -478,4 +478,214 @@ import Testing
       try AppConfig.load(environment: env)
     }
   }
+
+  @Test func execDefaultsToDisabledWithStableLowCoreSafeValues() throws {
+    // given
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.exec == .disabledDefault)
+    #expect(config.exec.enabled == false)
+    #expect(config.exec.image == nil)
+    #expect(config.exec.imageRegistryAllowlist == ["cgr.dev"])
+    #expect(config.exec.memoryMiB == 1024)
+    #expect(config.exec.cpus == 4)
+    #expect(config.exec.timeoutSeconds == 30)
+    #expect(config.exec.allowEgress == false)
+  }
+
+  @Test func pinnedImageParserAcceptsOnlyAnExplicitRegistryAndLowercaseDigest() throws {
+    // given
+    let digest = String(repeating: "a", count: 64)
+
+    // when
+    let image = try #require(
+      PinnedImageReference.parse("cgr.dev/chainguard/python@sha256:\(digest)")
+    )
+
+    // then
+    #expect(image.repository == "cgr.dev/chainguard/python")
+    #expect(image.digest == digest)
+    #expect(image.registryHost == "cgr.dev")
+    #expect(image.description == "cgr.dev/chainguard/python@sha256:\(digest)")
+  }
+
+  @Test(arguments: [
+    "chainguard/python@sha256:" + String(repeating: "a", count: 64),
+    "https://cgr.dev/chainguard/python@sha256:" + String(repeating: "a", count: 64),
+    "cgr.dev/chainguard/python:latest",
+    "cgr.dev/chainguard/python@sha256:" + String(repeating: "A", count: 64),
+    "localhost/python@sha256:" + String(repeating: "a", count: 64),
+    "127.0.0.1/python@sha256:" + String(repeating: "a", count: 64),
+    "éxample.com/python@sha256:" + String(repeating: "a", count: 64),
+    "cgr.dev/pythön@sha256:" + String(repeating: "a", count: 64),
+    "cgr.dev:+443/python@sha256:" + String(repeating: "a", count: 64),
+    "cgr.dev/python@sha256:abc",
+    " cgr.dev/python@sha256:" + String(repeating: "a", count: 64),
+  ])
+  func pinnedImageParserRejectsAmbiguousOrUntrustedReferences(_ rawValue: String) {
+    // given / when / then
+    #expect(PinnedImageReference.parse(rawValue) == nil)
+  }
+
+  @Test func enabledExecParsesTheCompleteValidatedBlock() throws {
+    // given
+    let digest = String(repeating: "b", count: 64)
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.execEnabled] = "true"
+    env[EnvKey.execImage] = "images.example.com/team/python@sha256:\(digest)"
+    env[EnvKey.execImageRegistries] = "CGR.DEV, images.example.com, cgr.dev"
+    env[EnvKey.execMemoryMiB] = "512"
+    env[EnvKey.execCPUs] = "1"
+    env[EnvKey.execTimeout] = "45"
+    env[EnvKey.execAllowEgress] = "true"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.exec.enabled)
+    #expect(
+      config.exec.image?.description
+        == "images.example.com/team/python@sha256:\(digest)"
+    )
+    #expect(config.exec.imageRegistryAllowlist == ["cgr.dev", "images.example.com"])
+    #expect(config.exec.memoryMiB == 512)
+    #expect(config.exec.cpus == 1)
+    #expect(config.exec.timeoutSeconds == 45)
+    #expect(config.exec.allowEgress)
+  }
+
+  @Test func disabledExecDoesNotApplyTheLiveHostCPUCeiling() throws {
+    // given: Linux CI may expose fewer than four CPUs; disabled parsing must remain stable
+    let aboveHost = ProcessInfo.processInfo.activeProcessorCount + 1
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.execCPUs] = "\(aboveHost)"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.exec.enabled == false)
+    #expect(config.exec.cpus == aboveHost)
+  }
+
+  @Test func enabledExecRequiresAnImage() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.execEnabled] = "true"
+    env[EnvKey.execCPUs] = "1"
+
+    // when / then
+    #expect(throws: ConfigError.invalidExecImage("")) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func enabledExecRejectsAnImageOutsideTheRegistryAllowlist() {
+    // given
+    let rawImage =
+      "registry.example.com/team/python@sha256:" + String(repeating: "c", count: 64)
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.execEnabled] = "true"
+    env[EnvKey.execImage] = rawImage
+    env[EnvKey.execCPUs] = "1"
+
+    // when / then
+    #expect(
+      throws: ConfigError.execImageRegistryNotAllowed("registry.example.com")
+    ) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func enabledExecRejectsCPUAboveTheLiveHostCap() {
+    // given
+    let rawCPUs = "\(ProcessInfo.processInfo.activeProcessorCount + 1)"
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.execEnabled] = "true"
+    env[EnvKey.execImage] =
+      "cgr.dev/chainguard/python@sha256:" + String(repeating: "d", count: 64)
+    env[EnvKey.execCPUs] = rawCPUs
+
+    // when / then
+    #expect(throws: ConfigError.invalidExecCPUs(rawCPUs)) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func execImageWhitespaceFailsClosedAtTheConfigBoundary() {
+    // given
+    let rawImage =
+      " cgr.dev/chainguard/python@sha256:" + String(repeating: "e", count: 64)
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.execImage] = rawImage
+
+    // when / then
+    #expect(throws: ConfigError.invalidExecImage(rawImage)) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test(arguments: [
+    (
+      key: AppConfig.EnvKey.execMemoryMiB, value: "255",
+      error: ConfigError.invalidExecMemoryMiB("255")
+    ),
+    (
+      key: AppConfig.EnvKey.execMemoryMiB, value: "8193",
+      error: ConfigError.invalidExecMemoryMiB("8193")
+    ),
+    (
+      key: AppConfig.EnvKey.execMemoryMiB, value: "large",
+      error: ConfigError.invalidExecMemoryMiB("large")
+    ),
+    (key: AppConfig.EnvKey.execCPUs, value: "0", error: ConfigError.invalidExecCPUs("0")),
+    (key: AppConfig.EnvKey.execCPUs, value: "many", error: ConfigError.invalidExecCPUs("many")),
+    (key: AppConfig.EnvKey.execTimeout, value: "0", error: ConfigError.invalidExecTimeout("0")),
+    (key: AppConfig.EnvKey.execTimeout, value: "301", error: ConfigError.invalidExecTimeout("301")),
+    (
+      key: AppConfig.EnvKey.execTimeout, value: "later",
+      error: ConfigError.invalidExecTimeout("later")
+    ),
+  ])
+  func malformedExecBoundsFailClosed(
+    _ fixture: (key: String, value: String, error: ConfigError)
+  ) {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[fixture.key] = fixture.value
+
+    // when / then
+    #expect(throws: fixture.error) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test(arguments: ["", "localhost", "127.0.0.1", "bad host"])
+  func invalidOrEmptyRegistryAllowlistFailsClosed(_ rawValue: String) {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.execImageRegistries] = rawValue
+
+    // when / then
+    #expect(throws: ConfigError.invalidExecImageRegistry(rawValue)) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test(arguments: [AppConfig.EnvKey.execEnabled, AppConfig.EnvKey.execAllowEgress])
+  func malformedExecBooleansFailClosed(_ key: String) {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[key] = "sometimes"
+
+    // when / then
+    #expect(throws: ConfigError.invalidBool(key: key, value: "sometimes")) {
+      try AppConfig.load(environment: env)
+    }
+  }
 }

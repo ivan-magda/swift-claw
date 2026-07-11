@@ -252,6 +252,7 @@ func makeSC3Harness(
   let approvedExecutor = ApprovedActionExecutor(
     tools: dispatcher.toolsByName,
     runs: stores.runs,
+    redactArguments: { $0 },
     now: { Date() },
     logger: logger
   )

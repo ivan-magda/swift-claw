@@ -1,4 +1,3 @@
-import Crypto
 import Foundation
 
 /// Why a non-approve resolution happened — the audit `decision` column vocabulary.
@@ -148,11 +147,7 @@ public enum ApprovalNonce {
 /// the approve CAS. One helper so the two computations can never diverge.
 public enum ApprovalArgsHash {
   public static func sha256Hex(_ canonicalArgsJSON: String) -> String {
-    SHA256.hash(data: Data(canonicalArgsJSON.utf8))
-      .map { byte in
-        String(format: "%02x", byte)
-      }
-      .joined()
+    SHA256Digest.hex(canonicalArgsJSON)
   }
 }
 

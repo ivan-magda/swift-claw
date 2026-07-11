@@ -13,6 +13,12 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidApprovalExpiry(String)
   case invalidWebFetchExemptCIDR(String)
   case heartbeatOwnerUnresolved(allowlistCount: Int)
+  case invalidExecImage(String)
+  case invalidExecImageRegistry(String)
+  case execImageRegistryNotAllowed(String)
+  case invalidExecMemoryMiB(String)
+  case invalidExecCPUs(String)
+  case invalidExecTimeout(String)
 
   public var exitCode: Int32 {
     switch self {
@@ -30,6 +36,12 @@ public enum ConfigError: Error, Sendable, Equatable {
     case .invalidApprovalExpiry: ClawExitCode.configInvalid.rawValue
     case .invalidWebFetchExemptCIDR: ClawExitCode.configInvalid.rawValue
     case .heartbeatOwnerUnresolved: ClawExitCode.configInvalid.rawValue
+    case .invalidExecImage: ClawExitCode.configInvalid.rawValue
+    case .invalidExecImageRegistry: ClawExitCode.configInvalid.rawValue
+    case .execImageRegistryNotAllowed: ClawExitCode.configInvalid.rawValue
+    case .invalidExecMemoryMiB: ClawExitCode.configInvalid.rawValue
+    case .invalidExecCPUs: ClawExitCode.configInvalid.rawValue
+    case .invalidExecTimeout: ClawExitCode.configInvalid.rawValue
     }
   }
 }

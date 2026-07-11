@@ -82,6 +82,7 @@ import Testing
       observationMessageId: receipt.observationMessageId,
       item: item,
       observationContent: "Saved memory item.",
+      audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
       notResumableObservationContent: "stopped",
       now: now
     )
@@ -90,6 +91,7 @@ import Testing
       observationMessageId: receipt.observationMessageId,
       item: item,
       observationContent: "Saved memory item.",
+      audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
       notResumableObservationContent: "stopped",
       now: now
     )
@@ -110,5 +112,13 @@ import Testing
       ) ?? 0
     }
     #expect(observationCount == 1)
+    let auditCount = try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM audit_events WHERE run_id = ? AND action = ?",
+        arguments: [runId, AuditAction.toolCall.rawValue]
+      ) ?? 0
+    }
+    #expect(auditCount == 1)
   }
 }

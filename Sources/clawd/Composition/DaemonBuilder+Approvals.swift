@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawGateway
+import ClawTools
 import Foundation
 
 // MARK: - Coordination Fixtures & Approve-Resume Fabric
@@ -54,9 +55,13 @@ extension DaemonBuilder {
     turnRunner: TurnRunner
   ) -> ApprovalFabric {
     let contextBuilder = agentStack.contextBuilder
+    let argumentGuard = ExfilArgGuard(secretValues: secrets.redactionValues)
     let approvedExecutor = ApprovedActionExecutor(
       tools: agentStack.toolDispatcher.toolsByName,
       runs: stores.runs,
+      redactArguments: { arguments in
+        argumentGuard.renderRedacted(argsJSON: arguments)
+      },
       now: { Date() },
       logger: logger
     )

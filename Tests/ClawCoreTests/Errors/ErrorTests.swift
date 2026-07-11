@@ -31,5 +31,19 @@ import Testing
     #expect(
       ConfigError.invalidApprovalExpiry("999999").exitCode == ClawExitCode.configInvalid.rawValue
     )
+    #expect(ConfigError.invalidExecImage("bad").exitCode == ClawExitCode.configInvalid.rawValue)
+    #expect(
+      ConfigError.invalidExecImageRegistry("bad").exitCode
+        == ClawExitCode.configInvalid.rawValue
+    )
+    #expect(
+      ConfigError.execImageRegistryNotAllowed("bad").exitCode
+        == ClawExitCode.configInvalid.rawValue
+    )
+    #expect(
+      ConfigError.invalidExecMemoryMiB("bad").exitCode == ClawExitCode.configInvalid.rawValue
+    )
+    #expect(ConfigError.invalidExecCPUs("bad").exitCode == ClawExitCode.configInvalid.rawValue)
+    #expect(ConfigError.invalidExecTimeout("bad").exitCode == ClawExitCode.configInvalid.rawValue)
   }
 }

@@ -122,15 +122,16 @@ extension RunStoreGRDB {
   public func fillClaimedObservation(
     runId: Int64,
     observationMessageId: Int64,
-    content: String
+    fill: ClaimedObservationFill
   ) throws(StoreError) {
     try database.writeMapping { db in
-      try Self.fillApprovedObservation(
+      try Self.fillClaimedObservation(
         db,
         runId: runId,
-        messageId: observationMessageId,
-        content: content
+        observationMessageId: observationMessageId,
+        fill: fill
       )
+      try claimedFillFault()
     }
   }
 
@@ -139,6 +140,7 @@ extension RunStoreGRDB {
     observationMessageId: Int64,
     item: NewMemoryItem,
     observationContent: String,
+    audit: ApprovedExecutionAudit,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {
@@ -153,16 +155,24 @@ extension RunStoreGRDB {
       guard claim == .committed else {
         return claim
       }
-      // Exactly-once: the item insert shares this transaction with the observation fill, both
-      // gated by the claim guards above — the same db-scoped static `applyRemember` uses;
-      // MemoryStore.append would open its own txn and could not fuse.
+      // Exactly-once: the item insert shares this transaction with the observation fill and its
+      // audit, all gated by the claim guards above — the same db-scoped static `applyRemember`
+      // uses; MemoryStore.append would open its own txn and could not fuse.
       _ = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
-      try Self.fillApprovedObservation(
+      try Self.fillClaimedObservation(
         db,
         runId: runId,
-        messageId: observationMessageId,
-        content: observationContent
+        observationMessageId: observationMessageId,
+        fill: ClaimedObservationFill(
+          content: observationContent,
+          status: .ok,
+          setTainted: false,
+          setPrivateData: false,
+          audit: audit,
+          now: now
+        )
       )
+      try claimedFillFault()
       return .committed
     }
   }
@@ -284,6 +294,61 @@ extension RunStoreGRDB {
     try db.execute(
       sql: "UPDATE messages SET content = ? WHERE id = ? AND run_id = ? AND role = 'tool'",
       arguments: [content, messageId, runId]
+    )
+  }
+
+  /// Fills a claimed observation with its result, the state-guarded provenance flags, and the
+  /// `.toolCall` audit in the caller's transaction so all three commit or roll back together.
+  static func fillClaimedObservation(
+    _ db: Database,
+    runId: Int64,
+    observationMessageId: Int64,
+    fill: ClaimedObservationFill
+  ) throws {
+    guard
+      let row = try Row.fetchOne(
+        db,
+        sql: "SELECT session_id, state FROM runs WHERE id = ?",
+        arguments: [runId]
+      ),
+      let state = RunState(rawValue: row["state"])
+    else {
+      throw StoreError.unexpected("run \(runId) is missing or has an unrecognized state")
+    }
+    let sessionId: Int64 = row["session_id"]
+
+    try fillApprovedObservation(
+      db,
+      runId: runId,
+      messageId: observationMessageId,
+      content: fill.content
+    )
+
+    // Provenance follows the run that claimed the action: a running or `/stop`-cancelled window
+    // still owns the taint, but a `/new`-superseded window already detainted, so re-flagging it
+    // would recontaminate the fresh window. The observation and audit above stay truthful either way.
+    if state == .running || state == .cancelled {
+      if fill.setTainted {
+        try setSessionTainted(db, sessionId: sessionId, now: fill.now)
+      }
+      if fill.setPrivateData {
+        try setSessionPrivateData(db, sessionId: sessionId, now: fill.now)
+      }
+    }
+
+    try AuditLogGRDB.insertAudit(
+      db,
+      AuditEvent(
+        actor: .assistant,
+        action: .toolCall,
+        tool: fill.audit.tool,
+        argsRedacted: fill.audit.argsRedacted,
+        resultSize: fill.content.utf8.count,
+        decision: fill.status.rawValue,
+        runId: runId,
+        sessionId: sessionId,
+        ts: fill.now
+      )
     )
   }
 }

@@ -56,17 +56,20 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 
   private let tools: [String: any Tool]
   private let runs: any RunStore
+  private let redactArguments: @Sendable (String) -> String
   private let now: @Sendable () -> Date
   private let logger: Logger
 
   public init(
     tools: [String: any Tool],
     runs: any RunStore,
+    redactArguments: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
     self.tools = tools
     self.runs = runs
+    self.redactArguments = redactArguments
     self.now = now
     self.logger = logger
   }
@@ -110,38 +113,60 @@ private extension ApprovedActionExecutor {
       break
     }
 
-    let content = await executedContent(for: approval)
+    let payload = await executedPayload(for: approval)
 
     do {
       try runs.fillClaimedObservation(
         runId: approval.runId,
         observationMessageId: approval.observationMessageId,
-        content: content
+        fill: ClaimedObservationFill(
+          content: payload.content,
+          status: payload.status,
+          setTainted: payload.ingestedUntrusted,
+          setPrivateData: payload.readPrivateData,
+          audit: audit(for: approval),
+          now: now()
+        )
       )
     } catch {
       logger.error("recording the executed result failed for run \(approval.runId): \(error)")
-      return ApprovedExecutionOutcome(observationContent: content, commit: .recordFailed)
+      return ApprovedExecutionOutcome(
+        observationContent: payload.content,
+        commit: .recordFailed
+      )
     }
-    return ApprovedExecutionOutcome(observationContent: content, commit: .committed)
+    return ApprovedExecutionOutcome(observationContent: payload.content, commit: .committed)
   }
 
-  /// Runs the claimed action and returns the observation content — a truthful error line when the
+  /// Runs the claimed action and returns its full payload — a truthful error payload when the
   /// recorded tool vanished or its args no longer parse.
-  func executedContent(for approval: Approval) async -> String {
+  func executedPayload(for approval: Approval) async -> ToolPayload {
     guard
       let tool = tools[approval.tool],
       let arguments = JSONValue.parse(approval.canonicalArgsJSON)
     else {
       logger.error("approved action \(approval.tool) has no registered tool or unparsable args")
-      return "That action could not run because its tool is no longer available."
+      return ToolPayload(
+        content: "That action could not run because its tool is no longer available.",
+        status: .error,
+        ingestedUntrusted: false
+      )
     }
     // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
     // abandon-on-timeout race, so the observation is always truthful (file_write is atomic).
-    let payload = await tool.execute(
+    return await tool.execute(
       arguments: arguments,
       canonicalTarget: approval.canonicalTarget
     )
-    return payload.content
+  }
+
+  /// Renders the recorded args through the injected exact-secret redactor so raw canonical
+  /// arguments never enter the audit log.
+  func audit(for approval: Approval) -> ApprovedExecutionAudit {
+    ApprovedExecutionAudit(
+      tool: approval.tool,
+      argsRedacted: redactArguments(approval.canonicalArgsJSON)
+    )
   }
 }
 
@@ -176,6 +201,7 @@ private extension ApprovedActionExecutor {
         observationMessageId: approval.observationMessageId,
         item: request.item,
         observationContent: content,
+        audit: audit(for: approval),
         notResumableObservationContent: Self.notResumableObservationContent,
         now: now()
       )
@@ -226,7 +252,14 @@ private extension ApprovedActionExecutor {
       try runs.fillClaimedObservation(
         runId: approval.runId,
         observationMessageId: approval.observationMessageId,
-        content: content
+        fill: ClaimedObservationFill(
+          content: content,
+          status: .error,
+          setTainted: false,
+          setPrivateData: false,
+          audit: audit(for: approval),
+          now: now()
+        )
       )
       return ApprovedExecutionOutcome(observationContent: content, commit: .committed)
     } catch {
