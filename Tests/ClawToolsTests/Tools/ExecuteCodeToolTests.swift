@@ -332,3 +332,75 @@ extension ExecuteCodeToolTests {
     #expect(data == nil)
   }
 }
+
+extension ExecuteCodeToolTests {
+  @Test func presentationShowsTheCompleteRedactedScriptAndEveryStage() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    try write(Data("one".utf8), relativePath: "notes/one.txt", workspace: workspace)
+    try write(Data("two".utf8), relativePath: "two.txt", workspace: workspace)
+    let secret = "approval-secret-value"
+    let code = "print('start')\nprint('\(secret)')\nprint('end')"
+    let tool = makeTool(workspace: workspace, secrets: [secret])
+
+    // when
+    let action = try await prepared(
+      tool.prepareAction(
+        arguments: arguments(code: code, stage: ["notes/one.txt", "two.txt"])
+      )
+    )
+    let preview = try #require(action.presentation.contentPreview)
+    let canonicalRoot = try #require(WorkspacePathContainment.canonicalPath(workspace.root.path))
+    let oneHash = SHA256Digest.hex(Data("one".utf8)).prefix(16)
+    let twoHash = SHA256Digest.hex(Data("two".utf8)).prefix(16)
+
+    // then
+    #expect(preview.contains("```python"))
+    #expect(preview.contains("print('start')"))
+    #expect(preview.contains("print('end')"))
+    #expect(preview.contains(secret) == false)
+    #expect(preview.contains(SecretRedactor.replacement))
+    #expect(preview.contains("notes/one.txt"))
+    #expect(preview.contains("two.txt"))
+    #expect(preview.contains("3 B"))
+    #expect(preview.contains(canonicalRoot + "/notes/one.txt"))
+    #expect(preview.contains(canonicalRoot + "/two.txt"))
+    #expect(preview.contains(String(oneHash)))
+    #expect(preview.contains(String(twoHash)))
+    #expect(
+      action.presentation.blastRadius
+        == "run python · egress: no · 4 CPU / 1024 MiB · code \(code.utf8.count) B · 2 staged file(s), 6 B"
+    )
+  }
+
+  @Test func maximumCodePreviewIsNeverTruncated() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let code = String(repeating: "x", count: ExecuteCodeTool.maxCodeBytes)
+    let tool = makeTool(workspace: workspace)
+
+    // when
+    let action = try await prepared(tool.prepareAction(arguments: arguments(code: code)))
+    let preview = try #require(action.presentation.contentPreview)
+
+    // then
+    #expect(preview.contains(code))
+    #expect(preview.contains(ToolOutputCap.truncationMarker) == false)
+  }
+
+  @Test func networkedPresentationNamesEgressAndWarning() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let tool = makeTool(workspace: workspace, allowEgress: true)
+
+    // when
+    let action = try await prepared(
+      tool.prepareAction(arguments: arguments(network: true))
+    )
+
+    // then
+    #expect(action.presentation.blastRadius.contains("egress: yes"))
+    #expect(action.presentation.warnings.count == 1)
+    #expect(action.presentation.warnings[0].contains("send data out"))
+  }
+}

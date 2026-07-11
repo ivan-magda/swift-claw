@@ -254,6 +254,36 @@ import Testing
     #expect(chunks.last?.replyMarkup != nil)
   }
 
+  @Test func fullCodeConsentSurvivesPromptChunking() {
+    // given
+    let code = String(repeating: "print('x')\n", count: 4_000)
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "execute_code",
+        target: "code_exec:python:0123456789abcdef",
+        reason: .codeExec,
+        blastRadius: "run python · egress: no · 4 CPU / 1024 MiB",
+        preview: "```python\n\(code)```"
+      ),
+      taintBanner: true,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "nonce")
+
+    // then
+    #expect(chunks.count > 1)
+    #expect(chunks.map(\.payload).joined() == ToolApprovalPrompt.text(for: input))
+    #expect(chunks.map(\.payload).joined().contains(code))
+    #expect(
+      chunks.dropLast().allSatisfy { chunk in
+        chunk.replyMarkup == nil
+      }
+    )
+    #expect(chunks.last?.replyMarkup != nil)
+  }
+
   @Test func richPromptRendersForEveryApprovalReason() {
     // given — the renderer is exhaustive over ApprovalReason; this pins that both reasons produce
     // owner-facing copy carrying the target at runtime (the compile-time guarantee is the switch)

@@ -123,7 +123,7 @@ public struct ExecuteCodeTool: Tool {
         PreparedToolAction(
           canonicalTarget: target,
           canonicalArgsJSON: canonicalArgsJSON,
-          presentation: preliminaryPresentation(raw: raw, recorded: recorded),
+          presentation: approvalPresentation(raw: raw, recorded: recorded),
           guardTexts: [raw.code] + loaded.map(\.guardText),
           canExfiltrate: network
         )
@@ -345,13 +345,32 @@ private extension ExecuteCodeTool {
     return json
   }
 
-  func preliminaryPresentation(
+  func approvalPresentation(
     raw: RawArguments,
     recorded: RecordedArguments
   ) -> ToolApprovalPresentation {
-    ToolApprovalPresentation(
-      blastRadius: "run \(recorded.language.rawValue) · egress: \(recorded.network ? "yes" : "no")",
-      contentPreview: redactor.redact(raw.code),
+    let codeBytes = raw.code.utf8.count
+    let totalBytes = recorded.stage.reduce(0) { partial, stage in
+      partial + stage.bytes
+    }
+    let stagedSummary =
+      recorded.stage.isEmpty
+      ? "Staged inputs: none"
+      : (["Staged inputs:"]
+        + recorded.stage.map { stage in
+          "- \(stage.path) | \(stage.realpath) | \(stage.bytes) B | \(stage.sha256.prefix(16))"
+        }).joined(separator: "\n")
+    let preview = """
+      ```\(recorded.language.rawValue)
+      \(redactor.redact(raw.code))
+      ```
+      \(stagedSummary)
+      """
+
+    return ToolApprovalPresentation(
+      blastRadius:
+        "run \(recorded.language.rawValue) · egress: \(recorded.network ? "yes" : "no") · \(settings.cpus) CPU / \(settings.memoryMiB) MiB · code \(codeBytes) B · \(recorded.stage.count) staged file(s), \(totalBytes) B",
+      contentPreview: preview,
       warnings: recorded.network
         ? ["network egress is enabled — this run can send data out"] : []
     )
