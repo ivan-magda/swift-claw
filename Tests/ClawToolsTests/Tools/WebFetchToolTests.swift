@@ -4,11 +4,12 @@ import Testing
 
 @testable import ClawTools
 
-/// Scripted HTTP: URL → result (or error). Records requested URLs so tests can assert what was
-/// (and was NOT) dispatched.
+/// Scripted HTTP: URL → result (or error). Records requested URLs and headers so tests can assert
+/// what was (and was NOT) dispatched.
 actor ScriptedHTTP: HTTPExecuting {
   private let responses: [String: HTTPResult]
   private(set) var requestedURLs: [String] = []
+  private(set) var requestedHeaders: [[String: String]] = []
 
   init(responses: [String: HTTPResult]) {
     self.responses = responses
@@ -31,6 +32,7 @@ actor ScriptedHTTP: HTTPExecuting {
     maxBodyBytes: Int
   ) async throws -> HTTPResult {
     requestedURLs.append(url)
+    requestedHeaders.append(headers)
     guard let scripted = responses[url] else {
       struct Unscripted: Error { let url: String }
       throw Unscripted(url: url)
@@ -131,6 +133,24 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     #expect(payload.content.contains("Hello [REDACTED:secret-value] world"))
     #expect(payload.ingestedUntrusted)
     #expect(await http.requestedURLs == ["https://example.com/a"])
+  }
+
+  @Test func identifiesWebFetchWithCanonicalUserAgent() async {
+    // given — public sites commonly reject anonymous HTTP clients, so web_fetch identifies the
+    // project honestly using the standard product/version plus contact-comment form
+    let url = "https://example.com/article"
+    let http = ScriptedHTTP(responses: [url: htmlResult("<html><body>article</body></html>")])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["example.com": [publicAddress]])
+    )
+
+    // when
+    let payload = await fetch(tool, url: url)
+
+    // then — the outbound web contract carries the canonical identity on the actual request
+    #expect(payload.status == .ok)
+    #expect(await http.requestedHeaders == [["User-Agent": WebFetchTool.userAgent]])
   }
 
   @Test func privateResolutionIsBlockedBeforeAnyRequest() async throws {

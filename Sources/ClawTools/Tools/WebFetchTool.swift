@@ -10,6 +10,7 @@ public struct WebFetchTool: Tool {
   static let contentTypeAllowlistExact = [
     "application/json", "application/xml", "application/xhtml+xml",
   ]
+  static let userAgent = "swift-claw/1.0 (+https://github.com/ivan-magda/swift-claw)"
 
   private let http: any HTTPExecuting
   private let resolver: any AddressResolving
@@ -103,7 +104,7 @@ public struct WebFetchTool: Tool {
       do {
         result = try await http.get(
           url: currentURL,
-          headers: [:],
+          headers: ["User-Agent": Self.userAgent],
           timeoutSeconds: remainingSeconds,
           maxBodyBytes: maxBodyBytes
         )
