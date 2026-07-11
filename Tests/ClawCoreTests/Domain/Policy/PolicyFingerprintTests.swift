@@ -54,14 +54,16 @@ import Testing
     llm: String = "https://llm.example",
     search: Bool = false,
     root: String = "/workspace",
-    exempt: [CIDR] = []
+    exempt: [CIDR] = [],
+    exec: ExecConfig = .disabledDefault
   ) -> String {
     PolicyFingerprint.staticSubhash(
       tools: tools,
       llmBaseURL: llm,
       searchEndpointPresent: search,
       workspaceRoot: root,
-      webFetchExemptCIDRs: exempt
+      webFetchExemptCIDRs: exempt,
+      exec: exec
     )
   }
 
@@ -153,6 +155,64 @@ import Testing
 
     // when / then
     #expect(subhash(exempt: [poolV4, poolV6]) == subhash(exempt: [poolV6, poolV4]))
+  }
+
+  private func execConfig(
+    enabled: Bool = false,
+    imageCharacter: Character? = nil,
+    registries: [String] = ["cgr.dev"],
+    memoryMiB: Int = 1024,
+    cpus: Int = 4,
+    timeoutSeconds: Int = 30,
+    allowEgress: Bool = false
+  ) throws -> ExecConfig {
+    let image = try imageCharacter.map { character in
+      try #require(
+        PinnedImageReference.parse(
+          "cgr.dev/chainguard/python@sha256:" + String(repeating: character, count: 64)
+        )
+      )
+    }
+    return ExecConfig(
+      enabled: enabled,
+      image: image,
+      imageRegistryAllowlist: registries,
+      memoryMiB: memoryMiB,
+      cpus: cpus,
+      timeoutSeconds: timeoutSeconds,
+      allowEgress: allowEgress
+    )
+  }
+
+  @Test func everyExecPolicyFieldIsAnInputClass() throws {
+    // given
+    let baseline = try execConfig()
+    let mutations = try [
+      execConfig(enabled: true),
+      execConfig(imageCharacter: "a"),
+      execConfig(registries: ["cgr.dev", "images.example.com"]),
+      execConfig(memoryMiB: 2048),
+      execConfig(cpus: 2),
+      execConfig(timeoutSeconds: 60),
+      execConfig(allowEgress: true),
+    ]
+
+    // when
+    let baselineHash = subhash(exec: baseline)
+    let mutationHashes = mutations.map { config in subhash(exec: config) }
+
+    // then: each field change produces a different policy fingerprint
+    #expect(mutationHashes.allSatisfy { $0 != baselineHash })
+    #expect(Set(mutationHashes).count == mutations.count)
+  }
+
+  @Test func execRegistryOrderDoesNotChangeTheFingerprint() throws {
+    // given
+    let forward = try execConfig(registries: ["cgr.dev", "images.example.com"])
+    let reverse = try execConfig(registries: ["images.example.com", "cgr.dev"])
+
+    // when / then: sorting makes equivalent registry sets produce the same fingerprint
+    #expect(subhash(exec: forward) == subhash(exec: reverse))
   }
 
   // MARK: - combined
