@@ -11,6 +11,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidQuietHours(String)
   case invalidScheduling(key: String, value: String)
   case invalidApprovalExpiry(String)
+  case invalidWebFetchExemptCIDR(String)
   case heartbeatOwnerUnresolved(allowlistCount: Int)
 
   public var exitCode: Int32 {
@@ -27,6 +28,7 @@ public enum ConfigError: Error, Sendable, Equatable {
     case .invalidQuietHours: ClawExitCode.configInvalid.rawValue
     case .invalidScheduling: ClawExitCode.configInvalid.rawValue
     case .invalidApprovalExpiry: ClawExitCode.configInvalid.rawValue
+    case .invalidWebFetchExemptCIDR: ClawExitCode.configInvalid.rawValue
     case .heartbeatOwnerUnresolved: ClawExitCode.configInvalid.rawValue
     }
   }

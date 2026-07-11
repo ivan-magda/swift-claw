@@ -1,7 +1,7 @@
 import Foundation
 
 public struct AppConfig: Sendable, Equatable {
-  enum EnvKey {
+  public enum EnvKey {
     static let allowlist = "CLAW_ALLOWLIST"
     static let stateRoot = "CLAW_STATE_ROOT"
     static let pollTimeout = "CLAW_POLL_TIMEOUT"
@@ -30,6 +30,8 @@ public struct AppConfig: Sendable, Equatable {
     static let heartbeatQuietHours = "CLAW_HEARTBEAT_QUIET_HOURS"
     static let heartbeatMaxPerDay = "CLAW_HEARTBEAT_MAX_PER_DAY"
     static let approvalExpiry = "CLAW_APPROVAL_EXPIRY"
+
+    public static let webFetchExemptCIDRs = "CLAW_WEBFETCH_EXEMPT_CIDRS"
   }
 
   private enum EnvDefaults {
@@ -73,6 +75,8 @@ public struct AppConfig: Sendable, Equatable {
 
   public let approvalExpirySeconds: Int
 
+  public let webFetchExemptCIDRs: [CIDR]
+
   public init(
     allowlist: Set<Int64>,
     stateRoot: URL,
@@ -87,7 +91,8 @@ public struct AppConfig: Sendable, Equatable {
     heartbeatIntervalMinutes: Int,
     heartbeatQuietHours: QuietHours,
     heartbeatMaxPerDay: Int,
-    approvalExpirySeconds: Int
+    approvalExpirySeconds: Int,
+    webFetchExemptCIDRs: [CIDR]
   ) {
     self.allowlist = allowlist
     self.stateRoot = stateRoot
@@ -103,6 +108,7 @@ public struct AppConfig: Sendable, Equatable {
     self.heartbeatQuietHours = heartbeatQuietHours
     self.heartbeatMaxPerDay = heartbeatMaxPerDay
     self.approvalExpirySeconds = approvalExpirySeconds
+    self.webFetchExemptCIDRs = webFetchExemptCIDRs
   }
 
   /// Loads and validates non-secret config from the environment. Secrets (the bot token / LLM key)
@@ -136,6 +142,7 @@ public struct AppConfig: Sendable, Equatable {
     let heartbeat = try parseHeartbeat(from: env, allowlist: allowlist)
 
     let approvalExpirySeconds = try parseApprovalExpiry(env[EnvKey.approvalExpiry])
+    let webFetchExemptCIDRs = try parseWebFetchExemptCIDRs(from: env[EnvKey.webFetchExemptCIDRs])
 
     return AppConfig(
       allowlist: allowlist,
@@ -151,7 +158,8 @@ public struct AppConfig: Sendable, Equatable {
       heartbeatIntervalMinutes: heartbeat.intervalMinutes,
       heartbeatQuietHours: heartbeat.quietHours,
       heartbeatMaxPerDay: heartbeat.maxPerDay,
-      approvalExpirySeconds: approvalExpirySeconds
+      approvalExpirySeconds: approvalExpirySeconds,
+      webFetchExemptCIDRs: webFetchExemptCIDRs
     )
   }
 }
@@ -460,6 +468,28 @@ private extension AppConfig {
     }
 
     return stateRootURL
+  }
+}
+
+// MARK: - Web Fetch Egress Parsing
+
+private extension AppConfig {
+  /// The comma-separated CIDR list web_fetch exempts from the SSRF blocklist. Absent/blank means
+  /// no exemption; any malformed entry fails the whole load closed — a widening of the egress
+  /// posture must never boot half-parsed.
+  static func parseWebFetchExemptCIDRs(from raw: String?) throws -> [CIDR] {
+    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
+    guard !trimmed.isEmpty else {
+      return []
+    }
+
+    return try trimmed.split(separator: ",").map { part in
+      let entry = part.trimmingCharacters(in: .whitespaces)
+      guard let cidr = CIDR.parse(entry) else {
+        throw ConfigError.invalidWebFetchExemptCIDR(entry)
+      }
+      return cidr
+    }
   }
 }
 

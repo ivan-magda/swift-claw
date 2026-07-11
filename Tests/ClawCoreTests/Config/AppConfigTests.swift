@@ -435,4 +435,47 @@ import Testing
       try AppConfig.load(environment: env)
     }
   }
+
+  @Test func webFetchExemptCIDRsDefaultToEmpty() throws {
+    // given — the key unset, and set but blank
+    let omittedEnv = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    var blankEnv = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    blankEnv[EnvKey.webFetchExemptCIDRs] = "   "
+
+    // when / then — no exemption unless the owner opts in explicitly
+    #expect(try AppConfig.load(environment: omittedEnv).webFetchExemptCIDRs.isEmpty)
+    #expect(try AppConfig.load(environment: blankEnv).webFetchExemptCIDRs.isEmpty)
+  }
+
+  @Test func webFetchExemptCIDRsParseAsAList() throws {
+    // given — a fake-IP v4 pool plus a fake v6 range, comma-separated with spaces
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.webFetchExemptCIDRs] = "198.18.0.0/15, fc00::/18"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.webFetchExemptCIDRs == [CIDR.parse("198.18.0.0/15"), CIDR.parse("fc00::/18")])
+  }
+
+  @Test(arguments: [
+    "junk",  // not CIDR notation
+    "198.18.0.84",  // bare address without a prefix
+    "198.18.0.0/33",  // prefix out of bounds
+    "198.18.0.0/15, junk",  // one bad entry poisons the list
+  ])
+  func malformedWebFetchExemptCIDRsFailClosed(_ rawValue: String) {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.webFetchExemptCIDRs] = rawValue
+
+    // when / then — a widening of the SSRF posture must never load half-parsed
+    let badEntry = rawValue.split(separator: ",").map { part in
+      part.trimmingCharacters(in: .whitespaces)
+    }.first { entry in CIDR.parse(entry) == nil }
+    #expect(throws: ConfigError.invalidWebFetchExemptCIDR(badEntry ?? rawValue)) {
+      try AppConfig.load(environment: env)
+    }
+  }
 }

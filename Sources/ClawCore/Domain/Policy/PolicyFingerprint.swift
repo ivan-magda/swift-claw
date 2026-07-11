@@ -28,13 +28,16 @@ public enum PolicyFingerprint {
 
   /// The static inputs: the tool-registry surface (sorted by name — each tool contributes
   /// name, canonical `.sortedKeys` parameter JSON, `riskLevel.rawValue`, and the egress label),
-  /// then the llm base URL, the search-endpoint presence, and the canonical workspace root. Computed
+  /// then the llm base URL, the search-endpoint presence, the canonical workspace root, and the
+  /// web_fetch SSRF exemption list (sorted, so config order cannot move the hash). The exemption
+  /// list is egress policy: a change to it voids an outstanding `web_fetch` approval. Computed
   /// once at the composition root and injected into `ContextBuilder`.
   public static func staticSubhash(
     tools: [ToolDefinition],
     llmBaseURL: String,
     searchEndpointPresent: Bool,
-    workspaceRoot: String
+    workspaceRoot: String,
+    webFetchExemptCIDRs: [CIDR]
   ) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -57,6 +60,8 @@ public enum PolicyFingerprint {
     parts.append(llmBaseURL)
     parts.append(searchEndpointPresent ? "search:present" : "search:absent")
     parts.append(workspaceRoot)
+    let exemptLabel = webFetchExemptCIDRs.map(\.description).sorted().joined(separator: ",")
+    parts.append("webfetch_exempt:" + exemptLabel)
 
     return hash(parts: parts)
   }

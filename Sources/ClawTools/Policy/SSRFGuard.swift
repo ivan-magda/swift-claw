@@ -1,3 +1,4 @@
+import ClawCore
 import Dispatch
 import Foundation
 
@@ -7,33 +8,20 @@ import Foundation
   import Darwin
 #endif
 
-/// A resolved IP address in a checkable form. `.ipv4` is host byte order; `.ipv6` is the 16 raw
-/// bytes.
-public enum ResolvedAddress: Sendable, Equatable {
-  case ipv4(UInt32)
-  case ipv6([UInt8])
-
-  /// Parses a textual IPv4/IPv6 literal via `inet_pton`; nil for anything else.
-  public static func parse(_ text: String) -> ResolvedAddress? {
-    var v4Address = in_addr()
-    if inet_pton(AF_INET, text, &v4Address) == 1 {
-      return .ipv4(UInt32(bigEndian: v4Address.s_addr))
-    }
-
-    var v6Address = in6_addr()
-    if inet_pton(AF_INET6, text, &v6Address) == 1 {
-      let bytes = withUnsafeBytes(of: &v6Address) { raw in Array(raw) }
-      return .ipv6(bytes)
-    }
-
-    return nil
-  }
-}
-
 /// The pure classifier: is this address safe to connect to from the daemon? The blocklist is
 /// a pinned table; every range has a test row. IPv4-mapped IPv6 is unwrapped and the
 /// embedded v4 re-checked.
 public enum SSRFGuard {
+  /// The RFC 2544 benchmarking blocklist row (`198.18.0.0/15`) — the range fake-IP VPN/proxy
+  /// resolvers conventionally repurpose as their synthetic-address pool. Exposed so the fake-IP
+  /// relaxation and the doctor probe key on exactly the row the blocklist refuses.
+  public static let benchmarkRange: CIDR = {
+    guard let range = CIDR.parse("198.18.0.0/15") else {
+      preconditionFailure("the pinned benchmarking CIDR literal must parse")
+    }
+    return range
+  }()
+
   public static func isPublic(_ address: ResolvedAddress) -> Bool {
     switch address {
     case .ipv4(let value):

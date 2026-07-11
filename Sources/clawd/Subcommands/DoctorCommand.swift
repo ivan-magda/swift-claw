@@ -5,6 +5,7 @@ import ClawData
 import ClawGateway
 import ClawSecrets
 import ClawTelegram
+import ClawTools
 import Foundation
 
 struct DoctorCommand: AsyncParsableCommand {
@@ -95,6 +96,13 @@ private extension DoctorCommand {
     report.add(key: "heartbeat.quiet_hours", value: config.heartbeatQuietHours.rendered)
     report.add(key: "heartbeat.max_per_day", value: "\(config.heartbeatMaxPerDay)")
     report.add(key: "approval.expiry_s", value: "\(config.approvalExpirySeconds)")
+    let exemptCIDRs = config.webFetchExemptCIDRs.map { cidr in
+      "\(cidr)"
+    }
+    report.add(
+      key: "webfetch.exempt_cidrs",
+      value: exemptCIDRs.isEmpty ? "none" : exemptCIDRs.joined(separator: " ")
+    )
   }
 
   func addDatabaseRows(to report: inout DoctorReport, config: AppConfig) {
@@ -116,6 +124,19 @@ private extension DoctorCommand {
 
   /// Best-effort connectivity check (only if a token is available).
   func addConnectivityRows(to report: inout DoctorReport, config: AppConfig) async {
+    // Info, never a failed check: names the fake-IP VPN/proxy condition that otherwise
+    // surfaces only as silent web_fetch refusals (needs no secrets, so it precedes the guard).
+    switch await FakeIPDetector(resolver: SystemAddressResolver()).detect() {
+    case .active(let sample):
+      report.add(
+        key: "dns.fake_ip",
+        value: "detected (public hosts resolve into \(SSRFGuard.benchmarkRange), e.g. \(sample); "
+          + "web_fetch allows probe-confirmed answers in that range)"
+      )
+    case .inactive:
+      report.add(key: "dns.fake_ip", value: "not detected")
+    }
+
     guard let secrets = try? EnvironmentLoader.loadSecrets(config: config) else {
       return
     }

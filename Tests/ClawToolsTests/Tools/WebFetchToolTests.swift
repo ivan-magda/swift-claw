@@ -4,11 +4,12 @@ import Testing
 
 @testable import ClawTools
 
-/// Scripted HTTP: URL → result (or error). Records requested URLs so tests can assert what was
-/// (and was NOT) dispatched.
+/// Scripted HTTP: URL → result (or error). Records requested URLs and headers so tests can assert
+/// what was (and was NOT) dispatched.
 actor ScriptedHTTP: HTTPExecuting {
   private let responses: [String: HTTPResult]
   private(set) var requestedURLs: [String] = []
+  private(set) var requestedHeaders: [[String: String]] = []
 
   init(responses: [String: HTTPResult]) {
     self.responses = responses
@@ -31,6 +32,7 @@ actor ScriptedHTTP: HTTPExecuting {
     maxBodyBytes: Int
   ) async throws -> HTTPResult {
     requestedURLs.append(url)
+    requestedHeaders.append(headers)
     guard let scripted = responses[url] else {
       struct Unscripted: Error { let url: String }
       throw Unscripted(url: url)
@@ -54,6 +56,15 @@ struct ScriptedResolver: AddressResolving {
   }
 }
 
+/// Scripted probe: always answers with the canned detection.
+struct ScriptedFakeIPDetector: FakeIPDetecting {
+  let detection: FakeIPDetection
+
+  func detect() async -> FakeIPDetection {
+    detection
+  }
+}
+
 @Suite struct WebFetchToolTests {
   private let publicAddress: ResolvedAddress
   private let privateAddress: ResolvedAddress
@@ -71,11 +82,18 @@ struct ScriptedResolver: AddressResolving {
     )
   }
 
-  private func makeTool(http: ScriptedHTTP, resolver: ScriptedResolver) -> WebFetchTool {
+  private func makeTool(
+    http: ScriptedHTTP,
+    resolver: ScriptedResolver,
+    exemptCIDRs: [CIDR] = [],
+    fakeIPDetector: (any FakeIPDetecting)? = nil
+  ) -> WebFetchTool {
     WebFetchTool(
       http: http,
       resolver: resolver,
-      redactor: SecretRedactor(secretValues: ["tok-secret-1"])
+      redactor: SecretRedactor(secretValues: ["tok-secret-1"]),
+      exemptCIDRs: exemptCIDRs,
+      fakeIPDetector: fakeIPDetector
     )
   }
 
@@ -115,6 +133,24 @@ struct ScriptedResolver: AddressResolving {
     #expect(payload.content.contains("Hello [REDACTED:secret-value] world"))
     #expect(payload.ingestedUntrusted)
     #expect(await http.requestedURLs == ["https://example.com/a"])
+  }
+
+  @Test func identifiesWebFetchWithCanonicalUserAgent() async {
+    // given — public sites commonly reject anonymous HTTP clients, so web_fetch identifies the
+    // project honestly using the standard product/version plus contact-comment form
+    let url = "https://example.com/article"
+    let http = ScriptedHTTP(responses: [url: htmlResult("<html><body>article</body></html>")])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["example.com": [publicAddress]])
+    )
+
+    // when
+    let payload = await fetch(tool, url: url)
+
+    // then — the outbound web contract carries the canonical identity on the actual request
+    #expect(payload.status == .ok)
+    #expect(await http.requestedHeaders == [["User-Agent": WebFetchTool.userAgent]])
   }
 
   @Test func privateResolutionIsBlockedBeforeAnyRequest() async throws {
@@ -292,6 +328,212 @@ struct ScriptedResolver: AddressResolving {
       tool.canonicalTarget(arguments: .object(["url": .string("")]))
         == .refused(reason: #"web_fetch needs a non-empty "url" argument."#)
     )
+  }
+
+  @Test func benchmarkResolutionProceedsWhenFakeIPModeIsConfirmed() async throws {
+    // given — DNS hijacked by a fake-IP proxy: a public host answers from 198.18.0.0/15 and a
+    // fresh canary probe confirms interception (issue #26)
+    let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let http = ScriptedHTTP(responses: [
+      "https://blog.example/post": htmlResult("<html><body><p>the article</p></body></html>")
+    ])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["blog.example": [fakeIPAddress]]),
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .active(sample: fakeIPAddress))
+    )
+
+    // when
+    let payload = await fetch(tool, url: "https://blog.example/post")
+
+    // then — the fetch egresses through the owner's tunnel instead of being refused
+    #expect(payload.status == .ok)
+    #expect(payload.content.contains("the article"))
+  }
+
+  @Test func benchmarkResolutionIsRefusedWhenProbeDoesNotConfirm() async throws {
+    // given — a benchmark-range answer WITHOUT confirmed fake-IP interception
+    let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["blog.example": [fakeIPAddress]]),
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .inactive)
+    )
+
+    // when
+    let payload = await fetch(tool, url: "https://blog.example/post")
+
+    // then — refused before any request, and the copy names the address, the range, and the
+    // opt-in env key so the failure is diagnosable instead of silent
+    #expect(payload.status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+    #expect(payload.content.contains("\(fakeIPAddress)"))
+    #expect(payload.content.contains("\(SSRFGuard.benchmarkRange)"))
+    #expect(payload.content.contains(AppConfig.EnvKey.webFetchExemptCIDRs))
+  }
+
+  @Test func privateResolutionStaysBlockedEvenWithFakeIPConfirmed() async throws {
+    // given — the relaxation is scoped to the benchmarking row: RFC-1918 (and loopback/metadata)
+    // must stay refused no matter what the probe says
+    let fakeIPSample = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["internal.example": [privateAddress]]),
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .active(sample: fakeIPSample))
+    )
+
+    // when / then
+    #expect((await fetch(tool, url: "https://internal.example/")).status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+  }
+
+  @Test func mixedBenchmarkAndPrivateResolutionIsRefused() async throws {
+    // given — one pool address plus one RFC-1918 address: the private one decides
+    let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["dual.example": [fakeIPAddress, privateAddress]]),
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .active(sample: fakeIPAddress))
+    )
+
+    // when / then
+    #expect((await fetch(tool, url: "https://dual.example/")).status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+  }
+
+  @Test func exemptCIDRAllowsMatchingResolutionWithoutProbeConfirmation() async throws {
+    // given — the owner exempted a fake IPv6 pool; the probe confirms nothing
+    let fakeV6Address = try #require(ResolvedAddress.parse("fc00::1234"))
+    let exemptBlock = try #require(CIDR.parse("fc00::/18"))
+    let http = ScriptedHTTP(responses: [
+      "https://blog.example/post": htmlResult("<html><body><p>via the tunnel</p></body></html>")
+    ])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["blog.example": [fakeV6Address]]),
+      exemptCIDRs: [exemptBlock],
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .inactive)
+    )
+
+    // when
+    let payload = await fetch(tool, url: "https://blog.example/post")
+
+    // then — the manual override alone opts the block in
+    #expect(payload.status == .ok)
+    #expect(payload.content.contains("via the tunnel"))
+  }
+
+  @Test func exemptCIDRDoesNotCoverOtherBlockedRanges() async throws {
+    // given — an exemption for the v6 pool must not leak onto RFC-1918
+    let exemptBlock = try #require(CIDR.parse("fc00::/18"))
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["internal.example": [privateAddress]]),
+      exemptCIDRs: [exemptBlock],
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .inactive)
+    )
+
+    // when / then
+    #expect((await fetch(tool, url: "https://internal.example/")).status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+  }
+
+  @Test func literalBenchmarkAddressStaysRefusedEvenWithBothWideningsAvailable() async throws {
+    // given — a literal-IP URL inside the pool, with the probe confirming fake-IP mode AND an
+    // exempt CIDR covering the block: the widenings apply to resolved hostnames only (a fake-IP
+    // resolver never rewrites a literal, and pool addresses recycle, so a literal target is
+    // meaningless there)
+    let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let poolBlock = try #require(CIDR.parse("198.18.0.0/15"))
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: [:]),
+      exemptCIDRs: [poolBlock],
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .active(sample: fakeIPAddress))
+    )
+
+    // when
+    let payload = await fetch(tool, url: "https://198.18.0.84/page")
+
+    // then — refused although BOTH widenings would cover a hostname resolving to this address
+    #expect(payload.status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+  }
+
+  @Test func legacyNumericLiteralStaysRefusedEvenWhenFakeIPConfirmed() async throws {
+    // given — the integer spelling of 198.18.0.84 (http://3323068500/); strict inet_pton rejects
+    // it but getaddrinfo resolves it into the pool. It must still count as a literal (pure
+    // blocklist), not ride either widening, even with the probe active AND the pool exempted
+    let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let poolBlock = try #require(CIDR.parse("198.18.0.0/15"))
+    let http = ScriptedHTTP(responses: [:])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: ["3323068500": [fakeIPAddress]]),
+      exemptCIDRs: [poolBlock],
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .active(sample: fakeIPAddress))
+    )
+
+    // when
+    let payload = await fetch(tool, url: "http://3323068500/page")
+
+    // then
+    #expect(payload.status == .blockedSSRF)
+    #expect(await http.requestedURLs.isEmpty)
+  }
+
+  @Test func literalPublicAddressURLStillFetches() async throws {
+    // given — the literal carve-out must not over-block: a public literal is ordinary egress
+    let http = ScriptedHTTP(responses: [
+      "https://93.184.216.34/page": htmlResult("<html><body><p>by address</p></body></html>")
+    ])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: [:]),
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .inactive)
+    )
+
+    // when
+    let payload = await fetch(tool, url: "https://93.184.216.34/page")
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.content.contains("by address"))
+  }
+
+  @Test func redirectHopIntoBenchmarkRangeFollowsWhenConfirmed() async throws {
+    // given — the per-hop policy re-runs on redirect targets; a confirmed fake-IP answer on
+    // hop 2 is followed like any public address
+    let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
+    let http = ScriptedHTTP(responses: [
+      "https://example.com/start": HTTPResult(
+        statusCode: 301,
+        headers: ["Location": "https://blog.example/post"],
+        body: Data()
+      ),
+      "https://blog.example/post": htmlResult("<html><body><p>hop two</p></body></html>"),
+    ])
+    let tool = makeTool(
+      http: http,
+      resolver: ScriptedResolver(table: [
+        "example.com": [publicAddress],
+        "blog.example": [fakeIPAddress],
+      ]),
+      fakeIPDetector: ScriptedFakeIPDetector(detection: .active(sample: fakeIPAddress))
+    )
+
+    // when
+    let payload = await fetch(tool, url: "https://example.com/start")
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.content.contains("hop two"))
+    #expect(await http.requestedURLs == ["https://example.com/start", "https://blog.example/post"])
   }
 
   @Test func nonSuccessStatusIsAnError() async throws {

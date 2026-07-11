@@ -10,10 +10,13 @@ public struct WebFetchTool: Tool {
   static let contentTypeAllowlistExact = [
     "application/json", "application/xml", "application/xhtml+xml",
   ]
+  static let userAgent = "swift-claw/1.0 (+https://github.com/ivan-magda/swift-claw)"
 
   private let http: any HTTPExecuting
   private let resolver: any AddressResolving
   private let redactor: SecretRedactor
+  private let exemptCIDRs: [CIDR]
+  private let fakeIPDetector: any FakeIPDetecting
   private let maxBodyBytes: Int
   private let maxHops: Int
   private let outputCapGraphemes: Int
@@ -22,6 +25,8 @@ public struct WebFetchTool: Tool {
     http: any HTTPExecuting,
     resolver: any AddressResolving,
     redactor: SecretRedactor,
+    exemptCIDRs: [CIDR] = [],
+    fakeIPDetector: (any FakeIPDetecting)? = nil,
     maxBodyBytes: Int = 2 * 1024 * 1024,
     maxHops: Int = 5,
     outputCapGraphemes: Int = ToolOutputCap.maxGraphemes
@@ -29,6 +34,8 @@ public struct WebFetchTool: Tool {
     self.http = http
     self.resolver = resolver
     self.redactor = redactor
+    self.exemptCIDRs = exemptCIDRs
+    self.fakeIPDetector = fakeIPDetector ?? FakeIPDetector(resolver: resolver)
     self.maxBodyBytes = maxBodyBytes
     self.maxHops = maxHops
     self.outputCapGraphemes = outputCapGraphemes
@@ -59,6 +66,7 @@ public struct WebFetchTool: Tool {
     guard let rawURL = arguments.objectValue?["url"]?.stringValue, rawURL.isEmpty == false else {
       return .refused(reason: "web_fetch needs a non-empty \"url\" argument.")
     }
+
     switch CanonicalURL.canonicalize(rawURL) {
     case .success(let canonical):
       return .resolved(canonical)
@@ -97,7 +105,7 @@ public struct WebFetchTool: Tool {
       do {
         result = try await http.get(
           url: currentURL,
-          headers: [:],
+          headers: ["User-Agent": Self.userAgent],
           timeoutSeconds: remainingSeconds,
           maxBodyBytes: maxBodyBytes
         )
@@ -135,7 +143,12 @@ private extension WebFetchTool {
   }
 
   /// Per-hop SSRF assertion: resolves the host and returns the refusal/error payload unless every
-  /// resolved address is public; nil means the hop may proceed.
+  /// resolved address is public; nil means the hop may proceed. Two scoped widenings, both
+  /// owner-trusted egress (a fake-IP proxy tunnels the connection and re-resolves the real name
+  /// at its edge): an address inside an owner-configured exempt CIDR passes, and an address
+  /// inside the benchmarking range passes when a fresh canary probe confirms fake-IP DNS
+  /// interception. Every other blocklist row — loopback, RFC-1918, link-local/metadata — is
+  /// refused unconditionally.
   func refusalForNonPublicHost(_ host: String) async -> ToolPayload? {
     let addresses: [ResolvedAddress]
     do {
@@ -144,17 +157,53 @@ private extension WebFetchTool {
       return errorPayload("Could not resolve \(host).")
     }
 
-    guard addresses.isEmpty == false,
-      addresses.allSatisfy({ address in SSRFGuard.isPublic(address) })
-    else {
-      return ToolPayload(
-        content: "Refused: \(host) resolves to a private or reserved address.",
-        status: .blockedSSRF,
-        ingestedUntrusted: false
+    guard addresses.isEmpty == false else {
+      return refusalPayload("Refused: \(host) resolves to a private or reserved address.")
+    }
+
+    // The widenings below apply to resolved hostnames only: a fake-IP resolver never rewrites
+    // a literal, and pool addresses recycle, so a literal target inside the pool is meaningless.
+    // Literals stay on the pure blocklist — including the legacy numeric spellings getaddrinfo
+    // resolves without DNS (http://3323068500/), which strict IP-literal parsing would miss.
+    if ResolvedAddress.denotesIPLiteral(host: host) {
+      guard addresses.allSatisfy({ SSRFGuard.isPublic($0) }) else {
+        return refusalPayload("Refused: \(host) is a private or reserved address.")
+      }
+      return nil
+    }
+
+    let refusable = addresses.filter { address in
+      SSRFGuard.isPublic(address) == false
+        && exemptCIDRs.contains { cidr in cidr.contains(address) } == false
+    }
+    guard let firstRefusable = refusable.first else {
+      return nil
+    }
+
+    let allInBenchmarkRange = refusable.allSatisfy { address in
+      SSRFGuard.benchmarkRange.contains(address)
+    }
+    if allInBenchmarkRange {
+      if case .active = await fakeIPDetector.detect() {
+        return nil
+      }
+      return refusalPayload(
+        """
+        Refused: \(host) resolves to \(firstRefusable) inside \(SSRFGuard.benchmarkRange) — \
+        the reserved range fake-IP VPN/proxies use as their pool, but a fresh DNS probe did not \
+        confirm fake-IP mode. If you run such a proxy, set \
+        \(AppConfig.EnvKey.webFetchExemptCIDRs)=\(SSRFGuard.benchmarkRange) to exempt the pool.
+        """
       )
     }
 
-    return nil
+    return refusalPayload(
+      "Refused: \(host) resolves to \(firstRefusable), a private or reserved address."
+    )
+  }
+
+  func refusalPayload(_ reason: String) -> ToolPayload {
+    ToolPayload(content: reason, status: .blockedSSRF, ingestedUntrusted: false)
   }
 
   /// One 3xx hop: consumes a hop from the budget and re-canonicalizes the Location target so the
