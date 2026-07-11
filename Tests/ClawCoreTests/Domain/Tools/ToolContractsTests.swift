@@ -3,6 +3,26 @@ import Testing
 
 @testable import ClawCore
 
+private struct DefaultPrepareTool: Tool {
+  var definition: ToolDefinition {
+    ToolDefinition(
+      name: "default_prepare",
+      description: "test",
+      parameters: .object(["type": .string("object")]),
+      egressClass: .none,
+      riskLevel: .safe
+    )
+  }
+
+  var timeout: Duration { .seconds(1) }
+
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
+  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+    ToolPayload(content: "ok", status: .ok, ingestedUntrusted: false)
+  }
+}
+
 @Suite struct ToolContractsTests {
   @Test func jsonValueParsesObjectsAndAccessors() throws {
     // given
@@ -108,5 +128,43 @@ import Testing
     // then
     #expect(context.sessionTainted)
     #expect(context.approvalAlreadyPending == false)
+  }
+
+  @Test func preparedActionCarriesReplacementArgsAndPerCallEgress() {
+    // given
+    let presentation = ToolApprovalPresentation(
+      blastRadius: "run python",
+      contentPreview: "print('hello')",
+      warnings: []
+    )
+
+    // when
+    let action = PreparedToolAction(
+      canonicalTarget: "code_exec:python:0123456789abcdef",
+      canonicalArgsJSON: #"{"code":"print('hello')"}"#,
+      presentation: presentation,
+      guardTexts: ["print('hello')", "staged text"],
+      canExfiltrate: true
+    )
+
+    // then
+    #expect(action.canonicalTarget == "code_exec:python:0123456789abcdef")
+    #expect(action.canonicalArgsJSON == #"{"code":"print('hello')"}"#)
+    #expect(action.presentation == presentation)
+    #expect(action.guardTexts == ["print('hello')", "staged text"])
+    #expect(action.canExfiltrate)
+    #expect(PreparedActionResolution.prepared(action) == .prepared(action))
+    #expect(PreparedActionResolution.refused(reason: "no") == .refused(reason: "no"))
+  }
+
+  @Test func ordinaryToolsDefaultToNoPreparedAction() async {
+    // given
+    let tool = DefaultPrepareTool()
+
+    // when
+    let resolution = await tool.prepareAction(arguments: .object([:]))
+
+    // then
+    #expect(resolution == nil)
   }
 }

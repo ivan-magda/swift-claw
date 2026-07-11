@@ -25,9 +25,10 @@ import Testing
     #expect(definition.riskLevel == .ask)
   }
 
-  @Test func askTierReasonHasTheStableRawValue() {
+  @Test func approvalReasonsHaveStableRawValues() {
     // given / when / then — the approvals.reason column vocabulary (spec §4.1)
     #expect(ApprovalReason.askTier.rawValue == "ask_tier")
     #expect(ApprovalReason.exfilTrifecta.rawValue == "exfil_trifecta")
+    #expect(ApprovalReason.codeExec.rawValue == "code_exec")
   }
 }
