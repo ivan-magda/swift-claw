@@ -87,7 +87,8 @@ extension DaemonBuilder {
       registry: ToolRegistry(tools: tools),
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: secretValues),
-        privateFileLoader: privateFileLoader
+        privateFileLoader: privateFileLoader,
+        execEnabled: config.exec.enabled
       )
     )
   }
