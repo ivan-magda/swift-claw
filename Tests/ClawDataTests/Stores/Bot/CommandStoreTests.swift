@@ -163,6 +163,78 @@ import Testing
     #expect(audits.map { $0["run_id"] as Int64? } == [env.firstRunId, queuedRunId])
   }
 
+  @Test func newDetaintsBothStickyFlagsAndReportsSupersededRuns() throws {
+    // given — an active session carrying BOTH sticky flags plus one RUNNING and one queued run
+    let env = try fixture()
+    _ = try #require(
+      try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10))
+    )
+    let queued = try env.sessions.claimAndPersistInbound(
+      inbound(updateId: 2, sessionKey: env.sessionKey, text: "queued")
+    )
+    let queuedRunId = try #require(queued.runId)
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE sessions SET tainted = 1, has_private_data = 1 WHERE id = ?",
+        arguments: [env.sessionId]
+      )
+    }
+    let now = Date(timeIntervalSince1970: 200)
+
+    // when
+    let result = try env.commands.applyNew(updateId: 200, sessionKey: env.sessionKey, now: now)
+
+    // then — supersede AND both-flag detaint are observed jointly after the single /new commit
+    #expect(result.supersededRunIds == [env.firstRunId, queuedRunId])
+    let states = try runStates(env.queue)
+    #expect(states[env.firstRunId] == RunState.superseded.rawValue)
+    #expect(states[queuedRunId] == RunState.superseded.rawValue)
+    let flags = try sessionFlags(env.queue, sessionId: env.sessionId)
+    #expect(flags.tainted == false)
+    #expect(flags.hasPrivateData == false)
+  }
+
+  @Test func newSupersedeAndDetaintCommitTogether() throws {
+    // given — active runs and both sticky flags set, with a store that throws AFTER the in-txn
+    // supersede+detaint so we can observe whether they persist independently of a later failure
+    let env = try fixture()
+    _ = try #require(
+      try env.runs.pickUp(runId: env.firstRunId, now: Date(timeIntervalSince1970: 10))
+    )
+    let queued = try env.sessions.claimAndPersistInbound(
+      inbound(updateId: 2, sessionKey: env.sessionKey, text: "queued")
+    )
+    let queuedRunId = try #require(queued.runId)
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE sessions SET tainted = 1, has_private_data = 1 WHERE id = ?",
+        arguments: [env.sessionId]
+      )
+    }
+    let statesBefore = try runStates(env.queue)
+    let crashingStore = CommandStoreGRDB(
+      writer: env.queue,
+      afterSupersedeAndDetaintForTesting: { throw InjectedCrash() }
+    )
+    let now = Date(timeIntervalSince1970: 500)
+
+    // when — the post-detaint throw surfaces classified at the seam, never as its raw type
+    #expect(throws: StoreError.self) {
+      try crashingStore.applyNew(updateId: 500, sessionKey: env.sessionKey, now: now)
+    }
+
+    // then — the whole transaction rolls back: supersede and detaint commit together or not at all,
+    // so a future split into two transactions (leaving supersede persisted) would break this
+    #expect(try processedCount(env.queue, updateId: 500) == 0)
+    let statesAfter = try runStates(env.queue)
+    #expect(statesAfter == statesBefore)
+    #expect(statesAfter[env.firstRunId] != RunState.superseded.rawValue)
+    #expect(statesAfter[queuedRunId] != RunState.superseded.rawValue)
+    let flags = try sessionFlags(env.queue, sessionId: env.sessionId)
+    #expect(flags.tainted == true)
+    #expect(flags.hasPrivateData == true)
+  }
+
   @Test func duplicateCommandDoesNotRepeatEffects() throws {
     // given
     let env = try fixture()
@@ -220,6 +292,22 @@ import Testing
         uniqueKeysWithValues: rows.map { row in (row["id"] as Int64, row["state"] as String) }
       )
     }
+  }
+
+  private func sessionFlags(
+    _ queue: DatabaseQueue,
+    sessionId: Int64
+  ) throws -> (tainted: Bool, hasPrivateData: Bool) {
+    let row = try #require(
+      try queue.read { db in
+        try Row.fetchOne(
+          db,
+          sql: "SELECT tainted, has_private_data FROM sessions WHERE id = ?",
+          arguments: [sessionId]
+        )
+      }
+    )
+    return (tainted: row["tainted"], hasPrivateData: row["has_private_data"])
   }
 
   private func processedCount(_ queue: DatabaseQueue, updateId: Int64) throws -> Int {
