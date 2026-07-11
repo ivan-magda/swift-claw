@@ -132,12 +132,61 @@ public struct ExecuteCodeTool: Tool {
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    ToolPayload(
-      content:
-        "The recorded code action is not executable until its approval binding is revalidated.",
-      status: .error,
-      ingestedUntrusted: false
+    guard let approvedTarget = canonicalTarget else {
+      return errorPayload("execute_code was dispatched without its approved target.")
+    }
+    guard let recorded = Self.decode(RecordedArguments.self, from: arguments) else {
+      return errorPayload("The recorded code action is unreadable; nothing ran.")
+    }
+    guard let canonicalArgsJSON = Self.canonicalJSON(recorded) else {
+      return errorPayload("The recorded code action cannot be re-encoded safely; nothing ran.")
+    }
+    let expectedTarget =
+      "code_exec:\(recorded.language.rawValue):"
+      + String(SHA256Digest.hex(Data(canonicalArgsJSON.utf8)).prefix(16))
+    guard expectedTarget == approvedTarget else {
+      return errorPayload(
+        "The recorded code action no longer matches its approved target; nothing ran."
+      )
+    }
+    guard recorded.code.utf8.count <= Self.maxCodeBytes else {
+      return errorPayload("The recorded script exceeds the approved code cap; nothing ran.")
+    }
+    guard recorded.network == false || settings.allowEgress else {
+      return errorPayload("Networked execution is no longer enabled; nothing ran.")
+    }
+
+    let loaded: [LoadedStage]
+    switch reloadRecordedStages(recorded.stage) {
+    case .failure(let reason):
+      return errorPayload(reason)
+    case .success(let stages):
+      loaded = stages
+    }
+    let privateData = loaded.contains { stage in
+      isPrivate(realpath: stage.record.realpath)
+    }
+    guard privateData == recorded.readsPrivateData else {
+      return errorPayload(
+        "The staged private-data classification changed after approval; nothing ran."
+      )
+    }
+
+    let entrypoint = StagedFile(
+      name: recorded.language == .python ? ".clawd-entrypoint.py" : ".clawd-entrypoint.sh",
+      bytes: Data(recorded.code.utf8),
+      mode: .readExecute
     )
+    let request = ExecutionRequest(
+      language: recorded.language,
+      entrypoint: entrypoint,
+      inputs: loaded.map { stage in
+        StagedFile(name: stage.basename, bytes: stage.bytes, mode: .readOnly)
+      },
+      network: recorded.network,
+      timeout: settings.timeout
+    )
+    return map(result: await backend.run(request), readsPrivateData: recorded.readsPrivateData)
   }
 }
 
@@ -373,6 +422,157 @@ private extension ExecuteCodeTool {
       contentPreview: preview,
       warnings: recorded.network
         ? ["network egress is enabled — this run can send data out"] : []
+    )
+  }
+}
+
+// MARK: - Resume Revalidation
+
+private extension ExecuteCodeTool {
+  func reloadRecordedStages(_ records: [RecordedStage]) -> StageLoadResult {
+    guard records.count <= Self.maxStagedFiles else {
+      return .failure("The recorded stage count exceeds the approved cap; nothing ran.")
+    }
+
+    var recordedTotalBytes = 0
+    for record in records {
+      guard record.bytes >= 0, record.bytes <= Self.maxStagedFileBytes else {
+        return .failure("A recorded staged-file size exceeds the approved cap; nothing ran.")
+      }
+      let (nextTotal, overflow) = recordedTotalBytes.addingReportingOverflow(record.bytes)
+      guard overflow == false, nextTotal <= Self.maxStagedTotalBytes else {
+        return .failure("The recorded staged total exceeds the approved cap; nothing ran.")
+      }
+      recordedTotalBytes = nextTotal
+    }
+
+    var loaded: [LoadedStage] = []
+    var normalizedNames = Set<String>()
+    var totalBytes = 0
+
+    for record in records {
+      let liveRealpath: String
+      switch WorkspacePathContainment.resolveExisting(
+        path: record.path,
+        root: workspaceRoot.path
+      ) {
+      case .refused:
+        return .failure("A staged path no longer resolves to its approved target; nothing ran.")
+      case .resolved(let resolved):
+        liveRealpath = resolved
+      }
+      guard liveRealpath == record.realpath else {
+        return .failure("A staged path no longer resolves to its approved target; nothing ran.")
+      }
+
+      let attributes: [FileAttributeKey: Any]
+      do {
+        attributes = try FileManager.default.attributesOfItem(atPath: liveRealpath)
+      } catch {
+        return .failure("A staged file became unavailable after approval; nothing ran.")
+      }
+      guard attributes[.type] as? FileAttributeType == .typeRegular,
+        let size = attributes[.size] as? NSNumber,
+        size.intValue == record.bytes,
+        size.intValue <= Self.maxStagedFileBytes
+      else {
+        return .failure("A staged file no longer has its approved size and type; nothing ran.")
+      }
+
+      let data: Data
+      do {
+        guard
+          let bounded = try Self.readBoundedFile(
+            atPath: liveRealpath,
+            maxBytes: Self.maxStagedFileBytes
+          )
+        else {
+          return .failure("A staged file grew past its approved cap; nothing ran.")
+        }
+        data = bounded
+      } catch {
+        return .failure("A staged file became unreadable after approval; nothing ran.")
+      }
+      guard data.count == record.bytes, SHA256Digest.hex(data) == record.sha256 else {
+        return .failure("A staged file no longer matches its approved bytes; nothing ran.")
+      }
+      let (nextTotal, overflow) = totalBytes.addingReportingOverflow(data.count)
+      guard overflow == false, nextTotal <= Self.maxStagedTotalBytes else {
+        return .failure("Staged files exceed the approved total cap; nothing ran.")
+      }
+      totalBytes = nextTotal
+
+      let basename = (record.path as NSString).lastPathComponent
+      let normalized = Self.normalizedBasename(basename)
+      guard normalized.hasPrefix(".clawd-entrypoint.") == false,
+        normalizedNames.insert(normalized).inserted
+      else {
+        return .failure(
+          "The staged basename set no longer satisfies the approved layout; nothing ran."
+        )
+      }
+
+      loaded.append(
+        LoadedStage(
+          record: record,
+          basename: basename,
+          bytes: data
+        )
+      )
+    }
+
+    return .success(loaded)
+  }
+}
+
+// MARK: - Result Mapping
+
+private extension ExecuteCodeTool {
+  static let timeoutCopy = "The sandbox exceeded its execution timeout and was killed."
+  static let cancellationCopy = "The sandbox execution was cancelled."
+  static let memoryCapHint = "The run may have hit its memory cap."
+
+  func map(result: ExecutionResult, readsPrivateData: Bool) -> ToolPayload {
+    switch result.terminationReason {
+    case .exited(let code):
+      let stdout = redactor.redact(result.stdout)
+      let stderr = redactor.redact(result.stderr)
+      var content = """
+        exit \(code)
+        --- stdout ---
+        \(stdout)
+        --- stderr ---
+        \(stderr)
+        """
+      if code == 137 {
+        content += "\n" + Self.memoryCapHint
+      }
+      if result.truncatedRawBytes {
+        content += "\n" + Self.rawOutputTruncationNotice
+      }
+      return ToolPayload(
+        content: ToolOutputCap.cap(content),
+        status: .ok,
+        ingestedUntrusted: true,
+        readPrivateData: readsPrivateData
+      )
+    case .timedOutKilled:
+      return errorPayload(Self.timeoutCopy)
+    case .cancelled:
+      return errorPayload(Self.cancellationCopy)
+    case .startFailed(let reason):
+      return errorPayload("The sandbox could not start: \(reason)")
+    case .unavailable(let reason):
+      return errorPayload("The sandbox is unavailable: \(reason)")
+    }
+  }
+
+  func errorPayload(_ reason: String) -> ToolPayload {
+    ToolPayload(
+      content: redactor.redact(reason),
+      status: .error,
+      ingestedUntrusted: false,
+      readPrivateData: false
     )
   }
 }

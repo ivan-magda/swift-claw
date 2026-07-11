@@ -80,6 +80,30 @@ import Testing
     return true
   }
 
+  private func recordedInvocation(
+    tool: ExecuteCodeTool,
+    arguments: JSONValue
+  ) async throws -> (JSONValue, String) {
+    let action = try await prepared(tool.prepareAction(arguments: arguments))
+    let recorded = try #require(JSONValue.parse(action.canonicalArgsJSON))
+    return (recorded, action.canonicalTarget)
+  }
+
+  private func result(
+    termination: ExecTermination,
+    stdout: String = "",
+    stderr: String = "",
+    truncated: Bool = false
+  ) -> ExecutionResult {
+    ExecutionResult(
+      terminationReason: termination,
+      stdout: stdout,
+      stderr: stderr,
+      truncatedRawBytes: truncated,
+      wallClock: .milliseconds(20)
+    )
+  }
+
   private struct PreparationFailure: Error {}
 }
 
@@ -402,5 +426,287 @@ extension ExecuteCodeToolTests {
     #expect(action.presentation.blastRadius.contains("egress: yes"))
     #expect(action.presentation.warnings.count == 1)
     #expect(action.presentation.warnings[0].contains("send data out"))
+  }
+}
+
+extension ExecuteCodeToolTests {
+  @Test func executeRevalidatesAndSendsOnlyRecordedCopies() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    try write(Data("input".utf8), relativePath: "notes/input.txt", workspace: workspace)
+    let backend = FakeExecutionBackend(
+      results: [result(termination: .exited(code: 0), stdout: "done")]
+    )
+    let tool = makeTool(workspace: workspace, backend: backend, allowEgress: true)
+    let (recorded, target) = try await recordedInvocation(
+      tool: tool,
+      arguments: arguments(
+        language: "python",
+        code: "print(open('/work/input.txt').read())",
+        stage: ["notes/input.txt"],
+        network: true
+      )
+    )
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+    let requests = await backend.recordedRequests()
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(requests.count == 1)
+    let request = try #require(requests.first)
+    #expect(request.language == .python)
+    #expect(request.entrypoint.name == ".clawd-entrypoint.py")
+    #expect(request.entrypoint.mode == .readExecute)
+    #expect(String(decoding: request.entrypoint.bytes, as: UTF8.self).contains("/work/input.txt"))
+    #expect(request.inputs.map(\.name) == ["input.txt"])
+    #expect(request.inputs.map(\.mode) == [.readOnly])
+    #expect(
+      request.inputs.map { input in
+        String(decoding: input.bytes, as: UTF8.self)
+      } == ["input"]
+    )
+    #expect(request.network)
+    #expect(request.timeout == .seconds(30))
+  }
+
+  @Test func contentDriftFailsBeforeBackend() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    try write(Data("approved".utf8), relativePath: "input.txt", workspace: workspace)
+    let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 0))])
+    let tool = makeTool(workspace: workspace, backend: backend)
+    let (recorded, target) = try await recordedInvocation(
+      tool: tool,
+      arguments: arguments(stage: ["input.txt"])
+    )
+    try write(Data("tampered".utf8), relativePath: "input.txt", workspace: workspace)
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("approved bytes"))
+    #expect(await backend.recordedRequests().isEmpty)
+  }
+
+  @Test func symlinkRealpathDriftFailsBeforeBackend() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    try write(Data("first".utf8), relativePath: "first.txt", workspace: workspace)
+    try write(Data("second".utf8), relativePath: "second.txt", workspace: workspace)
+    let link = workspace.root.appendingPathComponent("input.txt")
+    try FileManager.default.createSymbolicLink(
+      at: link,
+      withDestinationURL: workspace.root.appendingPathComponent("first.txt")
+    )
+    let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 0))])
+    let tool = makeTool(workspace: workspace, backend: backend)
+    let (recorded, target) = try await recordedInvocation(
+      tool: tool,
+      arguments: arguments(stage: ["input.txt"])
+    )
+    try FileManager.default.removeItem(at: link)
+    try FileManager.default.createSymbolicLink(
+      at: link,
+      withDestinationURL: workspace.root.appendingPathComponent("second.txt")
+    )
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("approved target"))
+    #expect(await backend.recordedRequests().isEmpty)
+  }
+
+  @Test func changedCanonicalTargetFailsBeforeBackend() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 0))])
+    let tool = makeTool(workspace: workspace, backend: backend)
+    let (recorded, _) = try await recordedInvocation(tool: tool, arguments: arguments())
+
+    // when
+    let payload = await tool.execute(
+      arguments: recorded,
+      canonicalTarget: "code_exec:python:ffffffffffffffff"
+    )
+
+    // then
+    #expect(payload.status == .error)
+    #expect(await backend.recordedRequests().isEmpty)
+  }
+
+  @Test func rawArgumentsCannotCrossTheRecordedResumeSeam() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 0))])
+    let tool = makeTool(workspace: workspace, backend: backend)
+
+    // when
+    let payload = await tool.execute(
+      arguments: arguments(),
+      canonicalTarget: "code_exec:python:0123456789abcdef"
+    )
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("unreadable"))
+    #expect(await backend.recordedRequests().isEmpty)
+  }
+
+  @Test func networkPolicyDriftFailsBeforeBackend() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let preparingTool = makeTool(workspace: workspace, allowEgress: true)
+    let (recorded, target) = try await recordedInvocation(
+      tool: preparingTool,
+      arguments: arguments(network: true)
+    )
+    let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 0))])
+    let executingTool = makeTool(workspace: workspace, backend: backend, allowEgress: false)
+
+    // when
+    let payload = await executingTool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("no longer enabled"))
+    #expect(await backend.recordedRequests().isEmpty)
+  }
+}
+
+extension ExecuteCodeToolTests {
+  @Test func exitedResultRedactsLabelsNoticesAndCapsOnce() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let stdoutSecret = "stdout-secret-value"
+    let boundarySecret = String(repeating: "boundary-secret-value-", count: 20)
+    let boundaryPrefix = String(repeating: "x", count: ToolOutputCap.maxGraphemes - 200)
+    let overflowTail = String(repeating: "y", count: 1_000)
+    let backend = FakeExecutionBackend(
+      results: [
+        result(
+          termination: .exited(code: 7),
+          stdout: "stdout \(stdoutSecret)",
+          stderr: boundaryPrefix + boundarySecret + overflowTail,
+          truncated: true
+        )
+      ]
+    )
+    let tool = makeTool(
+      workspace: workspace,
+      backend: backend,
+      secrets: [stdoutSecret, boundarySecret]
+    )
+    let (recorded, target) = try await recordedInvocation(tool: tool, arguments: arguments())
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.ingestedUntrusted)
+    #expect(payload.readPrivateData == false)
+    #expect(payload.content.contains("exit 7"))
+    #expect(payload.content.contains("--- stdout ---"))
+    #expect(payload.content.contains("--- stderr ---"))
+    #expect(payload.content.contains(stdoutSecret) == false)
+    #expect(payload.content.contains(String(boundarySecret.prefix(32))) == false)
+    #expect(
+      payload.content.components(separatedBy: SecretRedactor.replacement).count - 1 == 2
+    )
+    #expect(payload.content.components(separatedBy: ToolOutputCap.truncationMarker).count - 1 == 1)
+  }
+
+  @Test func rawPrefixOverflowGetsOneNoticeBeforeTheSingleCap() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let backend = FakeExecutionBackend(
+      results: [result(termination: .exited(code: 0), stdout: "short", truncated: true)]
+    )
+    let tool = makeTool(workspace: workspace, backend: backend)
+    let (recorded, target) = try await recordedInvocation(tool: tool, arguments: arguments())
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(
+      payload.content.components(separatedBy: ExecuteCodeTool.rawOutputTruncationNotice).count - 1
+        == 1
+    )
+    #expect(payload.content.contains(ToolOutputCap.truncationMarker) == false)
+  }
+
+  @Test func exit137IsSuccessfulAndCarriesTheMemoryHint() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 137))])
+    let tool = makeTool(workspace: workspace, backend: backend)
+    let (recorded, target) = try await recordedInvocation(tool: tool, arguments: arguments())
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.ingestedUntrusted)
+    #expect(payload.content.contains("memory cap"))
+  }
+
+  @Test func infrastructureAndCancellationResultsHaveNoNewProvenance() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    try write(Data("private".utf8), relativePath: "MEMORY.md", workspace: workspace)
+    let secret = "backend-control-secret"
+    let terminations: [ExecTermination] = [
+      .timedOutKilled,
+      .cancelled,
+      .startFailed(reason: "engine failed \(secret)"),
+      .unavailable(reason: "engine unavailable \(secret)"),
+    ]
+
+    for termination in terminations {
+      let backend = FakeExecutionBackend(results: [result(termination: termination)])
+      let tool = makeTool(workspace: workspace, backend: backend, secrets: [secret])
+      let (recorded, target) = try await recordedInvocation(
+        tool: tool,
+        arguments: arguments(stage: ["MEMORY.md"])
+      )
+
+      // when
+      let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+      // then
+      #expect(payload.status == .error)
+      #expect(payload.ingestedUntrusted == false)
+      #expect(payload.readPrivateData == false)
+      #expect(payload.content.contains(secret) == false)
+    }
+  }
+
+  @Test func successfulPrivateStagePropagatesPrivateData() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    try write(Data("private".utf8), relativePath: "MEMORY.md", workspace: workspace)
+    let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 0))])
+    let tool = makeTool(workspace: workspace, backend: backend)
+    let (recorded, target) = try await recordedInvocation(
+      tool: tool,
+      arguments: arguments(stage: ["MEMORY.md"])
+    )
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.ingestedUntrusted)
+    #expect(payload.readPrivateData)
   }
 }
