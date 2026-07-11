@@ -57,11 +57,12 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     guard rawHost == rawHost.lowercased(), rawHost.isEmpty == false else {
       return false
     }
+
     let pieces = rawHost.split(separator: ":", omittingEmptySubsequences: false)
     guard pieces.count <= 2 else {
       return false
     }
-    let hostname = String(pieces[0])
+
     if pieces.count == 2 {
       let rawPort = pieces[1]
       guard
@@ -73,9 +74,12 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
         return false
       }
     }
+
+    let hostname = String(pieces[0])
     guard hostname != "localhost", hostname.contains("."), hostname.contains("[") == false else {
       return false
     }
+
     let labels = hostname.split(separator: ".", omittingEmptySubsequences: false)
     guard labels.allSatisfy(isValidDNSLabel) else {
       return false
@@ -83,6 +87,7 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     guard labels.allSatisfy({ Int($0) != nil }) == false else {
       return false
     }
+
     return true
   }
 }
@@ -676,7 +681,9 @@ private extension AppConfig {
       key: EnvKey.execEnabled,
       default: false
     )
+
     let registryAllowlist = try parseExecRegistryAllowlist(env[EnvKey.execImageRegistries])
+
     let rawImage = env[EnvKey.execImage] ?? ""
     let image: PinnedImageReference?
     if rawImage.isEmpty {
@@ -690,6 +697,7 @@ private extension AppConfig {
       }
       image = parsed
     }
+
     if enabled, image == nil {
       throw ConfigError.invalidExecImage(rawImage)
     }
@@ -700,6 +708,7 @@ private extension AppConfig {
       range: 256...8192,
       error: ConfigError.invalidExecMemoryMiB
     )
+
     let cpus = try boundedExecInt(
       env[EnvKey.execCPUs],
       default: EnvDefaults.execCPUs,
@@ -709,12 +718,14 @@ private extension AppConfig {
     if enabled, cpus > ProcessInfo.processInfo.activeProcessorCount {
       throw ConfigError.invalidExecCPUs("\(cpus)")
     }
+
     let timeoutSeconds = try boundedExecInt(
       env[EnvKey.execTimeout],
       default: EnvDefaults.execTimeoutSeconds,
       range: 1...300,
       error: ConfigError.invalidExecTimeout
     )
+
     let allowEgress = try boolValue(
       env[EnvKey.execAllowEgress],
       key: EnvKey.execAllowEgress,
