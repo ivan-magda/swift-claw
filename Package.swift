@@ -70,7 +70,7 @@ let package = Package(
       ]
     ),
     .target(name: "ClawTools", dependencies: ["ClawCore"]),
-    .target(name: "ClawTestSupport"),
+    .target(name: "ClawTestSupport", dependencies: ["ClawCore"]),
     .target(
       name: "ClawGateway",
       dependencies: [
@@ -91,7 +91,7 @@ let package = Package(
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
-    .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore"]),
+    .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore", "ClawTestSupport"]),
     .testTarget(
       name: "ClawSecretsTests",
       dependencies: [
