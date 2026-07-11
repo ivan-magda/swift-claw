@@ -186,6 +186,7 @@ import Testing
         ?? ApprovedActionExecutor(
           tools: ["file_write": StubTool(toolName: "file_write", result: "Wrote 12 B.")],
           runs: env.runs,
+          redactArguments: { $0 },
           now: { Date() },
           logger: Logger(label: "test")
         ),

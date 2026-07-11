@@ -18,26 +18,63 @@ import Testing
     }
   }
 
-  /// A ClawCore `Tool` double that records execution and can stall past its own declared timeout —
-  /// the executor must still await it to completion (§6.6, never the read-tool abandon race).
+  private actor ExecutionGate {
+    private var started = false
+    private var released = false
+    private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func arriveAndWait() async {
+      started = true
+      for waiter in startedWaiters {
+        waiter.resume()
+      }
+      startedWaiters.removeAll()
+      guard released == false else { return }
+      await withCheckedContinuation { continuation in
+        releaseWaiters.append(continuation)
+      }
+    }
+
+    func waitUntilStarted() async {
+      guard started == false else { return }
+      await withCheckedContinuation { continuation in
+        startedWaiters.append(continuation)
+      }
+    }
+
+    func release() {
+      released = true
+      for waiter in releaseWaiters {
+        waiter.resume()
+      }
+      releaseWaiters.removeAll()
+    }
+  }
+
   private struct RecordingWriteTool: Tool {
     let toolName: String
-    let result: String
-    let status: ToolObservationStatus
-    let stallFor: Duration?
+    let payload: ToolPayload
+    let gate: ExecutionGate?
     let probe: ExecutionProbe?
 
     init(
       toolName: String,
       result: String,
       status: ToolObservationStatus = .ok,
-      stallFor: Duration? = nil,
+      ingestedUntrusted: Bool = false,
+      readPrivateData: Bool = false,
+      gate: ExecutionGate? = nil,
       probe: ExecutionProbe? = nil
     ) {
       self.toolName = toolName
-      self.result = result
-      self.status = status
-      self.stallFor = stallFor
+      payload = ToolPayload(
+        content: result,
+        status: status,
+        ingestedUntrusted: ingestedUntrusted,
+        readPrivateData: readPrivateData
+      )
+      self.gate = gate
       self.probe = probe
     }
 
@@ -57,10 +94,8 @@ import Testing
 
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       await probe?.mark()
-      if let stallFor {
-        try? await Task.sleep(for: stallFor)
-      }
-      return ToolPayload(content: result, status: status, ingestedUntrusted: false)
+      await gate?.arriveAndWait()
+      return payload
     }
   }
 
@@ -172,11 +207,13 @@ import Testing
   private func makeExecutor(
     _ env: Fixture,
     tools: [any Tool],
-    runs: (any RunStore)? = nil
+    runs: (any RunStore)? = nil,
+    redactArguments: @escaping @Sendable (String) -> String = { $0 }
   ) -> ApprovedActionExecutor {
     ApprovedActionExecutor(
       tools: Dictionary(uniqueKeysWithValues: tools.map { ($0.definition.name, $0) }),
       runs: runs ?? env.runs,
+      redactArguments: redactArguments,
       now: { Date() },
       logger: Logger(label: "test")
     )
@@ -195,6 +232,36 @@ import Testing
   private func runState(_ env: Fixture) throws -> String? {
     try env.queue.read { db in
       try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runId])
+    }
+  }
+
+  private func sessionFlags(_ env: Fixture) throws -> (tainted: Bool, privateData: Bool) {
+    try env.queue.read { db in
+      let row = try #require(
+        try Row.fetchOne(
+          db,
+          sql: "SELECT tainted, has_private_data FROM sessions WHERE id = ?",
+          arguments: [env.sessionId]
+        )
+      )
+      return (row["tainted"], row["has_private_data"])
+    }
+  }
+
+  private func lastToolAudit(_ env: Fixture) throws -> Row {
+    try env.queue.read { db in
+      try #require(
+        try Row.fetchOne(
+          db,
+          sql: """
+            SELECT tool, args_redacted, result_size, decision
+            FROM audit_events
+            WHERE run_id = ? AND action = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+          arguments: [env.runId, AuditAction.toolCall.rawValue]
+        )
+      )
     }
   }
 
@@ -219,27 +286,149 @@ import Testing
   }
 
   @Test func awaitsAStallingToolToCompletionWithoutTheTimeoutAbandonRace() async throws {
-    // given — the tool stalls 20ms past its own 1ms declared timeout; the executor must NOT abandon
+    // given
     let env = try makeSuspendedFixture()
+    let gate = ExecutionGate()
     let executor = makeExecutor(
       env,
       tools: [
         RecordingWriteTool(
           toolName: "file_write",
-          result: "the slow write finished",
-          stallFor: .milliseconds(20)
+          result: "the gated write finished",
+          gate: gate
         )
       ]
     )
 
-    // when
-    let outcome = await executor.executeApproved(
-      approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
+    // when: the tool remains suspended until the test releases the signal
+    let execution = Task {
+      await executor.executeApproved(
+        approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
+      )
+    }
+    await gate.waitUntilStarted()
+    await gate.release()
+    let outcome = await execution.value
+
+    // then: approved execution awaits completion and records the truthful result
+    #expect(outcome.observationContent == "the gated write finished")
+    #expect(try messageContent(env) == "the gated write finished")
+  }
+
+  @Test func fullPayloadStatusProvenanceAndRedactedArgsReachTheFill() async throws {
+    // given
+    let env = try makeSuspendedFixture()
+    let secret = "owner-secret-value"
+    let rawArgs = #"{"code":"owner-secret-value"}"#
+    let executor = makeExecutor(
+      env,
+      tools: [
+        RecordingWriteTool(
+          toolName: "execute_code",
+          result: "exit 9",
+          status: .error,
+          ingestedUntrusted: true,
+          readPrivateData: true
+        )
+      ],
+      redactArguments: { arguments in
+        arguments.replacingOccurrences(of: secret, with: "[REDACTED:secret-value]")
+      }
     )
 
-    // then — the observation is truthful: the completed result, never a "timed out but maybe applied"
-    #expect(outcome.observationContent == "the slow write finished")
-    #expect(try messageContent(env) == "the slow write finished")
+    // when
+    let outcome = await executor.executeApproved(
+      approval(env, tool: "execute_code", argsJSON: rawArgs, target: "code_exec:sh:abcd")
+    )
+
+    // then
+    #expect(outcome.commit == .committed)
+    #expect(outcome.observationContent == "exit 9")
+    #expect(try sessionFlags(env).tainted)
+    #expect(try sessionFlags(env).privateData)
+    let audit = try lastToolAudit(env)
+    #expect(audit["tool"] == "execute_code")
+    #expect(audit["decision"] == ToolObservationStatus.error.rawValue)
+    let argsRedacted: String = audit["args_redacted"]
+    #expect(argsRedacted == #"{"code":"[REDACTED:secret-value]"}"#)
+    #expect(argsRedacted.contains(secret) == false)
+  }
+
+  @Test func stopDuringExecutionRetainsCompletedPayloadProvenance() async throws {
+    // given
+    let env = try makeSuspendedFixture()
+    let gate = ExecutionGate()
+    let executor = makeExecutor(
+      env,
+      tools: [
+        RecordingWriteTool(
+          toolName: "execute_code",
+          result: "completed output",
+          ingestedUntrusted: true,
+          readPrivateData: true,
+          gate: gate
+        )
+      ]
+    )
+    let execution = Task {
+      await executor.executeApproved(
+        approval(env, tool: "execute_code", argsJSON: "{}", target: "code_exec:sh:abcd")
+      )
+    }
+    await gate.waitUntilStarted()
+
+    // when: claim is already RUNNING; /stop wins before the fill
+    _ = try env.runs.cancelActiveRun(
+      sessionId: env.sessionId,
+      reason: .cancelled,
+      now: Date()
+    )
+    await gate.release()
+    let outcome = await execution.value
+
+    // then
+    #expect(outcome.commit == .committed)
+    #expect(try runState(env) == RunState.cancelled.rawValue)
+    #expect(try messageContent(env) == "completed output")
+    #expect(try sessionFlags(env).tainted)
+    #expect(try sessionFlags(env).privateData)
+  }
+
+  @Test func newDuringExecutionNeverRetaintsTheFreshWindow() async throws {
+    // given
+    let env = try makeSuspendedFixture()
+    let gate = ExecutionGate()
+    let executor = makeExecutor(
+      env,
+      tools: [
+        RecordingWriteTool(
+          toolName: "execute_code",
+          result: "old-window output",
+          ingestedUntrusted: true,
+          readPrivateData: true,
+          gate: gate
+        )
+      ]
+    )
+    let execution = Task {
+      await executor.executeApproved(
+        approval(env, tool: "execute_code", argsJSON: "{}", target: "code_exec:sh:abcd")
+      )
+    }
+    await gate.waitUntilStarted()
+
+    // when: /new supersedes/detaints after claim but before fill
+    _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
+    await gate.release()
+    let outcome = await execution.value
+
+    // then: old observation and audit are truthful; fresh-window flags remain clear
+    #expect(outcome.commit == .committed)
+    #expect(try runState(env) == RunState.superseded.rawValue)
+    #expect(try messageContent(env) == "old-window output")
+    #expect(try sessionFlags(env).tainted == false)
+    #expect(try sessionFlags(env).privateData == false)
+    #expect(try lastToolAudit(env)["tool"] == "execute_code")
   }
 
   @Test func memoryWriteFusesTheInsertAndIsExactlyOnce() async throws {
