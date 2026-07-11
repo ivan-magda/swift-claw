@@ -88,6 +88,87 @@ pool set `CLAW_WEBFETCH_EXEMPT_CIDRS` (see `.env.example`).
 
 ---
 
+## Sandbox workload image (macOS 26 arm64)
+
+`execute_code` is disabled by default and the distribution does not silently select an image.
+The verified development image pin for this release is:
+
+```text
+cgr.dev/chainguard/python@sha256:55cd38584d1bba1913a1d58da07184cbe512724bc03e822e269404c73cd4c9cd
+```
+
+The pinned arm64 image provides `/usr/bin/python` and `/bin/sh`, has OCI ENTRYPOINT
+`["/usr/bin/python"]`, and runs as nonroot uid `65532`. clawd always supplies an explicit
+entrypoint. Re-verify before replacing the digest; never copy a moving tag into
+`CLAW_EXEC_IMAGE`.
+
+```bash
+brew install cosign
+
+set -euo pipefail
+IMAGE_TAG=cgr.dev/chainguard/python:latest-dev
+IMAGE_DIGEST=sha256:55cd38584d1bba1913a1d58da07184cbe512724bc03e822e269404c73cd4c9cd
+IMAGE_REF=cgr.dev/chainguard/python@${IMAGE_DIGEST}
+ISSUER=https://token.actions.githubusercontent.com
+IDENTITY='^https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main$'
+EVIDENCE_DIR="${HOME}/.swift-claw/image-evidence/${IMAGE_DIGEST#sha256:}"
+install -d -m 0700 "${EVIDENCE_DIR}"
+
+/usr/local/bin/container image pull \
+  --scheme https --progress none --platform linux/arm64 "${IMAGE_TAG}"
+/usr/local/bin/container image inspect "${IMAGE_TAG}" | grep -q "${IMAGE_DIGEST}"
+
+cosign verify \
+  --certificate-oidc-issuer "${ISSUER}" \
+  --certificate-identity-regexp "${IDENTITY}" "${IMAGE_REF}" \
+  > "${EVIDENCE_DIR}/signature.json"
+cosign verify-attestation --type https://slsa.dev/provenance/v1 \
+  --certificate-oidc-issuer "${ISSUER}" \
+  --certificate-identity-regexp "${IDENTITY}" "${IMAGE_REF}" \
+  > "${EVIDENCE_DIR}/slsa-v1.intoto.jsonl"
+cosign verify-attestation --type https://apko.dev/image-configuration \
+  --certificate-oidc-issuer "${ISSUER}" \
+  --certificate-identity-regexp "${IDENTITY}" "${IMAGE_REF}" \
+  > "${EVIDENCE_DIR}/apko.intoto.jsonl"
+cosign verify-attestation --type https://spdx.dev/Document \
+  --certificate-oidc-issuer "${ISSUER}" \
+  --certificate-identity-regexp "${IDENTITY}" "${IMAGE_REF}" \
+  > "${EVIDENCE_DIR}/spdx.intoto.jsonl"
+test -s "${EVIDENCE_DIR}/signature.json"
+test -s "${EVIDENCE_DIR}/slsa-v1.intoto.jsonl"
+test -s "${EVIDENCE_DIR}/apko.intoto.jsonl"
+test -s "${EVIDENCE_DIR}/spdx.intoto.jsonl"
+
+/usr/local/bin/container run --rm \
+  --scheme https --progress none --platform linux/arm64 \
+  --network none --no-dns --cap-drop ALL --read-only --tmpfs /tmp \
+  --entrypoint /bin/sh "${IMAGE_REF}" -c '
+    test -x /usr/bin/python
+    test -x /bin/sh
+    test "$(id -u)" = 65532
+  '
+```
+
+After those checks pass, set the non-secret execution configuration in
+`~/.swift-claw/clawd.env`:
+
+```bash
+CLAW_EXEC_ENABLED=true
+CLAW_EXEC_IMAGE=cgr.dev/chainguard/python@sha256:55cd38584d1bba1913a1d58da07184cbe512724bc03e822e269404c73cd4c9cd
+CLAW_EXEC_IMAGE_REGISTRIES=cgr.dev
+CLAW_EXEC_MEMORY_MIB=1024
+CLAW_EXEC_CPUS=4
+CLAW_EXEC_TIMEOUT=30
+CLAW_EXEC_ALLOW_EGRESS=false
+```
+
+Re-pin on an upstream advisory or an intentional maintenance review. Repeat signature plus all
+three attestation checks, interpreter/user inspection, hardening canary, and the mandatory
+`ContainerBackendRealAcceptanceTests` command before changing the configured digest. Automated
+mirroring and refresh scheduling are outside this increment.
+
+---
+
 ## Secrets
 
 ### Seal (first-time setup)
