@@ -307,6 +307,18 @@ private extension ToolPolicyGate {
     guard execEnabled else {
       return dangerousBlock(reason: "Code execution is disabled.", call: call)
     }
+    // A dangerous action can never take the second approval slot, and it cannot park or execute
+    // while one is pending, so refuse here before the expensive staging and content scans run.
+    guard context.approvalAlreadyPending == false else {
+      return .block(
+        payload: ToolPayload(
+          content: "blocked: an approval is already pending",
+          status: .blockedPendingApproval,
+          ingestedUntrusted: false
+        ),
+        argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
+      )
+    }
     guard let arguments = JSONValue.parse(call.argumentsJSON) else {
       return dangerousBlock(reason: "Malformed arguments for \(call.name).", call: call)
     }
@@ -325,7 +337,6 @@ private extension ToolPolicyGate {
       return dangerousBlock(reason: reason, call: call)
     }
 
-    let argsRedacted = argGuard.renderRedacted(argsJSON: prepared.canonicalArgsJSON)
     for text in prepared.guardTexts {
       let verdict = argGuard.evaluate(text: text)
       if let rule = verdict.blockedRule {
@@ -342,17 +353,6 @@ private extension ToolPolicyGate {
           return blockedArgs(rule: rule, argsRedacted: "[REDACTED:\(rule)]")
         }
       }
-    }
-
-    guard context.approvalAlreadyPending == false else {
-      return .block(
-        payload: ToolPayload(
-          content: "blocked: an approval is already pending",
-          status: .blockedPendingApproval,
-          ingestedUntrusted: false
-        ),
-        argsRedacted: argsRedacted
-      )
     }
 
     let recorded = RecordedToolAction(

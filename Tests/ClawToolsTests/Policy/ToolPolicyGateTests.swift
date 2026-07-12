@@ -123,6 +123,44 @@ private struct PreparedDangerousTool: Tool {
   }
 }
 
+/// Counts how many times the gate asked the tool to prepare, so a test can prove that an occupied
+/// approval slot short-circuits before the expensive staging/scan preparation runs.
+private actor PrepareCallProbe {
+  private(set) var count = 0
+
+  func mark() {
+    count += 1
+  }
+}
+
+private struct ProbedDangerousTool: Tool {
+  let resolution: PreparedActionResolution?
+  let probe: PrepareCallProbe
+
+  var definition: ToolDefinition {
+    ToolDefinition(
+      name: "execute_code",
+      description: "test dangerous tool",
+      parameters: .object(["type": .string("object")]),
+      egressClass: .none,
+      riskLevel: .dangerous
+    )
+  }
+
+  var timeout: Duration { .seconds(30) }
+
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
+  func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
+    await probe.mark()
+    return resolution
+  }
+
+  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+    ToolPayload(content: "must not execute in the gate", status: .error, ingestedUntrusted: false)
+  }
+}
+
 @Suite struct ToolPolicyGateTests {
   private static let memoryText = "The owner's private project is called Operation Nightjar Falcon."
 
@@ -714,6 +752,49 @@ private struct PreparedDangerousTool: Tool {
       return
     }
     #expect(payload.status == .blockedPendingApproval)
+  }
+
+  @Test func pendingApprovalBlocksBeforeAnyStagingOrScan() async {
+    // given
+    let probe = PrepareCallProbe()
+    let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
+
+    // when — an approval already holds the single slot
+    let verdict = await makeGate(execEnabled: true).evaluate(
+      call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
+      tool: tool,
+      context: makeContext(approvalPending: true)
+    )
+
+    // then — blocked without ever asking the tool to stage/scan its inputs
+    guard case .block(let payload, _) = verdict else {
+      Issue.record("expected pending-approval block, got \(verdict)")
+      return
+    }
+    #expect(payload.status == .blockedPendingApproval)
+    let prepareCalls = await probe.count
+    #expect(prepareCalls == 0)
+  }
+
+  @Test func openApprovalSlotStillPreparesTheDangerousAction() async {
+    // given — the control: with the slot open, preparation must run so the action can park
+    let probe = PrepareCallProbe()
+    let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
+
+    // when
+    let verdict = await makeGate(execEnabled: true).evaluate(
+      call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
+      tool: tool,
+      context: makeContext()
+    )
+
+    // then
+    guard case .requireApproval = verdict else {
+      Issue.record("expected dangerous approval, got \(verdict)")
+      return
+    }
+    let prepareCalls = await probe.count
+    #expect(prepareCalls == 1)
   }
 }
 
