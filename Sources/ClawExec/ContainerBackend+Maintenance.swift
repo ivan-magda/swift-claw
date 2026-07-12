@@ -4,15 +4,78 @@ import Foundation
 extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
   public func prepare() async -> SandboxHealth {
     preparedInitImage = nil
+    if let refusal = prepareRefusal() { return refusal }
+    let deadline = now().advanced(by: Self.prepareTimeout)
+    let engineVersion: String
+    switch await probeAndReap(deadline: deadline) {
+    case .abort(let health): return health
+    case .proceed(let version): engineVersion = version
+    }
+    let initImage: String
+    switch await resolveInitImage(engineVersion: engineVersion, deadline: deadline) {
+    case .abort(let health): return health
+    case .proceed(let image): initImage = image
+    }
+    if let failure = await stageImages(
+      engineVersion: engineVersion,
+      initImage: initImage,
+      deadline: deadline
+    ) {
+      return failure
+    }
+    return await verifyCanaryAndArm(
+      engineVersion: engineVersion,
+      initImage: initImage,
+      deadline: deadline
+    )
+  }
+
+  public func shutdown() async {
+    shuttingDown = true
+    preparedInitImage = nil
+    let executions = Array(executionTasks.values)
+    for execution in executions { execution.cancel() }
+    for execution in executions { _ = await execution.value }
+    let cleanups = Array(cleanupTasks.values)
+    for cleanup in cleanups { _ = await cleanup.value }
+    let deadline = now().advanced(by: Self.prepareTimeout)
+    _ = await reapOwnedContainers(deadline: deadline)
+    _ = sweepScratchRoots()
+  }
+
+  var preparedInitImageForTesting: String? { preparedInitImage }
+
+  func ownedContainerNamesForTesting() async -> [String]? {
+    let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
+    return await ownedContainers(deadline: deadline)?.compactMap(\.resolvedIdentifier)
+  }
+
+  func reapOwnedContainersForTesting() async -> Bool {
+    await reapOwnedContainers(deadline: now().advanced(by: Self.prepareTimeout))
+  }
+}
+
+// MARK: - Prepare Phases
+
+private enum PrepareStep<Value> {
+  case proceed(Value)
+  case abort(SandboxHealth)
+}
+
+private extension ContainerBackend {
+  func prepareRefusal() -> SandboxHealth? {
     guard !shuttingDown else {
       return failedHealth(lastError: "sandbox backend is shutting down")
     }
     // New executions cannot be admitted while `preparedInitImage` is nil, so in-flight
-    // work only needs this entry check; it cannot grow across the awaits below.
+    // work only needs this entry check; it cannot grow across prepare's awaits.
     guard executionTasks.isEmpty, cleanupTasks.isEmpty else {
       return failedHealth(lastError: "sandbox prepare refused: executions in flight")
     }
-    let deadline = now().advanced(by: Self.prepareTimeout)
+    return nil
+  }
+
+  func probeAndReap(deadline: ContinuousClock.Instant) async -> PrepareStep<String> {
     let availability = await probe()
     guard case .available(let engineVersion) = availability else {
       let reason =
@@ -20,15 +83,24 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
         case .available: "container engine is unavailable"
         case .unavailable(let reason): reason
         }
-      return failedHealth(lastError: reason)
+      return .abort(failedHealth(lastError: reason))
     }
     guard await reapOwnedContainers(deadline: deadline), sweepScratchRoots() else {
-      return failedHealth(
-        engineVersion: engineVersion,
-        versionOK: true,
-        lastError: "could not reap prior sandbox state"
+      return .abort(
+        failedHealth(
+          engineVersion: engineVersion,
+          versionOK: true,
+          lastError: "could not reap prior sandbox state"
+        )
       )
     }
+    return .proceed(engineVersion)
+  }
+
+  func resolveInitImage(
+    engineVersion: String,
+    deadline: ContinuousClock.Instant
+  ) async -> PrepareStep<String> {
     guard
       let propertyData = await boundedCommandData(
         ContainerInvocation.systemPropertyList(),
@@ -37,22 +109,34 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
       ),
       let properties = try? JSONDecoder().decode(SystemPropertiesDocument.self, from: propertyData)
     else {
-      return failedHealth(
-        engineVersion: engineVersion,
-        versionOK: true,
-        reaperOK: true,
-        lastError: "could not read container runtime properties"
+      return .abort(
+        failedHealth(
+          engineVersion: engineVersion,
+          versionOK: true,
+          reaperOK: true,
+          lastError: "could not read container runtime properties"
+        )
       )
     }
     let initImage = properties.vminit.image
     guard RuntimeInitImageReference.isRegistryQualifiedTag(initImage) else {
-      return failedHealth(
-        engineVersion: engineVersion,
-        versionOK: true,
-        reaperOK: true,
-        lastError: "container runtime init image is not a registry-qualified tag"
+      return .abort(
+        failedHealth(
+          engineVersion: engineVersion,
+          versionOK: true,
+          reaperOK: true,
+          lastError: "container runtime init image is not a registry-qualified tag"
+        )
       )
     }
+    return .proceed(initImage)
+  }
+
+  func stageImages(
+    engineVersion: String,
+    initImage: String,
+    deadline: ContinuousClock.Instant
+  ) async -> SandboxHealth? {
     // Shutdown may complete while prepare is suspended; re-check before pulling images,
     // before launching the canary container, and before re-arming the init image so a
     // finished shutdown leaves no sandbox activity or prepared state behind.
@@ -91,6 +175,14 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
         lastError: "workload image digest did not match the configured pin"
       )
     }
+    return nil
+  }
+
+  func verifyCanaryAndArm(
+    engineVersion: String,
+    initImage: String,
+    deadline: ContinuousClock.Instant
+  ) async -> SandboxHealth {
     guard !shuttingDown else {
       return failedHealth(
         engineVersion: engineVersion,
@@ -137,30 +229,6 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
       preparedInitImage = initImage
     }
     return health
-  }
-
-  public func shutdown() async {
-    shuttingDown = true
-    preparedInitImage = nil
-    let executions = Array(executionTasks.values)
-    for execution in executions { execution.cancel() }
-    for execution in executions { _ = await execution.value }
-    let cleanups = Array(cleanupTasks.values)
-    for cleanup in cleanups { _ = await cleanup.value }
-    let deadline = now().advanced(by: Self.prepareTimeout)
-    _ = await reapOwnedContainers(deadline: deadline)
-    _ = sweepScratchRoots()
-  }
-
-  var preparedInitImageForTesting: String? { preparedInitImage }
-
-  func ownedContainerNamesForTesting() async -> [String]? {
-    let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    return await ownedContainers(deadline: deadline)?.compactMap(\.resolvedIdentifier)
-  }
-
-  func reapOwnedContainersForTesting() async -> Bool {
-    await reapOwnedContainers(deadline: now().advanced(by: Self.prepareTimeout))
   }
 }
 
