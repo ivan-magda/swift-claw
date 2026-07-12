@@ -169,6 +169,42 @@ mirroring and refresh scheduling are outside this increment.
 
 ---
 
+## Running execute_code (macOS 26 arm64)
+
+`execute_code` is a `dangerous` tool: even when enabled it never auto-runs. Every call suspends the
+turn and sends the owner the complete redacted script, the staged-inputs table, the egress mode, and
+a taint banner when the turn ingested untrusted content. The tool runs only after the owner approves
+that exact action from Telegram.
+
+**Enable it.** After pinning and verifying the image (previous section), set `CLAW_EXEC_ENABLED=true`
+and the `CLAW_EXEC_*` block in `~/.swift-claw/clawd.env`, then restart `clawd`.
+
+**Confirm the sandbox is healthy.** `clawd doctor` prints a `sandbox` row built from one
+`SandboxMaintenance.prepare()` (host/version gates, then a hardening canary). A ready row means every
+gate passed and the tool is registered:
+
+```bash
+clawd doctor
+```
+
+Expect `sandbox` with `available`, `os_ok`, `version_ok`, `image_digest_ok`, `caps_empty`,
+`net_isolated`, `caps_match`, `reaper_ok`, `rootfs_ro`, `staging_ro`, and `interpreters_ok` all true
+and an empty `last_error`. `clawd doctor --check-config` validates the config (digest-pin format and
+registry allowlist) and the host/version gates without booting a canary.
+
+**Egress is opt-in and gated.** A `network:false` run has no route out. A `network:true` run needs
+`CLAW_EXEC_ALLOW_EGRESS=true` and shows `egress: yes` with a warning in the approval prompt; the run
+is treated as able to exfiltrate, so its output taints the session and forces the next outbound tool
+call through the trifecta approval.
+
+**If the tool never appears** (calls are refused as unknown), `clawd doctor` explains why. It is
+absent — by design, fail-closed — on Linux, macOS 15, Intel macOS, with `CLAW_EXEC_ENABLED=false`,
+with no or an unpinned `CLAW_EXEC_IMAGE`, when the `container` CLI is missing or below `1.0.0`, or
+when any hardening canary assertion failed. An owner-enabled sandbox that fails a gate prints a loud
+error row rather than silently degrading.
+
+---
+
 ## Secrets
 
 ### Seal (first-time setup)
@@ -231,3 +267,33 @@ Default: `~/.swift-claw/`. Contents:
 | `secret.key`  | AES key (keep out of backups) |
 
 Override the state root with `CLAW_STATE_ROOT` for isolated test setups.
+
+---
+
+## Release gates — sandbox code execution
+
+The increment is not complete until all of the following pass on a macOS 26 arm64 host with
+`container >= 1.0.0`:
+
+```bash
+# 1. Full hermetic suite (Layer A + all unit/gate/backend doubles) is green.
+swift build --build-tests
+timeout 900 swift test --skip-build
+
+# 2. Mandatory real-backend security suite (Layer B) is green — the SC6 sandbox proof.
+set -a && source ~/.swift-claw/clawd.env && set +a
+CLAW_REAL_SANDBOX_TESTS=1 timeout 1200 swift test \
+  --filter ContainerBackendRealAcceptanceTests
+
+# 3. Lint is clean.
+scripts/lint.sh --fix
+scripts/lint.sh
+
+# 4. Doctor shows a ready sandbox row when enabled, and no leftover instances remain.
+clawd doctor
+container ls --all | grep clawd-exec- || echo "no leftover exec containers"
+```
+
+A skipped Layer-B run (no `CLAW_REAL_SANDBOX_TESTS`) is fine for ordinary CI but is not acceptable
+completion evidence. Re-pinning the workload image on an advisory repeats the image verification
+section and this checklist before the new digest ships.
