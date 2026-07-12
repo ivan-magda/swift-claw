@@ -90,11 +90,11 @@ public struct ExecuteCodeTool: Tool {
       return .refused(reason: "The script exceeds the 16 KiB code cap.")
     }
 
-    let paths = raw.stage ?? []
+    let paths = raw.stage
     guard paths.count <= Self.maxStagedFiles else {
       return .refused(reason: "execute_code stages at most 16 files.")
     }
-    let network = raw.network ?? false
+    let network = raw.network
     guard network == false || settings.allowEgress else {
       return .refused(reason: "Networked code execution is disabled by configuration.")
     }
@@ -193,11 +193,26 @@ public struct ExecuteCodeTool: Tool {
 // MARK: - Argument Values
 
 private extension ExecuteCodeTool {
-  struct RawArguments: Codable {
+  struct RawArguments: Decodable {
     let language: String
     let code: String
-    let stage: [String]?
-    let network: Bool?
+    let stage: [String]
+    let network: Bool
+
+    init(from decoder: any Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      language = try container.decode(String.self, forKey: .language)
+      code = try container.decode(String.self, forKey: .code)
+      stage = try container.decodeIfPresent([String].self, forKey: .stage) ?? []
+      network = try container.decodeIfPresent(Bool.self, forKey: .network) ?? false
+    }
+
+    private enum CodingKeys: String, CodingKey {
+      case language
+      case code
+      case stage
+      case network
+    }
   }
 
   struct RecordedStage: Codable, Equatable {
