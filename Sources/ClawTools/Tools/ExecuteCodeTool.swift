@@ -103,22 +103,17 @@ public struct ExecuteCodeTool: Tool {
     case .failure(let reason):
       return .refused(reason: reason)
     case .success(let loaded):
-      let privateData = loaded.contains { stage in
-        isPrivate(realpath: stage.record.realpath)
-      }
       let recorded = RecordedArguments(
         code: raw.code,
         language: language,
         network: network,
-        readsPrivateData: privateData,
+        readsPrivateData: readsPrivateData(in: loaded),
         stage: loaded.map(\.record)
       )
       guard let canonicalArgsJSON = Self.canonicalJSON(recorded) else {
         return .refused(reason: "The prepared code action could not be encoded safely.")
       }
-      let target =
-        "code_exec:\(language.rawValue):"
-        + String(SHA256Digest.hex(Data(canonicalArgsJSON.utf8)).prefix(16))
+      let target = Self.canonicalTarget(language: language, canonicalArgsJSON: canonicalArgsJSON)
       return .prepared(
         PreparedToolAction(
           canonicalTarget: target,
@@ -141,14 +136,17 @@ public struct ExecuteCodeTool: Tool {
     guard let canonicalArgsJSON = Self.canonicalJSON(recorded) else {
       return errorPayload("The recorded code action cannot be re-encoded safely; nothing ran.")
     }
-    let expectedTarget =
-      "code_exec:\(recorded.language.rawValue):"
-      + String(SHA256Digest.hex(Data(canonicalArgsJSON.utf8)).prefix(16))
+
+    let expectedTarget = Self.canonicalTarget(
+      language: recorded.language,
+      canonicalArgsJSON: canonicalArgsJSON
+    )
     guard expectedTarget == approvedTarget else {
       return errorPayload(
         "The recorded code action no longer matches its approved target; nothing ran."
       )
     }
+
     guard recorded.code.utf8.count <= Self.maxCodeBytes else {
       return errorPayload("The recorded script exceeds the approved code cap; nothing ran.")
     }
@@ -163,10 +161,8 @@ public struct ExecuteCodeTool: Tool {
     case .success(let stages):
       loaded = stages
     }
-    let privateData = loaded.contains { stage in
-      isPrivate(realpath: stage.record.realpath)
-    }
-    guard privateData == recorded.readsPrivateData else {
+
+    guard readsPrivateData(in: loaded) == recorded.readsPrivateData else {
       return errorPayload(
         "The staged private-data classification changed after approval; nothing ran."
       )
@@ -186,6 +182,7 @@ public struct ExecuteCodeTool: Tool {
       network: recorded.network,
       timeout: settings.timeout
     )
+
     return map(result: await backend.run(request), readsPrivateData: recorded.readsPrivateData)
   }
 }
@@ -279,29 +276,32 @@ private extension ExecuteCodeTool {
       } catch {
         return .failure("A staged file became unavailable before it could be inspected.")
       }
+
       guard attributes[.type] as? FileAttributeType == .typeRegular else {
         return .failure("Every staged path must resolve to a regular file.")
       }
       guard let number = attributes[.size] as? NSNumber else {
         return .failure("A staged file size could not be determined.")
       }
+
       let statBytes = number.intValue
       guard statBytes <= Self.maxStagedFileBytes else {
         return .failure("A staged file exceeds the 1 MiB per-file cap.")
       }
-      let (nextTotal, overflow) = totalStatBytes.addingReportingOverflow(statBytes)
-      guard overflow == false, nextTotal <= Self.maxStagedTotalBytes else {
+
+      guard let nextTotal = Self.totalWithinCap(adding: statBytes, to: totalStatBytes) else {
         return .failure("Staged files exceed the 4 MiB total cap.")
       }
       totalStatBytes = nextTotal
 
-      let basename = (path as NSString).lastPathComponent
-      let normalized = Self.normalizedBasename(basename)
-      guard normalized.hasPrefix(".clawd-entrypoint.") == false else {
+      let basename: String
+      switch Self.validateBasename(of: path, claimed: &normalizedNames) {
+      case .reservedNamespace:
         return .failure("Staged files may not use the reserved .clawd-entrypoint.* namespace.")
-      }
-      guard normalizedNames.insert(normalized).inserted else {
+      case .duplicate:
         return .failure("Staged files must have unique flat basenames.")
+      case .accepted(let accepted):
+        basename = accepted
       }
 
       authorized.append(
@@ -330,8 +330,8 @@ private extension ExecuteCodeTool {
       } catch {
         return .failure("A staged file became unreadable before it could be prepared.")
       }
-      let (nextTotal, overflow) = totalReadBytes.addingReportingOverflow(data.count)
-      guard overflow == false, nextTotal <= Self.maxStagedTotalBytes else {
+
+      guard let nextTotal = Self.totalWithinCap(adding: data.count, to: totalReadBytes) else {
         return .failure("Staged files grew past the 4 MiB total cap while they were read.")
       }
       totalReadBytes = nextTotal
@@ -463,20 +463,11 @@ private extension ExecuteCodeTool {
     let totalBytes = recorded.stage.reduce(0) { partial, stage in
       partial + stage.bytes
     }
-    // The path and realpath are model- and filesystem-derived, so a loaded secret could sit inside
-    // one; redact them for the owner-facing preview while the canonical action keeps the true values.
-    let stagedSummary =
-      recorded.stage.isEmpty
-      ? "Staged inputs: none"
-      : (["Staged inputs:"]
-        + recorded.stage.map { stage in
-          "- \(redactor.redact(stage.path)) | \(redactor.redact(stage.realpath)) | \(stage.bytes) B | \(stage.sha256.prefix(16))"
-        }).joined(separator: "\n")
     let preview = """
       ```\(recorded.language.rawValue)
       \(redactor.redact(raw.code))
       ```
-      \(stagedSummary)
+      \(stagedInputsSummary(recorded.stage))
       """
 
     return ToolApprovalPresentation(
@@ -518,8 +509,7 @@ private extension ExecuteCodeTool {
       guard record.bytes >= 0, record.bytes <= Self.maxStagedFileBytes else {
         return .failure("A recorded staged-file size exceeds the approved cap; nothing ran.")
       }
-      let (nextTotal, overflow) = recordedTotalBytes.addingReportingOverflow(record.bytes)
-      guard overflow == false, nextTotal <= Self.maxStagedTotalBytes else {
+      guard let nextTotal = Self.totalWithinCap(adding: record.bytes, to: recordedTotalBytes) else {
         return .failure("The recorded staged total exceeds the approved cap; nothing ran.")
       }
       recordedTotalBytes = nextTotal
@@ -575,20 +565,19 @@ private extension ExecuteCodeTool {
       guard data.count == record.bytes, SHA256Digest.hex(data) == record.sha256 else {
         return .failure("A staged file no longer matches its approved bytes; nothing ran.")
       }
-      let (nextTotal, overflow) = totalBytes.addingReportingOverflow(data.count)
-      guard overflow == false, nextTotal <= Self.maxStagedTotalBytes else {
+      guard let nextTotal = Self.totalWithinCap(adding: data.count, to: totalBytes) else {
         return .failure("Staged files exceed the approved total cap; nothing ran.")
       }
       totalBytes = nextTotal
 
-      let basename = (record.path as NSString).lastPathComponent
-      let normalized = Self.normalizedBasename(basename)
-      guard normalized.hasPrefix(".clawd-entrypoint.") == false,
-        normalizedNames.insert(normalized).inserted
-      else {
+      let basename: String
+      switch Self.validateBasename(of: record.path, claimed: &normalizedNames) {
+      case .reservedNamespace, .duplicate:
         return .failure(
           "The staged basename set no longer satisfies the approved layout; nothing ran."
         )
+      case .accepted(let accepted):
+        basename = accepted
       }
 
       loaded.append(
