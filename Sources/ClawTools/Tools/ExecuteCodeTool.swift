@@ -239,6 +239,9 @@ private extension ExecuteCodeTool {
     let bytes: Data
 
     var guardText: String {
+      // Lossy on purpose: a failable UTF-8 decode would fold invalid bytes to nil and blind the
+      // exfiltration guard, while lossy decoding still surfaces every scannable substring.
+      // swiftlint:disable:next optional_data_string_conversion
       String(decoding: bytes, as: UTF8.self)
     }
   }

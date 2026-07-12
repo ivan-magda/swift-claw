@@ -459,12 +459,13 @@ extension ExecuteCodeToolTests {
     #expect(request.language == .python)
     #expect(request.entrypoint.name == ".clawd-entrypoint.py")
     #expect(request.entrypoint.mode == .readExecute)
-    #expect(String(decoding: request.entrypoint.bytes, as: UTF8.self).contains("/work/input.txt"))
+    let entrypointText = try #require(String(bytes: request.entrypoint.bytes, encoding: .utf8))
+    #expect(entrypointText.contains("/work/input.txt"))
     #expect(request.inputs.map(\.name) == ["input.txt"])
     #expect(request.inputs.map(\.mode) == [.readOnly])
     #expect(
       request.inputs.map { input in
-        String(decoding: input.bytes, as: UTF8.self)
+        String(bytes: input.bytes, encoding: .utf8)
       } == ["input"]
     )
     #expect(request.network)
