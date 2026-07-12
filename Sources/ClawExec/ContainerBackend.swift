@@ -200,6 +200,14 @@ private extension ContainerBackend {
 
 private extension ContainerBackend {
   func performExecution(_ request: ExecutionRequest, initImage: String) async -> ExecutionResult {
+    // A prior run in the FIFO lane may have disarmed the backend after this run was admitted
+    // (its cleanup could not confirm container removal). The disarm happens before that run
+    // returns and this run only dequeues afterwards, so re-checking here — ignoring the
+    // initImage captured at admission — guarantees a queued run never boots a VM beside the
+    // surviving container.
+    guard preparedInitImage != nil else {
+      return unavailableResult("sandbox is not prepared")
+    }
     let started = now()
     let deadline = started.advanced(by: request.timeout + Self.teardownAllowance)
     let identity = ExecutionIdentity()
