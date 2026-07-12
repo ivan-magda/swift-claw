@@ -173,4 +173,70 @@ import Testing
     #expect(verdict.redactedArgs.contains("first-secret-aaa") == false)
     #expect(verdict.redactedArgs.contains("second-secret-bbb") == false)
   }
+
+  @Test func textEvaluationUsesTheSameUnconditionalRulesAsArgumentJSON() {
+    // given
+    let guardrail = ExfilArgGuard(secretValues: ["loaded-secret-value"])
+
+    // when
+    let exact = guardrail.evaluate(text: "prefix loaded-secret-value suffix")
+    let shaped = guardrail.evaluate(text: "token sk-abcdefghijklmnop1234")
+
+    // then
+    #expect(exact.blockedRule == "secret-value")
+    #expect(exact.redactedArgs.contains("loaded-secret-value") == false)
+    #expect(shaped.blockedRule == "openai-key")
+    #expect(shaped.redactedArgs.contains("sk-abcdefghijklmnop1234") == false)
+  }
+
+  @Test func onePrivateIndexScansMultipleTextsAtTheSixteenGraphemeBoundary() {
+    // given
+    let guardrail = ExfilArgGuard(secretValues: [])
+    let index = ExfilArgGuard.PrivateTextIndex(
+      texts: ["Operation Nightjar Falcon belongs to the owner."]
+    )
+
+    // when
+    let first = guardrail.evaluateConditional(
+      text: "send Operation Nightj now",
+      index: index
+    )
+    let second = guardrail.evaluateConditional(
+      text: "Operation Night",
+      index: index
+    )
+
+    // then
+    #expect(first.blockedRule == "private-file-substring")
+    #expect(second.blockedRule == nil)
+  }
+
+  @Test func privateIndexNormalizesBothSourcesAndCandidatesToNFC() {
+    // given
+    let guardrail = ExfilArgGuard(secretValues: [])
+    let composed = "Résumé confidentiel"
+    let decomposed = composed.decomposedStringWithCanonicalMapping
+    let index = ExfilArgGuard.PrivateTextIndex(texts: [composed])
+
+    // when
+    let verdict = guardrail.evaluateConditional(text: decomposed, index: index)
+
+    // then
+    #expect(verdict.blockedRule == "private-file-substring")
+  }
+
+  @Test func maximumStagedPayloadUsesTheBoundedTextPath() {
+    // given — functional max-bound case; no stopwatch assertion
+    let guardrail = ExfilArgGuard(secretValues: [])
+    let index = ExfilArgGuard.PrivateTextIndex(texts: ["private marker only in source"])
+    let text = String(repeating: "a", count: 4 * 1024 * 1024)
+
+    // when
+    let unconditional = guardrail.evaluate(text: text)
+    let conditional = guardrail.evaluateConditional(text: text, index: index)
+
+    // then
+    #expect(unconditional.blockedRule == nil)
+    #expect(conditional.blockedRule == nil)
+  }
 }

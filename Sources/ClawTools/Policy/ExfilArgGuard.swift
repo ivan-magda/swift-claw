@@ -8,6 +8,71 @@ public struct ExfilArgGuard: Sendable {
     public let redactedArgs: String
   }
 
+  public struct PrivateTextIndex: Sendable {
+    /// A window's provenance: which normalized source it came from and where it starts. The
+    /// window graphemes themselves live once in `sources`, not copied per overlapping position.
+    private struct Window: Sendable {
+      let source: Int
+      let start: Int
+    }
+
+    /// Each source text normalized to NFC and stored ONCE, only for sources long enough to hold a
+    /// full window. Confirmation slices back into these rather than into duplicated window arrays.
+    private let sources: [[Character]]
+    private let windowsByFingerprint: [UInt64: [Window]]
+
+    public init(texts: [String]) {
+      let width = ExfilArgGuard.substringThresholdGraphemes
+      var storedSources: [[Character]] = []
+      var indexed: [UInt64: [Window]] = [:]
+
+      for text in texts {
+        let characters = Array(text.precomposedStringWithCanonicalMapping)
+        guard characters.count >= width else {
+          continue
+        }
+
+        let sourceIndex = storedSources.count
+        storedSources.append(characters)
+
+        for start in 0...(characters.count - width) {
+          let fingerprint = ExfilArgGuard.windowFingerprint(characters[start..<(start + width)])
+          indexed[fingerprint, default: []].append(Window(source: sourceIndex, start: start))
+        }
+      }
+
+      sources = storedSources
+      windowsByFingerprint = indexed
+    }
+
+    fileprivate func firstMatch(in text: String) -> String? {
+      let width = ExfilArgGuard.substringThresholdGraphemes
+      let characters = Array(text.precomposedStringWithCanonicalMapping)
+      guard characters.count >= width else {
+        return nil
+      }
+
+      for start in 0...(characters.count - width) {
+        let candidate = characters[start..<(start + width)]
+        let fingerprint = ExfilArgGuard.windowFingerprint(candidate)
+        guard let windows = windowsByFingerprint[fingerprint] else {
+          continue
+        }
+        // The fingerprint only narrows the set; confirm grapheme-for-grapheme so a hash
+        // collision can never false-block.
+        let matched = windows.contains { window in
+          let source = sources[window.source]
+          return candidate.elementsEqual(source[window.start..<(window.start + width)])
+        }
+        if matched {
+          return String(candidate)
+        }
+      }
+
+      return nil
+    }
+  }
+
   /// Tier 2 — the pinned v1 secret-shape table. Order matters: first match names the rule.
   static let shapePatterns: [(rule: String, pattern: String)] = [
     ("openai-key", "sk-[A-Za-z0-9_-]{16,}"),
@@ -32,11 +97,15 @@ public struct ExfilArgGuard: Sendable {
   // MARK: - Tiers 1 + 2 (always)
 
   public func evaluateUnconditional(argsJSON: String) -> Verdict {
-    let candidates = Self.matchCandidates(argsJSON)
+    evaluate(text: argsJSON)
+  }
+
+  public func evaluate(text: String) -> Verdict {
+    let candidates = Self.matchCandidates(text)
 
     for candidate in candidates {
       for secret in secretValues where candidate.contains(secret) {
-        return blockedVerdict(rule: "secret-value", raw: argsJSON, spans: [secret])
+        return blockedVerdict(rule: "secret-value", raw: text, spans: [secret])
       }
     }
 
@@ -46,39 +115,35 @@ public struct ExfilArgGuard: Sendable {
           rule != "high-entropy" || Self.looksHighEntropy(match)
         }
         if matches.isEmpty == false {
-          return blockedVerdict(rule: rule, raw: argsJSON, spans: matches)
+          return blockedVerdict(rule: rule, raw: text, spans: matches)
         }
       }
     }
 
-    return Verdict(blockedRule: nil, redactedArgs: renderRedacted(argsJSON: argsJSON))
+    return Verdict(blockedRule: nil, redactedArgs: renderRedacted(argsJSON: text))
   }
 
   // MARK: - Tier 3 (trifecta condition only)
 
   public func evaluateConditional(argsJSON: String, privateFileTexts: [String]) -> Verdict {
-    let threshold = Self.substringThresholdGraphemes
-    let normalizedFiles = privateFileTexts.map { text in
-      text.precomposedStringWithCanonicalMapping
-    }
+    evaluateConditional(
+      text: argsJSON,
+      index: PrivateTextIndex(texts: privateFileTexts)
+    )
+  }
 
-    for candidate in Self.matchCandidates(argsJSON) {
-      let normalizedCandidate = candidate.precomposedStringWithCanonicalMapping
-      let graphemes = Array(normalizedCandidate)
-
-      guard graphemes.count >= threshold else {
-        continue
-      }
-
-      for start in 0...(graphemes.count - threshold) {
-        let window = String(graphemes[start..<(start + threshold)])
-        if normalizedFiles.contains(where: { fileText in fileText.contains(window) }) {
-          return blockedVerdict(rule: "private-file-substring", raw: argsJSON, spans: [window])
-        }
+  public func evaluateConditional(text: String, index: PrivateTextIndex) -> Verdict {
+    for candidate in Self.matchCandidates(text) {
+      if let window = index.firstMatch(in: candidate) {
+        return blockedVerdict(
+          rule: "private-file-substring",
+          raw: text,
+          spans: [window]
+        )
       }
     }
 
-    return Verdict(blockedRule: nil, redactedArgs: renderRedacted(argsJSON: argsJSON))
+    return Verdict(blockedRule: nil, redactedArgs: renderRedacted(argsJSON: text))
   }
 
   // MARK: - Audit rendering
@@ -170,13 +235,13 @@ public struct ExfilArgGuard: Sendable {
   private static func hexNibble(_ scalar: Unicode.Scalar) -> UInt8? {
     switch scalar {
     case "0"..."9":
-      return UInt8(scalar.value - Unicode.Scalar("0").value)
+      UInt8(scalar.value - Unicode.Scalar("0").value)
     case "a"..."f":
-      return UInt8(scalar.value - Unicode.Scalar("a").value + 10)
+      UInt8(scalar.value - Unicode.Scalar("a").value + 10)
     case "A"..."F":
-      return UInt8(scalar.value - Unicode.Scalar("A").value + 10)
+      UInt8(scalar.value - Unicode.Scalar("A").value + 10)
     default:
-      return nil
+      nil
     }
   }
 
@@ -204,6 +269,28 @@ public struct ExfilArgGuard: Sendable {
     token.contains(where: \.isNumber)
       && token.contains(where: \.isUppercase)
       && token.contains(where: \.isLowercase)
+  }
+
+  /// A collision-tolerant FNV-1a hash over a grapheme window's UTF-8 bytes, with a byte that
+  /// cannot occur in valid UTF-8 mixed in between graphemes so that different grapheme boundaries
+  /// can never fold into the same byte stream. It only narrows the candidate set — callers must
+  /// still confirm exact `Character` equality before blocking, so a collision cannot false-block.
+  static func windowFingerprint<Characters: Collection>(
+    _ characters: Characters
+  ) -> UInt64 where Characters.Element == Character {
+    var fingerprint: UInt64 = 0xcbf2_9ce4_8422_2325
+    let prime: UInt64 = 0x0000_0100_0000_01b3
+
+    for character in characters {
+      for byte in String(character).utf8 {
+        fingerprint ^= UInt64(byte)
+        fingerprint = fingerprint &* prime
+      }
+      fingerprint ^= 0xff
+      fingerprint = fingerprint &* prime
+    }
+
+    return fingerprint
   }
 
   /// Runs a full redaction sweep over the RAW string so a span only present in a decoded candidate

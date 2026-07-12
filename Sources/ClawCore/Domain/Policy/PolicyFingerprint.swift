@@ -26,26 +26,46 @@ public enum PolicyFingerprint {
     }.joined()
   }
 
-  /// The static inputs: the tool-registry surface (sorted by name — each tool contributes
-  /// name, canonical `.sortedKeys` parameter JSON, `riskLevel.rawValue`, and the egress label),
-  /// then the llm base URL, the search-endpoint presence, the canonical workspace root, the
-  /// web_fetch SSRF exemption list, and the normalized exec block (enabled state, pinned image,
-  /// sorted registry allowlist, caps, timeout, and egress switch). Sorted lists mean config
-  /// order cannot move the hash; a change to any egress-policy input voids an outstanding
-  /// approval. Computed once at the composition root and injected into `ContextBuilder`.
-  public static func staticSubhash(
-    tools: [ToolDefinition],
-    llmBaseURL: String,
-    searchEndpointPresent: Bool,
-    workspaceRoot: String,
-    webFetchExemptCIDRs: [CIDR],
-    exec: ExecConfig
-  ) -> String {
+  /// The policy-relevant surface the static sub-hash is computed over: the tool-registry surface,
+  /// the llm base URL, the search-endpoint presence, the canonical workspace root, the web_fetch
+  /// SSRF exemption list, and the exec block. Secret values are never included.
+  public struct StaticInputs: Sendable {
+    public let tools: [ToolDefinition]
+    public let llmBaseURL: String
+    public let searchEndpointPresent: Bool
+    public let workspaceRoot: String
+    public let webFetchExemptCIDRs: [CIDR]
+    public let exec: ExecConfig
+
+    public init(
+      tools: [ToolDefinition],
+      llmBaseURL: String,
+      searchEndpointPresent: Bool,
+      workspaceRoot: String,
+      webFetchExemptCIDRs: [CIDR],
+      exec: ExecConfig
+    ) {
+      self.tools = tools
+      self.llmBaseURL = llmBaseURL
+      self.searchEndpointPresent = searchEndpointPresent
+      self.workspaceRoot = workspaceRoot
+      self.webFetchExemptCIDRs = webFetchExemptCIDRs
+      self.exec = exec
+    }
+  }
+
+  /// Hashes the static inputs: the tool surface sorted by name (each tool contributes name,
+  /// canonical `.sortedKeys` parameter JSON, `riskLevel.rawValue`, and the egress label), then the
+  /// remaining config identity with the exec block normalized (enabled state, pinned image, sorted
+  /// registry allowlist, caps, timeout, and egress switch). Sorted lists mean config order cannot
+  /// move the hash; a change to any egress-policy input voids an outstanding approval. Computed
+  /// once at the composition root and injected into `ContextBuilder`.
+  public static func staticSubhash(inputs: StaticInputs) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
 
     var parts: [String] = []
-    for tool in tools.sorted(by: { lhs, rhs in lhs.name < rhs.name }) {
+    for tool in inputs.tools.sorted(by: { lhs, rhs in lhs.name < rhs.name }) {
       // JSONValue encoding cannot realistically fail for the finite case set; tool name still
       // distinguishes entries. JSONEncoder output is always valid UTF-8, so the failable decode
       // preserves the byte-exact contribution and folds to "" only on the same encode failure.
@@ -59,11 +79,12 @@ public enum PolicyFingerprint {
       parts.append(tool.riskLevel.rawValue)
       parts.append(egressLabel(tool.egressClass))
     }
-    parts.append(llmBaseURL)
-    parts.append(searchEndpointPresent ? "search:present" : "search:absent")
-    parts.append(workspaceRoot)
-    let exemptLabel = webFetchExemptCIDRs.map(\.description).sorted().joined(separator: ",")
+    parts.append(inputs.llmBaseURL)
+    parts.append(inputs.searchEndpointPresent ? "search:present" : "search:absent")
+    parts.append(inputs.workspaceRoot)
+    let exemptLabel = inputs.webFetchExemptCIDRs.map(\.description).sorted().joined(separator: ",")
     parts.append("webfetch_exempt:" + exemptLabel)
+    let exec = inputs.exec
     parts.append("exec.enabled:\(exec.enabled)")
     parts.append("exec.image:\(exec.image?.description ?? "absent")")
     parts.append(

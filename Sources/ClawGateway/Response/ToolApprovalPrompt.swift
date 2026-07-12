@@ -24,7 +24,7 @@ public enum ToolApprovalPrompt {
   }
 
   /// The durable-approval prompt: a reason-keyed headline, the taint banner, the
-  /// fully-resolved target, blast radius, the privileged-file banner, a size-capped
+  /// fully-resolved target, blast radius, the privileged-file banner, the tool-authored
   /// secret-redacted preview, and scan warnings — assembled in a fixed order so the owner can
   /// judge risk at a glance.
   public static func text(for input: Input) -> String {
@@ -92,6 +92,8 @@ private extension ToolApprovalPrompt {
       "⚠ I want to run \(tool). This changes state and needs your explicit approval."
     case .exfilTrifecta:
       "⚠ I want to run \(tool) while this session holds private data after reading external content."
+    case .codeExec:
+      "⚠ I want to run \(tool) in a disposable sandbox. Review the complete script and staged inputs before approving."
     }
   }
 }

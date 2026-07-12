@@ -262,6 +262,10 @@ public protocol Tool: Sendable {
   /// every tool decides explicitly.
   func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution?
 
+  /// Resolves everything a dangerous approval must bind. The default nil is correct for safe and
+  /// ask-tier tools; the gate fails closed when a dangerous tool returns nil.
+  func prepareAction(arguments: JSONValue) async -> PreparedActionResolution?
+
   /// `canonicalTarget` is the gate-resolved form for `.arbitraryDestination` tools — act on
   /// exactly what was authorized, never re-derive it; `nil` for the other classes.
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
@@ -276,6 +280,10 @@ public protocol Tool: Sendable {
 }
 
 extension Tool {
+  public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
+    nil
+  }
+
   public func approvalPresentation(
     arguments: JSONValue,
     canonicalTarget: String

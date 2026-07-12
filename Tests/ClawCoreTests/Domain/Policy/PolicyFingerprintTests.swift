@@ -58,12 +58,14 @@ import Testing
     exec: ExecConfig = .disabledDefault
   ) -> String {
     PolicyFingerprint.staticSubhash(
-      tools: tools,
-      llmBaseURL: llm,
-      searchEndpointPresent: search,
-      workspaceRoot: root,
-      webFetchExemptCIDRs: exempt,
-      exec: exec
+      inputs: PolicyFingerprint.StaticInputs(
+        tools: tools,
+        llmBaseURL: llm,
+        searchEndpointPresent: search,
+        workspaceRoot: root,
+        webFetchExemptCIDRs: exempt,
+        exec: exec
+      )
     )
   }
 

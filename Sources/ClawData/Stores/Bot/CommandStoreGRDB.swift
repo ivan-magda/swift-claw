@@ -5,6 +5,7 @@ import GRDB
 public struct CommandStoreGRDB: CommandStore {
   private let database: MappedDatabase
   private let afterClaimForTesting: @Sendable () throws -> Void
+  private let afterSupersedeAndDetaintForTesting: @Sendable () throws -> Void
 
   public init(writer: any DatabaseWriter) {
     self.init(writer: writer, afterClaimForTesting: {})
@@ -12,10 +13,12 @@ public struct CommandStoreGRDB: CommandStore {
 
   init(
     writer: any DatabaseWriter,
-    afterClaimForTesting: @Sendable @escaping () throws -> Void
+    afterClaimForTesting: @Sendable @escaping () throws -> Void = {},
+    afterSupersedeAndDetaintForTesting: @Sendable @escaping () throws -> Void = {}
   ) {
     database = MappedDatabase(writer: writer)
     self.afterClaimForTesting = afterClaimForTesting
+    self.afterSupersedeAndDetaintForTesting = afterSupersedeAndDetaintForTesting
   }
 
   public func applyStop(
@@ -126,6 +129,9 @@ public struct CommandStoreGRDB: CommandStore {
       )
 
       try SessionMessageStoreGRDB.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
+
+      try afterSupersedeAndDetaintForTesting()
+
       try Self.insertNewAudits(db, sessionId: sessionId, runIds: supersededRunIds, now: now)
 
       return NewCommandResult(

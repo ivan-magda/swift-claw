@@ -145,6 +145,7 @@ func makeSC3Harness(
   workspaceRoot: URL? = nil,
   coordinator: ApprovalCoordinator = ApprovalCoordinator(),
   extraTools: [any Tool] = [],
+  execEnabled: Bool = false,
   dispatcherOverride: (any ToolDispatching)? = nil
 ) throws -> SC3Harness {
   let fileManager = FileManager.default
@@ -206,7 +207,8 @@ func makeSC3Harness(
     registry: ToolRegistry(tools: tools),
     gate: ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: secretValues),
-      privateFileLoader: privateFileLoader
+      privateFileLoader: privateFileLoader,
+      execEnabled: execEnabled
     )
   )
 

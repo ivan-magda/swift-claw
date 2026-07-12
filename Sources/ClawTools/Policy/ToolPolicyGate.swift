@@ -1,9 +1,9 @@
 import ClawCore
 import Foundation
 
-/// The unconditional arg-guard tier, the trifecta condition, the tier-3 disk-time substring
-/// check, and the web_fetch approval decision. Pure — every input
-/// arrives via the call/context; tier-3 texts via the injected loader (disk at gate time).
+/// The single policy gate for safe, ask-tier, and dangerous tools. Safe egress retains the
+/// unconditional/trifecta tiers; ask-tier actions resolve owner consent; dangerous actions may
+/// park only after the tool prepares, scans, and binds the exact recorded action.
 public struct ToolPolicyGate: Sendable {
   public enum Verdict: Sendable, Equatable {
     /// `action` is the gate-resolved canonical action for `.arbitraryDestination` tools — the
@@ -18,29 +18,36 @@ public struct ToolPolicyGate: Sendable {
 
   private let argGuard: ExfilArgGuard
   private let privateFileLoader: @Sendable () -> [String]
+  private let execEnabled: Bool
 
-  public init(argGuard: ExfilArgGuard, privateFileLoader: @escaping @Sendable () -> [String]) {
+  public init(
+    argGuard: ExfilArgGuard,
+    privateFileLoader: @escaping @Sendable () -> [String],
+    execEnabled: Bool
+  ) {
     self.argGuard = argGuard
     self.privateFileLoader = privateFileLoader
+    self.execEnabled = execEnabled
   }
 
   public func evaluate(
     call: ToolCall,
     tool: any Tool,
     context: ToolDispatchContext
-  ) -> Verdict {
-    // (1) ask-tier is evaluated FIRST, before the egress fast-path: an ask-tier tool
-    // reaches the durable approval arm regardless of egress class — an ask-tier file_write has
-    // egress `.none` yet must still park for the owner's decision.
-    // INVARIANT: this arm returns before the unconditional/conditional arg-guard and redaction
-    // tiers run, which is safe ONLY while every ask-tier tool is `.none`-egress (nothing leaves
-    // the host). An ask-tier tool WITH egress must move this arm below those tiers or re-run
-    // them inside `evaluateAskTier`.
-    if tool.definition.riskLevel == .ask {
+  ) async -> Verdict {
+    // Total over RiskLevel. Ask-tier resolves before the egress fast-path so a `.none`-egress
+    // ask tool (file_write) still parks; dangerous consumes only a tool-prepared action; safe
+    // egress falls through to the unconditional/trifecta tiers below.
+    switch tool.definition.riskLevel {
+    case .ask:
       return evaluateAskTier(call: call, tool: tool, context: context)
+    case .dangerous:
+      return await evaluateDangerousTier(call: call, tool: tool, context: context)
+    case .safe:
+      break
     }
 
-    // (2) .none-egress fast path — a safe non-egress read (file_read): audit-render only.
+    // .none-egress fast path — a safe non-egress read (file_read): audit-render only.
     guard tool.definition.egressClass != .none else {
       return .allow(
         argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON),
@@ -48,23 +55,22 @@ public struct ToolPolicyGate: Sendable {
       )
     }
 
-    // (3) unconditional tier — BLOCKING, every egress class
+    // Unconditional tier — BLOCKING, every egress class.
     let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
     if let rule = unconditional.blockedRule {
       return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
     }
 
-    // (4) trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run ∪ session)
+    // Trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run ∪ session). The
+    // session flag survives a window roll, closing the over-cap gap the per-assembly leg cannot.
     let tainted = context.sessionTainted || context.runIngestedUntrusted
-    // Three private-data sources — the per-assembly leg, the run-local leg, and the
-    // persisted session flag that survives a window roll (the over-cap gap).
     let privateData =
       context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
     guard tainted && privateData else {
       return resolveAndAllow(call: call, tool: tool, argsRedacted: unconditional.redactedArgs)
     }
 
-    // (4a) conditional tier — redaction-block WINS over approval; disk at gate time
+    // Conditional tier — redaction-block WINS over approval; disk at gate time.
     let conditional = argGuard.evaluateConditional(
       argsJSON: call.argumentsJSON,
       privateFileTexts: privateFileLoader()
@@ -73,9 +79,8 @@ public struct ToolPolicyGate: Sendable {
       return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
     }
 
-    // (5) trifecta arm — DURABLE: a would-park action suspends onto the approval
-    // fabric via `.requireApproval`. Non-interactive runs take the SAME park (→ EXPIRED → DENY),
-    // never an immediate gate DENY. Recorded-args execution subsumes the retired one-turn grant.
+    // Trifecta arm — DURABLE: a would-park action suspends onto the approval fabric. Non-interactive
+    // runs take the SAME park (→ EXPIRED → DENY), never an immediate gate DENY.
     let action: ToolAction?
     switch resolveAction(call: call, tool: tool) {
     case .action(let resolved):
@@ -288,6 +293,87 @@ private extension ToolPolicyGate {
   }
 }
 
+// MARK: - Dangerous-tier Approval
+
+private extension ToolPolicyGate {
+  /// Dangerous tools park ONLY over a tool-prepared canonical action. The `execEnabled` backstop
+  /// fails closed; the arg-guard scans run over the prepared `guardTexts` (never the model's raw
+  /// arguments), and the recorded action binds the prepared canonical JSON verbatim.
+  func evaluateDangerousTier(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) async -> Verdict {
+    guard execEnabled else {
+      return dangerousBlock(reason: "Code execution is disabled.", call: call)
+    }
+    // A dangerous action can never take the second approval slot, and it cannot park or execute
+    // while one is pending, so refuse here before the expensive staging and content scans run.
+    guard context.approvalAlreadyPending == false else {
+      return .block(
+        payload: ToolPayload(
+          content: "blocked: an approval is already pending",
+          status: .blockedPendingApproval,
+          ingestedUntrusted: false
+        ),
+        argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
+      )
+    }
+    guard let arguments = JSONValue.parse(call.argumentsJSON) else {
+      return dangerousBlock(reason: "Malformed arguments for \(call.name).", call: call)
+    }
+    guard let resolution = await tool.prepareAction(arguments: arguments) else {
+      return dangerousBlock(
+        reason: "\(call.name) is dangerous-tier but prepared no action.",
+        call: call
+      )
+    }
+
+    let prepared: PreparedToolAction
+    switch resolution {
+    case .prepared(let action):
+      prepared = action
+    case .refused(let reason):
+      return dangerousBlock(reason: reason, call: call)
+    }
+
+    for text in prepared.guardTexts {
+      let verdict = argGuard.evaluate(text: text)
+      if let rule = verdict.blockedRule {
+        return blockedArgs(rule: rule, argsRedacted: "[REDACTED:\(rule)]")
+      }
+    }
+
+    // The disk-time private-substring scan runs only when the prepared action can leave the host.
+    if prepared.canExfiltrate {
+      let privateIndex = ExfilArgGuard.PrivateTextIndex(texts: privateFileLoader())
+      for text in prepared.guardTexts {
+        let verdict = argGuard.evaluateConditional(text: text, index: privateIndex)
+        if let rule = verdict.blockedRule {
+          return blockedArgs(rule: rule, argsRedacted: "[REDACTED:\(rule)]")
+        }
+      }
+    }
+
+    let recorded = RecordedToolAction(
+      tool: call.name,
+      canonicalArgsJSON: prepared.canonicalArgsJSON,
+      argsHash: ApprovalArgsHash.sha256Hex(prepared.canonicalArgsJSON),
+      canonicalTarget: prepared.canonicalTarget,
+      reason: .codeExec,
+      presentation: prepared.presentation
+    )
+    return .requireApproval(recorded: recorded)
+  }
+
+  func dangerousBlock(reason: String, call: ToolCall) -> Verdict {
+    .block(
+      payload: ToolPayload(content: reason, status: .error, ingestedUntrusted: false),
+      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
+    )
+  }
+}
+
 /// The full per-call order behind the loop's `ToolDispatching` seam: (0) lookup → (1) parse →
 /// (2)/(3) gate → (4) execute under the tool's own timeout. Audit is the LOOP's job.
 public struct GatedToolDispatcher: ToolDispatching {
@@ -326,7 +412,7 @@ public struct GatedToolDispatcher: ToolDispatching {
       return errorOutcome(call: call, reason: "Malformed arguments for \(call.name).")
     }
     // (2)/(3) the gate
-    switch gate.evaluate(call: call, tool: tool, context: context) {
+    switch await gate.evaluate(call: call, tool: tool, context: context) {
     case .block(let payload, let argsRedacted):
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
@@ -344,7 +430,7 @@ public struct GatedToolDispatcher: ToolDispatching {
           status: .blockedPendingApproval,
           ingestedUntrusted: false
         ),
-        argsRedacted: gate.renderRedacted(argsJSON: call.argumentsJSON),
+        argsRedacted: gate.renderRedacted(argsJSON: recorded.canonicalArgsJSON),
         requiresApproval: recorded
       )
     case .allow(let argsRedacted, let action):

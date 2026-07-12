@@ -21,6 +21,7 @@ public struct ToolAction: Sendable, Equatable {
 public enum ApprovalReason: String, Sendable, Equatable {
   case exfilTrifecta = "exfil_trifecta"
   case askTier = "ask_tier"
+  case codeExec = "code_exec"
 }
 
 /// The tool-specific prompt inputs, produced at gate time by the tool that will act. The gate
@@ -29,7 +30,8 @@ public enum ApprovalReason: String, Sendable, Equatable {
 public struct ToolApprovalPresentation: Sendable, Equatable {
   /// e.g. "create, 1.2 KB" / "overwrite, 340 B" / "egress to <host>".
   public let blastRadius: String
-  /// Size-capped, secret-redacted; nil for non-write tools.
+  /// Tool-authored and exact-secret-redacted; write tools cap their preview, while code execution
+  /// renders its complete 16 KiB-bounded script. Nil for tools with no preview.
   public let contentPreview: String?
   /// `memory_write` scan warnings; empty otherwise.
   public let warnings: [String]
@@ -39,6 +41,35 @@ public struct ToolApprovalPresentation: Sendable, Equatable {
     self.contentPreview = contentPreview
     self.warnings = warnings
   }
+}
+
+/// Everything a dangerous-tier approval binds, produced by the tool at gate time. The canonical
+/// JSON REPLACES the model's raw arguments for hashing, persistence, and approved execution.
+public struct PreparedToolAction: Sendable, Equatable {
+  public let canonicalTarget: String
+  public let canonicalArgsJSON: String
+  public let presentation: ToolApprovalPresentation
+  public let guardTexts: [String]
+  public let canExfiltrate: Bool
+
+  public init(
+    canonicalTarget: String,
+    canonicalArgsJSON: String,
+    presentation: ToolApprovalPresentation,
+    guardTexts: [String],
+    canExfiltrate: Bool
+  ) {
+    self.canonicalTarget = canonicalTarget
+    self.canonicalArgsJSON = canonicalArgsJSON
+    self.presentation = presentation
+    self.guardTexts = guardTexts
+    self.canExfiltrate = canExfiltrate
+  }
+}
+
+public enum PreparedActionResolution: Sendable, Equatable {
+  case prepared(PreparedToolAction)
+  case refused(reason: String)
 }
 
 /// Everything the suspend commit records and the approval binds to. The recorded canonical
