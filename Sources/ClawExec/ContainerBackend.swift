@@ -296,7 +296,7 @@ private extension ContainerBackend {
 
 // MARK: - Shielded Cleanup
 
-private extension ContainerBackend {
+extension ContainerBackend {
   func runShieldedCleanup(
     identity: ExecutionIdentity,
     workspace: ScratchWorkspace
@@ -461,7 +461,7 @@ struct ListedContainer: Decodable, Sendable {
 
 // MARK: - Results and Reason Boundary
 
-private extension ContainerBackend {
+extension ContainerBackend {
   func result(
     _ termination: ExecTermination,
     started: ContinuousClock.Instant
