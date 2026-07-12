@@ -6,14 +6,17 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
     preparedInitImage = nil
     do {
       try refuseIfBusy()
+
       let deadline = now().advanced(by: Self.prepareTimeout)
       let engineVersion = try await probeAndReap(deadline: deadline)
       let initImage = try await resolveInitImage(engineVersion: engineVersion, deadline: deadline)
+
       try await stageImages(
         engineVersion: engineVersion,
         initImage: initImage,
         deadline: deadline
       )
+
       return await verifyCanaryAndArm(
         engineVersion: engineVersion,
         initImage: initImage,
@@ -27,17 +30,29 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
   public func shutdown() async {
     shuttingDown = true
     preparedInitImage = nil
+
     let executions = Array(executionTasks.values)
-    for execution in executions { execution.cancel() }
-    for execution in executions { _ = await execution.value }
+    for execution in executions {
+      execution.cancel()
+    }
+    for execution in executions {
+      _ = await execution.value
+    }
+
     let cleanups = Array(cleanupTasks.values)
-    for cleanup in cleanups { _ = await cleanup.value }
+    for cleanup in cleanups {
+      _ = await cleanup.value
+    }
+
     let deadline = now().advanced(by: Self.prepareTimeout)
     _ = await reapOwnedContainers(deadline: deadline)
+
     _ = sweepScratchRoots()
   }
 
-  var preparedInitImageForTesting: String? { preparedInitImage }
+  var preparedInitImageForTesting: String? {
+    preparedInitImage
+  }
 
   func reapOwnedContainersForTesting() async -> Bool {
     await reapOwnedContainers(deadline: now().advanced(by: Self.prepareTimeout))
@@ -67,6 +82,7 @@ private extension ContainerBackend {
 
   func probeAndReap(deadline: ContinuousClock.Instant) async throws(PrepareAbort) -> String {
     let availability = await probe()
+
     guard case .available(let engineVersion) = availability else {
       let reason =
         switch availability {
@@ -75,6 +91,7 @@ private extension ContainerBackend {
         }
       throw PrepareAbort(health: failedHealth(lastError: reason))
     }
+
     guard await reapOwnedContainers(deadline: deadline), sweepScratchRoots() else {
       throw PrepareAbort(
         health: failedHealth(
@@ -84,6 +101,7 @@ private extension ContainerBackend {
         )
       )
     }
+
     return engineVersion
   }
 
@@ -107,7 +125,9 @@ private extension ContainerBackend {
         )
       )
     }
+
     let initImage = properties.vminit.image
+
     guard RuntimeInitImageReference.isRegistryQualifiedTag(initImage) else {
       throw PrepareAbort(
         health: failedHealth(
@@ -117,6 +137,7 @@ private extension ContainerBackend {
         )
       )
     }
+
     return initImage
   }
 
@@ -137,6 +158,7 @@ private extension ContainerBackend {
         )
       )
     }
+
     guard
       await boundedCommandSucceeded(
         ContainerInvocation.pull(settings.workloadImage.description),
@@ -157,6 +179,7 @@ private extension ContainerBackend {
         )
       )
     }
+
     guard await workloadDigestMatches(deadline: deadline) else {
       throw PrepareAbort(
         health: failedHealth(
@@ -181,6 +204,7 @@ private extension ContainerBackend {
         lastError: "sandbox backend is shutting down"
       )
     }
+
     guard let canary = await canaryOutcome(initImage: initImage, deadline: deadline) else {
       return failedHealth(
         engineVersion: engineVersion,
@@ -189,6 +213,7 @@ private extension ContainerBackend {
         lastError: "sandbox canary did not complete"
       )
     }
+
     guard !shuttingDown else {
       return failedHealth(
         engineVersion: engineVersion,
@@ -197,6 +222,7 @@ private extension ContainerBackend {
         lastError: "sandbox backend is shutting down"
       )
     }
+
     let health = SandboxHealth(
       available: true,
       osOK: true,
@@ -215,6 +241,7 @@ private extension ContainerBackend {
     if health.isReady {
       preparedInitImage = initImage
     }
+
     return health
   }
 }
@@ -228,9 +255,15 @@ private extension ContainerBackend {
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
       )
-    else { return nil }
+    else {
+      return nil
+    }
+
     return containers.filter { container in
-      guard let identity = container.resolvedIdentifier else { return false }
+      guard let identity = container.resolvedIdentifier else {
+        return false
+      }
+
       return identity.hasPrefix(ExecutionIdentity.namePrefix)
         && container.labels[ExecutionIdentity.ownershipLabelKey]
           == ExecutionIdentity.ownershipLabelValue
@@ -238,9 +271,15 @@ private extension ContainerBackend {
   }
 
   func reapOwnedContainers(deadline: ContinuousClock.Instant) async -> Bool {
-    guard let owned = await ownedContainers(deadline: deadline) else { return false }
+    guard let owned = await ownedContainers(deadline: deadline) else {
+      return false
+    }
+
     for container in owned {
-      guard let identity = container.resolvedIdentifier else { return false }
+      guard let identity = container.resolvedIdentifier else {
+        return false
+      }
+
       for step in ContainerInvocation.teardownLadder(identity) {
         _ = await boundedCommandSucceeded(
           step,
@@ -249,26 +288,43 @@ private extension ContainerBackend {
         )
       }
     }
-    guard !owned.isEmpty else { return true }
-    guard let remaining = await ownedContainers(deadline: deadline) else { return false }
+
+    guard !owned.isEmpty else {
+      return true
+    }
+
+    guard let remaining = await ownedContainers(deadline: deadline) else {
+      return false
+    }
+
     let expectedRemoved = Set(owned.compactMap(\.resolvedIdentifier))
     return remaining.allSatisfy { container in
-      guard let identity = container.resolvedIdentifier else { return false }
+      guard let identity = container.resolvedIdentifier else {
+        return false
+      }
       return !expectedRemoved.contains(identity)
     }
   }
 
   func sweepScratchRoots() -> Bool {
     let manager = FileManager.default
+
     for name in [ScratchWorkspace.scratchRootName, ScratchWorkspace.controlRootName] {
       let root = stateRoot.appending(path: name, directoryHint: .isDirectory)
-      guard manager.fileExists(atPath: root.path) else { continue }
+
+      guard manager.fileExists(atPath: root.path) else {
+        continue
+      }
+
       guard
         let children = try? manager.contentsOfDirectory(
           at: root,
           includingPropertiesForKeys: nil
         )
-      else { return false }
+      else {
+        return false
+      }
+
       for child in children {
         do {
           try manager.removeItem(at: child)
@@ -277,6 +333,7 @@ private extension ContainerBackend {
         }
       }
     }
+
     return true
   }
 }
@@ -291,10 +348,14 @@ private extension ContainerBackend {
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
       )
-    else { return false }
+    else {
+      return false
+    }
+
     guard let images = try? JSONDecoder().decode([ImageInspectDocument].self, from: data) else {
       return false
     }
+
     return images.contains { image in
       image.configuration.name == settings.workloadImage.description
         && image.configuration.descriptor.digest == "sha256:\(settings.workloadImage.digest)"
@@ -321,13 +382,16 @@ private extension ContainerBackend {
       network: false,
       timeout: Self.ordinaryCommandTimeout
     )
+
     guard
       let workspace = try? ScratchWorkspace.create(
         stateRoot: stateRoot,
         identity: identity,
         request: request
       )
-    else { return nil }
+    else {
+      return nil
+    }
 
     let evaluated = await evaluateCanary(
       identity: identity,
@@ -335,11 +399,15 @@ private extension ContainerBackend {
       initImage: initImage,
       deadline: deadline
     )
+
     let cleanupOK = await runShieldedCleanup(
       identity: identity,
       workspace: workspace
     )
-    guard cleanupOK else { return nil }
+    guard cleanupOK else {
+      return nil
+    }
+
     return evaluated
   }
 
@@ -360,7 +428,10 @@ private extension ContainerBackend {
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
       )
-    else { return nil }
+    else {
+      return nil
+    }
+
     guard
       let inspectData = await boundedCommandData(
         ContainerInvocation.inspect(identity.name),
@@ -372,7 +443,10 @@ private extension ContainerBackend {
         from: inspectData
       ),
       let inspection = inspections.first(where: { $0.configuration.id == identity.name })
-    else { return nil }
+    else {
+      return nil
+    }
+
     guard
       let guestData = await boundedCommandData(
         ContainerInvocation.execCanary(identity.name, script: Self.guestCanaryScript),
@@ -380,11 +454,16 @@ private extension ContainerBackend {
         deadline: deadline
       ),
       let guest = try? JSONDecoder().decode(GuestCanaryDocument.self, from: guestData)
-    else { return nil }
+    else {
+      return nil
+    }
+
     let expectedDigest = "sha256:\(settings.workloadImage.digest)"
+
     let imageDigestOK =
       inspection.configuration.image.reference == settings.workloadImage.description
       && inspection.configuration.image.descriptor.digest == expectedDigest
+
     let capsMatch =
       inspection.status.state == "running"
       && inspection.configuration.resources.cpus == settings.cpus
@@ -394,6 +473,7 @@ private extension ContainerBackend {
       && inspection.configuration.useInit
       && inspection.configuration.capAdd.isEmpty
       && inspection.configuration.capDrop == ["ALL"]
+
     return CanaryOutcome(imageDigestOK: imageDigestOK, capsMatch: capsMatch, guest: guest)
   }
 
@@ -490,30 +570,44 @@ private extension ContainerBackend {
 }
 
 private struct SystemPropertiesDocument: Decodable {
-  struct Vminit: Decodable { let image: String }
+  struct Vminit: Decodable {
+    let image: String
+  }
+
   let vminit: Vminit
 }
 
 private struct ImageInspectDocument: Decodable {
   struct Configuration: Decodable {
-    struct Descriptor: Decodable { let digest: String }
+    struct Descriptor: Decodable {
+      let digest: String
+    }
+
     let name: String
+
     let descriptor: Descriptor
   }
+
   let configuration: Configuration
 }
 
 private struct ContainerInspectDocument: Decodable {
   struct Configuration: Decodable {
     struct Image: Decodable {
-      struct Descriptor: Decodable { let digest: String }
+      struct Descriptor: Decodable {
+        let digest: String
+      }
+
       let reference: String
+
       let descriptor: Descriptor
     }
+
     struct Resources: Decodable {
       let cpus: Int
       let memoryInBytes: UInt64
     }
+
     let id: String
     let image: Image
     let labels: [String: String]
@@ -523,7 +617,11 @@ private struct ContainerInspectDocument: Decodable {
     let capAdd: [String]
     let capDrop: [String]
   }
-  struct Status: Decodable { let state: String }
+
+  struct Status: Decodable {
+    let state: String
+  }
+
   let configuration: Configuration
   let status: Status
 }
@@ -558,20 +656,35 @@ private enum RuntimeInitImageReference {
       !value.contains("@"),
       !value.contains(where: \.isWhitespace),
       let slash = value.firstIndex(of: "/")
-    else { return false }
+    else {
+      return false
+    }
+
     let hostWithPort = String(value[..<slash])
     let repositoryWithTag = String(value[value.index(after: slash)...])
-    guard let colon = repositoryWithTag.lastIndex(of: ":") else { return false }
+
+    guard let colon = repositoryWithTag.lastIndex(of: ":") else {
+      return false
+    }
+
     let repository = String(repositoryWithTag[..<colon])
     let tag = String(repositoryWithTag[repositoryWithTag.index(after: colon)...])
-    guard !repository.isEmpty, !tag.isEmpty else { return false }
-    guard PinnedImageReference.isValidRegistryHost(hostWithPort) else { return false }
+
+    guard !repository.isEmpty, !tag.isEmpty else {
+      return false
+    }
+
+    guard PinnedImageReference.isValidRegistryHost(hostWithPort) else {
+      return false
+    }
+
     let components = repository.split(separator: "/", omittingEmptySubsequences: false)
     guard
-      components.allSatisfy({ component in
-        PinnedImageReference.isValidRepositoryComponent(String(component))
-      })
-    else { return false }
+      components.allSatisfy({ PinnedImageReference.isValidRepositoryComponent(String($0)) })
+    else {
+      return false
+    }
+
     return tag.utf8.allSatisfy(isTagByte) && (tag.utf8.first.map(isTagStartByte) ?? false)
   }
 
@@ -580,7 +693,9 @@ private enum RuntimeInitImageReference {
   }
 
   private static func isTagStartByte(_ byte: UInt8) -> Bool {
-    (byte >= 0x41 && byte <= 0x5a) || (byte >= 0x61 && byte <= 0x7a)
-      || (byte >= 0x30 && byte <= 0x39) || byte == 0x5f
+    (byte >= 0x41 && byte <= 0x5a)
+      || (byte >= 0x61 && byte <= 0x7a)
+      || (byte >= 0x30 && byte <= 0x39)
+      || byte == 0x5f
   }
 }
