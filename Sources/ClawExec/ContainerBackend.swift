@@ -10,6 +10,7 @@ import Foundation
 public actor ContainerBackend {
   public static let maxRawStreamBytes = 1024 * 1024
   public static let maxControlStreamBytes = 1024 * 1024
+
   public static let teardownAllowance: Duration = .seconds(20)
   public static let lifecycleCommandTimeout: Duration = .seconds(5)
   public static let ordinaryCommandTimeout: Duration = .seconds(15)
@@ -89,6 +90,7 @@ public actor ContainerBackend {
         reason: ownerSafe("execute_code requires macOS 26 or newer on arm64")
       )
     }
+
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
     guard
       let data = await boundedCommandData(
@@ -99,15 +101,18 @@ public actor ContainerBackend {
     else {
       return .unavailable(reason: ownerSafe("container version command failed"))
     }
+
     guard
       let documents = try? JSONDecoder().decode([SystemVersionDocument].self, from: data),
       let cli = documents.first(where: { $0.appName == "container" })
     else {
       return .unavailable(reason: ownerSafe("container version response was invalid"))
     }
+
     guard let version = SemanticVersion(cli.version) else {
       return .unavailable(reason: ownerSafe("container CLI version was malformed"))
     }
+
     guard version >= ExecSandboxSettings.minimumContainerVersion else {
       return .unavailable(
         reason: ownerSafe(
@@ -115,6 +120,7 @@ public actor ContainerBackend {
         )
       )
     }
+
     return .available(engineVersion: cli.version)
   }
 
@@ -124,6 +130,7 @@ public actor ContainerBackend {
         reason: ownerSafe("execute_code requires macOS 26 or newer on arm64")
       )
     }
+
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
     guard
       let data = await boundedCommandData(
@@ -136,6 +143,7 @@ public actor ContainerBackend {
     else {
       return .unavailable(reason: ownerSafe("container engine is not running"))
     }
+
     return await versionAvailability()
   }
 
@@ -143,8 +151,11 @@ public actor ContainerBackend {
     guard let initImage = preparedInitImage else {
       return unavailableResult("sandbox is not prepared")
     }
+
     return await enqueueExecution { [weak self] in
-      guard let self else { return Self.cancelledResult() }
+      guard let self else {
+        return Self.cancelledResult()
+      }
       return await self.performExecution(request, initImage: initImage)
     }
   }
@@ -153,7 +164,9 @@ public actor ContainerBackend {
     preparedInitImage = image
   }
 
-  var queuedExecutionCountForTesting: Int { executionTasks.count }
+  var queuedExecutionCountForTesting: Int {
+    executionTasks.count
+  }
 
   func runSerializedForTesting(
     operation: @escaping @Sendable () async -> ExecutionResult
@@ -168,22 +181,31 @@ private extension ContainerBackend {
   func enqueueExecution(
     operation: @escaping @Sendable () async -> ExecutionResult
   ) async -> ExecutionResult {
-    guard !shuttingDown, !Task.isCancelled else { return Self.cancelledResult() }
+    guard !shuttingDown, !Task.isCancelled else {
+      return Self.cancelledResult()
+    }
+
     let prior = executionTail
     let taskIdentifier = UUID()
     let work = Task<ExecutionResult, Never> {
       _ = await prior?.value
-      guard !Task.isCancelled else { return Self.cancelledResult() }
+
+      guard !Task.isCancelled else {
+        return Self.cancelledResult()
+      }
+
       return await operation()
     }
     executionTasks[taskIdentifier] = work
     executionTail = work
+
     let result = await withTaskCancellationHandler {
       await work.value
     } onCancel: {
       work.cancel()
     }
     executionTasks[taskIdentifier] = nil
+
     return result
   }
 
@@ -218,10 +240,12 @@ private extension ContainerBackend {
     guard preparedInitImage != nil else {
       return unavailableResult("sandbox is not prepared")
     }
+
     let started = now()
     let deadline = started.advanced(by: request.timeout + Self.teardownAllowance)
     let identity = ExecutionIdentity()
     let workspace: ScratchWorkspace
+
     do {
       workspace = try ScratchWorkspace.create(
         stateRoot: stateRoot,
@@ -249,6 +273,7 @@ private extension ContainerBackend {
       captureLimit: Self.maxRawStreamBytes,
       teardownGracePeriod: Self.commandTeardownGrace
     )
+
     var result =
       switch await boundedForegroundRun(command, deadline: deadline) {
       case .runnerReturned(let commandResult):
@@ -264,6 +289,7 @@ private extension ContainerBackend {
       case .callerCancelled:
         self.result(.cancelled, started: started)
       }
+
     let cleanupOK = await runShieldedCleanup(
       identity: identity,
       workspace: workspace
@@ -278,6 +304,7 @@ private extension ContainerBackend {
         started: started
       )
     }
+
     return result
   }
 
@@ -289,6 +316,7 @@ private extension ContainerBackend {
   ) async -> WatchdogRaceOutcome {
     let commands = commands
     let remaining = now().duration(to: deadline)
+
     return await Self.raceRunnerAgainstWatchdog(
       allowance: remaining,
       sleep: watchdogSleep
@@ -323,24 +351,28 @@ private extension ContainerBackend {
           started: started
         )
       }
+
       guard await engineRunning(deadline: deadline) else {
         return infrastructureResult(
           "container engine became unavailable after execution",
           started: started
         )
       }
+
       guard let present = await containerPresent(identity.name, deadline: deadline) else {
         return infrastructureResult(
           "could not inspect container state after execution",
           started: started
         )
       }
+
       guard !present else {
         return infrastructureResult(
           "container remained after the foreground CLI exited",
           started: started
         )
       }
+
       return ExecutionResult(
         terminationReason: .exited(code: code),
         stdout: String(decoding: commandResult.stdout.bytes, as: UTF8.self),
@@ -378,17 +410,22 @@ extension ContainerBackend {
     let runnerTask = Task {
       continuation.yield(.runnerReturned(await runner()))
     }
+
     let deadlineTask = Task {
       // A cancelled sleep must never yield: only an uncancelled, fully elapsed deadline may
       // produce .deadlineExpired, so it cannot outrace the runner's outcome after the runner
       // already won or the whole run was cancelled.
-      guard (try? await sleep(allowance)) != nil else { return }
+      guard (try? await sleep(allowance)) != nil else {
+        return
+      }
       continuation.yield(.deadlineExpired)
     }
+
     defer {
       runnerTask.cancel()
       deadlineTask.cancel()
     }
+
     for await outcome in outcomes {
       return outcome
     }
@@ -409,6 +446,7 @@ extension ContainerBackend {
     let commands = commands
     let watchdogSleep = watchdogSleep
     let taskIdentifier = UUID()
+
     let cleanup = Task.detached {
       await CleanupOperation(
         commands: commands,
@@ -417,9 +455,11 @@ extension ContainerBackend {
         watchdogSleep: watchdogSleep
       ).run()
     }
+
     cleanupTasks[taskIdentifier] = cleanup
     let succeeded = await cleanup.value
     cleanupTasks[taskIdentifier] = nil
+
     return succeeded
   }
 }
@@ -437,12 +477,15 @@ private struct CleanupOperation: Sendable {
     for step in ContainerInvocation.teardownLadder(identity) {
       _ = await runLifecycle(step)
     }
+
     let absent = await finalAbsence()
+
     do {
       try workspace.remove()
     } catch {
       return false
     }
+
     return absent
   }
 
@@ -465,7 +508,9 @@ private struct CleanupOperation: Sendable {
         commands: commands,
         watchdogSleep: watchdogSleep
       )
-    else { return false }
+    else {
+      return false
+    }
     return !containers.contains { $0.resolvedIdentifier == identity }
   }
 }
@@ -480,8 +525,12 @@ private extension ContainerBackend {
         limit: Self.lifecycleCommandTimeout,
         deadline: deadline
       )
-    else { return false }
-    return (try? JSONDecoder().decode(SystemStatusDocument.self, from: data).status) == "running"
+    else {
+      return false
+    }
+
+    let document = try? JSONDecoder().decode(SystemStatusDocument.self, from: data)
+    return document?.status == "running"
   }
 
   func containerPresent(
@@ -493,14 +542,21 @@ private extension ContainerBackend {
         limit: Self.lifecycleCommandTimeout,
         deadline: deadline
       )
-    else { return nil }
+    else {
+      return nil
+    }
     return containers.contains { $0.resolvedIdentifier == identity }
   }
 
   func cidMatches(_ identity: ExecutionIdentity, at url: URL) -> Bool {
-    guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return false }
-    return String(decoding: data, as: UTF8.self)
-      .trimmingCharacters(in: .whitespacesAndNewlines) == identity.name
+    guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
+      return false
+    }
+
+    let decoded = String(decoding: data, as: UTF8.self).trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
+    return decoded == identity.name
   }
 }
 
@@ -514,13 +570,15 @@ extension ContainerBackend {
     limit: Duration,
     deadline: ContinuousClock.Instant
   ) async -> ContainerCommandResult? {
-    guard let timeout = clampedTimeout(limit: limit, deadline: deadline) else { return nil }
-    return await Self.runControlCommand(
-      arguments,
-      timeout: timeout,
-      commands: commands,
-      watchdogSleep: watchdogSleep
-    )
+    if let timeout = clampedTimeout(limit: limit, deadline: deadline) {
+      return await Self.runControlCommand(
+        arguments,
+        timeout: timeout,
+        commands: commands,
+        watchdogSleep: watchdogSleep
+      )
+    }
+    return nil
   }
 
   /// Fail-closed evidence: stdout only when the command exited 0 with neither stream truncated.
@@ -529,9 +587,10 @@ extension ContainerBackend {
     limit: Duration,
     deadline: ContinuousClock.Instant
   ) async -> Data? {
-    guard let result = await boundedCommandResult(arguments, limit: limit, deadline: deadline)
-    else { return nil }
-    return Self.successOutput(of: result)
+    if let result = await boundedCommandResult(arguments, limit: limit, deadline: deadline) {
+      return Self.successOutput(of: result)
+    }
+    return nil
   }
 
   func boundedCommandSucceeded(
@@ -546,12 +605,14 @@ extension ContainerBackend {
     limit: Duration,
     deadline: ContinuousClock.Instant
   ) async -> [ListedContainer]? {
-    guard let timeout = clampedTimeout(limit: limit, deadline: deadline) else { return nil }
-    return await Self.fetchContainerList(
-      timeout: timeout,
-      commands: commands,
-      watchdogSleep: watchdogSleep
-    )
+    if let timeout = clampedTimeout(limit: limit, deadline: deadline) {
+      return await Self.fetchContainerList(
+        timeout: timeout,
+        commands: commands,
+        watchdogSleep: watchdogSleep
+      )
+    }
+    return nil
   }
 
   static func fetchContainerList(
@@ -565,7 +626,11 @@ extension ContainerBackend {
       commands: commands,
       watchdogSleep: watchdogSleep
     )
-    guard let data = successOutput(of: result) else { return nil }
+
+    guard let data = successOutput(of: result) else {
+      return nil
+    }
+
     return try? JSONDecoder().decode([ListedContainer].self, from: data)
   }
 
@@ -586,9 +651,11 @@ extension ContainerBackend {
       captureLimit: maxControlStreamBytes,
       teardownGracePeriod: commandTeardownGrace
     )
+
     let clock = ContinuousClock()
     let started = clock.now
     let allowance = command.timeout + command.teardownGracePeriod + hostWatchdogSlack
+
     switch await raceRunnerAgainstWatchdog(
       allowance: allowance,
       sleep: watchdogSleep,
@@ -626,7 +693,9 @@ extension ContainerBackend {
       case .exited(0) = result.termination,
       !result.stdout.truncated,
       !result.stderr.truncated
-    else { return nil }
+    else {
+      return nil
+    }
     return result.stdout.bytes
   }
 }
@@ -634,7 +703,11 @@ extension ContainerBackend {
 private extension ContainerBackend {
   func clampedTimeout(limit: Duration, deadline: ContinuousClock.Instant) -> Duration? {
     let available = now().duration(to: deadline)
-    guard available > .zero else { return nil }
+
+    guard available > .zero else {
+      return nil
+    }
+
     return available < limit ? available : limit
   }
 }
@@ -662,8 +735,13 @@ struct ListedContainer: Decodable, Sendable {
   let id: String?
   let configuration: Configuration?
 
-  var resolvedIdentifier: String? { id ?? configuration?.id }
-  var labels: [String: String] { configuration?.labels ?? [:] }
+  var resolvedIdentifier: String? {
+    id ?? configuration?.id
+  }
+
+  var labels: [String: String] {
+    configuration?.labels ?? [:]
+  }
 }
 
 // MARK: - Results and Reason Boundary
@@ -716,6 +794,7 @@ enum ScratchWorkspaceError: Error, Equatable {
 struct ScratchWorkspace: Sendable {
   static let scratchRootName = "exec-scratch"
   static let controlRootName = "exec-control"
+
   static let maxEntrypointBytes = 16 * 1024
   static let maxInputBytes = 1024 * 1024
   static let maxInputTotalBytes = 4 * 1024 * 1024
@@ -732,6 +811,7 @@ struct ScratchWorkspace: Sendable {
     request: ExecutionRequest
   ) throws -> ScratchWorkspace {
     try validate(request)
+
     let scratchRoot = stateRoot.appending(path: scratchRootName, directoryHint: .isDirectory)
     let controlRoot = stateRoot.appending(path: controlRootName, directoryHint: .isDirectory)
     let directory = scratchRoot.appending(path: identity.identifier, directoryHint: .isDirectory)
@@ -743,22 +823,28 @@ struct ScratchWorkspace: Sendable {
         "state root path contains characters that cannot cross a mount directive"
       )
     }
+
     try ensurePrivateDirectory(scratchRoot)
     try ensurePrivateDirectory(controlRoot)
+
     guard directory.path.withCString({ mkdir($0, 0o700) }) == 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot create execution scratch")
     }
+
     let workspace = ScratchWorkspace(
       scratchRoot: scratchRoot,
       controlRoot: controlRoot,
       directory: directory,
       cidFile: controlRoot.appending(path: "\(identity.identifier).cid")
     )
+
     do {
       try write(request.entrypoint, in: directory)
+
       for input in request.inputs {
         try write(input, in: directory)
       }
+
       return workspace
     } catch {
       try? workspace.remove()
@@ -768,9 +854,11 @@ struct ScratchWorkspace: Sendable {
 
   func remove() throws {
     let manager = FileManager.default
+
     if manager.fileExists(atPath: directory.path) {
       try manager.removeItem(at: directory)
     }
+
     if manager.fileExists(atPath: cidFile.path) {
       try manager.removeItem(at: cidFile)
     }
@@ -782,6 +870,7 @@ struct ScratchWorkspace: Sendable {
 private extension ScratchWorkspace {
   static func validate(_ request: ExecutionRequest) throws {
     let expectedEntrypoint = ExecEntrypoint.fileName(for: request.language)
+
     guard
       request.entrypoint.name == expectedEntrypoint,
       request.entrypoint.mode == .readExecute,
@@ -789,41 +878,52 @@ private extension ScratchWorkspace {
     else {
       throw ScratchWorkspaceError.invalidRequest("invalid execution entrypoint")
     }
+
     guard request.inputs.count <= maxInputFiles else {
       throw ScratchWorkspaceError.invalidRequest("too many staged inputs")
     }
+
     var normalizedNames = Set<String>()
     var totalBytes = 0
+
     for input in request.inputs {
       guard input.mode == .readOnly else {
         throw ScratchWorkspaceError.invalidRequest("staged input mode is not read-only")
       }
+
       guard isBareName(input.name), !isReserved(input.name) else {
         throw ScratchWorkspaceError.invalidRequest("invalid staged input name")
       }
+
       let normalized = input.name.precomposedStringWithCanonicalMapping.lowercased()
       guard normalizedNames.insert(normalized).inserted else {
         throw ScratchWorkspaceError.invalidRequest("duplicate staged input name")
       }
+
       guard input.bytes.count <= maxInputBytes else {
         throw ScratchWorkspaceError.invalidRequest("staged input exceeds per-file limit")
       }
+
       let addition = totalBytes.addingReportingOverflow(input.bytes.count)
       guard !addition.overflow, addition.partialValue <= maxInputTotalBytes else {
         throw ScratchWorkspaceError.invalidRequest("staged inputs exceed total limit")
       }
+
       totalBytes = addition.partialValue
     }
   }
 
   static func isBareName(_ name: String) -> Bool {
-    !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains("\\")
+    !name.isEmpty
+      && name != "."
+      && name != ".."
+      && !name.contains("/")
+      && !name.contains("\\")
       && URL(fileURLWithPath: name).lastPathComponent == name
   }
 
   static func isReserved(_ name: String) -> Bool {
-    name.precomposedStringWithCanonicalMapping.lowercased()
-      .hasPrefix(ExecEntrypoint.reservedPrefix)
+    name.precomposedStringWithCanonicalMapping.lowercased().hasPrefix(ExecEntrypoint.reservedPrefix)
   }
 }
 
@@ -837,6 +937,7 @@ private extension ScratchWorkspace {
         withIntermediateDirectories: true,
         attributes: [.posixPermissions: 0o700]
       )
+
       guard chmod(url.path, 0o700) == 0 else {
         throw ScratchWorkspaceError.fileSystem("cannot set private directory mode")
       }
@@ -852,22 +953,32 @@ private extension ScratchWorkspace {
     let descriptor = destination.path.withCString { path in
       open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, mode_t(file.mode.rawValue))
     }
+
     guard descriptor >= 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot create staged copy")
     }
-    defer { _ = close(descriptor) }
+    defer {
+      _ = close(descriptor)
+    }
+
     guard fchmod(descriptor, mode_t(file.mode.rawValue)) == 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot set staged copy mode")
     }
+
     try file.bytes.withUnsafeBytes { bytes in
       // An empty Data may expose a nil baseAddress; nothing to write in that case.
-      guard let base = bytes.baseAddress else { return }
+      guard let base = bytes.baseAddress else {
+        return
+      }
+
       var offset = 0
       while offset < bytes.count {
         let written = systemWrite(descriptor, base.advanced(by: offset), bytes.count - offset)
+
         guard written > 0 else {
           throw ScratchWorkspaceError.fileSystem("cannot write staged copy")
         }
+
         offset += written
       }
     }
