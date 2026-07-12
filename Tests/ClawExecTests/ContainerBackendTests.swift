@@ -69,6 +69,29 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: runDirectory.path))
   }
 
+  @Test func materializerRefusesStateRootThatCannotCrossAMountDirective() throws {
+    // given
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "clawd-scratch-tests-comma,\(UUID().uuidString.lowercased())")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    // when / then
+    #expect(
+      throws: ScratchWorkspaceError.invalidRequest(
+        "state root path contains characters that cannot cross a mount directive"
+      )
+    ) {
+      try ScratchWorkspace.create(
+        stateRoot: root,
+        identity: try fixedIdentity(),
+        request: executionRequest()
+      )
+    }
+    let scratchRoot = root.appending(path: "exec-scratch")
+    #expect(!FileManager.default.fileExists(atPath: scratchRoot.path))
+  }
+
   @Test func materializerRejectsWrongEntrypointNameAndModes() throws {
     // given
     let fixture = try ScratchFixture()
@@ -467,6 +490,59 @@ import Testing
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
+  @Test func hostWatchdogBoundsWedgedControlCommandAndDisarmsAdmission() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let wedge = WedgeGate()
+    defer { wedge.open() }
+    let runner = ScriptedCommandRunner { command, history in
+      switch command.arguments.first {
+      case "run":
+        writeCidfile(from: command.arguments)
+        return commandResult(.exited(0))
+      case "stop":
+        // A wedged first cleanup rung: never returns and never observes cancellation
+        // until the test releases it after the assertions.
+        await wedge.wait()
+        return commandResult(.exited(0))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
+        return jsonCommandResult("[{\"id\":\"\(name)\"}]")
+      default:
+        return commandResult(.exited(0))
+      }
+    }
+    let controlAllowance =
+      ContainerBackend.lifecycleCommandTimeout + ContainerBackend.commandTeardownGrace
+      + ContainerBackend.hostWatchdogSlack
+    let backend = fixture.backend(
+      commands: runner,
+      watchdogSleep: { duration in
+        // Fire instantly only for full-length lifecycle watchdogs: the wedged stop is
+        // bounded while the foreground watchdog can never outrace the scripted run.
+        if duration != controlAllowance {
+          try await Task.sleep(for: duration)
+        }
+      }
+    )
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    let first = await backend.run(executionRequest())
+    let second = await backend.run(executionRequest())
+
+    // then
+    guard case .startFailed(let reason) = first.terminationReason else {
+      Issue.record("expected cleanup start failure")
+      return
+    }
+    #expect(reason.contains("could not confirm container removal"))
+    #expect(second.terminationReason == .unavailable(reason: "sandbox is not prepared"))
+  }
+
   @Test func failedCleanupDisarmsAdmissionUntilNextPrepare() async throws {
     // given
     let fixture = try BackendFixture()
@@ -842,7 +918,10 @@ private struct BackendFixture {
     commands: any ContainerCommandRunning = NoopCommandRunner(),
     sanitizeReason: @escaping @Sendable (String) -> String = { $0 },
     now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
-    supportedHost: @escaping @Sendable () -> Bool = { true }
+    supportedHost: @escaping @Sendable () -> Bool = { true },
+    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
+      try await Task.sleep(for: duration)
+    }
   ) -> ContainerBackend {
     ContainerBackend(
       settings: settings,
@@ -850,7 +929,8 @@ private struct BackendFixture {
       commands: commands,
       sanitizeReason: sanitizeReason,
       now: now,
-      supportedHost: supportedHost
+      supportedHost: supportedHost,
+      watchdogSleep: watchdogSleep
     )
   }
 

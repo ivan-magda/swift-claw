@@ -16,6 +16,9 @@ public actor ContainerBackend {
   public static let pullTimeout: Duration = .seconds(120)
   public static let prepareTimeout: Duration = .seconds(300)
   static let commandTeardownGrace: Duration = .seconds(2)
+  // Head start the host watchdog grants the runner's own timeout + teardown, so in the
+  // cooperative case the runner always reports its typed outcome before the watchdog fires.
+  static let hostWatchdogSlack: Duration = .seconds(2)
 
   let settings: ExecSandboxSettings
   let stateRoot: URL
@@ -23,6 +26,9 @@ public actor ContainerBackend {
   let sanitizeReason: @Sendable (String) -> String
   let now: @Sendable () -> ContinuousClock.Instant
   let supportedHost: @Sendable () -> Bool
+  // Drives the host-watchdog deadline sleeps; injectable so tests can fire a watchdog
+  // without waiting out a real per-command allowance.
+  let watchdogSleep: @Sendable (Duration) async throws -> Void
   // Longest-first so nested paths are replaced before the roots that contain them.
   let sensitiveHostPaths: [String]
 
@@ -55,7 +61,10 @@ public actor ContainerBackend {
     commands: any ContainerCommandRunning,
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant,
-    supportedHost: @escaping @Sendable () -> Bool
+    supportedHost: @escaping @Sendable () -> Bool,
+    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
+      try await Task.sleep(for: duration)
+    }
   ) {
     self.settings = settings
     self.stateRoot = stateRoot
@@ -63,6 +72,7 @@ public actor ContainerBackend {
     self.sanitizeReason = sanitizeReason
     self.now = now
     self.supportedHost = supportedHost
+    self.watchdogSleep = watchdogSleep
     self.sensitiveHostPaths = [
       stateRoot.path,
       stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
@@ -273,40 +283,18 @@ private extension ContainerBackend {
 
   // The runner enforces the guest timeout itself; this host-side watchdog is an independent
   // bound so a wedged `container run` that never returns cannot hang the execution lane.
-  // Both racers are deliberately unstructured: a structured group would await the runner
-  // child on scope exit, so a runner that never returns and ignores cancellation (a wedged
-  // container process kill cannot reap) would hang the watchdog itself. After a deadline or
-  // cancellation win the runner task is cancelled and abandoned, never awaited: its result
-  // is meaningless once the run is `.timedOutKilled`, it is bounded by process lifetime,
-  // and the shielded teardown ladder plus the prepared-image disarm own containment.
   func boundedForegroundRun(
     _ command: ContainerCommand,
     deadline: ContinuousClock.Instant
-  ) async -> ForegroundOutcome {
+  ) async -> WatchdogRaceOutcome {
     let commands = commands
     let remaining = now().duration(to: deadline)
-    let (outcomes, continuation) = AsyncStream.makeStream(of: ForegroundOutcome.self)
-    let runnerTask = Task {
-      continuation.yield(.runnerReturned(await commands.run(command)))
+    return await Self.raceRunnerAgainstWatchdog(
+      allowance: remaining,
+      sleep: watchdogSleep
+    ) {
+      await commands.run(command)
     }
-    let deadlineTask = Task {
-      // A cancelled sleep must never yield: only an uncancelled, fully elapsed deadline may
-      // produce .deadlineExpired, so it cannot outrace the runner's outcome after the runner
-      // already won or the whole run was cancelled.
-      guard (try? await Task.sleep(for: remaining)) != nil else { return }
-      continuation.yield(.deadlineExpired)
-    }
-    defer {
-      runnerTask.cancel()
-      deadlineTask.cancel()
-    }
-    for await outcome in outcomes {
-      return outcome
-    }
-    // The stream ends without an element only when this task was cancelled mid-wait
-    // (unstructured racers do not inherit that cancellation); report it explicitly so
-    // the caller returns the same cancelled result the runner would have produced.
-    return .callerCancelled
   }
 
   func classify(
@@ -364,10 +352,51 @@ private extension ContainerBackend {
   }
 }
 
-private enum ForegroundOutcome: Sendable {
+enum WatchdogRaceOutcome: Sendable {
   case runnerReturned(ContainerCommandResult)
   case deadlineExpired
   case callerCancelled
+}
+
+// MARK: - Host Watchdog Race
+
+extension ContainerBackend {
+  // First-wins race between a command runner and a host-side deadline. Both racers are
+  // deliberately unstructured: a structured group would await the runner child on scope
+  // exit, so a runner that never returns and ignores cancellation (a wedged container
+  // process kill cannot reap) would hang the watchdog itself. After a deadline or
+  // cancellation win the runner task is cancelled and abandoned, never awaited: its result
+  // is meaningless once the caller fails the command closed, it is bounded by process
+  // lifetime, and the shielded teardown ladder plus the prepared-image disarm own
+  // containment.
+  static func raceRunnerAgainstWatchdog(
+    allowance: Duration,
+    sleep: @escaping @Sendable (Duration) async throws -> Void,
+    runner: @escaping @Sendable () async -> ContainerCommandResult
+  ) async -> WatchdogRaceOutcome {
+    let (outcomes, continuation) = AsyncStream.makeStream(of: WatchdogRaceOutcome.self)
+    let runnerTask = Task {
+      continuation.yield(.runnerReturned(await runner()))
+    }
+    let deadlineTask = Task {
+      // A cancelled sleep must never yield: only an uncancelled, fully elapsed deadline may
+      // produce .deadlineExpired, so it cannot outrace the runner's outcome after the runner
+      // already won or the whole run was cancelled.
+      guard (try? await sleep(allowance)) != nil else { return }
+      continuation.yield(.deadlineExpired)
+    }
+    defer {
+      runnerTask.cancel()
+      deadlineTask.cancel()
+    }
+    for await outcome in outcomes {
+      return outcome
+    }
+    // The stream ends without an element only when this task was cancelled mid-wait
+    // (unstructured racers do not inherit that cancellation); report it explicitly so
+    // the caller returns the same cancelled result the runner would have produced.
+    return .callerCancelled
+  }
 }
 
 // MARK: - Shielded Cleanup
@@ -378,12 +407,14 @@ extension ContainerBackend {
     workspace: ScratchWorkspace
   ) async -> Bool {
     let commands = commands
+    let watchdogSleep = watchdogSleep
     let taskIdentifier = UUID()
     let cleanup = Task.detached {
       await CleanupOperation(
         commands: commands,
         identity: identity.name,
-        workspace: workspace
+        workspace: workspace,
+        watchdogSleep: watchdogSleep
       ).run()
     }
     cleanupTasks[taskIdentifier] = cleanup
@@ -397,6 +428,7 @@ private struct CleanupOperation: Sendable {
   let commands: any ContainerCommandRunning
   let identity: String
   let workspace: ScratchWorkspace
+  let watchdogSleep: @Sendable (Duration) async throws -> Void
 
   // The teardown ladder is shielded from cancellation and each command keeps its own
   // `lifecycleCommandTimeout` independent of the run's outer deadline, so a wedged or cancelled
@@ -418,7 +450,8 @@ private struct CleanupOperation: Sendable {
     let result = await ContainerBackend.runControlCommand(
       arguments,
       timeout: ContainerBackend.lifecycleCommandTimeout,
-      commands: commands
+      commands: commands,
+      watchdogSleep: watchdogSleep
     )
     return ContainerBackend.successOutput(of: result) != nil
   }
@@ -429,7 +462,8 @@ private struct CleanupOperation: Sendable {
     guard
       let containers = await ContainerBackend.fetchContainerList(
         timeout: ContainerBackend.lifecycleCommandTimeout,
-        commands: commands
+        commands: commands,
+        watchdogSleep: watchdogSleep
       )
     else { return false }
     return !containers.contains { $0.resolvedIdentifier == identity }
@@ -481,7 +515,12 @@ extension ContainerBackend {
     deadline: ContinuousClock.Instant
   ) async -> ContainerCommandResult? {
     guard let timeout = clampedTimeout(limit: limit, deadline: deadline) else { return nil }
-    return await Self.runControlCommand(arguments, timeout: timeout, commands: commands)
+    return await Self.runControlCommand(
+      arguments,
+      timeout: timeout,
+      commands: commands,
+      watchdogSleep: watchdogSleep
+    )
   }
 
   /// Fail-closed evidence: stdout only when the command exited 0 with neither stream truncated.
@@ -508,34 +547,77 @@ extension ContainerBackend {
     deadline: ContinuousClock.Instant
   ) async -> [ListedContainer]? {
     guard let timeout = clampedTimeout(limit: limit, deadline: deadline) else { return nil }
-    return await Self.fetchContainerList(timeout: timeout, commands: commands)
+    return await Self.fetchContainerList(
+      timeout: timeout,
+      commands: commands,
+      watchdogSleep: watchdogSleep
+    )
   }
 
   static func fetchContainerList(
     timeout: Duration,
-    commands: any ContainerCommandRunning
+    commands: any ContainerCommandRunning,
+    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void
   ) async -> [ListedContainer]? {
     let result = await runControlCommand(
       ContainerInvocation.listAll(),
       timeout: timeout,
-      commands: commands
+      commands: commands,
+      watchdogSleep: watchdogSleep
     )
     guard let data = successOutput(of: result) else { return nil }
     return try? JSONDecoder().decode([ListedContainer].self, from: data)
   }
 
+  // Control commands (stop/kill/rm/list/probe/pull) get the same host-side watchdog as the
+  // foreground run: the runner's own timeout is cooperative only, and a wedged control
+  // command would otherwise hang the shielded cleanup ladder, the FIFO lane, or prepare().
+  // The allowance is measured on a real clock (the injected `now` drives outer deadlines,
+  // not this per-command bound) via the injectable sleep.
   static func runControlCommand(
     _ arguments: [String],
     timeout: Duration,
-    commands: any ContainerCommandRunning
+    commands: any ContainerCommandRunning,
+    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void
   ) async -> ContainerCommandResult {
-    await commands.run(
-      ContainerCommand(
-        arguments: arguments,
-        timeout: timeout,
-        captureLimit: maxControlStreamBytes,
-        teardownGracePeriod: commandTeardownGrace
-      )
+    let command = ContainerCommand(
+      arguments: arguments,
+      timeout: timeout,
+      captureLimit: maxControlStreamBytes,
+      teardownGracePeriod: commandTeardownGrace
+    )
+    let clock = ContinuousClock()
+    let started = clock.now
+    let allowance = command.timeout + command.teardownGracePeriod + hostWatchdogSlack
+    switch await raceRunnerAgainstWatchdog(
+      allowance: allowance,
+      sleep: watchdogSleep,
+      runner: {
+        await commands.run(command)
+      }
+    ) {
+    case .runnerReturned(let result):
+      return result
+    case .deadlineExpired:
+      return failClosedResult(.timedOut, wallClock: started.duration(to: clock.now))
+    case .callerCancelled:
+      return failClosedResult(.cancelled, wallClock: started.duration(to: clock.now))
+    }
+  }
+
+  // Synthesized when the runner never reported: every consumer treats it fail-closed
+  // (successOutput → nil, lifecycle/absence checks → false, bounded helpers → nil).
+  private static func failClosedResult(
+    _ termination: ContainerCommandTermination,
+    wallClock: Duration
+  ) -> ContainerCommandResult {
+    let empty = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
+    return ContainerCommandResult(
+      termination: termination,
+      stdout: empty,
+      stderr: empty,
+      processIdentifier: nil,
+      wallClock: wallClock
     )
   }
 
@@ -652,9 +734,17 @@ struct ScratchWorkspace: Sendable {
     try validate(request)
     let scratchRoot = stateRoot.appending(path: scratchRootName, directoryHint: .isDirectory)
     let controlRoot = stateRoot.appending(path: controlRootName, directoryHint: .isDirectory)
+    let directory = scratchRoot.appending(path: identity.identifier, directoryHint: .isDirectory)
+    // This directory becomes the source of a `--mount type=bind,source=…` directive, whose
+    // comma/equals grammar has no escape syntax in apple/container 1.1.0; a delimiter in the
+    // path would be parsed as extra directive fields, so refuse it before creating anything.
+    guard !directory.path.contains(","), !directory.path.contains("=") else {
+      throw ScratchWorkspaceError.invalidRequest(
+        "state root path contains characters that cannot cross a mount directive"
+      )
+    }
     try ensurePrivateDirectory(scratchRoot)
     try ensurePrivateDirectory(controlRoot)
-    let directory = scratchRoot.appending(path: identity.identifier, directoryHint: .isDirectory)
     guard directory.path.withCString({ mkdir($0, 0o700) }) == 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot create execution scratch")
     }
