@@ -16,6 +16,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
     .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.11.0"),
+    .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "0.5.0"),
   ],
   targets: [
     .target(
@@ -70,6 +71,13 @@ let package = Package(
       ]
     ),
     .target(name: "ClawTools", dependencies: ["ClawCore"]),
+    .target(
+      name: "ClawExec",
+      dependencies: [
+        "ClawCore",
+        .product(name: "Subprocess", package: "swift-subprocess"),
+      ]
+    ),
     .target(name: "ClawTestSupport", dependencies: ["ClawCore"]),
     .target(
       name: "ClawGateway",
@@ -130,6 +138,7 @@ let package = Package(
       name: "ClawToolsTests",
       dependencies: ["ClawTools", "ClawCore", "ClawTestSupport"]
     ),
+    .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore"]),
     .testTarget(
       name: "ClawGatewayTests",
       dependencies: [
