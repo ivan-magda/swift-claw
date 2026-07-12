@@ -243,12 +243,18 @@ private extension ContainerBackend {
         )
       case .deadlineExpired:
         self.result(.timedOutKilled, started: started)
+      case .callerCancelled:
+        self.result(.cancelled, started: started)
       }
     let cleanupOK = await runShieldedCleanup(
       identity: identity,
       workspace: workspace
     )
     if !cleanupOK {
+      // The container provably survived the teardown ladder; fail closed and refuse new
+      // admissions until a future successful prepare() reaps it, otherwise the next queued
+      // run would boot a second VM beside the zombie.
+      preparedInitImage = nil
       result = infrastructureResult(
         "could not confirm container removal for \(identity.name)",
         started: started
@@ -259,37 +265,40 @@ private extension ContainerBackend {
 
   // The runner enforces the guest timeout itself; this host-side watchdog is an independent
   // bound so a wedged `container run` that never returns cannot hang the execution lane.
-  // The losing racer is cancelled and drained before returning (the real runner honors
-  // cancellation by tearing down its process group), so no child task is leaked.
+  // Both racers are deliberately unstructured: a structured group would await the runner
+  // child on scope exit, so a runner that never returns and ignores cancellation (a wedged
+  // container process kill cannot reap) would hang the watchdog itself. After a deadline or
+  // cancellation win the runner task is cancelled and abandoned, never awaited: its result
+  // is meaningless once the run is `.timedOutKilled`, it is bounded by process lifetime,
+  // and the shielded teardown ladder plus the prepared-image disarm own containment.
   func boundedForegroundRun(
     _ command: ContainerCommand,
     deadline: ContinuousClock.Instant
   ) async -> ForegroundOutcome {
     let commands = commands
     let remaining = now().duration(to: deadline)
-    return await withTaskGroup(of: ForegroundOutcome?.self) { group in
-      group.addTask {
-        .runnerReturned(await commands.run(command))
-      }
-      group.addTask {
-        do {
-          try await Task.sleep(for: remaining)
-          return .deadlineExpired
-        } catch {
-          // Cancelled because the runner won (or the whole run was cancelled):
-          // yield nothing so the runner's own outcome decides the result.
-          return nil
-        }
-      }
-      var winner: ForegroundOutcome?
-      while let child = await group.next() {
-        guard let outcome = child, winner == nil else { continue }
-        winner = outcome
-        group.cancelAll()
-      }
-      // The runner child always yields an outcome, so the group cannot drain empty.
-      return winner ?? .deadlineExpired
+    let (outcomes, continuation) = AsyncStream.makeStream(of: ForegroundOutcome.self)
+    let runnerTask = Task {
+      continuation.yield(.runnerReturned(await commands.run(command)))
     }
+    let deadlineTask = Task {
+      // A cancelled sleep must never yield: only an uncancelled, fully elapsed deadline may
+      // produce .deadlineExpired, so it cannot outrace the runner's outcome after the runner
+      // already won or the whole run was cancelled.
+      guard (try? await Task.sleep(for: remaining)) != nil else { return }
+      continuation.yield(.deadlineExpired)
+    }
+    defer {
+      runnerTask.cancel()
+      deadlineTask.cancel()
+    }
+    for await outcome in outcomes {
+      return outcome
+    }
+    // The stream ends without an element only when this task was cancelled mid-wait
+    // (unstructured racers do not inherit that cancellation); report it explicitly so
+    // the caller returns the same cancelled result the runner would have produced.
+    return .callerCancelled
   }
 
   func classify(
@@ -350,6 +359,7 @@ private extension ContainerBackend {
 private enum ForegroundOutcome: Sendable {
   case runnerReturned(ContainerCommandResult)
   case deadlineExpired
+  case callerCancelled
 }
 
 // MARK: - Shielded Cleanup

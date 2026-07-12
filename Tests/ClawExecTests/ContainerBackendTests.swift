@@ -434,6 +434,72 @@ import Testing
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
+  @Test func hostWatchdogCompletesWhenRunnerIgnoresCancellationEntirely() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, _ in
+      if command.arguments.first == "run" {
+        writeCidfile(from: command.arguments)
+        // A truly wedged foreground CLI: suspended forever, never observes cancellation.
+        await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+      }
+      return command.arguments.first == "list"
+        ? jsonCommandResult("[]")
+        : commandResult(.exited(0))
+    }
+    let nowSource = SteppingNowSource()
+    let backend = fixture.backend(commands: runner, now: { nowSource.next() })
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    let result = await backend.run(executionRequest())
+
+    // then
+    #expect(result.terminationReason == .timedOutKilled)
+    let commands = await runner.recorded()
+    let name = try #require(value(after: "--name", in: commands[0].arguments))
+    let arguments = commands.map(\.arguments)
+    #expect(arguments.contains(ContainerInvocation.stop(name)))
+    #expect(arguments.contains(ContainerInvocation.kill(name)))
+    #expect(arguments.contains(ContainerInvocation.remove(name)))
+    #expect(arguments.last == ContainerInvocation.listAll())
+    #expect(try scratchChildren(fixture.root).isEmpty)
+  }
+
+  @Test func failedCleanupDisarmsAdmissionUntilNextPrepare() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, history in
+      if command.arguments.first == "run" {
+        writeCidfile(from: command.arguments)
+        return commandResult(.timedOut)
+      }
+      if command.arguments.first == "list" {
+        let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
+        return jsonCommandResult("[{\"id\":\"\(name)\"}]")
+      }
+      return commandResult(.exited(0))
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    let first = await backend.run(executionRequest())
+    let commandsAfterFirst = await runner.recorded().count
+    let second = await backend.run(executionRequest())
+
+    // then
+    guard case .startFailed(let reason) = first.terminationReason else {
+      Issue.record("expected cleanup start failure")
+      return
+    }
+    #expect(reason.contains("could not confirm container removal"))
+    #expect(second.terminationReason == .unavailable(reason: "sandbox is not prepared"))
+    #expect(await runner.recorded().count == commandsAfterFirst)
+  }
+
   @Test func cancellationWhileRunningStillCleansIdentityAndScratch() async throws {
     // given
     let fixture = try BackendFixture()
