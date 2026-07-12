@@ -128,10 +128,12 @@ import Testing
     #expect(result.termination == .cancelled)
   }
 
-  @Test func childExitDoesNotWaitForGrandchildHoldingThePipe() async {
+  @Test func childExitDoesNotWaitForGrandchildHoldingThePipe() async throws {
     // given
     let runner = SwiftSubprocessContainerCommandRunner(executablePath: "/bin/sh")
-    let command = testCommand(["-c", "(sleep 30) & printf child"], timeout: .seconds(2))
+    // The backgrounded sleep inherits stdout (the asserted pipe); stderr only publishes its
+    // PID so the test can reap the grandchild instead of orphaning a real 30-second sleep.
+    let command = testCommand(["-c", "sleep 30 & echo $! >&2; printf child"], timeout: .seconds(2))
 
     // when
     let result = await runner.run(command)
@@ -139,6 +141,11 @@ import Testing
     // then
     #expect(result.termination == .exited(0))
     #expect(String(decoding: result.stdout.bytes, as: UTF8.self) == "child")
+    let pidText = String(decoding: result.stderr.bytes, as: UTF8.self)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let grandchild = try #require(Int32(pidText))
+    // ESRCH just means the grandchild already exited; anything else is equally moot here.
+    _ = kill(grandchild, SIGKILL)
   }
 }
 

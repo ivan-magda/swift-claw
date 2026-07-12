@@ -461,11 +461,15 @@ import Testing
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
+    let wedge = WedgeGate()
+    defer { wedge.open() }
     let runner = ScriptedCommandRunner { command, _ in
       if command.arguments.first == "run" {
         writeCidfile(from: command.arguments)
-        // A truly wedged foreground CLI: suspended forever, never observes cancellation.
-        await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+        // A truly wedged foreground CLI: never returns and never observes cancellation
+        // until the test releases it after the assertions.
+        await wedge.wait()
+        return commandResult(.cancelled)
       }
       return command.arguments.first == "list"
         ? jsonCommandResult("[]")
