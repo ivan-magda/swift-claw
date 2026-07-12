@@ -7,6 +7,11 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
     guard !shuttingDown else {
       return failedHealth(lastError: "sandbox backend is shutting down")
     }
+    // New executions cannot be admitted while `preparedInitImage` is nil, so in-flight
+    // work only needs this entry check; it cannot grow across the awaits below.
+    guard executionTasks.isEmpty, cleanupTasks.isEmpty else {
+      return failedHealth(lastError: "sandbox prepare refused: executions in flight")
+    }
     let deadline = now().advanced(by: Self.prepareTimeout)
     let availability = await probe()
     guard case .available(let engineVersion) = availability else {
@@ -48,6 +53,17 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
         lastError: "container runtime init image is not a registry-qualified tag"
       )
     }
+    // Shutdown may complete while prepare is suspended; re-check before pulling images,
+    // before launching the canary container, and before re-arming the init image so a
+    // finished shutdown leaves no sandbox activity or prepared state behind.
+    guard !shuttingDown else {
+      return failedHealth(
+        engineVersion: engineVersion,
+        versionOK: true,
+        reaperOK: true,
+        lastError: "sandbox backend is shutting down"
+      )
+    }
     guard
       await runMaintenance(
         ContainerInvocation.pull(settings.workloadImage.description),
@@ -75,6 +91,15 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
         lastError: "workload image digest did not match the configured pin"
       )
     }
+    guard !shuttingDown else {
+      return failedHealth(
+        engineVersion: engineVersion,
+        versionOK: true,
+        imageDigestOK: true,
+        reaperOK: true,
+        lastError: "sandbox backend is shutting down"
+      )
+    }
     guard let canary = await canaryOutcome(initImage: initImage, deadline: deadline) else {
       return failedHealth(
         engineVersion: engineVersion,
@@ -82,6 +107,15 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
         imageDigestOK: true,
         reaperOK: true,
         lastError: "sandbox canary did not complete"
+      )
+    }
+    guard !shuttingDown else {
+      return failedHealth(
+        engineVersion: engineVersion,
+        versionOK: true,
+        imageDigestOK: true,
+        reaperOK: true,
+        lastError: "sandbox backend is shutting down"
       )
     }
     let health = SandboxHealth(

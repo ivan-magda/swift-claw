@@ -218,14 +218,19 @@ private extension ContainerBackend {
       captureLimit: Self.maxRawStreamBytes,
       teardownGracePeriod: .seconds(2)
     )
-    let commandResult = await commands.run(command)
-    var result = await classify(
-      commandResult,
-      identity: identity,
-      cidFile: workspace.cidFile,
-      deadline: deadline,
-      started: started
-    )
+    var result =
+      switch await boundedForegroundRun(command, deadline: deadline) {
+      case .runnerReturned(let commandResult):
+        await classify(
+          commandResult,
+          identity: identity,
+          cidFile: workspace.cidFile,
+          deadline: deadline,
+          started: started
+        )
+      case .deadlineExpired:
+        self.result(.timedOutKilled, started: started)
+      }
     let cleanupOK = await runShieldedCleanup(
       identity: identity,
       workspace: workspace
@@ -237,6 +242,41 @@ private extension ContainerBackend {
       )
     }
     return result
+  }
+
+  // The runner enforces the guest timeout itself; this host-side watchdog is an independent
+  // bound so a wedged `container run` that never returns cannot hang the execution lane.
+  // The losing racer is cancelled and drained before returning (the real runner honors
+  // cancellation by tearing down its process group), so no child task is leaked.
+  func boundedForegroundRun(
+    _ command: ContainerCommand,
+    deadline: ContinuousClock.Instant
+  ) async -> ForegroundOutcome {
+    let commands = commands
+    let remaining = now().duration(to: deadline)
+    return await withTaskGroup(of: ForegroundOutcome?.self) { group in
+      group.addTask {
+        .runnerReturned(await commands.run(command))
+      }
+      group.addTask {
+        do {
+          try await Task.sleep(for: remaining)
+          return .deadlineExpired
+        } catch {
+          // Cancelled because the runner won (or the whole run was cancelled):
+          // yield nothing so the runner's own outcome decides the result.
+          return nil
+        }
+      }
+      var winner: ForegroundOutcome?
+      while let child = await group.next() {
+        guard let outcome = child, winner == nil else { continue }
+        winner = outcome
+        group.cancelAll()
+      }
+      // The runner child always yields an outcome, so the group cannot drain empty.
+      return winner ?? .deadlineExpired
+    }
   }
 
   func classify(
@@ -292,6 +332,11 @@ private extension ContainerBackend {
       )
     }
   }
+}
+
+private enum ForegroundOutcome: Sendable {
+  case runnerReturned(ContainerCommandResult)
+  case deadlineExpired
 }
 
 // MARK: - Shielded Cleanup

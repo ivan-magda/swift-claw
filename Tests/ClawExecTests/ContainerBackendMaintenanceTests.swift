@@ -191,6 +191,37 @@ import Testing
     #expect(health.lastError == "could not read container runtime properties")
   }
 
+  @Test func prepareRefusesWithoutIssuingCommandsWhileAnExecutionIsInFlight() async throws {
+    // given
+    let fixture = try MaintenanceFixture()
+    defer { fixture.remove() }
+    let runner = MaintenanceCommandRunner { command, _ in
+      if command.arguments.first == "run" && !command.arguments.contains("--detach") {
+        maintenanceWriteCidfile(command.arguments)
+        while !Task.isCancelled { await Task.yield() }
+        return maintenanceResult(.cancelled)
+      }
+      return command.arguments == ContainerInvocation.listAll()
+        ? maintenanceJSON("[]")
+        : maintenanceResult(.exited(0))
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting(fixture.initImage)
+    let run = Task { await backend.run(maintenanceRequest()) }
+    await runner.waitForCount(1)
+    let commandsBeforePrepare = await runner.recorded().count
+
+    // when
+    let health = await backend.prepare()
+
+    // then
+    #expect(!health.isReady)
+    #expect(health.lastError == "sandbox prepare refused: executions in flight")
+    #expect(await runner.recorded().count == commandsBeforePrepare)
+    run.cancel()
+    _ = await run.value
+  }
+
   @Test func shutdownCancelsRunningWorkThenReapsAndSweeps() async throws {
     // given
     let fixture = try MaintenanceFixture()

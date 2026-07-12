@@ -400,6 +400,40 @@ import Testing
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
+  @Test func hostWatchdogBoundsHungForegroundRunThenRunsShieldedIdentityLadder() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, _ in
+      if command.arguments.first == "run" {
+        writeCidfile(from: command.arguments)
+        // A wedged foreground CLI: never returns until the watchdog cancels the losing racer.
+        while !Task.isCancelled { await Task.yield() }
+        return commandResult(.cancelled)
+      }
+      return command.arguments.first == "list"
+        ? jsonCommandResult("[]")
+        : commandResult(.exited(0))
+    }
+    let nowSource = SteppingNowSource()
+    let backend = fixture.backend(commands: runner, now: { nowSource.next() })
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    let result = await backend.run(executionRequest())
+
+    // then
+    #expect(result.terminationReason == .timedOutKilled)
+    let commands = await runner.recorded()
+    let name = try #require(value(after: "--name", in: commands[0].arguments))
+    let arguments = commands.map(\.arguments)
+    #expect(arguments.contains(ContainerInvocation.stop(name)))
+    #expect(arguments.contains(ContainerInvocation.kill(name)))
+    #expect(arguments.contains(ContainerInvocation.remove(name)))
+    #expect(arguments.last == ContainerInvocation.listAll())
+    #expect(try scratchChildren(fixture.root).isEmpty)
+  }
+
   @Test func cancellationWhileRunningStillCleansIdentityAndScratch() async throws {
     // given
     let fixture = try BackendFixture()
@@ -702,6 +736,7 @@ private struct BackendFixture {
   func backend(
     commands: any ContainerCommandRunning = NoopCommandRunner(),
     sanitizeReason: @escaping @Sendable (String) -> String = { $0 },
+    now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
     supportedHost: @escaping @Sendable () -> Bool = { true }
   ) -> ContainerBackend {
     ContainerBackend(
@@ -709,13 +744,28 @@ private struct BackendFixture {
       stateRoot: root,
       commands: commands,
       sanitizeReason: sanitizeReason,
-      now: { ContinuousClock.now },
+      now: now,
       supportedHost: supportedHost
     )
   }
 
   func remove() {
     try? FileManager.default.removeItem(at: root)
+  }
+}
+
+// First call anchors the execution start; every later call sits far past the outer
+// deadline so the host watchdog fires deterministically without wall-clock waiting.
+private final class SteppingNowSource: @unchecked Sendable {
+  private let lock = NSLock()
+  private let base = ContinuousClock.now
+  private var calls = 0
+
+  func next() -> ContinuousClock.Instant {
+    lock.lock()
+    defer { lock.unlock() }
+    calls += 1
+    return calls == 1 ? base : base.advanced(by: .seconds(3600))
   }
 }
 
