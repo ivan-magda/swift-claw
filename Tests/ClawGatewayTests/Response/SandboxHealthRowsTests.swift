@@ -69,6 +69,48 @@ import Testing
     #expect(rows.last?.value.contains("0.9.0") == true)
   }
 
+  @Test func daemonManagedAvailableReportsVersionAndDaemonOwnedCanary() {
+    // given / when
+    let rows = SandboxHealthRows.rows(
+      for: .daemonManaged(availability: .available(engineVersion: "1.1.0"))
+    )
+
+    // then
+    #expect(
+      rows.map(\.key) == [
+        "sandbox.available",
+        "sandbox.os_ok",
+        "sandbox.engine_version",
+        "sandbox.version_ok",
+        "sandbox.canary",
+      ]
+    )
+    #expect(rows.allSatisfy { $0.ok })
+    #expect(rows.last?.value == "owned by the running daemon")
+  }
+
+  @Test func daemonManagedBelowFloorFailsClosed() {
+    // given / when
+    let rows = SandboxHealthRows.rows(
+      for: .daemonManaged(
+        availability: .unavailable(reason: "container 0.9.0 is below minimum 1.0.0")
+      )
+    )
+
+    // then
+    #expect(
+      rows.map(\.key) == [
+        "sandbox.available",
+        "sandbox.os_ok",
+        "sandbox.engine_version",
+        "sandbox.version_ok",
+        "sandbox.last_error",
+      ]
+    )
+    #expect(rows.allSatisfy { $0.ok == false })
+    #expect(rows.last?.value.contains("0.9.0") == true)
+  }
+
   @Test func passingLiveSnapshotRendersEveryGateGreen() {
     // given / when
     let rows = SandboxHealthRows.rows(for: .live(health: .passingForTests))

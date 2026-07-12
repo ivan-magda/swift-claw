@@ -196,6 +196,17 @@ private extension DoctorCommand {
         return SandboxHealthRows.rows(for: .configOnly(availability: availability))
       }
 
+      // A running daemon owns sandbox maintenance (reap + scratch sweep) and holds the
+      // single-instance lock for its whole lifetime. Acquiring it here proves no daemon can be
+      // mid-execution, so the destructive live canary is safe; failing to acquire it means a daemon
+      // is running and doctor must not reap its live VM or sweep its scratch.
+      let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
+      guard let lock = try? InstanceLock(path: lockPath) else {
+        let availability = await backend.versionAvailability()
+        return SandboxHealthRows.rows(for: .daemonManaged(availability: availability))
+      }
+      defer { lock.release() }
+
       let bootstrap = await SandboxBootstrapper(
         enabled: true,
         backend: backend,
