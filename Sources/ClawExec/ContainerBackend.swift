@@ -60,6 +60,62 @@ public actor ContainerBackend {
     self.supportedHost = supportedHost
   }
 
+  public func versionAvailability() async -> BackendAvailability {
+    guard supportedHost() else {
+      return .unavailable(
+        reason: ownerSafe("execute_code requires macOS 26 or newer on arm64")
+      )
+    }
+    let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
+    guard
+      let data = await controlData(
+        ContainerInvocation.systemVersion(),
+        limit: Self.ordinaryCommandTimeout,
+        deadline: deadline
+      )
+    else {
+      return .unavailable(reason: ownerSafe("container version command failed"))
+    }
+    guard
+      let documents = try? JSONDecoder().decode([SystemVersionDocument].self, from: data),
+      let cli = documents.first(where: { $0.appName == "container" })
+    else {
+      return .unavailable(reason: ownerSafe("container version response was invalid"))
+    }
+    guard let version = SemanticVersion(cli.version) else {
+      return .unavailable(reason: ownerSafe("container CLI version was malformed"))
+    }
+    guard version >= ExecSandboxSettings.minimumContainerVersion else {
+      return .unavailable(
+        reason: ownerSafe(
+          "container CLI \(cli.version) is older than the required 1.0.0"
+        )
+      )
+    }
+    return .available(engineVersion: cli.version)
+  }
+
+  public func probe() async -> BackendAvailability {
+    guard supportedHost() else {
+      return .unavailable(
+        reason: ownerSafe("execute_code requires macOS 26 or newer on arm64")
+      )
+    }
+    let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
+    guard
+      let data = await controlData(
+        ContainerInvocation.systemStatus(),
+        limit: Self.ordinaryCommandTimeout,
+        deadline: deadline
+      ),
+      let status = try? JSONDecoder().decode(SystemStatusDocument.self, from: data),
+      status.status == "running"
+    else {
+      return .unavailable(reason: ownerSafe("container engine is not running"))
+    }
+    return await versionAvailability()
+  }
+
   public func run(_ request: ExecutionRequest) async -> ExecutionResult {
     guard let initImage = preparedInitImage else {
       return unavailableResult("sandbox is not prepared")
@@ -378,6 +434,16 @@ private extension ContainerBackend {
 
 private struct SystemStatusDocument: Decodable {
   let status: String
+}
+
+// All four fields stay required even though only appName/version drive the gate: decoding pins
+// the expected v1.1.0 CLI row shape and rejects unrelated {appName, version} payloads from a
+// different command.
+private struct SystemVersionDocument: Decodable {
+  let version: String
+  let buildType: String
+  let commit: String
+  let appName: String
 }
 
 struct ListedContainer: Decodable, Sendable {
