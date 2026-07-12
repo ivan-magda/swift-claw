@@ -60,6 +60,20 @@ public actor ContainerBackend {
     self.supportedHost = supportedHost
   }
 
+  public func run(_ request: ExecutionRequest) async -> ExecutionResult {
+    guard let initImage = preparedInitImage else {
+      return unavailableResult("sandbox is not prepared")
+    }
+    return await enqueueExecution { [weak self] in
+      guard let self else { return Self.cancelledResult() }
+      return await self.performExecution(request, initImage: initImage)
+    }
+  }
+
+  func setPreparedInitImageForTesting(_ image: String?) {
+    preparedInitImage = image
+  }
+
   var queuedExecutionCountForTesting: Int { executionTasks.count }
 
   func runSerializedForTesting(
@@ -110,6 +124,320 @@ private extension ContainerBackend {
     #else
       false
     #endif
+  }
+}
+
+// MARK: - Execution Pipeline
+
+private extension ContainerBackend {
+  func performExecution(_ request: ExecutionRequest, initImage: String) async -> ExecutionResult {
+    let started = now()
+    let deadline = started.advanced(by: request.timeout + Self.teardownAllowance)
+    let identity = ExecutionIdentity()
+    let workspace: ScratchWorkspace
+    do {
+      workspace = try ScratchWorkspace.create(
+        stateRoot: stateRoot,
+        identity: identity,
+        request: request
+      )
+    } catch {
+      return infrastructureResult(
+        "failed to materialize execution scratch: \(error)",
+        started: started
+      )
+    }
+
+    let command = ContainerCommand(
+      arguments: ContainerInvocation.run(
+        identity: identity,
+        scratchPath: workspace.directory.path,
+        cidFilePath: workspace.cidFile.path,
+        language: request.language,
+        network: request.network,
+        settings: settings,
+        initImage: initImage
+      ),
+      timeout: request.timeout,
+      captureLimit: Self.maxRawStreamBytes,
+      teardownGracePeriod: .seconds(2)
+    )
+    let commandResult = await commands.run(command)
+    var result = await classify(
+      commandResult,
+      identity: identity,
+      cidFile: workspace.cidFile,
+      deadline: deadline,
+      started: started
+    )
+    let cleanupOK = await runShieldedCleanup(
+      identity: identity,
+      workspace: workspace
+    )
+    if !cleanupOK {
+      result = infrastructureResult(
+        "could not confirm container removal for \(identity.name)",
+        started: started
+      )
+    }
+    return result
+  }
+
+  func classify(
+    _ commandResult: ContainerCommandResult,
+    identity: ExecutionIdentity,
+    cidFile: URL,
+    deadline: ContinuousClock.Instant,
+    started: ContinuousClock.Instant
+  ) async -> ExecutionResult {
+    switch commandResult.termination {
+    case .timedOut:
+      return result(.timedOutKilled, started: started)
+    case .cancelled:
+      return result(.cancelled, started: started)
+    case .startFailed(let reason):
+      return infrastructureResult(reason, started: started)
+    case .signaled(let signal):
+      return infrastructureResult(
+        "container CLI was terminated by host signal \(signal)",
+        started: started
+      )
+    case .exited(let code):
+      guard cidMatches(identity, at: cidFile) else {
+        return infrastructureResult(
+          "container did not create its identity file",
+          started: started
+        )
+      }
+      guard await engineRunning(deadline: deadline) else {
+        return infrastructureResult(
+          "container engine became unavailable after execution",
+          started: started
+        )
+      }
+      guard let present = await containerPresent(identity.name, deadline: deadline) else {
+        return infrastructureResult(
+          "could not inspect container state after execution",
+          started: started
+        )
+      }
+      guard !present else {
+        return infrastructureResult(
+          "container remained after the foreground CLI exited",
+          started: started
+        )
+      }
+      return ExecutionResult(
+        terminationReason: .exited(code: code),
+        stdout: String(decoding: commandResult.stdout.bytes, as: UTF8.self),
+        stderr: String(decoding: commandResult.stderr.bytes, as: UTF8.self),
+        truncatedRawBytes: commandResult.stdout.truncated || commandResult.stderr.truncated,
+        wallClock: started.duration(to: now())
+      )
+    }
+  }
+}
+
+// MARK: - Shielded Cleanup
+
+private extension ContainerBackend {
+  func runShieldedCleanup(
+    identity: ExecutionIdentity,
+    workspace: ScratchWorkspace
+  ) async -> Bool {
+    let commands = commands
+    let taskIdentifier = UUID()
+    let cleanup = Task.detached {
+      await CleanupOperation(
+        commands: commands,
+        identity: identity.name,
+        workspace: workspace
+      ).run()
+    }
+    cleanupTasks[taskIdentifier] = cleanup
+    let succeeded = await cleanup.value
+    cleanupTasks[taskIdentifier] = nil
+    return succeeded
+  }
+}
+
+private struct CleanupOperation: Sendable {
+  let commands: any ContainerCommandRunning
+  let identity: String
+  let workspace: ScratchWorkspace
+
+  // The teardown ladder is shielded from cancellation and each command keeps its own
+  // `lifecycleCommandTimeout` independent of the run's outer deadline, so a wedged or cancelled
+  // execution still tears its VM down instead of orphaning it (ARCHITECTURE.md §13 return bound).
+  func run() async -> Bool {
+    _ = await runLifecycle(ContainerInvocation.stop(identity))
+    _ = await runLifecycle(ContainerInvocation.kill(identity))
+    _ = await runLifecycle(ContainerInvocation.remove(identity))
+    let absent = await finalAbsence()
+    do {
+      try workspace.remove()
+    } catch {
+      return false
+    }
+    return absent
+  }
+
+  private func runLifecycle(_ arguments: [String]) async -> Bool {
+    let result = await commands.run(
+      ContainerCommand(
+        arguments: arguments,
+        timeout: ContainerBackend.lifecycleCommandTimeout,
+        captureLimit: ContainerBackend.maxControlStreamBytes,
+        teardownGracePeriod: .seconds(2)
+      )
+    )
+    guard case .exited(0) = result.termination else { return false }
+    return !result.stdout.truncated && !result.stderr.truncated
+  }
+
+  private func finalAbsence() async -> Bool {
+    let result = await commands.run(
+      ContainerCommand(
+        arguments: ContainerInvocation.listAll(),
+        timeout: ContainerBackend.lifecycleCommandTimeout,
+        captureLimit: ContainerBackend.maxControlStreamBytes,
+        teardownGracePeriod: .seconds(2)
+      )
+    )
+    guard
+      case .exited(0) = result.termination,
+      !result.stdout.truncated,
+      !result.stderr.truncated,
+      let containers = try? JSONDecoder().decode([ListedContainer].self, from: result.stdout.bytes)
+    else { return false }
+    return !containers.contains { $0.resolvedIdentifier == identity }
+  }
+}
+
+// MARK: - Typed Control Evidence
+
+private extension ContainerBackend {
+  func engineRunning(deadline: ContinuousClock.Instant) async -> Bool {
+    guard
+      let data = await controlData(
+        ContainerInvocation.systemStatus(),
+        limit: Self.lifecycleCommandTimeout,
+        deadline: deadline
+      )
+    else { return false }
+    return (try? JSONDecoder().decode(SystemStatusDocument.self, from: data).status) == "running"
+  }
+
+  func containerPresent(
+    _ identity: String,
+    deadline: ContinuousClock.Instant
+  ) async -> Bool? {
+    guard
+      let data = await controlData(
+        ContainerInvocation.listAll(),
+        limit: Self.lifecycleCommandTimeout,
+        deadline: deadline
+      )
+    else { return nil }
+    guard let containers = try? JSONDecoder().decode([ListedContainer].self, from: data) else {
+      return nil
+    }
+    return containers.contains { $0.resolvedIdentifier == identity }
+  }
+
+  func controlData(
+    _ arguments: [String],
+    limit: Duration,
+    deadline: ContinuousClock.Instant
+  ) async -> Data? {
+    let available = now().duration(to: deadline)
+    guard available > .zero else { return nil }
+    let timeout = available < limit ? available : limit
+    let result = await commands.run(
+      ContainerCommand(
+        arguments: arguments,
+        timeout: timeout,
+        captureLimit: Self.maxControlStreamBytes,
+        teardownGracePeriod: .seconds(2)
+      )
+    )
+    guard
+      case .exited(0) = result.termination,
+      !result.stdout.truncated,
+      !result.stderr.truncated
+    else { return nil }
+    return result.stdout.bytes
+  }
+
+  func cidMatches(_ identity: ExecutionIdentity, at url: URL) -> Bool {
+    guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return false }
+    return String(decoding: data, as: UTF8.self)
+      .trimmingCharacters(in: .whitespacesAndNewlines) == identity.name
+  }
+}
+
+private struct SystemStatusDocument: Decodable {
+  let status: String
+}
+
+struct ListedContainer: Decodable, Sendable {
+  struct Configuration: Decodable, Sendable {
+    let id: String?
+    let labels: [String: String]?
+  }
+
+  let id: String?
+  let configuration: Configuration?
+
+  var resolvedIdentifier: String? { id ?? configuration?.id }
+  var labels: [String: String] { configuration?.labels ?? [:] }
+}
+
+// MARK: - Results and Reason Boundary
+
+private extension ContainerBackend {
+  func result(
+    _ termination: ExecTermination,
+    started: ContinuousClock.Instant
+  ) -> ExecutionResult {
+    ExecutionResult(
+      terminationReason: termination,
+      stdout: "",
+      stderr: "",
+      truncatedRawBytes: false,
+      wallClock: started.duration(to: now())
+    )
+  }
+
+  func unavailableResult(_ reason: String) -> ExecutionResult {
+    ExecutionResult(
+      terminationReason: .unavailable(reason: ownerSafe(reason)),
+      stdout: "",
+      stderr: "",
+      truncatedRawBytes: false,
+      wallClock: .zero
+    )
+  }
+
+  func infrastructureResult(
+    _ reason: String,
+    started: ContinuousClock.Instant
+  ) -> ExecutionResult {
+    result(.startFailed(reason: ownerSafe(reason)), started: started)
+  }
+
+  func ownerSafe(_ reason: String) -> String {
+    var safe = sanitizeReason(reason)
+    let paths = [
+      stateRoot.path,
+      stateRoot.appending(path: "exec-scratch").path,
+      FileManager.default.homeDirectoryForCurrentUser.path,
+      "/usr/local/bin/container",
+    ].sorted { $0.count > $1.count }
+    for path in paths where !path.isEmpty {
+      safe = safe.replacingOccurrences(of: path, with: "[HOST_PATH]")
+    }
+    return safe
   }
 }
 

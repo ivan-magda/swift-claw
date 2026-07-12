@@ -230,6 +230,240 @@ import Testing
     #expect(await recorder.values() == [1, 2, 3])
   }
 
+  @Test func runRequiresPreparedRuntimeInitImageWithoutStartingACommand() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { _, _ in
+      commandResult(.exited(0))
+    }
+    let backend = fixture.backend(commands: runner)
+
+    // when
+    let result = await backend.run(executionRequest())
+
+    // then
+    #expect(result.terminationReason == .unavailable(reason: "sandbox is not prepared"))
+    #expect(await runner.recorded().isEmpty)
+  }
+
+  @Test func cidBackedNonzeroExitIsGuestResultWithLossyBoundedStreams() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, _ in
+      switch command.arguments.first {
+      case "run":
+        writeCidfile(from: command.arguments)
+        return commandResult(
+          .exited(7),
+          stdout: Data([0x66, 0x6f, 0x80]),
+          stderr: Data("guest error".utf8),
+          stdoutTotal: 2_000_000,
+          stdoutTruncated: true
+        )
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
+      }
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    let result = await backend.run(executionRequest())
+
+    // then
+    #expect(result.terminationReason == .exited(code: 7))
+    #expect(result.stdout == "fo\u{FFFD}")
+    #expect(result.stderr == "guest error")
+    #expect(result.truncatedRawBytes)
+    let arguments = await runner.recorded().map(\.arguments)
+    #expect(arguments[0].first == "run")
+    #expect(arguments.contains { $0.first == "stop" })
+    #expect(arguments.contains { $0.first == "kill" })
+    #expect(arguments.contains { $0.first == "rm" })
+    #expect(arguments.last == ContainerInvocation.listAll())
+    #expect(try scratchChildren(fixture.root).isEmpty)
+  }
+
+  @Test func nonzeroExitWithoutCidfileIsStartFailureAndHidesGuestStreams() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, _ in
+      if command.arguments.first == "list" {
+        return jsonCommandResult("[]")
+      }
+      return commandResult(
+        .exited(command.arguments.first == "run" ? 125 : 0),
+        stdout: Data("secret".utf8)
+      )
+    }
+    let backend = fixture.backend(
+      commands: runner,
+      sanitizeReason: { $0.replacingOccurrences(of: "secret", with: "[REDACTED]") }
+    )
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    let result = await backend.run(executionRequest())
+
+    // then
+    guard case .startFailed(let reason) = result.terminationReason else {
+      Issue.record("expected startFailed")
+      return
+    }
+    #expect(reason == "container did not create its identity file")
+    #expect(result.stdout.isEmpty)
+    #expect(result.stderr.isEmpty)
+  }
+
+  @Test func engineFailureOrSurvivingNameOverridesAnExitedCli() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, history in
+      switch command.arguments.first {
+      case "run":
+        writeCidfile(from: command.arguments)
+        return commandResult(.exited(0))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list" where history.count < 5:
+        let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
+        return jsonCommandResult(
+          "[{\"id\":\"\(name)\",\"configuration\":{\"id\":\"\(name)\",\"labels\":{\"clawd.exec\":\"1\"}}}]"
+        )
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
+      }
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    let result = await backend.run(executionRequest())
+
+    // then
+    #expect(
+      result.terminationReason
+        == .startFailed(reason: "container remained after the foreground CLI exited")
+    )
+  }
+
+  @Test func timeoutUsesProgramBudgetThenRunsShieldedIdentityLadder() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, _ in
+      switch command.arguments.first {
+      case "run":
+        writeCidfile(from: command.arguments)
+        return commandResult(.timedOut, stdout: Data("partial".utf8))
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
+      }
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+    let request = ExecutionRequest(
+      language: .python,
+      entrypoint: pythonEntrypoint(),
+      inputs: [],
+      network: false,
+      timeout: .seconds(3)
+    )
+
+    // when
+    let result = await backend.run(request)
+
+    // then
+    #expect(result.terminationReason == .timedOutKilled)
+    #expect(result.stdout.isEmpty)
+    let commands = await runner.recorded()
+    #expect(commands[0].timeout == .seconds(3))
+    #expect(
+      commands.dropFirst().allSatisfy { $0.timeout <= ContainerBackend.lifecycleCommandTimeout }
+    )
+    let name = try #require(value(after: "--name", in: commands[0].arguments))
+    #expect(commands.map(\.arguments).contains(ContainerInvocation.stop(name)))
+    #expect(commands.map(\.arguments).contains(ContainerInvocation.kill(name)))
+    #expect(commands.map(\.arguments).contains(ContainerInvocation.remove(name)))
+    #expect(try scratchChildren(fixture.root).isEmpty)
+  }
+
+  @Test func cancellationWhileRunningStillCleansIdentityAndScratch() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, _ in
+      if command.arguments.first == "run" {
+        writeCidfile(from: command.arguments)
+        while !Task.isCancelled { await Task.yield() }
+        return commandResult(.cancelled)
+      }
+      return command.arguments.first == "list"
+        ? jsonCommandResult("[]")
+        : commandResult(.exited(0))
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+    let task = Task {
+      await backend.run(executionRequest())
+    }
+    await runner.waitForCount(1)
+
+    // when
+    task.cancel()
+    let result = await task.value
+
+    // then
+    #expect(result.terminationReason == .cancelled)
+    let arguments = await runner.recorded().map(\.arguments)
+    #expect(arguments.contains { $0.first == "stop" })
+    #expect(arguments.contains { $0.first == "kill" })
+    #expect(arguments.contains { $0.first == "rm" })
+    #expect(arguments.last == ContainerInvocation.listAll())
+    #expect(try scratchChildren(fixture.root).isEmpty)
+  }
+
+  @Test func finalPresenceFailureOverridesGuestOrCancellationResult() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, history in
+      if command.arguments.first == "run" {
+        writeCidfile(from: command.arguments)
+        return commandResult(.timedOut)
+      }
+      if command.arguments.first == "list" {
+        let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
+        return jsonCommandResult("[{\"id\":\"\(name)\"}]")
+      }
+      return commandResult(.exited(0))
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    let result = await backend.run(executionRequest())
+
+    // then
+    guard case .startFailed(let reason) = result.terminationReason else {
+      Issue.record("expected cleanup start failure")
+      return
+    }
+    #expect(reason.contains("could not confirm container removal"))
+  }
+
   @Test func cancellationWhileQueuedReturnsCancelledWithoutStartingOperation() async throws {
     // given
     let fixture = try BackendFixture()
@@ -323,14 +557,15 @@ private struct BackendFixture {
     )
   }
 
-  func backend() -> ContainerBackend {
+  func backend(
+    commands: any ContainerCommandRunning = NoopCommandRunner(),
+    sanitizeReason: @escaping @Sendable (String) -> String = { $0 }
+  ) -> ContainerBackend {
     ContainerBackend(
       settings: settings,
       stateRoot: root,
-      commands: NoopCommandRunner(),
-      sanitizeReason: { reason in
-        reason
-      }
+      commands: commands,
+      sanitizeReason: sanitizeReason
     )
   }
 
@@ -349,6 +584,95 @@ private struct NoopCommandRunner: ContainerCommandRunning {
       wallClock: .zero
     )
   }
+}
+
+private actor ScriptedCommandRunner: ContainerCommandRunning {
+  typealias Handler =
+    @Sendable (ContainerCommand, [ContainerCommand]) async -> ContainerCommandResult
+
+  private let handler: Handler
+  private var commands: [ContainerCommand] = []
+  private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+  init(handler: @escaping Handler) {
+    self.handler = handler
+  }
+
+  func run(_ command: ContainerCommand) async -> ContainerCommandResult {
+    commands.append(command)
+    let history = commands
+    let ready = waiters.filter { history.count >= $0.0 }
+    waiters.removeAll { history.count >= $0.0 }
+    for waiter in ready {
+      waiter.1.resume()
+    }
+    return await handler(command, history)
+  }
+
+  func recorded() -> [ContainerCommand] { commands }
+
+  func waitForCount(_ count: Int) async {
+    if commands.count >= count { return }
+    await withCheckedContinuation { continuation in
+      waiters.append((count, continuation))
+    }
+  }
+}
+
+private func commandResult(
+  _ termination: ContainerCommandTermination,
+  stdout: Data = Data(),
+  stderr: Data = Data(),
+  stdoutTotal: Int? = nil,
+  stderrTotal: Int? = nil,
+  stdoutTruncated: Bool = false,
+  stderrTruncated: Bool = false
+) -> ContainerCommandResult {
+  ContainerCommandResult(
+    termination: termination,
+    stdout: CapturedCommandStream(
+      bytes: stdout,
+      totalBytes: stdoutTotal ?? stdout.count,
+      truncated: stdoutTruncated
+    ),
+    stderr: CapturedCommandStream(
+      bytes: stderr,
+      totalBytes: stderrTotal ?? stderr.count,
+      truncated: stderrTruncated
+    ),
+    processIdentifier: 42,
+    wallClock: .milliseconds(1)
+  )
+}
+
+private func jsonCommandResult(_ json: String) -> ContainerCommandResult {
+  commandResult(.exited(0), stdout: Data(json.utf8))
+}
+
+private func value(after flag: String, in arguments: [String]) -> String? {
+  guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
+    return nil
+  }
+  return arguments[index + 1]
+}
+
+// Missing run flags surface as classification/assert failures in the calling test,
+// so this helper stays non-throwing for use inside non-throwing scripted handlers.
+private func writeCidfile(from arguments: [String]) {
+  guard
+    let path = value(after: "--cidfile", in: arguments),
+    let name = value(after: "--name", in: arguments)
+  else { return }
+  try? Data(name.utf8).write(to: URL(fileURLWithPath: path), options: .withoutOverwriting)
+}
+
+private func scratchChildren(_ stateRoot: URL) throws -> [URL] {
+  let root = stateRoot.appending(path: "exec-scratch")
+  guard FileManager.default.fileExists(atPath: root.path) else { return [] }
+  return try FileManager.default.contentsOfDirectory(
+    at: root,
+    includingPropertiesForKeys: nil
+  )
 }
 
 private actor AsyncGate {
