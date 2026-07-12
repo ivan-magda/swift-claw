@@ -352,15 +352,56 @@ extension ExecuteCodeTool {
       }
       data.append(chunk)
     }
+
     return nil
   }
 }
 
 private extension ExecuteCodeTool {
+  enum BasenameValidation {
+    case accepted(String)
+    case reservedNamespace
+    case duplicate
+  }
+
+  static func validateBasename(
+    of path: String,
+    claimed normalizedNames: inout Set<String>
+  ) -> BasenameValidation {
+    let basename = (path as NSString).lastPathComponent
+    let normalized = normalizedBasename(basename)
+
+    guard normalized.hasPrefix(".clawd-entrypoint.") == false else {
+      return .reservedNamespace
+    }
+
+    guard normalizedNames.insert(normalized).inserted else {
+      return .duplicate
+    }
+
+    return .accepted(basename)
+  }
+
+  static func totalWithinCap(adding bytes: Int, to total: Int) -> Int? {
+    let (nextTotal, overflow) = total.addingReportingOverflow(bytes)
+
+    guard overflow == false, nextTotal <= maxStagedTotalBytes else {
+      return nil
+    }
+
+    return nextTotal
+  }
+
   static func normalizedBasename(_ basename: String) -> String {
     basename.precomposedStringWithCanonicalMapping
       .lowercased(with: Locale(identifier: "en_US_POSIX"))
       .precomposedStringWithCanonicalMapping
+  }
+
+  func readsPrivateData(in stages: [LoadedStage]) -> Bool {
+    stages.contains { stage in
+      isPrivate(realpath: stage.record.realpath)
+    }
   }
 
   func isPrivate(realpath: String) -> Bool {
@@ -394,6 +435,11 @@ private extension ExecuteCodeTool {
     return json
   }
 
+  static func canonicalTarget(language: ExecLanguage, canonicalArgsJSON: String) -> String {
+    "code_exec:\(language.rawValue):"
+      + String(SHA256Digest.hex(Data(canonicalArgsJSON.utf8)).prefix(16))
+  }
+
   func approvalPresentation(
     raw: RawArguments,
     recorded: RecordedArguments
@@ -425,6 +471,22 @@ private extension ExecuteCodeTool {
       warnings: recorded.network
         ? ["network egress is enabled — this run can send data out"] : []
     )
+  }
+
+  func stagedInputsSummary(_ stages: [RecordedStage]) -> String {
+    guard stages.isEmpty == false else {
+      return "Staged inputs: none"
+    }
+    // The path and realpath are model- and filesystem-derived, so a loaded secret could sit inside
+    // one; redact them for the owner-facing preview while the canonical action keeps the true values.
+    var lines = ["Staged inputs:"]
+    for stage in stages {
+      let path = redactor.redact(stage.path)
+      let realpath = redactor.redact(stage.realpath)
+      lines.append("- \(path) | \(realpath) | \(stage.bytes) B | \(stage.sha256.prefix(16))")
+    }
+
+    return lines.joined(separator: "\n")
   }
 }
 
