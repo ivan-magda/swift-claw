@@ -57,6 +57,11 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
   func reapOwnedContainersForTesting() async -> Bool {
     await reapOwnedContainers(deadline: now().advanced(by: Self.prepareTimeout))
   }
+
+  func ownedContainerNamesForTesting() async -> [String]? {
+    await ownedContainers(deadline: now().advanced(by: Self.prepareTimeout))?
+      .compactMap(\.resolvedIdentifier)
+  }
 }
 
 // MARK: - Prepare Phases
