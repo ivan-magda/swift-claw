@@ -235,13 +235,13 @@ public struct ExfilArgGuard: Sendable {
   private static func hexNibble(_ scalar: Unicode.Scalar) -> UInt8? {
     switch scalar {
     case "0"..."9":
-      return UInt8(scalar.value - Unicode.Scalar("0").value)
+      UInt8(scalar.value - Unicode.Scalar("0").value)
     case "a"..."f":
-      return UInt8(scalar.value - Unicode.Scalar("a").value + 10)
+      UInt8(scalar.value - Unicode.Scalar("a").value + 10)
     case "A"..."F":
-      return UInt8(scalar.value - Unicode.Scalar("A").value + 10)
+      UInt8(scalar.value - Unicode.Scalar("A").value + 10)
     default:
-      return nil
+      nil
     }
   }
 
@@ -275,8 +275,9 @@ public struct ExfilArgGuard: Sendable {
   /// cannot occur in valid UTF-8 mixed in between graphemes so that different grapheme boundaries
   /// can never fold into the same byte stream. It only narrows the candidate set — callers must
   /// still confirm exact `Character` equality before blocking, so a collision cannot false-block.
-  static func windowFingerprint<Characters: Collection>(_ characters: Characters) -> UInt64
-  where Characters.Element == Character {
+  static func windowFingerprint<Characters: Collection>(
+    _ characters: Characters
+  ) -> UInt64 where Characters.Element == Character {
     var fingerprint: UInt64 = 0xcbf2_9ce4_8422_2325
     let prime: UInt64 = 0x0000_0100_0000_01b3
 
