@@ -64,7 +64,7 @@ trailing_semicolon: error
 duplicate_imports: error
 
 identifier_name:
-  excluded: [id, db, ts, ok]
+  excluded: [id, db, ts, ok, sh]
 
 type_name:
   min_length: 3
