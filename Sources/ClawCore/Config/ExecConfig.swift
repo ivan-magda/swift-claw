@@ -222,6 +222,7 @@ extension AppConfig {
     else {
       throw ConfigError.invalidExecImageRegistry(rawValue)
     }
+
     return Array(Set(hosts)).sorted()
   }
 
@@ -235,9 +236,11 @@ extension AppConfig {
     guard trimmed.isEmpty == false else {
       return fallback
     }
+
     guard let value = Int(trimmed), range.contains(value) else {
       throw error(trimmed)
     }
+
     return value
   }
 }
