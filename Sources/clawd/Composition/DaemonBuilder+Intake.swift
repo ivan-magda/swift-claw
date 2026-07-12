@@ -102,12 +102,14 @@ extension DaemonBuilder {
     workspace: FileSystemWorkspace
   ) -> String {
     PolicyFingerprint.staticSubhash(
-      tools: toolDispatcher.definitions,
-      llmBaseURL: config.llm.baseURL,
-      searchEndpointPresent: secrets.searchApiKey != nil,
-      workspaceRoot: workspace.root.path,
-      webFetchExemptCIDRs: config.webFetchExemptCIDRs,
-      exec: config.exec
+      inputs: PolicyFingerprint.StaticInputs(
+        tools: toolDispatcher.definitions,
+        llmBaseURL: config.llm.baseURL,
+        searchEndpointPresent: secrets.searchApiKey != nil,
+        workspaceRoot: workspace.root.path,
+        webFetchExemptCIDRs: config.webFetchExemptCIDRs,
+        exec: config.exec
+      )
     )
   }
 }
