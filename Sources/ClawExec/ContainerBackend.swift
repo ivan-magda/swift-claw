@@ -15,6 +15,7 @@ public actor ContainerBackend {
   public static let ordinaryCommandTimeout: Duration = .seconds(15)
   public static let pullTimeout: Duration = .seconds(120)
   public static let prepareTimeout: Duration = .seconds(300)
+  static let commandTeardownGrace: Duration = .seconds(2)
 
   let settings: ExecSandboxSettings
   let stateRoot: URL
@@ -68,7 +69,7 @@ public actor ContainerBackend {
     }
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
     guard
-      let data = await controlData(
+      let data = await boundedCommandData(
         ContainerInvocation.systemVersion(),
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
@@ -103,7 +104,7 @@ public actor ContainerBackend {
     }
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
     guard
-      let data = await controlData(
+      let data = await boundedCommandData(
         ContainerInvocation.systemStatus(),
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
@@ -216,7 +217,7 @@ private extension ContainerBackend {
       ),
       timeout: request.timeout,
       captureLimit: Self.maxRawStreamBytes,
-      teardownGracePeriod: .seconds(2)
+      teardownGracePeriod: Self.commandTeardownGrace
     )
     var result =
       switch await boundedForegroundRun(command, deadline: deadline) {
@@ -384,32 +385,22 @@ private struct CleanupOperation: Sendable {
   }
 
   private func runLifecycle(_ arguments: [String]) async -> Bool {
-    let result = await commands.run(
-      ContainerCommand(
-        arguments: arguments,
-        timeout: ContainerBackend.lifecycleCommandTimeout,
-        captureLimit: ContainerBackend.maxControlStreamBytes,
-        teardownGracePeriod: .seconds(2)
-      )
+    let result = await ContainerBackend.runControlCommand(
+      arguments,
+      timeout: ContainerBackend.lifecycleCommandTimeout,
+      commands: commands
     )
-    guard case .exited(0) = result.termination else { return false }
-    return !result.stdout.truncated && !result.stderr.truncated
+    return ContainerBackend.successOutput(of: result) != nil
   }
 
+  // Cleanup deliberately keeps the full per-command timeout (not the run's outer deadline,
+  // which may already be exhausted) so a wedged execution still gets its teardown attempts.
   private func finalAbsence() async -> Bool {
-    let result = await commands.run(
-      ContainerCommand(
-        arguments: ContainerInvocation.listAll(),
-        timeout: ContainerBackend.lifecycleCommandTimeout,
-        captureLimit: ContainerBackend.maxControlStreamBytes,
-        teardownGracePeriod: .seconds(2)
-      )
-    )
     guard
-      case .exited(0) = result.termination,
-      !result.stdout.truncated,
-      !result.stderr.truncated,
-      let containers = try? JSONDecoder().decode([ListedContainer].self, from: result.stdout.bytes)
+      let containers = await ContainerBackend.fetchContainerList(
+        timeout: ContainerBackend.lifecycleCommandTimeout,
+        commands: commands
+      )
     else { return false }
     return !containers.contains { $0.resolvedIdentifier == identity }
   }
@@ -420,7 +411,7 @@ private struct CleanupOperation: Sendable {
 private extension ContainerBackend {
   func engineRunning(deadline: ContinuousClock.Instant) async -> Bool {
     guard
-      let data = await controlData(
+      let data = await boundedCommandData(
         ContainerInvocation.systemStatus(),
         limit: Self.lifecycleCommandTimeout,
         deadline: deadline
@@ -434,34 +425,91 @@ private extension ContainerBackend {
     deadline: ContinuousClock.Instant
   ) async -> Bool? {
     guard
-      let data = await controlData(
-        ContainerInvocation.listAll(),
+      let containers = await listedContainers(
         limit: Self.lifecycleCommandTimeout,
         deadline: deadline
       )
     else { return nil }
-    guard let containers = try? JSONDecoder().decode([ListedContainer].self, from: data) else {
-      return nil
-    }
     return containers.contains { $0.resolvedIdentifier == identity }
   }
 
-  func controlData(
+  func cidMatches(_ identity: ExecutionIdentity, at url: URL) -> Bool {
+    guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return false }
+    return String(decoding: data, as: UTF8.self)
+      .trimmingCharacters(in: .whitespacesAndNewlines) == identity.name
+  }
+}
+
+// MARK: - Bounded Control Commands
+
+extension ContainerBackend {
+  /// Runs a control command clamped to the remaining deadline and returns the raw result,
+  /// or nil when the deadline is already exhausted.
+  func boundedCommandResult(
+    _ arguments: [String],
+    limit: Duration,
+    deadline: ContinuousClock.Instant
+  ) async -> ContainerCommandResult? {
+    guard let timeout = clampedTimeout(limit: limit, deadline: deadline) else { return nil }
+    return await Self.runControlCommand(arguments, timeout: timeout, commands: commands)
+  }
+
+  /// Fail-closed evidence: stdout only when the command exited 0 with neither stream truncated.
+  func boundedCommandData(
     _ arguments: [String],
     limit: Duration,
     deadline: ContinuousClock.Instant
   ) async -> Data? {
-    let available = now().duration(to: deadline)
-    guard available > .zero else { return nil }
-    let timeout = available < limit ? available : limit
-    let result = await commands.run(
+    guard let result = await boundedCommandResult(arguments, limit: limit, deadline: deadline)
+    else { return nil }
+    return Self.successOutput(of: result)
+  }
+
+  func boundedCommandSucceeded(
+    _ arguments: [String],
+    limit: Duration,
+    deadline: ContinuousClock.Instant
+  ) async -> Bool {
+    await boundedCommandData(arguments, limit: limit, deadline: deadline) != nil
+  }
+
+  func listedContainers(
+    limit: Duration,
+    deadline: ContinuousClock.Instant
+  ) async -> [ListedContainer]? {
+    guard let timeout = clampedTimeout(limit: limit, deadline: deadline) else { return nil }
+    return await Self.fetchContainerList(timeout: timeout, commands: commands)
+  }
+
+  static func fetchContainerList(
+    timeout: Duration,
+    commands: any ContainerCommandRunning
+  ) async -> [ListedContainer]? {
+    let result = await runControlCommand(
+      ContainerInvocation.listAll(),
+      timeout: timeout,
+      commands: commands
+    )
+    guard let data = successOutput(of: result) else { return nil }
+    return try? JSONDecoder().decode([ListedContainer].self, from: data)
+  }
+
+  static func runControlCommand(
+    _ arguments: [String],
+    timeout: Duration,
+    commands: any ContainerCommandRunning
+  ) async -> ContainerCommandResult {
+    await commands.run(
       ContainerCommand(
         arguments: arguments,
         timeout: timeout,
-        captureLimit: Self.maxControlStreamBytes,
-        teardownGracePeriod: .seconds(2)
+        captureLimit: maxControlStreamBytes,
+        teardownGracePeriod: commandTeardownGrace
       )
     )
+  }
+
+  static func successOutput(of result: ContainerCommandResult) -> Data? {
     guard
       case .exited(0) = result.termination,
       !result.stdout.truncated,
@@ -469,11 +517,13 @@ private extension ContainerBackend {
     else { return nil }
     return result.stdout.bytes
   }
+}
 
-  func cidMatches(_ identity: ExecutionIdentity, at url: URL) -> Bool {
-    guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return false }
-    return String(decoding: data, as: UTF8.self)
-      .trimmingCharacters(in: .whitespacesAndNewlines) == identity.name
+private extension ContainerBackend {
+  func clampedTimeout(limit: Duration, deadline: ContinuousClock.Instant) -> Duration? {
+    let available = now().duration(to: deadline)
+    guard available > .zero else { return nil }
+    return available < limit ? available : limit
   }
 }
 
@@ -541,7 +591,7 @@ extension ContainerBackend {
     var safe = sanitizeReason(reason)
     let paths = [
       stateRoot.path,
-      stateRoot.appending(path: "exec-scratch").path,
+      stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
       FileManager.default.homeDirectoryForCurrentUser.path,
       "/usr/local/bin/container",
     ].sorted { $0.count > $1.count }
@@ -558,6 +608,8 @@ enum ScratchWorkspaceError: Error, Equatable {
 }
 
 struct ScratchWorkspace: Sendable {
+  static let scratchRootName = "exec-scratch"
+  static let controlRootName = "exec-control"
   static let maxEntrypointBytes = 16 * 1024
   static let maxInputBytes = 1024 * 1024
   static let maxInputTotalBytes = 4 * 1024 * 1024
@@ -574,8 +626,8 @@ struct ScratchWorkspace: Sendable {
     request: ExecutionRequest
   ) throws -> ScratchWorkspace {
     try validate(request)
-    let scratchRoot = stateRoot.appending(path: "exec-scratch", directoryHint: .isDirectory)
-    let controlRoot = stateRoot.appending(path: "exec-control", directoryHint: .isDirectory)
+    let scratchRoot = stateRoot.appending(path: scratchRootName, directoryHint: .isDirectory)
+    let controlRoot = stateRoot.appending(path: controlRootName, directoryHint: .isDirectory)
     try ensurePrivateDirectory(scratchRoot)
     try ensurePrivateDirectory(controlRoot)
     let directory = scratchRoot.appending(path: identity.identifier, directoryHint: .isDirectory)
@@ -615,11 +667,7 @@ struct ScratchWorkspace: Sendable {
 
 private extension ScratchWorkspace {
   static func validate(_ request: ExecutionRequest) throws {
-    let expectedEntrypoint =
-      switch request.language {
-      case .python: ".clawd-entrypoint.py"
-      case .sh: ".clawd-entrypoint.sh"
-      }
+    let expectedEntrypoint = ExecEntrypoint.fileName(for: request.language)
     guard
       request.entrypoint.name == expectedEntrypoint,
       request.entrypoint.mode == .readExecute,
@@ -660,7 +708,8 @@ private extension ScratchWorkspace {
   }
 
   static func isReserved(_ name: String) -> Bool {
-    name.precomposedStringWithCanonicalMapping.lowercased().hasPrefix(".clawd-entrypoint.")
+    name.precomposedStringWithCanonicalMapping.lowercased()
+      .hasPrefix(ExecEntrypoint.reservedPrefix)
   }
 }
 

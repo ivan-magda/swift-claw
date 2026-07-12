@@ -54,6 +54,11 @@ public struct SemanticVersion: Sendable, Equatable, Comparable {
 }
 
 struct ExecutionIdentity: Sendable, Equatable {
+  static let namePrefix = "clawd-exec-"
+  static let ownershipLabelKey = "clawd.exec"
+  static let ownershipLabelValue = "1"
+  static let ownershipLabelArgument = "\(ownershipLabelKey)=\(ownershipLabelValue)"
+
   let uuid: UUID
 
   init(uuid: UUID = UUID()) {
@@ -61,5 +66,23 @@ struct ExecutionIdentity: Sendable, Equatable {
   }
 
   var identifier: String { uuid.uuidString.lowercased() }
-  var name: String { "clawd-exec-\(identifier)" }
+  var name: String { "\(Self.namePrefix)\(identifier)" }
+}
+
+/// Single authority for the reserved entrypoint namespace: the host-side staged file name and
+/// its guest-side path under the bind-mounted work directory.
+enum ExecEntrypoint {
+  static let reservedPrefix = ".clawd-entrypoint."
+  static let guestWorkDirectory = "/work"
+
+  static func fileName(for language: ExecLanguage) -> String {
+    switch language {
+    case .python: "\(reservedPrefix)py"
+    case .sh: "\(reservedPrefix)sh"
+    }
+  }
+
+  static func guestPath(for language: ExecLanguage) -> String {
+    "\(guestWorkDirectory)/\(fileName(for: language))"
+  }
 }

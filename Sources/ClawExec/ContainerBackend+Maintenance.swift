@@ -30,7 +30,7 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
       )
     }
     guard
-      let propertyData = await maintenanceData(
+      let propertyData = await boundedCommandData(
         ContainerInvocation.systemPropertyList(),
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
@@ -65,12 +65,12 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
       )
     }
     guard
-      await runMaintenance(
+      await boundedCommandSucceeded(
         ContainerInvocation.pull(settings.workloadImage.description),
         limit: Self.pullTimeout,
         deadline: deadline
       ),
-      await runMaintenance(
+      await boundedCommandSucceeded(
         ContainerInvocation.pull(initImage),
         limit: Self.pullTimeout,
         deadline: deadline
@@ -169,18 +169,16 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
 private extension ContainerBackend {
   func ownedContainers(deadline: ContinuousClock.Instant) async -> [ListedContainer]? {
     guard
-      let data = await maintenanceData(
-        ContainerInvocation.listAll(),
+      let containers = await listedContainers(
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
       )
     else { return nil }
-    guard let containers = try? JSONDecoder().decode([ListedContainer].self, from: data) else {
-      return nil
-    }
     return containers.filter { container in
       guard let identity = container.resolvedIdentifier else { return false }
-      return identity.hasPrefix("clawd-exec-") && container.labels["clawd.exec"] == "1"
+      return identity.hasPrefix(ExecutionIdentity.namePrefix)
+        && container.labels[ExecutionIdentity.ownershipLabelKey]
+          == ExecutionIdentity.ownershipLabelValue
     }
   }
 
@@ -188,17 +186,17 @@ private extension ContainerBackend {
     guard let owned = await ownedContainers(deadline: deadline) else { return false }
     for container in owned {
       guard let identity = container.resolvedIdentifier else { return false }
-      _ = await runMaintenance(
+      _ = await boundedCommandSucceeded(
         ContainerInvocation.stop(identity),
         limit: Self.lifecycleCommandTimeout,
         deadline: deadline
       )
-      _ = await runMaintenance(
+      _ = await boundedCommandSucceeded(
         ContainerInvocation.kill(identity),
         limit: Self.lifecycleCommandTimeout,
         deadline: deadline
       )
-      _ = await runMaintenance(
+      _ = await boundedCommandSucceeded(
         ContainerInvocation.remove(identity),
         limit: Self.lifecycleCommandTimeout,
         deadline: deadline
@@ -215,7 +213,7 @@ private extension ContainerBackend {
 
   func sweepScratchRoots() -> Bool {
     let manager = FileManager.default
-    for name in ["exec-scratch", "exec-control"] {
+    for name in [ScratchWorkspace.scratchRootName, ScratchWorkspace.controlRootName] {
       let root = stateRoot.appending(path: name, directoryHint: .isDirectory)
       guard manager.fileExists(atPath: root.path) else { continue }
       guard
@@ -241,7 +239,7 @@ private extension ContainerBackend {
 private extension ContainerBackend {
   func workloadDigestMatches(deadline: ContinuousClock.Instant) async -> Bool {
     guard
-      let data = await maintenanceData(
+      let data = await boundedCommandData(
         ContainerInvocation.inspectImage(settings.workloadImage.description),
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
@@ -268,7 +266,7 @@ private extension ContainerBackend {
     let request = ExecutionRequest(
       language: .python,
       entrypoint: StagedFile(
-        name: ".clawd-entrypoint.py",
+        name: ExecEntrypoint.fileName(for: .python),
         bytes: Data("# canary mount marker\n".utf8),
         mode: .readExecute
       ),
@@ -305,7 +303,7 @@ private extension ContainerBackend {
     deadline: ContinuousClock.Instant
   ) async -> CanaryOutcome? {
     guard
-      await runMaintenance(
+      await boundedCommandSucceeded(
         ContainerInvocation.detachedCanary(
           identity: identity,
           scratchPath: workspace.directory.path,
@@ -317,7 +315,7 @@ private extension ContainerBackend {
       )
     else { return nil }
     guard
-      let inspectData = await maintenanceData(
+      let inspectData = await boundedCommandData(
         ContainerInvocation.inspect(identity.name),
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
@@ -329,7 +327,7 @@ private extension ContainerBackend {
       let inspection = inspections.first(where: { $0.configuration.id == identity.name })
     else { return nil }
     guard
-      let guestData = await maintenanceData(
+      let guestData = await boundedCommandData(
         ContainerInvocation.execCanary(identity.name, script: Self.guestCanaryScript),
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline
@@ -395,8 +393,8 @@ private extension ContainerBackend {
     os.unlink(tmp_path)
     rootfs_ro = create_is_denied('/clawd-canary-root-write')
     staging_ro = (
-        create_is_denied('/work/clawd-canary-create')
-        and chmod_is_denied('/work/.clawd-entrypoint.py')
+        create_is_denied('\(ExecEntrypoint.guestWorkDirectory)/clawd-canary-create')
+        and chmod_is_denied('\(ExecEntrypoint.guestPath(for: .python))')
     )
     interpreters_ok = all(
         os.path.isfile(path) and os.access(path, os.X_OK)
@@ -412,56 +410,6 @@ private extension ContainerBackend {
     }, sort_keys=True))
     PY
     """
-  }
-}
-
-// MARK: - Bounded Maintenance Commands
-
-private extension ContainerBackend {
-  func runMaintenance(
-    _ arguments: [String],
-    limit: Duration,
-    deadline: ContinuousClock.Instant
-  ) async -> Bool {
-    guard let result = await maintenanceResult(arguments, limit: limit, deadline: deadline) else {
-      return false
-    }
-    guard case .exited(0) = result.termination else { return false }
-    return !result.stdout.truncated && !result.stderr.truncated
-  }
-
-  func maintenanceData(
-    _ arguments: [String],
-    limit: Duration,
-    deadline: ContinuousClock.Instant
-  ) async -> Data? {
-    guard let result = await maintenanceResult(arguments, limit: limit, deadline: deadline) else {
-      return nil
-    }
-    guard
-      case .exited(0) = result.termination,
-      !result.stdout.truncated,
-      !result.stderr.truncated
-    else { return nil }
-    return result.stdout.bytes
-  }
-
-  func maintenanceResult(
-    _ arguments: [String],
-    limit: Duration,
-    deadline: ContinuousClock.Instant
-  ) async -> ContainerCommandResult? {
-    let available = now().duration(to: deadline)
-    guard available > .zero else { return nil }
-    let timeout = available < limit ? available : limit
-    return await commands.run(
-      ContainerCommand(
-        arguments: arguments,
-        timeout: timeout,
-        captureLimit: Self.maxControlStreamBytes,
-        teardownGracePeriod: .seconds(2)
-      )
-    )
   }
 }
 

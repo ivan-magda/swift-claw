@@ -20,7 +20,7 @@ enum ContainerInvocation {
       + networkArguments(network)
       + [
         "--entrypoint", interpreter(for: language), settings.workloadImage.description,
-        entrypointPath(for: language),
+        ExecEntrypoint.guestPath(for: language),
       ]
   }
 
@@ -75,7 +75,8 @@ private extension ContainerInvocation {
   ) -> [String] {
     var arguments = [
       "run", "--scheme", "https", "--progress", "none", "--platform",
-      ExecSandboxSettings.platform, "--rm", "--name", identity.name, "--label", "clawd.exec=1",
+      ExecSandboxSettings.platform, "--rm", "--name", identity.name, "--label",
+      ExecutionIdentity.ownershipLabelArgument,
     ]
     if let cidFilePath {
       arguments += ["--cidfile", cidFilePath]
@@ -83,7 +84,7 @@ private extension ContainerInvocation {
     arguments += [
       "--cap-drop", "ALL", "--init", "--init-image", initImage, "--read-only", "--tmpfs",
       "/tmp", "--cpus", String(settings.cpus), "--memory", "\(settings.memoryMiB)M", "--mount",
-      "type=bind,source=\(scratchPath),target=/work,readonly",
+      "type=bind,source=\(scratchPath),target=\(ExecEntrypoint.guestWorkDirectory),readonly",
     ]
     return arguments
   }
@@ -96,13 +97,6 @@ private extension ContainerInvocation {
     switch language {
     case .python: ExecSandboxSettings.pythonInterpreter
     case .sh: ExecSandboxSettings.shellInterpreter
-    }
-  }
-
-  static func entrypointPath(for language: ExecLanguage) -> String {
-    switch language {
-    case .python: "/work/.clawd-entrypoint.py"
-    case .sh: "/work/.clawd-entrypoint.sh"
     }
   }
 }
