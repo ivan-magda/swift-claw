@@ -32,23 +32,13 @@ enum SandboxBackendFactory {
       cpus: config.exec.cpus
     )
     let redactor = SecretRedactor(secretValues: secrets?.redactionValues ?? [])
-    let paths = [
-      config.stateRoot.path,
-      config.stateRoot.appendingPathComponent("exec-scratch").path,
-      FileManager.default.homeDirectoryForCurrentUser.path,
-      "/usr/local/bin/container",
-    ].sorted { first, second in
-      first.count > second.count
-    }
 
     return ContainerBackend(
       settings: settings,
       stateRoot: config.stateRoot,
       commands: SwiftSubprocessContainerCommandRunner(),
       sanitizeReason: { text in
-        paths.reduce(redactor.redact(text)) { partial, path in
-          partial.replacingOccurrences(of: path, with: "[HOST_PATH]")
-        }
+        redactor.redact(text)
       }
     )
   }
