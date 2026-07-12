@@ -15,7 +15,8 @@ extension DaemonBuilder {
       enabled: config.exec.enabled,
       backend: backend,
       maintenance: backend
-    ).prepare()
+    )
+    .prepare()
   }
 }
 
@@ -26,6 +27,7 @@ enum SandboxBackendFactory {
     guard config.exec.enabled, let image = config.exec.image else {
       return nil
     }
+
     let settings = ExecSandboxSettings(
       workloadImage: image,
       memoryMiB: config.exec.memoryMiB,
