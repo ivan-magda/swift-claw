@@ -53,7 +53,7 @@ enum ContainerInvocation {
   static func inspect(_ identity: String) -> [String] { ["inspect", identity] }
   static func inspectImage(_ image: String) -> [String] { ["image", "inspect", image] }
   static func execCanary(_ identity: String, script: String) -> [String] {
-    ["exec", "--user", "0", identity, "/bin/sh", "-c", script]
+    ["exec", "--user", "0", identity, ExecSandboxSettings.shellInterpreter, "-c", script]
   }
   static func pull(_ image: String) -> [String] {
     ["image", "pull", "--scheme", "https", "--progress", "none", image]
@@ -61,6 +61,12 @@ enum ContainerInvocation {
   static func stop(_ identity: String) -> [String] { ["stop", "--time", "1", identity] }
   static func kill(_ identity: String) -> [String] { ["kill", "--signal", "KILL", identity] }
   static func remove(_ identity: String) -> [String] { ["rm", "--force", identity] }
+
+  /// The stop → kill → remove escalation every teardown path walks; callers keep their own
+  /// timeout policy per rung.
+  static func teardownLadder(_ identity: String) -> [[String]] {
+    [stop(identity), kill(identity), remove(identity)]
+  }
 }
 
 // MARK: - Secure Run Grammar

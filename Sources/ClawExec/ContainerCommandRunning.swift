@@ -122,26 +122,26 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
       ) { execution in
         let processIdentifier = Int32(execution.processIdentifier.value)
         onSpawnForTesting(processIdentifier)
-        let deadline = CommandDeadline()
-        let timeoutTask = Task {
+        // The task's value carries the verdict: a cancelled sleep means the process finished
+        // first, a slept-through deadline tears the process group down and reports a timeout.
+        let timeoutTask = Task<Bool, Never> {
           do {
             try await clock.sleep(for: command.timeout)
           } catch {
-            return
+            return false
           }
-          await deadline.expire()
           await execution.teardown(using: teardownSequence)
+          return true
         }
 
         async let stdout = Self.capture(execution.standardOutput, limit: command.captureLimit)
         async let stderr = Self.capture(execution.standardError, limit: command.captureLimit)
         let streams = try await (stdout, stderr)
         timeoutTask.cancel()
-        await timeoutTask.value
         return CommandClosureResult(
           stdout: streams.0,
           stderr: streams.1,
-          timedOut: await deadline.isExpired
+          timedOut: await timeoutTask.value
         )
       }
 
@@ -207,7 +207,7 @@ private extension SwiftSubprocessContainerCommandRunner {
     limit: Int
   ) async throws -> CapturedCommandStream {
     var prefix = Data()
-    prefix.reserveCapacity(limit)
+    prefix.reserveCapacity(min(limit, 64 * 1024))
     var totalBytes = 0
     var overflowedCounter = false
     for try await buffer in sequence {
@@ -232,14 +232,4 @@ private struct CommandClosureResult: Sendable {
   let stdout: CapturedCommandStream
   let stderr: CapturedCommandStream
   let timedOut: Bool
-}
-
-private actor CommandDeadline {
-  private var expired = false
-
-  var isExpired: Bool { expired }
-
-  func expire() {
-    expired = true
-  }
 }

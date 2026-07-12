@@ -23,9 +23,11 @@ public actor ContainerBackend {
   let sanitizeReason: @Sendable (String) -> String
   let now: @Sendable () -> ContinuousClock.Instant
   let supportedHost: @Sendable () -> Bool
+  // Longest-first so nested paths are replaced before the roots that contain them.
+  let sensitiveHostPaths: [String]
 
   var preparedInitImage: String?
-  var executionTail: Task<Void, Never>?
+  var executionTail: Task<ExecutionResult, Never>?
   var executionTasks: [UUID: Task<ExecutionResult, Never>] = [:]
   var cleanupTasks: [UUID: Task<Bool, Never>] = [:]
   var shuttingDown = false
@@ -37,12 +39,14 @@ public actor ContainerBackend {
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
   ) {
-    self.settings = settings
-    self.stateRoot = stateRoot
-    self.commands = commands
-    self.sanitizeReason = sanitizeReason
-    self.now = now
-    self.supportedHost = Self.defaultSupportedHost
+    self.init(
+      settings: settings,
+      stateRoot: stateRoot,
+      commands: commands,
+      sanitizeReason: sanitizeReason,
+      now: now,
+      supportedHost: Self.defaultSupportedHost
+    )
   }
 
   init(
@@ -59,6 +63,14 @@ public actor ContainerBackend {
     self.sanitizeReason = sanitizeReason
     self.now = now
     self.supportedHost = supportedHost
+    self.sensitiveHostPaths = [
+      stateRoot.path,
+      stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
+      FileManager.default.homeDirectoryForCurrentUser.path,
+      "/usr/local/bin/container",
+    ]
+    .filter { !$0.isEmpty }
+    .sorted { $0.count > $1.count }
   }
 
   public func versionAvailability() async -> BackendAvailability {
@@ -150,12 +162,12 @@ private extension ContainerBackend {
     let prior = executionTail
     let taskIdentifier = UUID()
     let work = Task<ExecutionResult, Never> {
-      await prior?.value
+      _ = await prior?.value
       guard !Task.isCancelled else { return Self.cancelledResult() }
       return await operation()
     }
     executionTasks[taskIdentifier] = work
-    executionTail = Task<Void, Never> { _ = await work.value }
+    executionTail = work
     let result = await withTaskCancellationHandler {
       await work.value
     } onCancel: {
@@ -372,9 +384,9 @@ private struct CleanupOperation: Sendable {
   // `lifecycleCommandTimeout` independent of the run's outer deadline, so a wedged or cancelled
   // execution still tears its VM down instead of orphaning it (ARCHITECTURE.md §13 return bound).
   func run() async -> Bool {
-    _ = await runLifecycle(ContainerInvocation.stop(identity))
-    _ = await runLifecycle(ContainerInvocation.kill(identity))
-    _ = await runLifecycle(ContainerInvocation.remove(identity))
+    for step in ContainerInvocation.teardownLadder(identity) {
+      _ = await runLifecycle(step)
+    }
     let absent = await finalAbsence()
     do {
       try workspace.remove()
@@ -589,13 +601,7 @@ extension ContainerBackend {
 
   func ownerSafe(_ reason: String) -> String {
     var safe = sanitizeReason(reason)
-    let paths = [
-      stateRoot.path,
-      stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
-      FileManager.default.homeDirectoryForCurrentUser.path,
-      "/usr/local/bin/container",
-    ].sorted { $0.count > $1.count }
-    for path in paths where !path.isEmpty {
+    for path in sensitiveHostPaths {
       safe = safe.replacingOccurrences(of: path, with: "[HOST_PATH]")
     }
     return safe

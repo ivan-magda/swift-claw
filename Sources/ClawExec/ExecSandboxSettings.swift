@@ -69,17 +69,14 @@ struct ExecutionIdentity: Sendable, Equatable {
   var name: String { "\(Self.namePrefix)\(identifier)" }
 }
 
-/// Single authority for the reserved entrypoint namespace: the host-side staged file name and
-/// its guest-side path under the bind-mounted work directory.
+/// Guest-side view of the reserved entrypoint namespace: the staged file names come from
+/// `ExecLanguage` in ClawCore; only the bind-mounted work directory layout is sandbox knowledge.
 enum ExecEntrypoint {
-  static let reservedPrefix = ".clawd-entrypoint."
+  static let reservedPrefix = ExecLanguage.reservedEntrypointPrefix
   static let guestWorkDirectory = "/work"
 
   static func fileName(for language: ExecLanguage) -> String {
-    switch language {
-    case .python: "\(reservedPrefix)py"
-    case .sh: "\(reservedPrefix)sh"
-    }
+    language.entrypointFileName
   }
 
   static func guestPath(for language: ExecLanguage) -> String {

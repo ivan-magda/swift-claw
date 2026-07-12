@@ -53,7 +53,7 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     return PinnedImageReference(repository: repository, digest: digest)
   }
 
-  static func isValidRegistryHost(_ rawHost: String) -> Bool {
+  package static func isValidRegistryHost(_ rawHost: String) -> Bool {
     guard rawHost == rawHost.lowercased(), rawHost.isEmpty == false else {
       return false
     }
@@ -90,6 +90,15 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
 
     return true
   }
+
+  package static func isValidRepositoryComponent(_ component: String) -> Bool {
+    guard component.isEmpty == false, component != ".", component != ".." else {
+      return false
+    }
+    return component.allSatisfy { character in
+      "abcdefghijklmnopqrstuvwxyz0123456789._-".contains(character)
+    }
+  }
 }
 
 // MARK: - Image Reference Validation
@@ -101,15 +110,6 @@ private extension PinnedImageReference {
     }
     return label.allSatisfy { character in
       "abcdefghijklmnopqrstuvwxyz0123456789-".contains(character)
-    }
-  }
-
-  static func isValidRepositoryComponent(_ component: String) -> Bool {
-    guard component.isEmpty == false, component != ".", component != ".." else {
-      return false
-    }
-    return component.allSatisfy { character in
-      "abcdefghijklmnopqrstuvwxyz0123456789._-".contains(character)
     }
   }
 }

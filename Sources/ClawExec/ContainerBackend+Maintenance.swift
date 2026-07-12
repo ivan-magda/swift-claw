@@ -4,30 +4,24 @@ import Foundation
 extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
   public func prepare() async -> SandboxHealth {
     preparedInitImage = nil
-    if let refusal = prepareRefusal() { return refusal }
-    let deadline = now().advanced(by: Self.prepareTimeout)
-    let engineVersion: String
-    switch await probeAndReap(deadline: deadline) {
-    case .abort(let health): return health
-    case .proceed(let version): engineVersion = version
+    do {
+      try refuseIfBusy()
+      let deadline = now().advanced(by: Self.prepareTimeout)
+      let engineVersion = try await probeAndReap(deadline: deadline)
+      let initImage = try await resolveInitImage(engineVersion: engineVersion, deadline: deadline)
+      try await stageImages(
+        engineVersion: engineVersion,
+        initImage: initImage,
+        deadline: deadline
+      )
+      return await verifyCanaryAndArm(
+        engineVersion: engineVersion,
+        initImage: initImage,
+        deadline: deadline
+      )
+    } catch {
+      return error.health
     }
-    let initImage: String
-    switch await resolveInitImage(engineVersion: engineVersion, deadline: deadline) {
-    case .abort(let health): return health
-    case .proceed(let image): initImage = image
-    }
-    if let failure = await stageImages(
-      engineVersion: engineVersion,
-      initImage: initImage,
-      deadline: deadline
-    ) {
-      return failure
-    }
-    return await verifyCanaryAndArm(
-      engineVersion: engineVersion,
-      initImage: initImage,
-      deadline: deadline
-    )
   }
 
   public func shutdown() async {
@@ -45,11 +39,6 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
 
   var preparedInitImageForTesting: String? { preparedInitImage }
 
-  func ownedContainerNamesForTesting() async -> [String]? {
-    let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    return await ownedContainers(deadline: deadline)?.compactMap(\.resolvedIdentifier)
-  }
-
   func reapOwnedContainersForTesting() async -> Bool {
     await reapOwnedContainers(deadline: now().advanced(by: Self.prepareTimeout))
   }
@@ -57,25 +46,26 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
 
 // MARK: - Prepare Phases
 
-private enum PrepareStep<Value> {
-  case proceed(Value)
-  case abort(SandboxHealth)
+/// Aborts the prepare pipeline carrying the failed health to report.
+private struct PrepareAbort: Error {
+  let health: SandboxHealth
 }
 
 private extension ContainerBackend {
-  func prepareRefusal() -> SandboxHealth? {
+  func refuseIfBusy() throws(PrepareAbort) {
     guard !shuttingDown else {
-      return failedHealth(lastError: "sandbox backend is shutting down")
+      throw PrepareAbort(health: failedHealth(lastError: "sandbox backend is shutting down"))
     }
     // New executions cannot be admitted while `preparedInitImage` is nil, so in-flight
     // work only needs this entry check; it cannot grow across prepare's awaits.
     guard executionTasks.isEmpty, cleanupTasks.isEmpty else {
-      return failedHealth(lastError: "sandbox prepare refused: executions in flight")
+      throw PrepareAbort(
+        health: failedHealth(lastError: "sandbox prepare refused: executions in flight")
+      )
     }
-    return nil
   }
 
-  func probeAndReap(deadline: ContinuousClock.Instant) async -> PrepareStep<String> {
+  func probeAndReap(deadline: ContinuousClock.Instant) async throws(PrepareAbort) -> String {
     let availability = await probe()
     guard case .available(let engineVersion) = availability else {
       let reason =
@@ -83,24 +73,24 @@ private extension ContainerBackend {
         case .available: "container engine is unavailable"
         case .unavailable(let reason): reason
         }
-      return .abort(failedHealth(lastError: reason))
+      throw PrepareAbort(health: failedHealth(lastError: reason))
     }
     guard await reapOwnedContainers(deadline: deadline), sweepScratchRoots() else {
-      return .abort(
-        failedHealth(
+      throw PrepareAbort(
+        health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
           lastError: "could not reap prior sandbox state"
         )
       )
     }
-    return .proceed(engineVersion)
+    return engineVersion
   }
 
   func resolveInitImage(
     engineVersion: String,
     deadline: ContinuousClock.Instant
-  ) async -> PrepareStep<String> {
+  ) async throws(PrepareAbort) -> String {
     guard
       let propertyData = await boundedCommandData(
         ContainerInvocation.systemPropertyList(),
@@ -109,8 +99,8 @@ private extension ContainerBackend {
       ),
       let properties = try? JSONDecoder().decode(SystemPropertiesDocument.self, from: propertyData)
     else {
-      return .abort(
-        failedHealth(
+      throw PrepareAbort(
+        health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
           reaperOK: true,
@@ -120,8 +110,8 @@ private extension ContainerBackend {
     }
     let initImage = properties.vminit.image
     guard RuntimeInitImageReference.isRegistryQualifiedTag(initImage) else {
-      return .abort(
-        failedHealth(
+      throw PrepareAbort(
+        health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
           reaperOK: true,
@@ -129,23 +119,25 @@ private extension ContainerBackend {
         )
       )
     }
-    return .proceed(initImage)
+    return initImage
   }
 
   func stageImages(
     engineVersion: String,
     initImage: String,
     deadline: ContinuousClock.Instant
-  ) async -> SandboxHealth? {
+  ) async throws(PrepareAbort) {
     // Shutdown may complete while prepare is suspended; re-check before pulling images,
     // before launching the canary container, and before re-arming the init image so a
     // finished shutdown leaves no sandbox activity or prepared state behind.
     guard !shuttingDown else {
-      return failedHealth(
-        engineVersion: engineVersion,
-        versionOK: true,
-        reaperOK: true,
-        lastError: "sandbox backend is shutting down"
+      throw PrepareAbort(
+        health: failedHealth(
+          engineVersion: engineVersion,
+          versionOK: true,
+          reaperOK: true,
+          lastError: "sandbox backend is shutting down"
+        )
       )
     }
     guard
@@ -160,22 +152,25 @@ private extension ContainerBackend {
         deadline: deadline
       )
     else {
-      return failedHealth(
-        engineVersion: engineVersion,
-        versionOK: true,
-        reaperOK: true,
-        lastError: "could not pull sandbox images"
+      throw PrepareAbort(
+        health: failedHealth(
+          engineVersion: engineVersion,
+          versionOK: true,
+          reaperOK: true,
+          lastError: "could not pull sandbox images"
+        )
       )
     }
     guard await workloadDigestMatches(deadline: deadline) else {
-      return failedHealth(
-        engineVersion: engineVersion,
-        versionOK: true,
-        reaperOK: true,
-        lastError: "workload image digest did not match the configured pin"
+      throw PrepareAbort(
+        health: failedHealth(
+          engineVersion: engineVersion,
+          versionOK: true,
+          reaperOK: true,
+          lastError: "workload image digest did not match the configured pin"
+        )
       )
     }
-    return nil
   }
 
   func verifyCanaryAndArm(
@@ -254,21 +249,13 @@ private extension ContainerBackend {
     guard let owned = await ownedContainers(deadline: deadline) else { return false }
     for container in owned {
       guard let identity = container.resolvedIdentifier else { return false }
-      _ = await boundedCommandSucceeded(
-        ContainerInvocation.stop(identity),
-        limit: Self.lifecycleCommandTimeout,
-        deadline: deadline
-      )
-      _ = await boundedCommandSucceeded(
-        ContainerInvocation.kill(identity),
-        limit: Self.lifecycleCommandTimeout,
-        deadline: deadline
-      )
-      _ = await boundedCommandSucceeded(
-        ContainerInvocation.remove(identity),
-        limit: Self.lifecycleCommandTimeout,
-        deadline: deadline
-      )
+      for step in ContainerInvocation.teardownLadder(identity) {
+        _ = await boundedCommandSucceeded(
+          step,
+          limit: Self.lifecycleCommandTimeout,
+          deadline: deadline
+        )
+      }
     }
     guard !owned.isEmpty else { return true }
     guard let remaining = await ownedContainers(deadline: deadline) else { return false }
@@ -569,6 +556,8 @@ private struct CanaryOutcome: Sendable {
 }
 
 private enum RuntimeInitImageReference {
+  // Host/port and repository grammar defer to the same authority that validates the pinned
+  // workload image, so the two reference checks cannot drift apart; only tag grammar is local.
   static func isRegistryQualifiedTag(_ value: String) -> Bool {
     guard
       !value.isEmpty,
@@ -583,32 +572,14 @@ private enum RuntimeInitImageReference {
     let repository = String(repositoryWithTag[..<colon])
     let tag = String(repositoryWithTag[repositoryWithTag.index(after: colon)...])
     guard !repository.isEmpty, !tag.isEmpty else { return false }
-    let host = hostWithPort.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-    guard validDNSHost(String(host[0])) else { return false }
-    if host.count == 2 && (!host[1].allSatisfy(\.isNumber) || host[1].isEmpty) { return false }
-    return repository.utf8.allSatisfy(isRepositoryByte)
-      && tag.utf8.allSatisfy(isTagByte)
-      && (tag.utf8.first.map(isTagStartByte) ?? false)
-  }
-
-  private static func validDNSHost(_ host: String) -> Bool {
-    let labels = host.lowercased().split(separator: ".", omittingEmptySubsequences: false)
-    guard labels.count >= 2 else { return false }
-    return labels.allSatisfy { label in
-      guard
-        !label.isEmpty,
-        label.first != "-",
-        label.last != "-"
-      else { return false }
-      return label.utf8.allSatisfy { byte in
-        (byte >= 0x61 && byte <= 0x7a) || (byte >= 0x30 && byte <= 0x39) || byte == 0x2d
-      }
-    }
-  }
-
-  private static func isRepositoryByte(_ byte: UInt8) -> Bool {
-    (byte >= 0x41 && byte <= 0x5a) || (byte >= 0x61 && byte <= 0x7a)
-      || (byte >= 0x30 && byte <= 0x39) || [0x2f, 0x2e, 0x5f, 0x2d].contains(byte)
+    guard PinnedImageReference.isValidRegistryHost(hostWithPort) else { return false }
+    let components = repository.split(separator: "/", omittingEmptySubsequences: false)
+    guard
+      components.allSatisfy({ component in
+        PinnedImageReference.isValidRepositoryComponent(String(component))
+      })
+    else { return false }
+    return tag.utf8.allSatisfy(isTagByte) && (tag.utf8.first.map(isTagStartByte) ?? false)
   }
 
   private static func isTagByte(_ byte: UInt8) -> Bool {

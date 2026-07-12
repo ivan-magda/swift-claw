@@ -9,7 +9,7 @@ import Testing
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
-    let runner = MaintenanceCommandRunner { command, history in
+    let runner = ScriptedCommandRunner { command, history in
       fixture.response(for: command, history: history)
     }
     let backend = fixture.backend(commands: runner)
@@ -51,7 +51,7 @@ import Testing
     // given
     let fixture = try MaintenanceFixture(initImage: "vminit:latest")
     defer { fixture.remove() }
-    let runner = MaintenanceCommandRunner { command, history in
+    let runner = ScriptedCommandRunner { command, history in
       fixture.response(for: command, history: history)
     }
     let backend = fixture.backend(commands: runner)
@@ -88,11 +88,11 @@ import Testing
         {"id":"\(labelOnly)","configuration":{"id":"\(labelOnly)","labels":{"clawd.exec":"1"}}}
       ]
       """
-    let runner = MaintenanceCommandRunner { command, history in
+    let runner = ScriptedCommandRunner { command, history in
       if command.arguments == ContainerInvocation.listAll() {
-        return maintenanceJSON(history.count == 1 ? firstList : finalList)
+        return jsonCommandResult(history.count == 1 ? firstList : finalList)
       }
-      return maintenanceResult(.exited(0))
+      return commandResult(.exited(0))
     }
     let backend = fixture.backend(commands: runner)
 
@@ -115,7 +115,7 @@ import Testing
       inspectedDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     )
     defer { fixture.remove() }
-    let runner = MaintenanceCommandRunner { command, history in
+    let runner = ScriptedCommandRunner { command, history in
       fixture.response(for: command, history: history)
     }
     let backend = fixture.backend(commands: runner)
@@ -143,7 +143,7 @@ import Testing
       )
     )
     defer { fixture.remove() }
-    let runner = MaintenanceCommandRunner { command, history in
+    let runner = ScriptedCommandRunner { command, history in
       fixture.response(for: command, history: history)
     }
     let backend = fixture.backend(commands: runner)
@@ -170,9 +170,9 @@ import Testing
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
-    let runner = MaintenanceCommandRunner { command, history in
+    let runner = ScriptedCommandRunner { command, history in
       if command.arguments == ContainerInvocation.systemPropertyList() {
-        return maintenanceResult(
+        return commandResult(
           .exited(0),
           stdout: Data(#"{"vminit":{"image":"ghcr.io/apple/containerization/vminit:1.1.0"}}"#.utf8),
           stdoutTotal: 2_000_000,
@@ -195,15 +195,15 @@ import Testing
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
-    let runner = MaintenanceCommandRunner { command, _ in
+    let runner = ScriptedCommandRunner { command, _ in
       if command.arguments.first == "run" && !command.arguments.contains("--detach") {
-        maintenanceWriteCidfile(command.arguments)
+        writeCidfile(from: command.arguments)
         while !Task.isCancelled { await Task.yield() }
-        return maintenanceResult(.cancelled)
+        return commandResult(.cancelled)
       }
       return command.arguments == ContainerInvocation.listAll()
-        ? maintenanceJSON("[]")
-        : maintenanceResult(.exited(0))
+        ? jsonCommandResult("[]")
+        : commandResult(.exited(0))
     }
     let backend = fixture.backend(commands: runner)
     await backend.setPreparedInitImageForTesting(fixture.initImage)
@@ -226,15 +226,15 @@ import Testing
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
-    let runner = MaintenanceCommandRunner { command, _ in
+    let runner = ScriptedCommandRunner { command, _ in
       if command.arguments.first == "run" && !command.arguments.contains("--detach") {
-        maintenanceWriteCidfile(command.arguments)
+        writeCidfile(from: command.arguments)
         while !Task.isCancelled { await Task.yield() }
-        return maintenanceResult(.cancelled)
+        return commandResult(.cancelled)
       }
       return command.arguments == ContainerInvocation.listAll()
-        ? maintenanceJSON("[]")
-        : maintenanceResult(.exited(0))
+        ? jsonCommandResult("[]")
+        : commandResult(.exited(0))
     }
     let backend = fixture.backend(commands: runner)
     await backend.setPreparedInitImageForTesting(fixture.initImage)
@@ -249,7 +249,7 @@ import Testing
     // then
     #expect(result.terminationReason == .cancelled)
     #expect(await backend.preparedInitImageForTesting == nil)
-    #expect(try maintenanceScratchChildren(fixture.root).isEmpty)
+    #expect(try scratchChildren(fixture.root).isEmpty)
     #expect((await runner.recorded()).contains { $0.arguments == ContainerInvocation.listAll() })
   }
 }
@@ -322,103 +322,50 @@ private final class MaintenanceFixture: @unchecked Sendable {
 
   func response(
     for command: ContainerCommand,
-    history: [ContainerCommand]
+    history _: [ContainerCommand]
   ) -> ContainerCommandResult {
     let arguments = command.arguments
     if arguments == ContainerInvocation.systemStatus() {
-      return maintenanceJSON(#"{"status":"running"}"#)
+      return jsonCommandResult(#"{"status":"running"}"#)
     }
     if arguments == ContainerInvocation.systemVersion() {
-      return maintenanceJSON(
+      return jsonCommandResult(
         #"[{"version":"1.1.0","buildType":"release","commit":"5973b9c","appName":"container"}]"#
       )
     }
     if arguments == ContainerInvocation.listAll() {
-      return maintenanceJSON("[]")
+      return jsonCommandResult("[]")
     }
     if arguments == ContainerInvocation.systemPropertyList() {
-      return maintenanceJSON("{\"vminit\":{\"image\":\"\(initImage)\"}}")
+      return jsonCommandResult("{\"vminit\":{\"image\":\"\(initImage)\"}}")
     }
     if arguments == ContainerInvocation.inspectImage(settings.workloadImage.description) {
-      return maintenanceJSON(
+      return jsonCommandResult(
         """
         [{"configuration":{"name":"\(settings.workloadImage.description)","descriptor":{"digest":"\(inspectedDigest)"}}}]
         """
       )
     }
     if arguments.first == "run" && arguments.contains("--detach") {
-      return maintenanceResult(.exited(0), stdout: Data("canary-name".utf8))
+      return commandResult(.exited(0), stdout: Data("canary-name".utf8))
     }
     if arguments.first == "inspect" {
       let name = arguments[1]
-      return maintenanceJSON(
+      return jsonCommandResult(
         """
         [{"configuration":{"id":"\(name)","image":{"reference":"\(settings.workloadImage.description)","descriptor":{"digest":"\(inspectedDigest)"}},"labels":{"clawd.exec":"1"},"resources":{"cpus":4,"memoryInBytes":1073741824},"readOnly":true,"useInit":true,"capAdd":[],"capDrop":["ALL"]},"status":{"state":"running"}}]
         """
       )
     }
     if arguments.first == "exec" {
-      return maintenanceJSON(guestProbe.json)
+      return jsonCommandResult(guestProbe.json)
     }
-    _ = history
-    return maintenanceResult(.exited(0))
+    return commandResult(.exited(0))
   }
 
   func remove() {
     try? FileManager.default.removeItem(at: root)
   }
-}
-
-private actor MaintenanceCommandRunner: ContainerCommandRunning {
-  typealias Handler =
-    @Sendable (ContainerCommand, [ContainerCommand]) async -> ContainerCommandResult
-
-  private let handler: Handler
-  private var commands: [ContainerCommand] = []
-  private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
-
-  init(handler: @escaping Handler) {
-    self.handler = handler
-  }
-
-  func run(_ command: ContainerCommand) async -> ContainerCommandResult {
-    commands.append(command)
-    let history = commands
-    let ready = waiters.filter { history.count >= $0.0 }
-    waiters.removeAll { history.count >= $0.0 }
-    for waiter in ready { waiter.1.resume() }
-    return await handler(command, history)
-  }
-
-  func recorded() -> [ContainerCommand] { commands }
-
-  func waitForCount(_ count: Int) async {
-    if commands.count >= count { return }
-    await withCheckedContinuation { continuation in waiters.append((count, continuation)) }
-  }
-}
-
-private func maintenanceResult(
-  _ termination: ContainerCommandTermination,
-  stdout: Data = Data(),
-  stdoutTotal: Int? = nil,
-  stdoutTruncated: Bool = false
-) -> ContainerCommandResult {
-  ContainerCommandResult(
-    termination: termination,
-    stdout: CapturedCommandStream(
-      bytes: stdout,
-      totalBytes: stdoutTotal ?? stdout.count,
-      truncated: stdoutTruncated
-    ),
-    stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
-    processIdentifier: 42,
-    wallClock: .milliseconds(1)
-  )
-}
-
-private func maintenanceJSON(_ json: String) -> ContainerCommandResult {
-  maintenanceResult(.exited(0), stdout: Data(json.utf8))
 }
 
 private func maintenanceRequest() -> ExecutionRequest {
@@ -433,25 +380,6 @@ private func maintenanceRequest() -> ExecutionRequest {
     network: false,
     timeout: .seconds(30)
   )
-}
-
-private func maintenanceWriteCidfile(_ arguments: [String]) {
-  guard
-    let pathIndex = arguments.firstIndex(of: "--cidfile"),
-    let nameIndex = arguments.firstIndex(of: "--name"),
-    (try? Data(arguments[nameIndex + 1].utf8).write(
-      to: URL(fileURLWithPath: arguments[pathIndex + 1]),
-      options: .withoutOverwriting
-    )) != nil
-  else {
-    preconditionFailure("run invocation did not carry cidfile identity")
-  }
-}
-
-private func maintenanceScratchChildren(_ stateRoot: URL) throws -> [URL] {
-  let root = stateRoot.appending(path: "exec-scratch")
-  guard FileManager.default.fileExists(atPath: root.path) else { return [] }
-  return try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
 }
 
 private enum MaintenanceFixtureError: Error {
