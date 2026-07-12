@@ -1,4 +1,6 @@
 import Foundation
+import Subprocess
+import System
 
 public struct ContainerCommand: Sendable, Equatable {
   public let arguments: [String]
@@ -65,4 +67,179 @@ public struct ContainerCommandResult: Sendable, Equatable {
 
 public protocol ContainerCommandRunning: Sendable {
   func run(_ command: ContainerCommand) async -> ContainerCommandResult
+}
+
+public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
+  private static let removedEnvironmentKeys = [
+    "SSH_AUTH_SOCK",
+    "CONTAINER_DEBUG",
+    "CONTAINER_DEFAULT_PLATFORM",
+  ]
+
+  private let executablePath: String
+  private let environmentForTesting: [String: String]
+  private let onSpawnForTesting: @Sendable (Int32) -> Void
+
+  public init(executablePath: String = "/usr/local/bin/container") {
+    self.executablePath = executablePath
+    self.environmentForTesting = [:]
+    self.onSpawnForTesting = { _ in }
+  }
+
+  init(
+    executablePath: String,
+    environmentForTesting: [String: String] = [:],
+    onSpawnForTesting: @escaping @Sendable (Int32) -> Void = { _ in }
+  ) {
+    self.executablePath = executablePath
+    self.environmentForTesting = environmentForTesting
+    self.onSpawnForTesting = onSpawnForTesting
+  }
+
+  public func run(_ command: ContainerCommand) async -> ContainerCommandResult {
+    let clock = ContinuousClock()
+    let started = clock.now
+    let teardownSequence: [TeardownStep] = [
+      .gracefulShutDown(
+        toProcessGroup: true,
+        allowedDurationToNextStep: command.teardownGracePeriod
+      )
+    ]
+    var platformOptions = PlatformOptions()
+    platformOptions.createSession = true
+    platformOptions.teardownSequence = teardownSequence
+
+    do {
+      let result = try await Subprocess.run(
+        .path(FilePath(executablePath)),
+        arguments: Arguments(command.arguments),
+        environment: environment(),
+        workingDirectory: nil,
+        platformOptions: platformOptions,
+        input: .none,
+        output: .sequence,
+        error: .sequence
+      ) { execution in
+        let processIdentifier = Int32(execution.processIdentifier.value)
+        onSpawnForTesting(processIdentifier)
+        let deadline = CommandDeadline()
+        let timeoutTask = Task {
+          do {
+            try await clock.sleep(for: command.timeout)
+          } catch {
+            return
+          }
+          await deadline.expire()
+          await execution.teardown(using: teardownSequence)
+        }
+
+        async let stdout = Self.capture(execution.standardOutput, limit: command.captureLimit)
+        async let stderr = Self.capture(execution.standardError, limit: command.captureLimit)
+        let streams = try await (stdout, stderr)
+        timeoutTask.cancel()
+        await timeoutTask.value
+        return CommandClosureResult(
+          stdout: streams.0,
+          stderr: streams.1,
+          timedOut: await deadline.isExpired
+        )
+      }
+
+      // Caller cancellation does not throw out of Subprocess.run: its cleanup
+      // handler tears the process down and the call returns normally with the
+      // teardown signal status, so classify cancellation here, not in `catch`.
+      let termination: ContainerCommandTermination
+      if result.closureOutput.timedOut {
+        termination = .timedOut
+      } else if Task.isCancelled {
+        termination = .cancelled
+      } else {
+        switch result.terminationStatus {
+        case .exited(let code): termination = .exited(Int32(code))
+        case .signaled(let signal): termination = .signaled(Int32(signal))
+        }
+      }
+      return ContainerCommandResult(
+        termination: termination,
+        stdout: result.closureOutput.stdout,
+        stderr: result.closureOutput.stderr,
+        processIdentifier: Int32(result.processIdentifier.value),
+        wallClock: started.duration(to: clock.now)
+      )
+    } catch {
+      let termination: ContainerCommandTermination =
+        Task.isCancelled || error is CancellationError
+        ? .cancelled
+        : .startFailed(String(describing: error))
+      return ContainerCommandResult(
+        termination: termination,
+        stdout: Self.emptyStream,
+        stderr: Self.emptyStream,
+        processIdentifier: nil,
+        wallClock: started.duration(to: clock.now)
+      )
+    }
+  }
+}
+
+// MARK: - Environment
+
+private extension SwiftSubprocessContainerCommandRunner {
+  func environment() -> Environment {
+    var updates: [Environment.Key: String?] = [:]
+    for (key, value) in environmentForTesting {
+      updates[Environment.Key(stringLiteral: key)] = value
+    }
+    for key in Self.removedEnvironmentKeys {
+      updates[Environment.Key(stringLiteral: key)] = String?.none
+    }
+    return .inherit.updating(updates)
+  }
+}
+
+// MARK: - Raw Capture
+
+private extension SwiftSubprocessContainerCommandRunner {
+  static let emptyStream = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
+
+  static func capture(
+    _ sequence: SubprocessOutputSequence,
+    limit: Int
+  ) async throws -> CapturedCommandStream {
+    var prefix = Data()
+    prefix.reserveCapacity(limit)
+    var totalBytes = 0
+    var overflowedCounter = false
+    for try await buffer in sequence {
+      let addition = totalBytes.addingReportingOverflow(buffer.count)
+      totalBytes = addition.overflow ? Int.max : addition.partialValue
+      overflowedCounter = overflowedCounter || addition.overflow
+      let remaining = max(0, limit - prefix.count)
+      guard remaining > 0 else { continue }
+      buffer.withUnsafeBytes { bytes in
+        prefix.append(contentsOf: bytes.prefix(remaining))
+      }
+    }
+    return CapturedCommandStream(
+      bytes: prefix,
+      totalBytes: totalBytes,
+      truncated: overflowedCounter || totalBytes > prefix.count
+    )
+  }
+}
+
+private struct CommandClosureResult: Sendable {
+  let stdout: CapturedCommandStream
+  let stderr: CapturedCommandStream
+  let timedOut: Bool
+}
+
+private actor CommandDeadline {
+  private var expired = false
+
+  var isExpired: Bool { expired }
+
+  func expire() {
+    expired = true
+  }
 }
