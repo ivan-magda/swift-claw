@@ -43,6 +43,7 @@ public struct SandboxBootstrapper: Sendable {
         unavailableReason: "code execution is disabled"
       )
     }
+
     guard let backend, let maintenance else {
       return SandboxBootstrapResult(
         backend: nil,
@@ -73,6 +74,7 @@ public struct SandboxBootstrapper: Sendable {
         unavailableReason: health.lastError ?? "sandbox hardening canary failed"
       )
     }
+
     return SandboxBootstrapResult(
       backend: backend,
       maintenance: maintenance,
