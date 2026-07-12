@@ -15,6 +15,7 @@ struct AuditRow: Sendable, Equatable {
   let actor: String
   let action: String
   let tool: String?
+  let argsRedacted: String
   let decision: String
 }
 
@@ -90,12 +91,13 @@ struct SC3Harness {
     return try pool.read { database in
       try Row.fetchAll(
         database,
-        sql: "SELECT actor, action, tool, decision FROM audit_events ORDER BY id"
+        sql: "SELECT actor, action, tool, args_redacted, decision FROM audit_events ORDER BY id"
       ).map { row in
         AuditRow(
           actor: row["actor"],
           action: row["action"],
           tool: row["tool"],
+          argsRedacted: row["args_redacted"],
           decision: row["decision"]
         )
       }
@@ -107,18 +109,26 @@ struct SC3Harness {
 /// responses for that turn's round-trips). A non-re-proposing script is just a script whose
 /// yes-turn entry contains no tool calls.
 actor TurnScriptedProvider: LLMProvider {
+  typealias BeforeCompletion = @Sendable (Int, ChatRequest) async throws -> Void
+
   private var scripts: [[ChatResponse]]
   private var currentTurn: [ChatResponse] = []
+  private let beforeCompletion: BeforeCompletion?
   private(set) var completions = 0
   private(set) var requests: [ChatRequest] = []
 
-  init(scripts: [[ChatResponse]]) {
+  init(
+    scripts: [[ChatResponse]],
+    beforeCompletion: BeforeCompletion? = nil
+  ) {
     self.scripts = scripts
+    self.beforeCompletion = beforeCompletion
   }
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
     completions += 1
     requests.append(request)
+    try await beforeCompletion?(completions, request)
     if currentTurn.isEmpty, scripts.isEmpty == false {
       currentTurn = scripts.removeFirst()
     }
@@ -146,6 +156,14 @@ func makeSC3Harness(
   coordinator: ApprovalCoordinator = ApprovalCoordinator(),
   extraTools: [any Tool] = [],
   execEnabled: Bool = false,
+  executionBackend: (any ExecutionBackend)? = nil,
+  execSettings: ExecuteCodeSettings = ExecuteCodeSettings(
+    memoryMiB: 1024,
+    cpus: 4,
+    timeout: .seconds(30),
+    allowEgress: false
+  ),
+  beforeCompletion: TurnScriptedProvider.BeforeCompletion? = nil,
   dispatcherOverride: (any ToolDispatching)? = nil
 ) throws -> SC3Harness {
   let fileManager = FileManager.default
@@ -188,14 +206,24 @@ func makeSC3Harness(
   let http = ScriptedHTTP(responses: httpResponses)
   let resolver = ScriptedResolver(table: resolverTable)
   let redactor = SecretRedactor(secretValues: secretValues)
-  let tools: [any Tool] =
-    [
-      FileReadTool(workspaceRoot: workspaceRoot, redactor: redactor),
-      FileWriteTool(workspaceRoot: workspaceRoot, redactor: redactor),
-      MemoryWriteTool(redactor: redactor),
-      WebFetchTool(http: http, resolver: resolver, redactor: redactor),
-      WebSearchTool(search: ExaSearchProvider(apiKey: "exa-key", http: http)),
-    ] + extraTools
+  var tools: [any Tool] = [
+    FileReadTool(workspaceRoot: workspaceRoot, redactor: redactor),
+    FileWriteTool(workspaceRoot: workspaceRoot, redactor: redactor),
+    MemoryWriteTool(redactor: redactor),
+    WebFetchTool(http: http, resolver: resolver, redactor: redactor),
+    WebSearchTool(search: ExaSearchProvider(apiKey: "exa-key", http: http)),
+  ]
+  if let executionBackend {
+    tools.append(
+      ExecuteCodeTool(
+        workspaceRoot: workspaceRoot,
+        backend: executionBackend,
+        settings: execSettings,
+        redactor: redactor
+      )
+    )
+  }
+  tools.append(contentsOf: extraTools)
 
   // 5. GatedToolDispatcher: tier-3 private files load from DISK at gate-evaluation time (rev.1 H1).
   let privateFileLoader: @Sendable () -> [String] = {
@@ -213,7 +241,10 @@ func makeSC3Harness(
   )
 
   // 6. AgentRuntime over the per-turn scripted provider and the real gated dispatcher.
-  let provider = TurnScriptedProvider(scripts: scripts)
+  let provider = TurnScriptedProvider(
+    scripts: scripts,
+    beforeCompletion: beforeCompletion
+  )
   let agent = AgentRuntime(
     provider: provider,
     typingIndicator: NoopTyping(),

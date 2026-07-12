@@ -73,12 +73,13 @@ struct SC7Harness {
     return try pool.read { database in
       try Row.fetchAll(
         database,
-        sql: "SELECT actor, action, tool, decision FROM audit_events ORDER BY id"
+        sql: "SELECT actor, action, tool, args_redacted, decision FROM audit_events ORDER BY id"
       ).map { row in
         AuditRow(
           actor: row["actor"],
           action: row["action"],
           tool: row["tool"],
+          argsRedacted: row["args_redacted"],
           decision: row["decision"]
         )
       }

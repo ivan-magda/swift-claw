@@ -74,6 +74,7 @@ struct ApprovalRowSnapshot: Sendable, Equatable {
   let state: String
   let tool: String
   let canonicalTarget: String
+  let canonicalArgsJSON: String
   let nonce: String
   let reason: String
 }
@@ -84,7 +85,7 @@ func fetchApprovals(databasePath: String) throws -> [ApprovalRowSnapshot] {
     try Row.fetchAll(
       db,
       sql: """
-        SELECT id, run_id, state, tool, canonical_target, nonce, reason
+        SELECT id, run_id, state, tool, canonical_target, canonical_args, nonce, reason
         FROM approvals ORDER BY id
         """
     ).map { row in
@@ -94,6 +95,7 @@ func fetchApprovals(databasePath: String) throws -> [ApprovalRowSnapshot] {
         state: row["state"],
         tool: row["tool"],
         canonicalTarget: row["canonical_target"],
+        canonicalArgsJSON: row["canonical_args"],
         nonce: row["nonce"],
         reason: row["reason"]
       )
