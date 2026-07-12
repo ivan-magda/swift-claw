@@ -99,12 +99,14 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
   public func run(_ command: ContainerCommand) async -> ContainerCommandResult {
     let clock = ContinuousClock()
     let started = clock.now
+
     let teardownSequence: [TeardownStep] = [
       .gracefulShutDown(
         toProcessGroup: true,
         allowedDurationToNextStep: command.teardownGracePeriod
       )
     ]
+
     var platformOptions = PlatformOptions()
     platformOptions.createSession = true
     platformOptions.teardownSequence = teardownSequence
@@ -130,14 +132,18 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
           } catch {
             return false
           }
+
           await execution.teardown(using: teardownSequence)
+
           return true
         }
 
         async let stdout = Self.capture(execution.standardOutput, limit: command.captureLimit)
         async let stderr = Self.capture(execution.standardError, limit: command.captureLimit)
+
         let streams = try await (stdout, stderr)
         timeoutTask.cancel()
+
         return CommandClosureResult(
           stdout: streams.0,
           stderr: streams.1,
@@ -149,16 +155,20 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
       // handler tears the process down and the call returns normally with the
       // teardown signal status, so classify cancellation here, not in `catch`.
       let termination: ContainerCommandTermination
+
       if result.closureOutput.timedOut {
         termination = .timedOut
       } else if Task.isCancelled {
         termination = .cancelled
       } else {
         switch result.terminationStatus {
-        case .exited(let code): termination = .exited(Int32(code))
-        case .signaled(let signal): termination = .signaled(Int32(signal))
+        case .exited(let code):
+          termination = .exited(Int32(code))
+        case .signaled(let signal):
+          termination = .signaled(Int32(signal))
         }
       }
+
       return ContainerCommandResult(
         termination: termination,
         stdout: result.closureOutput.stdout,
@@ -171,6 +181,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         Task.isCancelled || error is CancellationError
         ? .cancelled
         : .startFailed(String(describing: error))
+
       return ContainerCommandResult(
         termination: termination,
         stdout: Self.emptyStream,
@@ -187,12 +198,15 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
 private extension SwiftSubprocessContainerCommandRunner {
   func environment() -> Environment {
     var updates: [Environment.Key: String?] = [:]
+
     for (key, value) in environmentForTesting {
       updates[Environment.Key(stringLiteral: key)] = value
     }
+
     for key in Self.removedEnvironmentKeys {
       updates[Environment.Key(stringLiteral: key)] = String?.none
     }
+
     return .inherit.updating(updates)
   }
 }
@@ -208,18 +222,26 @@ private extension SwiftSubprocessContainerCommandRunner {
   ) async throws -> CapturedCommandStream {
     var prefix = Data()
     prefix.reserveCapacity(min(limit, 64 * 1024))
+
     var totalBytes = 0
     var overflowedCounter = false
+
     for try await buffer in sequence {
       let addition = totalBytes.addingReportingOverflow(buffer.count)
+
       totalBytes = addition.overflow ? Int.max : addition.partialValue
       overflowedCounter = overflowedCounter || addition.overflow
+
       let remaining = max(0, limit - prefix.count)
-      guard remaining > 0 else { continue }
+      guard remaining > 0 else {
+        continue
+      }
+
       buffer.withUnsafeBytes { bytes in
         prefix.append(contentsOf: bytes.prefix(remaining))
       }
     }
+
     return CapturedCommandStream(
       bytes: prefix,
       totalBytes: totalBytes,
