@@ -2,6 +2,7 @@ import ArgumentParser
 import AsyncHTTPClient
 import ClawCore
 import ClawData
+import ClawExec
 import ClawGateway
 import ClawSecrets
 import ClawTelegram
@@ -39,6 +40,9 @@ struct DoctorCommand: AsyncParsableCommand {
     report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)")
     if checkConfig {
       addConfigDetailRows(to: &report, config: config)
+      for row in await sandboxRows(config: config, live: false) {
+        report.add(key: row.key, value: row.value, ok: row.ok)
+      }
     }
 
     let secretsRow = SecretStoreResolver.doctorRow(
@@ -62,6 +66,9 @@ struct DoctorCommand: AsyncParsableCommand {
 
     addDatabaseRows(to: &report, config: config)
     await addConnectivityRows(to: &report, config: config)
+    for row in await sandboxRows(config: config, live: true) {
+      report.add(key: row.key, value: row.value, ok: row.ok)
+    }
 
     emit(report)
 
@@ -161,6 +168,61 @@ private extension DoctorCommand {
     }
 
     try? await httpClient.shutdown()
+  }
+}
+
+// MARK: - Sandbox Health
+
+private extension DoctorCommand {
+  func sandboxRows(
+    config: AppConfig,
+    live: Bool
+  ) async -> [SandboxHealthRows.Row] {
+    guard config.exec.enabled else {
+      return SandboxHealthRows.rows(for: .disabled)
+    }
+
+    #if os(Linux)
+      return SandboxHealthRows.rows(for: .linuxDeferred)
+    #else
+      guard let backend = SandboxBackendFactory.make(config: config, secrets: nil) else {
+        return SandboxHealthRows.rows(
+          for: .unavailable(reason: "sandbox backend is not configured")
+        )
+      }
+
+      guard live else {
+        let availability = await backend.versionAvailability()
+        return SandboxHealthRows.rows(for: .configOnly(availability: availability))
+      }
+
+      // A running daemon owns sandbox maintenance (reap + scratch sweep) and holds the
+      // single-instance lock for its whole lifetime. Acquiring it here proves no daemon can be
+      // mid-execution, so the destructive live canary is safe; failing to acquire it means a daemon
+      // is running and doctor must not reap its live VM or sweep its scratch.
+      let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
+      guard let lock = try? InstanceLock(path: lockPath) else {
+        let availability = await backend.versionAvailability()
+        return SandboxHealthRows.rows(for: .daemonManaged(availability: availability))
+      }
+      defer { lock.release() }
+
+      let bootstrap = await SandboxBootstrapper(
+        enabled: true,
+        backend: backend,
+        maintenance: backend
+      ).prepare()
+      await backend.shutdown()
+
+      if let health = bootstrap.health {
+        return SandboxHealthRows.rows(for: .live(health: health))
+      }
+      return SandboxHealthRows.rows(
+        for: .unavailable(
+          reason: bootstrap.unavailableReason ?? "sandbox health is unavailable"
+        )
+      )
+    #endif
   }
 }
 
