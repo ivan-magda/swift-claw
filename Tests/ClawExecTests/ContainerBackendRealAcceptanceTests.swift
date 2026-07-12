@@ -110,8 +110,8 @@ struct ContainerBackendRealAcceptanceTests {
     let script = """
       set -e
       test "$(cat /work/input.txt)" = "staged-content"
-      if echo mutate > /work/input.txt 2>/dev/null; then echo FAIL-write; exit 11; fi
-      if : > /work/created 2>/dev/null; then echo FAIL-create; exit 12; fi
+      if ( echo mutate > /work/input.txt ) 2>/dev/null; then echo FAIL-write; exit 11; fi
+      if ( : > /work/created ) 2>/dev/null; then echo FAIL-create; exit 12; fi
       if chmod 0700 /work/input.txt 2>/dev/null; then echo FAIL-chmod; exit 13; fi
       echo staging-readonly-ok
       """
