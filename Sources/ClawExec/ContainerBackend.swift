@@ -7,6 +7,112 @@ import Foundation
   import Glibc
 #endif
 
+public actor ContainerBackend {
+  public static let maxRawStreamBytes = 1024 * 1024
+  public static let maxControlStreamBytes = 1024 * 1024
+  public static let teardownAllowance: Duration = .seconds(20)
+  public static let lifecycleCommandTimeout: Duration = .seconds(5)
+  public static let ordinaryCommandTimeout: Duration = .seconds(15)
+  public static let pullTimeout: Duration = .seconds(120)
+  public static let prepareTimeout: Duration = .seconds(300)
+
+  let settings: ExecSandboxSettings
+  let stateRoot: URL
+  let commands: any ContainerCommandRunning
+  let sanitizeReason: @Sendable (String) -> String
+  let now: @Sendable () -> ContinuousClock.Instant
+  let supportedHost: @Sendable () -> Bool
+
+  var preparedInitImage: String?
+  var executionTail: Task<Void, Never>?
+  var executionTasks: [UUID: Task<ExecutionResult, Never>] = [:]
+  var cleanupTasks: [UUID: Task<Bool, Never>] = [:]
+  var shuttingDown = false
+
+  public init(
+    settings: ExecSandboxSettings,
+    stateRoot: URL,
+    commands: any ContainerCommandRunning,
+    sanitizeReason: @escaping @Sendable (String) -> String,
+    now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
+  ) {
+    self.settings = settings
+    self.stateRoot = stateRoot
+    self.commands = commands
+    self.sanitizeReason = sanitizeReason
+    self.now = now
+    self.supportedHost = Self.defaultSupportedHost
+  }
+
+  init(
+    settings: ExecSandboxSettings,
+    stateRoot: URL,
+    commands: any ContainerCommandRunning,
+    sanitizeReason: @escaping @Sendable (String) -> String,
+    now: @escaping @Sendable () -> ContinuousClock.Instant,
+    supportedHost: @escaping @Sendable () -> Bool
+  ) {
+    self.settings = settings
+    self.stateRoot = stateRoot
+    self.commands = commands
+    self.sanitizeReason = sanitizeReason
+    self.now = now
+    self.supportedHost = supportedHost
+  }
+
+  var queuedExecutionCountForTesting: Int { executionTasks.count }
+
+  func runSerializedForTesting(
+    operation: @escaping @Sendable () async -> ExecutionResult
+  ) async -> ExecutionResult {
+    await enqueueExecution(operation: operation)
+  }
+}
+
+// MARK: - Serialized Execution
+
+private extension ContainerBackend {
+  func enqueueExecution(
+    operation: @escaping @Sendable () async -> ExecutionResult
+  ) async -> ExecutionResult {
+    guard !shuttingDown, !Task.isCancelled else { return Self.cancelledResult() }
+    let prior = executionTail
+    let taskIdentifier = UUID()
+    let work = Task<ExecutionResult, Never> {
+      await prior?.value
+      guard !Task.isCancelled else { return Self.cancelledResult() }
+      return await operation()
+    }
+    executionTasks[taskIdentifier] = work
+    executionTail = Task<Void, Never> { _ = await work.value }
+    let result = await withTaskCancellationHandler {
+      await work.value
+    } onCancel: {
+      work.cancel()
+    }
+    executionTasks[taskIdentifier] = nil
+    return result
+  }
+
+  static func cancelledResult() -> ExecutionResult {
+    ExecutionResult(
+      terminationReason: .cancelled,
+      stdout: "",
+      stderr: "",
+      truncatedRawBytes: false,
+      wallClock: .zero
+    )
+  }
+
+  nonisolated static func defaultSupportedHost() -> Bool {
+    #if os(macOS) && arch(arm64)
+      ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
+    #else
+      false
+    #endif
+  }
+}
+
 enum ScratchWorkspaceError: Error, Equatable {
   case invalidRequest(String)
   case fileSystem(String)
