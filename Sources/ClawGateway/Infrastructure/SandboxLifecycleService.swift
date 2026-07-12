@@ -19,7 +19,7 @@ public struct SandboxLifecycleService: Service {
 
   public func run() async throws {
     await cancelWhenGracefulShutdown {
-      while Task.isCancelled == false {
+      while !Task.isCancelled {
         do {
           try await clock.sleep(for: Self.idleInterval)
         } catch {
