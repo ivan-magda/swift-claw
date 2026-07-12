@@ -52,7 +52,10 @@ extension DaemonBuilder {
   /// no-redirect `toolExecutor`; no `searchApiKey` ⇒ `web_search` is never constructed
   /// (unconfigured ⇒ absent). Tier-3 private texts load from DISK at gate-evaluation time,
   /// not the assembly snapshot, so the loader closure re-reads the workspace each call.
-  func makeToolDispatcher(workspace: FileSystemWorkspace) -> GatedToolDispatcher {
+  func makeToolDispatcher(
+    workspace: FileSystemWorkspace,
+    sandbox: SandboxStack
+  ) -> GatedToolDispatcher {
     let secretValues = secrets.redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)
 
@@ -71,6 +74,22 @@ extension DaemonBuilder {
     if let searchApiKey = secrets.searchApiKey {
       tools.append(
         WebSearchTool(search: ExaSearchProvider(apiKey: searchApiKey, http: toolExecutor))
+      )
+    }
+
+    if let backend = sandbox.backend, sandbox.health?.isReady == true {
+      tools.append(
+        ExecuteCodeTool(
+          workspaceRoot: workspace.root,
+          backend: backend,
+          settings: ExecuteCodeSettings(
+            memoryMiB: config.exec.memoryMiB,
+            cpus: config.exec.cpus,
+            timeout: .seconds(config.exec.timeoutSeconds),
+            allowEgress: config.exec.allowEgress
+          ),
+          redactor: redactor
+        )
       )
     }
 

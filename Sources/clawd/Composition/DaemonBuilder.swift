@@ -6,6 +6,7 @@ import ClawTelegram
 import ClawWorkspace
 import Foundation
 import Logging
+import ServiceLifecycle
 
 /// The composition root. Holds the cross-cutting inputs `run()` resolves before wiring — config,
 /// secrets, stores, the two HTTP executors, the Telegram transport, and the logger — and `build()`
@@ -23,6 +24,7 @@ struct DaemonBuilder: Sendable {
   let logger: Logger
 
   func build() async -> Daemon {
+    let sandbox = await prepareSandbox()
     let coordination = TurnCoordination()
 
     // Hoisted so the schedule draft parser and the agent share one provider instance.
@@ -39,7 +41,8 @@ struct DaemonBuilder: Sendable {
     let agentStack = makeAgentStack(
       provider: provider,
       workspace: workspace,
-      costResolver: costResolver
+      costResolver: costResolver,
+      sandbox: sandbox
     )
 
     let turnRunner = makeTurnRunner(coordination: coordination, agentStack: agentStack)
@@ -62,8 +65,13 @@ struct DaemonBuilder: Sendable {
       workspace: workspace
     )
 
+    var services: [any Service] = [poller, dispatcher, scheduler, approvalFabric.expiry]
+    if let maintenance = sandbox.maintenance {
+      services.append(SandboxLifecycleService(maintenance: maintenance))
+    }
+
     return Daemon(
-      services: [poller, dispatcher, scheduler, approvalFabric.expiry],
+      services: services,
       boot: bootSequence(
         coordination: coordination,
         waiter: approvalFabric.waiter,

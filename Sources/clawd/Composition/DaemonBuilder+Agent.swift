@@ -33,9 +33,10 @@ extension DaemonBuilder {
   func makeAgentStack(
     provider: OpenAICompatibleProvider,
     workspace: FileSystemWorkspace,
-    costResolver: CostResolver
+    costResolver: CostResolver,
+    sandbox: SandboxStack
   ) -> AgentStack {
-    let toolDispatcher = makeToolDispatcher(workspace: workspace)
+    let toolDispatcher = makeToolDispatcher(workspace: workspace, sandbox: sandbox)
     let staticSubhash = policyStaticSubhash(toolDispatcher: toolDispatcher, workspace: workspace)
     let agent = makeAgent(
       provider: provider,
