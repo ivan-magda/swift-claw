@@ -5,6 +5,19 @@ public enum ExecLanguage: String, Sendable, Equatable, Codable {
   case sh
 }
 
+extension ExecLanguage {
+  /// Namespace reserved for the staged entrypoint file; staged inputs must never claim it.
+  public static let reservedEntrypointPrefix = ".clawd-entrypoint."
+
+  /// Staged file name of the script the sandbox executes for this language.
+  public var entrypointFileName: String {
+    switch self {
+    case .python: "\(Self.reservedEntrypointPrefix)py"
+    case .sh: "\(Self.reservedEntrypointPrefix)sh"
+    }
+  }
+}
+
 public enum FileMode: UInt16, Sendable, Equatable {
   case readOnly = 0o400
   case readExecute = 0o500

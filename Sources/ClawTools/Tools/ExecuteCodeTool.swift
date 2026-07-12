@@ -169,7 +169,7 @@ public struct ExecuteCodeTool: Tool {
     }
 
     let entrypoint = StagedFile(
-      name: recorded.language == .python ? ".clawd-entrypoint.py" : ".clawd-entrypoint.sh",
+      name: recorded.language.entrypointFileName,
       bytes: Data(recorded.code.utf8),
       mode: .readExecute
     )
@@ -300,7 +300,9 @@ private extension ExecuteCodeTool {
       let basename: String
       switch Self.validateBasename(of: path, claimed: &normalizedNames) {
       case .reservedNamespace:
-        return .failure("Staged files may not use the reserved .clawd-entrypoint.* namespace.")
+        return .failure(
+          "Staged files may not use the reserved \(ExecLanguage.reservedEntrypointPrefix)* namespace."
+        )
       case .duplicate:
         return .failure("Staged files must have unique flat basenames.")
       case .accepted(let accepted):
@@ -389,7 +391,7 @@ private extension ExecuteCodeTool {
     let basename = (path as NSString).lastPathComponent
     let normalized = normalizedBasename(basename)
 
-    guard normalized.hasPrefix(".clawd-entrypoint.") == false else {
+    guard normalized.hasPrefix(ExecLanguage.reservedEntrypointPrefix) == false else {
       return .reservedNamespace
     }
 
