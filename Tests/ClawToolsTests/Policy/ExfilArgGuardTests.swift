@@ -43,6 +43,28 @@ import Testing
     #expect(verdict.redactedArgs.contains(fixture.token) == false)
   }
 
+  @Test func everyShapeAnchorAppearsInEveryTokenItsPatternMatches() {
+    // given / when / then — an anchor is a fast-path prefilter: if a genuine match could lack
+    // its pattern's anchor, the prefilter would silently disable the rule. Pin the invariant
+    // against the shaped-token fixtures, and require each anchored pattern to hit ≥1 fixture
+    // so a dead anchor can't pass vacuously.
+    for shape in ExfilArgGuard.shapePatterns {
+      guard let anchor = shape.anchor else {
+        continue
+      }
+      let matchedTokens = Self.shapedTokens.map(\.token).filter { token in
+        ExfilArgGuard.regexMatches(shape.pattern, in: token).isEmpty == false
+      }
+      #expect(matchedTokens.isEmpty == false, "no fixture exercises pattern \(shape.pattern)")
+      for token in matchedTokens {
+        #expect(
+          token.contains(anchor),
+          "anchor \(anchor) would skip a genuine \(shape.pattern) match"
+        )
+      }
+    }
+  }
+
   @Test func benignArgsPass() {
     // given — ordinary URLs and prose must not trip the table
     let args = #"{"url":"https://swift.org/blog/announcing-swift-6/","query":"swift concurrency"}"#
@@ -223,6 +245,22 @@ import Testing
 
     // then
     #expect(verdict.blockedRule == "private-file-substring")
+  }
+
+  @Test func exactThresholdWidthTextAndSourceAreASingleWindow() {
+    // given — both the candidate text and an indexed source at exactly 16 graphemes: one window,
+    // zero slides, the degenerate case of the rolling fingerprint sweep
+    let guardrail = ExfilArgGuard(secretValues: [])
+    let sixteen = "exactly16chars!!"
+    let index = ExfilArgGuard.PrivateTextIndex(texts: [sixteen])
+
+    // when
+    let matching = guardrail.evaluateConditional(text: sixteen, index: index)
+    let benign = guardrail.evaluateConditional(text: "different16chars", index: index)
+
+    // then
+    #expect(matching.blockedRule == "private-file-substring")
+    #expect(benign.blockedRule == nil)
   }
 
   @Test func maximumStagedPayloadUsesTheBoundedTextPath() {

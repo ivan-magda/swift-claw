@@ -35,8 +35,7 @@ public struct ExfilArgGuard: Sendable {
         let sourceIndex = storedSources.count
         storedSources.append(characters)
 
-        for start in 0...(characters.count - width) {
-          let fingerprint = ExfilArgGuard.windowFingerprint(characters[start..<(start + width)])
+        for (start, fingerprint) in ExfilArgGuard.windowFingerprints(characters).enumerated() {
           indexed[fingerprint, default: []].append(Window(source: sourceIndex, start: start))
         }
       }
@@ -52,12 +51,11 @@ public struct ExfilArgGuard: Sendable {
         return nil
       }
 
-      for start in 0...(characters.count - width) {
-        let candidate = characters[start..<(start + width)]
-        let fingerprint = ExfilArgGuard.windowFingerprint(candidate)
+      for (start, fingerprint) in ExfilArgGuard.windowFingerprints(characters).enumerated() {
         guard let windows = windowsByFingerprint[fingerprint] else {
           continue
         }
+        let candidate = characters[start..<(start + width)]
         // The fingerprint only narrows the set; confirm grapheme-for-grapheme so a hash
         // collision can never false-block.
         let matched = windows.contains { window in
@@ -73,16 +71,29 @@ public struct ExfilArgGuard: Sendable {
     }
   }
 
+  struct ShapePattern: Sendable {
+    let rule: String
+    let pattern: String
+    /// A literal every match of `pattern` necessarily contains — when the text lacks it, the
+    /// regex scan (a full pass over what can be multi-MiB text) is skipped outright. It is a
+    /// fast path only; verdicts never depend on it.
+    let anchor: String?
+  }
+
   /// Tier 2 — the pinned v1 secret-shape table. Order matters: first match names the rule.
-  static let shapePatterns: [(rule: String, pattern: String)] = [
-    ("openai-key", "sk-[A-Za-z0-9_-]{16,}"),
-    ("github-token", "gh[pousr]_[A-Za-z0-9]{20,}"),
-    ("github-token", "github_pat_[A-Za-z0-9_]{20,}"),
-    ("slack-token", "xox[bpoas]-[A-Za-z0-9-]{10,}"),
-    ("aws-access-key", "AKIA[A-Z0-9]{16}"),
-    ("google-api-key", "AIza[A-Za-z0-9_-]{30,}"),
-    ("telegram-bot-token", "[0-9]{8,10}:[A-Za-z0-9_-]{35}"),
-    ("high-entropy", "[A-Za-z0-9+/=_-]{40,}"),
+  static let shapePatterns: [ShapePattern] = [
+    ShapePattern(rule: "openai-key", pattern: "sk-[A-Za-z0-9_-]{16,}", anchor: "sk-"),
+    ShapePattern(rule: "github-token", pattern: "gh[pousr]_[A-Za-z0-9]{20,}", anchor: "gh"),
+    ShapePattern(
+      rule: "github-token",
+      pattern: "github_pat_[A-Za-z0-9_]{20,}",
+      anchor: "github_pat_"
+    ),
+    ShapePattern(rule: "slack-token", pattern: "xox[bpoas]-[A-Za-z0-9-]{10,}", anchor: "xox"),
+    ShapePattern(rule: "aws-access-key", pattern: "AKIA[A-Z0-9]{16}", anchor: "AKIA"),
+    ShapePattern(rule: "google-api-key", pattern: "AIza[A-Za-z0-9_-]{30,}", anchor: "AIza"),
+    ShapePattern(rule: "telegram-bot-token", pattern: "[0-9]{8,10}:[A-Za-z0-9_-]{35}", anchor: ":"),
+    ShapePattern(rule: "high-entropy", pattern: "[A-Za-z0-9+/=_-]{40,}", anchor: nil),
   ]
 
   static let substringThresholdGraphemes = 16
@@ -110,17 +121,24 @@ public struct ExfilArgGuard: Sendable {
     }
 
     for candidate in candidates {
-      for (rule, pattern) in Self.shapePatterns {
-        let matches = Self.regexMatches(pattern, in: candidate).filter { match in
-          rule != "high-entropy" || Self.looksHighEntropy(match)
+      let candidateBytes = Data(candidate.utf8)
+      for shape in Self.shapePatterns {
+        if let anchor = shape.anchor, Self.containsAnchor(candidateBytes, anchor) == false {
+          continue
+        }
+        let matches = Self.regexMatches(shape.pattern, in: candidate).filter { match in
+          shape.rule != "high-entropy" || Self.looksHighEntropy(match)
         }
         if matches.isEmpty == false {
-          return blockedVerdict(rule: rule, raw: text, spans: matches)
+          return blockedVerdict(rule: shape.rule, raw: text, spans: matches)
         }
       }
     }
 
-    return Verdict(blockedRule: nil, redactedArgs: renderRedacted(argsJSON: text))
+    // Reaching here proved the raw text (always the first candidate) holds no loaded secret and
+    // no shaped token, so the redaction sweep — the same secrets, patterns, and entropy filter —
+    // could only be an identity pass; skip re-scanning what can be multi-MiB text.
+    return Verdict(blockedRule: nil, redactedArgs: text)
   }
 
   // MARK: - Tier 3 (trifecta condition only)
@@ -157,10 +175,15 @@ public struct ExfilArgGuard: Sendable {
       rendered = rendered.replacingOccurrences(of: secret, with: "[REDACTED:secret-value]")
     }
 
-    for (rule, pattern) in Self.shapePatterns {
-      for match in Self.regexMatches(pattern, in: rendered)
-      where rule != "high-entropy" || Self.looksHighEntropy(match) {
-        rendered = rendered.replacingOccurrences(of: match, with: "[REDACTED:\(rule)]")
+    for shape in Self.shapePatterns {
+      // Rebuilt each iteration: an earlier rule's replacement mutates `rendered`, and a stale
+      // byte snapshot could skip a rule whose anchor only exists in the mutated text.
+      if let anchor = shape.anchor, Self.containsAnchor(Data(rendered.utf8), anchor) == false {
+        continue
+      }
+      for match in Self.regexMatches(shape.pattern, in: rendered)
+      where shape.rule != "high-entropy" || Self.looksHighEntropy(match) {
+        rendered = rendered.replacingOccurrences(of: match, with: "[REDACTED:\(shape.rule)]")
       }
     }
 
@@ -199,6 +222,11 @@ public struct ExfilArgGuard: Sendable {
   /// spans so an appended `%ZZ` can't shield an encoded secret. Returns nil only when nothing
   /// was decoded (so the caller stops the pass loop).
   static func bestEffortPercentDecode(_ text: String) -> String? {
+    // Skips the scalar-by-scalar scan below, which is expensive on multi-MiB staged payloads.
+    guard text.utf8.contains(UInt8(ascii: "%")) else {
+      return nil
+    }
+
     let scalars = Array(text.unicodeScalars)
     var bytes: [UInt8] = []
     var index = 0
@@ -264,6 +292,12 @@ public struct ExfilArgGuard: Sendable {
     return matches
   }
 
+  /// Byte-level rather than `String.contains` because `Data` search is an order of magnitude
+  /// faster on multi-MiB haystacks; anchors are plain ASCII, so byte search is exact.
+  static func containsAnchor(_ bytes: Data, _ anchor: String) -> Bool {
+    bytes.range(of: Data(anchor.utf8)) != nil
+  }
+
   /// The deterministic, pinned stand-in for an entropy measure: ≥1 digit AND both letter cases.
   static func looksHighEntropy(_ token: String) -> Bool {
     token.contains(where: \.isNumber)
@@ -271,26 +305,55 @@ public struct ExfilArgGuard: Sendable {
       && token.contains(where: \.isLowercase)
   }
 
-  /// A collision-tolerant FNV-1a hash over a grapheme window's UTF-8 bytes, with a byte that
-  /// cannot occur in valid UTF-8 mixed in between graphemes so that different grapheme boundaries
-  /// can never fold into the same byte stream. It only narrows the candidate set — callers must
-  /// still confirm exact `Character` equality before blocking, so a collision cannot false-block.
-  static func windowFingerprint<Characters: Collection>(
-    _ characters: Characters
-  ) -> UInt64 where Characters.Element == Character {
-    var fingerprint: UInt64 = 0xcbf2_9ce4_8422_2325
-    let prime: UInt64 = 0x0000_0100_0000_01b3
+  /// The polynomial base for rolling window fingerprints (the FNV-1a prime, reused as an
+  /// arbitrary odd multiplier) and its precomputed weight for the window's leading grapheme,
+  /// used to subtract that grapheme back out when the window slides one position right.
+  private static let rollingBase: UInt64 = 0x0000_0100_0000_01b3
+  private static let leadingGraphemeWeight: UInt64 = {
+    var weight: UInt64 = 1
+    for _ in 1..<substringThresholdGraphemes {
+      weight &*= rollingBase
+    }
+    return weight
+  }()
 
-    for character in characters {
-      for byte in String(character).utf8 {
-        fingerprint ^= UInt64(byte)
-        fingerprint = fingerprint &* prime
-      }
-      fingerprint ^= 0xff
-      fingerprint = fingerprint &* prime
+  /// The standard library's `Character` hash carries a per-process random seed; that is safe
+  /// here because index and candidate fingerprints are always computed in the same process
+  /// (`PrivateTextIndex` is never persisted), and callers confirm exact `Character` equality
+  /// before blocking anyway.
+  private static func graphemeHash(_ character: Character) -> UInt64 {
+    UInt64(bitPattern: Int64(character.hashValue))
+  }
+
+  /// The fingerprint of every `substringThresholdGraphemes`-wide window of `characters`, at
+  /// index = window start — a rolling polynomial hash over per-grapheme hashes, so the whole
+  /// sweep is O(n) rather than O(n · width). Fingerprints only narrow the candidate set —
+  /// callers must still confirm exact `Character` equality before blocking, so a collision
+  /// cannot false-block.
+  static func windowFingerprints(_ characters: [Character]) -> [UInt64] {
+    let width = substringThresholdGraphemes
+    guard characters.count >= width else {
+      return []
     }
 
-    return fingerprint
+    let graphemeHashes = characters.map(graphemeHash)
+    var fingerprints: [UInt64] = []
+    fingerprints.reserveCapacity(characters.count - width + 1)
+
+    var rolling: UInt64 = 0
+    for hash in graphemeHashes[0..<width] {
+      rolling = rolling &* rollingBase &+ hash
+    }
+    fingerprints.append(rolling)
+
+    // Half-open so the exact-width text (a single window, zero slides) yields an empty range.
+    for start in 1..<(characters.count - width + 1) {
+      rolling &-= graphemeHashes[start - 1] &* leadingGraphemeWeight
+      rolling = rolling &* rollingBase &+ graphemeHashes[start + width - 1]
+      fingerprints.append(rolling)
+    }
+
+    return fingerprints
   }
 
   /// Runs a full redaction sweep over the RAW string so a span only present in a decoded candidate
