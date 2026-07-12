@@ -103,7 +103,6 @@ private extension ContainerBackend {
         health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
-          reaperOK: true,
           lastError: "could not read container runtime properties"
         )
       )
@@ -114,7 +113,6 @@ private extension ContainerBackend {
         health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
-          reaperOK: true,
           lastError: "container runtime init image is not a registry-qualified tag"
         )
       )
@@ -135,7 +133,6 @@ private extension ContainerBackend {
         health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
-          reaperOK: true,
           lastError: "sandbox backend is shutting down"
         )
       )
@@ -156,7 +153,6 @@ private extension ContainerBackend {
         health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
-          reaperOK: true,
           lastError: "could not pull sandbox images"
         )
       )
@@ -166,7 +162,6 @@ private extension ContainerBackend {
         health: failedHealth(
           engineVersion: engineVersion,
           versionOK: true,
-          reaperOK: true,
           lastError: "workload image digest did not match the configured pin"
         )
       )
@@ -183,7 +178,6 @@ private extension ContainerBackend {
         engineVersion: engineVersion,
         versionOK: true,
         imageDigestOK: true,
-        reaperOK: true,
         lastError: "sandbox backend is shutting down"
       )
     }
@@ -192,7 +186,6 @@ private extension ContainerBackend {
         engineVersion: engineVersion,
         versionOK: true,
         imageDigestOK: true,
-        reaperOK: true,
         lastError: "sandbox canary did not complete"
       )
     }
@@ -201,7 +194,6 @@ private extension ContainerBackend {
         engineVersion: engineVersion,
         versionOK: true,
         imageDigestOK: true,
-        reaperOK: true,
         lastError: "sandbox backend is shutting down"
       )
     }
@@ -471,11 +463,12 @@ private extension ContainerBackend {
 // MARK: - Health
 
 private extension ContainerBackend {
+  // reaperOK is guest evidence (/proc/1/comm observed by the canary); failed health always
+  // reports it false because reaching a failure path means the canary never proved it.
   func failedHealth(
     engineVersion: String? = nil,
     versionOK: Bool = false,
     imageDigestOK: Bool = false,
-    reaperOK: Bool = false,
     lastError: String
   ) -> SandboxHealth {
     SandboxHealth(
@@ -487,7 +480,7 @@ private extension ContainerBackend {
       capsEmpty: false,
       netIsolated: false,
       capsMatch: false,
-      reaperOK: reaperOK,
+      reaperOK: false,
       rootfsRO: false,
       stagingRO: false,
       interpretersOK: false,
