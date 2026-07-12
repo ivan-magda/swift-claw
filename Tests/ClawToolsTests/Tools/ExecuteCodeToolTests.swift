@@ -769,3 +769,30 @@ extension ExecuteCodeToolTests {
     #expect(replayed.canonicalArgsJSON == action.canonicalArgsJSON)
   }
 }
+
+extension ExecuteCodeToolTests {
+  @Test func stagedPathsAreRedactedInTheApprovalPreview() async throws {
+    // given — a loaded secret value embedded in a staged file's own path
+    let workspace = try makeWorkspace()
+    let secret = "s3cr3t-path-token-abcdef"
+    let relativePath = "notes/\(secret)/input.txt"
+    try write(Data("data".utf8), relativePath: relativePath, workspace: workspace)
+    let tool = makeTool(workspace: workspace, secrets: [secret])
+
+    // when
+    let action = try await prepared(tool.prepareAction(arguments: arguments(stage: [relativePath])))
+    let preview = try #require(action.presentation.contentPreview)
+    let recorded = try #require(JSONValue.parse(action.canonicalArgsJSON)?.objectValue)
+    guard case .array(let stages) = recorded["stage"], let stage = stages.first?.objectValue else {
+      Issue.record("recorded stage missing")
+      return
+    }
+
+    // then — the owner-facing preview never leaks the secret from the path or realpath
+    #expect(preview.contains(secret) == false)
+    #expect(preview.contains(SecretRedactor.replacement))
+    // ...while the canonical action keeps the true path and realpath for hash binding and resume.
+    #expect(stage["path"]?.stringValue == relativePath)
+    #expect(stage["realpath"]?.stringValue?.contains(secret) == true)
+  }
+}

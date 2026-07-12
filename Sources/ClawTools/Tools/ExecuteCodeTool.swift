@@ -402,12 +402,14 @@ private extension ExecuteCodeTool {
     let totalBytes = recorded.stage.reduce(0) { partial, stage in
       partial + stage.bytes
     }
+    // The path and realpath are model- and filesystem-derived, so a loaded secret could sit inside
+    // one; redact them for the owner-facing preview while the canonical action keeps the true values.
     let stagedSummary =
       recorded.stage.isEmpty
       ? "Staged inputs: none"
       : (["Staged inputs:"]
         + recorded.stage.map { stage in
-          "- \(stage.path) | \(stage.realpath) | \(stage.bytes) B | \(stage.sha256.prefix(16))"
+          "- \(redactor.redact(stage.path)) | \(redactor.redact(stage.realpath)) | \(stage.bytes) B | \(stage.sha256.prefix(16))"
         }).joined(separator: "\n")
     let preview = """
       ```\(recorded.language.rawValue)
