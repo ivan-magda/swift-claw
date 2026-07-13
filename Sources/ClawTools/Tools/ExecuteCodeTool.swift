@@ -250,16 +250,27 @@ private extension ExecuteCodeTool {
 // MARK: - Staging Authorization
 
 private extension ExecuteCodeTool {
-  enum StageLoadResult {
-    case success([LoadedStage])
+  enum StageOutcome<Value> {
+    case success(Value)
     case failure(String)
   }
 
-  func authorizeAndLoad(paths: [String]) -> StageLoadResult {
+  func authorizeAndLoad(paths: [String]) -> StageOutcome<[LoadedStage]> {
     guard WorkspacePathContainment.canonicalPath(workspaceRoot.path) != nil else {
       return .failure("The workspace root is unavailable.")
     }
 
+    switch authorizeStages(paths) {
+    case .failure(let reason):
+      return .failure(reason)
+    case .success(let authorized):
+      return loadAuthorizedStages(authorized)
+    }
+  }
+
+  // Phase 1: resolve, stat, size-cap, and basename-validate every requested path before a single
+  // byte is read, so a rejected batch never leaves a partially-read set behind.
+  func authorizeStages(_ paths: [String]) -> StageOutcome<[AuthorizedStage]> {
     var authorized: [AuthorizedStage] = []
     var normalizedNames = Set<String>()
     var totalStatBytes = 0
@@ -318,20 +329,26 @@ private extension ExecuteCodeTool {
       )
     }
 
+    return .success(authorized)
+  }
+
+  // Phase 2: read each authorized file under the same per-file and total caps (a file can grow
+  // between stat and read), hashing the bytes into the recorded stage the approval will pin.
+  func loadAuthorizedStages(_ authorized: [AuthorizedStage]) -> StageOutcome<[LoadedStage]> {
     var loaded: [LoadedStage] = []
     var totalReadBytes = 0
+
     for stage in authorized {
       let data: Data
       do {
-        guard
-          let bounded = try Self.readBoundedFile(
-            atPath: stage.realpath,
-            maxBytes: Self.maxStagedFileBytes
-          )
-        else {
+        if let bounded = try Self.readBoundedFile(
+          atPath: stage.realpath,
+          maxBytes: Self.maxStagedFileBytes
+        ) {
+          data = bounded
+        } else {
           return .failure("A staged file grew past the 1 MiB cap while it was read.")
         }
-        data = bounded
       } catch {
         return .failure("A staged file became unreadable before it could be prepared.")
       }
@@ -367,9 +384,11 @@ extension ExecuteCodeTool {
     var data = Data()
     while data.count <= maxBytes {
       let remaining = maxBytes + 1 - data.count
-      guard let chunk = try handle.read(upToCount: remaining), chunk.isEmpty == false else {
+
+      guard let chunk = try handle.read(upToCount: remaining), !chunk.isEmpty else {
         return data
       }
+
       data.append(chunk)
     }
 
@@ -504,20 +523,9 @@ private extension ExecuteCodeTool {
 // MARK: - Resume Revalidation
 
 private extension ExecuteCodeTool {
-  func reloadRecordedStages(_ records: [RecordedStage]) -> StageLoadResult {
-    guard records.count <= Self.maxStagedFiles else {
-      return .failure("The recorded stage count exceeds the approved cap; nothing ran.")
-    }
-
-    var recordedTotalBytes = 0
-    for record in records {
-      guard record.bytes >= 0, record.bytes <= Self.maxStagedFileBytes else {
-        return .failure("A recorded staged-file size exceeds the approved cap; nothing ran.")
-      }
-      guard let nextTotal = Self.totalWithinCap(adding: record.bytes, to: recordedTotalBytes) else {
-        return .failure("The recorded staged total exceeds the approved cap; nothing ran.")
-      }
-      recordedTotalBytes = nextTotal
+  func reloadRecordedStages(_ records: [RecordedStage]) -> StageOutcome<[LoadedStage]> {
+    if let reason = precheckRecordedSizes(records) {
+      return .failure(reason)
     }
 
     var loaded: [LoadedStage] = []
@@ -525,76 +533,114 @@ private extension ExecuteCodeTool {
     var totalBytes = 0
 
     for record in records {
-      let liveRealpath: String
-      switch WorkspacePathContainment.resolveExisting(
-        path: record.path,
-        root: workspaceRoot.path
-      ) {
-      case .refused:
-        return .failure("A staged path no longer resolves to its approved target; nothing ran.")
-      case .resolved(let resolved):
-        liveRealpath = resolved
-      }
-      guard liveRealpath == record.realpath else {
-        return .failure("A staged path no longer resolves to its approved target; nothing ran.")
+      let stage: LoadedStage
+      switch revalidateRecordedStage(record, claimed: &normalizedNames) {
+      case .failure(let reason):
+        return .failure(reason)
+      case .success(let revalidated):
+        stage = revalidated
       }
 
-      let attributes: [FileAttributeKey: Any]
-      do {
-        attributes = try FileManager.default.attributesOfItem(atPath: liveRealpath)
-      } catch {
-        return .failure("A staged file became unavailable after approval; nothing ran.")
-      }
-      guard attributes[.type] as? FileAttributeType == .typeRegular,
-        let size = attributes[.size] as? NSNumber,
-        size.intValue == record.bytes,
-        size.intValue <= Self.maxStagedFileBytes
-      else {
-        return .failure("A staged file no longer has its approved size and type; nothing ran.")
-      }
-
-      let data: Data
-      do {
-        guard
-          let bounded = try Self.readBoundedFile(
-            atPath: liveRealpath,
-            maxBytes: Self.maxStagedFileBytes
-          )
-        else {
-          return .failure("A staged file grew past its approved cap; nothing ran.")
-        }
-        data = bounded
-      } catch {
-        return .failure("A staged file became unreadable after approval; nothing ran.")
-      }
-      guard data.count == record.bytes, SHA256Digest.hex(data) == record.sha256 else {
-        return .failure("A staged file no longer matches its approved bytes; nothing ran.")
-      }
-      guard let nextTotal = Self.totalWithinCap(adding: data.count, to: totalBytes) else {
+      guard let nextTotal = Self.totalWithinCap(adding: stage.bytes.count, to: totalBytes) else {
         return .failure("Staged files exceed the approved total cap; nothing ran.")
       }
       totalBytes = nextTotal
 
-      let basename: String
-      switch Self.validateBasename(of: record.path, claimed: &normalizedNames) {
-      case .reservedNamespace, .duplicate:
-        return .failure(
-          "The staged basename set no longer satisfies the approved layout; nothing ran."
-        )
-      case .accepted(let accepted):
-        basename = accepted
-      }
-
-      loaded.append(
-        LoadedStage(
-          record: record,
-          basename: basename,
-          bytes: data
-        )
-      )
+      loaded.append(stage)
     }
 
     return .success(loaded)
+  }
+
+  func precheckRecordedSizes(_ records: [RecordedStage]) -> String? {
+    guard records.count <= Self.maxStagedFiles else {
+      return "The recorded stage count exceeds the approved cap; nothing ran."
+    }
+
+    var recordedTotalBytes = 0
+    for record in records {
+      guard record.bytes >= 0, record.bytes <= Self.maxStagedFileBytes else {
+        return "A recorded staged-file size exceeds the approved cap; nothing ran."
+      }
+      guard let nextTotal = Self.totalWithinCap(adding: record.bytes, to: recordedTotalBytes) else {
+        return "The recorded staged total exceeds the approved cap; nothing ran."
+      }
+      recordedTotalBytes = nextTotal
+    }
+
+    return nil
+  }
+
+  func revalidateRecordedStage(
+    _ record: RecordedStage,
+    claimed normalizedNames: inout Set<String>
+  ) -> StageOutcome<LoadedStage> {
+    let liveRealpath: String
+    switch WorkspacePathContainment.resolveExisting(
+      path: record.path,
+      root: workspaceRoot.path
+    ) {
+    case .refused:
+      return .failure("A staged path no longer resolves to its approved target; nothing ran.")
+    case .resolved(let resolved):
+      liveRealpath = resolved
+    }
+
+    guard liveRealpath == record.realpath else {
+      return .failure("A staged path no longer resolves to its approved target; nothing ran.")
+    }
+
+    let attributes: [FileAttributeKey: Any]
+    do {
+      attributes = try FileManager.default.attributesOfItem(atPath: liveRealpath)
+    } catch {
+      return .failure("A staged file became unavailable after approval; nothing ran.")
+    }
+
+    guard
+      attributes[.type] as? FileAttributeType == .typeRegular,
+      let size = attributes[.size] as? NSNumber,
+      size.intValue == record.bytes,
+      size.intValue <= Self.maxStagedFileBytes
+    else {
+      return .failure("A staged file no longer has its approved size and type; nothing ran.")
+    }
+
+    let data: Data
+    do {
+      if let bounded = try Self.readBoundedFile(
+        atPath: liveRealpath,
+        maxBytes: Self.maxStagedFileBytes
+      ) {
+        data = bounded
+      } else {
+        return .failure("A staged file grew past its approved cap; nothing ran.")
+      }
+    } catch {
+      return .failure("A staged file became unreadable after approval; nothing ran.")
+    }
+
+    guard data.count == record.bytes, SHA256Digest.hex(data) == record.sha256 else {
+      return .failure("A staged file no longer matches its approved bytes; nothing ran.")
+    }
+
+    let basename: String
+    switch Self.validateBasename(of: record.path, claimed: &normalizedNames) {
+    case .reservedNamespace, .duplicate:
+      return .failure(
+        "The staged basename set no longer satisfies the approved layout; nothing ran."
+      )
+    case .accepted(let accepted):
+      basename = accepted
+    }
+
+    return .success(
+      LoadedStage(
+        record: record,
+        basename: basename,
+        bytes: data
+      )
+    )
   }
 }
 
