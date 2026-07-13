@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import ClawWorkspace
 import Foundation
 import GRDB
@@ -30,10 +31,6 @@ actor StubLLMProvider: LLMProvider {
     case .fail(let error): throw error
     }
   }
-}
-
-struct NoopTyping: TypingIndicator {
-  func sendTyping(chatId: Int64) async {}
 }
 
 /// Delegates to the real run store but flips the active run to CANCELLED immediately before the

@@ -132,6 +132,7 @@ A test in this repo:
 - [ ] asserts an **observable effect** (outbox payload, run state, persisted row, egress list, typed error), not private structure or call order;
 - [ ] uses a **real GRDB store** for anything touching SQL/FTS/migrations/triggers, and a **scripted double at the protocol seam** for the LLM provider and Telegram;
 - [ ] references the **enum `rawValue` / named constant** the production code emits, not a duplicated literal;
+- [ ] reuses a shared double from **`Sources/ClawTestSupport`** (the one cross-target support module) rather than re-declaring one — a double defined in a per-target `*TestSupport.swift` is invisible to sibling test targets, so promote it to `ClawTestSupport` before duplicating;
 - [ ] pins the **load-bearing fields** of any rendered output, not the full copy blob or incidental counts/ids;
 - [ ] synchronizes on a **gate or emitted signal**, never a `sleep`;
 - [ ] builds its **own fresh environment** and cleans up; does not depend on order;

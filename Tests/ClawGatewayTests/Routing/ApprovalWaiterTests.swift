@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -37,6 +38,35 @@ import Testing
 
     func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
       ApprovedExecutionOutcome(observationContent: "scripted", commit: commit)
+    }
+  }
+
+  /// An executor whose action only completes after `gate` releases — i.e. after typing fired once —
+  /// standing in for a long sandbox run the owner would otherwise stare at in silence.
+  private struct GatedExecutor: ApprovedActionExecuting {
+    let gate: TypingReleaseGate
+
+    func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
+      await gate.awaitRelease()
+      return ApprovedExecutionOutcome(observationContent: "scripted", commit: .committed)
+    }
+  }
+
+  /// Captures whether the prompt keyboard was already disarmed when the action started
+  /// executing — the owner-facing ordering the approve path must guarantee.
+  private actor DisarmOrderProbeExecutor: ApprovedActionExecuting {
+    private let callbacks: RecordingCallbacks
+    private(set) var executed = false
+    private(set) var disarmedBeforeExecution = false
+
+    init(callbacks: RecordingCallbacks) {
+      self.callbacks = callbacks
+    }
+
+    func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
+      executed = true
+      disarmedBeforeExecution = await !callbacks.disarmed.isEmpty
+      return ApprovedExecutionOutcome(observationContent: "scripted", commit: .committed)
     }
   }
 
@@ -176,7 +206,9 @@ import Testing
     delivery: RecordingDelivery,
     callbacks: RecordingCallbacks,
     currentPolicyVersion: @escaping @Sendable () throws -> String = { "pv" },
-    executor: (any ApprovedActionExecuting)? = nil
+    executor: (any ApprovedActionExecuting)? = nil,
+    typing: any TypingIndicator = NoopTyping(),
+    clock: any Clock<Duration> = ContinuousClock()
   ) -> ApprovalWaiter {
     ApprovalWaiter(
       approvals: env.approvals,
@@ -193,6 +225,8 @@ import Testing
       turns: turns,
       delivery: delivery,
       callbacks: callbacks,
+      typing: typing,
+      clock: clock,
       currentPolicyVersion: currentPolicyVersion,
       now: { Date() },
       logger: Logger(label: "test")
@@ -259,6 +293,83 @@ import Testing
       ]
     )
     #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
+  @Test func approveDisarmsTheButtonsBeforeTheActionExecutes() async throws {
+    // given — an executor that records whether the keyboard was already gone when it started
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let executor = DisarmOrderProbeExecutor(callbacks: callbacks)
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks,
+      executor: executor
+    )
+
+    // when
+    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then — the tap is acknowledged before the (possibly long) execution, not after it: the
+    // approve CAS already made re-taps no-ops, so the keyboard must not outlive the decision
+    #expect(await executor.executed)
+    #expect(await executor.disarmedBeforeExecution)
+    #expect(await callbacks.disarmed == [env.promptMessageId])
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func approveShowsTypingWhileTheActionExecutes() async throws {
+    // given — an executor that cannot finish until the typing indicator has pulsed at least once,
+    // and a clock whose reissue sleep parks until the race cancels it
+    let env = try makeApprovedFixture()
+    let coordinator = ApprovalCoordinator()
+    let turns = ResumeRecorder()
+    let delivery = RecordingDelivery()
+    let callbacks = RecordingCallbacks()
+    let gate = TypingReleaseGate()
+    let typing = GatingTyping(gate: gate)
+    let waiter = makeWaiter(
+      env,
+      coordinator: coordinator,
+      turns: turns,
+      delivery: delivery,
+      callbacks: callbacks,
+      executor: GatedExecutor(gate: gate),
+      typing: typing,
+      clock: ScriptedClock { _ in
+        try await Task.sleep(for: .seconds(3600))
+      }
+    )
+
+    // when
+    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await waiter.park(
+      approvalId: env.approvalId,
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: 7,
+      revalidatePolicyOnApprove: false
+    )
+
+    // then — the owner saw activity during the execution window, and the resume still ran
+    #expect(await typing.calls >= 1)
+    #expect(
+      await turns.resumeCalls == [
+        .init(runId: env.runId, contextBoundMessageId: env.observationMessageId)
+      ]
+    )
   }
 
   @Test func aStoreFailedCommitNotifiesTheOwnerAndLeavesTheRunAwaiting() async throws {

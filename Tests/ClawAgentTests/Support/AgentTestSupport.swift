@@ -1,3 +1,4 @@
+import ClawTestSupport
 import ClawWorkspace
 import Foundation
 import Testing
@@ -7,14 +8,8 @@ import Testing
 
 // MARK: - Test doubles
 
-/// Counts typing pulses so "issued at least once" and "never issued" are both observable.
-actor RecordingTyping: TypingIndicator {
-  private(set) var calls = 0
-
-  func sendTyping(chatId: Int64) async {
-    calls += 1
-  }
-}
+// The generic typing doubles (`RecordingTyping`, `TypingReleaseGate`, `GatingTyping`) live in
+// `ClawTestSupport` so the gateway's approve-resume tests share the same activity contract.
 
 /// Returns a scripted response or throws a scripted `ProviderError`;
 /// records its call count so the preflight-stop path can assert the provider was never reached.
@@ -49,46 +44,6 @@ actor HangingProvider: LLMProvider {
     calls += 1
     try await Task.sleep(for: .seconds(3600))
     return ChatResponse(content: "late", finishReason: "stop", usage: .zero, costFromProvider: nil)
-  }
-}
-
-/// A one-shot release signal: `complete` blocks on `awaitRelease` until `release` is called once.
-/// Lets a test pin the provider-after-typing ordering that `withTypingAndDeadline` would otherwise
-/// leave to scheduler luck (the source of the historical `typing.calls` flake).
-actor TypingReleaseGate {
-  private var waiters: [CheckedContinuation<Void, Never>] = []
-  private var released = false
-
-  func awaitRelease() async {
-    if released { return }
-    await withCheckedContinuation { continuation in
-      waiters.append(continuation)
-    }
-  }
-
-  func release() {
-    guard !released else { return }
-    released = true
-    for waiter in waiters {
-      waiter.resume()
-    }
-    waiters.removeAll()
-  }
-}
-
-/// A typing indicator that releases `gate` on its first pulse, so a `GatedProvider` cannot answer
-/// before the user has seen "typing…" — making "typing was issued" deterministic.
-actor GatingTyping: TypingIndicator {
-  private(set) var calls = 0
-  private let gate: TypingReleaseGate
-
-  init(gate: TypingReleaseGate) {
-    self.gate = gate
-  }
-
-  func sendTyping(chatId: Int64) async {
-    calls += 1
-    await gate.release()
   }
 }
 

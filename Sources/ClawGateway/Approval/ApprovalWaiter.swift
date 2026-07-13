@@ -13,13 +13,19 @@ import Logging
 public struct ApprovalWaiter: ApprovalParking {
   private let approvals: any ApprovalStore
   private let runs: any RunStore
+
   private let coordinator: ApprovalCoordinator
   private let executor: any ApprovedActionExecuting
   private let turns: any TurnDispatching
+
   private let delivery: any MessageDelivery
   private let callbacks: any CallbackResponding
+  private let typing: any TypingIndicator
+
+  private let clock: any Clock<Duration>
   private let currentPolicyVersion: @Sendable () throws -> String
   private let now: @Sendable () -> Date
+
   private let logger: Logger
 
   public init(
@@ -30,19 +36,27 @@ public struct ApprovalWaiter: ApprovalParking {
     turns: any TurnDispatching,
     delivery: any MessageDelivery,
     callbacks: any CallbackResponding,
+    typing: any TypingIndicator,
+    clock: any Clock<Duration>,
     currentPolicyVersion: @escaping @Sendable () throws -> String,
     now: @escaping @Sendable () -> Date,
     logger: Logger
   ) {
     self.approvals = approvals
     self.runs = runs
+
     self.coordinator = coordinator
     self.executor = executor
     self.turns = turns
+
     self.delivery = delivery
     self.callbacks = callbacks
+    self.typing = typing
+
+    self.clock = clock
     self.currentPolicyVersion = currentPolicyVersion
     self.now = now
+
     self.logger = logger
   }
 
@@ -97,23 +111,27 @@ private extension ApprovalWaiter {
       return
     }
 
+    // Disarm on decision, not after execution: the approve CAS already made re-taps no-ops, and
+    // a keyboard that outlives a tens-of-seconds run reads as an unacknowledged tap.
+    await disarm(approval, chatId: chatId)
+
     if revalidatePolicyOnApprove, policyStillMatches(approval) == false {
       await failOnStalePolicy(approval, chatId: chatId)
       return
     }
 
-    let outcome = await executor.executeApproved(approval)
+    let outcome = await withTypingPulse(chatId: chatId, indicator: typing, clock: clock) {
+      await executor.executeApproved(approval)
+    }
     switch outcome.commit {
     case .ignored:
       // A duplicate signal already resumed the run; do not run the continuation twice.
       logger.debug("approved resume for run \(runId) was a no-op (duplicate signal)")
-      await disarm(approval, chatId: chatId)
       return
     case .runNotResumable:
       // `/stop`//`new` drove the run terminal after the approve CAS: nothing executed, the claim
-      // txn resolved the observation, and the command already acked the owner — just disarm.
+      // txn resolved the observation, and the command already acked the owner — nothing to do.
       logger.debug("approved action for run \(runId) skipped; the run was cancelled first")
-      await disarm(approval, chatId: chatId)
       return
     case .storeFailed:
       // The pre-execution claim threw at the store seam — nothing ran. Leave the run
@@ -123,7 +141,6 @@ private extension ApprovalWaiter {
         "approved claim store-failed (tool \(approval.tool), approval \(approval.id)); run left AWAITING_APPROVAL for boot recovery"
       )
       await notifyOwner(chatId: chatId, text: Self.storeFailureNotice)
-      await disarm(approval, chatId: chatId)
       return
     case .recordFailed:
       // The action EXECUTED but its result could not be recorded. Never promise a retry — the
@@ -132,7 +149,6 @@ private extension ApprovalWaiter {
         "approved result record-failed (tool \(approval.tool), approval \(approval.id)); run left RUNNING for the boot orphan sweep"
       )
       await notifyOwner(chatId: chatId, text: Self.recordFailureNotice)
-      await disarm(approval, chatId: chatId)
       return
     case .committed:
       break
@@ -144,7 +160,6 @@ private extension ApprovalWaiter {
       chatId: chatId,
       contextBoundMessageId: approval.observationMessageId
     )
-    await disarm(approval, chatId: chatId)
   }
 
   func policyStillMatches(_ approval: Approval) -> Bool {
@@ -169,7 +184,6 @@ private extension ApprovalWaiter {
       logger.error("failRunStalePolicy failed for run \(approval.runId): \(error)")
     }
     await notifyOwner(chatId: chatId, text: Self.stalePolicyNotice)
-    await disarm(approval, chatId: chatId)
   }
 }
 

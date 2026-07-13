@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -343,6 +344,8 @@ private extension CommandApprovalCancelSignalRaceTests {
       turns: FakeTurnRunner(),
       delivery: transport,
       callbacks: transport,
+      typing: NoopTyping(),
+      clock: ContinuousClock(),
       currentPolicyVersion: { "pv" },
       now: { Date() },
       logger: TestLog.silent

@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import ClawTools
 import ClawWorkspace
 import Foundation
@@ -297,6 +298,8 @@ func makeSC3Harness(
     turns: runner,
     delivery: transport,
     callbacks: transport,
+    typing: NoopTyping(),
+    clock: ContinuousClock(),
     currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
     now: { Date() },
     logger: logger

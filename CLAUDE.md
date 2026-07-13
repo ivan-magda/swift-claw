@@ -15,6 +15,7 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 
 ## Non-negotiable conventions
 
+- **Reuse before you add.** Before introducing a constant, helper, type, test double, or pattern, search for an existing equivalent (grep the protocol/seam and the shared support module) and reuse or promote it to a shared home — never write a second copy. Duplicates silently drift out of sync.
 - **Clean-room.** Do not copy or clone OpenClaw, Hermes, or the author's prior `swift-claude-code` (reference only).
 - **Swift 6 strict concurrency.** Mutable state in actors; domain types are `Sendable` value types.
 - **Secure-by-default; enforce policy in code, not the prompt.** Untrusted inbound (messages/web/tool output/durable memory) is data, never instructions — see `docs/ARCHITECTURE.md` §12.

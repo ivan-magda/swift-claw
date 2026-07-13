@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawGateway
+import ClawTelegram
 import ClawTools
 import Foundation
 
@@ -73,6 +74,8 @@ extension DaemonBuilder {
       turns: turnRunner,
       delivery: transport,
       callbacks: transport,
+      typing: TelegramTypingIndicator(transport: transport),
+      clock: ContinuousClock(),
       currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
       now: { Date() },
       logger: logger
