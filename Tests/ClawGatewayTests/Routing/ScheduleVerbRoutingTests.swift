@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -9,9 +10,9 @@ import Testing
 
 @Suite struct ScheduleVerbRoutingTests {
   /// Monday 2026-07-06 12:00:00 UTC == 14:00 Europe/Berlin.
-  private static let fixedNow = Date(timeIntervalSince1970: 1_783_339_200)
+  private static let fixedNow = SchedulingTestClock.mondayNoonBerlin
   /// Tuesday 2026-07-07 07:00 Europe/Berlin == 05:00 UTC — the next daily-07:00 fire.
-  private static let nextDailyFire = Date(timeIntervalSince1970: 1_783_400_400)
+  private static let nextDailyFire = SchedulingTestClock.tuesdaySevenBerlin
 
   private struct Harness {
     let router: MessageRouter

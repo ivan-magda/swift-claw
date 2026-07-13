@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -6,7 +7,7 @@ import Testing
 @Suite struct ScheduleDraftValidatorTests {
   /// Monday 2026-07-06 12:00:00 UTC == 14:00 Europe/Berlin (CEST). All expectations below are
   /// derived from this fixed instant — no real clocks.
-  private let fixedNow = Date(timeIntervalSince1970: 1_783_339_200)
+  private let fixedNow = SchedulingTestClock.mondayNoonBerlin
 
   private func makeValidator() throws -> ScheduleDraftValidator {
     ScheduleDraftValidator(

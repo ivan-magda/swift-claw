@@ -72,9 +72,10 @@ public struct FileReadTool: Tool {
     }
 
     let redacted = redactor.redact(text)
-    let readPrivateData =
-      canonicalTarget == canonicalRoot + "/MEMORY.md"
-      || canonicalTarget == canonicalRoot + "/USER.md"
+    let readPrivateData = WorkspaceFile.isPrivateData(
+      canonicalPath: canonicalTarget,
+      canonicalRoot: canonicalRoot
+    )
 
     return ToolPayload(
       content: ToolOutputCap.cap(redacted, maxGraphemes: outputCapGraphemes),

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Crypto
 import Foundation
 import Testing
@@ -6,17 +7,9 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EncryptedFileSecretStoreTests {
-  /// A fresh, unique state root per test so the suite stays parallel-safe.
-  private func makeStateRoot() throws -> URL {
-    let dir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-secrets-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    return dir
-  }
-
   @Test func sealThenLoadRoundTrips() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let original = Secrets(telegramBotToken: "123:abc", llmApiKey: "sk-secret")
@@ -31,7 +24,7 @@ import Testing
 
   @Test func sealedEnvelopeContainsNoPlaintextToken() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let token = "123:super-secret-token"
@@ -51,7 +44,7 @@ import Testing
 
   @Test func tamperedCiphertextFailsClosed() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
@@ -73,7 +66,7 @@ import Testing
 
   @Test func tamperedVersionByteFailsClosed() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
@@ -98,7 +91,7 @@ import Testing
     // DIFFERENT associated-data byte. This proves the version byte is bound as AEAD AAD: the reader
     // passes the version guard, then authentication fails because the AAD it uses ([1]) differs
     // from the AAD the box was sealed with ([2]). Built by hand with a key we control.
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let keyData = Data(repeating: 0x11, count: EncryptedFileSecretStore.keyByteCount)

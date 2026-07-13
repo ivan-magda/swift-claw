@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -44,7 +45,7 @@ import Testing
 
   @Test func cursorSurvivesReopen() throws {
     // given: persist on one connection, read on a fresh one (stand-in for SIGTERM + restart)
-    let path = NSTemporaryDirectory() + "claw-cursor-\(UInt64.random(in: 0..<(.max))).sqlite"
+    let path = makeTempDatabasePath(prefix: "claw-cursor")
     defer {
       try? FileManager.default.removeItem(atPath: path)
     }

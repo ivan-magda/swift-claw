@@ -182,7 +182,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
       stop: request.stop,
       stream: streaming,
       streamOptions: streaming ? StreamOptions(includeUsage: true) : nil,
-      tools: wireTools.isEmpty ? nil : wireTools
+      tools: wireTools.isEmpty ? nil : wireTools,
+      responseFormat: request.responseFormat
     )
     return try JSONEncoder().encode(payload)
   }
@@ -200,12 +201,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
 
     let choice = decoded.choices.first
     let usage =
-      decoded.usage.map {
-        ChatUsage(
-          promptTokens: $0.promptTokens ?? 0,
-          completionTokens: $0.completionTokens ?? 0,
-          totalTokens: $0.totalTokens ?? 0
-        )
+      decoded.usage.map { wireUsage in
+        wireUsage.toChatUsage()
       }
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
     let providerCost = decoded.usage?.cost ?? providerCost(from: result)
@@ -312,10 +309,7 @@ private extension OpenAICompatibleProvider {
 
 private extension OpenAICompatibleProvider {
   func sanitize(message: String) -> String {
-    guard !config.apiKey.isEmpty else {
-      return message
-    }
-    return message.replacingOccurrences(of: config.apiKey, with: "<redacted-key>")
+    SecretRedactor(secretValues: [config.apiKey]).redact(message)
   }
 
   func sanitize(providerError: ProviderError) -> ProviderError {
@@ -399,9 +393,11 @@ private struct RequestBody: Encodable {
   let streamOptions: StreamOptions?
   // swiftlint:disable:next discouraged_optional_collection
   let tools: [WireToolDefinition]?
+  let responseFormat: ResponseFormat?
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: DynamicKey.self)
+
     try container.encode(model, forKey: DynamicKey("model"))
     try container.encode(messages, forKey: DynamicKey("messages"))
     try container.encode(maxOutputTokens, forKey: DynamicKey(maxTokensKey))
@@ -409,7 +405,39 @@ private struct RequestBody: Encodable {
     try container.encodeIfPresent(streamOptions, forKey: DynamicKey("stream_options"))
     try container.encodeIfPresent(stop, forKey: DynamicKey("stop"))
     try container.encodeIfPresent(tools, forKey: DynamicKey("tools"))
+
+    if let responseFormat {
+      try container.encode(
+        WireResponseFormat(responseFormat: responseFormat),
+        forKey: DynamicKey("response_format")
+      )
+    }
   }
+}
+
+private struct WireResponseFormat: Encodable {
+  let responseFormat: ResponseFormat
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: DynamicKey.self)
+
+    switch responseFormat {
+    case .jsonObject:
+      try container.encode("json_object", forKey: DynamicKey("type"))
+    case .jsonSchema(let name, let schema):
+      try container.encode("json_schema", forKey: DynamicKey("type"))
+      try container.encode(
+        WireJSONSchema(name: name, strict: true, schema: schema),
+        forKey: DynamicKey("json_schema")
+      )
+    }
+  }
+}
+
+private struct WireJSONSchema: Encodable {
+  let name: String
+  let strict: Bool
+  let schema: JSONValue
 }
 
 private struct StreamOptions: Encodable {
@@ -452,22 +480,8 @@ private struct ResponseBody: Decodable {
     }
   }
 
-  struct Usage: Decodable {
-    let promptTokens: Int?
-    let completionTokens: Int?
-    let totalTokens: Int?
-    let cost: Double?
-
-    enum CodingKeys: String, CodingKey {
-      case promptTokens = "prompt_tokens"
-      case completionTokens = "completion_tokens"
-      case totalTokens = "total_tokens"
-      case cost
-    }
-  }
-
   let choices: [Choice]
-  let usage: Usage?
+  let usage: WireUsage?
 }
 
 private struct ErrorBody: Decodable {

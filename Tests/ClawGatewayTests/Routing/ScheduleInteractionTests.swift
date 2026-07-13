@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -8,7 +9,7 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct ScheduleInteractionTests {
-  private static let fixedNow = Date(timeIntervalSince1970: 1_783_339_200)
+  private static let fixedNow = SchedulingTestClock.mondayNoonBerlin
 
   private static let morningDraft = ScheduleDraft(
     label: "morning digest",

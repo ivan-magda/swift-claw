@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -7,16 +8,9 @@ import Testing
 @Suite struct SecretStoreResolverTests {
   private typealias EnvKey = EnvSecretStore.EnvKey
 
-  private func makeStateRoot() throws -> URL {
-    let dir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-resolve-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    return dir
-  }
-
   @Test func picksEnvWhenNoEncryptedArtifacts() throws {
     // given — neither secrets.enc nor secret.key exists.
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-resolve")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     // when
@@ -33,7 +27,7 @@ import Testing
 
   @Test func picksEncryptedWhenSealed() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-resolve")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
@@ -55,7 +49,7 @@ import Testing
 
   @Test func envelopeWithoutKeyFailsClosedNeverFallsBackToEnv() throws {
     // given — a partial encrypted setup: secrets.enc present, secret.key missing, env token set.
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-resolve")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
@@ -84,7 +78,7 @@ import Testing
     // given — secret.key is a BROKEN symlink (its target was never created) and an env token is set.
     // `FileManager.fileExists` follows symlinks and reports a broken one as absent (fail-open);
     // an `lstat`-based check sees the entry and must force the encrypted backend (fail-closed).
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-resolve")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let keyURL = stateRoot.appendingPathComponent(SecretFile.key)

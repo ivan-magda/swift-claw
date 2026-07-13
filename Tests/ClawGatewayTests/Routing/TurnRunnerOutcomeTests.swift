@@ -63,6 +63,7 @@ import Testing
       notifyOutbox: {},
       // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
       parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
+      approvalExpirySeconds: testApprovalExpirySeconds,
       logger: TestLog.silent
     )
     return Fixture(

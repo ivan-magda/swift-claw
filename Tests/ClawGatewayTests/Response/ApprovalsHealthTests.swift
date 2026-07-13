@@ -4,7 +4,7 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct ApprovalsHealthTests {
-  private func value(_ rows: [ApprovalsHealthRows.Row], _ key: String) -> String? {
+  private func value(_ rows: [DoctorReport.Check], _ key: String) -> String? {
     rows.first { row in row.key == key }?.value
   }
 

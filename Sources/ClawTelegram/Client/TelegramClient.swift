@@ -200,11 +200,7 @@ extension TelegramClient {
   /// Strips the bot token from any thrown/logged message so `TelegramError` is safe to log
   /// verbatim downstream (the token is in the request URL).
   private func sanitize(_ message: String) -> String {
-    if token.isEmpty {
-      message
-    } else {
-      message.replacingOccurrences(of: token, with: "<redacted-token>")
-    }
+    SecretRedactor(secretValues: [token]).redact(message)
   }
 
   /// Decodes the `TResponse<R>` envelope,

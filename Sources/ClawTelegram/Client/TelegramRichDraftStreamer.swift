@@ -6,7 +6,7 @@ import Foundation
 /// lives in the caller — `StreamingTurnRuntime` abandons a send at its deadline — so a stalled
 /// POST needs no escape hatch here.
 public struct TelegramRichDraftStreamer: RichDraftStreaming {
-  public static let maxMarkdownCharacters = 32_768
+  public static let maxMarkdownCharacters = TelegramMessageLimits.maxRichMessageCharacters
 
   private let transport: any TelegramTransport
 

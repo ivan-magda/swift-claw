@@ -55,12 +55,12 @@ public struct RunBudget: Sendable, Equatable {
 
   public static let `default` = RunBudget(
     maxInputTokens: 100_000,
-    maxOutputTokens: 4_096,
+    maxOutputTokens: RunDefaults.maxOutputTokens,
     wallClockDeadlineSeconds: 180,
-    retryBudget: 3,
+    retryBudget: RunDefaults.retryBudget,
     perRunUSD: 0.50,
     perDayUSD: 10.00,
-    proactivePerDayUSD: 2.00,
+    proactivePerDayUSD: RunDefaults.proactivePerDayUSD,
     referenceUSDPerToken: 0.000_015,
     maxTurns: 12,
     maxToolCalls: 20

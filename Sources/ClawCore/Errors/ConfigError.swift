@@ -4,6 +4,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case missingLLMBaseURL
   case missingLLMModel
   case invalidMaxTokensField(String)
+  case invalidStructuredOutput(String)
   case invalidMaxTokens(String)
   case invalidBudget(String)
   case invalidBool(key: String, value: String)
@@ -27,6 +28,7 @@ public enum ConfigError: Error, Sendable, Equatable {
     case .missingLLMBaseURL: ClawExitCode.configInvalid.rawValue
     case .missingLLMModel: ClawExitCode.configInvalid.rawValue
     case .invalidMaxTokensField: ClawExitCode.configInvalid.rawValue
+    case .invalidStructuredOutput: ClawExitCode.configInvalid.rawValue
     case .invalidMaxTokens: ClawExitCode.configInvalid.rawValue
     case .invalidBudget: ClawExitCode.configInvalid.rawValue
     case .invalidBool: ClawExitCode.configInvalid.rawValue

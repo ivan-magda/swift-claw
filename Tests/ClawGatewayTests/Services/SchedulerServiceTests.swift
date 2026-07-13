@@ -200,9 +200,7 @@ private final class SleepRecorder: @unchecked Sendable {
   private let anchor = Date(timeIntervalSince1970: 1_750_000_000)
 
   private func everyFiveMinutesRule() -> Calendar.RecurrenceRule {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "Europe/Berlin") ?? .gmt
-    return Calendar.RecurrenceRule(calendar: calendar, frequency: .minutely, interval: 5)
+    SchedulingRuleFixtures.everyNMinutes(5, zone: TimeZone(identifier: "Europe/Berlin") ?? .gmt)
   }
 
   private func makeJob(

@@ -79,15 +79,7 @@ enum DoctorHealth {
       now: now
     )
 
-    return SchedulerHealth.rows(snapshot).map { row in
-      DoctorReport.Check(
-        key: row.key,
-        value: row.value,
-        ok: true,
-        group: .scheduler,
-        isHeadline: row.headline
-      )
-    }
+    return SchedulerHealth.rows(snapshot)
   }
 
   static func approvalChecks(
@@ -101,15 +93,7 @@ enum DoctorHealth {
     return ApprovalsHealthRows.rows(
       health: health,
       approvalExpirySeconds: config.approvalExpirySeconds
-    ).map { row in
-      DoctorReport.Check(
-        key: row.key,
-        value: row.value,
-        ok: true,
-        group: .approvals,
-        isHeadline: row.headline
-      )
-    }
+    )
   }
 
   static func bootSandboxChecks(
@@ -122,8 +106,6 @@ enum DoctorHealth {
       health: health,
       unavailableReason: unavailableReason
     )
-    return SandboxHealthRows.rows(for: status).map { row in
-      DoctorReport.Check(key: row.key, value: row.value, ok: row.ok, group: .sandbox)
-    }
+    return SandboxHealthRows.rows(for: status)
   }
 }

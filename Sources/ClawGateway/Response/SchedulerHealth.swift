@@ -5,18 +5,6 @@ import Foundation
 /// the rendering is unit-testable; doctor is a separate process, so ONLY persisted state is
 /// visible to it — `dueCount` arrives from a live query at call time, never from storage.
 public enum SchedulerHealth {
-  public struct Row: Sendable, Equatable {
-    public let key: String
-    public let value: String
-    public let headline: Bool
-
-    public init(key: String, value: String, headline: Bool = false) {
-      self.key = key
-      self.value = value
-      self.headline = headline
-    }
-  }
-
   /// One doctor-time observation: persisted `scheduler_state` plus the live/config values that
   /// contextualize it (due query result, proactive spend vs. its cap, heartbeat settings).
   public struct Snapshot: Sendable {
@@ -58,7 +46,7 @@ public enum SchedulerHealth {
     }
   }
 
-  public static func rows(_ snapshot: Snapshot) -> [Row] {
+  public static func rows(_ snapshot: Snapshot) -> [DoctorReport.Check] {
     let state = snapshot.state
     let misfire: String
     if let lastMisfireAt = state.lastMisfireAt {
@@ -76,26 +64,26 @@ public enum SchedulerHealth {
       snapshot.proactiveTodayUSD.map { spent in USD.display(spent) } ?? "unknown"
 
     return [
-      Row(
-        key: "scheduler.last_tick_at",
-        value: state.lastTickAt.map(String.init(describing:)) ?? "never"
+      check(
+        "scheduler.last_tick_at",
+        state.lastTickAt.map(String.init(describing:)) ?? "never"
       ),
-      Row(
-        key: "scheduler.due_count",
-        value: snapshot.dueCount.map(String.init) ?? "unknown",
+      check(
+        "scheduler.due_count",
+        snapshot.dueCount.map(String.init) ?? "unknown",
         headline: true
       ),
-      Row(key: "scheduler.last_misfire", value: misfire),
-      Row(
-        key: "spend.proactive_today_usd",
-        value: "\(proactiveSpend)/\(USD.display(snapshot.proactivePerDayUSD))"
+      check("scheduler.last_misfire", misfire),
+      check(
+        "spend.proactive_today_usd",
+        "\(proactiveSpend)/\(USD.display(snapshot.proactivePerDayUSD))"
       ),
-      Row(key: "heartbeat.enabled", value: snapshot.heartbeatEnabled ? "on" : "off"),
-      Row(
-        key: "heartbeat.last",
-        value: state.lastHeartbeatAt.map(String.init(describing:)) ?? "never"
+      check("heartbeat.enabled", snapshot.heartbeatEnabled ? "on" : "off"),
+      check(
+        "heartbeat.last",
+        state.lastHeartbeatAt.map(String.init(describing:)) ?? "never"
       ),
-      Row(key: "heartbeat.today", value: "\(todayCount)/\(snapshot.heartbeatMaxPerDay)"),
+      check("heartbeat.today", "\(todayCount)/\(snapshot.heartbeatMaxPerDay)"),
     ]
   }
 
@@ -111,14 +99,18 @@ public enum SchedulerHealth {
 
   /// "YYYY-MM-DD" in the given zone — the `scheduler_state.heartbeat_count_day` stamp format.
   static func dayString(for instant: Date, timezone: TimeZone) -> String {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = timezone
-    let components = calendar.dateComponents([.year, .month, .day], from: instant)
-    return String(
-      format: "%04d-%02d-%02d",
-      components.year ?? 0,
-      components.month ?? 0,
-      components.day ?? 0
-    )
+    instant.wallClockDay(in: timezone)
+  }
+}
+
+// MARK: - Check Builder
+
+private extension SchedulerHealth {
+  static func check(
+    _ key: String,
+    _ value: String,
+    headline: Bool = false
+  ) -> DoctorReport.Check {
+    DoctorReport.Check(key: key, value: value, ok: true, group: .scheduler, isHeadline: headline)
   }
 }

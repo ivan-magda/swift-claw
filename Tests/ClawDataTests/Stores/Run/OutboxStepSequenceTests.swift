@@ -155,17 +155,7 @@ import Testing
   }
 
   private func makeUsage(_ fixture: Fixture) -> ProviderUsage {
-    ProviderUsage(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      model: "test-model",
-      promptTokens: 10,
-      completionTokens: 5,
-      costUSD: 0.001,
-      costSource: .heuristic,
-      isEstimated: false,
-      ts: Date()
-    )
+    makeProviderUsage(runId: fixture.runId, sessionId: fixture.sessionId, model: "test-model")
   }
 
   @Test func aSecondSuspendInTheSameRunLandsItsPromptPastTheFirst() throws {

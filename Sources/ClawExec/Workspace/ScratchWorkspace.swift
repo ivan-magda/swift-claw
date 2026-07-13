@@ -16,10 +16,10 @@ struct ScratchWorkspace: Sendable {
   static let scratchRootName = "exec-scratch"
   static let controlRootName = "exec-control"
 
-  static let maxEntrypointBytes = 16 * 1024
-  static let maxInputBytes = 1024 * 1024
-  static let maxInputTotalBytes = 4 * 1024 * 1024
-  static let maxInputFiles = 16
+  static let maxEntrypointBytes = ExecStagingLimits.standard.maxCodeBytes
+  static let maxInputBytes = ExecStagingLimits.standard.maxStagedFileBytes
+  static let maxInputTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes
+  static let maxInputFiles = ExecStagingLimits.standard.maxStagedFiles
 
   let scratchRoot: URL
   let controlRoot: URL

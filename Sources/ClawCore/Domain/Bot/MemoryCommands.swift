@@ -68,7 +68,7 @@ public enum MemoryCommand: Sendable, Equatable {
     guard tokens.count == 2 else {
       return .invalid
     }
-    guard let id = positiveId(tokens[1]) else {
+    guard let id = PositiveInt64.parse(String(tokens[1])) else {
       return .invalid
     }
 
@@ -80,12 +80,5 @@ public enum MemoryCommand: Sendable, Equatable {
     default:
       return .invalid
     }
-  }
-
-  private static func positiveId(_ token: Substring) -> Int64? {
-    if let id = Int64(token), id > 0 {
-      return id
-    }
-    return nil
   }
 }

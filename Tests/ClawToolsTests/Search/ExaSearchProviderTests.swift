@@ -1,42 +1,9 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
 @testable import ClawTools
-
-/// Scripted POST transport recording the last request for wire assertions.
-actor ScriptedPostHTTP: HTTPExecuting {
-  private let result: HTTPResult
-  private(set) var lastURL: String?
-  private(set) var lastHeaders: [String: String] = [:]
-  private(set) var lastBody: Data?
-
-  init(result: HTTPResult) {
-    self.result = result
-  }
-
-  func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult {
-    lastURL = url
-    lastHeaders = headers
-    lastBody = jsonBody
-    return result
-  }
-
-  func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    struct GetUnsupported: Error {}
-    throw GetUnsupported()
-  }
-}
 
 @Suite struct ExaSearchProviderTests {
   /// A captured-shape /search response (§20 item 7 — the mapping fixture).
@@ -65,8 +32,8 @@ actor ScriptedPostHTTP: HTTPExecuting {
 
   @Test func mapsResultsWithThePinnedSnippetFallback() async throws {
     // given
-    let http = ScriptedPostHTTP(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(Self.fixtureBody.utf8))
+    let http = RecordingHTTPExecutor(
+      cannedResult: HTTPResult(statusCode: 200, headers: [:], body: Data(Self.fixtureBody.utf8))
     )
     let provider = ExaSearchProvider(apiKey: "exa-key", http: http)
 
@@ -93,8 +60,12 @@ actor ScriptedPostHTTP: HTTPExecuting {
 
   @Test func fourOhTwoIsTerminalWithTheCreditsMessage() async throws {
     // given — 402 = credits exhausted (verified live 2026-07-03)
-    let http = ScriptedPostHTTP(
-      result: HTTPResult(statusCode: 402, headers: [:], body: Data(#"{"error":"no credits"}"#.utf8))
+    let http = RecordingHTTPExecutor(
+      cannedResult: HTTPResult(
+        statusCode: 402,
+        headers: [:],
+        body: Data(#"{"error":"no credits"}"#.utf8)
+      )
     )
     let provider = ExaSearchProvider(apiKey: "exa-key", http: http)
 
@@ -111,8 +82,8 @@ actor ScriptedPostHTTP: HTTPExecuting {
 
   @Test func retryableStatusesClassifyAsRetryable() async throws {
     // given
-    let http = ScriptedPostHTTP(
-      result: HTTPResult(statusCode: 503, headers: [:], body: Data())
+    let http = RecordingHTTPExecutor(
+      cannedResult: HTTPResult(statusCode: 503, headers: [:], body: Data())
     )
     let provider = ExaSearchProvider(apiKey: "exa-key", http: http)
 
@@ -129,8 +100,8 @@ actor ScriptedPostHTTP: HTTPExecuting {
 
   @Test func errorMessagesNeverEchoTheKey() async throws {
     // given — an error body that reflects the key back
-    let http = ScriptedPostHTTP(
-      result: HTTPResult(
+    let http = RecordingHTTPExecutor(
+      cannedResult: HTTPResult(
         statusCode: 401,
         headers: [:],
         body: Data(#"{"error":"bad key exa-key"}"#.utf8)

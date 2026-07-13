@@ -32,6 +32,7 @@ import Testing
   private func makeFixture(
     provider: any LLMProvider,
     budget: RunBudget = .default,
+    structuredOutput: StructuredOutputMode = .off,
     clock: any Clock<Duration> = ContinuousClock()
   ) throws -> Fixture {
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -54,6 +55,7 @@ import Testing
       usageStore: UsageStoreGRDB(writer: queue),
       budget: budget,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
+      structuredOutput: structuredOutput,
       clock: clock,
       logger: TestLog.silent
     )
@@ -120,6 +122,53 @@ import Testing
       {"label":"x","prompt":"y","schedule":{"kind":"fortnightly","time":"07:00"}}
       """
     #expect(ScheduleDraftParser.decode(badKind) == .unparseable)
+  }
+
+  @Test func honorsTheUnparseableMarkerButDecodesADraftThatCarriesTheFlag() async {
+    // given / when / then — the model's explicit {"unparseable": true} decline is unparseable,
+    // while a real draft that also carries unparseable:false still decodes (the flag is not part
+    // of the stored draft) — the shape json_schema mode returns for a valid request
+    #expect(ScheduleDraftParser.decode(#"{"unparseable": true}"#) == .unparseable)
+    #expect(
+      ScheduleDraftParser.decode(
+        #"{"unparseable": true, "label": null, "prompt": null, "schedule": null}"#
+      ) == .unparseable
+    )
+    let flagged = """
+      {"unparseable":false,"label":"morning digest","prompt":"Summarize my unread items",\
+      "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
+      """
+    #expect(ScheduleDraftParser.decode(flagged) == .draft(Self.expectedDraft))
+  }
+
+  @Test func offModeSendsNoResponseFormat() async throws {
+    // given
+    let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
+    let fixture = try makeFixture(provider: provider, structuredOutput: .off)
+
+    // when
+    _ = await fixture.parser.parse(ownerText: "every weekday at 7am", sessionId: fixture.sessionId)
+
+    // then — today's behavior: the parse request carries no structured-output directive
+    let request = try #require(await provider.requests.first)
+    #expect(request.responseFormat == nil)
+  }
+
+  @Test func jsonSchemaModeConstrainsTheReplyToTheDraftSchema() async throws {
+    // given
+    let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
+    let fixture = try makeFixture(provider: provider, structuredOutput: .jsonSchema)
+
+    // when
+    _ = await fixture.parser.parse(ownerText: "every weekday at 7am", sessionId: fixture.sessionId)
+
+    // then — the request pins the reply to the named schedule_draft schema
+    let request = try #require(await provider.requests.first)
+    guard case .jsonSchema(let name, _)? = request.responseFormat else {
+      Issue.record("expected a json_schema response format")
+      return
+    }
+    #expect(name == "schedule_draft")
   }
 
   @Test func providerFailureDegradesWithoutArming() async throws {
@@ -225,14 +274,6 @@ import Testing
       try Bool.fetchOne(db, sql: "SELECT is_estimated FROM provider_usage")
     }
     #expect(estimated == true)
-  }
-}
-
-/// Never returns; stands in for a provider brownout (retry loop × 180 s timeout).
-private struct HangingProvider: LLMProvider {
-  func complete(request: ChatRequest) async throws -> ChatResponse {
-    try await Task.sleep(for: .seconds(3_600))
-    throw ProviderError.terminal(status: nil, message: "unreachable")
   }
 }
 

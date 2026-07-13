@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -7,8 +8,9 @@ import Testing
   private let policy = OccurrencePolicy()
   private let utc = TimeZone(identifier: "UTC")
 
-  /// 2026-07-07 12:00:00 UTC — a fixed, DST-free reference instant.
-  private let noon = Date(timeIntervalSince1970: 1_783_339_200)
+  /// 2026-07-06 12:00:00 UTC — a fixed, DST-free reference instant (the same instant as
+  /// `SchedulingTestClock.mondayNoonBerlin`, read here as plain UTC noon).
+  private let noon = SchedulingTestClock.mondayNoonBerlin
 
   private func everyTenMinutesRule() throws -> Calendar.RecurrenceRule {
     var calendar = Calendar(identifier: .gregorian)

@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import ClawTools
 import Foundation
 import GRDB
@@ -13,9 +14,9 @@ import Testing
   // MARK: - Pinned instants (verified on this host's macOS 15 Foundation — plan header table)
 
   /// Mon 2026-07-06 12:00:00 UTC = 14:00 Europe/Berlin.
-  private static let armMonday = Date(timeIntervalSince1970: 1_783_339_200)
+  private static let armMonday = SchedulingTestClock.mondayNoonBerlin
   /// Tue/Wed/Thu 2026-07-07/08/09 07:00 Berlin = 05:00 UTC.
-  private static let tueFire = Date(timeIntervalSince1970: 1_783_400_400)
+  private static let tueFire = SchedulingTestClock.tuesdaySevenBerlin
   private static let wedFire = Date(timeIntervalSince1970: 1_783_486_800)
   private static let thuFire = Date(timeIntervalSince1970: 1_783_573_200)
   /// Fri 2026-10-23 07:00 CEST = 05:00 UTC and Mon 2026-10-26 07:00 CET = 06:00 UTC — local
@@ -37,37 +38,19 @@ import Testing
   // MARK: - Rule + seeding fixtures
 
   private func berlinCalendar() -> Calendar {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = berlin
-    return calendar
+    SchedulingRuleFixtures.calendar(zone: berlin)
   }
 
   private func weekdaySevenRule() -> Calendar.RecurrenceRule {
-    Calendar.RecurrenceRule(
-      calendar: berlinCalendar(),
-      frequency: .weekly,
-      weekdays: [
-        .every(.monday), .every(.tuesday), .every(.wednesday), .every(.thursday),
-        .every(.friday),
-      ],
-      hours: [7],
-      minutes: [0],
-      seconds: [0]
-    )
+    SchedulingRuleFixtures.weekdaySeven(zone: berlin, seconds: [0])
   }
 
   private func dailySevenRule() -> Calendar.RecurrenceRule {
-    Calendar.RecurrenceRule(
-      calendar: berlinCalendar(),
-      frequency: .daily,
-      hours: [7],
-      minutes: [0],
-      seconds: [0]
-    )
+    SchedulingRuleFixtures.dailyAt(hour: 7, minute: 0, zone: berlin, seconds: [0])
   }
 
   private func everyFiveMinutesRule() -> Calendar.RecurrenceRule {
-    Calendar.RecurrenceRule(calendar: berlinCalendar(), frequency: .minutely, interval: 5)
+    SchedulingRuleFixtures.everyNMinutes(5, zone: berlin)
   }
 
   @discardableResult

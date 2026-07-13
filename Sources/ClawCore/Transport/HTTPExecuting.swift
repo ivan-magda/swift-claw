@@ -12,8 +12,7 @@ public struct HTTPResult: Sendable {
   }
 
   public func getHeader(for name: String) -> String? {
-    let target = name.lowercased()
-    return headers.first { $0.key.lowercased() == target }?.value
+    headers.caseInsensitiveValue(for: name)
   }
 }
 
@@ -27,8 +26,16 @@ public struct HTTPStreamHead: Sendable, Equatable {
   }
 
   public func getHeader(for name: String) -> String? {
-    let target = name.lowercased()
-    return headers.first { $0.key.lowercased() == target }?.value
+    headers.caseInsensitiveValue(for: name)
+  }
+}
+
+private extension Dictionary where Key == String, Value == String {
+  /// Case-insensitive header lookup: HTTP field names are case-insensitive, but the header maps
+  /// preserve the wire casing, so match on a lowercased key.
+  func caseInsensitiveValue(for key: String) -> String? {
+    let target = key.lowercased()
+    return first { $0.key.lowercased() == target }?.value
   }
 }
 

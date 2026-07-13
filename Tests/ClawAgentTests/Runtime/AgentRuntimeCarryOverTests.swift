@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Testing
 
 @testable import ClawAgent

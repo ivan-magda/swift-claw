@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -208,5 +209,21 @@ import Testing
     // given / when / then (§12 row 1)
     #expect(SystemPrompt.minimal.contains("Tool use policy"))
     #expect(SystemPrompt.minimal.contains("blocked_pending_approval"))
+  }
+
+  @Test func assembledSystemMessageCarriesTheSchedulePointer() throws {
+    // given — the owner asks in plain language for a recurring delivery; the built-in prompt is
+    // the only trusted source in play (empty workspace, no SOUL/AGENTS)
+    let history = [userMessage("send me football news every morning")]
+
+    // when
+    let result = try makeBuilder().assemble(snapshot: makeSnapshot(history), sessionId: 1)
+
+    // then — the /schedule pointer reaches the model inside the trusted system-role message,
+    // so the agent drafts that command instead of suggesting external cron
+    let systemMessage = try #require(
+      result.messages.first { message in message.role == .system }
+    )
+    #expect(systemMessage.content.contains("/schedule"))
   }
 }

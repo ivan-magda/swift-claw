@@ -39,14 +39,6 @@ import Testing
     } == false
   }
 
-  /// Every run row's state, oldest first — the FIFO queue behind the parked lane in durable form.
-  private func runStates(databasePath: String) throws -> [String] {
-    let pool = try ClawDatabase.makePool(path: databasePath)
-    return try pool.read { database in
-      try String.fetchAll(database, sql: "SELECT state FROM runs ORDER BY id")
-    }
-  }
-
   private func armSessionPrivateData(databasePath: String, sessionId: Int64) throws {
     let pool = try ClawDatabase.makePool(path: databasePath)
     try pool.write { database in
