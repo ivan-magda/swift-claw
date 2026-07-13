@@ -116,9 +116,6 @@ public enum MemoryReplies {
   }
 
   private static func formattedDayString(_ date: Date) -> String {
-    date.formatted(dayFormat)
+    date.wallClockDay(in: .gmt)
   }
-
-  /// `yyyy-MM-dd` in UTC. `ISO8601FormatStyle` is Sendable; a static `DateFormatter` is not.
-  private static let dayFormat = Date.ISO8601FormatStyle(timeZone: .gmt).year().month().day()
 }

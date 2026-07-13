@@ -195,7 +195,7 @@ import Testing
     // then
     let message = try #require(thrownMessage)
     #expect(message.contains(apiKey) == false)
-    #expect(message.contains("<redacted-key>"))
+    #expect(message.contains(SecretRedactor.replacement))
     let attempts = await exec.recorded.count
     #expect(attempts == 3)
   }
@@ -362,7 +362,7 @@ import Testing
       guard case ProviderError.connectFailed(let message) = error else {
         return false
       }
-      return message.contains("sk-test") == false && message.contains("<redacted-key>")
+      return message.contains("sk-test") == false && message.contains(SecretRedactor.replacement)
     }
   }
 

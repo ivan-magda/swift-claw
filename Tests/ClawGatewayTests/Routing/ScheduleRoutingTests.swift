@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -9,7 +10,7 @@ import Testing
 
 @Suite struct ScheduleRoutingTests {
   /// Monday 2026-07-06 12:00:00 UTC == 14:00 Europe/Berlin. Injected — no real clocks.
-  private static let fixedNow = Date(timeIntervalSince1970: 1_783_339_200)
+  private static let fixedNow = SchedulingTestClock.mondayNoonBerlin
 
   private static let weekdayDraft = ScheduleDraft(
     label: "morning digest",
@@ -147,7 +148,7 @@ import Testing
     #expect(job.ownerChatId == 42)
     #expect(job.status == .active)
     #expect(job.timezone == "Europe/Berlin")
-    #expect(job.nextOccurrence == Date(timeIntervalSince1970: 1_783_400_400))
+    #expect(job.nextOccurrence == SchedulingTestClock.tuesdaySevenBerlin)
     let ack = await harness.transport.sent.last?.text ?? ""
     #expect(ack.contains("Armed schedule \(job.id)"))
     #expect(ack.contains("morning digest"))
@@ -201,7 +202,7 @@ import Testing
     let jobs = try harness.jobs.listAll()
     #expect(jobs.count == 1)
     let job = try #require(jobs.first)
-    #expect(job.nextOccurrence == Date(timeIntervalSince1970: 1_783_400_400))
+    #expect(job.nextOccurrence == SchedulingTestClock.tuesdaySevenBerlin)
   }
 
   /// The confirm preview anchors on the parked draft's `firstOccurrence`, so arming must too —

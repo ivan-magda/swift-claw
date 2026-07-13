@@ -16,10 +16,10 @@ public struct ExecuteCodeSettings: Sendable, Equatable {
 }
 
 public struct ExecuteCodeTool: Tool {
-  public static let maxCodeBytes = 16 * 1024
-  public static let maxStagedFileBytes = 1024 * 1024
-  public static let maxStagedTotalBytes = 4 * 1024 * 1024
-  public static let maxStagedFiles = 16
+  public static let maxCodeBytes = ExecStagingLimits.standard.maxCodeBytes
+  public static let maxStagedFileBytes = ExecStagingLimits.standard.maxStagedFileBytes
+  public static let maxStagedTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes
+  public static let maxStagedFiles = ExecStagingLimits.standard.maxStagedFiles
   public static let rawOutputTruncationNotice =
     "[raw output truncated after the first 1 MiB of one or more streams]"
 
@@ -87,12 +87,12 @@ public struct ExecuteCodeTool: Tool {
       return .refused(reason: "execute_code supports only python and sh.")
     }
     guard raw.code.utf8.count <= Self.maxCodeBytes else {
-      return .refused(reason: "The script exceeds the 16 KiB code cap.")
+      return .refused(reason: "The script exceeds the \(Self.maxCodeBytes / 1024) KiB code cap.")
     }
 
     let paths = raw.stage
     guard paths.count <= Self.maxStagedFiles else {
-      return .refused(reason: "execute_code stages at most 16 files.")
+      return .refused(reason: "execute_code stages at most \(Self.maxStagedFiles) files.")
     }
     let network = raw.network
     guard network == false || settings.allowEgress else {
@@ -300,11 +300,15 @@ private extension ExecuteCodeTool {
 
       let statBytes = number.intValue
       guard statBytes <= Self.maxStagedFileBytes else {
-        return .failure("A staged file exceeds the 1 MiB per-file cap.")
+        return .failure(
+          "A staged file exceeds the \(Self.maxStagedFileBytes / (1024 * 1024)) MiB per-file cap."
+        )
       }
 
       guard let nextTotal = Self.totalWithinCap(adding: statBytes, to: totalStatBytes) else {
-        return .failure("Staged files exceed the 4 MiB total cap.")
+        return .failure(
+          "Staged files exceed the \(Self.maxStagedTotalBytes / (1024 * 1024)) MiB total cap."
+        )
       }
       totalStatBytes = nextTotal
 
@@ -347,14 +351,18 @@ private extension ExecuteCodeTool {
         ) {
           data = bounded
         } else {
-          return .failure("A staged file grew past the 1 MiB cap while it was read.")
+          let perFileMiB = Self.maxStagedFileBytes / (1024 * 1024)
+          return .failure("A staged file grew past the \(perFileMiB) MiB cap while it was read.")
         }
       } catch {
         return .failure("A staged file became unreadable before it could be prepared.")
       }
 
       guard let nextTotal = Self.totalWithinCap(adding: data.count, to: totalReadBytes) else {
-        return .failure("Staged files grew past the 4 MiB total cap while they were read.")
+        let totalMiB = Self.maxStagedTotalBytes / (1024 * 1024)
+        return .failure(
+          "Staged files grew past the \(totalMiB) MiB total cap while they were read."
+        )
       }
       totalReadBytes = nextTotal
 
@@ -447,8 +455,7 @@ private extension ExecuteCodeTool {
     guard let canonicalRoot = WorkspacePathContainment.canonicalPath(workspaceRoot.path) else {
       return false
     }
-    return realpath == canonicalRoot + "/MEMORY.md"
-      || realpath == canonicalRoot + "/USER.md"
+    return WorkspaceFile.isPrivateData(canonicalPath: realpath, canonicalRoot: canonicalRoot)
   }
 }
 
@@ -463,15 +470,7 @@ private extension ExecuteCodeTool {
   }
 
   static func canonicalJSON<Value: Encodable>(_ value: Value) -> String? {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-    guard
-      let data = try? encoder.encode(value),
-      let json = String(data: data, encoding: .utf8)
-    else {
-      return nil
-    }
-    return json
+    CanonicalJSON.encode(value)
   }
 
   static func canonicalTarget(language: ExecLanguage, canonicalArgsJSON: String) -> String {

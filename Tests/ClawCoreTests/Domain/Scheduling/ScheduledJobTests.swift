@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -5,19 +6,9 @@ import Testing
 
 @Suite struct RecurrenceEnvelopeTests {
   private func weekdaySevenBerlinRule() throws -> Calendar.RecurrenceRule {
-    var calendar = Calendar(identifier: .gregorian)
     // force_unwrapping is `error` project-wide with no Tests exclusion (.swiftlint.yml); #require
     // is the house pattern for a lookup that is statically known to succeed.
-    calendar.timeZone = try #require(TimeZone(identifier: "Europe/Berlin"))
-    return Calendar.RecurrenceRule(
-      calendar: calendar,
-      frequency: .weekly,
-      weekdays: [
-        .every(.monday), .every(.tuesday), .every(.wednesday), .every(.thursday), .every(.friday),
-      ],
-      hours: [7],
-      minutes: [0]
-    )
+    SchedulingRuleFixtures.weekdaySeven(zone: try #require(TimeZone(identifier: "Europe/Berlin")))
   }
 
   @Test func roundTripIsByteForByteStable() throws {

@@ -29,7 +29,7 @@ public struct RetrieverGRDB: Retriever {
         FROM messages m
         JOIN messages_fts ON messages_fts.rowid = m.id
         WHERE messages_fts MATCH ?
-          AND m.role IN ('user', 'assistant')
+          AND m.role IN ('\(MessageRole.user.rawValue)', '\(MessageRole.assistant.rawValue)')
         """
       var arguments: StatementArguments = [pattern]
 

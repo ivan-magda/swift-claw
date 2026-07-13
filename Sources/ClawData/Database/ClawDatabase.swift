@@ -235,7 +235,7 @@ public enum ClawDatabase {
         on: "approvals",
         columns: ["run_id"],
         options: [.unique],
-        condition: Column("state") == "PENDING"
+        condition: Column("state") == ApprovalState.pending.rawValue
       )
       try db.alter(table: "runs") { table in
         table.add(column: "policy_version", .text)

@@ -76,7 +76,7 @@ public enum BudgetFitterError: Error, Equatable {
 }
 
 public enum BudgetFitter {
-  public static let truncationMarker = "…[truncated]"
+  public static let truncationMarker = TextTruncation.marker
 
   public static func fit(
     _ sections: [FittableSection],

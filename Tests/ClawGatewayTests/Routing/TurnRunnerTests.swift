@@ -10,6 +10,10 @@ import Testing
 
 @testable import ClawGateway
 
+/// The suspended-approval expiry window every `TurnRunner` fixture injects; matches the
+/// production `AppConfig` default so the commit's `expires_ts` stays realistic under test.
+let testApprovalExpirySeconds = 3600
+
 // MARK: - Test doubles
 
 /// Drives `AgentRuntime` to a chosen `TurnResult` by scripting the provider it calls.
@@ -639,6 +643,7 @@ func makeEnv(
     now: now,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
+    approvalExpirySeconds: testApprovalExpirySeconds,
     logger: TestLog.silent
   )
 

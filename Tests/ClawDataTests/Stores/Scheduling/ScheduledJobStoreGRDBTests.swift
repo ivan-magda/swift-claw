@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -22,18 +23,7 @@ import Testing
   }
 
   private func weekdayEnvelope() -> RecurrenceEnvelope {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "Europe/Berlin") ?? .gmt
-    let rule = Calendar.RecurrenceRule(
-      calendar: calendar,
-      frequency: .weekly,
-      weekdays: [
-        .every(.monday), .every(.tuesday), .every(.wednesday), .every(.thursday), .every(.friday),
-      ],
-      hours: [7],
-      minutes: [0]
-    )
-    return RecurrenceEnvelope(schemaVersion: RecurrenceEnvelope.currentSchemaVersion, rule: rule)
+    SchedulingRuleFixtures.weekdayEnvelope(zone: TimeZone(identifier: "Europe/Berlin") ?? .gmt)
   }
 
   @discardableResult

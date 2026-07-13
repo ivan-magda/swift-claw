@@ -275,21 +275,7 @@ private extension ToolPolicyGate {
   /// Deterministic sorted-keys re-encoding so the same arguments always hash the same. Falls back
   /// to the raw string only if it is unparseable (the ask-tier path already blocks that case).
   static func canonicalArgs(_ rawArgumentsJSON: String) -> String {
-    guard let value = JSONValue.parse(rawArgumentsJSON) else {
-      return rawArgumentsJSON
-    }
-
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-
-    guard
-      let data = try? encoder.encode(value),
-      let json = String(data: data, encoding: .utf8)
-    else {
-      return rawArgumentsJSON
-    }
-
-    return json
+    JSONValue.parse(rawArgumentsJSON).flatMap(CanonicalJSON.encode) ?? rawArgumentsJSON
   }
 }
 

@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -12,14 +13,6 @@ import Testing
 /// authenticated button callback resolves it (proven end-to-end in FileWriteApprovalFlowTests +
 /// Task 25's matrix).
 @Suite(.serialized) struct PlainReplyDoesNotApproveTests {
-  /// Every run row's state, oldest first — the FIFO queue behind the parked lane in durable form.
-  private func runStates(databasePath: String) throws -> [String] {
-    let pool = try ClawDatabase.makePool(path: databasePath)
-    return try pool.read { database in
-      try String.fetchAll(database, sql: "SELECT state FROM runs ORDER BY id")
-    }
-  }
-
   @Test func plainYesLeavesTheParkedApprovalPending() async throws {
     // given — a file_write proposal suspends the run to a durable checkpoint
     let harness = try makeSC3Harness(

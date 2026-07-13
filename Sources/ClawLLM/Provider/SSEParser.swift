@@ -243,12 +243,8 @@ private extension SSEParser {
       }
   }
 
-  mutating func record(_ chunkUsage: Usage) {
-    usage = ChatUsage(
-      promptTokens: chunkUsage.promptTokens ?? 0,
-      completionTokens: chunkUsage.completionTokens ?? 0,
-      totalTokens: chunkUsage.totalTokens ?? 0
-    )
+  mutating func record(_ chunkUsage: WireUsage) {
+    usage = chunkUsage.toChatUsage()
     if let cost = chunkUsage.cost {
       providerCost = cost
     }
@@ -257,7 +253,7 @@ private extension SSEParser {
 
 private struct Chunk: Decodable {
   let choices: [Choice]
-  let usage: Usage?
+  let usage: WireUsage?
 }
 
 private struct Choice: Decodable {
@@ -298,7 +294,10 @@ private struct ToolCallAccumulator {
   var arguments = ""
 }
 
-private struct Usage: Decodable {
+/// The OpenAI-compatible `usage` object, shared by the blocking (`ResponseBody`) and streaming
+/// (`Chunk`) decoders so the two seams decode identical bytes into the same shape and can't drift.
+/// Absent counts fold to zero in `toChatUsage()`; `cost` is the OpenRouter per-response cost.
+struct WireUsage: Decodable {
   let promptTokens: Int?
   let completionTokens: Int?
   let totalTokens: Int?
@@ -309,5 +308,13 @@ private struct Usage: Decodable {
     case completionTokens = "completion_tokens"
     case totalTokens = "total_tokens"
     case cost
+  }
+
+  func toChatUsage() -> ChatUsage {
+    ChatUsage(
+      promptTokens: promptTokens ?? 0,
+      completionTokens: completionTokens ?? 0,
+      totalTokens: totalTokens ?? 0
+    )
   }
 }

@@ -46,13 +46,13 @@ public struct AppConfig: Sendable, Equatable {
     static let pollTimeoutSeconds = 30
     static let stateDirectoryName = ".swift-claw"
     static let maxTokensField = MaxTokensField.maxCompletionTokens
-    static let maxOutputTokens = 4096
-    static let retryBudget = 3
+    static let maxOutputTokens = RunDefaults.maxOutputTokens
+    static let retryBudget = RunDefaults.retryBudget
     static let requestTimeoutSeconds = 180
 
     static let schedCatchUpMaxAgeMinutes = 30
     static let schedMinIntervalMinutes = 5
-    static let proactivePerDayUSD = 2.00
+    static let proactivePerDayUSD = RunDefaults.proactivePerDayUSD
 
     static let heartbeatIntervalMinutes = 60
     static let heartbeatQuietHours = "22:00-09:00"
@@ -278,45 +278,23 @@ private extension AppConfig {
     _ raw: String?,
     default fallback: Double
   ) throws -> Double {
-    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
-    guard !trimmed.isEmpty else {
-      return fallback
-    }
-
-    guard let value = Double(trimmed), value > 0 else {
-      throw ConfigError.invalidBudget(trimmed)
-    }
-
-    return value
+    try ConfigParse.positiveDouble(raw, default: fallback, onInvalid: ConfigError.invalidBudget)
   }
 
   /// A positive `Int` override: `fallback` when absent/blank, else `invalidBudget` on a
   /// non-numeric or non-positive value.
   static func positiveBudgetInt(_ raw: String?, default fallback: Int) throws -> Int {
-    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
-    guard !trimmed.isEmpty else {
-      return fallback
-    }
-
-    guard let value = Int(trimmed), value > 0 else {
-      throw ConfigError.invalidBudget(trimmed)
-    }
-
-    return value
+    try ConfigParse.boundedInt(
+      raw,
+      default: fallback,
+      range: 1...Int.max,
+      onInvalid: ConfigError.invalidBudget
+    )
   }
 
   /// An optional positive `Int` ceiling override; `nil` when absent so the budget derives it.
   static func positiveBudgetIntOrNil(_ raw: String?) throws -> Int? {
-    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
-    guard !trimmed.isEmpty else {
-      return nil
-    }
-
-    guard let value = Int(trimmed), value > 0 else {
-      throw ConfigError.invalidBudget(trimmed)
-    }
-
-    return value
+    try ConfigParse.boundedIntOrNil(raw, range: 1...Int.max, onInvalid: ConfigError.invalidBudget)
   }
 }
 
@@ -346,16 +324,9 @@ private extension AppConfig {
     default fallback: Int,
     minimum: Int
   ) throws -> Int {
-    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
-    guard !trimmed.isEmpty else {
-      return fallback
+    try ConfigParse.boundedInt(raw, default: fallback, range: minimum...Int.max) { value in
+      ConfigError.invalidScheduling(key: key, value: value)
     }
-
-    guard let value = Int(trimmed), value >= minimum else {
-      throw ConfigError.invalidScheduling(key: key, value: trimmed)
-    }
-
-    return value
   }
 
   struct HeartbeatSettings {
@@ -524,19 +495,11 @@ private extension AppConfig {
   /// must be an integer within `[floor, ceiling]`, else it fails closed with the dedicated
   /// `invalidApprovalExpiry` case — the scheduling vocabulary deliberately is NOT reused.
   static func parseApprovalExpiry(_ raw: String?) throws -> Int {
-    let trimmed = raw?.trimmingCharacters(in: .whitespaces) ?? ""
-    guard !trimmed.isEmpty else {
-      return EnvDefaults.approvalExpirySeconds
-    }
-
-    guard
-      let value = Int(trimmed),
-      value >= EnvDefaults.approvalExpiryFloor,
-      value <= EnvDefaults.approvalExpiryCeiling
-    else {
-      throw ConfigError.invalidApprovalExpiry(trimmed)
-    }
-
-    return value
+    try ConfigParse.boundedInt(
+      raw,
+      default: EnvDefaults.approvalExpirySeconds,
+      range: EnvDefaults.approvalExpiryFloor...EnvDefaults.approvalExpiryCeiling,
+      onInvalid: ConfigError.invalidApprovalExpiry
+    )
   }
 }
