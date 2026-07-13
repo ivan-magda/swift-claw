@@ -18,10 +18,6 @@ extension ExecLanguage {
   }
 }
 
-/// The staging size and count caps for a code-execution run. The exec tool enforces them at
-/// gate time (over model-supplied paths) and the sandbox workspace re-enforces them at write
-/// time (over the already-built request); both layers keep their own guards, but read the numbers
-/// from here so the two can never drift apart.
 public struct ExecStagingLimits: Sendable, Equatable {
   public let maxCodeBytes: Int
   public let maxStagedFileBytes: Int
