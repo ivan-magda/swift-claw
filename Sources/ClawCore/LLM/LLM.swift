@@ -24,6 +24,11 @@ public struct ChatMessage: Sendable, Equatable {
   }
 }
 
+public enum ResponseFormat: Sendable, Equatable {
+  case jsonObject
+  case jsonSchema(name: String, schema: JSONValue)
+}
+
 /// A blocking chat-completions request.
 public struct ChatRequest: Sendable, Equatable {
   public let model: String
@@ -32,6 +37,7 @@ public struct ChatRequest: Sendable, Equatable {
   // swiftlint:disable:next discouraged_optional_collection
   public let stop: [String]?
   public let tools: [ToolDefinition]
+  public let responseFormat: ResponseFormat?
 
   public init(
     model: String,
@@ -39,13 +45,15 @@ public struct ChatRequest: Sendable, Equatable {
     maxOutputTokens: Int,
     // swiftlint:disable:next discouraged_optional_collection
     stop: [String]? = nil,
-    tools: [ToolDefinition] = []
+    tools: [ToolDefinition] = [],
+    responseFormat: ResponseFormat? = nil
   ) {
     self.model = model
     self.messages = messages
     self.maxOutputTokens = maxOutputTokens
     self.stop = stop
     self.tools = tools
+    self.responseFormat = responseFormat
   }
 }
 
@@ -131,6 +139,12 @@ public enum MaxTokensField: String, Sendable, Equatable {
   case maxTokens = "max_tokens"
 }
 
+public enum StructuredOutputMode: String, Sendable, Equatable {
+  case off
+  case jsonObject = "json_object"
+  case jsonSchema = "json_schema"
+}
+
 /// Static LLM wiring loaded from the environment. `apiKey` defaults to "" — local servers
 /// need none, so a missing key is not a config error.
 public struct LLMConfig: Sendable, Equatable {
@@ -142,6 +156,7 @@ public struct LLMConfig: Sendable, Equatable {
   public let retryBudget: Int
   public let requestTimeoutSeconds: Int
   public let streamingEnabled: Bool
+  public let structuredOutput: StructuredOutputMode
 
   public init(
     baseURL: String,
@@ -151,7 +166,8 @@ public struct LLMConfig: Sendable, Equatable {
     maxOutputTokens: Int,
     retryBudget: Int,
     requestTimeoutSeconds: Int,
-    streamingEnabled: Bool = true
+    streamingEnabled: Bool = true,
+    structuredOutput: StructuredOutputMode = .off
   ) {
     self.baseURL = baseURL
     self.model = model
@@ -161,6 +177,7 @@ public struct LLMConfig: Sendable, Equatable {
     self.retryBudget = retryBudget
     self.requestTimeoutSeconds = requestTimeoutSeconds
     self.streamingEnabled = streamingEnabled
+    self.structuredOutput = structuredOutput
   }
 }
 
@@ -176,7 +193,8 @@ extension LLMConfig {
       maxOutputTokens: maxOutputTokens,
       retryBudget: retryBudget,
       requestTimeoutSeconds: requestTimeoutSeconds,
-      streamingEnabled: streamingEnabled
+      streamingEnabled: streamingEnabled,
+      structuredOutput: structuredOutput
     )
   }
 }

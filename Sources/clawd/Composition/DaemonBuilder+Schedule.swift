@@ -22,6 +22,7 @@ extension DaemonBuilder {
         usageStore: stores.usage,
         budget: config.budget,
         costResolver: costResolver,
+        structuredOutput: config.llm.structuredOutput,
         clock: ContinuousClock(),
         logger: logger
       ),

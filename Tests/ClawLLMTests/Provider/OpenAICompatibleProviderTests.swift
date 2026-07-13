@@ -40,6 +40,66 @@ import Testing
     #expect(recorded.headers["Authorization"] == nil)
   }
 
+  @Test func omitsResponseFormatWhenUnset() async throws {
+    // given — a plain turn request carries no structured-output directive
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+
+    // when
+    _ = try await provider.complete(request: sampleRequest)
+
+    // then
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    #expect(body["response_format"] == nil)
+  }
+
+  @Test func encodesJSONObjectResponseFormat() async throws {
+    // given
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+    let request = ChatRequest(
+      model: "gpt-4o",
+      messages: [ChatMessage(role: .user, content: "hi")],
+      maxOutputTokens: 256,
+      responseFormat: .jsonObject
+    )
+
+    // when
+    _ = try await provider.complete(request: request)
+
+    // then
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    let responseFormat = try #require(body["response_format"] as? [String: Any])
+    #expect(responseFormat["type"] as? String == "json_object")
+  }
+
+  @Test func encodesJSONSchemaResponseFormatAsStrict() async throws {
+    // given
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+    let request = ChatRequest(
+      model: "gpt-4o",
+      messages: [ChatMessage(role: .user, content: "hi")],
+      maxOutputTokens: 256,
+      responseFormat: .jsonSchema(name: "draft", schema: .object(["type": .string("object")]))
+    )
+
+    // when
+    _ = try await provider.complete(request: request)
+
+    // then — the OpenAI structured-outputs envelope: name + strict + the schema object
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    let responseFormat = try #require(body["response_format"] as? [String: Any])
+    #expect(responseFormat["type"] as? String == "json_schema")
+    let jsonSchema = try #require(responseFormat["json_schema"] as? [String: Any])
+    #expect(jsonSchema["name"] as? String == "draft")
+    #expect(jsonSchema["strict"] as? Bool == true)
+    #expect(jsonSchema["schema"] is [String: Any])
+  }
+
   @Test func nullContentBecomesEmptyAndAbsentUsageBecomesNil() async throws {
     // given — Ollama-style: null content and no usage object
     let json = #"{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":null}}]}"#

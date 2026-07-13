@@ -11,6 +11,7 @@ public struct AppConfig: Sendable, Equatable {
     static let llmMaxTokensField = "CLAW_LLM_MAX_TOKENS_FIELD"
     static let llmMaxTokens = "CLAW_LLM_MAX_TOKENS"
     static let llmStreaming = "CLAW_LLM_STREAMING"
+    static let llmStructuredOutput = "CLAW_LLM_STRUCTURED_OUTPUT"
 
     static let perRunUSD = "CLAW_PER_RUN_USD"
     static let perDayUSD = "CLAW_PER_DAY_USD"
@@ -46,6 +47,7 @@ public struct AppConfig: Sendable, Equatable {
     static let pollTimeoutSeconds = 30
     static let stateDirectoryName = ".swift-claw"
     static let maxTokensField = MaxTokensField.maxCompletionTokens
+    static let structuredOutput = StructuredOutputMode.off
     static let maxOutputTokens = RunDefaults.maxOutputTokens
     static let retryBudget = RunDefaults.retryBudget
     static let requestTimeoutSeconds = 180
@@ -225,6 +227,17 @@ private extension AppConfig {
       throw ConfigError.invalidMaxTokens(rawMaxTokens)
     }
 
+    let rawStructuredOutput =
+      env[EnvKey.llmStructuredOutput]?.trimmingCharacters(in: .whitespaces) ?? ""
+    let structuredOutput: StructuredOutputMode
+    if rawStructuredOutput.isEmpty {
+      structuredOutput = EnvDefaults.structuredOutput
+    } else if let parsedMode = StructuredOutputMode(rawValue: rawStructuredOutput) {
+      structuredOutput = parsedMode
+    } else {
+      throw ConfigError.invalidStructuredOutput(rawStructuredOutput)
+    }
+
     return LLMConfig(
       baseURL: baseURL,
       model: model,
@@ -237,7 +250,8 @@ private extension AppConfig {
         env[EnvKey.llmStreaming],
         key: EnvKey.llmStreaming,
         default: true
-      )
+      ),
+      structuredOutput: structuredOutput
     )
   }
 }

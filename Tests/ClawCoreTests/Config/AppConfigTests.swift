@@ -127,6 +127,44 @@ import Testing
     #expect(config.llm.maxTokensField == .maxTokens)
   }
 
+  @Test func structuredOutputDefaultsToOff() throws {
+    // given — no override; the safe default sends no response_format, so a provider that does not
+    // support the field is never broken by it (opt in only when the provider is known to support it)
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.llm.structuredOutput == .off)
+  }
+
+  @Test func structuredOutputOverridesParse() throws {
+    // given / when / then — each accepted mode round-trips from its raw env value
+    let cases: [(String, StructuredOutputMode)] = [
+      ("off", .off),
+      ("json_object", .jsonObject),
+      ("json_schema", .jsonSchema),
+    ]
+    for (raw, expected) in cases {
+      var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+      env[EnvKey.llmStructuredOutput] = raw
+      let config = try AppConfig.load(environment: env)
+      #expect(config.llm.structuredOutput == expected)
+    }
+  }
+
+  @Test func invalidStructuredOutputFailsClosed() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.llmStructuredOutput] = "grammar"
+
+    // when / then
+    #expect(throws: ConfigError.invalidStructuredOutput("grammar")) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
   @Test func perDayUSDOverrideParses() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])

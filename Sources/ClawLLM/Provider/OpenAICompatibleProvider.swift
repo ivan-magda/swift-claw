@@ -182,7 +182,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
       stop: request.stop,
       stream: streaming,
       streamOptions: streaming ? StreamOptions(includeUsage: true) : nil,
-      tools: wireTools.isEmpty ? nil : wireTools
+      tools: wireTools.isEmpty ? nil : wireTools,
+      responseFormat: request.responseFormat
     )
     return try JSONEncoder().encode(payload)
   }
@@ -392,9 +393,11 @@ private struct RequestBody: Encodable {
   let streamOptions: StreamOptions?
   // swiftlint:disable:next discouraged_optional_collection
   let tools: [WireToolDefinition]?
+  let responseFormat: ResponseFormat?
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: DynamicKey.self)
+
     try container.encode(model, forKey: DynamicKey("model"))
     try container.encode(messages, forKey: DynamicKey("messages"))
     try container.encode(maxOutputTokens, forKey: DynamicKey(maxTokensKey))
@@ -402,7 +405,39 @@ private struct RequestBody: Encodable {
     try container.encodeIfPresent(streamOptions, forKey: DynamicKey("stream_options"))
     try container.encodeIfPresent(stop, forKey: DynamicKey("stop"))
     try container.encodeIfPresent(tools, forKey: DynamicKey("tools"))
+
+    if let responseFormat {
+      try container.encode(
+        WireResponseFormat(responseFormat: responseFormat),
+        forKey: DynamicKey("response_format")
+      )
+    }
   }
+}
+
+private struct WireResponseFormat: Encodable {
+  let responseFormat: ResponseFormat
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: DynamicKey.self)
+
+    switch responseFormat {
+    case .jsonObject:
+      try container.encode("json_object", forKey: DynamicKey("type"))
+    case .jsonSchema(let name, let schema):
+      try container.encode("json_schema", forKey: DynamicKey("type"))
+      try container.encode(
+        WireJSONSchema(name: name, strict: true, schema: schema),
+        forKey: DynamicKey("json_schema")
+      )
+    }
+  }
+}
+
+private struct WireJSONSchema: Encodable {
+  let name: String
+  let strict: Bool
+  let schema: JSONValue
 }
 
 private struct StreamOptions: Encodable {

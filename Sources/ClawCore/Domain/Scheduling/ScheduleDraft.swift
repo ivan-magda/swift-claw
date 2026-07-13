@@ -41,7 +41,7 @@ public struct DraftSchedule: Sendable, Equatable, Codable {
   }
 }
 
-public enum DraftScheduleKind: String, Sendable, Equatable, Codable {
+public enum DraftScheduleKind: String, Sendable, Equatable, Codable, CaseIterable {
   case once
   case daily
   case weekdays
