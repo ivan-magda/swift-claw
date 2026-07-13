@@ -58,10 +58,12 @@ extension ContainerBackend {
     guard
       await boundedCommandSucceeded(
         ContainerInvocation.detachedCanary(
-          identity: identity,
-          scratchPath: workspace.directory.path,
-          settings: settings,
-          initImage: initImage
+          context: ContainerLaunchContext(
+            identity: identity,
+            scratchPath: workspace.directory.path,
+            settings: settings,
+            initImage: initImage
+          )
         ),
         limit: Self.ordinaryCommandTimeout,
         deadline: deadline

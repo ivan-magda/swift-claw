@@ -219,10 +219,12 @@ struct ContainerBackendRealAcceptanceTests {
     let launch = await runner.run(
       ContainerCommand(
         arguments: ContainerInvocation.detachedCanary(
-          identity: identity,
-          scratchPath: orphanScratch.path,
-          settings: host.settings,
-          initImage: initImage
+          context: ContainerLaunchContext(
+            identity: identity,
+            scratchPath: orphanScratch.path,
+            settings: host.settings,
+            initImage: initImage
+          )
         ),
         timeout: .seconds(30),
         captureLimit: ContainerBackend.maxControlStreamBytes,

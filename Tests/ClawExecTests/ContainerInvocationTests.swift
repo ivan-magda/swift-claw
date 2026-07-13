@@ -128,13 +128,15 @@ import Testing
   @Test func noEgressRunArgvIsExactAndFullyExplicit() throws {
     // given / when
     let arguments = ContainerInvocation.run(
-      identity: try makeIdentity(),
-      scratchPath: "/state/exec-scratch/11111111-2222-3333-4444-555555555555",
+      context: ContainerLaunchContext(
+        identity: try makeIdentity(),
+        scratchPath: "/state/exec-scratch/11111111-2222-3333-4444-555555555555",
+        settings: try makeSettings(),
+        initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
+      ),
       cidFilePath: "/state/exec-control/11111111-2222-3333-4444-555555555555.cid",
       language: .python,
-      network: false,
-      settings: try makeSettings(),
-      initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
+      network: false
     )
 
     // then
@@ -158,13 +160,15 @@ import Testing
   @Test func optedInEgressRunArgvIsExactAndHasNoNoDNSFlag() throws {
     // given / when
     let arguments = ContainerInvocation.run(
-      identity: try makeIdentity(),
-      scratchPath: "/scratch",
+      context: ContainerLaunchContext(
+        identity: try makeIdentity(),
+        scratchPath: "/scratch",
+        settings: try makeSettings(),
+        initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
+      ),
       cidFilePath: "/control/run.cid",
       language: .sh,
-      network: true,
-      settings: try makeSettings(),
-      initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
+      network: true
     )
 
     // then
@@ -177,13 +181,15 @@ import Testing
   @Test func runArgvCannotEmitForbiddenExposureFlagsOrAmbientMounts() throws {
     // given
     let arguments = ContainerInvocation.run(
-      identity: try makeIdentity(),
-      scratchPath: "/approved-scratch",
+      context: ContainerLaunchContext(
+        identity: try makeIdentity(),
+        scratchPath: "/approved-scratch",
+        settings: try makeSettings(),
+        initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
+      ),
       cidFilePath: "/control/run.cid",
       language: .python,
-      network: false,
-      settings: try makeSettings(),
-      initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
+      network: false
     )
     let forbidden = ["--cap-add", "--volume", "-v", "--publish", "-p", "--ssh"]
 
@@ -206,10 +212,12 @@ import Testing
 
     // when
     let arguments = ContainerInvocation.detachedCanary(
-      identity: try makeIdentity(),
-      scratchPath: "/canary",
-      settings: settings,
-      initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
+      context: ContainerLaunchContext(
+        identity: try makeIdentity(),
+        scratchPath: "/canary",
+        settings: settings,
+        initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
+      )
     )
 
     // then

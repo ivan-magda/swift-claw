@@ -1,44 +1,31 @@
 import ClawCore
 
+struct ContainerLaunchContext {
+  let identity: ExecutionIdentity
+  let scratchPath: String
+  let settings: ExecSandboxSettings
+  let initImage: String
+}
+
 enum ContainerInvocation {
   static func run(
-    identity: ExecutionIdentity,
-    scratchPath: String,
+    context: ContainerLaunchContext,
     cidFilePath: String,
     language: ExecLanguage,
-    network: Bool,
-    settings: ExecSandboxSettings,
-    initImage: String
+    network: Bool
   ) -> [String] {
-    secureRunPrefix(
-      identity: identity,
-      scratchPath: scratchPath,
-      cidFilePath: cidFilePath,
-      settings: settings,
-      initImage: initImage
-    )
+    secureRunPrefix(context: context, cidFilePath: cidFilePath)
       + networkArguments(network)
       + [
         "--entrypoint",
         interpreter(for: language),
-        settings.workloadImage.description,
+        context.settings.workloadImage.description,
         ExecEntrypoint.guestPath(for: language),
       ]
   }
 
-  static func detachedCanary(
-    identity: ExecutionIdentity,
-    scratchPath: String,
-    settings: ExecSandboxSettings,
-    initImage: String
-  ) -> [String] {
-    secureRunPrefix(
-      identity: identity,
-      scratchPath: scratchPath,
-      cidFilePath: nil,
-      settings: settings,
-      initImage: initImage
-    )
+  static func detachedCanary(context: ContainerLaunchContext) -> [String] {
+    secureRunPrefix(context: context, cidFilePath: nil)
       + [
         "--detach",
         "--network",
@@ -46,7 +33,7 @@ enum ContainerInvocation {
         "--no-dns",
         "--entrypoint",
         ExecSandboxSettings.pythonInterpreter,
-        settings.workloadImage.description,
+        context.settings.workloadImage.description,
         "-c",
         "import signal; signal.pause()",
       ]
@@ -107,15 +94,12 @@ enum ContainerInvocation {
 
 private extension ContainerInvocation {
   static func secureRunPrefix(
-    identity: ExecutionIdentity,
-    scratchPath: String,
-    cidFilePath: String?,
-    settings: ExecSandboxSettings,
-    initImage: String
+    context: ContainerLaunchContext,
+    cidFilePath: String?
   ) -> [String] {
     var arguments = [
       "run", "--scheme", "https", "--progress", "none", "--platform",
-      ExecSandboxSettings.platform, "--rm", "--name", identity.name, "--label",
+      ExecSandboxSettings.platform, "--rm", "--name", context.identity.name, "--label",
       ExecutionIdentity.ownershipLabelArgument,
     ]
 
@@ -124,9 +108,10 @@ private extension ContainerInvocation {
     }
 
     arguments += [
-      "--cap-drop", "ALL", "--init", "--init-image", initImage, "--read-only", "--tmpfs",
-      "/tmp", "--cpus", String(settings.cpus), "--memory", "\(settings.memoryMiB)M", "--mount",
-      "type=bind,source=\(scratchPath),target=\(ExecEntrypoint.guestWorkDirectory),readonly",
+      "--cap-drop", "ALL", "--init", "--init-image", context.initImage, "--read-only", "--tmpfs",
+      "/tmp", "--cpus", String(context.settings.cpus), "--memory",
+      "\(context.settings.memoryMiB)M", "--mount",
+      "type=bind,source=\(context.scratchPath),target=\(ExecEntrypoint.guestWorkDirectory),readonly",
     ]
 
     return arguments

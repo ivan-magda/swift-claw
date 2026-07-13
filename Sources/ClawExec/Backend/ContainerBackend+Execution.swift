@@ -85,19 +85,11 @@ extension ContainerBackend {
       )
     }
 
-    let command = ContainerCommand(
-      arguments: ContainerInvocation.run(
-        identity: identity,
-        scratchPath: workspace.directory.path,
-        cidFilePath: workspace.cidFile.path,
-        language: request.language,
-        network: request.network,
-        settings: settings,
-        initImage: initImage
-      ),
-      timeout: request.timeout,
-      captureLimit: Self.maxRawStreamBytes,
-      teardownGracePeriod: Self.commandTeardownGrace
+    let command = foregroundCommand(
+      request: request,
+      identity: identity,
+      workspace: workspace,
+      initImage: initImage
     )
 
     var result =
@@ -132,6 +124,30 @@ extension ContainerBackend {
     }
 
     return result
+  }
+
+  private func foregroundCommand(
+    request: ExecutionRequest,
+    identity: ExecutionIdentity,
+    workspace: ScratchWorkspace,
+    initImage: String
+  ) -> ContainerCommand {
+    ContainerCommand(
+      arguments: ContainerInvocation.run(
+        context: ContainerLaunchContext(
+          identity: identity,
+          scratchPath: workspace.directory.path,
+          settings: settings,
+          initImage: initImage
+        ),
+        cidFilePath: workspace.cidFile.path,
+        language: request.language,
+        network: request.network
+      ),
+      timeout: request.timeout,
+      captureLimit: Self.maxRawStreamBytes,
+      teardownGracePeriod: Self.commandTeardownGrace
+    )
   }
 
   // The runner enforces the guest timeout itself; this host-side watchdog is an independent
