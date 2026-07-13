@@ -110,11 +110,7 @@ private extension Command {
 
   /// nil ⇒ missing/invalid argument; the router replies with usage, never guesses.
   static func jobId(from arguments: Substring) -> Int64? {
-    let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let id = Int64(trimmed), id > 0 else {
-      return nil
-    }
-    return id
+    PositiveInt64.parse(String(arguments))
   }
 }
 

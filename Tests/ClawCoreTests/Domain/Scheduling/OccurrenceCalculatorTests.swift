@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -33,35 +34,16 @@ import Testing
 
   /// Rules are deliberately built on a UTC calendar: the calculator must install the job's
   /// zone itself (the IANA zone is a separate column rebuilt on load — spec D2).
-  private func utcCalendar() -> Calendar {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = utcZone
-    return calendar
-  }
-
   private func weekdaySevenRule() -> Calendar.RecurrenceRule {
-    Calendar.RecurrenceRule(
-      calendar: utcCalendar(),
-      frequency: .weekly,
-      weekdays: [
-        .every(.monday), .every(.tuesday), .every(.wednesday), .every(.thursday), .every(.friday),
-      ],
-      hours: [7],
-      minutes: [0]
-    )
+    SchedulingRuleFixtures.weekdaySeven(zone: utcZone)
   }
 
   private func dailyTwoThirtyRule() -> Calendar.RecurrenceRule {
-    Calendar.RecurrenceRule(
-      calendar: utcCalendar(),
-      frequency: .daily,
-      hours: [2],
-      minutes: [30]
-    )
+    SchedulingRuleFixtures.dailyAt(hour: 2, minute: 30, zone: utcZone)
   }
 
   private func everyThirtyMinutesRule() -> Calendar.RecurrenceRule {
-    Calendar.RecurrenceRule(calendar: utcCalendar(), frequency: .minutely, interval: 30)
+    SchedulingRuleFixtures.everyNMinutes(30, zone: utcZone)
   }
 
   private func berlinHourMinute(of date: Date) -> DateComponents {

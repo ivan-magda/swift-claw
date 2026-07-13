@@ -182,13 +182,15 @@ extension RunStoreGRDB {
       let rounds =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = 'assistant'",
+          sql:
+            "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = '\(MessageRole.assistant.rawValue)'",
           arguments: [runId]
         ) ?? 0
       let toolCalls =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = 'tool'",
+          sql:
+            "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)'",
           arguments: [runId]
         ) ?? 0
       let tokens =
@@ -275,7 +277,7 @@ extension RunStoreGRDB {
       sql: """
         SELECT EXISTS(
           SELECT 1 FROM messages
-          WHERE id = ? AND run_id = ? AND role = 'tool' AND content = ?
+          WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)' AND content = ?
         )
         """,
       arguments: [messageId, runId, placeholderObservationContent]
@@ -292,7 +294,8 @@ extension RunStoreGRDB {
     content: String
   ) throws {
     try db.execute(
-      sql: "UPDATE messages SET content = ? WHERE id = ? AND run_id = ? AND role = 'tool'",
+      sql:
+        "UPDATE messages SET content = ? WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'",
       arguments: [content, messageId, runId]
     )
   }
@@ -368,18 +371,34 @@ private extension RunStoreGRDB {
     try db.execute(
       sql: """
         INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, 'assistant', ?, 'trusted', ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-      arguments: [sessionId, runId, commit.assistantContent, now, commit.toolCallsJSON]
+      arguments: [
+        sessionId,
+        runId,
+        MessageRole.assistant.rawValue,
+        commit.assistantContent,
+        Provenance.trusted.rawValue,
+        now,
+        commit.toolCallsJSON,
+      ]
     )
 
     for observation in commit.completedObservations {
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, 'tool', ?, 'untrusted', ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           """,
-        arguments: [sessionId, runId, observation.content, now, observation.toolCallId]
+        arguments: [
+          sessionId,
+          runId,
+          MessageRole.tool.rawValue,
+          observation.content,
+          Provenance.untrusted.rawValue,
+          now,
+          observation.toolCallId,
+        ]
       )
     }
     // The PLACEHOLDER pins rowid adjacency: a real `tool` row satisfying the anchor's expected
@@ -388,10 +407,16 @@ private extension RunStoreGRDB {
     try db.execute(
       sql: """
         INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', ?, 'untrusted', ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [
-        sessionId, runId, placeholderObservationContent, now, commit.pending.toolCallId,
+        sessionId,
+        runId,
+        MessageRole.tool.rawValue,
+        placeholderObservationContent,
+        Provenance.untrusted.rawValue,
+        now,
+        commit.pending.toolCallId,
       ]
     )
     let observationMessageId = db.lastInsertedRowID

@@ -7,7 +7,7 @@ public protocol SecretStore: Sendable {
 }
 
 /// The loaded secrets. These values feed the exact-value redactors: `TelegramClient` (bot token),
-/// `OpenAICompatibleProvider` (LLM key), and the ClawTools `SecretRedactor` and the search
+/// `OpenAICompatibleProvider` (LLM key), and the `SecretRedactor` and the search
 /// client (`searchApiKey`).
 public struct Secrets: Sendable, Equatable {
   public let telegramBotToken: String

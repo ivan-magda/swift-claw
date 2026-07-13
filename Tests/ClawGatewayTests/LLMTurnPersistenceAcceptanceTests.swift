@@ -363,6 +363,7 @@ func makeStack(
     delivery: transport,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
+    approvalExpirySeconds: testApprovalExpirySeconds,
     logger: logger
   )
 
@@ -455,6 +456,7 @@ func makeStreamingStack(
     delivery: transport,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
+    approvalExpirySeconds: testApprovalExpirySeconds,
     logger: logger
   )
   let router = MessageRouter(
@@ -541,6 +543,7 @@ func makeStopNewStack(
     delivery: transport,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
+    approvalExpirySeconds: testApprovalExpirySeconds,
     logger: logger
   )
 
@@ -840,7 +843,7 @@ func makeStopNewStack(
   /// both the user message and the committed assistant reply are still in history.
   @Test func cursorAndHistorySurviveRestart() async throws {
     // given — a file-backed pool so the state outlives the "process"
-    let path = NSTemporaryDirectory() + "claw-restart-\(UInt64.random(in: 0..<(.max))).sqlite"
+    let path = makeTempDatabasePath(prefix: "claw-restart")
     defer { try? FileManager.default.removeItem(atPath: path) }
     let sessionKey = SessionKey.telegramDM(chatId: 42)
 

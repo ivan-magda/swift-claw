@@ -56,17 +56,7 @@ import Testing
     now: Date
   ) throws {
     try usage.recordUsage(
-      ProviderUsage(
-        runId: runId,
-        sessionId: sessionId,
-        model: "m",
-        promptTokens: 10,
-        completionTokens: 5,
-        costUSD: 0.001,
-        costSource: source,
-        isEstimated: false,
-        ts: now
-      )
+      makeProviderUsage(runId: runId, sessionId: sessionId, costSource: source, ts: now)
     )
   }
 
@@ -83,15 +73,10 @@ import Testing
       ts: now
     )
     _ = try #require(try fixture.store.pickUp(runId: runId, now: now))
-    let usage = ProviderUsage(
+    let usage = makeProviderUsage(
       runId: runId,
       sessionId: fixture.sessionId,
-      model: "m",
-      promptTokens: 10,
-      completionTokens: 5,
-      costUSD: 0.001,
       costSource: .providerReturned,
-      isEstimated: false,
       ts: now
     )
     _ = try fixture.store.commitAssistantTurn(

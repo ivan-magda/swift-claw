@@ -200,12 +200,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
 
     let choice = decoded.choices.first
     let usage =
-      decoded.usage.map {
-        ChatUsage(
-          promptTokens: $0.promptTokens ?? 0,
-          completionTokens: $0.completionTokens ?? 0,
-          totalTokens: $0.totalTokens ?? 0
-        )
+      decoded.usage.map { wireUsage in
+        wireUsage.toChatUsage()
       }
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
     let providerCost = decoded.usage?.cost ?? providerCost(from: result)
@@ -312,10 +308,7 @@ private extension OpenAICompatibleProvider {
 
 private extension OpenAICompatibleProvider {
   func sanitize(message: String) -> String {
-    guard !config.apiKey.isEmpty else {
-      return message
-    }
-    return message.replacingOccurrences(of: config.apiKey, with: "<redacted-key>")
+    SecretRedactor(secretValues: [config.apiKey]).redact(message)
   }
 
   func sanitize(providerError: ProviderError) -> ProviderError {
@@ -452,22 +445,8 @@ private struct ResponseBody: Decodable {
     }
   }
 
-  struct Usage: Decodable {
-    let promptTokens: Int?
-    let completionTokens: Int?
-    let totalTokens: Int?
-    let cost: Double?
-
-    enum CodingKeys: String, CodingKey {
-      case promptTokens = "prompt_tokens"
-      case completionTokens = "completion_tokens"
-      case totalTokens = "total_tokens"
-      case cost
-    }
-  }
-
   let choices: [Choice]
-  let usage: Usage?
+  let usage: WireUsage?
 }
 
 private struct ErrorBody: Decodable {

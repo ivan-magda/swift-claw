@@ -1,60 +1,9 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
 @testable import ClawTools
-
-/// Scripted HTTP: URL → result (or error). Records requested URLs and headers so tests can assert
-/// what was (and was NOT) dispatched.
-actor ScriptedHTTP: HTTPExecuting {
-  private let responses: [String: HTTPResult]
-  private(set) var requestedURLs: [String] = []
-  private(set) var requestedHeaders: [[String: String]] = []
-
-  init(responses: [String: HTTPResult]) {
-    self.responses = responses
-  }
-
-  func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult {
-    struct PostUnsupported: Error {}
-    throw PostUnsupported()
-  }
-
-  func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    requestedURLs.append(url)
-    requestedHeaders.append(headers)
-    guard let scripted = responses[url] else {
-      struct Unscripted: Error { let url: String }
-      throw Unscripted(url: url)
-    }
-    return scripted
-  }
-}
-
-/// Scripted DNS: host → addresses.
-struct ScriptedResolver: AddressResolving {
-  let table: [String: [ResolvedAddress]]
-
-  func resolve(host: String) async throws -> [ResolvedAddress] {
-    if let literal = ResolvedAddress.parse(host) {
-      return [literal]
-    }
-    guard let addresses = table[host] else {
-      throw AddressResolutionError.unresolvable(host: host)
-    }
-    return addresses
-  }
-}
 
 /// Scripted probe: always answers with the canned detection.
 struct ScriptedFakeIPDetector: FakeIPDetecting {
@@ -83,7 +32,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
   }
 
   private func makeTool(
-    http: ScriptedHTTP,
+    http: RecordingHTTPExecutor,
     resolver: ScriptedResolver,
     exemptCIDRs: [CIDR] = [],
     fakeIPDetector: (any FakeIPDetecting)? = nil
@@ -115,7 +64,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func fetchesExtractsAndRedactsHTML() async throws {
     // given
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://example.com/a": htmlResult(
         "<html><body><p>Hello tok-secret-1 world</p></body></html>"
       )
@@ -139,7 +88,9 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     // given — public sites commonly reject anonymous HTTP clients, so web_fetch identifies the
     // project honestly using the standard product/version plus contact-comment form
     let url = "https://example.com/article"
-    let http = ScriptedHTTP(responses: [url: htmlResult("<html><body>article</body></html>")])
+    let http = RecordingHTTPExecutor(responses: [
+      url: htmlResult("<html><body>article</body></html>")
+    ])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["example.com": [publicAddress]])
@@ -155,7 +106,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func privateResolutionIsBlockedBeforeAnyRequest() async throws {
     // given — a public-looking host resolving to RFC-1918 (SC3 clause 5)
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["internal.example": [privateAddress]])
@@ -171,7 +122,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func mixedResolutionIsBlocked() async throws {
     // given — EVERY returned address must be public (§7.2)
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["dual.example": [publicAddress, privateAddress]])
@@ -183,7 +134,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func emptyResolutionIsBlockedBeforeAnyRequest() async throws {
     // given — a resolver that returns ZERO addresses must NOT vacuously pass the SSRF check
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(http: http, resolver: ScriptedResolver(table: ["empty.example": []]))
 
     // when
@@ -196,7 +147,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func redirectIntoPrivateRangeIsBlockedMidChain() async throws {
     // given — public host 301s to a private-resolving host (the blocklist re-runs per hop)
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://example.com/start": HTTPResult(
         statusCode: 301,
         headers: ["Location": "https://internal.example/steal"],
@@ -229,7 +180,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
         body: Data()
       )
     }
-    let http = ScriptedHTTP(responses: responses)
+    let http = RecordingHTTPExecutor(responses: responses)
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["example.com": [publicAddress]])
@@ -245,7 +196,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func refusesDisallowedContentType() async throws {
     // given
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://example.com/blob": HTTPResult(
         statusCode: 200,
         headers: ["Content-Type": "application/octet-stream"],
@@ -263,7 +214,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func allowsJSONAndSuffixTypes() async throws {
     // given
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://example.com/api": HTTPResult(
         statusCode: 200,
         headers: ["Content-Type": "application/json"],
@@ -288,7 +239,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
   @Test func urlPolicyRefusalsAreRefusedAtResolutionNotDispatched() async throws {
     // given — scheme/port/userinfo/IDN refusals come from CanonicalURL, at the gate's resolution
     // step (the tool no longer re-canonicalizes in execute), so they never reach dispatch
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(http: http, resolver: ScriptedResolver(table: [:]))
 
     // when / then — each raw URL resolves to a refusal carrying the specific policy copy
@@ -316,7 +267,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func missingUrlIsRefusedAtResolution() async throws {
     // given — the gate's resolution step rejects a missing/empty url with the unified copy
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(http: http, resolver: ScriptedResolver(table: [:]))
 
     // when / then
@@ -334,7 +285,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     // given — DNS hijacked by a fake-IP proxy: a public host answers from 198.18.0.0/15 and a
     // fresh canary probe confirms interception (issue #26)
     let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://blog.example/post": htmlResult("<html><body><p>the article</p></body></html>")
     ])
     let tool = makeTool(
@@ -354,7 +305,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
   @Test func benchmarkResolutionIsRefusedWhenProbeDoesNotConfirm() async throws {
     // given — a benchmark-range answer WITHOUT confirmed fake-IP interception
     let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["blog.example": [fakeIPAddress]]),
@@ -377,7 +328,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     // given — the relaxation is scoped to the benchmarking row: RFC-1918 (and loopback/metadata)
     // must stay refused no matter what the probe says
     let fakeIPSample = try #require(ResolvedAddress.parse("198.18.0.84"))
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["internal.example": [privateAddress]]),
@@ -392,7 +343,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
   @Test func mixedBenchmarkAndPrivateResolutionIsRefused() async throws {
     // given — one pool address plus one RFC-1918 address: the private one decides
     let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["dual.example": [fakeIPAddress, privateAddress]]),
@@ -408,7 +359,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     // given — the owner exempted a fake IPv6 pool; the probe confirms nothing
     let fakeV6Address = try #require(ResolvedAddress.parse("fc00::1234"))
     let exemptBlock = try #require(CIDR.parse("fc00::/18"))
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://blog.example/post": htmlResult("<html><body><p>via the tunnel</p></body></html>")
     ])
     let tool = makeTool(
@@ -429,7 +380,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
   @Test func exemptCIDRDoesNotCoverOtherBlockedRanges() async throws {
     // given — an exemption for the v6 pool must not leak onto RFC-1918
     let exemptBlock = try #require(CIDR.parse("fc00::/18"))
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["internal.example": [privateAddress]]),
@@ -449,7 +400,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     // meaningless there)
     let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
     let poolBlock = try #require(CIDR.parse("198.18.0.0/15"))
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: [:]),
@@ -471,7 +422,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     // blocklist), not ride either widening, even with the probe active AND the pool exempted
     let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
     let poolBlock = try #require(CIDR.parse("198.18.0.0/15"))
-    let http = ScriptedHTTP(responses: [:])
+    let http = RecordingHTTPExecutor(responses: [:])
     let tool = makeTool(
       http: http,
       resolver: ScriptedResolver(table: ["3323068500": [fakeIPAddress]]),
@@ -489,7 +440,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func literalPublicAddressURLStillFetches() async throws {
     // given — the literal carve-out must not over-block: a public literal is ordinary egress
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://93.184.216.34/page": htmlResult("<html><body><p>by address</p></body></html>")
     ])
     let tool = makeTool(
@@ -510,7 +461,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
     // given — the per-hop policy re-runs on redirect targets; a confirmed fake-IP answer on
     // hop 2 is followed like any public address
     let fakeIPAddress = try #require(ResolvedAddress.parse("198.18.0.84"))
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://example.com/start": HTTPResult(
         statusCode: 301,
         headers: ["Location": "https://blog.example/post"],
@@ -538,7 +489,7 @@ struct ScriptedFakeIPDetector: FakeIPDetecting {
 
   @Test func nonSuccessStatusIsAnError() async throws {
     // given
-    let http = ScriptedHTTP(responses: [
+    let http = RecordingHTTPExecutor(responses: [
       "https://example.com/gone": htmlResult("<html>gone</html>", status: 404)
     ])
     let tool = makeTool(

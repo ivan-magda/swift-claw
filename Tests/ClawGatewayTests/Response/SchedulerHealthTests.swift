@@ -11,7 +11,7 @@ import Testing
   // Berlin` always resolves at runtime, so `.gmt` here is unreachable — matches sibling tests.
   private let berlin = TimeZone(identifier: "Europe/Berlin") ?? .gmt
 
-  private func value(_ rows: [SchedulerHealth.Row], _ key: String) -> String? {
+  private func value(_ rows: [DoctorReport.Check], _ key: String) -> String? {
     rows.first { row in row.key == key }?.value
   }
 

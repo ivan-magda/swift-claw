@@ -21,9 +21,7 @@ public enum PolicyFingerprint {
       hasher.update(data: Data(bytes))
     }
 
-    return hasher.finalize().map { byte in
-      String(format: "%02x", byte)
-    }.joined()
+    return SHA256Digest.hex(digest: hasher.finalize())
   }
 
   /// The policy-relevant surface the static sub-hash is computed over: the tool-registry surface,

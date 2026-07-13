@@ -40,9 +40,7 @@ struct DoctorCommand: AsyncParsableCommand {
     report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)", group: .config)
     if checkConfig {
       addConfigDetailRows(to: &report, config: config)
-      for row in await sandboxRows(config: config, live: false) {
-        report.add(key: row.key, value: row.value, ok: row.ok, group: .sandbox)
-      }
+      report.add(contentsOf: await sandboxRows(config: config, live: false))
     }
 
     let secretsRow = SecretStoreResolver.doctorRow(
@@ -66,9 +64,7 @@ struct DoctorCommand: AsyncParsableCommand {
 
     addDatabaseRows(to: &report, config: config)
     await addConnectivityRows(to: &report, config: config)
-    for row in await sandboxRows(config: config, live: true) {
-      report.add(key: row.key, value: row.value, ok: row.ok, group: .sandbox)
-    }
+    report.add(contentsOf: await sandboxRows(config: config, live: true))
 
     emit(report)
 
@@ -211,7 +207,7 @@ private extension DoctorCommand {
   func sandboxRows(
     config: AppConfig,
     live: Bool
-  ) async -> [SandboxHealthRows.Row] {
+  ) async -> [DoctorReport.Check] {
     guard config.exec.enabled else {
       return SandboxHealthRows.rows(for: .disabled)
     }

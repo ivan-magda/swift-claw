@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -6,7 +7,7 @@ import Testing
 @testable import ClawData
 
 @Suite struct ScheduleCommandStoreTests {
-  private let fixedNow = Date(timeIntervalSince1970: 1_783_339_200)
+  private let fixedNow = SchedulingTestClock.mondayNoonBerlin
 
   private func makeQueue() throws -> DatabaseQueue {
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -30,7 +31,7 @@ import Testing
       prompt: "Summarize my unread items",
       recurrence: RecurrenceEnvelope(schemaVersion: 1, rule: rule),
       timezone: "Europe/Berlin",
-      nextOccurrence: Date(timeIntervalSince1970: 1_783_400_400)
+      nextOccurrence: SchedulingTestClock.tuesdaySevenBerlin
     )
   }
 
@@ -48,7 +49,7 @@ import Testing
     #expect(job.label == "morning digest")
     #expect(job.ownerChatId == 42)
     #expect(job.status == .active)
-    #expect(job.nextOccurrence == Date(timeIntervalSince1970: 1_783_400_400))
+    #expect(job.nextOccurrence == SchedulingTestClock.tuesdaySevenBerlin)
     let jobCount = try queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM scheduled_jobs") ?? -1
     }

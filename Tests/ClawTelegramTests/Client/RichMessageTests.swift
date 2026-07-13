@@ -1,43 +1,15 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
 @testable import ClawCore
 @testable import ClawTelegram
 
-/// Captures the posted JSON body so the test can assert the exact wire shape sent to Telegram,
-/// then returns a canned `sendRichMessage` success envelope.
-private actor CapturingExecutor: HTTPExecuting {
-  private(set) var capturedBody: Data?
-  private let result: HTTPResult
-
-  init(result: HTTPResult) { self.result = result }
-
-  func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult {
-    capturedBody = jsonBody
-    return result
-  }
-
-  func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    struct GetUnsupported: Error {}
-    throw GetUnsupported()
-  }
-}
-
 @Suite struct RichMessageTests {
   @Test func sendRichMessagePostsMarkdownInputRichMessage() async throws {
     // given — a transport whose executor records the request body and returns message_id 99
-    let executor = CapturingExecutor(
-      result: HTTPResult(
+    let executor = ClawTestSupport.RecordingHTTPExecutor(
+      cannedResult: HTTPResult(
         statusCode: 200,
         headers: [:],
         body: Data(#"{"ok":true,"result":{"message_id":99,"chat":{"id":42}}}"#.utf8)
@@ -50,7 +22,7 @@ private actor CapturingExecutor: HTTPExecuting {
 
     // then — the assigned id comes back, and the markdown rode inside `rich_message` verbatim
     #expect(messageId == 99)
-    let body = try #require(await executor.capturedBody)
+    let body = try #require(await executor.lastBody)
     let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     let richMessage = try #require(json["rich_message"] as? [String: Any])
     #expect(richMessage["markdown"] as? String == "**hi**")

@@ -39,7 +39,7 @@ struct SC3Harness {
 
   let stores: ClawStores
 
-  let http: ScriptedHTTP
+  let http: RecordingHTTPExecutor
   let provider: TurnScriptedProvider
 
   let databasePath: String
@@ -211,7 +211,7 @@ func makeSC3Harness(
   )
 
   // 4. Real tools over the scripted HTTP + DNS seams and an exact-value redactor.
-  let http = ScriptedHTTP(responses: httpResponses)
+  let http = RecordingHTTPExecutor(responses: httpResponses)
   let resolver = ScriptedResolver(table: resolverTable)
   let redactor = SecretRedactor(secretValues: secretValues)
   var tools: [any Tool] = [
@@ -284,6 +284,7 @@ func makeSC3Harness(
     contextBuilder: contextBuilder,
     notifyOutbox: {},
     parker: deferredParker,
+    approvalExpirySeconds: testApprovalExpirySeconds,
     logger: logger
   )
 
@@ -366,59 +367,4 @@ func makeSC3Harness(
     waiter: waiter,
     lanes: lanes
   )
-}
-
-// MARK: - Seam doubles
-
-// Duplicated from `ClawToolsTests` unchanged — test targets cannot share sources. `ScriptedHTTP` is
-// an `actor`; read `requestedURLs` with `await`.
-
-/// Scripted HTTP transport: `get` records the URL and returns the scripted result (throwing for an
-/// unscripted URL); `post` is unsupported (the search path isn't exercised over a real socket).
-actor ScriptedHTTP: HTTPExecuting {
-  private let responses: [String: HTTPResult]
-  private(set) var requestedURLs: [String] = []
-
-  init(responses: [String: HTTPResult]) {
-    self.responses = responses
-  }
-
-  func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult {
-    struct PostUnsupported: Error {}
-    throw PostUnsupported()
-  }
-
-  func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    requestedURLs.append(url)
-    guard let scripted = responses[url] else {
-      struct Unscripted: Error { let url: String }
-      throw Unscripted(url: url)
-    }
-    return scripted
-  }
-}
-
-/// Scripted DNS resolver: IP literals parse directly; named hosts come from the injected table.
-struct ScriptedResolver: AddressResolving {
-  let table: [String: [ResolvedAddress]]
-
-  func resolve(host: String) async throws -> [ResolvedAddress] {
-    if let literal = ResolvedAddress.parse(host) {
-      return [literal]
-    }
-    guard let addresses = table[host] else {
-      throw AddressResolutionError.unresolvable(host: host)
-    }
-    return addresses
-  }
 }

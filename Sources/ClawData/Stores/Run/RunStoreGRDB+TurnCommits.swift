@@ -140,12 +140,14 @@ private extension RunStoreGRDB {
     try db.execute(
       sql: """
         INSERT INTO messages(session_id, run_id, role, content, provenance, ts, prompt_tokens, completion_tokens)
-        VALUES (?, ?, 'assistant', ?, 'trusted', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [
         turn.sessionId,
         turn.runId,
+        MessageRole.assistant.rawValue,
         turn.content,
+        Provenance.trusted.rawValue,
         now,
         usage.promptTokens,
         usage.completionTokens,
@@ -237,19 +239,33 @@ private extension RunStoreGRDB {
     try db.execute(
       sql: """
         INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, 'assistant', ?, 'trusted', ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [
-        sessionId, runId, exchange.assistantContent, now, ToolCallCoding.encode(exchange.toolCalls),
+        sessionId,
+        runId,
+        MessageRole.assistant.rawValue,
+        exchange.assistantContent,
+        Provenance.trusted.rawValue,
+        now,
+        ToolCallCoding.encode(exchange.toolCalls),
       ]
     )
     for observation in exchange.observations {
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, 'tool', ?, 'untrusted', ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           """,
-        arguments: [sessionId, runId, observation.content, now, observation.callId]
+        arguments: [
+          sessionId,
+          runId,
+          MessageRole.tool.rawValue,
+          observation.content,
+          Provenance.untrusted.rawValue,
+          now,
+          observation.callId,
+        ]
       )
     }
   }

@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -107,6 +108,14 @@ func runState(databasePath: String, runId: Int64) throws -> String? {
   let pool = try SnapshotPoolCache.shared.pool(at: databasePath)
   return try pool.read { db in
     try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+  }
+}
+
+/// Every run row's state, oldest first — the FIFO queue behind the parked lane in durable form.
+func runStates(databasePath: String) throws -> [String] {
+  let pool = try SnapshotPoolCache.shared.pool(at: databasePath)
+  return try pool.read { db in
+    try String.fetchAll(db, sql: "SELECT state FROM runs ORDER BY id")
   }
 }
 

@@ -70,9 +70,15 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, role, content, provenance, ts)
-          VALUES (?, 'user', ?, 'trusted', ?)
+          VALUES (?, ?, ?, ?, ?)
           """,
-        arguments: [sessionId, inbound.text, inbound.ts]
+        arguments: [
+          sessionId,
+          MessageRole.user.rawValue,
+          inbound.text,
+          Provenance.trusted.rawValue,
+          inbound.ts,
+        ]
       )
       let messageId = db.lastInsertedRowID
 
@@ -148,7 +154,8 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
           db,
           sql: """
             SELECT id FROM messages
-            WHERE session_id = ? AND id > ? AND id <= ? AND role IN ('user', 'assistant')
+            WHERE session_id = ? AND id > ? AND id <= ?
+              AND role IN ('\(MessageRole.user.rawValue)', '\(MessageRole.assistant.rawValue)')
             ORDER BY id DESC
             LIMIT 1 OFFSET ?
             """,

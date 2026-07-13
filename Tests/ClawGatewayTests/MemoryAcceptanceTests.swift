@@ -2,6 +2,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import ClawWorkspace
 import Foundation
 import GRDB
@@ -35,7 +36,7 @@ import Testing
   }
 
   private func makeTempDatabasePath() -> String {
-    NSTemporaryDirectory() + "claw-memory-accept-\(UInt64.random(in: 0..<(.max))).sqlite"
+    ClawTestSupport.makeTempDatabasePath(prefix: "claw-memory-accept")
   }
 
   /// SC2 (spec §1.1, §14): tell it a fact today; it recalls it in a new conversation after a real
@@ -105,8 +106,7 @@ import Testing
     let reviewText = try #require(await stack.transport.sent.last?.text)
     #expect(reviewText.contains("project:"))
     #expect(reviewText.contains("\(savedItem.id) · «ship 3a» · owner"))
-    let dayFormat = Date.ISO8601FormatStyle(timeZone: .gmt).year().month().day()
-    #expect(reviewText.contains(weekAgo.formatted(dayFormat)))
+    #expect(reviewText.contains(weekAgo.wallClockDay(in: .gmt)))
 
     // when — phase 4: confirmed delete, then one more turn
     _ = await stack.router.handle(

@@ -11,7 +11,7 @@ import Testing
     // then
     #expect(
       rows == [
-        .init(key: "sandbox", value: "disabled by CLAW_EXEC_ENABLED", ok: true)
+        .init(key: "sandbox", value: "disabled by CLAW_EXEC_ENABLED", ok: true, group: .sandbox)
       ]
     )
   }
@@ -81,8 +81,8 @@ import Testing
     let armed = SandboxHealthRows.admittingRow(true)
 
     // then
-    #expect(disarmed == .init(key: "sandbox.admitting", value: "false", ok: false))
-    #expect(armed == .init(key: "sandbox.admitting", value: "true", ok: true))
+    #expect(disarmed == .init(key: "sandbox.admitting", value: "false", ok: false, group: .sandbox))
+    #expect(armed == .init(key: "sandbox.admitting", value: "true", ok: true, group: .sandbox))
   }
 
   @Test func configOnlyReportsVersionAndDefersTheCanary() {

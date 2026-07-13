@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -11,13 +12,6 @@ import Testing
 #endif
 
 @Suite struct KeyFileSecurityTests {
-  private func makeStateRoot() throws -> URL {
-    let dir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-keysec-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    return dir
-  }
-
   private func writeKey(at url: URL, mode: Int) throws {
     try Data(repeating: 0xAB, count: EncryptedFileSecretStore.keyByteCount).write(to: url)
     try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path)
@@ -25,7 +19,7 @@ import Testing
 
   @Test func acceptsRegularOwned0600Key() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let keyURL = stateRoot.appendingPathComponent(SecretFile.key)
@@ -39,7 +33,7 @@ import Testing
 
   @Test func rejectsWorldReadableKey() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let keyURL = stateRoot.appendingPathComponent(SecretFile.key)
@@ -53,7 +47,7 @@ import Testing
 
   @Test func rejectsSymlinkedKey() throws {
     // given — a symlink whose target is a valid 0600 key; O_NOFOLLOW must still refuse it.
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let realKey = stateRoot.appendingPathComponent("real.key")
@@ -69,7 +63,7 @@ import Testing
 
   @Test func rejectsWrongLengthKey() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let keyURL = stateRoot.appendingPathComponent(SecretFile.key)
@@ -85,7 +79,7 @@ import Testing
   @Test func rejectsNonRegularKey() throws {
     // given — a directory standing in for secret.key; open succeeds but fstat reports a non-regular
     // file, so the metadata policy must reject it before any read.
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     let keyURL = stateRoot.appendingPathComponent(SecretFile.key)

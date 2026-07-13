@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import ClawTools
 import ClawWorkspace
 import Foundation

@@ -33,13 +33,7 @@ struct DaemonDoctorReporter: DoctorReporting {
     )
 
     if let maintenance = sandbox.maintenance {
-      let admittingRow = SandboxHealthRows.admittingRow(await maintenance.isAdmitting())
-      report.add(
-        key: admittingRow.key,
-        value: admittingRow.value,
-        ok: admittingRow.ok,
-        group: .sandbox
-      )
+      report.add(contentsOf: [SandboxHealthRows.admittingRow(await maintenance.isAdmitting())])
     }
 
     return report

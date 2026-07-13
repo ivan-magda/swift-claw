@@ -78,7 +78,7 @@ let package = Package(
         .product(name: "Subprocess", package: "swift-subprocess"),
       ]
     ),
-    .target(name: "ClawTestSupport", dependencies: ["ClawCore"]),
+    .target(name: "ClawTestSupport", dependencies: ["ClawCore", "ClawTools"]),
     .target(
       name: "ClawGateway",
       dependencies: [
@@ -104,17 +104,18 @@ let package = Package(
     .testTarget(
       name: "ClawSecretsTests",
       dependencies: [
-        "ClawSecrets", "ClawCore",
+        "ClawSecrets", "ClawCore", "ClawTestSupport",
         .product(name: "Crypto", package: "swift-crypto"),
       ]
     ),
-    .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore"]),
+    .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore", "ClawTestSupport"]),
     .testTarget(name: "ClawWorkspaceTests", dependencies: ["ClawWorkspace", "ClawCore"]),
     .testTarget(
       name: "ClawTelegramTests",
       dependencies: [
         "ClawTelegram",
         "ClawCore",
+        "ClawTestSupport",
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "NIOCore", package: "swift-nio"),
         .product(name: "NIOHTTP1", package: "swift-nio"),

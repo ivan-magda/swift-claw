@@ -45,7 +45,7 @@ struct SC7Harness {
 
   let stores: ClawStores
 
-  let http: ScriptedHTTP
+  let http: RecordingHTTPExecutor
   let provider: TurnScriptedProvider
   let parser: FakeDraftParser
 
@@ -141,7 +141,7 @@ struct SC7Harness {
 func makeSC7Harness(
   scripts: [[ChatResponse]],
   parseResults: [ScheduleDraftParseResult] = [.unparseable],
-  startAt: Date = Date(timeIntervalSince1970: 1_783_339_200),
+  startAt: Date = SchedulingTestClock.mondayNoonBerlin,
   httpResponses: [String: HTTPResult] = [:],
   resolverTable: [String: [ResolvedAddress]] = [
     "example.com": [resolvedAddress("93.184.216.34")],
@@ -190,7 +190,7 @@ func makeSC7Harness(
   )
 
   // 4. Real tools over the scripted HTTP + DNS seams and an exact-value redactor.
-  let http = ScriptedHTTP(responses: httpResponses)
+  let http = RecordingHTTPExecutor(responses: httpResponses)
   let resolver = ScriptedResolver(table: resolverTable)
   let redactor = SecretRedactor(secretValues: secretValues)
   let tools: [any Tool] = [
@@ -252,6 +252,7 @@ func makeSC7Harness(
     now: { clock.now },
     // Inert on purpose: the SC7 assertions never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
+    approvalExpirySeconds: testApprovalExpirySeconds,
     logger: logger
   )
 
