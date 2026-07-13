@@ -67,6 +67,10 @@ private extension Command {
   }
 
   static func command(named name: String, arguments: Substring, originalText: String) -> Command {
+    if let jobCommand = jobCommand(named: name, arguments: arguments) {
+      return jobCommand
+    }
+
     switch name {
     case "start":
       return .start
@@ -80,20 +84,27 @@ private extension Command {
       return .memory(MemoryCommand.parse(arguments: arguments))
     case "schedule":
       return .schedule(ScheduleCommand.parse(arguments: arguments))
-    case "pause":
-      return .pause(jobId: jobId(from: arguments))
-    case "resume":
-      return .resume(jobId: jobId(from: arguments))
-    case "runnow":
-      return .runNow(jobId: jobId(from: arguments))
-    case "cancel":
-      return .cancelJob(jobId: jobId(from: arguments))
     case "help":
       return .help
     case "status", "doctor":
       return .doctor
     default:
       return .plain(originalText)
+    }
+  }
+
+  static func jobCommand(named name: String, arguments: Substring) -> Command? {
+    switch name {
+    case "pause":
+      .pause(jobId: jobId(from: arguments))
+    case "resume":
+      .resume(jobId: jobId(from: arguments))
+    case "runnow":
+      .runNow(jobId: jobId(from: arguments))
+    case "cancel":
+      .cancelJob(jobId: jobId(from: arguments))
+    default:
+      nil
     }
   }
 
