@@ -10,6 +10,8 @@ enum EpochSecondCodec {
   }
 
   static func date(fromEpoch value: Int64?) -> Date? {
-    value.map { seconds in Date(timeIntervalSince1970: TimeInterval(seconds)) }
+    value.map { seconds in
+      Date(timeIntervalSince1970: TimeInterval(seconds))
+    }
   }
 }
