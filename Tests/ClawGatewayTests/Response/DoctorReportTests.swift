@@ -8,8 +8,8 @@ import Testing
     var report = DoctorReport()
 
     // when
-    report.add(key: "config", value: "OK")
-    report.add(key: "allowlist.owners", value: "1", ok: true)
+    report.add(key: "config", value: "OK", group: .config)
+    report.add(key: "allowlist.owners", value: "1", ok: true, group: .database)
 
     // then
     #expect(report.ok)
@@ -20,51 +20,123 @@ import Testing
     var report = DoctorReport()
 
     // when
-    report.add(key: "config", value: "OK")
-    report.add(key: "allowlist.owners", value: "0", ok: false)
+    report.add(key: "config", value: "OK", group: .config)
+    report.add(key: "allowlist.owners", value: "0", ok: false, group: .database)
 
     // then
     #expect(report.ok == false)
   }
 
-  @Test func textRenderShowsKeysAndMarkers() {
+  @Test func textRenderShowsGroupHeaderAndKeys() {
     // given
     var report = DoctorReport()
-    report.add(key: "config", value: "OK")
-    report.add(key: "allowlist.owners", value: "0", ok: false)
+    report.add(key: "config", value: "OK", group: .config)
 
     // when
     let text = report.renderText()
 
     // then
+    #expect(text.contains("Config"))
     #expect(text.contains("config"))
-    #expect(text.contains("FAIL"))
   }
 
-  @Test func mixedReportRendersOkAndFailMarkers() {
+  @Test func passingGroupRendersRollupWithoutRowMarkers() {
     // given
     var report = DoctorReport()
-    report.add(key: "db.writable", value: "true")
-    report.add(key: "allowlist.owners", value: "0", ok: false)
+    report.add(key: "config", value: "OK", group: .config)
+    report.add(key: "config.max_tokens", value: "4096", group: .config)
 
     // when
     let text = report.renderText()
 
     // then
-    #expect(text.contains("[ok]"))
-    #expect(text.contains("[FAIL]"))
+    #expect(text.contains("ok"))
+    #expect(!text.contains("✗"))
   }
 
-  @Test func jsonRenderIsParseable() {
+  @Test func failingRowMarksRowAndGroupHeaderRollup() {
     // given
     var report = DoctorReport()
-    report.add(key: "config", value: "OK")
+    report.add(key: "spend.today_usd", value: "0.0", group: .spend)
+    report.add(key: "spend.remaining_day_usd", value: "0.00", ok: false, group: .spend)
+
+    // when
+    let text = report.renderText()
+
+    // then
+    #expect(text.contains("FAIL"))
+    #expect(text.contains("✗ spend.remaining_day_usd"))
+  }
+
+  @Test func keyColumnIsAlignedPerGroupNotGlobally() {
+    // given: a short-key group and a group with a much wider key
+    var report = DoctorReport()
+    report.add(key: "config", value: "OK", group: .config)
+    report.add(key: "sandbox.image_digest_ok", value: "true", group: .sandbox)
+
+    // when
+    let text = report.renderText()
+
+    // then: the short-key group hugs its own width, not the wide sandbox key's
+    #expect(text.contains("    config  OK"))
+  }
+
+  @Test func groupsRenderInCanonicalOrderNotInsertionOrder() throws {
+    // given
+    var report = DoctorReport()
+    report.add(key: "sandbox.available", value: "true", group: .sandbox)
+    report.add(key: "config", value: "OK", group: .config)
+
+    // when
+    let text = report.renderText()
+
+    // then
+    let configIndex = try #require(text.range(of: "Config")).lowerBound
+    let sandboxIndex = try #require(text.range(of: "Sandbox")).lowerBound
+    #expect(configIndex < sandboxIndex)
+  }
+
+  @Test func emptyGroupsAreOmitted() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "config", value: "OK", group: .config)
+
+    // when
+    let text = report.renderText()
+
+    // then
+    #expect(text.contains("Config"))
+    #expect(!text.contains("Sandbox"))
+    #expect(!text.contains("Spend"))
+  }
+
+  @Test func llmRunsGroupUsesFriendlyTitleAndSnakeCaseJSON() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "llm.last_success", value: "never", group: .llmRuns)
+
+    // when
+    let text = report.renderText()
+    let json = report.renderJSON()
+
+    // then
+    #expect(text.contains("LLM & Runs"))
+    #expect(json.contains("\"llm_runs\""))
+  }
+
+  @Test func jsonIncludesGroupAndTopLevelOk() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "config", value: "OK", group: .config)
+    report.add(key: "spend.remaining_day_usd", value: "0.00", ok: false, group: .spend)
 
     // when
     let json = report.renderJSON()
 
     // then
     #expect(json.contains("\"config\""))
+    #expect(json.contains("\"group\""))
+    #expect(json.contains("\"spend\""))
     #expect(json.contains("\"ok\""))
   }
 }

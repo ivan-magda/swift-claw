@@ -32,16 +32,16 @@ struct DoctorCommand: AsyncParsableCommand {
     do {
       config = try EnvironmentLoader.loadConfig()
     } catch let error as ConfigError {
-      report.add(key: "config", value: "FAIL: \(error)", ok: false)
+      report.add(key: "config", value: "FAIL: \(error)", ok: false, group: .config)
       emit(report)
       throw ExitCode(error.exitCode)
     }
-    report.add(key: "config", value: "OK")
-    report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)")
+    report.add(key: "config", value: "OK", group: .config)
+    report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)", group: .config)
     if checkConfig {
       addConfigDetailRows(to: &report, config: config)
       for row in await sandboxRows(config: config, live: false) {
-        report.add(key: row.key, value: row.value, ok: row.ok)
+        report.add(key: row.key, value: row.value, ok: row.ok, group: .sandbox)
       }
     }
 
@@ -49,7 +49,7 @@ struct DoctorCommand: AsyncParsableCommand {
       stateRoot: config.stateRoot,
       environment: ProcessInfo.processInfo.environment
     )
-    report.add(key: "secrets", value: secretsRow.value, ok: secretsRow.ok)
+    report.add(key: "secrets", value: secretsRow.value, ok: secretsRow.ok, group: .config)
 
     if checkConfig {
       emit(report)
@@ -67,7 +67,7 @@ struct DoctorCommand: AsyncParsableCommand {
     addDatabaseRows(to: &report, config: config)
     await addConnectivityRows(to: &report, config: config)
     for row in await sandboxRows(config: config, live: true) {
-      report.add(key: row.key, value: row.value, ok: row.ok)
+      report.add(key: row.key, value: row.value, ok: row.ok, group: .sandbox)
     }
 
     emit(report)
@@ -85,10 +85,22 @@ struct DoctorCommand: AsyncParsableCommand {
 
 private extension DoctorCommand {
   func addConfigDetailRows(to report: inout DoctorReport, config: AppConfig) {
-    report.add(key: "llm.streaming", value: config.llm.streamingEnabled ? "on" : "off")
-    report.add(key: "sched.timezone", value: config.timezone.identifier)
-    report.add(key: "sched.catchup_max_age_min", value: "\(config.schedCatchUpMaxAgeMinutes)")
-    report.add(key: "sched.min_interval_min", value: "\(config.schedMinIntervalMinutes)")
+    report.add(
+      key: "llm.streaming",
+      value: config.llm.streamingEnabled ? "on" : "off",
+      group: .llmRuns
+    )
+    report.add(key: "sched.timezone", value: config.timezone.identifier, group: .scheduler)
+    report.add(
+      key: "sched.catchup_max_age_min",
+      value: "\(config.schedCatchUpMaxAgeMinutes)",
+      group: .scheduler
+    )
+    report.add(
+      key: "sched.min_interval_min",
+      value: "\(config.schedMinIntervalMinutes)",
+      group: .scheduler
+    )
     // Warn-not-fail: a proactive cap at/above the global cap is legal but inert —
     // the household kill-switch dominates.
     let proactiveNote =
@@ -96,36 +108,62 @@ private extension DoctorCommand {
       ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
     report.add(
       key: "spend.proactive_per_day_usd",
-      value: USD.display(config.proactivePerDayUSD) + proactiveNote
+      value: USD.display(config.proactivePerDayUSD) + proactiveNote,
+      group: .spend
     )
-    report.add(key: "heartbeat.enabled", value: config.heartbeatEnabled ? "on" : "off")
-    report.add(key: "heartbeat.interval_min", value: "\(config.heartbeatIntervalMinutes)")
-    report.add(key: "heartbeat.quiet_hours", value: config.heartbeatQuietHours.rendered)
-    report.add(key: "heartbeat.max_per_day", value: "\(config.heartbeatMaxPerDay)")
-    report.add(key: "approval.expiry_s", value: "\(config.approvalExpirySeconds)")
+    report.add(
+      key: "heartbeat.enabled",
+      value: config.heartbeatEnabled ? "on" : "off",
+      group: .scheduler
+    )
+    report.add(
+      key: "heartbeat.interval_min",
+      value: "\(config.heartbeatIntervalMinutes)",
+      group: .scheduler
+    )
+    report.add(
+      key: "heartbeat.quiet_hours",
+      value: config.heartbeatQuietHours.rendered,
+      group: .scheduler
+    )
+    report.add(
+      key: "heartbeat.max_per_day",
+      value: "\(config.heartbeatMaxPerDay)",
+      group: .scheduler
+    )
+    report.add(
+      key: "approval.expiry_s",
+      value: "\(config.approvalExpirySeconds)",
+      group: .approvals
+    )
     let exemptCIDRs = config.webFetchExemptCIDRs.map { cidr in
       "\(cidr)"
     }
     report.add(
       key: "webfetch.exempt_cidrs",
-      value: exemptCIDRs.isEmpty ? "none" : exemptCIDRs.joined(separator: " ")
+      value: exemptCIDRs.isEmpty ? "none" : exemptCIDRs.joined(separator: " "),
+      group: .connectivity
     )
   }
 
   func addDatabaseRows(to report: inout DoctorReport, config: AppConfig) {
     do {
       let stores = try EnvironmentLoader.openStores(config: config)
-      report.add(key: "db.writable", value: "true")
+      report.add(key: "db.writable", value: "true", group: .database)
 
       let owners = (try? stores.allowlist.allowlistCount()) ?? -1
-      report.add(key: "allowlist.owners", value: "\(owners)", ok: owners >= 1)
+      report.add(key: "allowlist.owners", value: "\(owners)", ok: owners >= 1, group: .database)
 
       let offset: Int64? = try? stores.cursor.loadCursor()
-      report.add(key: "poller.last_offset", value: offset.map(String.init) ?? "none")
+      report.add(
+        key: "poller.last_offset",
+        value: offset.map(String.init) ?? "none",
+        group: .database
+      )
 
       addHealthRows(to: &report, stores: stores, config: config)
     } catch {
-      report.add(key: "db.writable", value: "false: \(error)", ok: false)
+      report.add(key: "db.writable", value: "false: \(error)", ok: false, group: .database)
     }
   }
 
@@ -138,10 +176,11 @@ private extension DoctorCommand {
       report.add(
         key: "dns.fake_ip",
         value: "detected (public hosts resolve into \(SSRFGuard.benchmarkRange), e.g. \(sample); "
-          + "web_fetch allows probe-confirmed answers in that range)"
+          + "web_fetch allows probe-confirmed answers in that range)",
+        group: .connectivity
       )
     case .inactive:
-      report.add(key: "dns.fake_ip", value: "not detected")
+      report.add(key: "dns.fake_ip", value: "not detected", group: .connectivity)
     }
 
     guard let secrets = try? EnvironmentLoader.loadSecrets(config: config) else {
@@ -152,7 +191,8 @@ private extension DoctorCommand {
     report.add(
       key: "web_search",
       value: secrets.searchApiKey != nil
-        ? "configured" : "not configured (web_search tool absent)"
+        ? "configured" : "not configured (web_search tool absent)",
+      group: .connectivity
     )
 
     let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
@@ -162,9 +202,13 @@ private extension DoctorCommand {
     )
 
     if let identity = try? await transport.getMe() {
-      report.add(key: "telegram.bot", value: identity.username ?? "id:\(identity.id)")
+      report.add(
+        key: "telegram.bot",
+        value: identity.username ?? "id:\(identity.id)",
+        group: .connectivity
+      )
     } else {
-      report.add(key: "telegram.bot", value: "unreachable", ok: false)
+      report.add(key: "telegram.bot", value: "unreachable", ok: false, group: .connectivity)
     }
 
     try? await httpClient.shutdown()
@@ -259,19 +303,30 @@ private extension DoctorCommand {
 
     report.add(
       key: "llm.last_success",
-      value: health.lastSuccessAt.map(String.init(describing:)) ?? "never"
+      value: health.lastSuccessAt.map(String.init(describing:)) ?? "never",
+      group: .llmRuns
     )
-    report.add(key: "llm.consecutive_failures", value: "\(health.consecutiveFailures)")
-    report.add(key: "llm.retry_budget", value: "\(config.llm.retryBudget)")
-    report.add(key: "llm.streaming", value: config.llm.streamingEnabled ? "on" : "off")
-    report.add(key: "runs.in_flight", value: "\(health.inFlight)")
+    report.add(
+      key: "llm.consecutive_failures",
+      value: "\(health.consecutiveFailures)",
+      group: .llmRuns
+    )
+    report.add(key: "llm.retry_budget", value: "\(config.llm.retryBudget)", group: .llmRuns)
+    report.add(
+      key: "llm.streaming",
+      value: config.llm.streamingEnabled ? "on" : "off",
+      group: .llmRuns
+    )
+    report.add(key: "runs.in_flight", value: "\(health.inFlight)", group: .llmRuns)
     report.add(
       key: "runs.oldest_age_s",
-      value: health.oldestRunAgeSeconds.map { String(format: "%.0f", $0) } ?? "none"
+      value: health.oldestRunAgeSeconds.map { String(format: "%.0f", $0) } ?? "none",
+      group: .llmRuns
     )
     report.add(
       key: "runs.last_FAILED",
-      value: health.lastFailedAt.map(String.init(describing:)) ?? "none"
+      value: health.lastFailedAt.map(String.init(describing:)) ?? "none",
+      group: .llmRuns
     )
   }
 
@@ -283,28 +338,37 @@ private extension DoctorCommand {
   ) {
     let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
     let mix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
-    report.add(key: "spend.today_usd", value: USD.precise(todayUSD))
-    report.add(key: "spend.today_tokens", value: "\(todayTokens)")
+    report.add(key: "spend.today_usd", value: USD.precise(todayUSD), group: .spend)
+    report.add(key: "spend.today_tokens", value: "\(todayTokens)", group: .spend)
     report.add(
       key: "spend.remaining_day_usd",
-      value: USD.display(max(0, config.budget.perDayUSD - todayUSD))
+      value: USD.display(max(0, config.budget.perDayUSD - todayUSD)),
+      group: .spend
     )
-    report.add(key: "spend.per_run_cap_usd", value: USD.display(config.budget.perRunUSD))
+    report.add(
+      key: "spend.per_run_cap_usd",
+      value: USD.display(config.budget.perRunUSD),
+      group: .spend
+    )
     let mixText = mix.map { "\($0.key.rawValue)=\($0.value)" }.sorted().joined(separator: " ")
-    report.add(key: "spend.cost_source_mix", value: mixText.isEmpty ? "none" : mixText)
+    report.add(
+      key: "spend.cost_source_mix",
+      value: mixText.isEmpty ? "none" : mixText,
+      group: .spend
+    )
   }
 
   func addStorageRows(to report: inout DoctorReport, config: AppConfig) {
     let dbPath = EnvironmentLoader.databasePath(config: config)
     let walBytes =
       (try? FileManager.default.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int) ?? 0
-    report.add(key: "db.wal_size", value: "\(walBytes)")
+    report.add(key: "db.wal_size", value: "\(walBytes)", group: .storage)
 
     let fileSystemAttributes = try? FileManager.default.attributesOfFileSystem(
       forPath: config.stateRoot.path
     )
     let freeBytes = (fileSystemAttributes?[.systemFreeSize] as? Int) ?? 0
-    report.add(key: "db.free_disk", value: "\(freeBytes)", ok: freeBytes > 0)
+    report.add(key: "db.free_disk", value: "\(freeBytes)", ok: freeBytes > 0, group: .storage)
   }
 
   func addSchedulerRows(
@@ -337,7 +401,7 @@ private extension DoctorCommand {
       now: now
     )
     for row in SchedulerHealth.rows(snapshot) {
-      report.add(key: row.key, value: row.value)
+      report.add(key: row.key, value: row.value, group: .scheduler)
     }
   }
 
@@ -354,7 +418,7 @@ private extension DoctorCommand {
       health: approvalsHealth,
       approvalExpirySeconds: config.approvalExpirySeconds
     ) {
-      report.add(key: row.key, value: row.value)
+      report.add(key: row.key, value: row.value, group: .approvals)
     }
   }
 }
