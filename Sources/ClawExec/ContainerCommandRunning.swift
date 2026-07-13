@@ -100,16 +100,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
     let clock = ContinuousClock()
     let started = clock.now
 
-    let teardownSequence: [TeardownStep] = [
-      .gracefulShutDown(
-        toProcessGroup: true,
-        allowedDurationToNextStep: command.teardownGracePeriod
-      )
-    ]
-
-    var platformOptions = PlatformOptions()
-    platformOptions.createSession = true
-    platformOptions.teardownSequence = teardownSequence
+    let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
 
     do {
       let result = try await Subprocess.run(
@@ -117,7 +108,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         arguments: Arguments(command.arguments),
         environment: environment(),
         workingDirectory: nil,
-        platformOptions: platformOptions,
+        platformOptions: Self.platformOptions(teardownSequence: teardownSequence),
         input: .none,
         output: .sequence,
         error: .sequence
@@ -151,26 +142,11 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         )
       }
 
-      // Caller cancellation does not throw out of Subprocess.run: its cleanup
-      // handler tears the process down and the call returns normally with the
-      // teardown signal status, so classify cancellation here, not in `catch`.
-      let termination: ContainerCommandTermination
-
-      if result.closureOutput.timedOut {
-        termination = .timedOut
-      } else if Task.isCancelled {
-        termination = .cancelled
-      } else {
-        switch result.terminationStatus {
-        case .exited(let code):
-          termination = .exited(Int32(code))
-        case .signaled(let signal):
-          termination = .signaled(Int32(signal))
-        }
-      }
-
       return ContainerCommandResult(
-        termination: termination,
+        termination: Self.classifyTermination(
+          timedOut: result.closureOutput.timedOut,
+          status: result.terminationStatus
+        ),
         stdout: result.closureOutput.stdout,
         stderr: result.closureOutput.stderr,
         processIdentifier: Int32(result.processIdentifier.value),
@@ -189,6 +165,41 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         processIdentifier: nil,
         wallClock: started.duration(to: clock.now)
       )
+    }
+  }
+}
+
+// MARK: - Launch & Termination
+
+private extension SwiftSubprocessContainerCommandRunner {
+  static func teardownSequence(gracePeriod: Duration) -> [TeardownStep] {
+    [.gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: gracePeriod)]
+  }
+
+  static func platformOptions(teardownSequence: [TeardownStep]) -> PlatformOptions {
+    var options = PlatformOptions()
+    options.createSession = true
+    options.teardownSequence = teardownSequence
+    return options
+  }
+
+  static func classifyTermination(
+    timedOut: Bool,
+    status: TerminationStatus
+  ) -> ContainerCommandTermination {
+    if timedOut {
+      return .timedOut
+    }
+
+    if Task.isCancelled {
+      return .cancelled
+    }
+
+    switch status {
+    case .exited(let code):
+      return .exited(Int32(code))
+    case .signaled(let signal):
+      return .signaled(Int32(signal))
     }
   }
 }
