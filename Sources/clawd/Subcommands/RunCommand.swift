@@ -142,7 +142,9 @@ private extension RunCommand {
     }
   }
 
-  /// Opens the store bundle (exiting with the store code on failure) and seeds the allowlist.
+  /// Opens the store bundle and seeds the configured owners, exiting with the store code if the
+  /// open fails or if seeding configured owners fails — a daemon that can't seed its owners boots
+  /// locked out, since `AccessControl` default-denies the empty allowlist table.
   static func openStoresOrExit(config: AppConfig, logger: Logger) throws -> ClawStores {
     let stores: ClawStores
     do {
@@ -152,12 +154,14 @@ private extension RunCommand {
       throw ExitCode(ClawExitCode.storeError.rawValue)
     }
 
-    do {
-      // Additive only — removing an ID from config doesn't revoke it. Revocation is deferred
-      // to pairing, which needs an audited remove path, not a config-mirroring reconcile.
-      try stores.allowlist.seedAllowlist(userIds: Array(config.allowlist))
-    } catch {
+    switch AllowlistSeeding.seed(into: stores.allowlist, owners: config.allowlist) {
+    case .seeded:
+      break
+    case .toleratedFailure(let error):
       logger.error("failed to seed allowlist: \(error)")
+    case .strandedOwners(let error):
+      FileHandle.standardError.write(Data("allowlist seed failed: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.storeError.rawValue)
     }
 
     return stores
