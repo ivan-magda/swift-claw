@@ -1,9 +1,5 @@
 import Foundation
 
-/// Shared skeleton for the numeric env-config knobs: trim, treat absent/blank as the caller's
-/// fallback, parse, then enforce the caller's bound — throwing the caller's own `ConfigError` so
-/// each knob keeps its distinct vocabulary. Trimming is `.whitespacesAndNewlines` everywhere, so a
-/// value's acceptance never depends on which knob happens to strip trailing newlines.
 enum ConfigParse {
   static func boundedInt(
     _ raw: String?,
