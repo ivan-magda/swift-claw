@@ -18,7 +18,18 @@ struct SystemVersionDocument: Decodable {
 struct ListedContainer: Decodable, Sendable {
   struct Configuration: Decodable, Sendable {
     let id: String?
-    let labels: [String: String]?
+    let labels: [String: String]
+
+    init(from decoder: any Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      id = try container.decodeIfPresent(String.self, forKey: .id)
+      labels = try container.decodeIfPresent([String: String].self, forKey: .labels) ?? [:]
+    }
+
+    private enum CodingKeys: String, CodingKey {
+      case id
+      case labels
+    }
   }
 
   let id: String?
@@ -41,15 +52,15 @@ struct SystemPropertiesDocument: Decodable {
   let vminit: Vminit
 }
 
+struct ImageDigestDescriptor: Decodable {
+  let digest: String
+}
+
 struct ImageInspectDocument: Decodable {
   struct Configuration: Decodable {
-    struct Descriptor: Decodable {
-      let digest: String
-    }
-
     let name: String
 
-    let descriptor: Descriptor
+    let descriptor: ImageDigestDescriptor
   }
 
   let configuration: Configuration
@@ -58,13 +69,9 @@ struct ImageInspectDocument: Decodable {
 struct ContainerInspectDocument: Decodable {
   struct Configuration: Decodable {
     struct Image: Decodable {
-      struct Descriptor: Decodable {
-        let digest: String
-      }
-
       let reference: String
 
-      let descriptor: Descriptor
+      let descriptor: ImageDigestDescriptor
     }
 
     struct Resources: Decodable {
