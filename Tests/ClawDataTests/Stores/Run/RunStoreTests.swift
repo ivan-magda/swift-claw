@@ -8,10 +8,12 @@ import Testing
 @Suite struct RunStoreTests {
   private struct Fixture {
     let queue: DatabaseQueue
+
     let sessions: SessionMessageStoreGRDB
     let runs: RunStoreGRDB
     let usage: UsageStoreGRDB
     let outbox: OutboxStoreGRDB
+
     let sessionId: Int64
     let seedRunId: Int64
   }

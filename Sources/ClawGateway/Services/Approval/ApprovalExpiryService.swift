@@ -19,9 +19,12 @@ public struct ApprovalExpiryService: Service {
   public static let tickInterval: Duration = .seconds(60)
 
   private let approvals: any ApprovalStore
+
   private let coordinator: ApprovalCoordinator
+
   private let now: @Sendable () -> Date
   private let clock: any Clock<Duration>
+
   private let logger: Logger
 
   public init(
@@ -32,9 +35,12 @@ public struct ApprovalExpiryService: Service {
     logger: Logger
   ) {
     self.approvals = approvals
+
     self.coordinator = coordinator
+
     self.now = now
     self.clock = clock
+
     self.logger = logger
   }
 

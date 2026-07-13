@@ -21,11 +21,15 @@ public enum SchedulerHealth {
   /// contextualize it (due query result, proactive spend vs. its cap, heartbeat settings).
   public struct Snapshot: Sendable {
     public let state: SchedulerState
+
     public let dueCount: Int?
+
     public let proactiveTodayUSD: Double?
     public let proactivePerDayUSD: Double
+
     public let heartbeatEnabled: Bool
     public let heartbeatMaxPerDay: Int
+
     public let timezone: TimeZone
     public let now: Date
 
@@ -40,11 +44,15 @@ public enum SchedulerHealth {
       now: Date
     ) {
       self.state = state
+
       self.dueCount = dueCount
+
       self.proactiveTodayUSD = proactiveTodayUSD
       self.proactivePerDayUSD = proactivePerDayUSD
+
       self.heartbeatEnabled = heartbeatEnabled
       self.heartbeatMaxPerDay = heartbeatMaxPerDay
+
       self.timezone = timezone
       self.now = now
     }

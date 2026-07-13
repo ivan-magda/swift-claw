@@ -15,8 +15,10 @@ import Testing
 
   private struct Harness {
     let router: MessageRouter
+
     let transport: RecordingTransport
     let dispatcher: FakeTurnRunner
+
     let jobs: ScheduledJobStoreGRDB
     let queue: DatabaseQueue
   }

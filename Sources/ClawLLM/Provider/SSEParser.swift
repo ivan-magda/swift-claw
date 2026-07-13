@@ -35,6 +35,7 @@ public struct SSEParser: Sendable {
     self.maxEventBytes = maxEventBytes
     self.maxBufferedBytes = maxBufferedBytes
     self.maxAccumulatedContentBytes = maxAccumulatedContentBytes
+
     self.providerCost = fallbackProviderCost
   }
 

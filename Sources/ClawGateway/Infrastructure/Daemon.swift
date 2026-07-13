@@ -8,8 +8,11 @@ import UnixSignals
 /// parameter so tests can pass `[]` and cancel the task instead of raising a real signal.
 public struct Daemon: Sendable {
   private let services: [any Service]
+
   private let boot: @Sendable () async -> Void
+
   private let logger: Logger
+
   private let gracefulShutdownSignals: [UnixSignal]
   private let gracefulShutdownSeconds: Int
 
@@ -21,8 +24,11 @@ public struct Daemon: Sendable {
     gracefulShutdownSeconds: Int = 30
   ) {
     self.services = services
+
     self.boot = boot
+
     self.logger = logger
+
     self.gracefulShutdownSignals = gracefulShutdownSignals
     self.gracefulShutdownSeconds = gracefulShutdownSeconds
   }

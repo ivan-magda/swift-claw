@@ -535,12 +535,15 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
 struct Env {
   let runner: TurnRunner
   let queue: DatabaseQueue
+
   let sessionMessages: SessionMessageStoreGRDB
   let outbox: OutboxStoreGRDB
+
   let sessionId: Int64
   let chatId: Int64
   let runId: Int64
   let triggerMessageId: Int64
+
   let provider: StubLLMProvider
 }
 

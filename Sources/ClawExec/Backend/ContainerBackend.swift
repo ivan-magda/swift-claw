@@ -18,6 +18,7 @@ public actor ContainerBackend {
   let settings: ExecSandboxSettings
   let stateRoot: URL
   let commands: any ContainerCommandRunning
+
   let sanitizeReason: @Sendable (String) -> String
   let now: @Sendable () -> ContinuousClock.Instant
   let supportedHost: @Sendable () -> Bool
@@ -64,10 +65,12 @@ public actor ContainerBackend {
     self.settings = settings
     self.stateRoot = stateRoot
     self.commands = commands
+
     self.sanitizeReason = sanitizeReason
     self.now = now
     self.supportedHost = supportedHost
     self.watchdogSleep = watchdogSleep
+
     self.sensitiveHostPaths = [
       stateRoot.path,
       stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,

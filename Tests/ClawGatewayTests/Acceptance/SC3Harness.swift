@@ -36,12 +36,16 @@ struct SC3Harness {
   let coordinator: ApprovalCoordinator
   let registry: PendingConfirmationRegistry
   let transport: RecordingTransport
+
   let stores: ClawStores
+
   let http: ScriptedHTTP
   let provider: TurnScriptedProvider
+
   let databasePath: String
   let workspaceRoot: URL
   let sessionKey: String
+
   let waiter: ApprovalWaiter
   let lanes: SessionLaneRegistry
 
@@ -114,7 +118,9 @@ actor TurnScriptedProvider: LLMProvider {
 
   private var scripts: [[ChatResponse]]
   private var currentTurn: [ChatResponse] = []
+
   private let beforeCompletion: BeforeCompletion?
+
   private(set) var completions = 0
   private(set) var requests: [ChatRequest] = []
 
@@ -123,6 +129,7 @@ actor TurnScriptedProvider: LLMProvider {
     beforeCompletion: BeforeCompletion? = nil
   ) {
     self.scripts = scripts
+
     self.beforeCompletion = beforeCompletion
   }
 

@@ -15,15 +15,22 @@ public struct SchedulerService: Service {
   public static let tickInterval: Duration = .seconds(60)
 
   private let jobs: any ScheduledJobStore
+
   private let enqueuer: TurnEnqueuer
   private let policy: OccurrencePolicy
+
   private let catchUpMaxAge: Duration
   private let heartbeat: HeartbeatSettings
+
   private let workspace: any WorkspaceReading
+
   private let audit: any AuditLog
+
   private let now: @Sendable () -> Date
   private let clock: any Clock<Duration>
+
   private let logger: Logger
+
   private let skipEpisode = HeartbeatSkipEpisode()
 
   public init(
@@ -40,13 +47,18 @@ public struct SchedulerService: Service {
     logger: Logger
   ) {
     self.jobs = jobs
+
     self.policy = OccurrencePolicy(calculator: calculator)
     self.catchUpMaxAge = catchUpMaxAge
     self.heartbeat = heartbeat
+
     self.workspace = workspace
+
     self.audit = audit
+
     self.now = now
     self.clock = clock
+
     self.logger = logger
     self.enqueuer = TurnEnqueuer(lanes: lanes, turns: turns, logger: logger)
   }

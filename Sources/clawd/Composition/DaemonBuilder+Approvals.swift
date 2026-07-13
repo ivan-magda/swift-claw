@@ -16,6 +16,7 @@ extension DaemonBuilder {
     let outboxSignal = OutboxSignal()
     let lanes = SessionLaneRegistry()
     let pendingConfirmations = PendingConfirmationRegistry()
+
     let approvalCoordinator = ApprovalCoordinator()
     let deferredParker = DeferredApprovalParker()
   }

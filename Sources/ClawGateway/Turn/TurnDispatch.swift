@@ -7,8 +7,10 @@ import Logging
 /// background turn failures are logged in-band by `TurnEnqueuer`.
 struct TurnDispatch: Sendable {
   let sessionMessages: any SessionMessageStore
+
   let enqueuer: TurnEnqueuer
   let replies: ReplySender
+
   let now: @Sendable () -> Date
   let logger: Logger
 

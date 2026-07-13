@@ -81,6 +81,7 @@ actor RecordingTransport: TelegramTransport {
   private(set) var sendAttempts = 0
   private(set) var pollCount = 0
   private(set) var lastAllowedUpdates: [String] = []
+
   private var batches: [[RawUpdate]]
   private let onExhausted: TelegramError?
   private let sendError: TelegramError?
@@ -88,6 +89,7 @@ actor RecordingTransport: TelegramTransport {
   /// Fails the rich send whose `sendAttempts` index equals this, and poisons that row's plain
   /// fallback too — so the whole delivery fails, modeling a genuinely undeliverable row mid-batch.
   private let failSendAtAttempt: Int?
+
   private var failPlainFallbackNext = false
 
   private enum Event { case sent, attempt, poll, draft, answer }

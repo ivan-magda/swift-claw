@@ -8,8 +8,10 @@ import Logging
 public struct OpenAICompatibleProvider: LLMProvider {
   private let config: LLMConfig
   private let http: any HTTPExecuting & HTTPStreaming
+
   private let clock: any Clock<Duration>
   private let jitter: @Sendable (Duration) -> Duration
+
   /// Developer-facing diagnostics (swift-log). Lines self-tag `[ClawLLM]` via the source module; a
   /// no-op default keeps tests silent unless they inject one. Carries no run id by design — the
   /// per-turn correlation lives in `AgentRuntime`, so the `LLMProvider` contract stays unchanged.
@@ -24,8 +26,10 @@ public struct OpenAICompatibleProvider: LLMProvider {
   ) {
     self.config = config
     self.http = http
+
     self.clock = clock
     self.jitter = jitter
+
     self.logger = logger
   }
 

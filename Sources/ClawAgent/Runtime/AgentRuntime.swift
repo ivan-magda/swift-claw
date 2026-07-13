@@ -61,11 +61,14 @@ public struct AgentRuntime: Sendable {
   private let typingIndicator: any TypingIndicator
   private let draftStreamer: any RichDraftStreaming
   private let streamingEnabled: Bool
+
   private let costResolver: CostResolver
   private let usageResolver: UsageResolver
   private let budget: RunBudget
   private let model: String
+
   private let toolDispatcher: (any ToolDispatching)?
+
   private let usageStore: any UsageStore
   private let auditLog: any AuditLog
   /// Developer-facing diagnostics (swift-log). Distinct from `auditLog`, which is the durable
@@ -93,14 +96,19 @@ public struct AgentRuntime: Sendable {
     self.typingIndicator = typingIndicator
     self.draftStreamer = draftStreamer
     self.streamingEnabled = streamingEnabled
+
     self.costResolver = costResolver
     self.usageResolver = usageResolver
     self.budget = budget
     self.model = model
+
     self.toolDispatcher = toolDispatcher
+
     self.usageStore = usageStore
     self.auditLog = auditLog
+
     self.logger = logger
+
     self.clock = clock
   }
 

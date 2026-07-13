@@ -20,13 +20,16 @@ public enum HandleOutcome: Sendable, Equatable {
 /// `handle` is the single place the outcome returns to the poller.
 public struct MessageRouter: Sendable {
   private let botUsername: String?
+
   private let accessControl: AccessControl
   private let replies: ReplySender
+
   private let commandHandlers: CommandHandlers
   private let scheduleHandlers: ScheduleHandlers
   private let confirmations: ConfirmationResolver
   private let turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
+
   private let doctor: any DoctorReporting
   private let logger: Logger
 
@@ -50,8 +53,10 @@ public struct MessageRouter: Sendable {
     logger: Logger
   ) {
     self.botUsername = botUsername
+
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
+
     self.doctor = doctor
     self.logger = logger
 
@@ -64,6 +69,7 @@ public struct MessageRouter: Sendable {
       now: now,
       logger: logger
     )
+
     self.replies = replies
     self.turnDispatch = turnDispatch
     self.commandHandlers = CommandHandlers(

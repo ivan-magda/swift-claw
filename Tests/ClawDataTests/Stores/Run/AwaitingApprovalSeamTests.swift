@@ -10,6 +10,7 @@ import Testing
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
     let outbox: OutboxStoreGRDB
+
     let sessionId: Int64
     let runId: Int64
   }

@@ -8,8 +8,10 @@ import Testing
 @Suite struct CommandApprovalResolutionTests {
   private struct Fixture {
     let queue: DatabaseQueue
+
     let commands: CommandStoreGRDB
     let approvals: ApprovalStoreGRDB
+
     let sessionId: Int64
     let runId: Int64
     let approvalId: Int64

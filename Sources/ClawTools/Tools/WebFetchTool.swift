@@ -14,9 +14,11 @@ public struct WebFetchTool: Tool {
 
   private let http: any HTTPExecuting
   private let resolver: any AddressResolving
+
   private let redactor: SecretRedactor
   private let exemptCIDRs: [CIDR]
   private let fakeIPDetector: any FakeIPDetecting
+
   private let maxBodyBytes: Int
   private let maxHops: Int
   private let outputCapGraphemes: Int
@@ -33,9 +35,11 @@ public struct WebFetchTool: Tool {
   ) {
     self.http = http
     self.resolver = resolver
+
     self.redactor = redactor
     self.exemptCIDRs = exemptCIDRs
     self.fakeIPDetector = fakeIPDetector ?? FakeIPDetector(resolver: resolver)
+
     self.maxBodyBytes = maxBodyBytes
     self.maxHops = maxHops
     self.outputCapGraphemes = outputCapGraphemes

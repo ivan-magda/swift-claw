@@ -73,6 +73,7 @@ public struct AppConfig: Sendable, Equatable {
   public let allowlist: Set<Int64>
   public let stateRoot: URL
   public let pollTimeoutSeconds: Int
+
   public let llm: LLMConfig
   public let budget: RunBudget
 
@@ -87,9 +88,7 @@ public struct AppConfig: Sendable, Equatable {
   public let heartbeatMaxPerDay: Int
 
   public let approvalExpirySeconds: Int
-
   public let webFetchExemptCIDRs: [CIDR]
-
   public let exec: ExecConfig
 
   public init(
@@ -113,16 +112,20 @@ public struct AppConfig: Sendable, Equatable {
     self.allowlist = allowlist
     self.stateRoot = stateRoot
     self.pollTimeoutSeconds = pollTimeoutSeconds
+
     self.llm = llm
     self.budget = budget
+
     self.timezone = timezone
     self.schedCatchUpMaxAgeMinutes = schedCatchUpMaxAgeMinutes
     self.schedMinIntervalMinutes = schedMinIntervalMinutes
     self.proactivePerDayUSD = proactivePerDayUSD
+
     self.heartbeatEnabled = heartbeatEnabled
     self.heartbeatIntervalMinutes = heartbeatIntervalMinutes
     self.heartbeatQuietHours = heartbeatQuietHours
     self.heartbeatMaxPerDay = heartbeatMaxPerDay
+
     self.approvalExpirySeconds = approvalExpirySeconds
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
     self.exec = exec

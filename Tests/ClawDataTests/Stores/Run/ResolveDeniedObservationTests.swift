@@ -9,6 +9,7 @@ import Testing
   private struct Fixture {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
+
     let sessionId: Int64
     let runId: Int64
     let observationMessageId: Int64

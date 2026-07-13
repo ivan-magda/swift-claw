@@ -123,11 +123,14 @@ extension PinnedImageReference {
 
 public struct ExecConfig: Sendable, Equatable {
   public let enabled: Bool
+
   public let image: PinnedImageReference?
   public let imageRegistryAllowlist: [String]
+
   public let memoryMiB: Int
   public let cpus: Int
   public let timeoutSeconds: Int
+
   public let allowEgress: Bool
 
   public static let disabledDefault = ExecConfig(

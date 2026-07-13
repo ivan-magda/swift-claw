@@ -8,8 +8,11 @@ import ServiceLifecycle
 public struct TelegramPollerService: Service {
   private let intake: any ChannelIntake
   private let router: MessageRouter
+
   private let cursor: any UpdateCursorStore
+
   private let pollTimeout: Int
+
   private let logger: Logger
 
   /// Re-sent on every call: omitting it would reuse the previous server-side setting. Approval
@@ -34,8 +37,11 @@ public struct TelegramPollerService: Service {
   ) {
     self.intake = intake
     self.router = router
+
     self.cursor = cursor
+
     self.pollTimeout = pollTimeout
+
     self.logger = logger
   }
 

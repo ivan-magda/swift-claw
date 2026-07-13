@@ -25,6 +25,7 @@ actor RecordingProvider: LLMProvider {
 
   private let outcome: Outcome
   private let blocksFirstCall: Bool
+
   private(set) var requests: [[ChatMessage]] = []
   private var requestContinuations: [CheckedContinuation<Void, Never>] = []
   private var firstCallRelease: CheckedContinuation<Void, Never>?

@@ -233,9 +233,12 @@ actor CountingReleaseTyping: TypingIndicator {
 /// whether the turn awaits its final draft or abandons it.
 actor BlockingFinalDrafts: RichDraftStreaming {
   private(set) var drafts: [String] = []
+
   private let finalMarkdown: String
+
   private var released = false
   private var finalBlocked = false
+
   private var blockWaiters: [CheckedContinuation<Void, Never>] = []
   private var observeWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -306,8 +309,10 @@ let draftDeadlineParkingSleep: @Sendable (Duration) async throws -> Void = { dur
 
 actor BlockingDrafts: RichDraftStreaming {
   private(set) var drafts: [(chatId: Int64, draftId: Int64, markdown: String)] = []
+
   private var waiters: [CheckedContinuation<Void, Never>] = []
   private var blockedWaiters: [CheckedContinuation<Void, Never>] = []
+
   private var released = false
   private var firstSendBlocked = false
 

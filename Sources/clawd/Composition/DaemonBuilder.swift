@@ -17,10 +17,13 @@ struct DaemonBuilder: Sendable {
   let config: AppConfig
   let secrets: Secrets
   let stores: ClawStores
+
   let executor: AsyncHTTPExecutor
   let toolExecutor: AsyncHTTPExecutor
+
   let transport: TelegramClient
   let botUsername: String?
+
   let logger: Logger
 
   func build() async -> Daemon {

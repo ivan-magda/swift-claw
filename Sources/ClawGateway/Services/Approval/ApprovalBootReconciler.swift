@@ -22,10 +22,13 @@ import Logging
 public struct ApprovalBootReconciler: Sendable {
   private let approvals: any ApprovalStore
   private let runs: any RunStore
+
   private let lanes: SessionLaneRegistry
   private let coordinator: ApprovalCoordinator
   private let waiter: any ApprovalParking
+
   private let now: @Sendable () -> Date
+
   private let logger: Logger
 
   public init(
@@ -39,10 +42,13 @@ public struct ApprovalBootReconciler: Sendable {
   ) {
     self.approvals = approvals
     self.runs = runs
+
     self.lanes = lanes
     self.coordinator = coordinator
     self.waiter = waiter
+
     self.now = now
+
     self.logger = logger
   }
 

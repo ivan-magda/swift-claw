@@ -39,13 +39,18 @@ final class ManualClock: @unchecked Sendable {
 struct SC7Harness {
   let router: MessageRouter
   let scheduler: SchedulerService
+
   let registry: PendingConfirmationRegistry
   let transport: RecordingTransport
+
   let stores: ClawStores
+
   let http: ScriptedHTTP
   let provider: TurnScriptedProvider
   let parser: FakeDraftParser
+
   let clock: ManualClock
+
   let databasePath: String
   let workspaceRoot: URL
 

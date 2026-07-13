@@ -70,11 +70,14 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   ) {
     self.provider = provider
     self.model = model
+
     self.usageStore = usageStore
     self.gate = BudgetGate(budget: budget)
     self.costResolver = costResolver
+
     self.now = now
     self.clock = clock
+
     self.logger = logger
   }
 

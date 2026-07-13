@@ -42,7 +42,9 @@ struct StreamingTurnRuntime: Sendable {
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
   private let draftStreamer: any RichDraftStreaming
+
   private let wallClockDeadlineSeconds: Int
+
   private let clock: any Clock<Duration>
 
   init(
@@ -55,7 +57,9 @@ struct StreamingTurnRuntime: Sendable {
     self.provider = provider
     self.typingIndicator = typingIndicator
     self.draftStreamer = draftStreamer
+
     self.wallClockDeadlineSeconds = wallClockDeadlineSeconds
+
     self.clock = clock
   }
 

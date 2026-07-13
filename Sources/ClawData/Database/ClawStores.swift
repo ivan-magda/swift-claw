@@ -7,16 +7,20 @@ public struct ClawStores: Sendable {
   public let processed: any ProcessedUpdateStore
   public let commands: any CommandStore
   public let cursor: any UpdateCursorStore
+
   public let sessionMessages: any SessionMessageStore
   public let runs: any RunStore
   public let usage: any UsageStore
   public let outbox: any OutboxStore
   public let audit: any AuditLog
+
   public let memory: any MemoryStore
   public let memoryCommands: any MemoryCommandStore
   public let retriever: any Retriever
+
   public let scheduledJobs: any ScheduledJobStore
   public let scheduleCommands: any ScheduleCommandStore
+
   public let approvals: any ApprovalStore
 
   public init(
@@ -40,16 +44,20 @@ public struct ClawStores: Sendable {
     self.processed = processed
     self.commands = commands
     self.cursor = cursor
+
     self.sessionMessages = sessionMessages
     self.runs = runs
     self.usage = usage
     self.outbox = outbox
     self.audit = audit
+
     self.memory = memory
     self.memoryCommands = memoryCommands
     self.retriever = retriever
+
     self.scheduledJobs = scheduledJobs
     self.scheduleCommands = scheduleCommands
+
     self.approvals = approvals
   }
 }

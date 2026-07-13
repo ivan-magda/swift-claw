@@ -11,10 +11,13 @@ import Logging
 /// with real GRDB memory stores, a recording transport, and a fake turn dispatcher.
 struct MemoryRoutingHarness {
   let router: MessageRouter
+
   let transport: RecordingTransport
   let dispatcher: FakeTurnRunner
+
   let sessionMessages: SessionMessageStoreGRDB
   let memory: MemoryStoreGRDB
+
   let pendingConfirmations: PendingConfirmationRegistry
   let queue: DatabaseQueue
 

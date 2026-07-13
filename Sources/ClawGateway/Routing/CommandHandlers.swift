@@ -9,11 +9,15 @@ struct CommandHandlers: Sendable {
   let commands: any CommandStore
   let sessionMessages: any SessionMessageStore
   let memory: any MemoryStore
+
   let pendingConfirmations: PendingConfirmationRegistry
   let lanes: SessionLaneRegistry
+
   let replies: ReplySender
+
   let now: @Sendable () -> Date
   let logger: Logger
+
   let coordinator: ApprovalCoordinator
 
   func stop(

@@ -175,6 +175,7 @@ public struct ToolDefinition: Sendable, Equatable {
     self.name = name
     self.description = description
     self.parameters = parameters
+
     self.egressClass = egressClass
     self.riskLevel = riskLevel
   }

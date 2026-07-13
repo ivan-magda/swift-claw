@@ -45,8 +45,10 @@ public struct CapturedCommandStream: Sendable, Equatable {
 
 public struct ContainerCommandResult: Sendable, Equatable {
   public let termination: ContainerCommandTermination
+
   public let stdout: CapturedCommandStream
   public let stderr: CapturedCommandStream
+
   public let processIdentifier: Int32?
   public let wallClock: Duration
 
@@ -58,8 +60,10 @@ public struct ContainerCommandResult: Sendable, Equatable {
     wallClock: Duration
   ) {
     self.termination = termination
+
     self.stdout = stdout
     self.stderr = stderr
+
     self.processIdentifier = processIdentifier
     self.wallClock = wallClock
   }

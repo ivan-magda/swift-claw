@@ -31,6 +31,7 @@ public struct TurnRunner: TurnDispatching {
   private let sessionMessages: any SessionMessageStore
   private let runs: any RunStore
   private let usageStore: any UsageStore
+
   private let audit: any AuditLog
   private let agent: AgentRuntime
   private let budget: RunBudget
@@ -45,7 +46,9 @@ public struct TurnRunner: TurnDispatching {
   /// real clock) keeps the proactive/global daily-spend boundary deterministic under test — the
   /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
   private let now: @Sendable () -> Date
+
   private let logger: Logger
+
   /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's
   /// resolution.
   private let parker: any ApprovalParking
@@ -78,13 +81,16 @@ public struct TurnRunner: TurnDispatching {
     self.sessionMessages = sessionMessages
     self.runs = runs
     self.usageStore = usageStore
+
     self.audit = audit
     self.agent = agent
     self.budget = budget
     self.contextBuilder = contextBuilder
+
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.delivery = delivery
+
     self.now = now
     self.parker = parker
     self.approvalExpirySeconds = approvalExpirySeconds

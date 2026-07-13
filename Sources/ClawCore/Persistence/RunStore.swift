@@ -19,12 +19,17 @@ public struct SuspendedTurnCommit: Sendable {
   public let assistantContent: String
   public let toolCallsJSON: String
   public let completedObservations: [ToolObservationRow]
+
   public let pending: PendingToolAction
+
   public let ownerUserId: Int64  // the run's delivery chat id
   public let nonce: String  // caller-generated via ApprovalNonce.generate()
+
   public let promptChunks: [OutboxChunk]
+
   public let setTainted: Bool
   public let setPrivateData: Bool
+
   public let expiresTs: Date  // now + approval_expiry
   // NOTE: no `usage` field. The suspending round-trip's `provider_usage` row is already written
   // mid-loop by `AgentRuntime` before dispatch (crash-safe); re-inserting it here would double the
@@ -46,12 +51,17 @@ public struct SuspendedTurnCommit: Sendable {
     self.assistantContent = assistantContent
     self.toolCallsJSON = toolCallsJSON
     self.completedObservations = completedObservations
+
     self.pending = pending
+
     self.ownerUserId = ownerUserId
     self.nonce = nonce
+
     self.promptChunks = promptChunks
+
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
+
     self.expiresTs = expiresTs
   }
 }
@@ -88,9 +98,12 @@ public struct ApprovedExecutionAudit: Sendable, Equatable {
 public struct ClaimedObservationFill: Sendable, Equatable {
   public let content: String
   public let status: ToolObservationStatus
+
   public let setTainted: Bool
   public let setPrivateData: Bool
+
   public let audit: ApprovedExecutionAudit
+
   public let now: Date
 
   public init(
@@ -103,9 +116,12 @@ public struct ClaimedObservationFill: Sendable, Equatable {
   ) {
     self.content = content
     self.status = status
+
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
+
     self.audit = audit
+
     self.now = now
   }
 }

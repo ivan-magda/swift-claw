@@ -7,10 +7,13 @@ import Logging
 /// applies once. Occurrence anchoring is `schedule.policy`'s — never recomputed here.
 struct ScheduleHandlers: Sendable {
   let schedule: ScheduleSurface
+
   let sessionMessages: any SessionMessageStore
   let pendingConfirmations: PendingConfirmationRegistry
+
   let replies: ReplySender
   let enqueuer: TurnEnqueuer
+
   let now: @Sendable () -> Date
   let logger: Logger
 

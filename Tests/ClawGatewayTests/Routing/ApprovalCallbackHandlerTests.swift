@@ -46,10 +46,13 @@ actor RecordingCallbacks: CallbackResponding {
 /// other protocol members are unused by the handler and fail loudly if reached.
 final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
   private let lock = NSLock()
+
   private let byNonce: [String: Approval]
+
   private let approveOutcome: ApprovalApproveOutcome
   private let denyResult: Bool
   private let throwOnResolve: Bool
+
   private var recordedApproveCalls: [(id: Int64, policyVersion: String)] = []
   private var recordedDenyCalls: [(id: Int64, decision: ApprovalDecision)] = []
 
@@ -60,6 +63,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     throwOnResolve: Bool = false
   ) {
     self.byNonce = byNonce
+
     self.approveOutcome = approveOutcome
     self.denyResult = denyResult
     self.throwOnResolve = throwOnResolve

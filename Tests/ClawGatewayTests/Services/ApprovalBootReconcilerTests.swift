@@ -25,8 +25,10 @@ import Testing
     }
 
     private let coordinator: ApprovalCoordinator
+
     private var bufferedCalls: [Call] = []
     private var callWaiters: [CheckedContinuation<Call, Never>] = []
+
     private var resolvedSignals: [Int64: ApprovalSignal] = [:]
     private var resolutionWaiters: [Int64: [CheckedContinuation<ApprovalSignal, Never>]] = [:]
 
@@ -125,9 +127,12 @@ import Testing
   private struct Fixture {
     let queue: DatabaseQueue
     let store: ApprovalStoreGRDB
+
     let sessionId: Int64
+
     let lanes: SessionLaneRegistry
     let coordinator: ApprovalCoordinator
+
     let spy: ParkingSpy
 
     func reconciler(now instant: Date) -> ApprovalBootReconciler {

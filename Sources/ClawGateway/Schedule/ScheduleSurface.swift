@@ -7,7 +7,9 @@ import ClawCore
 public struct ScheduleSurface: Sendable {
   public let parser: any ScheduleDraftParsing
   public let validator: ScheduleDraftValidator
+
   public let policy: OccurrencePolicy
+
   public let jobs: any ScheduledJobStore
   public let commands: any ScheduleCommandStore
 
@@ -20,7 +22,9 @@ public struct ScheduleSurface: Sendable {
   ) {
     self.parser = parser
     self.validator = validator
+
     self.policy = OccurrencePolicy(calculator: calculator)
+
     self.jobs = jobs
     self.commands = commands
   }

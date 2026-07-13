@@ -40,12 +40,15 @@ public struct ContextBuilder: Sendable {
     warn: @escaping @Sendable (String) -> Void = { _ in }
   ) {
     self.systemPrompt = systemPrompt
+
     self.workspace = workspace
     self.memoryStore = memoryStore
     self.retriever = retriever
     self.recallCutoff = recallCutoff
     self.budget = budget
+
     self.policyStaticSubhash = policyStaticSubhash
+
     self.now = now
     self.warn = warn
   }

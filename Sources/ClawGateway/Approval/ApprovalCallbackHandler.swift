@@ -10,12 +10,16 @@ import Logging
 public struct ApprovalCallbackHandler: Sendable {
   private let replies: ReplySender
   private let accessControl: AccessControl
+
   private let approvals: any ApprovalStore
   private let audit: any AuditLog
+
   private let coordinator: ApprovalCoordinator
   private let callbacks: any CallbackResponding
+
   private let currentPolicyVersion: @Sendable () throws -> String
   private let now: @Sendable () -> Date
+
   private let logger: Logger
 
   // Module-internal init: `ReplySender`/`RoutingHalt` are internal to `ClawGateway`, so a `public`
@@ -36,12 +40,16 @@ public struct ApprovalCallbackHandler: Sendable {
   ) {
     self.replies = replies
     self.accessControl = accessControl
+
     self.approvals = approvals
     self.audit = audit
+
     self.coordinator = coordinator
     self.callbacks = callbacks
+
     self.currentPolicyVersion = currentPolicyVersion
     self.now = now
+
     self.logger = logger
   }
 

@@ -4,8 +4,10 @@ import Foundation
 public actor FakeExecutionBackend: ExecutionBackend, SandboxMaintenance {
   private let availability: BackendAvailability
   private let health: SandboxHealth
+
   private var results: [ExecutionResult]
   private var requests: [ExecutionRequest] = []
+
   private var prepareCalls = 0
   private var shutdownCalls = 0
   private var admitting = true
@@ -17,6 +19,7 @@ public actor FakeExecutionBackend: ExecutionBackend, SandboxMaintenance {
   ) {
     self.availability = availability
     self.health = health
+
     self.results = results
   }
 

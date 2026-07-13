@@ -9,9 +9,12 @@ struct ConfirmationResolver: Sendable {
   let sessionMessages: any SessionMessageStore
   let pendingConfirmations: PendingConfirmationRegistry
   let memoryCommands: any MemoryCommandStore
+
   let schedule: ScheduleSurface
   let replies: ReplySender
+
   let now: @Sendable () -> Date
+
   let logger: Logger
 
   /// nil ⇒ nothing to resolve; the caller falls through to normal turn dispatch.

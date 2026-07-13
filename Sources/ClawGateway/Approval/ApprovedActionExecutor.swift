@@ -56,8 +56,10 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 
   private let tools: [String: any Tool]
   private let runs: any RunStore
+
   private let redactArguments: @Sendable (String) -> String
   private let now: @Sendable () -> Date
+
   private let logger: Logger
 
   public init(
@@ -69,8 +71,10 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
   ) {
     self.tools = tools
     self.runs = runs
+
     self.redactArguments = redactArguments
     self.now = now
+
     self.logger = logger
   }
 
