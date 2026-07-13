@@ -106,9 +106,9 @@ import Testing
     // then — one recorded request ran and its provenance forced the continuation fetch to park
     let requests = try await waitForRequests(backend, count: 1)
     #expect(requests[0].language == .python)
-    #expect(String(decoding: requests[0].entrypoint.bytes, as: UTF8.self) == code)
+    #expect(String(bytes: requests[0].entrypoint.bytes, encoding: .utf8) == code)
     #expect(requests[0].inputs.map(\.name) == ["MEMORY.md"])
-    #expect(String(decoding: requests[0].inputs[0].bytes, as: UTF8.self) == privateText)
+    #expect(String(bytes: requests[0].inputs[0].bytes, encoding: .utf8) == privateText)
 
     let followUp = try #require(
       await pollUntil(timeout: .seconds(10)) {

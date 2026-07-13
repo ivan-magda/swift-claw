@@ -71,7 +71,7 @@ import Testing
 
     // then
     #expect(result.termination == .exited(0))
-    #expect(String(decoding: result.stdout.bytes, as: UTF8.self) == "unset|unset|unset|present")
+    #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "unset|unset|unset|present")
   }
 
   @Test func programBudgetStartsAfterSpawnAndReturnsTypedTimeout() async throws {
@@ -140,8 +140,8 @@ import Testing
 
     // then
     #expect(result.termination == .exited(0))
-    #expect(String(decoding: result.stdout.bytes, as: UTF8.self) == "child")
-    let pidText = String(decoding: result.stderr.bytes, as: UTF8.self)
+    #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "child")
+    let pidText = try #require(String(bytes: result.stderr.bytes, encoding: .utf8))
       .trimmingCharacters(in: .whitespacesAndNewlines)
     let grandchild = try #require(Int32(pidText))
     // ESRCH just means the grandchild already exited; anything else is equally moot here.

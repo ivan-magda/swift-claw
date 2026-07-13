@@ -33,13 +33,14 @@ extension ContainerBackend {
     }
     return containers.contains { $0.resolvedIdentifier == identity }
   }
+  // swiftlint:enable discouraged_optional_boolean
 
   func cidMatches(_ identity: ExecutionIdentity, at url: URL) -> Bool {
     guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
       return false
     }
 
-    let decoded = String(decoding: data, as: UTF8.self).trimmingCharacters(
+    let decoded = String(bytes: data, encoding: .utf8)?.trimmingCharacters(
       in: .whitespacesAndNewlines
     )
     return decoded == identity.name

@@ -215,10 +215,14 @@ extension ContainerBackend {
         )
       }
 
+      // swiftlint:disable optional_data_string_conversion
+      let stdout = String(decoding: commandResult.stdout.bytes, as: UTF8.self)
+      let stderr = String(decoding: commandResult.stderr.bytes, as: UTF8.self)
+      // swiftlint:enable optional_data_string_conversion
       return ExecutionResult(
         terminationReason: .exited(code: code),
-        stdout: String(decoding: commandResult.stdout.bytes, as: UTF8.self),
-        stderr: String(decoding: commandResult.stderr.bytes, as: UTF8.self),
+        stdout: stdout,
+        stderr: stderr,
         truncatedRawBytes: commandResult.stdout.truncated || commandResult.stderr.truncated,
         wallClock: started.duration(to: now())
       )
