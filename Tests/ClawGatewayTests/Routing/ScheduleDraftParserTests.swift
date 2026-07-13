@@ -228,14 +228,6 @@ import Testing
   }
 }
 
-/// Never returns; stands in for a provider brownout (retry loop × 180 s timeout).
-private struct HangingProvider: LLMProvider {
-  func complete(request: ChatRequest) async throws -> ChatResponse {
-    try await Task.sleep(for: .seconds(3_600))
-    throw ProviderError.terminal(status: nil, message: "unreachable")
-  }
-}
-
 /// Stands in for a provider whose retry budget is exhausted (repeated 429/5xx/transport): `complete`
 /// surfaces `.retryable`, the same case `OpenAICompatibleProvider` throws once its retries run out.
 private struct RetryExhaustedProvider: LLMProvider {

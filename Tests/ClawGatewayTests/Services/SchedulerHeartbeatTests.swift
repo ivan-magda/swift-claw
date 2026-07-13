@@ -26,7 +26,7 @@ private struct HeartbeatWorkspace: WorkspaceReading {
 
 @Suite struct SchedulerHeartbeatTests {
   /// Mon 2026-07-06 12:00:00 UTC = 14:00 Europe/Berlin — outside the default 22:00-09:00 window.
-  private static let daytime = Date(timeIntervalSince1970: 1_783_339_200)
+  private static let daytime = SchedulingTestClock.mondayNoonBerlin
   /// Mon 2026-07-06 21:00:00 UTC = 23:00 Berlin — inside the window, before midnight.
   private static let lateNight = Date(timeIntervalSince1970: 1_783_371_600)
   /// Mon 2026-07-06 03:00:00 UTC = 05:00 Berlin — inside the window, AFTER midnight (crossing).

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -7,7 +8,7 @@ import Testing
 @Suite struct ClawStoresTests {
   @Test func openStoresMigratesAndReturnsWorkingStores() throws {
     // given
-    let path = NSTemporaryDirectory() + "claw-stores-\(UInt64.random(in: 0..<(.max))).sqlite"
+    let path = makeTempDatabasePath(prefix: "claw-stores")
     defer { try? FileManager.default.removeItem(atPath: path) }
 
     // when
@@ -23,7 +24,7 @@ import Testing
 
   @Test func openStoresExposesMemoryStoresAndRetriever() throws {
     // given - a real temp-file pool, exercising the production composition path.
-    let path = NSTemporaryDirectory() + "claw-stores-mem-\(UInt64.random(in: 0..<(.max))).sqlite"
+    let path = makeTempDatabasePath(prefix: "claw-stores-mem")
     defer { try? FileManager.default.removeItem(atPath: path) }
     let stores = try ClawDatabase.openStores(path: path)
     let now = Date(timeIntervalSince1970: 100)

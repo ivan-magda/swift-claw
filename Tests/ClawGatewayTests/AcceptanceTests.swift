@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import Logging
 import Testing
@@ -10,7 +11,7 @@ import Testing
   // Survives restart: the offset persists and a redelivered update is deduped.
   @Test func offsetPersistsAndDedupsAcrossRestart() async throws {
     // given
-    let path = NSTemporaryDirectory() + "claw-accept-\(UInt64.random(in: 0..<(.max))).sqlite"
+    let path = makeTempDatabasePath(prefix: "claw-accept")
     defer { try? FileManager.default.removeItem(atPath: path) }
 
     // when — first "run": process update 100, advance the cursor

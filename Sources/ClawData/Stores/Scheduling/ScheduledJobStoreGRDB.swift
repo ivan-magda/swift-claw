@@ -55,10 +55,10 @@ extension ScheduledJobStoreGRDB {
         job.prompt,
         recurrenceJSON,
         job.timezone,
-        epoch(job.nextOccurrence),
+        EpochSecondCodec.epoch(job.nextOccurrence),
         ScheduledJobStatus.active.rawValue,
-        epoch(now),
-        epoch(now),
+        EpochSecondCodec.epoch(now),
+        EpochSecondCodec.epoch(now),
       ]
     )
     guard let created = try fetchJob(db, id: db.lastInsertedRowID) else {
@@ -89,7 +89,7 @@ extension ScheduledJobStoreGRDB {
           WHERE status = ? AND next_occurrence IS NOT NULL AND next_occurrence <= ?
           ORDER BY next_occurrence ASC, id ASC
           """,
-        arguments: [ScheduledJobStatus.active.rawValue, Self.epoch(now)]
+        arguments: [ScheduledJobStatus.active.rawValue, EpochSecondCodec.epoch(now)]
       )
       return try rows.map { row in try Self.jobFromRow(row) }
     }
@@ -129,8 +129,8 @@ extension ScheduledJobStoreGRDB {
       throw StoreError.unexpected("unknown scheduled job status")
     }
     guard
-      let createdTs = date(fromEpoch: row["created_ts"]),
-      let updatedTs = date(fromEpoch: row["updated_ts"])
+      let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
+      let updatedTs = EpochSecondCodec.date(fromEpoch: row["updated_ts"])
     else {
       throw StoreError.unexpected("scheduled job row missing timestamps")
     }
@@ -142,8 +142,8 @@ extension ScheduledJobStoreGRDB {
       prompt: row["prompt"],
       recurrence: recurrence,
       timezone: row["timezone"],
-      nextOccurrence: date(fromEpoch: row["next_occurrence"]),
-      lastFiredAt: date(fromEpoch: row["last_fired_at"]),
+      nextOccurrence: EpochSecondCodec.date(fromEpoch: row["next_occurrence"]),
+      lastFiredAt: EpochSecondCodec.date(fromEpoch: row["last_fired_at"]),
       status: status,
       sessionId: row["session_id"],
       createdTs: createdTs,
@@ -174,11 +174,11 @@ extension ScheduledJobStoreGRDB {
             WHERE id = ? AND next_occurrence = ? AND status = ?
             """,
           arguments: [
-            Self.epoch(nextOccurrence),
-            Self.epoch(fireAt),
-            Self.epoch(now),
+            EpochSecondCodec.epoch(nextOccurrence),
+            EpochSecondCodec.epoch(fireAt),
+            EpochSecondCodec.epoch(now),
             jobId,
-            Self.epoch(due),
+            EpochSecondCodec.epoch(due),
             ScheduledJobStatus.active.rawValue,
           ]
         )
@@ -191,11 +191,11 @@ extension ScheduledJobStoreGRDB {
             WHERE id = ? AND next_occurrence = ? AND status = ?
             """,
           arguments: [
-            Self.epoch(fireAt),
+            EpochSecondCodec.epoch(fireAt),
             ScheduledJobStatus.completed.rawValue,
-            Self.epoch(now),
+            EpochSecondCodec.epoch(now),
             jobId,
-            Self.epoch(due),
+            EpochSecondCodec.epoch(due),
             ScheduledJobStatus.active.rawValue,
           ]
         )
@@ -235,9 +235,15 @@ extension ScheduledJobStoreGRDB {
     try db.execute(
       sql: """
         INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, 'user', ?, 'trusted', ?)
+        VALUES (?, ?, ?, ?, ?)
         """,
-      arguments: [sessionId, prompt, now]
+      arguments: [
+        sessionId,
+        MessageRole.user.rawValue,
+        prompt,
+        Provenance.trusted.rawValue,
+        now,
+      ]
     )
     let triggerMessageId = db.lastInsertedRowID
 
@@ -293,7 +299,7 @@ extension ScheduledJobStoreGRDB {
       // change — /runnow on a PAUSED job tests it without unmuting it.
       try db.execute(
         sql: "UPDATE scheduled_jobs SET last_fired_at = ?, updated_ts = ? WHERE id = ?",
-        arguments: [Self.epoch(now), Self.epoch(now), jobId]
+        arguments: [EpochSecondCodec.epoch(now), EpochSecondCodec.epoch(now), jobId]
       )
       return try Self.insertFireRows(db, jobId: jobId, now: now)
     }
@@ -316,10 +322,10 @@ extension ScheduledJobStoreGRDB {
             WHERE id = ? AND next_occurrence = ? AND status = ?
             """,
           arguments: [
-            Self.epoch(nextOccurrence),
-            Self.epoch(now),
+            EpochSecondCodec.epoch(nextOccurrence),
+            EpochSecondCodec.epoch(now),
             jobId,
-            Self.epoch(due),
+            EpochSecondCodec.epoch(due),
             ScheduledJobStatus.active.rawValue,
           ]
         )
@@ -332,9 +338,9 @@ extension ScheduledJobStoreGRDB {
             """,
           arguments: [
             ScheduledJobStatus.completed.rawValue,
-            Self.epoch(now),
+            EpochSecondCodec.epoch(now),
             jobId,
-            Self.epoch(due),
+            EpochSecondCodec.epoch(due),
             ScheduledJobStatus.active.rawValue,
           ]
         )
@@ -351,7 +357,7 @@ extension ScheduledJobStoreGRDB {
             last_misfire_at = excluded.last_misfire_at,
             last_misfire_skipped_count = excluded.last_misfire_skipped_count
           """,
-        arguments: [Self.epoch(now), skippedCount]
+        arguments: [EpochSecondCodec.epoch(now), skippedCount]
       )
       try AuditLogGRDB.insertAudit(
         db,
@@ -385,10 +391,10 @@ extension ScheduledJobStoreGRDB {
         )
       }
       return SchedulerState(
-        lastTickAt: Self.date(fromEpoch: row["last_tick_at"]),
-        lastMisfireAt: Self.date(fromEpoch: row["last_misfire_at"]),
+        lastTickAt: EpochSecondCodec.date(fromEpoch: row["last_tick_at"]),
+        lastMisfireAt: EpochSecondCodec.date(fromEpoch: row["last_misfire_at"]),
         lastMisfireSkippedCount: row["last_misfire_skipped_count"],
-        lastHeartbeatAt: Self.date(fromEpoch: row["last_heartbeat_at"]),
+        lastHeartbeatAt: EpochSecondCodec.date(fromEpoch: row["last_heartbeat_at"]),
         heartbeatCountDay: row["heartbeat_count_day"],
         heartbeatCount: row["heartbeat_count"]
       )
@@ -402,7 +408,7 @@ extension ScheduledJobStoreGRDB {
           INSERT INTO scheduler_state(id, last_tick_at) VALUES (1, ?)
           ON CONFLICT(id) DO UPDATE SET last_tick_at = excluded.last_tick_at
           """,
-        arguments: [Self.epoch(tickTime)]
+        arguments: [EpochSecondCodec.epoch(tickTime)]
       )
     }
   }
@@ -429,7 +435,7 @@ extension ScheduledJobStoreGRDB {
         sql: "UPDATE scheduled_jobs SET status = ?, updated_ts = ? WHERE id = ? AND status = ?",
         arguments: [
           ScheduledJobStatus.paused.rawValue,
-          Self.epoch(now),
+          EpochSecondCodec.epoch(now),
           id,
           ScheduledJobStatus.active.rawValue,
         ]
@@ -470,8 +476,8 @@ extension ScheduledJobStoreGRDB {
           """,
         arguments: [
           ScheduledJobStatus.active.rawValue,
-          nextOccurrence.map(Self.epoch),
-          Self.epoch(now),
+          nextOccurrence.map(EpochSecondCodec.epoch),
+          EpochSecondCodec.epoch(now),
           id,
           ScheduledJobStatus.paused.rawValue,
         ]
@@ -504,7 +510,7 @@ extension ScheduledJobStoreGRDB {
           """,
         arguments: [
           ScheduledJobStatus.cancelled.rawValue,
-          Self.epoch(now),
+          EpochSecondCodec.epoch(now),
           id,
           ScheduledJobStatus.active.rawValue,
           ScheduledJobStatus.paused.rawValue,
@@ -563,9 +569,15 @@ extension ScheduledJobStoreGRDB {
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, role, content, provenance, ts)
-          VALUES (?, 'user', ?, 'untrusted', ?)
+          VALUES (?, ?, ?, ?, ?)
           """,
-        arguments: [sessionId, prompt, now]
+        arguments: [
+          sessionId,
+          MessageRole.user.rawValue,
+          prompt,
+          Provenance.untrusted.rawValue,
+          now,
+        ]
       )
       let triggerMessageId = db.lastInsertedRowID
 
@@ -603,7 +615,7 @@ extension ScheduledJobStoreGRDB {
             heartbeat_count_day = excluded.heartbeat_count_day,
             heartbeat_count = excluded.heartbeat_count
           """,
-        arguments: [Self.epoch(now), day, newCount]
+        arguments: [EpochSecondCodec.epoch(now), day, newCount]
       )
 
       return ClaimedFire(
@@ -667,18 +679,6 @@ private extension ScheduledJobStoreGRDB {
       ]
     )
     return db.lastInsertedRowID
-  }
-}
-
-// MARK: - Epoch-second column codec
-
-extension ScheduledJobStoreGRDB {
-  static func epoch(_ instant: Date) -> Int64 {
-    Int64(instant.timeIntervalSince1970.rounded())
-  }
-
-  static func date(fromEpoch value: Int64?) -> Date? {
-    value.map { seconds in Date(timeIntervalSince1970: TimeInterval(seconds)) }
   }
 }
 

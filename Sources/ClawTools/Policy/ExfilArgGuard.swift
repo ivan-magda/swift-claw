@@ -1,3 +1,4 @@
+import ClawCore
 import Foundation
 
 /// The blocking arg guard. Pure: secrets are injected at construction; tier-3 file texts are
@@ -99,6 +100,11 @@ public struct ExfilArgGuard: Sendable {
   static let substringThresholdGraphemes = 16
   static let maxPercentDecodePasses = 2
 
+  /// The tier-1 exact-value rule name. `[REDACTED:\(secretValueRule)]` must equal
+  /// `SecretRedactor.replacement` so a loaded secret reads identically whether it was blocked here
+  /// or scrubbed from tool output by the redactor.
+  static let secretValueRule = "secret-value"
+
   private let secretValues: [String]
 
   public init(secretValues: [String]) {
@@ -116,7 +122,7 @@ public struct ExfilArgGuard: Sendable {
 
     for candidate in candidates {
       for secret in secretValues where candidate.contains(secret) {
-        return blockedVerdict(rule: "secret-value", raw: text, spans: [secret])
+        return blockedVerdict(rule: Self.secretValueRule, raw: text, spans: [secret])
       }
     }
 
@@ -172,7 +178,7 @@ public struct ExfilArgGuard: Sendable {
     var rendered = argsJSON
 
     for secret in secretValues {
-      rendered = rendered.replacingOccurrences(of: secret, with: "[REDACTED:secret-value]")
+      rendered = rendered.replacingOccurrences(of: secret, with: SecretRedactor.replacement)
     }
 
     for shape in Self.shapePatterns {

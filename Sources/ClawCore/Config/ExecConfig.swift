@@ -136,10 +136,10 @@ public struct ExecConfig: Sendable, Equatable {
   public static let disabledDefault = ExecConfig(
     enabled: false,
     image: nil,
-    imageRegistryAllowlist: ["cgr.dev"],
-    memoryMiB: 1024,
-    cpus: 4,
-    timeoutSeconds: 30,
+    imageRegistryAllowlist: AppConfig.EnvDefaults.execImageRegistries,
+    memoryMiB: AppConfig.EnvDefaults.execMemoryMiB,
+    cpus: AppConfig.EnvDefaults.execCPUs,
+    timeoutSeconds: AppConfig.EnvDefaults.execTimeoutSeconds,
     allowEgress: false
   )
 }
@@ -171,28 +171,28 @@ extension AppConfig {
       throw ConfigError.execImageRegistryNotAllowed(image.registryHost)
     }
 
-    let memoryMiB = try boundedExecInt(
+    let memoryMiB = try ConfigParse.boundedInt(
       env[EnvKey.execMemoryMiB],
       default: EnvDefaults.execMemoryMiB,
       range: 256...8192,
-      error: ConfigError.invalidExecMemoryMiB
+      onInvalid: ConfigError.invalidExecMemoryMiB
     )
 
-    let cpus = try boundedExecInt(
+    let cpus = try ConfigParse.boundedInt(
       env[EnvKey.execCPUs],
       default: EnvDefaults.execCPUs,
       range: 1...Int.max,
-      error: ConfigError.invalidExecCPUs
+      onInvalid: ConfigError.invalidExecCPUs
     )
     if enabled, cpus > ProcessInfo.processInfo.activeProcessorCount {
       throw ConfigError.invalidExecCPUs("\(cpus)")
     }
 
-    let timeoutSeconds = try boundedExecInt(
+    let timeoutSeconds = try ConfigParse.boundedInt(
       env[EnvKey.execTimeout],
       default: EnvDefaults.execTimeoutSeconds,
       range: 1...300,
-      error: ConfigError.invalidExecTimeout
+      onInvalid: ConfigError.invalidExecTimeout
     )
 
     let allowEgress = try boolValue(
@@ -231,23 +231,5 @@ extension AppConfig {
     }
 
     return Array(Set(hosts)).sorted()
-  }
-
-  private static func boundedExecInt(
-    _ rawValue: String?,
-    default fallback: Int,
-    range: ClosedRange<Int>,
-    error: (String) -> ConfigError
-  ) throws -> Int {
-    let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    guard trimmed.isEmpty == false else {
-      return fallback
-    }
-
-    guard let value = Int(trimmed), range.contains(value) else {
-      throw error(trimmed)
-    }
-
-    return value
   }
 }

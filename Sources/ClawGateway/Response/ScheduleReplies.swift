@@ -111,19 +111,8 @@ public enum ScheduleReplies {
     "Running schedule \(id) now. You'll get the result like any scheduled delivery."
   }
 
-  /// `yyyy-MM-dd HH:mm` in the given zone — deterministic and locale-free (the ISO8601 format
-  /// styles force seconds; owners schedule in minutes).
   static func fireTime(_ date: Date, timezoneId: String) -> String {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: timezoneId) ?? .gmt  // id was validated upstream
-    let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
-    return String(
-      format: "%04d-%02d-%02d %02d:%02d",
-      parts.year ?? 0,
-      parts.month ?? 0,
-      parts.day ?? 0,
-      parts.hour ?? 0,
-      parts.minute ?? 0
-    )
+    let zone = TimeZone(identifier: timezoneId) ?? .gmt  // id was validated upstream
+    return date.wallClockMinute(in: zone)
   }
 }

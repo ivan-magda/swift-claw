@@ -7,7 +7,7 @@ import GRDB
 /// `transitionApproval` static (built like `RunStoreGRDB.transitionRun` but calling
 /// `ApprovalFSM.reduce`), and every resolution appends its `approvalGranted`/`approvalDenied`
 /// audit inside the same transaction. The `approvals` timestamp columns
-/// are `.integer` UTC epoch seconds (v8 migration), so they travel through the epoch codec below —
+/// are `.integer` UTC epoch seconds (v8 migration), so they travel through `EpochSecondCodec` —
 /// never a raw `Date` bind, which GRDB would serialize as a string and break `expires_ts <= now`.
 public struct ApprovalStoreGRDB: ApprovalStore {
   private let database: MappedDatabase
@@ -121,7 +121,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
       let expired = try Self.fetchApprovals(
         db,
         whereClause: "state = ? AND expires_ts <= ?",
-        arguments: [ApprovalState.pending.rawValue, Self.epoch(now)]
+        arguments: [ApprovalState.pending.rawValue, EpochSecondCodec.epoch(now)]
       )
 
       var swept: [Approval] = []
@@ -171,7 +171,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
               SELECT 1 FROM messages
               WHERE messages.id = approvals.observation_message_id
                 AND messages.run_id = approvals.run_id
-                AND messages.role = 'tool'
+                AND messages.role = '\(MessageRole.tool.rawValue)'
                 AND messages.content = ?
             ))
           """,
@@ -243,7 +243,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           sql: "SELECT MIN(created_ts) FROM approvals WHERE state = ?",
           arguments: [ApprovalState.pending.rawValue]
         ).map { oldestEpoch in
-          Int(Self.epoch(now) - oldestEpoch)
+          Int(EpochSecondCodec.epoch(now) - oldestEpoch)
         }
 
       return ApprovalsHealth(
@@ -281,8 +281,8 @@ extension ApprovalStoreGRDB {
         approval.observationMessageId,
         approval.toolCallId,
         approval.reason.rawValue,
-        epoch(approval.createdTs),
-        epoch(approval.expiresTs),
+        EpochSecondCodec.epoch(approval.createdTs),
+        EpochSecondCodec.epoch(approval.expiresTs),
       ]
     )
     return db.lastInsertedRowID
@@ -305,7 +305,7 @@ extension ApprovalStoreGRDB {
 
     try db.execute(
       sql: "UPDATE approvals SET state = ?, resolved_ts = ? WHERE id = ?",
-      arguments: [nextState.rawValue, epoch(now), id]
+      arguments: [nextState.rawValue, EpochSecondCodec.epoch(now), id]
     )
 
     return nextState
@@ -418,8 +418,8 @@ private extension ApprovalStoreGRDB {
     }
 
     guard
-      let createdTs = date(fromEpoch: row["created_ts"]),
-      let expiresTs = date(fromEpoch: row["expires_ts"])
+      let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
+      let expiresTs = EpochSecondCodec.date(fromEpoch: row["expires_ts"])
     else {
       throw StoreError.unexpected("approvals row is missing a required timestamp")
     }
@@ -442,7 +442,7 @@ private extension ApprovalStoreGRDB {
       promptMessageId: row["prompt_message_id"],
       createdTs: createdTs,
       expiresTs: expiresTs,
-      resolvedTs: date(fromEpoch: row["resolved_ts"])
+      resolvedTs: EpochSecondCodec.date(fromEpoch: row["resolved_ts"])
     )
   }
 }
@@ -473,19 +473,5 @@ private extension ApprovalStoreGRDB {
         ts: now
       )
     )
-  }
-}
-
-// MARK: - Epoch-Second Column Codec
-
-private extension ApprovalStoreGRDB {
-  static func epoch(_ instant: Date) -> Int64 {
-    Int64(instant.timeIntervalSince1970.rounded())
-  }
-
-  static func date(fromEpoch value: Int64?) -> Date? {
-    value.map { seconds in
-      Date(timeIntervalSince1970: TimeInterval(seconds))
-    }
   }
 }

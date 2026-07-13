@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import ClawTools
 import Foundation
 import GRDB
@@ -313,14 +314,6 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
 
   private func webFetch(_ callId: String, _ url: String) -> ToolCall {
     ToolCall(id: callId, name: "web_fetch", argumentsJSON: #"{"url":"\#(url)"}"#)
-  }
-
-  /// Every run row's state, oldest first — the FIFO queue behind the parked lane in durable form.
-  private func runStates(databasePath: String) throws -> [String] {
-    let pool = try ClawDatabase.makePool(path: databasePath)
-    return try pool.read { database in
-      try String.fetchAll(database, sql: "SELECT state FROM runs ORDER BY id")
-    }
   }
 
   // Clause 3 — trip → durable PENDING approval → the owner's button executes the RECORDED fetch

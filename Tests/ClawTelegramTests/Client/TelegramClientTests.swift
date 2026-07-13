@@ -234,7 +234,7 @@ private func client(status: Int, json: String) -> TelegramClient {
     // then
     let message = try #require(thrownMessage)
     #expect(message.contains("SECRET-123:abc") == false)
-    #expect(message.contains("<redacted-token>"))
+    #expect(message.contains(SecretRedactor.replacement))
   }
 
   @Test func setMyCommandsPostsCorrectPayload() async throws {

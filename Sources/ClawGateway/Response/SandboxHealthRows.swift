@@ -28,28 +28,16 @@ public enum SandboxDoctorStatus: Sendable, Equatable {
 }
 
 public enum SandboxHealthRows {
-  public struct Row: Sendable, Equatable {
-    public let key: String
-    public let value: String
-    public let ok: Bool
-
-    public init(key: String, value: String, ok: Bool) {
-      self.key = key
-      self.value = value
-      self.ok = ok
-    }
-  }
-
-  public static func admittingRow(_ admitting: Bool) -> Row {
+  public static func admittingRow(_ admitting: Bool) -> DoctorReport.Check {
     flag(key: "sandbox.admitting", value: admitting)
   }
 
-  public static func rows(for status: SandboxDoctorStatus) -> [Row] {
+  public static func rows(for status: SandboxDoctorStatus) -> [DoctorReport.Check] {
     switch status {
     case .disabled:
-      return [Row(key: "sandbox", value: "disabled by CLAW_EXEC_ENABLED", ok: true)]
+      return [check(key: "sandbox", value: "disabled by CLAW_EXEC_ENABLED", ok: true)]
     case .linuxDeferred:
-      return [Row(key: "sandbox", value: "execute_code awaits the Linux backend", ok: true)]
+      return [check(key: "sandbox", value: "execute_code awaits the Linux backend", ok: true)]
     case .configOnly(let availability):
       return configOnlyRows(availability)
     case .daemonManaged(let availability):
@@ -65,31 +53,31 @@ public enum SandboxHealthRows {
 // MARK: - Version-Only Rows
 
 private extension SandboxHealthRows {
-  static func configOnlyRows(_ availability: BackendAvailability) -> [Row] {
+  static func configOnlyRows(_ availability: BackendAvailability) -> [DoctorReport.Check] {
     switch availability {
     case .available(let engineVersion):
       return availableVersionRows(engineVersion)
-        + [Row(key: "sandbox.canary", value: "deferred until live daemon startup", ok: true)]
+        + [check(key: "sandbox.canary", value: "deferred until live daemon startup", ok: true)]
     case .unavailable(let reason):
       return unavailableVersionRows(reason)
     }
   }
 
-  static func daemonManagedRows(_ availability: BackendAvailability) -> [Row] {
+  static func daemonManagedRows(_ availability: BackendAvailability) -> [DoctorReport.Check] {
     switch availability {
     case .available(let engineVersion):
       return availableVersionRows(engineVersion)
-        + [Row(key: "sandbox.canary", value: "owned by the running daemon", ok: true)]
+        + [check(key: "sandbox.canary", value: "owned by the running daemon", ok: true)]
     case .unavailable(let reason):
       return unavailableVersionRows(reason)
     }
   }
 
-  static func availableVersionRows(_ engineVersion: String) -> [Row] {
+  static func availableVersionRows(_ engineVersion: String) -> [DoctorReport.Check] {
     [
       flag(key: "sandbox.available", value: true),
       flag(key: "sandbox.os_ok", value: true),
-      Row(
+      check(
         key: "sandbox.engine_version",
         value: "\(engineVersion) (minimum 1.0.0)",
         ok: true
@@ -98,17 +86,17 @@ private extension SandboxHealthRows {
     ]
   }
 
-  static func unavailableVersionRows(_ reason: String) -> [Row] {
+  static func unavailableVersionRows(_ reason: String) -> [DoctorReport.Check] {
     [
       flag(key: "sandbox.available", value: false),
-      Row(key: "sandbox.os_ok", value: "unknown", ok: false),
-      Row(
+      check(key: "sandbox.os_ok", value: "unknown", ok: false),
+      check(
         key: "sandbox.engine_version",
         value: "unknown (minimum 1.0.0)",
         ok: false
       ),
       flag(key: "sandbox.version_ok", value: false),
-      Row(key: "sandbox.last_error", value: reason, ok: false),
+      check(key: "sandbox.last_error", value: reason, ok: false),
     ]
   }
 }
@@ -116,33 +104,33 @@ private extension SandboxHealthRows {
 // MARK: - Live Rows
 
 private extension SandboxHealthRows {
-  static func unavailableRows(reason: String) -> [Row] {
+  static func unavailableRows(reason: String) -> [DoctorReport.Check] {
     [
       flag(key: "sandbox.available", value: false),
-      Row(key: "sandbox.os_ok", value: "unknown", ok: false),
-      Row(
+      check(key: "sandbox.os_ok", value: "unknown", ok: false),
+      check(
         key: "sandbox.engine_version",
         value: "unknown (minimum 1.0.0)",
         ok: false
       ),
       flag(key: "sandbox.version_ok", value: false),
-      Row(key: "sandbox.image_digest_ok", value: "not run", ok: false),
-      Row(key: "sandbox.caps_empty", value: "not run", ok: false),
-      Row(key: "sandbox.net_isolated", value: "not run", ok: false),
-      Row(key: "sandbox.caps_match", value: "not run", ok: false),
-      Row(key: "sandbox.reaper_ok", value: "not run", ok: false),
-      Row(key: "sandbox.rootfs_ro", value: "not run", ok: false),
-      Row(key: "sandbox.staging_ro", value: "not run", ok: false),
-      Row(key: "sandbox.interpreters_ok", value: "not run", ok: false),
-      Row(key: "sandbox.last_error", value: reason, ok: false),
+      check(key: "sandbox.image_digest_ok", value: "not run", ok: false),
+      check(key: "sandbox.caps_empty", value: "not run", ok: false),
+      check(key: "sandbox.net_isolated", value: "not run", ok: false),
+      check(key: "sandbox.caps_match", value: "not run", ok: false),
+      check(key: "sandbox.reaper_ok", value: "not run", ok: false),
+      check(key: "sandbox.rootfs_ro", value: "not run", ok: false),
+      check(key: "sandbox.staging_ro", value: "not run", ok: false),
+      check(key: "sandbox.interpreters_ok", value: "not run", ok: false),
+      check(key: "sandbox.last_error", value: reason, ok: false),
     ]
   }
 
-  static func liveRows(_ health: SandboxHealth) -> [Row] {
+  static func liveRows(_ health: SandboxHealth) -> [DoctorReport.Check] {
     [
       flag(key: "sandbox.available", value: health.available),
       flag(key: "sandbox.os_ok", value: health.osOK),
-      Row(
+      check(
         key: "sandbox.engine_version",
         value: "\(health.engineVersion ?? "unknown") (minimum 1.0.0)",
         ok: health.engineVersion != nil
@@ -156,7 +144,7 @@ private extension SandboxHealthRows {
       flag(key: "sandbox.rootfs_ro", value: health.rootfsRO),
       flag(key: "sandbox.staging_ro", value: health.stagingRO),
       flag(key: "sandbox.interpreters_ok", value: health.interpretersOK),
-      Row(
+      check(
         key: "sandbox.last_error",
         value: health.lastError ?? "none",
         ok: health.lastError == nil
@@ -164,7 +152,11 @@ private extension SandboxHealthRows {
     ]
   }
 
-  static func flag(key: String, value: Bool) -> Row {
-    Row(key: key, value: value ? "true" : "false", ok: value)
+  static func flag(key: String, value: Bool) -> DoctorReport.Check {
+    check(key: key, value: value ? "true" : "false", ok: value)
+  }
+
+  static func check(key: String, value: String, ok: Bool) -> DoctorReport.Check {
+    DoctorReport.Check(key: key, value: value, ok: ok, group: .sandbox)
   }
 }

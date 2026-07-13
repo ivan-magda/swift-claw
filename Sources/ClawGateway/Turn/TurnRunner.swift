@@ -75,7 +75,7 @@ public struct TurnRunner: TurnDispatching {
     // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
     // would hold that lane forever. Every caller chooses its parker explicitly.
     parker: any ApprovalParking,
-    approvalExpirySeconds: Int = 3600,
+    approvalExpirySeconds: Int,
     logger: Logger
   ) {
     self.sessionMessages = sessionMessages

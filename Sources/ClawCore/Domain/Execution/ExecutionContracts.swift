@@ -18,6 +18,32 @@ extension ExecLanguage {
   }
 }
 
+public struct ExecStagingLimits: Sendable, Equatable {
+  public let maxCodeBytes: Int
+  public let maxStagedFileBytes: Int
+  public let maxStagedTotalBytes: Int
+  public let maxStagedFiles: Int
+
+  public init(
+    maxCodeBytes: Int,
+    maxStagedFileBytes: Int,
+    maxStagedTotalBytes: Int,
+    maxStagedFiles: Int
+  ) {
+    self.maxCodeBytes = maxCodeBytes
+    self.maxStagedFileBytes = maxStagedFileBytes
+    self.maxStagedTotalBytes = maxStagedTotalBytes
+    self.maxStagedFiles = maxStagedFiles
+  }
+
+  public static let standard = ExecStagingLimits(
+    maxCodeBytes: 16 * 1024,
+    maxStagedFileBytes: 1024 * 1024,
+    maxStagedTotalBytes: 4 * 1024 * 1024,
+    maxStagedFiles: 16
+  )
+}
+
 public enum FileMode: UInt16, Sendable, Equatable {
   case readOnly = 0o400
   case readExecute = 0o500

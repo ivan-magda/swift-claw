@@ -43,14 +43,10 @@ import Testing
   }
 
   private func usage(runId: Int64, sessionId: Int64) -> ProviderUsage {
-    ProviderUsage(
+    makeProviderUsage(
       runId: runId,
       sessionId: sessionId,
-      model: "m",
-      promptTokens: 10,
       completionTokens: 20,
-      costUSD: 0.001,
-      costSource: .heuristic,
       isEstimated: true,
       ts: Date(timeIntervalSince1970: 1_750_000_000)
     )

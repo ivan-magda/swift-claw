@@ -96,10 +96,7 @@ public struct ExaSearchProvider: SearchProviding {
 
   /// The search key joins the exact-value redaction set of its own client.
   private func redact(_ message: String) -> String {
-    if apiKey.isEmpty {
-      return message
-    }
-    return message.replacingOccurrences(of: apiKey, with: "[REDACTED:secret-value]")
+    SecretRedactor(secretValues: [apiKey]).redact(message)
   }
 
   private struct ResponseBody: Decodable {

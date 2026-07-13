@@ -1,4 +1,3 @@
-import Crypto
 import Foundation
 
 /// The ONE decoder for `memory_write` tool arguments, shared by the gate-time tool
@@ -75,8 +74,7 @@ public enum MemoryWriteArguments {
   /// The canonical target: `memory_item:<kind>:<hash16>`, hash16 = first 16 hex chars of
   /// SHA-256 over the NORMALIZED stored text — the identity the approval binds to.
   public static func canonicalTarget(for request: MemoryWriteRequest) -> String {
-    let digest = SHA256.hash(data: Data(request.item.text.utf8))
-    let hash16 = digest.prefix(8).map { byte in String(format: "%02x", byte) }.joined()
+    let hash16 = String(SHA256Digest.hex(request.item.text).prefix(16))
     return "memory_item:\(request.item.kind.rawValue):\(hash16)"
   }
 

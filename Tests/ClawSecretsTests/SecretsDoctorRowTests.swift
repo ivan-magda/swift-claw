@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -7,16 +8,9 @@ import Testing
 @Suite struct SecretsDoctorRowTests {
   private typealias EnvKey = EnvSecretStore.EnvKey
 
-  private func makeStateRoot() throws -> URL {
-    let dir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-doctor-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    return dir
-  }
-
   @Test func reportsEncryptedOkAfterDecrypt() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-doctor")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
@@ -34,7 +28,7 @@ import Testing
 
   @Test func reportsEnvWarning() throws {
     // given
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-doctor")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     // when
@@ -50,7 +44,7 @@ import Testing
 
   @Test func reportsFailWhenEncryptedSetupIsBroken() throws {
     // given — secrets.enc present, key missing → decrypt fails.
-    let stateRoot = try makeStateRoot()
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-doctor")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
