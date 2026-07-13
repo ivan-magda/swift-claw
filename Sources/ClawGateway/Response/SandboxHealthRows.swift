@@ -7,6 +7,24 @@ public enum SandboxDoctorStatus: Sendable, Equatable {
   case daemonManaged(availability: BackendAvailability)
   case live(health: SandboxHealth)
   case unavailable(reason: String)
+
+  public static func atBoot(
+    execEnabled: Bool,
+    health: SandboxHealth?,
+    unavailableReason: String?
+  ) -> SandboxDoctorStatus {
+    guard execEnabled else {
+      return .disabled
+    }
+
+    guard let health else {
+      return .unavailable(
+        reason: unavailableReason ?? "sandbox was not ready at daemon startup"
+      )
+    }
+
+    return .live(health: health)
+  }
 }
 
 public enum SandboxHealthRows {
@@ -20,6 +38,10 @@ public enum SandboxHealthRows {
       self.value = value
       self.ok = ok
     }
+  }
+
+  public static func admittingRow(_ admitting: Bool) -> Row {
+    flag(key: "sandbox.admitting", value: admitting)
   }
 
   public static func rows(for status: SandboxDoctorStatus) -> [Row] {

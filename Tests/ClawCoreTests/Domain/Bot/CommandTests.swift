@@ -123,4 +123,18 @@ import Testing
     #expect(Command.parse("/HELP@CLAW_BOT", botUsername: "claw_bot") == .help)
     #expect(Command.parse("please /help me", botUsername: "claw_bot") == .plain("please /help me"))
   }
+
+  @Test func doctorParses() {
+    // given / when / then
+    #expect(Command.parse("/doctor", botUsername: "claw_bot") == .doctor)
+    #expect(Command.parse("/DOCTOR@CLAW_BOT", botUsername: "claw_bot") == .doctor)
+    #expect(Command.parse("run /doctor", botUsername: "claw_bot") == .plain("run /doctor"))
+  }
+
+  @Test func statusParsesAsDoctorAlias() {
+    // given / when / then
+    #expect(Command.parse("/status", botUsername: "claw_bot") == .doctor)
+    #expect(Command.parse("/STATUS@CLAW_BOT", botUsername: "claw_bot") == .doctor)
+    #expect(Command.parse("see /status", botUsername: "claw_bot") == .plain("see /status"))
+  }
 }

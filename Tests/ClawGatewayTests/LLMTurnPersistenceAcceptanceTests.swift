@@ -378,6 +378,7 @@ func makeStack(
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
     coordinator: ApprovalCoordinator(),
+    doctor: StubDoctorReporter(),
     logger: logger
   )
 
@@ -468,6 +469,7 @@ func makeStreamingStack(
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
     coordinator: ApprovalCoordinator(),
+    doctor: StubDoctorReporter(),
     logger: logger
   )
   let dispatcher = OutboxDispatcher(
@@ -554,6 +556,7 @@ func makeStopNewStack(
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
     coordinator: ApprovalCoordinator(),
+    doctor: StubDoctorReporter(),
     logger: logger
   )
 

@@ -8,10 +8,12 @@ public enum SchedulerHealth {
   public struct Row: Sendable, Equatable {
     public let key: String
     public let value: String
+    public let headline: Bool
 
-    public init(key: String, value: String) {
+    public init(key: String, value: String, headline: Bool = false) {
       self.key = key
       self.value = value
+      self.headline = headline
     }
   }
 
@@ -70,7 +72,11 @@ public enum SchedulerHealth {
         key: "scheduler.last_tick_at",
         value: state.lastTickAt.map(String.init(describing:)) ?? "never"
       ),
-      Row(key: "scheduler.due_count", value: snapshot.dueCount.map(String.init) ?? "unknown"),
+      Row(
+        key: "scheduler.due_count",
+        value: snapshot.dueCount.map(String.init) ?? "unknown",
+        headline: true
+      ),
       Row(key: "scheduler.last_misfire", value: misfire),
       Row(
         key: "spend.proactive_today_usd",

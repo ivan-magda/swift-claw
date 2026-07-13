@@ -167,4 +167,5 @@ public protocol ExecutionBackend: Sendable {
 public protocol SandboxMaintenance: Sendable {
   func prepare() async -> SandboxHealth
   func shutdown() async
+  func isAdmitting() async -> Bool
 }

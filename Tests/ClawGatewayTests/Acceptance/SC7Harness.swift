@@ -278,6 +278,7 @@ func makeSC7Harness(
       commands: stores.scheduleCommands
     ),
     coordinator: ApprovalCoordinator(),
+    doctor: StubDoctorReporter(),
     now: { clock.now },
     logger: logger
   )

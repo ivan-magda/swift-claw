@@ -151,16 +151,6 @@ private extension DoctorCommand {
       let stores = try EnvironmentLoader.openStores(config: config)
       report.add(key: "db.writable", value: "true", group: .database)
 
-      let owners = (try? stores.allowlist.allowlistCount()) ?? -1
-      report.add(key: "allowlist.owners", value: "\(owners)", ok: owners >= 1, group: .database)
-
-      let offset: Int64? = try? stores.cursor.loadCursor()
-      report.add(
-        key: "poller.last_offset",
-        value: offset.map(String.init) ?? "none",
-        group: .database
-      )
-
       addHealthRows(to: &report, stores: stores, config: config)
     } catch {
       report.add(key: "db.writable", value: "false: \(error)", ok: false, group: .database)
@@ -275,151 +265,13 @@ private extension DoctorCommand {
 private extension DoctorCommand {
   func addHealthRows(to report: inout DoctorReport, stores: ClawStores, config: AppConfig) {
     let now = Date()
-    addRunHealthRows(to: &report, stores: stores, config: config, now: now)
-    addSpendRows(to: &report, stores: stores, config: config, now: now)
-    addStorageRows(to: &report, config: config)
-    addSchedulerRows(to: &report, stores: stores, config: config, now: now)
-    addApprovalRows(to: &report, stores: stores, config: config, now: now)
-  }
-
-  func addRunHealthRows(
-    to report: inout DoctorReport,
-    stores: ClawStores,
-    config: AppConfig,
-    now: Date
-  ) {
-    let health =
-      if let storedRunsHealth = try? stores.runs.runsHealth(now: now) {
-        storedRunsHealth
-      } else {
-        RunsHealth(
-          inFlight: 0,
-          oldestRunAgeSeconds: nil,
-          lastFailedAt: nil,
-          lastSuccessAt: nil,
-          consecutiveFailures: 0
-        )
-      }
-
     report.add(
-      key: "llm.last_success",
-      value: health.lastSuccessAt.map(String.init(describing:)) ?? "never",
-      group: .llmRuns
-    )
-    report.add(
-      key: "llm.consecutive_failures",
-      value: "\(health.consecutiveFailures)",
-      group: .llmRuns
-    )
-    report.add(key: "llm.retry_budget", value: "\(config.llm.retryBudget)", group: .llmRuns)
-    report.add(
-      key: "llm.streaming",
-      value: config.llm.streamingEnabled ? "on" : "off",
-      group: .llmRuns
-    )
-    report.add(key: "runs.in_flight", value: "\(health.inFlight)", group: .llmRuns)
-    report.add(
-      key: "runs.oldest_age_s",
-      value: health.oldestRunAgeSeconds.map { String(format: "%.0f", $0) } ?? "none",
-      group: .llmRuns
-    )
-    report.add(
-      key: "runs.last_FAILED",
-      value: health.lastFailedAt.map(String.init(describing:)) ?? "none",
-      group: .llmRuns
-    )
-  }
-
-  func addSpendRows(
-    to report: inout DoctorReport,
-    stores: ClawStores,
-    config: AppConfig,
-    now: Date
-  ) {
-    let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
-    let mix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
-    report.add(key: "spend.today_usd", value: USD.precise(todayUSD), group: .spend)
-    report.add(key: "spend.today_tokens", value: "\(todayTokens)", group: .spend)
-    report.add(
-      key: "spend.remaining_day_usd",
-      value: USD.display(max(0, config.budget.perDayUSD - todayUSD)),
-      group: .spend
-    )
-    report.add(
-      key: "spend.per_run_cap_usd",
-      value: USD.display(config.budget.perRunUSD),
-      group: .spend
-    )
-    let mixText = mix.map { "\($0.key.rawValue)=\($0.value)" }.sorted().joined(separator: " ")
-    report.add(
-      key: "spend.cost_source_mix",
-      value: mixText.isEmpty ? "none" : mixText,
-      group: .spend
-    )
-  }
-
-  func addStorageRows(to report: inout DoctorReport, config: AppConfig) {
-    let dbPath = EnvironmentLoader.databasePath(config: config)
-    let walBytes =
-      (try? FileManager.default.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int) ?? 0
-    report.add(key: "db.wal_size", value: "\(walBytes)", group: .storage)
-
-    let fileSystemAttributes = try? FileManager.default.attributesOfFileSystem(
-      forPath: config.stateRoot.path
-    )
-    let freeBytes = (fileSystemAttributes?[.systemFreeSize] as? Int) ?? 0
-    report.add(key: "db.free_disk", value: "\(freeBytes)", ok: freeBytes > 0, group: .storage)
-  }
-
-  func addSchedulerRows(
-    to report: inout DoctorReport,
-    stores: ClawStores,
-    config: AppConfig,
-    now: Date
-  ) {
-    let schedulerState =
-      (try? stores.scheduledJobs.schedulerState())
-      ?? SchedulerState(
-        lastTickAt: nil,
-        lastMisfireAt: nil,
-        lastMisfireSkippedCount: 0,
-        lastHeartbeatAt: nil,
-        heartbeatCountDay: nil,
-        heartbeatCount: 0
+      contentsOf: HealthRowsBuilder.checks(
+        DoctorHealth.inputs(stores: stores, config: config, now: now)
       )
-    let dueCount = try? stores.scheduledJobs.dueJobs(now: now).count
-    let proactiveTodayUSD =
-      (try? stores.usage.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: now))?.costUSD
-    let snapshot = SchedulerHealth.Snapshot(
-      state: schedulerState,
-      dueCount: dueCount,
-      proactiveTodayUSD: proactiveTodayUSD,
-      proactivePerDayUSD: config.budget.proactivePerDayUSD,
-      heartbeatEnabled: config.heartbeatEnabled,
-      heartbeatMaxPerDay: config.heartbeatMaxPerDay,
-      timezone: config.timezone,
-      now: now
     )
-    for row in SchedulerHealth.rows(snapshot) {
-      report.add(key: row.key, value: row.value, group: .scheduler)
-    }
-  }
-
-  func addApprovalRows(
-    to report: inout DoctorReport,
-    stores: ClawStores,
-    config: AppConfig,
-    now: Date
-  ) {
-    let approvalsHealth =
-      (try? stores.approvals.approvalsHealth(now: now))
-      ?? ApprovalsHealth(pendingCount: 0, oldestPendingAgeSeconds: nil)
-    for row in ApprovalsHealthRows.rows(
-      health: approvalsHealth,
-      approvalExpirySeconds: config.approvalExpirySeconds
-    ) {
-      report.add(key: row.key, value: row.value, group: .approvals)
-    }
+    report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))
+    report.add(contentsOf: DoctorHealth.approvalChecks(stores: stores, config: config, now: now))
   }
 }
 

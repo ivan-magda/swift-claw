@@ -27,6 +27,10 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
     }
   }
 
+  public func isAdmitting() -> Bool {
+    preparedInitImage != nil
+  }
+
   public func shutdown() async {
     shuttingDown = true
     preparedInitImage = nil

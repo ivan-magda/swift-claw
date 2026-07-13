@@ -44,6 +44,7 @@ extension DaemonBuilder {
             BotMenuCommand(command: "resume", description: "Resume a paused schedule."),
             BotMenuCommand(command: "runnow", description: "Run a schedule now."),
             BotMenuCommand(command: "cancel", description: "Cancel a schedule."),
+            BotMenuCommand(command: "status", description: "Show daemon health."),
             BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
           ]
         )

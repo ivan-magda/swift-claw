@@ -13,7 +13,8 @@ extension DaemonBuilder {
     coordination: TurnCoordination,
     turnRunner: TurnRunner,
     scheduleSurface: ScheduleSurface,
-    approvalCallbacks: ApprovalCallbackHandler
+    approvalCallbacks: ApprovalCallbackHandler,
+    doctor: any DoctorReporting
   ) -> (poller: TelegramPollerService, dispatcher: OutboxDispatcher) {
     let router = MessageRouter(
       processed: stores.processed,
@@ -30,6 +31,7 @@ extension DaemonBuilder {
       schedule: scheduleSurface,
       approvalCallbacks: approvalCallbacks,
       coordinator: coordination.approvalCoordinator,
+      doctor: doctor,
       logger: logger
     )
     let poller = TelegramPollerService(

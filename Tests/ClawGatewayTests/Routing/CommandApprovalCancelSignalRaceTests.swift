@@ -240,6 +240,7 @@ private extension CommandApprovalCancelSignalRaceTests {
       lanes: lanes,
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: coordinator,
+      doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
 

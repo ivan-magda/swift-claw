@@ -84,6 +84,7 @@ import Testing
         commands: ScheduleCommandStoreGRDB(writer: queue)
       ),
       coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
       now: { Self.fixedNow },
       logger: TestLog.silent
     )

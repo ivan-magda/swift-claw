@@ -124,6 +124,98 @@ import Testing
     #expect(json.contains("\"llm_runs\""))
   }
 
+  @Test func telegramSummaryReportsHealthyPerGroup() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "config", value: "OK", group: .config)
+    report.add(key: "db.writable", value: "true", group: .database)
+
+    // when
+    let summary = report.renderTelegramSummary()
+
+    // then
+    #expect(summary.contains("all systems healthy"))
+    #expect(summary.contains("Config: ok"))
+    #expect(summary.contains("Database: ok"))
+    #expect(!summary.contains("FAIL"))
+  }
+
+  @Test func telegramSummaryExpandsFailingRowsUnderTheirGroup() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "spend.today_usd", value: "0.0", group: .spend)
+    report.add(key: "spend.remaining_day_usd", value: "0.00", ok: false, group: .spend)
+
+    // when
+    let summary = report.renderTelegramSummary()
+
+    // then
+    #expect(summary.contains("1 check failing"))
+    #expect(summary.contains("Spend: FAIL"))
+    #expect(summary.contains("  spend.remaining_day_usd: 0.00"))
+  }
+
+  @Test func telegramSummaryPluralizesFailingCount() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "spend.remaining_day_usd", value: "0.00", ok: false, group: .spend)
+    report.add(key: "sandbox.net_isolated", value: "false", ok: false, group: .sandbox)
+
+    // when
+    let summary = report.renderTelegramSummary()
+
+    // then
+    #expect(summary.contains("2 checks failing"))
+  }
+
+  @Test func telegramSummaryShowsHeadlineValuesOnHealthyGroupLines() {
+    // given — consecutive_failures is dynamic signal, streaming is static config
+    var report = DoctorReport()
+    report.add(key: "llm.consecutive_failures", value: "3", group: .llmRuns, headline: true)
+    report.add(key: "llm.streaming", value: "on", group: .llmRuns)
+
+    // when
+    let summary = report.renderTelegramSummary()
+
+    // then — the figure is visible without expanding the group; the short key labels it
+    #expect(summary.contains("LLM & Runs: ok · consecutive_failures 3"))
+    #expect(!summary.contains("streaming"))
+  }
+
+  @Test func telegramSummaryDoesNotRepeatFailingRowsInTheHeadline() {
+    // given
+    var report = DoctorReport()
+    report.add(
+      key: "spend.remaining_day_usd",
+      value: "0.00",
+      ok: false,
+      group: .spend,
+      headline: true
+    )
+
+    // when
+    let summary = report.renderTelegramSummary()
+
+    // then — the failing row appears once, as the expanded detail line
+    #expect(summary.contains("Spend: FAIL"))
+    #expect(summary.contains("  spend.remaining_day_usd: 0.00"))
+    #expect(!summary.contains("FAIL · remaining_day_usd"))
+  }
+
+  @Test func telegramSummaryTruncatesLongFailingValues() {
+    // given
+    var report = DoctorReport()
+    let longValue = String(repeating: "x", count: 500)
+    report.add(key: "sandbox.last_error", value: longValue, ok: false, group: .sandbox)
+
+    // when
+    let summary = report.renderTelegramSummary()
+
+    // then
+    #expect(!summary.contains(longValue))
+    #expect(summary.contains("…"))
+  }
+
   @Test func jsonIncludesGroupAndTopLevelOk() {
     // given
     var report = DoctorReport()

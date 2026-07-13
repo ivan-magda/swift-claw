@@ -209,6 +209,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
       schedule: makeIdleScheduleSurface(writer: queue),
       approvalCallbacks: wireHandler ? handler : nil,
       coordinator: coordinator,
+      doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
     return Harness(

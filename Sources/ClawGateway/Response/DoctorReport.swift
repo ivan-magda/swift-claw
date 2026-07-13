@@ -36,6 +36,21 @@ public struct DoctorReport: Sendable {
     public let value: String
     public let ok: Bool
     public let group: DoctorGroup
+    public let isHeadline: Bool
+
+    public init(
+      key: String,
+      value: String,
+      ok: Bool,
+      group: DoctorGroup,
+      isHeadline: Bool = false
+    ) {
+      self.key = key
+      self.value = value
+      self.ok = ok
+      self.group = group
+      self.isHeadline = isHeadline
+    }
   }
 
   public private(set) var checks: [Check]
@@ -50,9 +65,14 @@ public struct DoctorReport: Sendable {
     key: String,
     value: String,
     ok: Bool = true,
-    group: DoctorGroup
+    group: DoctorGroup,
+    headline: Bool = false
   ) {
-    checks.append(Check(key: key, value: value, ok: ok, group: group))
+    checks.append(Check(key: key, value: value, ok: ok, group: group, isHeadline: headline))
+  }
+
+  public mutating func add(contentsOf newChecks: [Check]) {
+    checks.append(contentsOf: newChecks)
   }
 
   public func renderText() -> String {
@@ -67,6 +87,26 @@ public struct DoctorReport: Sendable {
     }
 
     return sections.joined(separator: "\n\n")
+  }
+
+  public func renderTelegramSummary() -> String {
+    let failingCount = checks.count { !$0.ok }
+    let verdict =
+      failingCount == 0
+      ? "clawd: all systems healthy"
+      : "clawd: \(failingCount) \(failingCount == 1 ? "check" : "checks") failing"
+
+    let sections = DoctorGroup.allCases.compactMap { group -> String? in
+      let rows = checks.filter { $0.group == group }
+
+      guard !rows.isEmpty else {
+        return nil
+      }
+
+      return summarySection(group: group, rows: rows)
+    }
+
+    return ([verdict, ""] + sections).joined(separator: "\n")
   }
 
   public func renderJSON() -> String {
@@ -106,6 +146,39 @@ private extension DoctorReport {
     let marker = check.ok ? "  " : "✗ "
     let paddedKey = check.key.padding(toLength: keyWidth, withPad: " ", startingAt: 0)
     return "  \(marker)\(paddedKey)  \(check.value)"
+  }
+
+  static let summaryValueLimit = 200
+
+  func summarySection(group: DoctorGroup, rows: [Check]) -> String {
+    let groupOK = rows.allSatisfy(\.ok)
+
+    let headlines = rows.filter { row in
+      row.isHeadline && row.ok
+    }.map { row in
+      "\(Self.shortKey(row.key)) \(row.value)"
+    }
+    let header = (["\(group.title): \(groupOK ? "ok" : "FAIL")"] + headlines)
+      .joined(separator: " · ")
+
+    var lines = [header]
+    for row in rows where !row.ok {
+      lines.append("  \(row.key): \(Self.truncatedValue(row.value))")
+    }
+
+    return lines.joined(separator: "\n")
+  }
+
+  /// The key's last dotted component — the group line already names the subsystem.
+  static func shortKey(_ key: String) -> String {
+    key.split(separator: ".").last.map(String.init) ?? key
+  }
+
+  static func truncatedValue(_ value: String) -> String {
+    if value.count > summaryValueLimit {
+      return value.prefix(summaryValueLimit - 1) + "…"
+    }
+    return value
   }
 }
 

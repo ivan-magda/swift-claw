@@ -41,6 +41,7 @@ import Testing
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
       now: { Self.fixedNow },
       logger: TestLog.silent
     )

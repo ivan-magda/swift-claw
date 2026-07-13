@@ -57,7 +57,8 @@ struct DaemonBuilder: Sendable {
       coordination: coordination,
       turnRunner: turnRunner,
       scheduleSurface: scheduleSurface,
-      approvalCallbacks: approvalFabric.handler
+      approvalCallbacks: approvalFabric.handler,
+      doctor: DaemonDoctorReporter(stores: stores, config: config, sandbox: sandbox)
     )
     let (scheduler, heartbeatOwner) = makeScheduler(
       coordination: coordination,

@@ -27,6 +27,64 @@ import Testing
     #expect(rows[0].ok)
   }
 
+  @Test func bootStatusDisabledWinsOverEverything() {
+    // given / when
+    let status = SandboxDoctorStatus.atBoot(
+      execEnabled: false,
+      health: .passingForTests,
+      unavailableReason: nil
+    )
+
+    // then
+    #expect(status == .disabled)
+  }
+
+  @Test func bootStatusWithHealthIsLive() {
+    // given / when
+    let status = SandboxDoctorStatus.atBoot(
+      execEnabled: true,
+      health: .passingForTests,
+      unavailableReason: nil
+    )
+
+    // then
+    #expect(status == .live(health: .passingForTests))
+  }
+
+  @Test func bootStatusWithoutHealthKeepsTheBootstrapReason() {
+    // given / when
+    let status = SandboxDoctorStatus.atBoot(
+      execEnabled: true,
+      health: nil,
+      unavailableReason: "container engine is stopped"
+    )
+
+    // then
+    #expect(status == .unavailable(reason: "container engine is stopped"))
+  }
+
+  @Test func bootStatusWithoutHealthOrReasonFallsBackToGeneric() {
+    // given / when
+    let status = SandboxDoctorStatus.atBoot(
+      execEnabled: true,
+      health: nil,
+      unavailableReason: nil
+    )
+
+    // then
+    #expect(status == .unavailable(reason: "sandbox was not ready at daemon startup"))
+  }
+
+  @Test func admittingRowFailsWhenRuntimeDisarmed() {
+    // given / when — a failed cleanup disarms admissions after a green boot
+    let disarmed = SandboxHealthRows.admittingRow(false)
+    let armed = SandboxHealthRows.admittingRow(true)
+
+    // then
+    #expect(disarmed == .init(key: "sandbox.admitting", value: "false", ok: false))
+    #expect(armed == .init(key: "sandbox.admitting", value: "true", ok: true))
+  }
+
   @Test func configOnlyReportsVersionAndDefersTheCanary() {
     // given / when
     let rows = SandboxHealthRows.rows(

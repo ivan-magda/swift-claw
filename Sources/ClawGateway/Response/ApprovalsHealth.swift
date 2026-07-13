@@ -10,10 +10,12 @@ public enum ApprovalsHealthRows {
   public struct Row: Sendable, Equatable {
     public let key: String
     public let value: String
+    public let headline: Bool
 
-    public init(key: String, value: String) {
+    public init(key: String, value: String, headline: Bool = false) {
       self.key = key
       self.value = value
+      self.headline = headline
     }
   }
 
@@ -25,7 +27,7 @@ public enum ApprovalsHealthRows {
       health.oldestPendingAgeSeconds.map { age in "\(age)/\(approvalExpirySeconds)" } ?? "none"
 
     return [
-      Row(key: "approvals.pending", value: "\(health.pendingCount)"),
+      Row(key: "approvals.pending", value: "\(health.pendingCount)", headline: true),
       Row(key: "approvals.oldest_age_s", value: oldestAge),
     ]
   }

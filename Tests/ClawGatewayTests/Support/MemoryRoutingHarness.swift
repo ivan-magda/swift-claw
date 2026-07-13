@@ -48,6 +48,7 @@ struct MemoryRoutingHarness {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
 

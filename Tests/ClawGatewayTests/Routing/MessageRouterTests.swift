@@ -65,7 +65,10 @@ struct FullSessions: SessionMessageStore {
     let messageId: Int64
   }
 
-  private func makeHarness(allowed: [Int64]) throws -> Harness {
+  private func makeHarness(
+    allowed: [Int64],
+    doctor: any DoctorReporting = StubDoctorReporter()
+  ) throws -> Harness {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     let allowlist = AllowlistStoreGRDB(writer: queue)
@@ -89,6 +92,7 @@ struct FullSessions: SessionMessageStore {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      doctor: doctor,
       logger: TestLog.silent
     )
 
@@ -310,6 +314,7 @@ struct FullSessions: SessionMessageStore {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
 
@@ -372,6 +377,7 @@ struct FullSessions: SessionMessageStore {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
 
@@ -386,6 +392,25 @@ struct FullSessions: SessionMessageStore {
     let states = try runStates(queue)
     #expect(states[runningRunId] == RunState.superseded.rawValue)
     #expect(states[queuedRunId] == RunState.superseded.rawValue)
+  }
+
+  @Test func allowlistedDoctorSendsHealthSummary() async throws {
+    // given — a stub reporter standing in for the daemon's live health report
+    var report = DoctorReport()
+    report.add(key: "db.writable", value: "true", group: .database)
+    let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(stubbed: report))
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/doctor")
+    )
+
+    // then — the compact summary is sent, and no turn is dispatched
+    #expect(outcome == .processed)
+    let reply = try #require(await harness.transport.sent.first)
+    #expect(reply.text.contains("all systems healthy"))
+    #expect(reply.text.contains("Database: ok"))
+    #expect(await harness.dispatcher.calls.isEmpty)
   }
 
   @Test func unsupportedMediaGetsFriendlyReply() async throws {
@@ -435,6 +460,7 @@ struct FullSessions: SessionMessageStore {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
 

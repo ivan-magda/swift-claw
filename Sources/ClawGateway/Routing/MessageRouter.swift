@@ -27,6 +27,7 @@ public struct MessageRouter: Sendable {
   private let confirmations: ConfirmationResolver
   private let turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
+  private let doctor: any DoctorReporting
   private let logger: Logger
 
   public init(
@@ -44,12 +45,14 @@ public struct MessageRouter: Sendable {
     schedule: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     coordinator: ApprovalCoordinator,
+    doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
     self.botUsername = botUsername
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
+    self.doctor = doctor
     self.logger = logger
 
     let replies = ReplySender(processed: processed, delivery: delivery, logger: logger)
@@ -185,6 +188,12 @@ private extension MessageRouter {
         updateId: rawUpdate.updateId,
         chatId: message.chatId,
         text: CommandReplies.help
+      )
+    case .doctor:
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: await doctor.report().renderTelegramSummary()
       )
     case .stop:
       return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message)

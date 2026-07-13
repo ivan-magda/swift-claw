@@ -338,6 +338,7 @@ func makeSC3Harness(
     ),
     approvalCallbacks: approvalCallbacks,
     coordinator: coordinator,
+    doctor: StubDoctorReporter(),
     logger: logger
   )
 
