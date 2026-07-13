@@ -511,6 +511,11 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   unconditional cleanup. apple/container owns the init image: the backend resolves its exact
   runtime reference, pulls it over HTTPS, passes it explicitly, and reports it as a
   version-coupled trust dependency without claiming digest verification the CLI cannot expose.
+- **Workload image pin:** the distribution ships a release-verified default digest pin
+  (`PinnedImageReference.verifiedDefault`), so `CLAW_EXEC_ENABLED=true` is a complete config.
+  `CLAW_EXEC_IMAGE` overrides it and must itself be digest-pinned and registry-allowlisted; an
+  invalid override fails config load without falling back to the default. Rotating the default
+  digest repeats the release verification procedure in `LOCAL_DEV.md`.
 - **Network is explicit in both directions:** default execution emits
   `--network none --no-dns`; owner-approved `network: true` emits `--network default`. Omitting
   `--network` is forbidden because apple/container attaches the default network and grants full

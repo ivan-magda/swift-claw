@@ -114,6 +114,13 @@ private extension PinnedImageReference {
   }
 }
 
+extension PinnedImageReference {
+  static let verifiedDefault = PinnedImageReference(
+    repository: "cgr.dev/chainguard/python",
+    digest: "55cd38584d1bba1913a1d58da07184cbe512724bc03e822e269404c73cd4c9cd"
+  )
+}
+
 public struct ExecConfig: Sendable, Equatable {
   public let enabled: Bool
   public let image: PinnedImageReference?
@@ -148,20 +155,17 @@ extension AppConfig {
 
     let rawImage = env[EnvKey.execImage] ?? ""
     let image: PinnedImageReference?
+
     if rawImage.isEmpty {
-      image = nil
-    } else {
-      guard let parsed = PinnedImageReference.parse(rawImage) else {
-        throw ConfigError.invalidExecImage(rawImage)
-      }
-      guard registryAllowlist.contains(parsed.registryHost) else {
-        throw ConfigError.execImageRegistryNotAllowed(parsed.registryHost)
-      }
+      image = enabled ? .verifiedDefault : nil
+    } else if let parsed = PinnedImageReference.parse(rawImage) {
       image = parsed
+    } else {
+      throw ConfigError.invalidExecImage(rawImage)
     }
 
-    if enabled, image == nil {
-      throw ConfigError.invalidExecImage(rawImage)
+    if let image, !registryAllowlist.contains(image.registryHost) {
+      throw ConfigError.execImageRegistryNotAllowed(image.registryHost)
     }
 
     let memoryMiB = try boundedExecInt(

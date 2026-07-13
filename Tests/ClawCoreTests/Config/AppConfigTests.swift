@@ -573,16 +573,51 @@ import Testing
     #expect(config.exec.cpus == aboveHost)
   }
 
-  @Test func enabledExecRequiresAnImage() {
+  @Test func enabledExecDefaultsToTheVerifiedImagePin() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.execEnabled] = "true"
     env[EnvKey.execCPUs] = "1"
 
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.exec.enabled)
+    #expect(config.exec.image == .verifiedDefault)
+  }
+
+  @Test func theVerifiedDefaultPinSurvivesItsOwnValidation() {
+    // given
+    let reference = PinnedImageReference.verifiedDefault
+
+    // when / then: a typo in the baked-in constant must fail loudly in CI, not at a user's daemon
+    #expect(PinnedImageReference.parse(reference.description) == reference)
+    #expect(ExecConfig.disabledDefault.imageRegistryAllowlist.contains(reference.registryHost))
+  }
+
+  @Test func theDefaultPinObeysTheRegistryAllowlist() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.execEnabled] = "true"
+    env[EnvKey.execCPUs] = "1"
+    env[EnvKey.execImageRegistries] = "images.example.com"
+
     // when / then
-    #expect(throws: ConfigError.invalidExecImage("")) {
+    #expect(throws: ConfigError.execImageRegistryNotAllowed("cgr.dev")) {
       try AppConfig.load(environment: env)
     }
+  }
+
+  @Test func disabledExecDoesNotFillTheDefaultImage() throws {
+    // given
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.exec.image == nil)
   }
 
   @Test func enabledExecRejectsAnImageOutsideTheRegistryAllowlist() {

@@ -90,17 +90,23 @@ pool set `CLAW_WEBFETCH_EXEMPT_CIDRS` (see `.env.example`).
 
 ## Sandbox workload image (macOS 26 arm64)
 
-`execute_code` is disabled by default and the distribution does not silently select an image.
-The verified development image pin for this release is:
+`execute_code` is disabled by default. When enabled with no `CLAW_EXEC_IMAGE` set, clawd uses
+its built-in default pin, the image verified for this release
+(`PinnedImageReference.verifiedDefault` in `Sources/ClawCore/Config/ExecConfig.swift`):
 
 ```text
 cgr.dev/chainguard/python@sha256:55cd38584d1bba1913a1d58da07184cbe512724bc03e822e269404c73cd4c9cd
 ```
 
-The pinned arm64 image provides `/usr/bin/python` and `/bin/sh`, has OCI ENTRYPOINT
-`["/usr/bin/python"]`, and runs as nonroot uid `65532`. clawd always supplies an explicit
-entrypoint. Re-verify before replacing the digest; never copy a moving tag into
-`CLAW_EXEC_IMAGE`.
+The pinned arm64 image provides `/usr/bin/python` (Python 3.14) and `/bin/sh`, has OCI
+ENTRYPOINT `["/usr/bin/python"]`, and runs as nonroot uid `65532`. clawd always supplies an
+explicit entrypoint.
+
+Set `CLAW_EXEC_IMAGE` only to override the default with a pin you verified yourself; the value
+must be a digest-pinned reference from an allowlisted registry, and an invalid value fails the
+config outright instead of falling back to the default. Never copy a moving tag into
+`CLAW_EXEC_IMAGE`. The procedure below qualified the default pin; run it for any override or
+default rotation:
 
 ```bash
 brew install cosign
@@ -149,23 +155,22 @@ test -s "${EVIDENCE_DIR}/spdx.intoto.jsonl"
   '
 ```
 
-After those checks pass, set the non-secret execution configuration in
-`~/.swift-claw/clawd.env`:
+Enabling execution needs one line in `~/.swift-claw/clawd.env`; every other `CLAW_EXEC_*`
+variable has a usable default (built-in verified image pin, registries `cgr.dev`, 1024 MiB,
+4 CPUs, 30 s, no egress):
 
 ```bash
 CLAW_EXEC_ENABLED=true
-CLAW_EXEC_IMAGE=cgr.dev/chainguard/python@sha256:55cd38584d1bba1913a1d58da07184cbe512724bc03e822e269404c73cd4c9cd
-CLAW_EXEC_IMAGE_REGISTRIES=cgr.dev
-CLAW_EXEC_MEMORY_MIB=1024
-CLAW_EXEC_CPUS=4
-CLAW_EXEC_TIMEOUT=30
-CLAW_EXEC_ALLOW_EGRESS=false
 ```
 
-Re-pin on an upstream advisory or an intentional maintenance review. Repeat signature plus all
-three attestation checks, interpreter/user inspection, hardening canary, and the mandatory
-`ContainerBackendRealAcceptanceTests` command before changing the configured digest. Automated
-mirroring and refresh scheduling are outside this increment.
+Set the other `CLAW_EXEC_*` variables (see `.env.example`) only to override a default.
+
+Rotate the default pin on an upstream advisory or an intentional maintenance review. Repeat
+signature plus all three attestation checks, interpreter/user inspection, hardening canary, and
+the mandatory `ContainerBackendRealAcceptanceTests` command before changing
+`PinnedImageReference.verifiedDefault`, then update the digest cited in this file and any
+configured `CLAW_EXEC_IMAGE` overrides. Automated mirroring and refresh scheduling are outside
+this increment.
 
 ---
 
@@ -176,8 +181,8 @@ turn and sends the owner the complete redacted script, the staged-inputs table, 
 a taint banner when the turn ingested untrusted content. The tool runs only after the owner approves
 that exact action from Telegram.
 
-**Enable it.** After pinning and verifying the image (previous section), set `CLAW_EXEC_ENABLED=true`
-and the `CLAW_EXEC_*` block in `~/.swift-claw/clawd.env`, then restart `clawd`.
+**Enable it.** Set `CLAW_EXEC_ENABLED=true` in `~/.swift-claw/clawd.env`, then restart `clawd`.
+The built-in verified pin (previous section) is used unless `CLAW_EXEC_IMAGE` overrides it.
 
 **Confirm the sandbox is healthy.** `clawd doctor` prints a `sandbox` row built from one
 `SandboxMaintenance.prepare()` (host/version gates, then a hardening canary). A ready row means every
@@ -199,7 +204,7 @@ call through the trifecta approval.
 
 **If the tool never appears** (calls are refused as unknown), `clawd doctor` explains why. It is
 absent — by design, fail-closed — on Linux, macOS 15, Intel macOS, with `CLAW_EXEC_ENABLED=false`,
-with no or an unpinned `CLAW_EXEC_IMAGE`, when the `container` CLI is missing or below `1.0.0`, or
+with an unpinned `CLAW_EXEC_IMAGE` override, when the `container` CLI is missing or below `1.0.0`, or
 when any hardening canary assertion failed. An owner-enabled sandbox that fails a gate prints a loud
 error row rather than silently degrading.
 
