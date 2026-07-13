@@ -4,6 +4,7 @@ import Foundation
 // MARK: - Owned Reaper
 
 extension ContainerBackend {
+  // swiftlint:disable:next discouraged_optional_collection
   func ownedContainers(deadline: ContinuousClock.Instant) async -> [ListedContainer]? {
     guard
       let containers = await listedContainers(

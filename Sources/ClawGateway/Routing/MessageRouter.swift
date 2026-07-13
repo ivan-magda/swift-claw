@@ -171,6 +171,7 @@ private extension MessageRouter {
     return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
   }
 
+  // swiftlint:disable:next cyclomatic_complexity
   func routeAllowed(
     _ command: Command,
     rawUpdate: RawUpdate,

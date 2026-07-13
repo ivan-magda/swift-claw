@@ -62,6 +62,7 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
     await reapOwnedContainers(deadline: now().advanced(by: Self.prepareTimeout))
   }
 
+  // swiftlint:disable:next discouraged_optional_collection
   func ownedContainerNamesForTesting() async -> [String]? {
     await ownedContainers(deadline: now().advanced(by: Self.prepareTimeout))?
       .compactMap(\.resolvedIdentifier)

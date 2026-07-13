@@ -19,6 +19,7 @@ extension ContainerBackend {
     return document?.status == "running"
   }
 
+  // swiftlint:disable discouraged_optional_boolean
   func containerPresent(
     _ identity: String,
     deadline: ContinuousClock.Instant
@@ -88,6 +89,7 @@ extension ContainerBackend {
     await boundedCommandData(arguments, limit: limit, deadline: deadline) != nil
   }
 
+  // swiftlint:disable discouraged_optional_collection
   func listedContainers(
     limit: Duration,
     deadline: ContinuousClock.Instant
@@ -101,7 +103,9 @@ extension ContainerBackend {
     }
     return nil
   }
+  // swiftlint:enable discouraged_optional_collection
 
+  // swiftlint:disable discouraged_optional_collection
   static func fetchContainerList(
     timeout: Duration,
     commands: any ContainerCommandRunning,
@@ -120,6 +124,7 @@ extension ContainerBackend {
 
     return try? JSONDecoder().decode([ListedContainer].self, from: data)
   }
+  // swiftlint:enable discouraged_optional_collection
 
   // Control commands (stop/kill/rm/list/probe/pull) get the same host-side watchdog as the
   // foreground run: the runner's own timeout is cooperative only, and a wedged control
