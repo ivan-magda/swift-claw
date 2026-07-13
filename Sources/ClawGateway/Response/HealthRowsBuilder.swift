@@ -1,9 +1,23 @@
 import ClawCore
 import Foundation
 
+/// Doctor's view of the owner allowlist. `seeded` counts rows in the allowlist table — the live
+/// boundary `AccessControl` enforces — or is nil when that read failed. `configured` counts the
+/// owner IDs in `CLAW_ALLOWLIST`, which `run` seeds into the table additively at every daemon
+/// start; on a fresh install `seeded` is still 0 while `configured` already names the owner.
+public struct AllowlistHealth: Sendable, Equatable {
+  public let seeded: Int?
+  public let configured: Int
+
+  public init(seeded: Int?, configured: Int) {
+    self.seeded = seeded
+    self.configured = configured
+  }
+}
+
 public enum HealthRowsBuilder {
   public struct Inputs: Sendable {
-    public let allowlistOwners: Int
+    public let allowlist: AllowlistHealth
     public let lastOffset: Int64?
     public let runsHealth: RunsHealth
     public let retryBudget: Int
@@ -17,7 +31,7 @@ public enum HealthRowsBuilder {
     public let freeBytes: Int
 
     public init(
-      allowlistOwners: Int,
+      allowlist: AllowlistHealth,
       lastOffset: Int64?,
       runsHealth: RunsHealth,
       retryBudget: Int,
@@ -30,7 +44,7 @@ public enum HealthRowsBuilder {
       walBytes: Int,
       freeBytes: Int
     ) {
-      self.allowlistOwners = allowlistOwners
+      self.allowlist = allowlist
       self.lastOffset = lastOffset
       self.runsHealth = runsHealth
       self.retryBudget = retryBudget
@@ -54,11 +68,12 @@ public enum HealthRowsBuilder {
 
 private extension HealthRowsBuilder {
   static func databaseChecks(_ inputs: Inputs) -> [DoctorReport.Check] {
-    [
+    let owners = ownersOutcome(inputs.allowlist)
+    return [
       DoctorReport.Check(
         key: "allowlist.owners",
-        value: "\(inputs.allowlistOwners)",
-        ok: inputs.allowlistOwners >= 1,
+        value: owners.value,
+        ok: owners.ok,
         group: .database
       ),
       DoctorReport.Check(
@@ -68,6 +83,24 @@ private extension HealthRowsBuilder {
         group: .database
       ),
     ]
+  }
+
+  /// "At least one owner can reach the bot." The seeded table is the boundary `AccessControl`
+  /// enforces, but a fresh install runs `doctor` before the first `run` has seeded config into it,
+  /// so configured owners keep that state healthy — the value names the pending seed. An unreadable
+  /// table FAILs regardless of config: the boundary fails closed, locking every owner out until the
+  /// read recovers.
+  static func ownersOutcome(_ owners: AllowlistHealth) -> (value: String, ok: Bool) {
+    guard let seeded = owners.seeded else {
+      return ("unreadable (db read failed)", false)
+    }
+    if seeded >= 1 {
+      return ("\(seeded)", true)
+    }
+    if owners.configured >= 1 {
+      return ("0 seeded, \(owners.configured) configured (seeded at daemon start)", true)
+    }
+    return ("0", false)
   }
 
   static func runChecks(_ inputs: Inputs) -> [DoctorReport.Check] {
