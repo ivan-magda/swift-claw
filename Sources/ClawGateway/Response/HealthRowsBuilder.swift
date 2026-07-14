@@ -1,10 +1,6 @@
 import ClawCore
 import Foundation
 
-/// Doctor's view of the owner allowlist. `seeded` counts rows in the allowlist table — the live
-/// boundary `AccessControl` enforces — or is nil when that read failed. `configured` counts the
-/// owner IDs in `CLAW_ALLOWLIST`, which `run` seeds into the table additively at every daemon
-/// start; on a fresh install `seeded` is still 0 while `configured` already names the owner.
 public struct AllowlistHealth: Sendable, Equatable {
   public let seeded: Int?
   public let configured: Int
@@ -85,21 +81,19 @@ private extension HealthRowsBuilder {
     ]
   }
 
-  /// "At least one owner can reach the bot." The seeded table is the boundary `AccessControl`
-  /// enforces, but a fresh install runs `doctor` before the first `run` has seeded config into it,
-  /// so configured owners keep that state healthy — the value names the pending seed. An unreadable
-  /// table FAILs regardless of config: the boundary fails closed, locking every owner out until the
-  /// read recovers.
   static func ownersOutcome(_ owners: AllowlistHealth) -> (value: String, ok: Bool) {
     guard let seeded = owners.seeded else {
       return ("unreadable (db read failed)", false)
     }
+
     if seeded >= 1 {
       return ("\(seeded)", true)
     }
+
     if owners.configured >= 1 {
       return ("0 seeded, \(owners.configured) configured (seeded at daemon start)", true)
     }
+
     return ("0", false)
   }
 
