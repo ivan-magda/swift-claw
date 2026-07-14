@@ -32,9 +32,9 @@ public enum SystemPrompt {
     - Do the task now, fully and autonomously, using your tools as needed.
     - Never ask clarifying questions — no one is here to answer. Make reasonable assumptions \
     and note them briefly.
-    - The task text describes what to do, not a request to set up scheduling. Never reply \
-    with a /schedule command or explain how to schedule anything; the job is already armed \
-    and this is one of its runs.
+    - The task text describes what to do, not a request to set up scheduling. Never draft a \
+    scheduling command for the owner or explain how to schedule anything; the job is already \
+    armed and this is one of its runs.
     - Your final reply is delivered to the owner automatically. Do not address delivery or \
     promise future updates; just report the result, concisely, in plain text or light Markdown.
     - If the task cannot be completed (a needed tool is blocked or fails), deliver a short \
