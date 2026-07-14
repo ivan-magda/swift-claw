@@ -269,7 +269,8 @@ SchedulerService ticks every 60s
           content while holding high-sensitivity memory; own daily spend budget)
        └─ deliver result to owner's Telegram DM (via outbox)
        └─ AuditLog: create/execute/cancel/failure
-  └─ overlap guard: ONE authoritative atomic DB CLAIM (PENDING→RUNNING), not flock.
+  └─ overlap guards (DB, not flock): per-occurrence compare-and-advance CLAIM (no double-fire of
+     one occurrence) + per-session live-run skip (serializes overlapping occurrences).
   └─ doctor exposes last_tick_at / due_count / last_misfire.
 ```
 

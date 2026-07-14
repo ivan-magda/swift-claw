@@ -166,16 +166,18 @@ extension ScheduledJobStoreGRDB {
       // Step 1: the compare-and-advance. This IS the atomic claim expressed on the occurrence:
       // the WHERE arms (id, stored due, ACTIVE) make two racers for the same (job, due)
       // structurally single-winner.
+      // `last_fired_at` is deliberately NOT set here: it must move only when a run is actually
+      // created, so an overlap-skipped fire (insertFireRows → nil) leaves it untouched, like a
+      // misfire skip. insertFireRows stamps it with `fireAt` after the overlap guard passes.
       if let nextOccurrence {
         try db.execute(
           sql: """
             UPDATE scheduled_jobs
-            SET next_occurrence = ?, last_fired_at = ?, updated_ts = ?
+            SET next_occurrence = ?, updated_ts = ?
             WHERE id = ? AND next_occurrence = ? AND status = ?
             """,
           arguments: [
             EpochSecondCodec.epoch(nextOccurrence),
-            EpochSecondCodec.epoch(fireAt),
             EpochSecondCodec.epoch(now),
             jobId,
             EpochSecondCodec.epoch(due),
@@ -187,11 +189,10 @@ extension ScheduledJobStoreGRDB {
         try db.execute(
           sql: """
             UPDATE scheduled_jobs
-            SET next_occurrence = NULL, last_fired_at = ?, status = ?, updated_ts = ?
+            SET next_occurrence = NULL, status = ?, updated_ts = ?
             WHERE id = ? AND next_occurrence = ? AND status = ?
             """,
           arguments: [
-            EpochSecondCodec.epoch(fireAt),
             ScheduledJobStatus.completed.rawValue,
             EpochSecondCodec.epoch(now),
             jobId,
@@ -204,13 +205,20 @@ extension ScheduledJobStoreGRDB {
       guard db.changesCount > 0 else {
         return nil
       }
-      return try Self.insertFireRows(db, jobId: jobId, now: now)
+      return try Self.insertFireRows(db, jobId: jobId, fireAt: fireAt, now: now)
     }
   }
 
-  /// Steps 3-6 of the fire transaction: lazy session, trigger message, PENDING run, audit.
-  /// Shared verbatim by `fireNow` (which skips only step 1's advance).
-  static func insertFireRows(_ db: Database, jobId: Int64, now: Date) throws -> ClaimedFire? {
+  /// Steps 3-6 of the fire transaction: lazy session, trigger message, PENDING run, audit, and the
+  /// `last_fired_at` stamp. Shared by `claimAndFire` (which advances the schedule first) and
+  /// `fireNow` (which doesn't). `fireAt` is the fire's logical instant — `claimAndFire`'s T_fire,
+  /// `now` for `fireNow` — recorded to `last_fired_at` only if the overlap guard lets the fire run.
+  static func insertFireRows(
+    _ db: Database,
+    jobId: Int64,
+    fireAt: Date,
+    now: Date
+  ) throws -> ClaimedFire? {
     guard
       let jobRow = try Row.fetchOne(
         db,
@@ -241,6 +249,13 @@ extension ScheduledJobStoreGRDB {
     ) {
       return nil
     }
+
+    // The overlap guard passed — this fire creates a run, so stamp last_fired_at now (never on the
+    // claim, which also matches an about-to-be-skipped occurrence). Rides the same transaction.
+    try db.execute(
+      sql: "UPDATE scheduled_jobs SET last_fired_at = ?, updated_ts = ? WHERE id = ?",
+      arguments: [EpochSecondCodec.epoch(fireAt), EpochSecondCodec.epoch(now), jobId]
+    )
 
     // Each fire opens on a fresh context window (the /new mechanism): prior fires stay durable
     // for audit and FTS, but a past turn — including a bad one — never replays into this run's
@@ -312,15 +327,11 @@ extension ScheduledJobStoreGRDB {
         return .ineligible
       }
 
-      // A real fire for the bookkeeping (last_fired_at), but NO schedule advance and NO status
-      // change — /runnow on a PAUSED job tests it without unmuting it.
-      try db.execute(
-        sql: "UPDATE scheduled_jobs SET last_fired_at = ?, updated_ts = ? WHERE id = ?",
-        arguments: [EpochSecondCodec.epoch(now), EpochSecondCodec.epoch(now), jobId]
-      )
-      // A nil from the shared insert means the overlap guard skipped this fire (a prior run on
-      // the session is still live) — distinct from an absent job, so the owner ack can differ.
-      guard let fire = try Self.insertFireRows(db, jobId: jobId, now: now) else {
+      // NO schedule advance and NO status change — /runnow on a PAUSED job tests it without
+      // unmuting it. insertFireRows stamps last_fired_at (fireAt = now) only if a run is created;
+      // a nil means the overlap guard skipped this fire (a prior run on the session is still
+      // live) — distinct from an absent job, so the owner ack can differ.
+      guard let fire = try Self.insertFireRows(db, jobId: jobId, fireAt: now, now: now) else {
         return .skippedActiveRun
       }
       return .fired(fire)

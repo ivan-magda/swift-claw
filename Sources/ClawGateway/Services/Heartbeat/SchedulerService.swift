@@ -5,9 +5,10 @@ import Logging
 import ServiceLifecycle
 
 /// The 60 s wall-clock ticker: scans due jobs, claims each through the store's fused
-/// compare-and-advance (the ONE overlap guard), applies the misfire table, and
-/// enqueues claimed fires onto their job session's lane. Tick-level mutual exclusion is
-/// structural: one instance, one sequential loop; cross-process exclusion is the startup flock.
+/// compare-and-advance (the per-occurrence overlap guard, backed by a per-session live-run skip
+/// that serializes overlapping occurrences), applies the misfire table, and enqueues claimed fires
+/// onto their job session's lane. Tick-level mutual exclusion is structural: one instance, one
+/// sequential loop; cross-process exclusion is the startup flock.
 public struct SchedulerService: Service {
   /// The tick grain (ARCHITECTURE.md §6.3, pinned — not config): coarse enough to be negligible
   /// load, fine enough that an on-time fire lands within a minute of its occurrence. The misfire

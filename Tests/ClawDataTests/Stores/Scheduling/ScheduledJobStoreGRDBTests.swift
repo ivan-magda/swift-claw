@@ -823,6 +823,10 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try windowStart(queue, sessionId: firstFire.sessionId) == windowBeforeSecond)
     #expect(try auditCount(queue, action: .jobOverlapSkipped) == 1)
 
+    // and last_fired_at still records the prior REAL fire (dueFirst), not the skipped occurrence's
+    // fireAt (dueNext) — a skip creates no run, so it must not move the fire clock
+    #expect(try store.job(id: job.id)?.lastFiredAt == dueFirst)
+
     // and the parked run's trigger is still inside its context window
     let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
       sessionId: firstFire.sessionId,
@@ -860,6 +864,8 @@ extension ScheduledJobStoreGRDBTests {
     let resumedFire = try #require(secondFire)
     #expect(resumedFire.sessionId == firstFire.sessionId)
     #expect(try auditCount(queue, action: .jobOverlapSkipped) == 0)
+    // a real (non-overlap) fire DOES advance the fire clock to its fireAt
+    #expect(try store.job(id: job.id)?.lastFiredAt == dueNext)
     let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
       sessionId: resumedFire.sessionId,
       throughMessageId: resumedFire.triggerMessageId,
@@ -926,5 +932,7 @@ extension ScheduledJobStoreGRDBTests {
     )
     #expect(try windowStart(queue, sessionId: firstFire.sessionId) == windowBeforeSecond)
     #expect(try auditCount(queue, action: .jobOverlapSkipped) == 1)
+    // the skipped /runnow left the fire clock on the first real fire (baseNow), not dueFirst
+    #expect(try store.job(id: job.id)?.lastFiredAt == baseNow)
   }
 }
