@@ -219,7 +219,7 @@ struct ScheduleHandlers: Sendable {
     }
     try await replies.claimUpdate(updateId: rawUpdate.updateId, chatId: message.chatId)
 
-    let fire = try await replies.perform(
+    let outcome = try await replies.perform(
       "run-now",
       updateId: rawUpdate.updateId,
       chatId: message.chatId,
@@ -228,23 +228,31 @@ struct ScheduleHandlers: Sendable {
       try schedule.jobs.fireNow(jobId: jobId, now: now())
     }
 
-    guard let fire else {
+    switch outcome {
+    case .ineligible:
       return await replies.sendCommandAck(
         updateId: rawUpdate.updateId,
         chatId: message.chatId,
         text: ScheduleReplies.notFound(id: jobId)
       )
+    case .skippedActiveRun:
+      // A real job, but a prior run on its session is still live — the fire was skipped, not
+      // failed. Tell the owner rather than claiming the job doesn't exist.
+      return await replies.sendCommandAck(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: ScheduleReplies.alreadyRunning(id: jobId)
+      )
+    case .fired(let fire):
+      // The fused fireNow already created the session, trigger message, PENDING run, and
+      // jobExecuted audit; TurnEnqueuer gives the run ordering and cancellability.
+      await enqueuer.enqueue(fire: fire)
+      return await replies.sendCommandAck(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: ScheduleReplies.runningNow(id: jobId)
+      )
     }
-
-    // The fused fireNow already created the session, trigger message, PENDING run, and
-    // jobExecuted audit; TurnEnqueuer gives the run ordering and cancellability.
-    await enqueuer.enqueue(fire: fire)
-
-    return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      chatId: message.chatId,
-      text: ScheduleReplies.runningNow(id: jobId)
-    )
   }
 
   func cancelJob(

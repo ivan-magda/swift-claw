@@ -1,11 +1,18 @@
 import Foundation
 
 /// Which pathway created a run. The single discriminator driving reduced privilege, the
-/// proactive budget, and doctor metrics; persisted via rawValue in `runs.origin`.
+/// proactive budget, context assembly, and doctor metrics; persisted via rawValue in
+/// `runs.origin`.
 public enum RunOrigin: String, Sendable, Equatable {
   case interactive
   case scheduled
   case heartbeat
+
+  /// True for the origins that run with no owner present (a scheduled job or heartbeat fire) —
+  /// the pair every proactive gate (budget, prompt selection, context isolation) keys on.
+  public var isProactive: Bool {
+    self != .interactive
+  }
 }
 
 /// The scheduled-job status FSM. `completed`/`cancelled` are terminal; terminal rows

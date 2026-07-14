@@ -247,6 +247,28 @@ import Testing
     #expect(await harness.dispatcher.calls.count == 1)
   }
 
+  @Test func runNowOnAJobWithALiveRunTellsTheOwnerItIsAlreadyRunning() async throws {
+    // given — a first /runnow left a live PENDING run on the job's session (the fake dispatcher
+    // never drives it terminal, so it stays live)
+    let harness = try makeHarness()
+    let seeded = try seedDailyJob(harness)
+    await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/runnow \(seeded.id)")
+    )
+    await harness.dispatcher.waitForCalls(atLeast: 1)
+
+    // when — a second /runnow (a new update id) while that run is still live
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 2, from: 42, text: "/runnow \(seeded.id)")
+    )
+
+    // then — the owner is told a run is in progress, NOT "no schedule with id …"; nothing new ran
+    #expect(outcome == .processed)
+    #expect(await harness.dispatcher.calls.count == 1)
+    let reply = await harness.transport.sent.last?.text ?? ""
+    #expect(reply == ScheduleReplies.alreadyRunning(id: seeded.id))
+  }
+
   @Test func cancelRetainsTheRowAndStopsFutureFires() async throws {
     // given
     let harness = try makeHarness()

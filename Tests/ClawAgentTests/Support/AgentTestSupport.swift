@@ -20,6 +20,7 @@ actor StubProvider: LLMProvider {
 
   private let outcome: Outcome
   private(set) var calls = 0
+  private(set) var lastRequest: ChatRequest?
 
   init(_ outcome: Outcome) {
     self.outcome = outcome
@@ -27,6 +28,8 @@ actor StubProvider: LLMProvider {
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
     calls += 1
+    lastRequest = request
+
     switch outcome {
     case .respond(let response): return response
     case .fail(let error): throw error

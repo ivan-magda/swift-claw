@@ -79,18 +79,25 @@ private struct HeartbeatWorkspace: WorkspaceReading {
     heartbeat: HeartbeatSettings,
     state: SchedulerState,
     file: LoadedFile,
-    now: Date
+    now: Date,
+    firesHeartbeat: Bool = true
   ) -> Fixture {
-    let store = ScriptedJobStore(
-      jobs: [],
-      claimResult: nil,
-      state: state,
-      heartbeatResult: ClaimedFire(
+    // firesHeartbeat == false models the store's overlap skip: fireHeartbeat returns nil because a
+    // prior beat's run is still live, so the service must audit an overlap skip rather than fire.
+    let heartbeatResult =
+      firesHeartbeat
+      ? ClaimedFire(
         runId: 901,
         sessionId: 501,
         triggerMessageId: 301,
         ownerChatId: heartbeat.ownerChatId ?? 0
       )
+      : nil
+    let store = ScriptedJobStore(
+      jobs: [],
+      claimResult: nil,
+      state: state,
+      heartbeatResult: heartbeatResult
     )
     let runner = FakeTurnRunner()
     let audit = RecordingAuditLog()
@@ -175,6 +182,26 @@ private struct HeartbeatWorkspace: WorkspaceReading {
           triggerMessageId: 301
         )
     )
+  }
+
+  @Test func overlapSkipIsAuditedWithTheOverlapReason() async throws {
+    // given — enabled, due, under cap, non-empty file, but a prior beat's run is still live so the
+    // store skips the fire (fireHeartbeat returns nil)
+    let fixture = makeFixture(
+      heartbeat: settings(),
+      state: state(lastHeartbeatAt: nil),
+      file: presentFile("- check backups"),
+      now: Self.daytime,
+      firesHeartbeat: false
+    )
+
+    // when
+    await fixture.service.tick()
+
+    // then — no run enqueued, and the skip is audited with the overlap reason in `decision`,
+    // exactly like every other beat skip (not a divergent argsRedacted shape)
+    #expect(skipDecisions(fixture) == [HeartbeatSkipReason.overlap.rawValue])
+    #expect(await fixture.runner.calls.isEmpty)
   }
 
   @Test func notDueYetStaysSilentWithNoAudit() async throws {

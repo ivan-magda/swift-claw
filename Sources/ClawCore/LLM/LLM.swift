@@ -38,6 +38,7 @@ public struct ChatRequest: Sendable, Equatable {
   public let stop: [String]?
   public let tools: [ToolDefinition]
   public let responseFormat: ResponseFormat?
+  public let sessionId: String?
 
   public init(
     model: String,
@@ -46,7 +47,8 @@ public struct ChatRequest: Sendable, Equatable {
     // swiftlint:disable:next discouraged_optional_collection
     stop: [String]? = nil,
     tools: [ToolDefinition] = [],
-    responseFormat: ResponseFormat? = nil
+    responseFormat: ResponseFormat? = nil,
+    sessionId: String? = nil
   ) {
     self.model = model
     self.messages = messages
@@ -54,6 +56,7 @@ public struct ChatRequest: Sendable, Equatable {
     self.stop = stop
     self.tools = tools
     self.responseFormat = responseFormat
+    self.sessionId = sessionId
   }
 }
 

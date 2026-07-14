@@ -139,7 +139,7 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
 
   func listAll() throws(StoreError) -> [ScheduledJob] { [] }
 
-  func fireNow(jobId: Int64, now: Date) throws(StoreError) -> ClaimedFire? {
+  func fireNow(jobId: Int64, now: Date) throws(StoreError) -> RunNowOutcome {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
@@ -166,13 +166,10 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     ownerChatId: Int64,
     now: Date,
     day: String
-  ) throws(StoreError) -> ClaimedFire {
+  ) throws(StoreError) -> ClaimedFire? {
     lock.lock()
     defer { lock.unlock() }
     recordedHeartbeats.append(HeartbeatCall(prompt: prompt, ownerChatId: ownerChatId, day: day))
-    guard let heartbeatResult else {
-      throw StoreError.unexpected("fireHeartbeat called without a scripted result")
-    }
     return heartbeatResult
   }
 }

@@ -71,6 +71,7 @@ extension DaemonBuilder {
     )
     return ContextBuilder(
       systemPrompt: SystemPrompt.minimal,
+      proactiveSystemPrompt: SystemPrompt.proactive,
       workspace: workspace,
       memoryStore: stores.memory,
       retriever: stores.retriever,

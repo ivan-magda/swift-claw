@@ -100,6 +100,89 @@ import Testing
     #expect(jsonSchema["schema"] is [String: Any])
   }
 
+  @Test func emitsSessionIdWhenProviderIsOpenRouter() async throws {
+    // given — an OpenRouter base URL and a request carrying a session trace id
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(
+      config: makeConfig(baseURL: "https://openrouter.ai/api/v1"),
+      http: exec
+    )
+    let request = ChatRequest(
+      model: "gpt-4o",
+      messages: [ChatMessage(role: .user, content: "hi")],
+      maxOutputTokens: 256,
+      sessionId: "clawd-session-7"
+    )
+
+    // when
+    _ = try await provider.complete(request: request)
+
+    // then — the proprietary OpenRouter grouping field rides the body
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    #expect(body["session_id"] as? String == "clawd-session-7")
+  }
+
+  @Test func omitsSessionIdWhenProviderIsNotOpenRouter() async throws {
+    // given — the same session-carrying request but a non-OpenRouter host
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(
+      config: makeConfig(baseURL: "https://api.openai.com/v1"),
+      http: exec
+    )
+    let request = ChatRequest(
+      model: "gpt-4o",
+      messages: [ChatMessage(role: .user, content: "hi")],
+      maxOutputTokens: 256,
+      sessionId: "clawd-session-7"
+    )
+
+    // when
+    _ = try await provider.complete(request: request)
+
+    // then — the key is absent so the body stays a plain OpenAI-compatible request
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    #expect(body["session_id"] == nil)
+  }
+
+  @Test func omitsSessionIdWhenRequestHasNone() async throws {
+    // given — OpenRouter host but the request carries no session id
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(
+      config: makeConfig(baseURL: "https://openrouter.ai/api/v1"),
+      http: exec
+    )
+    let request = ChatRequest(
+      model: "gpt-4o",
+      messages: [ChatMessage(role: .user, content: "hi")],
+      maxOutputTokens: 256
+    )
+
+    // when
+    _ = try await provider.complete(request: request)
+
+    // then — nil session id encodes no key (not a null)
+    let recorded = try #require(await exec.recorded.first)
+    let body = try decodeBody(recorded.body)
+    #expect(body["session_id"] == nil)
+  }
+
+  @Test(
+    arguments: [
+      ("https://openrouter.ai/api/v1", true),
+      ("https://OpenRouter.ai/api/v1", true),
+      ("https://api.openai.com/v1", false),
+      ("http://localhost:11434/v1", false),
+      ("", false),
+      ("not a url", false),
+    ]
+  )
+  func baseURLIsOpenRouterDetectsHost(baseURL: String, expected: Bool) {
+    // given / when / then — detection is an exact, case-insensitive host match
+    #expect(OpenAICompatibleProvider.baseURLIsOpenRouter(baseURL) == expected)
+  }
+
   @Test func nullContentBecomesEmptyAndAbsentUsageBecomesNil() async throws {
     // given — Ollama-style: null content and no usage object
     let json = #"{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":null}}]}"#

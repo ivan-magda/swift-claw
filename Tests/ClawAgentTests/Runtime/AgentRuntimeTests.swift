@@ -77,6 +77,33 @@ struct AgentRuntimeTests {
     #expect(usage.costUSD > 0)  // never a silent $0 (D1/F19)
   }
 
+  @Test("a turn stamps the request with the namespaced session trace id")
+  func turnStampsRequestWithSessionTraceId() async throws {
+    // given
+    let provider = StubProvider(.respond(okResponse(content: "hi")))
+    let runtime = makeRuntime(provider: provider)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 42,
+      chatId: 3,
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hi")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the request carries the OpenRouter-grouping id derived from the session id
+    _ = try requireCompleted(outcome.result)
+    #expect(await provider.lastRequest?.sessionId == "clawd-session-42")
+  }
+
   @Test("a turn issues a typing pulse before the provider answers")
   func turnIssuesTypingPulseBeforeProviderAnswers() async throws {
     // given — the provider can't answer until typing has fired at least once (gate-released on the
