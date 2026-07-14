@@ -16,6 +16,7 @@ public struct ContextBuilder: Sendable {
   private static let historyTruncatedMarker = "\n\n[…earlier conversation truncated]"
 
   private let systemPrompt: String
+  private let proactiveSystemPrompt: String
 
   private let workspace: any WorkspaceReading
   private let memoryStore: any MemoryStore
@@ -30,6 +31,7 @@ public struct ContextBuilder: Sendable {
 
   public init(
     systemPrompt: String,
+    proactiveSystemPrompt: String = SystemPrompt.proactive,
     workspace: any WorkspaceReading,
     memoryStore: any MemoryStore,
     retriever: any Retriever,
@@ -40,6 +42,7 @@ public struct ContextBuilder: Sendable {
     warn: @escaping @Sendable (String) -> Void = { _ in }
   ) {
     self.systemPrompt = systemPrompt
+    self.proactiveSystemPrompt = proactiveSystemPrompt
 
     self.workspace = workspace
     self.memoryStore = memoryStore
@@ -55,15 +58,17 @@ public struct ContextBuilder: Sendable {
 
   public func assemble(
     snapshot: SessionContextSnapshot,
-    sessionId: Int64
+    sessionId: Int64,
+    origin: RunOrigin
   ) throws -> BuildResult {
     var ownerNotices: [String] = []
 
-    let fixedSections = buildFixedSections(ownerNotices: &ownerNotices)
+    let fixedSections = buildFixedSections(origin: origin, ownerNotices: &ownerNotices)
     let residual = residualAfterFixedSections(fixedSections)
     let truncatableSections = buildTruncatableSections(
       snapshot: snapshot,
       sessionId: sessionId,
+      origin: origin,
       residual: residual
     )
 
@@ -85,14 +90,17 @@ public struct ContextBuilder: Sendable {
 // MARK: - Section Assembly
 
 private extension ContextBuilder {
-  func buildFixedSections(ownerNotices: inout [String]) -> [FittableSection] {
+  func buildFixedSections(
+    origin: RunOrigin,
+    ownerNotices: inout [String]
+  ) -> [FittableSection] {
     [
       section(
         id: .policy,
         units: [
           SectionUnit(
             id: "policy",
-            content: systemPrompt,
+            content: origin.isProactive ? proactiveSystemPrompt : systemPrompt,
             canTruncate: false
           )
         ]
@@ -132,12 +140,18 @@ private extension ContextBuilder {
   func buildTruncatableSections(
     snapshot: SessionContextSnapshot,
     sessionId: Int64,
+    origin: RunOrigin,
     residual: Int
   ) -> [FittableSection] {
     [
       memoryItemsSection(snapshot: snapshot, residual: residual),
       historySection(snapshot: snapshot, residual: residual),
-      recallSection(snapshot: snapshot, sessionId: sessionId, residual: residual),
+      // Proactive runs never recall: the retriever's dedup excludes only the CURRENT window,
+      // so after a per-fire window reset a recall search would resurface exactly the prior-fire
+      // turns (and the owner's DM chat about arming the job) that the reset fenced off.
+      origin.isProactive
+        ? nil
+        : recallSection(snapshot: snapshot, sessionId: sessionId, residual: residual),
       skillsSection(residual: residual),
     ].compactMap { $0 }
   }
@@ -377,14 +391,17 @@ public extension ContextBuilder {
   /// The system-tier prompt materials in the pinned order (ARCHITECTURE.md §11), RAW (pre "## path"
   /// wrapping), folded into the injected static sub-hash. Reused verbatim at pick-up (the
   /// persisted `policy_version`, stamped by `TurnRunner`) and recomputed at callback resolution so
-  /// the two can never diverge. `public` because `TurnRunner` (ClawGateway) stamps with it
-  /// cross-module and `assemble` returns it — a `private` helper would be invisible to both the
-  /// stamp seam and `@testable`.
+  /// the two can never diverge. BOTH prompt variants fold in — the recompute seams are zero-argument
+  /// closures with no run (hence no origin) in scope, so the fingerprint must be origin-independent;
+  /// an edit to either variant conservatively invalidates parked approvals. `public` because
+  /// `TurnRunner` (ClawGateway) stamps with it cross-module and `assemble` returns it — a `private`
+  /// helper would be invisible to both the stamp seam and `@testable`.
   func currentPolicyVersion() -> String {
     PolicyFingerprint.combined(
       staticSubhash: policyStaticSubhash,
       promptMaterials: [
         systemPrompt,
+        proactiveSystemPrompt,
         rawPromptText(.soul),
         rawPromptText(.agents),
         rawPromptText(.tools),

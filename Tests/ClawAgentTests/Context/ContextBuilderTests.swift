@@ -32,7 +32,7 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
     #expect(result.messages.map(\.role) == [.system, .user, .user, .assistant])
@@ -76,12 +76,14 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 1)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
 
     // then — combined = first 16 hex over [staticSubhash, systemPrompt, soul, agents, tools]
     let expected = PolicyFingerprint.combined(
       staticSubhash: "static-sub-hash",
-      promptMaterials: ["system policy", "soul text", "agent rules", "tool policy"]
+      promptMaterials: [
+        "system policy", "proactive policy", "soul text", "agent rules", "tool policy",
+      ]
     )
     #expect(result.policyVersion == expected)
     #expect(result.policyVersion.count == 16)
@@ -105,7 +107,8 @@ struct ContextBuilderTests {
 
     // when
     let standalone = builder.currentPolicyVersion()
-    let assembled = try builder.assemble(snapshot: snapshot, sessionId: 1).policyVersion
+    let assembled = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
+      .policyVersion
 
     // then
     #expect(standalone == assembled)
@@ -123,7 +126,7 @@ struct ContextBuilderTests {
       version
         == PolicyFingerprint.combined(
           staticSubhash: "sub",
-          promptMaterials: ["system policy", "", "", ""]
+          promptMaterials: ["system policy", "proactive policy", "", "", ""]
         )
     )
   }
@@ -157,7 +160,7 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
     #expect(result.messages.count == 1)
@@ -187,7 +190,7 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
     #expect(memoryStore.fetchRankedCalls == [true])
@@ -226,7 +229,7 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
     #expect(retriever.calls.count == 1)
@@ -265,7 +268,7 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
     let untrusted = try #require(result.messages.first { message in message.role == .user })
@@ -301,7 +304,7 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
     #expect(result.messages.suffix(2).map(\.content) == ["middle", "new"])
@@ -333,7 +336,7 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
     #expect(result.messages.suffix(1).map(\.content) == ["newest"])
@@ -365,11 +368,52 @@ struct ContextBuilderTests {
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42)
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
     #expect(result.messages.last?.role == .user)
     #expect(result.messages.last?.content == "what is the meaning of this")
+  }
+
+  @Test(arguments: [RunOrigin.scheduled, RunOrigin.heartbeat])
+  func proactiveOriginSelectsTheProactivePromptAndSkipsRecall(origin: RunOrigin) throws {
+    // given — recall hits that a proactive run must never consult
+    let retriever = FakeRetriever(
+      hits: [
+        RecallHit(
+          id: 90,
+          sessionId: 2,
+          role: .user,
+          content: "owner DM about arming this schedule",
+          score: RecallScore(value: 10),
+          createdAt: Date(timeIntervalSince1970: 90)
+        )
+      ]
+    )
+    let builder = makeBuilder(retriever: retriever)
+    let snapshot = SessionContextSnapshot(
+      history: [
+        StoredMessage(role: .user, content: "follow the tournament daily", provenance: .trusted)
+      ],
+      historyMessageIds: [10],
+      windowStartMessageId: 0,
+      isTainted: false,
+      hasPrivateData: false
+    )
+
+    // when
+    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: origin)
+
+    // then — the proactive policy rides the system tier; the retriever is never consulted
+    #expect(result.messages[0].content.contains("proactive policy"))
+    #expect(result.messages[0].content.contains("system policy") == false)
+    #expect(retriever.calls.isEmpty)
+    #expect(
+      result.messages.contains { message in
+        message.content.contains("label=\"recall\"")
+      } == false
+    )
+    #expect(result.messages.last?.content == "follow the tournament daily")
   }
 }
 
@@ -382,6 +426,7 @@ private func makeBuilder(
 ) -> ContextBuilder {
   ContextBuilder(
     systemPrompt: "system policy",
+    proactiveSystemPrompt: "proactive policy",
     workspace: workspace,
     memoryStore: memoryStore,
     retriever: retriever,
