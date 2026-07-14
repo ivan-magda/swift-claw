@@ -297,7 +297,7 @@ extension ScheduledJobStoreGRDB {
 // MARK: - Run-Now and Misfire Skip
 
 extension ScheduledJobStoreGRDB {
-  public func fireNow(jobId: Int64, now: Date) throws(StoreError) -> ClaimedFire? {
+  public func fireNow(jobId: Int64, now: Date) throws(StoreError) -> RunNowOutcome {
     try database.writeMapping { db in
       let rawStatus = try String.fetchOne(
         db,
@@ -309,7 +309,7 @@ extension ScheduledJobStoreGRDB {
         let status = ScheduledJobStatus(rawValue: rawStatus),
         status == .active || status == .paused
       else {
-        return nil
+        return .ineligible
       }
 
       // A real fire for the bookkeeping (last_fired_at), but NO schedule advance and NO status
@@ -318,7 +318,12 @@ extension ScheduledJobStoreGRDB {
         sql: "UPDATE scheduled_jobs SET last_fired_at = ?, updated_ts = ? WHERE id = ?",
         arguments: [EpochSecondCodec.epoch(now), EpochSecondCodec.epoch(now), jobId]
       )
-      return try Self.insertFireRows(db, jobId: jobId, now: now)
+      // A nil from the shared insert means the overlap guard skipped this fire (a prior run on
+      // the session is still live) — distinct from an absent job, so the owner ack can differ.
+      guard let fire = try Self.insertFireRows(db, jobId: jobId, now: now) else {
+        return .skippedActiveRun
+      }
+      return .fired(fire)
     }
   }
 
@@ -581,14 +586,10 @@ extension ScheduledJobStoreGRDB {
       )
 
       // Same overlap guard as a job fire: a prior beat still in flight owns the shared heartbeat
-      // window; resetting it here would empty that beat's context on resume. Skip this beat.
-      if try Self.shouldSkipOverlappingFire(
-        db,
-        sessionId: sessionId,
-        action: .heartbeatSkipped,
-        argsRedacted: "{\"reason\":\"overlap\"}",
-        now: now
-      ) {
+      // window; resetting it here would empty that beat's context on resume. Skip this beat by
+      // returning nil — overlap is fireHeartbeat's only nil reason, so nil alone carries the
+      // signal. The caller records the canonical heartbeat_skipped audit (reason in `decision`).
+      if try RunStoreGRDB.hasLiveRun(db, sessionId: sessionId) {
         return nil
       }
 
@@ -664,11 +665,11 @@ extension ScheduledJobStoreGRDB {
 // MARK: - Fire-Row Helpers
 
 private extension ScheduledJobStoreGRDB {
-  /// The per-session serialization guard shared by both fire paths: true (and a skip audit
+  /// The job fire's per-session serialization guard: true (and a `.jobOverlapSkipped` audit
   /// written in the fire transaction) when the target session already carries a live run.
   /// Firing again would reset the shared context window out from under that run, emptying its
-  /// context on resume — so the caller drops this occurrence like a misfire. Job and heartbeat
-  /// fires differ only in the audit action and its args.
+  /// context on resume — so the caller drops this occurrence like a misfire. (The heartbeat path
+  /// returns nil instead and audits from the gateway, where its skip-reason enum lives.)
   static func shouldSkipOverlappingFire(
     _ db: Database,
     sessionId: Int64,

@@ -111,6 +111,11 @@ public enum ScheduleReplies {
     "Running schedule \(id) now. You'll get the result like any scheduled delivery."
   }
 
+  /// `/runnow` on a job whose previous run hasn't finished: the fire is skipped, not failed.
+  public static func alreadyRunning(id: Int64) -> String {
+    "Schedule \(id) already has a run in progress. Wait for it to finish, then try again."
+  }
+
   static func fireTime(_ date: Date, timezoneId: String) -> String {
     let zone = TimeZone(identifier: timezoneId) ?? .gmt  // id was validated upstream
     return date.wallClockMinute(in: zone)

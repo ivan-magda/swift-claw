@@ -34,6 +34,18 @@ public struct ClaimedFire: Sendable, Equatable {
   }
 }
 
+/// Outcome of a `/runnow` attempt. A bare optional could not tell "no such job" apart from
+/// "the job exists but a prior run on its session is still live" — the owner-facing ack differs.
+public enum RunNowOutcome: Sendable, Equatable {
+  /// The fire proceeded; the run is ready to enqueue.
+  case fired(ClaimedFire)
+  /// A prior run on this job's session is still live, so the fire was skipped to protect its
+  /// context window. The job is healthy — the owner should be told a run is already in progress.
+  case skippedActiveRun
+  /// The job is absent or not in an active/paused state — nothing to run now.
+  case ineligible
+}
+
 public protocol ScheduledJobStore: Sendable {
   func create(_ job: NewScheduledJob, now: Date) throws(StoreError) -> ScheduledJob
   func job(id: Int64) throws(StoreError) -> ScheduledJob?
@@ -56,9 +68,10 @@ public protocol ScheduledJobStore: Sendable {
     now: Date
   ) throws(StoreError) -> ClaimedFire?
 
-  /// Run-now: the same fused insert set with NO schedule advance. Requires
-  /// status ACTIVE or PAUSED (nil otherwise). fireAt = now; jobExecuted audited in-txn.
-  func fireNow(jobId: Int64, now: Date) throws(StoreError) -> ClaimedFire?
+  /// Run-now: the same fused insert set with NO schedule advance. Requires status ACTIVE or
+  /// PAUSED (`.ineligible` otherwise). fireAt = now; jobExecuted audited in-txn. Returns
+  /// `.skippedActiveRun` when a prior run on the job's session is still live (the overlap guard).
+  func fireNow(jobId: Int64, now: Date) throws(StoreError) -> RunNowOutcome
 
   /// Misfire skip: advance next_occurrence past now with no run (nil ⇒ one-shot →
   /// COMPLETED), update scheduler_state.last_misfire_at / last_misfire_skipped_count, and

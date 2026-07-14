@@ -257,7 +257,10 @@ private extension SchedulerService {
           day: day
         )
       else {
-        return  // a prior beat is still live: the store skipped this one to protect its window
+        // A prior beat is still live: the store skipped this one to protect its window. Record
+        // the canonical heartbeat_skipped audit (reason in `decision`) like every other beat skip.
+        await auditHeartbeatSkip(reason: .overlap, at: tickTime)
+        return
       }
       await skipEpisode.end()
       await enqueuer.enqueue(fire: fire)
@@ -296,6 +299,8 @@ enum HeartbeatSkipReason: String, Sendable {
   case quietHours = "quiet_hours"
   case dailyCap = "daily_cap"
   case emptyFile = "empty_file"
+  /// A prior beat's run on the heartbeat session is still live; firing would reset its window.
+  case overlap
 }
 
 /// Dedupes consecutive heartbeat skip audits: one row per skip EPISODE — a run of consecutive

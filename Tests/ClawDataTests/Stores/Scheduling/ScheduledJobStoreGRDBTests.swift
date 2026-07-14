@@ -77,6 +77,15 @@ import Testing
     }
   }
 
+  /// The `ClaimedFire` inside a `.fired` outcome, or nil for `.skippedActiveRun`/`.ineligible` —
+  /// lets a test assert the case and reach the fire without an exhaustive switch each time.
+  private func firedFire(_ outcome: RunNowOutcome) -> ClaimedFire? {
+    guard case .fired(let fire) = outcome else {
+      return nil
+    }
+    return fire
+  }
+
   private func windowStart(_ queue: DatabaseQueue, sessionId: Int64) throws -> Int64? {
     try queue.read { db in
       try Int64.fetchOne(
@@ -398,10 +407,10 @@ extension ScheduledJobStoreGRDBTests {
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
 
     // when
-    let claimed = try store.fireNow(jobId: job.id, now: baseNow)
+    let outcome = try store.fireNow(jobId: job.id, now: baseNow)
 
     // then — a real fire (run + audit + last_fired_at) with the schedule untouched (spec §5.4)
-    #expect(claimed != nil)
+    #expect(firedFire(outcome) != nil)
     let after = try store.job(id: job.id)
     #expect(after?.nextOccurrence == dueFirst)
     #expect(after?.status == .active)
@@ -428,7 +437,7 @@ extension ScheduledJobStoreGRDBTests {
     }
 
     // when / then — fires on PAUSED without changing the status
-    #expect(try store.fireNow(jobId: job.id, now: baseNow) != nil)
+    #expect(firedFire(try store.fireNow(jobId: job.id, now: baseNow)) != nil)
     #expect(try store.job(id: job.id)?.status == .paused)
 
     // and refuses terminal states and absent ids
@@ -438,8 +447,8 @@ extension ScheduledJobStoreGRDBTests {
         arguments: [ScheduledJobStatus.cancelled.rawValue, job.id]
       )
     }
-    #expect(try store.fireNow(jobId: job.id, now: baseNow) == nil)
-    #expect(try store.fireNow(jobId: job.id + 99, now: baseNow) == nil)
+    #expect(try store.fireNow(jobId: job.id, now: baseNow) == .ineligible)
+    #expect(try store.fireNow(jobId: job.id + 99, now: baseNow) == .ineligible)
   }
 
   @Test func skipMisfireAdvancesWithNoRunAndAuditsTheSkip() throws {
@@ -558,7 +567,7 @@ extension ScheduledJobStoreGRDBTests {
     // terminal states refuse every verb and every fire path
     #expect(try store.pause(id: job.id, now: baseNow) == nil)
     #expect(try store.resume(id: job.id, nextOccurrence: dueNext, now: baseNow) == nil)
-    #expect(try store.fireNow(jobId: job.id, now: baseNow) == nil)
+    #expect(try store.fireNow(jobId: job.id, now: baseNow) == .ineligible)
     #expect(
       try store.claimAndFire(
         jobId: job.id,
@@ -880,7 +889,9 @@ extension ScheduledJobStoreGRDBTests {
       day: "2026-07-14"
     )
 
-    // then — skipped: nil returned, no second run, window unchanged, overlap-reason skip audited
+    // then — skipped: nil returned, no second run, window unchanged. The store itself writes NO
+    // skip audit; nil is the whole signal (the gateway records the heartbeat_skipped audit with
+    // the reason in `decision`, matching every other beat skip).
     #expect(secondBeat == nil)
     #expect(
       try count(
@@ -890,12 +901,30 @@ extension ScheduledJobStoreGRDBTests {
       ) == 1
     )
     #expect(try windowStart(queue, sessionId: firstBeat.sessionId) == windowBeforeSecond)
+    #expect(try auditCount(queue, action: .heartbeatSkipped) == 0)
+  }
+
+  @Test func runNowIsSkippedWithItsOwnOutcomeWhileThePriorRunIsLive() throws {
+    // given — a job whose first fire left a live PENDING run
+    let (store, queue) = try makeStore()
+    let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
+    let firstFire = try #require(firedFire(try store.fireNow(jobId: job.id, now: baseNow)))
+    let windowBeforeSecond = try windowStart(queue, sessionId: firstFire.sessionId)
+
+    // when — /runnow fires again while that run is still live
+    let outcome = try store.fireNow(jobId: job.id, now: dueFirst)
+
+    // then — a distinct outcome (NOT .ineligible, which the handler maps to "not found"); no
+    // second run, window unchanged, and the overlap skip is audited
+    #expect(outcome == .skippedActiveRun)
     #expect(
       try count(
         queue,
-        sql: "SELECT COUNT(*) FROM audit_events WHERE action = ? AND args_redacted = ?",
-        arguments: [AuditAction.heartbeatSkipped.rawValue, "{\"reason\":\"overlap\"}"]
+        sql: "SELECT COUNT(*) FROM runs WHERE session_id = ?",
+        arguments: [firstFire.sessionId]
       ) == 1
     )
+    #expect(try windowStart(queue, sessionId: firstFire.sessionId) == windowBeforeSecond)
+    #expect(try auditCount(queue, action: .jobOverlapSkipped) == 1)
   }
 }
