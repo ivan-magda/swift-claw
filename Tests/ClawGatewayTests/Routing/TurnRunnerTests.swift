@@ -1262,7 +1262,11 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(resumeRequest.messages.first?.role == .system)
     #expect(resumeSystem.contains("started by your own scheduler"))
     #expect(resumeSystem.contains("/schedule") == false)
-    #expect(resumeRequest.messages.contains { message in message.role == .tool })
+    #expect(
+      resumeRequest.messages.contains { message in
+        message.role == .tool
+      }
+    )
     #expect(
       resumeRequest.messages.contains { message in
         message.content.contains("label=\"recall\"")
