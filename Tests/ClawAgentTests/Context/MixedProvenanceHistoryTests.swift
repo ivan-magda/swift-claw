@@ -221,6 +221,12 @@ import Testing
     // given / when / then (§12 row 1)
     #expect(SystemPrompt.minimal.contains("Tool use policy"))
     #expect(SystemPrompt.minimal.contains("blocked_pending_approval"))
+
+    // and the proactive variant carries the SAME policy: proactive runs ingest untrusted tool
+    // output with no owner watching, so dropping the clause there would be the worst place to lose
+    // it — this pins the interpolation into SystemPrompt.proactive.
+    #expect(SystemPrompt.proactive.contains("Tool use policy"))
+    #expect(SystemPrompt.proactive.contains("blocked_pending_approval"))
   }
 
   @Test func assembledSystemMessageCarriesTheSchedulePointer() throws {

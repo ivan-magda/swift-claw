@@ -157,7 +157,9 @@ private extension SchedulerService {
           now: tickTime
         )
       else {
-        return  // CAS matched no row: claimed elsewhere / job mutated — no fire
+        // No run to enqueue: the CAS matched no row (claimed elsewhere / job mutated) OR the
+        // job's session already has a live run and the overlap guard skipped this fire.
+        return
       }
 
       await enqueuer.enqueue(fire: fire)

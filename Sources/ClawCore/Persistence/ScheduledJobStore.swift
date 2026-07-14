@@ -59,7 +59,10 @@ public protocol ScheduledJobStore: Sendable {
   /// job session on first fire (session_key = SessionKey.scheduledJob(id:)), inserts the
   /// trigger message (role user, provenance trusted, text = job prompt), the PENDING run
   /// (origin 'scheduled', job_id set), and the jobExecuted audit row — one writeMapping.
-  /// Returns nil when the CAS matches no row (claimed elsewhere / job mutated): no fire.
+  /// Returns nil for either of two distinct reasons, both meaning "no run to enqueue": the CAS
+  /// matched no row (claimed elsewhere / job mutated) — nothing is written; OR the job's session
+  /// already has a live run (the overlap guard) — nothing is inserted except a `job_overlap_skipped`
+  /// audit, and the schedule advance from the CAS still stands (the occurrence drops misfire-style).
   func claimAndFire(
     jobId: Int64,
     due: Date,
