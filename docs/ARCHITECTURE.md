@@ -269,7 +269,8 @@ SchedulerService ticks every 60s
           content while holding high-sensitivity memory; own daily spend budget)
        └─ deliver result to owner's Telegram DM (via outbox)
        └─ AuditLog: create/execute/cancel/failure
-  └─ overlap guard: ONE authoritative atomic DB CLAIM (PENDING→RUNNING), not flock.
+  └─ overlap guards (DB, not flock): per-occurrence compare-and-advance CLAIM (no double-fire of
+     one occurrence) + per-session live-run skip (serializes overlapping occurrences).
   └─ doctor exposes last_tick_at / due_count / last_misfire.
 ```
 
@@ -427,6 +428,8 @@ One canonical ordered assembly. Each section carries a **priority** and a **trun
 
 **Budget:** `inputCap = modelMax − reservedOutput`. Fill **greedily by priority**. A truncatable section is **cut to its cap** with a literal marker string (e.g. `…[truncated]`). A non-truncatable section **degrades but is never dropped**.
 
+**Proactive-run assembly (`origin ∈ {scheduled, heartbeat}`):** row 1 renders the dedicated proactive prompt (`SystemPrompt.proactive` — autonomous-execution framing, no /schedule pointer) instead of the interactive policy prompt, and row 8's message recall is omitted entirely — the retriever's dedup excludes only the current session's in-window rows, so recall would resurface the prior fires that the per-fire window reset (§14) fences off. All other rows assemble identically. The policy fingerprint folds BOTH prompt variants, keeping `policy_version` origin-independent so the approval recompute seams need no run in scope.
+
 ### 9.3 Memory tier, caps, and trust
 
 - **Untrusted tier.** `MEMORY.md`/`USER.md` are injected inside the **SAME untrusted/labeled wrapper** as other data — **never the system tier** — so poisoned memory cannot claim system authority.
@@ -545,8 +548,9 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 ## 14. Scheduler architecture (Inc 4)
 
 - **`Calendar.RecurrenceRule`** (in-toolchain, DST/TZ-correct, `Sendable`/`Codable`) + a ~150-line custom 60s ticker.
-- Jobs persisted in `scheduled_jobs`; **fire-once-per-occurrence**; **one authoritative overlap guard = atomic DB CLAIM (PENDING→RUNNING)**, not flock. Due-time computed against **wall clock** (clock-gap-robust), with a catch-up cap (§6.3). (Reconciliation, Inc 4: the research corpus suggests actor-lock *plus* flock as overlap guards — rejected; the atomic claim is the ONE guard, and the §4 startup flock already covers the second-process case.)
+- Jobs persisted in `scheduled_jobs`; **fire-once-per-occurrence**; **two complementary DB guards, not flock**: (1) an **atomic per-occurrence CLAIM** — the compare-and-advance of `next_occurrence` — so the SAME occurrence can never double-fire, and (2) a **per-session live-run gate** that skips a fire while a prior run on that session is still live (PENDING/RUNNING/AWAITING_APPROVAL), so overlapping occurrences of one job/heartbeat serialize instead of racing the shared context window. Due-time computed against **wall clock** (clock-gap-robust), with a catch-up cap (§6.3). (Reconciliation, Inc 4: the research corpus suggests actor-lock *plus* flock as overlap guards — rejected; these two DB-level guards replace them, and the §4 startup flock already covers the second-process case.)
 - Scheduled runs are **reduced-privilege** agent runs (confirm-before-arm, no auto-approval, default-DENY — in Inc 4 (pre-approval-FSM) an immediate audited DENY with no pending state; with Inc 5a's FSM the same branch becomes park-with-timeout → EXPIRED → DENY — own daily budget); delivery routed to the owner's DM via the outbox; audit on create/execute/cancel/fail. NL → schedule via an LLM parse step that requires owner confirmation; the parse obeys turn spend discipline — day-cap preflight before the call, a run-less `provider_usage` row after (`run_id NULL`), and a 30 s deadline so the poller is never blinded. Attack-case to test: a self-scheduling injection cannot create a recurring fetch-and-follow C2 loop.
+- **Per-fire context isolation.** The fire transaction resets the session's context window (`window_start_message_id` → the pre-fire high-water mark, taint/private-data cleared — `/new` semantics) before inserting the trigger row, so every fire that runs starts on a fresh transcript of its persistent `sched:job:<id>` (or `sched:heartbeat`) session. That reset is session-global, so a fire into a session that already has a live run (PENDING/RUNNING/AWAITING_APPROVAL — e.g. one parked on an approval) is **skipped entirely** rather than run: resetting would advance the shared `window_start_message_id` past the live run's own rows and empty its context on resume (silent data loss). A skip resets nothing and inserts no trigger/run — the occurrence is dropped misfire-style with the schedule still advancing, audited as `job_overlap_skipped` (jobs) or `heartbeat_skipped` with the overlap reason (heartbeat). Prior fires stay durable (audit, FTS, interactive recall) but never replay into a proactive run's context, and proactive turns assemble under the dedicated proactive prompt with recall omitted (§9.2) — a fired task can never read as a "please arm a schedule" chat message, and one bad fire cannot poison the next.
 - `getUpdates` recovery is pinned: socket read timeout = long-poll timeout + 10 s; backoff-reconnect on timeout/network error. Scheduler-side gap recovery is lateness-based (§6.3's catch-up table) — no wake detection. Doctor exposes `last_tick_at`.
 
 ## 15. Configuration & secrets

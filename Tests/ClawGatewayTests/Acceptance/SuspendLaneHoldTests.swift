@@ -129,7 +129,11 @@ struct ScriptedAskTool: Tool {
       throughMessageId: lastMessageId,
       limit: 50
     )
-    let assembled = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
+    let assembled = try contextBuilder.assemble(
+      snapshot: snapshot,
+      sessionId: sessionId,
+      origin: .interactive
+    )
     #expect(assembled.messages.contains { $0.role == .assistant && $0.toolCalls.isEmpty == false })
     #expect(assembled.messages.contains { $0.role == .tool })
   }

@@ -279,7 +279,7 @@ import Testing
     )
 
     // when — nothing private exists yet
-    let emptyResult = try builder.assemble(snapshot: snapshot, sessionId: 1)
+    let emptyResult = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
 
     // then
     #expect(emptyResult.hasPrivateDataAccess == false)
@@ -289,7 +289,11 @@ import Testing
       NewMemoryItem(text: "durable fact", kind: .user, sessionId: nil),
       now: Date(timeIntervalSince1970: 86_400)
     )
-    let injectedResult = try builder.assemble(snapshot: snapshot, sessionId: 1)
+    let injectedResult = try builder.assemble(
+      snapshot: snapshot,
+      sessionId: 1,
+      origin: .interactive
+    )
 
     // then
     #expect(injectedResult.hasPrivateDataAccess)
@@ -299,7 +303,7 @@ import Testing
 
     // when — the fact is deleted again
     #expect(try memoryStore.delete(id: appended.id))
-    let deletedResult = try builder.assemble(snapshot: snapshot, sessionId: 1)
+    let deletedResult = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
 
     // then
     #expect(deletedResult.hasPrivateDataAccess == false)
