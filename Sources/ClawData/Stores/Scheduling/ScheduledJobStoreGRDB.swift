@@ -230,6 +230,11 @@ extension ScheduledJobStoreGRDB {
       now: now
     )
 
+    // Each fire opens on a fresh context window (the /new mechanism): prior fires stay durable
+    // for audit and FTS, but a past turn — including a bad one — never replays into this run's
+    // context. The trigger inserted below is the new window's first row.
+    try SessionMessageStoreGRDB.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
+
     // Step 4: the trigger message — the owner's own confirmed text, frozen at arm time, so
     // trusted-tier deliberately (anything the RUN ingests stays untrusted).
     try db.execute(
@@ -562,6 +567,10 @@ extension ScheduledJobStoreGRDB {
         sessionKey: SessionKey.heartbeat,
         now: now
       )
+
+      // Same per-fire isolation as a job fire: each beat starts on a fresh window of the
+      // persistent heartbeat session.
+      try SessionMessageStoreGRDB.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
 
       // The gateway-authored template WRAPS HEARTBEAT.md content, so the combined trigger text
       // carries the untrusted tier — workspace-file data must never enter context as trusted

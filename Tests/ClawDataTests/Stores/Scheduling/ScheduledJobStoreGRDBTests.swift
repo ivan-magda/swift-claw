@@ -631,3 +631,94 @@ extension ScheduledJobStoreGRDBTests {
     )
   }
 }
+
+// MARK: - Cycle F: per-fire context isolation
+
+extension ScheduledJobStoreGRDBTests {
+  @Test func eachFireResetsTheSessionWindowSoPriorTurnsStayOutOfContext() throws {
+    // given — a first fire whose turn left a poisoned exchange and sticky flags behind
+    let (store, queue) = try makeStore()
+    let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
+    let firstFire = try #require(
+      try store.claimAndFire(
+        jobId: job.id,
+        due: dueFirst,
+        fireAt: dueFirst,
+        nextOccurrence: dueNext,
+        now: dueFirst
+      )
+    )
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'assistant', 'That text needs to be sent as a /schedule command', 'trusted', ?)
+          """,
+        arguments: [firstFire.sessionId, dueFirst]
+      )
+      try db.execute(
+        sql: "UPDATE sessions SET tainted = 1, has_private_data = 1 WHERE id = ?",
+        arguments: [firstFire.sessionId]
+      )
+    }
+
+    // when — the next fire claims on the same persistent session
+    let secondFire = try #require(
+      try store.claimAndFire(
+        jobId: job.id,
+        due: dueNext,
+        fireAt: dueNext,
+        nextOccurrence: dueThird,
+        now: dueNext
+      )
+    )
+
+    // then — same session, but the snapshot holds only the new trigger and the flags cleared
+    #expect(secondFire.sessionId == firstFire.sessionId)
+    let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
+      sessionId: secondFire.sessionId,
+      throughMessageId: secondFire.triggerMessageId,
+      limit: 50
+    )
+    #expect(snapshot.history.map(\.content) == ["Summarize my unread items"])
+    #expect(snapshot.isTainted == false)
+    #expect(snapshot.hasPrivateData == false)
+  }
+
+  @Test func eachHeartbeatFireResetsTheHeartbeatSessionWindow() throws {
+    // given — a prior beat's reply persisted on the shared heartbeat session
+    let (store, queue) = try makeStore()
+    let firstBeat = try store.fireHeartbeat(
+      prompt: "beat one",
+      ownerChatId: 777,
+      now: baseNow,
+      day: "2026-07-13"
+    )
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'assistant', 'HEARTBEAT_OK', 'trusted', ?)
+          """,
+        arguments: [firstBeat.sessionId, baseNow]
+      )
+    }
+
+    // when
+    let secondBeat = try store.fireHeartbeat(
+      prompt: "beat two",
+      ownerChatId: 777,
+      now: dueFirst,
+      day: "2026-07-14"
+    )
+
+    // then — the new beat's snapshot carries only its own trigger
+    #expect(secondBeat.sessionId == firstBeat.sessionId)
+    let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
+      sessionId: secondBeat.sessionId,
+      throughMessageId: secondBeat.triggerMessageId,
+      limit: 50
+    )
+    #expect(snapshot.history.map(\.content) == ["beat two"])
+  }
+}
