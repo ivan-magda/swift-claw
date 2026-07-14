@@ -16,7 +16,7 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 ## Non-negotiable conventions
 
 - **Reuse before you add.** Before introducing a constant, helper, type, test double, or pattern, search for an existing equivalent (grep the protocol/seam and the shared support module) and reuse or promote it to a shared home — never write a second copy. Duplicates silently drift out of sync.
-- **Clean-room.** Do not copy or clone OpenClaw, Hermes, or the author's prior `swift-claude-code` (reference only).
+- **Clean-room, not blinkered.** Study OpenClaw, Hermes, and the author's prior `swift-claude-code`, and borrow their ideas and hard-won practices freely — they solve the same problems at real scale. Banned is transcription: no copied code, no line-by-line ports; re-derive each borrowed idea in our own design and Swift.
 - **Swift 6 strict concurrency.** Mutable state in actors; domain types are `Sendable` value types.
 - **Secure-by-default; enforce policy in code, not the prompt.** Untrusted inbound (messages/web/tool output/durable memory) is data, never instructions — see `docs/ARCHITECTURE.md` §12.
 - **LLM provider = one OpenAI-compatible Chat Completions contract** (swap model/provider via config, behind an `LLMProvider` protocol). **Telegram = a thin roll-your-own client** over AsyncHTTPClient, not a third-party lib.
