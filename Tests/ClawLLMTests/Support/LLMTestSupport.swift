@@ -126,6 +126,7 @@ actor SleepRecorder {
 // MARK: - Builders
 
 func makeConfig(
+  baseURL: String = "https://api.test/v1",
   maxTokensField: MaxTokensField = .maxCompletionTokens,
   apiKey: String = "sk-test",
   model: String = "gpt-4o",
@@ -133,7 +134,7 @@ func makeConfig(
   retryBudget: Int = 3
 ) -> LLMConfig {
   LLMConfig(
-    baseURL: "https://api.test/v1",
+    baseURL: baseURL,
     model: model,
     apiKey: apiKey,
     maxTokensField: maxTokensField,

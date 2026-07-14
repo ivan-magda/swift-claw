@@ -234,7 +234,8 @@ public struct AgentRuntime: Sendable {
         model: model,
         messages: wire,
         maxOutputTokens: budget.maxOutputTokens,
-        tools: definitions
+        tools: definitions,
+        sessionId: Self.sessionTraceId(sessionId: sessionId)
       )
 
       let response: ChatResponse
@@ -413,6 +414,10 @@ private extension AgentRuntime {
   /// `grep run=<id>` ties the turn's round-trips, tool calls, and outcome together.
   static func turnMetadata(runId: Int64, sessionId: Int64) -> Logger.Metadata {
     ["run": "\(runId)", "session": "\(sessionId)"]
+  }
+
+  static func sessionTraceId(sessionId: Int64) -> String {
+    "clawd-session-\(sessionId)"
   }
 
   /// Emits the one finished line for a turn; its level reflects severity — completed → info,

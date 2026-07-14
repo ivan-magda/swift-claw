@@ -140,6 +140,10 @@ public struct OpenAICompatibleProvider: LLMProvider {
     status == 408 || status == 429 || (500..<600).contains(status)
   }
 
+  static func baseURLIsOpenRouter(_ baseURL: String) -> Bool {
+    URLComponents(string: baseURL)?.host?.lowercased() == "openrouter.ai"
+  }
+
   /// Reasoning models reject sampling params; detection is forward-looking (none are sent yet).
   static func isReasoningModel(_ model: String) -> Bool {
     model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4") || model.hasPrefix("o-")
@@ -174,6 +178,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
         )
       )
     }
+
+    let sessionId = Self.baseURLIsOpenRouter(config.baseURL) ? request.sessionId : nil
     let payload = RequestBody(
       model: request.model,
       messages: wireMessages,
@@ -183,7 +189,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
       stream: streaming,
       streamOptions: streaming ? StreamOptions(includeUsage: true) : nil,
       tools: wireTools.isEmpty ? nil : wireTools,
-      responseFormat: request.responseFormat
+      responseFormat: request.responseFormat,
+      sessionId: sessionId
     )
     return try JSONEncoder().encode(payload)
   }
@@ -394,6 +401,7 @@ private struct RequestBody: Encodable {
   // swiftlint:disable:next discouraged_optional_collection
   let tools: [WireToolDefinition]?
   let responseFormat: ResponseFormat?
+  let sessionId: String?
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: DynamicKey.self)
@@ -405,6 +413,7 @@ private struct RequestBody: Encodable {
     try container.encodeIfPresent(streamOptions, forKey: DynamicKey("stream_options"))
     try container.encodeIfPresent(stop, forKey: DynamicKey("stop"))
     try container.encodeIfPresent(tools, forKey: DynamicKey("tools"))
+    try container.encodeIfPresent(sessionId, forKey: DynamicKey("session_id"))
 
     if let responseFormat {
       try container.encode(
