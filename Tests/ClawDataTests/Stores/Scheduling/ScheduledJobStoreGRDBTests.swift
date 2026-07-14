@@ -64,6 +64,28 @@ import Testing
       arguments: [action.rawValue]
     )
   }
+
+  /// Drives a fire's PENDING run to the terminal DONE state so the NEXT fire on that session no
+  /// longer overlaps a live run. Consecutive proactive fires are only non-overlapping because the
+  /// prior turn finished; the store enforces that, so these tests must model it explicitly.
+  private func markRunDone(_ queue: DatabaseQueue, runId: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET state = ? WHERE id = ?",
+        arguments: [RunState.done.rawValue, runId]
+      )
+    }
+  }
+
+  private func windowStart(_ queue: DatabaseQueue, sessionId: Int64) throws -> Int64? {
+    try queue.read { db in
+      try Int64.fetchOne(
+        db,
+        sql: "SELECT window_start_message_id FROM sessions WHERE id = ?",
+        arguments: [sessionId]
+      )
+    }
+  }
 }
 
 // MARK: - Cycle A: CRUD
@@ -278,7 +300,7 @@ extension ScheduledJobStoreGRDBTests {
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
 
-    // when — two consecutive fires
+    // when — two consecutive, non-overlapping fires (the first run completes before the second)
     let first = try store.claimAndFire(
       jobId: job.id,
       due: dueFirst,
@@ -286,6 +308,8 @@ extension ScheduledJobStoreGRDBTests {
       nextOccurrence: dueNext,
       now: dueFirst
     )
+    let firstFire = try #require(first)
+    try markRunDone(queue, runId: firstFire.runId)
     let second = try store.claimAndFire(
       jobId: job.id,
       due: dueNext,
@@ -296,7 +320,6 @@ extension ScheduledJobStoreGRDBTests {
 
     // then — one dedicated session, reused; runs carry origin + job linkage; the trigger
     // message is the owner's own confirmed prompt at the trusted tier (spec §5.2)
-    let firstFire = try #require(first)
     let secondFire = try #require(second)
     #expect(firstFire.sessionId == secondFire.sessionId)
     #expect(firstFire.triggerMessageId != secondFire.triggerMessageId)
@@ -309,12 +332,21 @@ extension ScheduledJobStoreGRDBTests {
       ) == 1
     )
     #expect(try store.job(id: job.id)?.sessionId == firstFire.sessionId)
+    // Both fires produced a scheduled run linked to the job (the first since driven to DONE, the
+    // second freshly PENDING) — the second was allowed only because the first was terminal.
+    #expect(
+      try count(
+        queue,
+        sql: "SELECT COUNT(*) FROM runs WHERE origin = ? AND job_id = ?",
+        arguments: [RunOrigin.scheduled.rawValue, job.id]
+      ) == 2
+    )
     #expect(
       try count(
         queue,
         sql: "SELECT COUNT(*) FROM runs WHERE origin = ? AND job_id = ? AND state = ?",
-        arguments: [RunOrigin.scheduled.rawValue, job.id, "PENDING"]
-      ) == 2
+        arguments: [RunOrigin.scheduled.rawValue, job.id, RunState.pending.rawValue]
+      ) == 1
     )
     #expect(
       try count(
@@ -557,11 +589,13 @@ extension ScheduledJobStoreGRDBTests {
     let (store, queue) = try makeStore()
 
     // when
-    let fired = try store.fireHeartbeat(
-      prompt: "Review the checklist below…",
-      ownerChatId: 777,
-      now: baseNow,
-      day: "2026-07-06"
+    let fired = try #require(
+      try store.fireHeartbeat(
+        prompt: "Review the checklist below…",
+        ownerChatId: 777,
+        now: baseNow,
+        day: "2026-07-06"
+      )
     )
 
     // then — dedicated persistent session; origin heartbeat; NO job linkage; the template
@@ -599,21 +633,31 @@ extension ScheduledJobStoreGRDBTests {
     let secondFire = baseNow.addingTimeInterval(3_600)
     let nextDayFire = baseNow.addingTimeInterval(86_400)
 
-    // when
-    _ = try store.fireHeartbeat(prompt: "check", ownerChatId: 777, now: baseNow, day: "2026-07-06")
-    _ = try store.fireHeartbeat(
-      prompt: "check",
-      ownerChatId: 777,
-      now: secondFire,
-      day: "2026-07-06"
+    // when — each beat completes before the next fires (consecutive beats never overlap; the
+    // store would otherwise skip a fire into a still-live beat)
+    let firstBeat = try #require(
+      try store.fireHeartbeat(prompt: "check", ownerChatId: 777, now: baseNow, day: "2026-07-06")
     )
+    try markRunDone(queue, runId: firstBeat.runId)
+    let secondBeat = try #require(
+      try store.fireHeartbeat(
+        prompt: "check",
+        ownerChatId: 777,
+        now: secondFire,
+        day: "2026-07-06"
+      )
+    )
+    try markRunDone(queue, runId: secondBeat.runId)
     let sameDayState = try store.schedulerState()
-    _ = try store.fireHeartbeat(
-      prompt: "check",
-      ownerChatId: 777,
-      now: nextDayFire,
-      day: "2026-07-07"
+    let thirdBeat = try #require(
+      try store.fireHeartbeat(
+        prompt: "check",
+        ownerChatId: 777,
+        now: nextDayFire,
+        day: "2026-07-07"
+      )
     )
+    try markRunDone(queue, runId: thirdBeat.runId)
     let nextDayState = try store.schedulerState()
 
     // then — the cap's day boundary is the caller's CLAW_TIMEZONE day string, not UTC (spec §4.3)
@@ -661,6 +705,8 @@ extension ScheduledJobStoreGRDBTests {
         arguments: [firstFire.sessionId]
       )
     }
+    // The first run finishes; only then is the next fire non-overlapping and allowed to reset.
+    try markRunDone(queue, runId: firstFire.runId)
 
     // when — the next fire claims on the same persistent session
     let secondFire = try #require(
@@ -686,13 +732,15 @@ extension ScheduledJobStoreGRDBTests {
   }
 
   @Test func eachHeartbeatFireResetsTheHeartbeatSessionWindow() throws {
-    // given — a prior beat's reply persisted on the shared heartbeat session
+    // given — a prior, now-completed beat left a reply on the shared heartbeat session
     let (store, queue) = try makeStore()
-    let firstBeat = try store.fireHeartbeat(
-      prompt: "beat one",
-      ownerChatId: 777,
-      now: baseNow,
-      day: "2026-07-13"
+    let firstBeat = try #require(
+      try store.fireHeartbeat(
+        prompt: "beat one",
+        ownerChatId: 777,
+        now: baseNow,
+        day: "2026-07-13"
+      )
     )
     try queue.write { db in
       try db.execute(
@@ -703,13 +751,16 @@ extension ScheduledJobStoreGRDBTests {
         arguments: [firstBeat.sessionId, baseNow]
       )
     }
+    try markRunDone(queue, runId: firstBeat.runId)
 
     // when
-    let secondBeat = try store.fireHeartbeat(
-      prompt: "beat two",
-      ownerChatId: 777,
-      now: dueFirst,
-      day: "2026-07-14"
+    let secondBeat = try #require(
+      try store.fireHeartbeat(
+        prompt: "beat two",
+        ownerChatId: 777,
+        now: dueFirst,
+        day: "2026-07-14"
+      )
     )
 
     // then — the new beat's snapshot carries only its own trigger
@@ -720,5 +771,131 @@ extension ScheduledJobStoreGRDBTests {
       limit: 50
     )
     #expect(snapshot.history.map(\.content) == ["beat two"])
+  }
+}
+
+// MARK: - Cycle G: overlapping fires skipped while a prior run is live
+
+extension ScheduledJobStoreGRDBTests {
+  @Test func overlappingJobFireIsSkippedWhileThePriorRunIsLive() throws {
+    // given — a first fire whose PENDING run is still live (parked, e.g. on an approval)
+    let (store, queue) = try makeStore()
+    let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
+    let firstFire = try #require(
+      try store.claimAndFire(
+        jobId: job.id,
+        due: dueFirst,
+        fireAt: dueFirst,
+        nextOccurrence: dueNext,
+        now: dueFirst
+      )
+    )
+    let windowBeforeSecond = try windowStart(queue, sessionId: firstFire.sessionId)
+
+    // when — the next occurrence claims while the prior run is still live
+    let secondFire = try store.claimAndFire(
+      jobId: job.id,
+      due: dueNext,
+      fireAt: dueNext,
+      nextOccurrence: dueThird,
+      now: dueNext
+    )
+
+    // then — skipped: nil returned, no second run, the window did not advance past the parked
+    // run's rows, and the skip is audited
+    #expect(secondFire == nil)
+    #expect(
+      try count(
+        queue,
+        sql: "SELECT COUNT(*) FROM runs WHERE session_id = ?",
+        arguments: [firstFire.sessionId]
+      ) == 1
+    )
+    #expect(try windowStart(queue, sessionId: firstFire.sessionId) == windowBeforeSecond)
+    #expect(try auditCount(queue, action: .jobOverlapSkipped) == 1)
+
+    // and the parked run's trigger is still inside its context window
+    let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
+      sessionId: firstFire.sessionId,
+      throughMessageId: firstFire.triggerMessageId,
+      limit: 50
+    )
+    #expect(snapshot.history.map(\.content) == ["Summarize my unread items"])
+  }
+
+  @Test func onceThePriorRunIsTerminalTheNextFireProceedsAndResets() throws {
+    // given — a first fire whose run has since reached the terminal DONE state
+    let (store, queue) = try makeStore()
+    let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
+    let firstFire = try #require(
+      try store.claimAndFire(
+        jobId: job.id,
+        due: dueFirst,
+        fireAt: dueFirst,
+        nextOccurrence: dueNext,
+        now: dueFirst
+      )
+    )
+    try markRunDone(queue, runId: firstFire.runId)
+
+    // when — the next occurrence fires with no live run to guard against
+    let secondFire = try store.claimAndFire(
+      jobId: job.id,
+      due: dueNext,
+      fireAt: dueNext,
+      nextOccurrence: dueThird,
+      now: dueNext
+    )
+
+    // then — it proceeds (fresh run) and its window resets so the prior trigger is out of context
+    let resumedFire = try #require(secondFire)
+    #expect(resumedFire.sessionId == firstFire.sessionId)
+    #expect(try auditCount(queue, action: .jobOverlapSkipped) == 0)
+    let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
+      sessionId: resumedFire.sessionId,
+      throughMessageId: resumedFire.triggerMessageId,
+      limit: 50
+    )
+    #expect(snapshot.history.map(\.content) == ["Summarize my unread items"])
+  }
+
+  @Test func overlappingHeartbeatFireIsSkippedWhileThePriorBeatIsLive() throws {
+    // given — a first beat whose PENDING run is still live
+    let (store, queue) = try makeStore()
+    let firstBeat = try #require(
+      try store.fireHeartbeat(
+        prompt: "beat one",
+        ownerChatId: 777,
+        now: baseNow,
+        day: "2026-07-13"
+      )
+    )
+    let windowBeforeSecond = try windowStart(queue, sessionId: firstBeat.sessionId)
+
+    // when — a second beat fires while the first is still live
+    let secondBeat = try store.fireHeartbeat(
+      prompt: "beat two",
+      ownerChatId: 777,
+      now: dueFirst,
+      day: "2026-07-14"
+    )
+
+    // then — skipped: nil returned, no second run, window unchanged, overlap-reason skip audited
+    #expect(secondBeat == nil)
+    #expect(
+      try count(
+        queue,
+        sql: "SELECT COUNT(*) FROM runs WHERE session_id = ?",
+        arguments: [firstBeat.sessionId]
+      ) == 1
+    )
+    #expect(try windowStart(queue, sessionId: firstBeat.sessionId) == windowBeforeSecond)
+    #expect(
+      try count(
+        queue,
+        sql: "SELECT COUNT(*) FROM audit_events WHERE action = ? AND args_redacted = ?",
+        arguments: [AuditAction.heartbeatSkipped.rawValue, "{\"reason\":\"overlap\"}"]
+      ) == 1
+    )
   }
 }

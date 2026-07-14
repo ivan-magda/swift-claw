@@ -210,7 +210,7 @@ extension ScheduledJobStoreGRDB {
 
   /// Steps 3-6 of the fire transaction: lazy session, trigger message, PENDING run, audit.
   /// Shared verbatim by `fireNow` (which skips only step 1's advance).
-  static func insertFireRows(_ db: Database, jobId: Int64, now: Date) throws -> ClaimedFire {
+  static func insertFireRows(_ db: Database, jobId: Int64, now: Date) throws -> ClaimedFire? {
     guard
       let jobRow = try Row.fetchOne(
         db,
@@ -229,6 +229,18 @@ extension ScheduledJobStoreGRDB {
       existingSessionId: jobRow["session_id"],
       now: now
     )
+
+    // Skip this occurrence when the prior run on this job's session is still live; the schedule
+    // already advanced, so it drops like a misfire rather than resetting the shared window.
+    if try shouldSkipOverlappingFire(
+      db,
+      sessionId: sessionId,
+      action: .jobOverlapSkipped,
+      argsRedacted: "{\"job_id\":\(jobId)}",
+      now: now
+    ) {
+      return nil
+    }
 
     // Each fire opens on a fresh context window (the /new mechanism): prior fires stay durable
     // for audit and FTS, but a past turn — including a bad one — never replays into this run's
@@ -560,13 +572,25 @@ extension ScheduledJobStoreGRDB {
     ownerChatId: Int64,
     now: Date,
     day: String
-  ) throws(StoreError) -> ClaimedFire {
+  ) throws(StoreError) -> ClaimedFire? {
     try database.writeMapping { db in
       let sessionId = try SessionMessageStoreGRDB.upsertSession(
         db,
         sessionKey: SessionKey.heartbeat,
         now: now
       )
+
+      // Same overlap guard as a job fire: a prior beat still in flight owns the shared heartbeat
+      // window; resetting it here would empty that beat's context on resume. Skip this beat.
+      if try Self.shouldSkipOverlappingFire(
+        db,
+        sessionId: sessionId,
+        action: .heartbeatSkipped,
+        argsRedacted: "{\"reason\":\"overlap\"}",
+        now: now
+      ) {
+        return nil
+      }
 
       // Same per-fire isolation as a job fire: each beat starts on a fresh window of the
       // persistent heartbeat session.
@@ -640,6 +664,34 @@ extension ScheduledJobStoreGRDB {
 // MARK: - Fire-Row Helpers
 
 private extension ScheduledJobStoreGRDB {
+  /// The per-session serialization guard shared by both fire paths: true (and a skip audit
+  /// written in the fire transaction) when the target session already carries a live run.
+  /// Firing again would reset the shared context window out from under that run, emptying its
+  /// context on resume — so the caller drops this occurrence like a misfire. Job and heartbeat
+  /// fires differ only in the audit action and its args.
+  static func shouldSkipOverlappingFire(
+    _ db: Database,
+    sessionId: Int64,
+    action: AuditAction,
+    argsRedacted: String,
+    now: Date
+  ) throws -> Bool {
+    guard try RunStoreGRDB.hasLiveRun(db, sessionId: sessionId) else {
+      return false
+    }
+    try AuditLogGRDB.insertAudit(
+      db,
+      AuditEvent(
+        actor: .system,
+        action: action,
+        argsRedacted: argsRedacted,
+        sessionId: sessionId,
+        ts: now
+      )
+    )
+    return true
+  }
+
   /// Step 3: the job's dedicated session, created lazily on first fire. The session row
   /// stores NO chat id — the delivery target stays on the job row.
   static func ensureJobSession(

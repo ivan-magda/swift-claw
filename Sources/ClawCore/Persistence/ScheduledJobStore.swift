@@ -89,10 +89,12 @@ public protocol ScheduledJobStore: Sendable {
   /// Heartbeat fire: creates/reuses the sched:heartbeat session, inserts the template
   /// trigger message + PENDING run (origin 'heartbeat', job_id NULL), and updates
   /// scheduler_state heartbeat fields (last_heartbeat_at, day-counter roll) — one transaction.
+  /// Returns nil when the heartbeat session already carries a live run: a prior beat is still
+  /// in flight, so firing again would reset its shared context window — the beat is skipped.
   func fireHeartbeat(
     prompt: String,
     ownerChatId: Int64,
     now: Date,
     day: String
-  ) throws(StoreError) -> ClaimedFire
+  ) throws(StoreError) -> ClaimedFire?
 }

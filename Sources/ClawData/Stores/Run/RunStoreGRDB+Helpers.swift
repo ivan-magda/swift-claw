@@ -51,6 +51,26 @@ extension RunStoreGRDB {
     )
   }
 
+  /// True when the session already carries a non-terminal run (`RunState.liveStates`). The
+  /// proactive-fire path checks this before resetting the shared context window: firing into a
+  /// live run would advance the window out from under it, emptying its context on resume.
+  static func hasLiveRun(_ db: Database, sessionId: Int64) throws -> Bool {
+    // databaseQuestionMarks is GRDB's public helper — it renders "?,?,?" for the IN clause.
+    let placeholders = databaseQuestionMarks(count: RunState.liveStates.count)
+    var values: [DatabaseValueConvertible] = [sessionId]
+    values.append(contentsOf: RunState.liveStates.map(\.rawValue))
+    let found = try Int.fetchOne(
+      db,
+      sql: """
+        SELECT 1 FROM runs
+        WHERE session_id = ? AND state IN (\(placeholders))
+        LIMIT 1
+        """,
+      arguments: StatementArguments(values)
+    )
+    return found != nil
+  }
+
   static func supersedeRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
     try terminateActiveRuns(db, sessionId: sessionId, event: .supersede, now: now)
   }
@@ -67,19 +87,17 @@ extension RunStoreGRDB {
     event: RunEvent,
     now: Date
   ) throws -> [Int64] {
+    let placeholders = databaseQuestionMarks(count: RunState.liveStates.count)
+    var values: [DatabaseValueConvertible] = [sessionId]
+    values.append(contentsOf: RunState.liveStates.map(\.rawValue))
     let rows = try Row.fetchAll(
       db,
       sql: """
         SELECT id FROM runs
-        WHERE session_id = ? AND state IN (?, ?, ?)
+        WHERE session_id = ? AND state IN (\(placeholders))
         ORDER BY id ASC
         """,
-      arguments: [
-        sessionId,
-        RunState.pending.rawValue,
-        RunState.running.rawValue,
-        RunState.awaitingApproval.rawValue,
-      ]
+      arguments: StatementArguments(values)
     )
 
     var affected: [Int64] = []

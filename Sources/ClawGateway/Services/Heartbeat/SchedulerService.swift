@@ -249,12 +249,16 @@ private extension SchedulerService {
     }
 
     do {
-      let fire = try jobs.fireHeartbeat(
-        prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
-        ownerChatId: ownerChatId,
-        now: tickTime,
-        day: day
-      )
+      guard
+        let fire = try jobs.fireHeartbeat(
+          prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
+          ownerChatId: ownerChatId,
+          now: tickTime,
+          day: day
+        )
+      else {
+        return  // a prior beat is still live: the store skipped this one to protect its window
+      }
       await skipEpisode.end()
       await enqueuer.enqueue(fire: fire)
     } catch {
