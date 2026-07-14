@@ -143,8 +143,7 @@ private extension RunCommand {
   }
 
   /// Opens the store bundle and seeds the configured owners, exiting with the store code if the
-  /// open fails or if seeding configured owners fails — a daemon that can't seed its owners boots
-  /// locked out, since `AccessControl` default-denies the empty allowlist table.
+  /// open fails or if seeding configured owners fails.
   static func openStoresOrExit(config: AppConfig, logger: Logger) throws -> ClawStores {
     let stores: ClawStores
     do {
