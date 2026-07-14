@@ -29,7 +29,10 @@ enum DoctorHealth {
     let freeBytes = (fileSystem?[.systemFreeSize] as? Int) ?? 0
 
     return HealthRowsBuilder.Inputs(
-      allowlistOwners: (try? stores.allowlist.allowlistCount()) ?? -1,
+      allowlist: AllowlistHealth(
+        seeded: try? stores.allowlist.allowlistCount(),
+        configured: config.allowlist.count
+      ),
       lastOffset: try? stores.cursor.loadCursor(),
       runsHealth: runsHealth,
       retryBudget: config.llm.retryBudget,

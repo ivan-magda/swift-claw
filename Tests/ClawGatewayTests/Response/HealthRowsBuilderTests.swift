@@ -5,13 +5,13 @@ import Testing
 
 @Suite struct HealthRowsBuilderTests {
   private func inputs(
-    owners: Int = 1,
+    allowlist: AllowlistHealth = AllowlistHealth(seeded: 1, configured: 1),
     freeBytes: Int = 1000,
     todayUSD: Double = 0.5,
     perDayUSD: Double = 10
   ) -> HealthRowsBuilder.Inputs {
     HealthRowsBuilder.Inputs(
-      allowlistOwners: owners,
+      allowlist: allowlist,
       lastOffset: 42,
       runsHealth: RunsHealth(
         inFlight: 0,
@@ -44,12 +44,60 @@ import Testing
     #expect(byKey["db.wal_size"]?.group == .storage)
   }
 
-  @Test func allowlistWithNoOwnersFails() {
+  private func allowlistRow(seeded: Int?, configured: Int) -> DoctorReport.Check? {
+    HealthRowsBuilder
+      .checks(inputs(allowlist: AllowlistHealth(seeded: seeded, configured: configured)))
+      .first { $0.key == "allowlist.owners" }
+  }
+
+  @Test func allowlistFailsWhenNoOwnersConfiguredOrSeeded() {
+    // given — genuinely ownerless: config names nobody and nothing was ever seeded
     // when
-    let checks = HealthRowsBuilder.checks(inputs(owners: 0))
+    let row = allowlistRow(seeded: 0, configured: 0)
 
     // then
-    #expect(checks.first { $0.key == "allowlist.owners" }?.ok == false)
+    #expect(row?.ok == false)
+    #expect(row?.value == "0")
+  }
+
+  @Test func allowlistPassesOnConfiguredOwnersBeforeFirstRunSeedsTheTable() {
+    // given — a fresh install: CLAW_ALLOWLIST names the owner, `run` has not seeded the table yet
+    // when
+    let row = allowlistRow(seeded: 0, configured: 1)
+
+    // then — config alone keeps the check healthy and the value explains the pending seed
+    #expect(row?.ok == true)
+    #expect(row?.value == "0 seeded, 1 configured (seeded at daemon start)")
+  }
+
+  @Test func allowlistReportsTheSeededCountOnceTheTableHasOwners() {
+    // given — pairing grew the table beyond config; the table is the enforced boundary
+    // when
+    let row = allowlistRow(seeded: 2, configured: 1)
+
+    // then
+    #expect(row?.ok == true)
+    #expect(row?.value == "2")
+  }
+
+  @Test func allowlistKeepsPassingWhenConfigIsTrimmedBelowTheSeededTable() {
+    // given — seeding is additive, so owners persist after their ID leaves CLAW_ALLOWLIST
+    // when
+    let row = allowlistRow(seeded: 1, configured: 0)
+
+    // then
+    #expect(row?.ok == true)
+    #expect(row?.value == "1")
+  }
+
+  @Test func allowlistFailsWhenTheStoreReadFailsEvenWithConfiguredOwners() {
+    // given — the allowlist read threw; the boundary fails closed, locking every owner out
+    // when
+    let row = allowlistRow(seeded: nil, configured: 3)
+
+    // then — configured owners must not mask a broken access boundary
+    #expect(row?.ok == false)
+    #expect(row?.value == "unreadable (db read failed)")
   }
 
   @Test func zeroFreeDiskFails() {
