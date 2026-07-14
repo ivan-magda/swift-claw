@@ -796,4 +796,57 @@ import Testing
       try AppConfig.load(environment: env)
     }
   }
+
+  // MARK: - Clause 11 (issue #51): a fire runs under the proactive prompt on an isolated context
+
+  @Test func clauseElevenFireRunsUnderTheProactivePromptOnAnIsolatedContext() async throws {
+    // given — an armed weekday job and two scripted single-round fires
+    let harness = try makeSC7Harness(
+      scripts: [
+        [okResponse(content: "Digest one.")],
+        [okResponse(content: "Digest two.")],
+      ]
+    )
+    try seedJob(
+      harness,
+      rule: weekdaySevenRule(),
+      next: Self.tueFire,
+      createdAt: Self.armMonday
+    )
+
+    // when — Tuesday's fire
+    harness.clock.advance(to: Self.tueFire.addingTimeInterval(30))
+    await harness.scheduler.tick()
+    _ = try await harness.waitForOutbox(atLeast: 1)
+
+    // then — the request is framed as autonomous execution: proactive prompt in the system
+    // slot, no /schedule pointer anywhere in it, no recall block, the frozen task text last
+    let firstRequest = try #require(await harness.provider.requests.first)
+    let firstSystem = try #require(firstRequest.messages.first?.content)
+    #expect(firstRequest.messages.first?.role == .system)
+    #expect(firstSystem.contains("started by your own scheduler"))
+    #expect(firstSystem.contains("/schedule") == false)
+    #expect(
+      firstRequest.messages.contains { message in
+        message.content.contains("label=\"recall\"")
+      } == false
+    )
+    #expect(firstRequest.messages.last?.content == "Summarize my unread items")
+
+    // when — Wednesday's fire on the same persistent job session
+    harness.clock.advance(to: Self.wedFire.addingTimeInterval(30))
+    await harness.scheduler.tick()
+    _ = try await harness.waitForOutbox(atLeast: 2)
+
+    // then — Tuesday's exchange did not replay into Wednesday's context
+    let requests = await harness.provider.requests
+    #expect(requests.count == 2)
+    let secondRequest = try #require(requests.last)
+    #expect(
+      secondRequest.messages.contains { message in
+        message.content.contains("Digest one.")
+      } == false
+    )
+    #expect(secondRequest.messages.last?.content == "Summarize my unread items")
+  }
 }

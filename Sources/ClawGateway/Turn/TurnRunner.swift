@@ -273,7 +273,11 @@ private extension TurnRunner {
       proactiveTodayUSD =
         try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: clock).costUSD
     }
-    let buildResult = try contextBuilder.assemble(snapshot: snapshot, sessionId: sessionId)
+    let buildResult = try contextBuilder.assemble(
+      snapshot: snapshot,
+      sessionId: sessionId,
+      origin: origin
+    )
     return TurnInputs(
       snapshot: snapshot,
       buildResult: buildResult,

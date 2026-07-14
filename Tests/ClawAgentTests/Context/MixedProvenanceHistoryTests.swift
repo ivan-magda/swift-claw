@@ -110,7 +110,11 @@ import Testing
     ]
 
     // when
-    let result = try makeBuilder().assemble(snapshot: makeSnapshot(history), sessionId: 1)
+    let result = try makeBuilder().assemble(
+      snapshot: makeSnapshot(history),
+      sessionId: 1,
+      origin: .interactive
+    )
 
     // then — the anchor renders natively WITH its calls; the tool row renders fenced
     let anchorMessage = try #require(
@@ -148,7 +152,11 @@ import Testing
     ]
 
     // when
-    let result = try makeBuilder().assemble(snapshot: makeSnapshot(history), sessionId: 1)
+    let result = try makeBuilder().assemble(
+      snapshot: makeSnapshot(history),
+      sessionId: 1,
+      origin: .interactive
+    )
 
     // then — assembly completes and the tool row's fence label resolves to one of the duplicate
     // names (the first one wins) rather than crashing
@@ -195,7 +203,11 @@ import Testing
     )
 
     // when
-    let result = try builder.assemble(snapshot: makeSnapshot(history), sessionId: 1)
+    let result = try builder.assemble(
+      snapshot: makeSnapshot(history),
+      sessionId: 1,
+      origin: .interactive
+    )
 
     // then — no orphaned tool message and no observation-less anchor in the wire (§12)
     let toolMessages = result.messages.filter { message in message.role == .tool }
@@ -209,6 +221,12 @@ import Testing
     // given / when / then (§12 row 1)
     #expect(SystemPrompt.minimal.contains("Tool use policy"))
     #expect(SystemPrompt.minimal.contains("blocked_pending_approval"))
+
+    // and the proactive variant carries the SAME policy: proactive runs ingest untrusted tool
+    // output with no owner watching, so dropping the clause there would be the worst place to lose
+    // it — this pins the interpolation into SystemPrompt.proactive.
+    #expect(SystemPrompt.proactive.contains("Tool use policy"))
+    #expect(SystemPrompt.proactive.contains("blocked_pending_approval"))
   }
 
   @Test func assembledSystemMessageCarriesTheSchedulePointer() throws {
@@ -217,7 +235,11 @@ import Testing
     let history = [userMessage("send me football news every morning")]
 
     // when
-    let result = try makeBuilder().assemble(snapshot: makeSnapshot(history), sessionId: 1)
+    let result = try makeBuilder().assemble(
+      snapshot: makeSnapshot(history),
+      sessionId: 1,
+      origin: .interactive
+    )
 
     // then — the /schedule pointer reaches the model inside the trusted system-role message,
     // so the agent drafts that command instead of suggesting external cron

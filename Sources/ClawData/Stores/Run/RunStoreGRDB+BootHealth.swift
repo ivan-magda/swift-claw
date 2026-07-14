@@ -139,23 +139,22 @@ extension RunStoreGRDB {
 
   public func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
     try database.readMapping { db in
-      let activeStates = [
-        RunState.pending.rawValue,
-        RunState.running.rawValue,
-        RunState.awaitingApproval.rawValue,
-      ]
+      // The one definition of "live" (shared with terminateActiveRuns / the overlap guard) so a
+      // new non-terminal state can't drift this health scan out of sync.
+      let liveStates = RunState.liveStates.map(\.rawValue)
+      let placeholders = databaseQuestionMarks(count: liveStates.count)
       let inFlight =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM runs WHERE state IN (?, ?, ?)",
-          arguments: StatementArguments(activeStates)
+          sql: "SELECT COUNT(*) FROM runs WHERE state IN (\(placeholders))",
+          arguments: StatementArguments(liveStates)
         ) ?? 0
 
       let oldestRunAgeSeconds: Double? =
         try Date.fetchOne(
           db,
-          sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (?, ?, ?)",
-          arguments: StatementArguments(activeStates)
+          sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (\(placeholders))",
+          arguments: StatementArguments(liveStates)
         ).map { now.timeIntervalSince($0) }
 
       let lastFailedAt = try Date.fetchOne(

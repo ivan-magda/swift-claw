@@ -16,6 +16,13 @@ public enum RunState: String, Sendable, Equatable {
   /// Suspended to a durable checkpoint: an `approvals` row is the one source of truth for
   /// "blocked on approval"; resolved by callback, ticker, boot, or command.
   case awaitingApproval = "AWAITING_APPROVAL"
+
+  /// The non-terminal states: a run in any of these can still advance and pick up an
+  /// advanced context window. The single definition of "live" — `terminateActiveRuns` and the
+  /// proactive-fire overlap guard both build their `state IN (…)` predicate from this set so the
+  /// live triple is never duplicated. `pending` is included because a claimed-but-not-yet-picked-up
+  /// run loads the current window at pickup.
+  public static let liveStates: [RunState] = [.pending, .running, .awaitingApproval]
 }
 
 /// The two command-owned reasons for terminating a live run.
@@ -409,6 +416,7 @@ public enum AuditAction: String, Sendable, Equatable {
   case jobCancelled = "job_cancelled"
   case jobFailed = "job_failed"
   case jobMisfire = "job_misfire"
+  case jobOverlapSkipped = "job_overlap_skipped"
   case heartbeatFired = "heartbeat_fired"
   case heartbeatSuppressed = "heartbeat_suppressed"
   case heartbeatSkipped = "heartbeat_skipped"
