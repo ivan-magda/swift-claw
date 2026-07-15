@@ -87,6 +87,10 @@ public enum CostSource: String, Sendable, Equatable {
   case providerReturned = "provider_returned"
   case priceFile = "price_file"
   case heuristic
+  /// A subscription route's confirmed zero. It is a distinct source rather than a $0
+  /// `providerReturned` so an audit can tell "the plan covered this" from "the provider billed
+  /// nothing", and so the never-a-silent-$0 rule is satisfied rather than bypassed.
+  case includedPlan = "included_plan"
 }
 
 public enum SessionKey {
@@ -169,19 +173,24 @@ public struct StoredMessage: Sendable, Equatable {
   public let provenance: Provenance
   public let toolCallsJSON: String?
   public let toolCallId: String?
+  /// The assistant anchor's replay state, loaded back for the route that minted it. It never
+  /// becomes prompt content, so a row that lost it stays a usable message.
+  public let providerState: ProviderExchangeState?
 
   public init(
     role: MessageRole,
     content: String,
     provenance: Provenance,
     toolCallsJSON: String? = nil,
-    toolCallId: String? = nil
+    toolCallId: String? = nil,
+    providerState: ProviderExchangeState? = nil
   ) {
     self.role = role
     self.content = content
     self.provenance = provenance
     self.toolCallsJSON = toolCallsJSON
     self.toolCallId = toolCallId
+    self.providerState = providerState
   }
 }
 
@@ -331,6 +340,9 @@ public struct AssistantTurn: Sendable, Equatable {
   public let setTainted: Bool
   /// Sticky private-data flag — persisted like `setTainted`, on every commit path.
   public let setPrivateData: Bool
+  /// The final assistant message's replay state, committed in the same transaction as the message
+  /// it belongs to so an anchor and its state can never be persisted apart.
+  public let providerState: ProviderExchangeState?
 
   public init(
     runId: Int64,
@@ -341,7 +353,8 @@ public struct AssistantTurn: Sendable, Equatable {
     chunks: [OutboxChunk],
     exchanges: [ToolExchange] = [],
     setTainted: Bool = false,
-    setPrivateData: Bool = false
+    setPrivateData: Bool = false,
+    providerState: ProviderExchangeState? = nil
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -352,6 +365,7 @@ public struct AssistantTurn: Sendable, Equatable {
     self.exchanges = exchanges
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
+    self.providerState = providerState
   }
 }
 

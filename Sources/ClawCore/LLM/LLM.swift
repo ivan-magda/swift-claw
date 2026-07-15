@@ -1,5 +1,25 @@
 import Foundation
 
+// MARK: - Provider replay state
+
+/// Continuity a route cannot express as text or tool calls — reasoning material that must be
+/// replayed to the same issuer to keep a conversation coherent.
+///
+/// It is opaque outside the adapter that produced it: never rendered into a prompt, FTS-indexed,
+/// recall-eligible, or exposed to tools, audit arguments, logs, Telegram, or memory. `issuer` is a
+/// structured logical identity binding the state to the credential profile, model, and replay epoch
+/// it was minted under, so state from a foreign origin is recognized and dropped rather than
+/// replayed. Only the owning adapter may interpret either field.
+public struct ProviderExchangeState: Sendable, Equatable, Codable {
+  public let issuer: String
+  public let payload: Data
+
+  public init(issuer: String, payload: Data) {
+    self.issuer = issuer
+    self.payload = payload
+  }
+}
+
 // MARK: - Chat contract
 
 /// One message in an OpenAI-compatible chat exchange. `toolCalls` carries assistant proposals
@@ -10,17 +30,21 @@ public struct ChatMessage: Sendable, Equatable {
   public let content: String
   public let toolCalls: [ToolCall]
   public let toolCallId: String?
+  /// Set only by a route that mints replay state, and carried back to that same route untouched.
+  public let providerState: ProviderExchangeState?
 
   public init(
     role: MessageRole,
     content: String,
     toolCalls: [ToolCall] = [],
-    toolCallId: String? = nil
+    toolCallId: String? = nil,
+    providerState: ProviderExchangeState? = nil
   ) {
     self.role = role
     self.content = content
     self.toolCalls = toolCalls
     self.toolCallId = toolCallId
+    self.providerState = providerState
   }
 }
 
@@ -85,19 +109,24 @@ public struct ChatResponse: Sendable, Equatable {
   public let usage: ChatUsage?
   public let costFromProvider: Double?
   public let toolCalls: [ToolCall]
+  /// The replay state produced with this reply, for the runtime to carry alongside the assistant
+  /// message it appends. A route that mints none leaves it nil.
+  public let providerState: ProviderExchangeState?
 
   public init(
     content: String,
     finishReason: String?,
     usage: ChatUsage?,
     costFromProvider: Double?,
-    toolCalls: [ToolCall] = []
+    toolCalls: [ToolCall] = [],
+    providerState: ProviderExchangeState? = nil
   ) {
     self.content = content
     self.finishReason = finishReason
     self.usage = usage
     self.costFromProvider = costFromProvider
     self.toolCalls = toolCalls
+    self.providerState = providerState
   }
 }
 
@@ -293,10 +322,11 @@ public struct ResolvedCost: Sendable, Equatable {
   }
 }
 
-/// Best-effort USD cost — never a silent $0. The first known source wins:
+/// Best-effort USD cost — never a silent $0. Under `metered` the first known source wins:
 /// provider-returned (incl. a confirmed $0) → vendored price-file (incl. a free model's $0) →
 /// reference-rate heuristic. Only the heuristic is `isEstimated`, and only it is floored at
-/// `heuristicFloorUSD`, so a *guessed* cost is never recorded as $0.
+/// `heuristicFloorUSD`, so a *guessed* cost is never recorded as $0. Under `includedPlan` the plan
+/// already paid, and `CostSource.includedPlan` is the durable proof of that.
 public struct CostResolver: Sendable {
   /// The never-silent-$0 floor for a heuristic tier that computes to 0.
   public static let heuristicFloorUSD = 0.000_001
@@ -309,11 +339,21 @@ public struct CostResolver: Sendable {
     self.referenceUSDPerToken = referenceUSDPerToken
   }
 
+  /// `policy` defaults to `metered` so a caller that has not been taught about subscription routes
+  /// keeps billing its calls rather than silently recording them as free.
   public func resolve(
     model: String,
     usage: ChatUsage,
-    providerCost: Double?
+    providerCost: Double?,
+    policy: LLMCostPolicy = .metered
   ) -> ResolvedCost {
+    guard case .metered = policy else {
+      // A subscription call costs nothing regardless of what the route reports in dollars, and the
+      // zero is confirmed rather than guessed — token estimation is `ResolvedUsage`'s verdict, and
+      // `ProviderUsage` ORs the two into the row's single flag.
+      return ResolvedCost(costUSD: 0, source: .includedPlan, isEstimated: false)
+    }
+
     if let providerCost {
       return ResolvedCost(costUSD: providerCost, source: .providerReturned, isEstimated: false)
     }
