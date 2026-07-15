@@ -10,8 +10,9 @@ import Testing
 private let accountClaimName = "https://api.openai.com/auth"
 
 /// Builds JWT-shaped strings from claim payloads. Signatures are never verified by the parser under
-/// test, so the third segment is arbitrary text rather than a real MAC.
-private enum TokenBuilder {
+/// test, so the third segment is arbitrary text rather than a real MAC. Module-scoped, so the suites
+/// that need a token with a given claim share one notion of what a token looks like.
+enum TokenBuilder {
   static func segment(_ json: String) -> String {
     base64URL(Data(json.utf8))
   }

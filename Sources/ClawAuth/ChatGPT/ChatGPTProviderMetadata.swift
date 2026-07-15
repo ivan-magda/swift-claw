@@ -57,6 +57,37 @@ public enum ChatGPTProviderMetadata {
   /// the flight time of the request that will carry it.
   public static let credentialFreshnessSkew = Duration.seconds(120)
 
+  /// The ceiling on any single auth request. A login is a conversation of several short calls, and
+  /// no one of them has business spending a noticeable slice of the owner's window; what actually
+  /// protects that window is the caller's remaining deadline, which cuts this down further.
+  public static let requestTimeout = Duration.seconds(30)
+
+  /// The delay this provider will actually wait, whatever was asked for. The floor is what stops a
+  /// poll loop from becoming a spin — including on a value no current parser can produce, since the
+  /// alternative is a guard that only exists in the sentence that describes it.
+  public static func honoredPollDelay(_ requested: Duration) -> Duration {
+    max(requested, minimumPollInterval)
+  }
+
+  // MARK: - Bounds
+
+  /// What a response may cost to read. The two caps part company because they answer different
+  /// questions: a success body is the payload the flow cannot proceed without, while a non-success
+  /// body is a diagnostic whose first few kilobytes are the only useful ones. Capping at read time,
+  /// rather than after, is what keeps an unbounded body from being materialized before the sanitizer
+  /// that would have trimmed it ever runs.
+  public static let maximumAuthResponseBytes = 256 * 1024
+  public static let maximumDiagnosticBytes = 8 * 1024
+
+  /// What the vendor's own values may weigh. Each is measured in UTF-8 bytes, generously above any
+  /// value the flow is observed to carry, and present so that a hostile or broken response cannot
+  /// spend the daemon's memory or widen what it prints.
+  public static let maximumUserCodeBytes = 128
+  public static let maximumDeviceAuthIDBytes = 4 * 1024
+  /// The authorization code and the code verifier alike.
+  public static let maximumGrantValueBytes = 16 * 1024
+  public static let maximumTokenBytes = 64 * 1024
+
   // MARK: - Authorization
 
   /// The sole builder of ChatGPT's credential-dependent headers, and the sole source of the exact
