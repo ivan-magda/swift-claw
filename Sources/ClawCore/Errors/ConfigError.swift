@@ -5,6 +5,10 @@ public enum ConfigError: Error, Sendable, Equatable {
   case missingLLMModel
   case invalidMaxTokensField(String)
   case invalidStructuredOutput(String)
+  case emptyQualifiedModelSuffix(reference: String)
+  case oversizedQualifiedModelSuffix(reference: String)
+  case unsafeQualifiedModelSuffix(reference: String)
+  case structuredOutputUnsupportedOnRoute(providerID: String, mode: String)
   case invalidMaxTokens(String)
   case invalidBudget(String)
   case invalidBool(key: String, value: String)
@@ -29,6 +33,10 @@ public enum ConfigError: Error, Sendable, Equatable {
     case .missingLLMModel: ClawExitCode.configInvalid.rawValue
     case .invalidMaxTokensField: ClawExitCode.configInvalid.rawValue
     case .invalidStructuredOutput: ClawExitCode.configInvalid.rawValue
+    case .emptyQualifiedModelSuffix: ClawExitCode.configInvalid.rawValue
+    case .oversizedQualifiedModelSuffix: ClawExitCode.configInvalid.rawValue
+    case .unsafeQualifiedModelSuffix: ClawExitCode.configInvalid.rawValue
+    case .structuredOutputUnsupportedOnRoute: ClawExitCode.configInvalid.rawValue
     case .invalidMaxTokens: ClawExitCode.configInvalid.rawValue
     case .invalidBudget: ClawExitCode.configInvalid.rawValue
     case .invalidBool: ClawExitCode.configInvalid.rawValue
