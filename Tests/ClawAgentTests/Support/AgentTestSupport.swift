@@ -141,15 +141,15 @@ func makeRuntime(
 
 func requireCompleted(
   _ result: TurnResult
-) throws -> (content: String, usage: ProviderUsage) {
-  guard case .completed(let content, let usage) = result else {
+) throws -> (content: String, usage: ProviderUsage, providerState: ProviderExchangeState?) {
+  guard case .completed(let content, let usage, let providerState) = result else {
     struct Mismatch: Error, CustomStringConvertible {
       let result: TurnResult
       var description: String { "expected TurnResult.completed, got \(result)" }
     }
     throw Mismatch(result: result)
   }
-  return (content, usage)
+  return (content, usage, providerState)
 }
 
 func requireDegraded(

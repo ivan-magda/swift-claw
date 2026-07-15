@@ -193,3 +193,114 @@ import Testing
     #expect(try count(fixture.queue, "SELECT COUNT(*) FROM outbound_deliveries") == 0)
   }
 }
+
+// MARK: - Provider Replay State
+
+extension SuspendedTurnCommitTests {
+  /// Deliberately not valid UTF-8: a seam that stringified the blob would mangle it rather than
+  /// round-trip it.
+  static let anchorState = ProviderExchangeState(
+    issuer: "openai-chatgpt-responses-v1:suspend",
+    payload: Data([0x00, 0xC3, 0x28, 0xFF])
+  )
+
+  private func statefulCommit(_ fixture: Fixture) -> SuspendedTurnCommit {
+    let base = makeCommit(fixture)
+    return SuspendedTurnCommit(
+      assistantContent: base.assistantContent,
+      toolCallsJSON: base.toolCallsJSON,
+      completedObservations: [ToolObservationRow(toolCallId: "w0", content: "already ran")],
+      pending: base.pending,
+      ownerUserId: base.ownerUserId,
+      nonce: base.nonce,
+      promptChunks: base.promptChunks,
+      setTainted: base.setTainted,
+      setPrivateData: base.setPrivateData,
+      providerState: Self.anchorState,
+      expiresTs: base.expiresTs
+    )
+  }
+
+  @Test func theSuspendCommitPersistsTheAnchorStateWithTheCheckpoint() throws {
+    // given
+    let fixture = try makeRunningFixture()
+    let runs = RunStoreGRDB(writer: fixture.queue)
+
+    // when
+    _ = try runs.commitSuspendedTurn(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      commit: statefulCommit(fixture),
+      now: Date()
+    )
+
+    // then — the checkpoint and the state its anchor was minted with land in one transaction
+    let anchor = try #require(
+      try fixture.queue.read { db in
+        try Row.fetchOne(
+          db,
+          sql: """
+            SELECT provider_state_issuer, provider_state FROM messages
+            WHERE run_id = ? AND role = ?
+            """,
+          arguments: [fixture.runId, MessageRole.assistant.rawValue]
+        )
+      }
+    )
+    #expect(anchor["provider_state_issuer"] as String? == Self.anchorState.issuer)
+    #expect(anchor["provider_state"] as Data? == Self.anchorState.payload)
+  }
+
+  @Test func providerStateNeverReachesTheAuditTrailOrTheApprovalPrompt() throws {
+    // given — the suspend commit is the one store path that writes an audit row and an owner-facing
+    // prompt in the same transaction as an anchor's state
+    let fixture = try makeRunningFixture()
+    let runs = RunStoreGRDB(writer: fixture.queue)
+
+    // when
+    _ = try runs.commitSuspendedTurn(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      commit: statefulCommit(fixture),
+      now: Date()
+    )
+
+    // then — both surfaces exist and neither holds the issuer or a byte of the payload
+    let auditRows = try fixture.queue.read { db in
+      try Row.fetchAll(db, sql: "SELECT * FROM audit_events").map { row in "\(row)" }
+    }
+    let prompts = try fixture.queue.read { db in
+      try String.fetchAll(db, sql: "SELECT payload FROM outbound_deliveries")
+    }
+    #expect(auditRows.isEmpty == false)
+    #expect(prompts.isEmpty == false)
+    for text in auditRows + prompts {
+      #expect(text.contains(Self.anchorState.issuer) == false)
+      #expect(Data(text.utf8).range(of: Self.anchorState.payload) == nil)
+    }
+  }
+
+  @Test func theResumedContextLoadsTheSuspendedAnchorStateAndNoOtherRow() throws {
+    // given — the checkpoint a resume reads back before its next provider call
+    let fixture = try makeRunningFixture()
+    let runs = RunStoreGRDB(writer: fixture.queue)
+    let receipt = try runs.commitSuspendedTurn(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      commit: statefulCommit(fixture),
+      now: Date()
+    )
+
+    // when — resume binds context to the filled observation row
+    let history = try SessionMessageStoreGRDB(writer: fixture.queue).loadContext(
+      sessionId: fixture.sessionId,
+      throughMessageId: receipt.observationMessageId,
+      limit: 50
+    )
+
+    // then — the parked anchor carries its state; the completed and placeholder rows carry none
+    #expect(history.map(\.role) == [.user, .assistant, .tool, .tool])
+    #expect(history[1].providerState == Self.anchorState)
+    #expect(history.filter { message in message.providerState != nil }.count == 1)
+  }
+}

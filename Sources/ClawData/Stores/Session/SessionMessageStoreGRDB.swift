@@ -165,7 +165,8 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
       let rows = try Row.fetchAll(
         db,
         sql: """
-          SELECT id, role, content, provenance, tool_calls, tool_call_id
+          SELECT id, role, content, provenance, tool_calls, tool_call_id,
+            \(ProviderStateCoding.selection)
           FROM messages
           WHERE session_id = ? AND id > ? AND id <= ? AND id >= ?
           ORDER BY id ASC
@@ -245,6 +246,11 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   /// `provenance` is the trust tier — a corrupted value must not silently become the
   /// permissive `.trusted` and unfence content the moment assembly keys off it. Same rule as
   /// `MemoryStoreGRDB.decodeItem`.
+  ///
+  /// Replay state is the opposite call, for the opposite reason: it is optional metadata no message
+  /// needs to be read, understood, or answered, so an invalid one is dropped and the message is
+  /// still delivered — the same leniency `tool_calls` already gets. Refusing the row instead would
+  /// let one bad blob take down a session that reads perfectly well without it.
   static func decodeStoredMessage(_ row: Row) throws -> StoredMessage {
     let rowId: Int64 = row["id"]
 
@@ -260,7 +266,8 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
       content: row["content"],
       provenance: provenance,
       toolCallsJSON: row["tool_calls"],
-      toolCallId: row["tool_call_id"]
+      toolCallId: row["tool_call_id"],
+      providerState: ProviderStateCoding.decode(row)
     )
   }
 }

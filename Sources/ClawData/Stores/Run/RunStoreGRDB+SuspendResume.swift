@@ -368,12 +368,10 @@ private extension RunStoreGRDB {
     commit: SuspendedTurnCommit,
     now: Date
   ) throws -> (approvalId: Int64, observationMessageId: Int64) {
-    try db.execute(
-      sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
+    try MessageRowInsert.execute(
+      db,
+      columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_calls"],
+      values: [
         sessionId,
         runId,
         MessageRole.assistant.rawValue,
@@ -381,16 +379,15 @@ private extension RunStoreGRDB {
         Provenance.trusted.rawValue,
         now,
         commit.toolCallsJSON,
-      ]
+      ],
+      providerState: commit.providerState
     )
 
     for observation in commit.completedObservations {
-      try db.execute(
-        sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          """,
-        arguments: [
+      try MessageRowInsert.execute(
+        db,
+        columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_call_id"],
+        values: [
           sessionId,
           runId,
           MessageRole.tool.rawValue,
@@ -398,7 +395,8 @@ private extension RunStoreGRDB {
           Provenance.untrusted.rawValue,
           now,
           observation.toolCallId,
-        ]
+        ],
+        providerState: nil
       )
     }
     // The PLACEHOLDER pins rowid adjacency: a real `tool` row satisfying the anchor's expected

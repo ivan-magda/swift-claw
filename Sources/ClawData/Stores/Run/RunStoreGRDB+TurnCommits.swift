@@ -29,17 +29,11 @@ extension RunStoreGRDB {
         )
       }
 
-      let nextState = try Self.transitionRun(
-        db,
-        runId: turn.runId,
-        event: .complete,
-        now: now
-      )
-      guard let nextState else {
+      guard try Self.transitionRun(db, runId: turn.runId, event: .complete, now: now) != nil else {
         return .ignored
       }
 
-      try Self.finalizeCompletedTurn(db, turn: turn, nextState: nextState, now: now)
+      try Self.finalizeCompletedTurn(db, turn: turn, now: now)
 
       return .committed
     }
@@ -91,8 +85,8 @@ extension RunStoreGRDB {
       }
 
       if let usage = turn.usage {
-        try Self.insertUsage(db, usage)
-        try Self.updateRunUsage(db, usage: usage, now: now)
+        _ = try Self.insertUsage(db, usage)
+        try Self.recomputeRunUsageTotals(db, runId: turn.runId, now: now)
       }
 
       // Same collision guard as the completed path: a degraded RESUME must not silently drop
@@ -120,10 +114,11 @@ extension RunStoreGRDB {
 // MARK: - Turn Commit Helpers
 
 private extension RunStoreGRDB {
+  /// The run's terminal state is already written by the `transitionRun` that authorised this
+  /// commit, so nothing here restates it.
   static func finalizeCompletedTurn(
     _ db: Database,
     turn: AssistantTurn,
-    nextState: RunState,
     now: Date
   ) throws {
     for exchange in turn.exchanges {
@@ -137,12 +132,13 @@ private extension RunStoreGRDB {
     }
 
     let usage = turn.usage
-    try db.execute(
-      sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, prompt_tokens, completion_tokens)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
+    try MessageRowInsert.execute(
+      db,
+      columns: [
+        "session_id", "run_id", "role", "content", "provenance", "ts", "prompt_tokens",
+        "completion_tokens",
+      ],
+      values: [
         turn.sessionId,
         turn.runId,
         MessageRole.assistant.rawValue,
@@ -151,21 +147,11 @@ private extension RunStoreGRDB {
         now,
         usage.promptTokens,
         usage.completionTokens,
-      ]
+      ],
+      providerState: turn.providerState
     )
-    try db.execute(
-      sql:
-        "UPDATE runs SET state = ?, updated_ts = ?, input_tokens = ?, output_tokens = ?, cost_usd = ? WHERE id = ?",
-      arguments: [
-        nextState.rawValue,
-        now,
-        usage.promptTokens,
-        usage.completionTokens,
-        usage.costUSD,
-        turn.runId,
-      ]
-    )
-    try insertUsage(db, usage)
+    _ = try insertUsage(db, usage)
+    try recomputeRunUsageTotals(db, runId: turn.runId, now: now)
 
     let stepBase = try nextOutboxStepBase(db, runId: turn.runId)
     for chunk in turn.chunks {
@@ -211,10 +197,15 @@ private extension RunStoreGRDB {
     return .usageRecordedAfterTerminal
   }
 
-  /// Re-derives the run's denormalized totals from every usage row it owns, in the transaction that
-  /// stored the new one. Summing what is stored — rather than adding the row in hand — keeps a row
-  /// arriving after the run terminated from erasing the rounds that preceded it, and needs no
-  /// separate replay guard: a commit whose row was already recorded never reaches this.
+  /// Re-derives the run's denormalized totals from every usage row it owns, in the same transaction
+  /// as the insert that prompted it. This is the ONLY definition of what `runs.input_tokens`,
+  /// `output_tokens`, and `cost_usd` mean — what the run spent across every round it recorded —
+  /// and every commit path goes through it, so the figure never depends on which path got there.
+  ///
+  /// Summing what is stored, rather than adding the row in hand, is what makes that possible: it is
+  /// idempotent, so it needs no replay guard and is safe to run when the insert conflicted and wrote
+  /// nothing. Adding the row in hand would instead let a late row erase the rounds before it, and
+  /// let a conflicting insert debit spend the run never incurred.
   static func recomputeRunUsageTotals(_ db: Database, runId: Int64, now: Date) throws {
     try db.execute(
       sql: """
@@ -233,24 +224,10 @@ private extension RunStoreGRDB {
     )
   }
 
-  static func updateRunUsage(_ db: Database, usage: ProviderUsage, now: Date) throws {
-    try db.execute(
-      sql: """
-        UPDATE runs SET updated_ts = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?
-        WHERE id = ?
-        """,
-      arguments: [
-        now,
-        usage.promptTokens,
-        usage.completionTokens,
-        usage.costUSD,
-        usage.runId,
-      ]
-    )
-  }
-
-  /// Writes one exchange as rows: the assistant anchor (tool_calls JSON, trusted) then each
-  /// observation (raw content, untrusted, tool_call_id).
+  /// Writes one exchange as rows: the assistant anchor (tool_calls JSON, trusted, carrying the
+  /// state the proposal was minted with) then each observation (raw content, untrusted,
+  /// tool_call_id). Observations get no state — the round produced one, and it belongs to the
+  /// proposal that made it, not to the untrusted output it fetched.
   static func insertExchangeRows(
     _ db: Database,
     sessionId: Int64,
@@ -258,12 +235,10 @@ private extension RunStoreGRDB {
     exchange: ToolExchange,
     now: Date
   ) throws {
-    try db.execute(
-      sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
+    try MessageRowInsert.execute(
+      db,
+      columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_calls"],
+      values: [
         sessionId,
         runId,
         MessageRole.assistant.rawValue,
@@ -271,15 +246,14 @@ private extension RunStoreGRDB {
         Provenance.trusted.rawValue,
         now,
         ToolCallCoding.encode(exchange.toolCalls),
-      ]
+      ],
+      providerState: exchange.providerState
     )
     for observation in exchange.observations {
-      try db.execute(
-        sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          """,
-        arguments: [
+      try MessageRowInsert.execute(
+        db,
+        columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_call_id"],
+        values: [
           sessionId,
           runId,
           MessageRole.tool.rawValue,
@@ -287,7 +261,8 @@ private extension RunStoreGRDB {
           Provenance.untrusted.rawValue,
           now,
           observation.callId,
-        ]
+        ],
+        providerState: nil
       )
     }
   }

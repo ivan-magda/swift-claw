@@ -509,7 +509,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, usage) = try requireCompleted(outcome.result)
+    let (content, usage, _) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     #expect(usage.promptTokens == 3)
     #expect(usage.completionTokens == 2)
@@ -567,7 +567,7 @@ func waitForTurnResult(
     let outcome = await waitForTurnResult(turnResult, milliseconds: 2_000)
 
     // then
-    let (content, _) = try requireCompleted(try #require(outcome).result)
+    let (content, _, _) = try requireCompleted(try #require(outcome).result)
     #expect(content == "hi")
     #expect(await typing.calls >= 3)
   }
@@ -616,7 +616,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     let sentDrafts = await drafts.drafts
     #expect(!sentDrafts.isEmpty)
@@ -668,7 +668,7 @@ func waitForTurnResult(
 
     // then
     #expect(doneWhileFinalSendBlocked == false)
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     #expect(await drafts.drafts.contains("hello"))
   }
@@ -785,7 +785,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
     #expect(await provider.completeCalls == 1)
     #expect(await provider.streamCalls == 0)
@@ -845,7 +845,7 @@ func waitForTurnResult(
     // guards the day against a future change that debits the retried attempt separately.
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)
-    let (_, usage) = try requireCompleted(outcome.result)
+    let (_, usage, _) = try requireCompleted(outcome.result)
     #expect(usage.providerCallID == ProviderCallID(rawValue: "call-1"))
   }
 
@@ -867,7 +867,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)
@@ -894,7 +894,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)

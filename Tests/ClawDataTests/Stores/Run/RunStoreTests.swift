@@ -420,6 +420,101 @@ import Testing
     #expect(abs(totals.cost - 0.504) < 1e-9)
   }
 
+  @Test func aCompletedRunsTotalsEqualTheSumOfEveryRoundItRecorded() throws {
+    // given — a live multi-round loop: the intermediate round's row is already stored when the
+    // terminal round commits
+    let env = try fixture()
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    try env.usage.recordUsage(
+      makeProviderUsage(
+        runId: env.seedRunId,
+        sessionId: env.sessionId,
+        callID: "call-round-1",
+        promptTokens: 10,
+        completionTokens: 20,
+        costUSD: 0.004
+      )
+    )
+
+    // when
+    _ = try env.runs.commitAssistantTurn(
+      terminalTurn(env, callID: "call-round-2", promptTokens: 7, completionTokens: 3, costUSD: 0.5),
+      now: Date()
+    )
+
+    // then — the run's totals mean the same thing here as after a late commit: what the run spent,
+    // not what its last round spent
+    let totals = try runTotals(env)
+    #expect(totals.input == 17)
+    #expect(totals.output == 23)
+    #expect(abs(totals.cost - 0.504) < 1e-9)
+  }
+
+  @Test func aDegradedRunsTotalsEqualTheSumOfEveryRoundItRecorded() throws {
+    // given
+    let env = try fixture()
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    try env.usage.recordUsage(
+      makeProviderUsage(
+        runId: env.seedRunId,
+        sessionId: env.sessionId,
+        callID: "call-round-1",
+        promptTokens: 10,
+        completionTokens: 20,
+        costUSD: 0.004
+      )
+    )
+
+    // when
+    _ = try env.runs.commitDegradedTurn(
+      degradedTurn(env, callID: "call-round-2", promptTokens: 7, completionTokens: 3, costUSD: 0.5),
+      now: Date()
+    )
+
+    // then
+    let totals = try runTotals(env)
+    #expect(totals.input == 17)
+    #expect(totals.output == 23)
+    #expect(abs(totals.cost - 0.504) < 1e-9)
+  }
+
+  @Test func aDegradedCommitWhoseUsageRowAlreadyLandedLeavesTheTotalsAlone() throws {
+    // given — the round already recorded its row; the degradation commit re-presents the SAME call
+    // under an estimate. The insert conflicts and writes nothing, so the totals it computes must
+    // still describe the rows the run owns rather than the estimate that lost.
+    let env = try fixture()
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    try env.usage.recordUsage(
+      makeProviderUsage(
+        runId: env.seedRunId,
+        sessionId: env.sessionId,
+        callID: "call-round-1",
+        promptTokens: 10,
+        completionTokens: 20,
+        costUSD: 0.004
+      )
+    )
+
+    // when
+    _ = try env.runs.commitDegradedTurn(
+      degradedTurn(
+        env,
+        callID: "call-round-1",
+        promptTokens: 999,
+        completionTokens: 999,
+        costUSD: 9
+      ),
+      now: Date()
+    )
+
+    // then
+    #expect(try usageRowCount(env) == 1)
+    let totals = try runTotals(env)
+    #expect(totals.input == 10)
+    #expect(totals.output == 20)
+    #expect(abs(totals.cost - 0.004) < 1e-9)
+  }
+
   @Test func replayingTheTerminalCommitChangesNeitherTotalsNorDayBudgets() throws {
     // given — a cancelled run whose terminal commit already landed
     let env = try fixture()
@@ -540,6 +635,31 @@ private extension RunStoreTests {
         costUSD: costUSD
       ),
       chunks: [OutboxChunk(stepIndex: 0, chatId: 42, payload: "answer", payloadHash: "h")]
+    )
+  }
+
+  /// The turn a tool loop's terminal round commits when it degrades, named by the call it accounts
+  /// for.
+  private func degradedTurn(
+    _ env: Fixture,
+    callID: String,
+    promptTokens: Int,
+    completionTokens: Int,
+    costUSD: Double
+  ) -> DegradedTurn {
+    DegradedTurn(
+      runId: env.seedRunId,
+      sessionId: env.sessionId,
+      chatId: 42,
+      usage: makeProviderUsage(
+        runId: env.seedRunId,
+        sessionId: env.sessionId,
+        callID: callID,
+        promptTokens: promptTokens,
+        completionTokens: completionTokens,
+        costUSD: costUSD
+      ),
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "degraded", payloadHash: "h")
     )
   }
 

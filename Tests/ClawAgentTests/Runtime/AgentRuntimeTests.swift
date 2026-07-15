@@ -1,4 +1,5 @@
 import ClawTestSupport
+import Foundation
 import Testing
 
 @testable import ClawAgent
@@ -31,7 +32,7 @@ struct AgentRuntimeTests {
     )
 
     // then — provider cost wins.
-    let (content, usage) = try requireCompleted(outcome.result)
+    let (content, usage, _) = try requireCompleted(outcome.result)
 
     #expect(content == "Hello there")
     #expect(usage.costSource == .providerReturned)
@@ -66,7 +67,7 @@ struct AgentRuntimeTests {
 
     // then — usage is estimated: prompt from the sent context, completion from the reply. Never a
     // zero row, so the hard daily token breaker can still account for it.
-    let (content, usage) = try requireCompleted(outcome.result)
+    let (content, usage, _) = try requireCompleted(outcome.result)
 
     #expect(content == "Hi!")
     // estimated from the prompt/reply — non-zero so the breaker can account for the turn
@@ -367,5 +368,130 @@ struct AgentRuntimeTests {
     #expect(recorded.costUSD > 0)  // never a silent $0 (D1/F19)
     #expect(recorded.promptTokens > 0)
     #expect(recorded.completionTokens == RunBudget.default.maxOutputTokens)
+  }
+}
+
+// MARK: - Provider Replay State
+
+extension AgentRuntimeTests {
+  /// Deliberately not valid UTF-8: a runtime that treated the payload as text rather than opaque
+  /// bytes would mangle it instead of handing it back unchanged.
+  static let roundOneState = ProviderExchangeState(
+    issuer: "openai-chatgpt-responses-v1:round-one",
+    payload: Data([0x00, 0xC3, 0x28, 0xFF])
+  )
+  static let roundTwoState = ProviderExchangeState(
+    issuer: "openai-chatgpt-responses-v1:round-two",
+    payload: Data([0x80, 0xFE, 0x01])
+  )
+
+  @Test("every assistant anchor of a loop carries the state produced with it")
+  func loopCarriesEachRoundsProviderState() async throws {
+    // given — round one proposes a tool call with its own state; round two answers with another
+    let provider = SequenceProvider([
+      toolCallResponse(
+        [fetchProposal()],
+        content: "let me check",
+        providerState: Self.roundOneState
+      ),
+      okResponse(content: "the page says hello", providerState: Self.roundTwoState),
+    ])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome(content: "page text"))
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: makeBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the intermediate proposal keeps round one's state, the answer keeps round two's
+    let completed = try requireCompleted(outcome.result)
+    #expect(completed.providerState == Self.roundTwoState)
+    #expect(outcome.exchanges.count == 1)
+    #expect(outcome.exchanges[0].providerState == Self.roundOneState)
+
+    // and the next round-trip replays round one's anchor state back to the route that minted it,
+    // on the assistant message alone
+    let secondRequest = try #require(await provider.requests.last)
+    let anchor = try #require(secondRequest.messages.last { message in message.role == .assistant })
+    #expect(anchor.providerState == Self.roundOneState)
+    #expect(
+      secondRequest.messages.filter { message in message.providerState != nil }.count == 1
+    )
+  }
+
+  @Test("a route that mints no state leaves every anchor stateless")
+  func aStatelessRouteProducesNoAnchorState() async throws {
+    // given — the Chat Completions contract, which mints nothing
+    let provider = SequenceProvider([
+      toolCallResponse([fetchProposal()], content: "let me check"),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome(content: "page text"))
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: makeBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    #expect(try requireCompleted(outcome.result).providerState == nil)
+    #expect(outcome.exchanges.allSatisfy { exchange in exchange.providerState == nil })
+    #expect(
+      await provider.requests.allSatisfy { request in
+        request.messages.allSatisfy { message in message.providerState == nil }
+      }
+    )
+  }
+
+  @Test("tool observations never carry replay state onto the wire")
+  func toolObservationsNeverCarryState() async throws {
+    // given
+    let provider = SequenceProvider([
+      toolCallResponse(
+        [fetchProposal()],
+        content: "let me check",
+        providerState: Self.roundOneState
+      ),
+      okResponse(content: "done", providerState: Self.roundTwoState),
+    ])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome(content: "page text"))
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    _ = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: makeBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the fenced observation is untrusted input; replay material must never ride it, and the
+    // issuer must never appear in the text a tool contributed
+    let secondRequest = try #require(await provider.requests.last)
+    for message in secondRequest.messages where message.role != .assistant {
+      #expect(message.providerState == nil)
+    }
+    let toolRow = try #require(secondRequest.messages.last { message in message.role == .tool })
+    #expect(toolRow.content.contains("round-one") == false)
   }
 }

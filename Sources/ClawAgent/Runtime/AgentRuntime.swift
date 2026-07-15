@@ -14,8 +14,10 @@ public enum DegradationKind: String, Sendable, Equatable {
 /// The outcome of one orchestrated turn. `runTurn` never throws — every failure becomes one of
 /// these so the gateway always has something to persist and send (never silence).
 public enum TurnResult: Sendable, Equatable {
-  /// A usable answer plus the reconciled, provider-truth usage to debit.
-  case completed(content: String, usage: ProviderUsage)
+  /// A usable answer plus the reconciled, provider-truth usage to debit. `providerState` is the
+  /// replay material the route produced with this answer, carried opaquely to the commit that
+  /// persists the answer — nil from any route that mints none.
+  case completed(content: String, usage: ProviderUsage, providerState: ProviderExchangeState?)
   /// No usable answer. `usage` is the real row when the call returned (truncation) or an
   /// estimated row when it didn't (deadline / exhausted retries); `nil` for terminal errors.
   case degraded(DegradationKind, usage: ProviderUsage?)
@@ -178,6 +180,17 @@ public struct AgentRuntime: Sendable {
       )
     }
 
+    // The three wall-clock exits — exhausted before the send, exceeded during it, exceeded
+    // mid-dispatch — all owe the estimate for the round they ended, over the wire that round was
+    // (or would have been) sent. `wire` only grows once a round completes, so it reads the same at
+    // each of them.
+    func deadlineDegradation(_ callID: ProviderCallID) -> TurnResult {
+      .degraded(
+        .providerUnavailable,
+        usage: estimatedDebit(callID: callID, context: wire, runId: runId, sessionId: sessionId)
+      )
+    }
+
     // The wall-clock deadline is left per-segment by construction — it is recomputed at each
     // `runTurn` entry above; only the round count needs to account for rounds already consumed.
     let priorRounds = carryOver?.rounds ?? 0
@@ -232,17 +245,7 @@ public struct AgentRuntime: Sendable {
       let remaining = deadline - ContinuousClock.now
       guard remaining > .zero else {
         turnLog.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
-        return outcome(
-          .degraded(
-            .providerUnavailable,
-            usage: estimatedDebit(
-              callID: callID,
-              context: wire,
-              runId: runId,
-              sessionId: sessionId
-            )
-          )
-        )
+        return outcome(deadlineDegradation(callID))
       }
 
       turnLog.debug(
@@ -266,17 +269,7 @@ public struct AgentRuntime: Sendable {
         )
       } catch is DeadlineExceeded {
         turnLog.notice("round-trip \(roundTripIndex) exceeded the wall-clock deadline; degrading")
-        return outcome(
-          .degraded(
-            .providerUnavailable,
-            usage: estimatedDebit(
-              callID: callID,
-              context: wire,
-              runId: runId,
-              sessionId: sessionId
-            )
-          )
-        )
+        return outcome(deadlineDegradation(callID))
       } catch {
         // Streaming can partially deliver before a terminal error, so its terminal case still debits
         // an ESTIMATED row (`degradedForStreamingError`); the typing path debits nil for a terminal
@@ -348,17 +341,7 @@ public struct AgentRuntime: Sendable {
         }
 
         guard deadline > ContinuousClock.now else {
-          return outcome(
-            .degraded(
-              .providerUnavailable,
-              usage: estimatedDebit(
-                callID: callID,
-                context: wire,
-                runId: runId,
-                sessionId: sessionId
-              )
-            )
-          )
+          return outcome(deadlineDegradation(callID))
         }
 
         let context = ToolDispatchContext(
@@ -412,9 +395,16 @@ public struct AgentRuntime: Sendable {
         }
       }
 
-      // Grow the wire array with the exchange; observations enter FENCED.
+      // Grow the wire array with the exchange; observations enter FENCED. The anchor carries the
+      // state this round produced, opaquely: only the route that minted it may read it, and this
+      // loop stays provider-agnostic by never looking.
       wire.append(
-        ChatMessage(role: .assistant, content: response.content, toolCalls: response.toolCalls)
+        ChatMessage(
+          role: .assistant,
+          content: response.content,
+          toolCalls: response.toolCalls,
+          providerState: response.providerState
+        )
       )
       for observation in observations {
         wire.append(
@@ -433,7 +423,8 @@ public struct AgentRuntime: Sendable {
         ToolExchange(
           assistantContent: response.content,
           toolCalls: response.toolCalls,
-          observations: observations
+          observations: observations,
+          providerState: response.providerState
         )
       )
 
@@ -478,7 +469,7 @@ private extension AgentRuntime {
   static func logFinish(_ result: TurnResult, on log: Logger, elapsed: Duration) {
     let elapsedMillis = millis(elapsed)
     switch result {
-    case .completed(let content, let usage):
+    case .completed(let content, let usage, _):
       log.info(
         "turn finished completed chars=\(content.count) tokens=\(usage.promptTokens + usage.completionTokens) usd=\(USD.precise(usage.costUSD)) ms=\(elapsedMillis)"
       )
@@ -730,7 +721,11 @@ private extension AgentRuntime {
     )
 
     if !response.content.isEmpty {
-      return .completed(content: response.content, usage: usage)
+      return .completed(
+        content: response.content,
+        usage: usage,
+        providerState: response.providerState
+      )
     }
 
     if response.finishReason == "length" {

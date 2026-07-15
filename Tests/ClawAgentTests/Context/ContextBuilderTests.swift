@@ -417,6 +417,121 @@ struct ContextBuilderTests {
   }
 }
 
+// MARK: - Provider Replay State
+
+extension ContextBuilderTests {
+  /// Deliberately not valid UTF-8, so a renderer that stringified the blob into prompt text would
+  /// leave detectable bytes behind rather than silently succeed.
+  static let replayPayload = Data([0x00, 0xC3, 0x28, 0xFF, 0xFE])
+  static let replayState = ProviderExchangeState(
+    issuer: "openai-chatgpt-responses-v1:zzzsecretissuer",
+    payload: replayPayload
+  )
+
+  /// A window whose assistant anchor proposed a tool call, ran it, and answered — one row of each
+  /// kind the renderer can meet, with state on the anchors alone.
+  private func statefulSnapshot() -> SessionContextSnapshot {
+    SessionContextSnapshot(
+      history: [
+        StoredMessage(role: .user, content: "fetch the page", provenance: .trusted),
+        StoredMessage(
+          role: .assistant,
+          content: "on it",
+          provenance: .trusted,
+          toolCallsJSON: #"[{"id":"c1","name":"web_fetch","arguments":"{}"}]"#,
+          providerState: Self.replayState
+        ),
+        StoredMessage(
+          role: .tool,
+          content: "raw page text",
+          provenance: .untrusted,
+          toolCallId: "c1"
+        ),
+        StoredMessage(
+          role: .assistant,
+          content: "here is the summary",
+          provenance: .trusted,
+          providerState: Self.replayState
+        ),
+      ],
+      historyMessageIds: [10, 11, 12, 13],
+      windowStartMessageId: 0,
+      isTainted: false,
+      hasPrivateData: false
+    )
+  }
+
+  @Test func assistantAnchorsCarryTheirProviderStateOntoTheWire() throws {
+    // given
+    let builder = makeBuilder()
+
+    // when
+    let result = try builder.assemble(
+      snapshot: statefulSnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then — the route that minted the state gets it back on exactly the messages it belongs to
+    #expect(result.messages.map(\.role) == [.system, .user, .assistant, .tool, .assistant])
+    #expect(result.messages[2].providerState == Self.replayState)
+    #expect(result.messages[4].providerState == Self.replayState)
+    for message in result.messages where message.role != .assistant {
+      #expect(message.providerState == nil)
+    }
+  }
+
+  @Test func providerStateNeverBecomesPromptContent() throws {
+    // given — a retriever that would surface the same window text again, and a recall query drawn
+    // from it, so every text-bearing seam of one assembly is covered at once
+    let builder = makeBuilder(
+      retriever: FakeRetriever(
+        hits: [
+          RecallHit(
+            id: 99,
+            sessionId: 2,
+            role: .assistant,
+            content: "an older answer",
+            score: RecallScore(value: 10),
+            createdAt: Date(timeIntervalSince1970: 0)
+          )
+        ]
+      )
+    )
+
+    // when
+    let result = try builder.assemble(
+      snapshot: statefulSnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then — the bytes are carried, never rendered: no message's text holds the issuer or the
+    // payload, whatever tier it belongs to
+    for message in result.messages {
+      #expect(message.content.contains("zzzsecretissuer") == false)
+      #expect(Data(message.content.utf8).range(of: Self.replayPayload) == nil)
+    }
+    #expect(result.messages.contains { message in message.content.contains("raw page text") })
+    #expect(
+      result.ownerNotices.allSatisfy { notice in notice.contains("zzzsecretissuer") == false }
+    )
+  }
+
+  @Test func historyHygienePreservesTheStateOfAnAnchorItKeeps() throws {
+    // given — the sanitizer is the last seam between a loaded row and the wire
+    let history = statefulSnapshot().history
+
+    // when
+    let sanitized = HistoryHygiene.sanitize(history)
+
+    // then
+    #expect(sanitized.count == 4)
+    #expect(sanitized[1].providerState == Self.replayState)
+    #expect(sanitized[3].providerState == Self.replayState)
+  }
+}
+
 private func makeBuilder(
   policyStaticSubhash: String = "",
   workspace: FakeWorkspace = FakeWorkspace(),
