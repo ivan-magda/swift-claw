@@ -667,7 +667,12 @@ final class HandoffCounter: Sendable {
     // given — nothing is listening, so no channel to write a request on ever exists
     let port = try await closedLocalPort()
     var configuration = HTTPClient.Configuration()
-    configuration.timeout = .init(connect: .milliseconds(10))
+    // Network.framework does not fail a refused connect; it parks it as "waiting" holding the typed
+    // refusal, and only a deadline ends that wait and surfaces it. This bound is therefore what makes
+    // the refusal observable at all, and it clears the ~1-2ms the transport takes to record it by two
+    // orders of magnitude so a loaded machine cannot make the deadline land first — which would
+    // surface an untyped connect timeout, a failure this test would then read as a real regression.
+    configuration.timeout = .init(connect: .milliseconds(200))
 
     // when
     let failure = await #expect(throws: HTTPTransportFailure.self) {
