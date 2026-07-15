@@ -148,6 +148,12 @@ public enum StructuredOutputMode: String, Sendable, Equatable {
   case jsonSchema = "json_schema"
 }
 
+extension StructuredOutputMode: CustomStringConvertible {
+  /// The wire spelling an owner sets `CLAW_LLM_STRUCTURED_OUTPUT` to, so a config error names the
+  /// value they typed rather than the Swift case that parsed it.
+  public var description: String { rawValue }
+}
+
 /// Static LLM wiring loaded from the environment. `apiKey` defaults to "" — local servers
 /// need none, so a missing key is not a config error.
 public struct LLMConfig: Sendable, Equatable {

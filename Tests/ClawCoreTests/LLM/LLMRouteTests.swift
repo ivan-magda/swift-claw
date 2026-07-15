@@ -280,7 +280,7 @@ private enum ProbeFailure: Error, Equatable {
     #expect(route.descriptor.qualifiedPrefix == nil)
     #expect(route.descriptor.credentialMode == .noneOrStaticBearer)
     #expect(capabilities.supportsTools)
-    #expect(capabilities.usesStreamingWire)
+    #expect(capabilities.usesStreamingWire == false)
     #expect(capabilities.supportsStructuredOutput)
     #expect(capabilities.supportsStopStrings)
     #expect(capabilities.outputTokenField == .configured(.maxCompletionTokens))

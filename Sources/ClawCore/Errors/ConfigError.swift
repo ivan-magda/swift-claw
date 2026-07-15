@@ -8,7 +8,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case emptyQualifiedModelSuffix(reference: String)
   case oversizedQualifiedModelSuffix(reference: String)
   case unsafeQualifiedModelSuffix(reference: String)
-  case structuredOutputUnsupportedOnRoute(providerID: String, mode: String)
+  case structuredOutputUnsupportedOnRoute(providerID: LLMProviderID, mode: StructuredOutputMode)
   case invalidMaxTokens(String)
   case invalidBudget(String)
   case invalidBool(key: String, value: String)

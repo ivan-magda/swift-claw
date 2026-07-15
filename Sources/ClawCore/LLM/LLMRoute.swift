@@ -15,6 +15,12 @@ public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
   public static let openAIChatGPT = LLMProviderID(rawValue: "openai-chatgpt")
 }
 
+extension LLMProviderID: CustomStringConvertible {
+  /// The bare identity an owner configured, for diagnostics that carry this as a payload: config
+  /// errors reach the operator through reflection, which would otherwise render the wrapper.
+  public var description: String { rawValue }
+}
+
 /// How a route authorizes. Authentication and wire protocol are separate choices: this names the
 /// credential seam to compose, never the wire format.
 public enum LLMCredentialMode: Sendable, Equatable {
@@ -33,6 +39,12 @@ public enum LLMWireOutputTokenField: Sendable, Equatable {
 /// any network I/O; the agent loop never reads them.
 public struct LLMProviderCapabilities: Sendable, Equatable {
   public let supportsTools: Bool
+  /// Whether SSE is the route's only transport, buffered replies included: a `complete()` here
+  /// drains the very event stream a `stream()` does. This is not "offers streaming" — the provider
+  /// protocol mandates `stream()`, so every route offers it — and the owner-facing streaming toggle
+  /// never moves it, governing whether partial text reaches the owner rather than what crosses the
+  /// wire. False marks a route whose buffered and streamed calls are genuinely different
+  /// transports, and which can therefore fall back from one to the other.
   public let usesStreamingWire: Bool
   public let supportsStructuredOutput: Bool
   public let supportsStopStrings: Bool
@@ -120,7 +132,7 @@ extension LLMProviderDescriptor {
       credentialMode: .noneOrStaticBearer,
       capabilities: LLMProviderCapabilities(
         supportsTools: true,
-        usesStreamingWire: true,
+        usesStreamingWire: false,
         supportsStructuredOutput: true,
         supportsStopStrings: true,
         outputTokenField: .configured(AppConfig.EnvDefaults.maxTokensField)
