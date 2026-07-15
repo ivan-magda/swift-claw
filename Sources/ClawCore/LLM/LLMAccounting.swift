@@ -105,9 +105,9 @@ private extension LLMInputReservationPolicy {
     // caller's gate — the one direction a reservation must never move.
     return max(
       0,
-      saturatingSum(
-        saturatingProduct(selectedBytes, tokensPerByte),
-        saturatingProduct(stateCount, framingTokensPerState)
+      SaturatingArithmetic.sum(
+        SaturatingArithmetic.product(selectedBytes, tokensPerByte),
+        SaturatingArithmetic.product(stateCount, framingTokensPerState)
       )
     )
   }
@@ -119,17 +119,22 @@ private extension LLMInputReservationPolicy {
     let (sum, overflowed) = running.addingReportingOverflow(bytes)
     return overflowed ? cap : min(sum, cap)
   }
+}
 
-  /// Saturating rather than trapping: a reservation this large already exceeds every token gate, so
-  /// the call gets refused — the safe direction — instead of the daemon dying mid-turn.
-  static func saturatingProduct(_ lhs: Int, _ rhs: Int) -> Int {
-    let (product, overflowed) = lhs.multipliedReportingOverflow(by: rhs)
-    return overflowed ? .max : product
+// MARK: - Saturating budget arithmetic
+
+/// Clamping rather than trapping. Every caller is totalling a budget — tokens to reserve, bytes to
+/// hold — so a sum this large has already passed the limit it feeds: clamping refuses the work,
+/// which is the safe direction, instead of taking the daemon down mid-turn.
+enum SaturatingArithmetic {
+  static func sum(_ lhs: Int, _ rhs: Int) -> Int {
+    let (total, overflowed) = lhs.addingReportingOverflow(rhs)
+    return overflowed ? .max : total
   }
 
-  static func saturatingSum(_ lhs: Int, _ rhs: Int) -> Int {
-    let (sum, overflowed) = lhs.addingReportingOverflow(rhs)
-    return overflowed ? .max : sum
+  static func product(_ lhs: Int, _ rhs: Int) -> Int {
+    let (total, overflowed) = lhs.multipliedReportingOverflow(by: rhs)
+    return overflowed ? .max : total
   }
 }
 
