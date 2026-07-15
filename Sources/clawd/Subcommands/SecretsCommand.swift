@@ -40,15 +40,18 @@ struct SecretsCommand: AsyncParsableCommand {
         throw ExitCode(error.exitCode)
       }
 
+      // The same hardened operation the login transition runs: it publishes crash-safely, proves
+      // the result decrypts, and unwinds anything it created if it cannot.
       do {
         try EncryptedFileSecretStore.seal(secrets, stateRoot: config.stateRoot)
-      } catch {
+      } catch let error as SecretStoreError {
         FileHandle.standardError.write(Data("secrets seal failed: \(error)\n".utf8))
-        throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
+        throw ExitCode(error.exitCode)
       }
 
-      let envelopePath = config.stateRoot.appendingPathComponent(SecretFile.envelope).path
-      let keyPath = config.stateRoot.appendingPathComponent(SecretFile.key).path
+      let paths = SecretStatePaths(stateRoot: config.stateRoot)
+      let envelopePath = paths.runtimeEnvelope.path
+      let keyPath = paths.key.path
       // swiftlint:disable:next no_print_in_production
       print(
         """

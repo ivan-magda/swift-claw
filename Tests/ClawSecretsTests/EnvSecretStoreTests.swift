@@ -88,6 +88,7 @@ import Testing
     SecretStoreError.malformedEnvelope,
     SecretStoreError.decryptionFailed,
     SecretStoreError.unreadable("x"),
+    SecretStoreError.publicationFailed("x"),
   ]) func everySecretErrorMapsToExit11(error: SecretStoreError) {
     // then — a secret-load failure is non-retryable and exits 11 (acceptance #5/#11).
     #expect(error.exitCode == ClawExitCode.secretLoadFailed.rawValue)
