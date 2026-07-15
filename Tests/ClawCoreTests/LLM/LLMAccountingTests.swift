@@ -120,6 +120,20 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(reserved == 2256)
   }
 
+  /// Pins the aggregate cap itself: history well past it must reserve the capped budget, because a
+  /// cap set too low would under-reserve — the one direction the reservation may not err.
+  @Test func theChatGPTReservationCapsAggregateBytesAtFourMebibytes() {
+    // given
+    let threeMebibytes = 3 * 1024 * 1024
+    let messages = history([threeMebibytes, threeMebibytes])
+
+    // when
+    let reserved = LLMInputReservationPolicy.chatGPTReplayState.additionalTokens(for: messages)
+
+    // then
+    #expect(reserved == 8_389_120)
+  }
+
   @Test func theTextEstimatorNeverAccountsForReplayState() {
     // given
     let bare = [ChatMessage(role: .assistant, content: "reply")]

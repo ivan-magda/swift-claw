@@ -347,7 +347,10 @@ public struct CostResolver: Sendable {
     providerCost: Double?,
     policy: LLMCostPolicy = .metered
   ) -> ResolvedCost {
-    guard case .metered = policy else {
+    switch policy {
+    case .metered:
+      break
+    case .includedPlan:
       // A subscription call costs nothing regardless of what the route reports in dollars, and the
       // zero is confirmed rather than guessed — token estimation is `ResolvedUsage`'s verdict, and
       // `ProviderUsage` ORs the two into the row's single flag.

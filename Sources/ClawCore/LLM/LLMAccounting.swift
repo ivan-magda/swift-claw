@@ -101,9 +101,14 @@ private extension LLMInputReservationPolicy {
       selectedBytes = accumulate(selectedBytes, adding: state.payload.count, cap: aggregateByteCap)
     }
 
-    return saturatingSum(
-      saturatingProduct(selectedBytes, tokensPerByte),
-      saturatingProduct(stateCount, framingTokensPerState)
+    // A negative rate is a misconfiguration, and letting its product through would subtract from the
+    // caller's gate — the one direction a reservation must never move.
+    return max(
+      0,
+      saturatingSum(
+        saturatingProduct(selectedBytes, tokensPerByte),
+        saturatingProduct(stateCount, framingTokensPerState)
+      )
     )
   }
 
