@@ -218,10 +218,21 @@ struct SecureFilePublisher: Sendable {
     temporaryNameLives = false
     closeOnce()
 
-    guard fires(.directorySync, on: name) == false, Self.syncDirectory(directory) else {
+    guard syncDirectory(directory, forEntry: name) else {
       return .commitUncertain(identity)
     }
     return .published(identity)
+  }
+
+  /// The durability step on its own. A caller recovering an uncertain commit whose bytes already
+  /// sit at the target retries exactly this rather than minting a second inode for bytes that are
+  /// already there — and reaches the same failpoint the publication does, so a directory that
+  /// cannot be synced stays unsynced for the retry too.
+  func syncDirectory(_ directory: URL, forEntry name: String) -> Bool {
+    guard fires(.directorySync, on: name) == false else {
+      return false
+    }
+    return Self.syncDirectory(directory)
   }
 
   private func fires(_ step: Failpoint.Step, on name: String) -> Bool {

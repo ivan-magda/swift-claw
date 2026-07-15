@@ -15,6 +15,14 @@ public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
   public static let openAIChatGPT = LLMProviderID(rawValue: "openai-chatgpt")
 }
 
+/// What makes a provider-keyed dictionary encode as a JSON object rather than the flat, iteration-
+/// ordered `["openai-chatgpt", {…}, "openai-compatible", {…}]` array `Dictionary` emits for every
+/// key type that is not `String`, `Int`, or this protocol. The stored credential map is keyed by
+/// this type, so the conformance is part of that file's on-disk shape: adding it after the format
+/// ships would silently reinterpret a file holding an owner's only refresh token, and dropping it
+/// would make the bytes depend on a per-process hash seed.
+extension LLMProviderID: CodingKeyRepresentable {}
+
 extension LLMProviderID: CustomStringConvertible {
   /// The bare identity an owner configured, for diagnostics that carry this as a payload: config
   /// errors reach the operator through reflection, which would otherwise render the wrapper.

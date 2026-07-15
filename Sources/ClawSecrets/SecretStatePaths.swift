@@ -14,6 +14,8 @@ public struct SecretStatePaths: Sendable, Equatable {
   /// keys.
   public static let runtimeEnvelopeName = SecretFile.envelope
   /// The provider-keyed OAuth credential map, encrypted under the same key as the runtime envelope.
+  /// Its associated data is distinct from that envelope's, so the two cannot be swapped: either one
+  /// moved to the other's name fails authentication instead of opening as the wrong kind of secret.
   public static let credentialEnvelopeName = "llm-credentials.enc"
   /// The daemon instance lock, named here so one type names every state-root entry the secret layer
   /// touches. Today only `clawd run` acquires it.
