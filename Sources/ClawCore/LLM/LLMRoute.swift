@@ -40,11 +40,12 @@ public enum LLMWireOutputTokenField: Sendable, Equatable {
 public struct LLMProviderCapabilities: Sendable, Equatable {
   public let supportsTools: Bool
   /// Whether SSE is the route's only transport, buffered replies included: a `complete()` here
-  /// drains the very event stream a `stream()` does. This is not "offers streaming" — the provider
-  /// protocol mandates `stream()`, so every route offers it — and the owner-facing streaming toggle
-  /// never moves it, governing whether partial text reaches the owner rather than what crosses the
-  /// wire. False marks a route whose buffered and streamed calls are genuinely different
-  /// transports, and which can therefore fall back from one to the other.
+  /// drains the very event stream a `stream()` does. This is not "offers streaming" — `stream()` is
+  /// a protocol requirement every conformer exposes, so its presence distinguishes no route from
+  /// another — and the owner-facing streaming toggle never moves it, governing whether partial text
+  /// reaches the owner rather than what crosses the wire. False marks a route whose buffered and
+  /// streamed calls are genuinely different transports, and which can therefore fall back from one
+  /// to the other.
   public let usesStreamingWire: Bool
   public let supportsStructuredOutput: Bool
   public let supportsStopStrings: Bool
