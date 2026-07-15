@@ -102,40 +102,83 @@ struct StreamingTurnRuntime: Sendable {
 // MARK: - Stream Consumption
 
 private extension StreamingTurnRuntime {
+  /// Joins the session on every way out. The session owns the inference and, through it, the HTTP
+  /// transfer, so returning without joining would leave both running behind a finished turn.
   func consumeStream(
     request: ChatRequest,
+    snapshot: DraftSnapshot
+  ) async throws -> ChatResponse {
+    let stream = provider.stream(request: request)
+    do {
+      let response = try await accumulate(from: stream, snapshot: snapshot)
+      _ = await stream.awaitTermination()
+      return response
+    } catch {
+      _ = await stream.cancelAndAwait()
+      throw error
+    }
+  }
+
+  func accumulate(
+    from stream: LLMEventStream,
     snapshot: DraftSnapshot
   ) async throws -> ChatResponse {
     var content = ""
     var contentBytes = 0
 
-    for try await event in provider.stream(request: request) {
-      try Task.checkCancellation()
-      switch event {
-      case .delta(let delta):
-        try append(delta: delta, to: &content, contentBytes: &contentBytes)
-        // An empty accumulation (providers commonly open with an empty role-only delta) must
-        // never surface as a blank draft bubble.
-        if !content.isEmpty {
-          await snapshot.publish(content)
+    do {
+      for try await event in stream {
+        try Task.checkCancellation()
+        switch event {
+        case .delta(let delta):
+          try append(delta: delta, to: &content, contentBytes: &contentBytes)
+          // An empty accumulation (providers commonly open with an empty role-only delta) must
+          // never surface as a blank draft bubble.
+          if !content.isEmpty {
+            await snapshot.publish(content)
+          }
+        case .finished(let response):
+          // The accumulation, not the terminal's own copy, is what the drafts have been showing;
+          // taking the reply from anywhere else would let the final frame disagree with them.
+          return ChatResponse(
+            content: content,
+            finishReason: response.finishReason,
+            usage: response.usage,
+            costFromProvider: response.costFromProvider,
+            toolCalls: response.toolCalls,
+            providerState: response.providerState
+          )
         }
-      case .finished(let finishReason, let usage, let providerCost, let toolCalls):
-        return ChatResponse(
-          content: content,
-          finishReason: finishReason,
-          usage: usage,
-          costFromProvider: providerCost,
-          toolCalls: toolCalls
-        )
       }
+    } catch let failure as ProviderFailure {
+      // The turn's one-time stream-to-buffered fallback turns on the typed cause, so hand that cause
+      // on rather than an envelope no caller upstream matches.
+      throw failure.cause
     }
 
     // A cancelled consumer ends iteration with nil instead of throwing, so re-check here or a
     // /stop-style cancel would surface the partial accumulation as a completed reply.
     try Task.checkCancellation()
 
-    // EOF without a `.finished` event after valid deltas — treat as a complete reply.
-    return ChatResponse(content: content, finishReason: nil, usage: nil, costFromProvider: nil)
+    // Only a completed inference reserves a terminal, so the queue running dry without one means
+    // the reply is not whole — the join says why.
+    throw Self.error(for: await stream.awaitTermination())
+  }
+
+  /// A terminal that reached here is never `.completed`: that case returns from the loop above with
+  /// its reserved event.
+  static func error(for termination: LLMStreamTermination) -> any Error {
+    switch termination {
+    case .failed(let failure):
+      return failure.cause
+    case .cancelled:
+      return CancellationError()
+    case .completed:
+      return ProviderError.retryable(
+        status: nil,
+        message: "streamed reply ended without a terminal"
+      )
+    }
   }
 
   func append(

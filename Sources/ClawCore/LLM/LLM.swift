@@ -130,14 +130,12 @@ public struct ChatResponse: Sendable, Equatable {
   }
 }
 
+/// One event from a streamed inference. The terminal carries the whole reply rather than the
+/// metadata around it: a consumer that stitched deltas together could not tell a truncated
+/// accumulation from a whole one, and the reply is the thing an outcome has to be able to state.
 public enum StreamEvent: Sendable, Equatable {
   case delta(String)
-  case finished(
-    finishReason: String?,
-    usage: ChatUsage?,
-    providerCost: Double?,
-    toolCalls: [ToolCall]
-  )
+  case finished(ChatResponse)
 }
 
 public enum LLMStreamLimits {
@@ -147,16 +145,25 @@ public enum LLMStreamLimits {
 }
 
 /// The single provider seam. The concrete impl lives in `ClawLLM`.
+///
+/// `stream` returns without suspending, so the caller holds the cancellation-and-join handle before
+/// any authorization or network work can race a deadline. Receiving a session claims nothing about
+/// whether inference started — the session's own terminal says.
 public protocol LLMProvider: Sendable {
   func complete(request: ChatRequest) async throws -> ChatResponse
-  func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error>
+  func stream(request: ChatRequest) -> LLMEventStream
 }
 
 extension LLMProvider {
-  public func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
-    AsyncThrowingStream { continuation in
-      continuation.finish(
-        throwing: ProviderError.terminal(status: nil, message: "streaming not implemented")
+  /// A session that reports the same refusal every non-streaming provider has always given, rather
+  /// than an empty stream a consumer would read as a whole, empty reply.
+  public func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { _ in
+      .failed(
+        ProviderFailure(
+          cause: .terminal(status: nil, message: "streaming not implemented"),
+          accounting: .notStarted
+        )
       )
     }
   }

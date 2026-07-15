@@ -600,7 +600,9 @@ private extension AgentRuntime {
           .providerUnavailable,
           usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
         )
-      case .terminal:
+      // A route that answered instead of inferring generated nothing, so there is nothing to debit.
+      case .terminal, .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
+        .invalidProviderState:
         return .degraded(.providerUnavailable, usage: nil)
       }
     }
@@ -619,7 +621,8 @@ private extension AgentRuntime {
   ) -> TurnResult {
     if let providerError = error as? ProviderError {
       switch providerError {
-      case .connectFailed, .retryable, .rejected, .terminal:
+      case .connectFailed, .retryable, .rejected, .terminal, .authenticationRequired, .accessDenied,
+        .quotaLimited, .cleanRejection, .invalidProviderState:
         return .degraded(
           .providerUnavailable,
           usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)

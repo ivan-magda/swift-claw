@@ -401,7 +401,7 @@ enum LLMEventStreamTests {
         events == [
           .delta("first"),
           .delta("second"),
-          .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: []),
+          .finished(maximumReply),
         ]
       )
     }
@@ -495,12 +495,8 @@ private let wholeReply = ChatResponse(
   costFromProvider: nil
 )
 
-private let wholeReplyEvent = StreamEvent.finished(
-  finishReason: "stop",
-  usage: ChatUsage(promptTokens: 3, completionTokens: 7, totalTokens: 10),
-  providerCost: nil,
-  toolCalls: []
-)
+/// The terminal a completed inference reserves: the reply itself, not a restatement of it.
+private let wholeReplyEvent = StreamEvent.finished(wholeReply)
 
 private func collect(_ stream: LLMEventStream) async throws -> [StreamEvent] {
   var received: [StreamEvent] = []

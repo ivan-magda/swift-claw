@@ -20,7 +20,8 @@ extension DaemonBuilder {
 
   func makeProvider() -> OpenAICompatibleProvider {
     OpenAICompatibleProvider(
-      config: config.llm.withAPIKey(secrets.llmApiKey ?? ""),
+      config: config.llm,
+      credentials: StaticLLMCredentialSource(bearer: secrets.llmApiKey),
       http: executor,
       clock: ContinuousClock(),
       jitter: { cap in

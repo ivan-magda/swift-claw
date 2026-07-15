@@ -17,6 +17,7 @@ import Testing
         retryBudget: 1,
         requestTimeoutSeconds: 5
       ),
+      credentials: StaticLLMCredentialSource(bearer: nil),
       http: UnusedHTTP(),
       clock: ScriptedClock { _ in
         try? await Task.sleep(for: .milliseconds(1))
@@ -159,7 +160,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then
@@ -178,7 +180,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then
@@ -205,7 +208,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then — dropped, not crashed
@@ -232,7 +236,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then
@@ -259,7 +264,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then

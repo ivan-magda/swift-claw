@@ -17,6 +17,10 @@ public struct SSEParser: Sendable {
   private var buffer = Data()
   private var accumulatedContentBytes = 0
 
+  /// The visible reply assembled from the deltas as they are emitted, so the terminal can state the
+  /// whole reply rather than leave a consumer to stitch it back together.
+  private var content = ""
+
   private var sawEvent = false
   private var finished = false
   private var finishReason: String?
@@ -123,9 +127,10 @@ public struct SSEParser: Sendable {
       sawEvent = true
     }
 
-    if let content = choice.delta?.content {
-      try appendContentBytes(content.utf8.count)
-      events.append(.delta(content))
+    if let fragment = choice.delta?.content {
+      try appendContentBytes(fragment.utf8.count)
+      content += fragment
+      events.append(.delta(fragment))
     }
 
     return events
@@ -202,16 +207,31 @@ public struct SSEParser: Sendable {
 
 // MARK: - Event Assembly
 
-private extension SSEParser {
-  /// The terminal event, built from everything accumulated so far — one construction shared by
-  /// `finish()` and the `[DONE]` sentinel so the two paths can never drift.
-  var finishedEvent: StreamEvent {
-    .finished(
+extension SSEParser {
+  /// The reply built from everything accumulated so far. A server that closes without a `[DONE]`
+  /// still has one, which is what lets the caller state an outcome for a stream that simply ended.
+  public var assembledResponse: ChatResponse {
+    ChatResponse(
+      content: content,
       finishReason: finishReason,
       usage: usage,
-      providerCost: providerCost,
+      costFromProvider: providerCost,
       toolCalls: assembledToolCalls
     )
+  }
+
+  /// A lower bound on what the reply has been billed for so far, for a caller accounting for an
+  /// attempt that may not reach its terminal.
+  public var observedCompletionTokens: Int {
+    usage?.completionTokens ?? 0
+  }
+}
+
+private extension SSEParser {
+  /// The terminal event — one construction shared by `finish()` and the `[DONE]` sentinel so the two
+  /// paths can never drift.
+  var finishedEvent: StreamEvent {
+    .finished(assembledResponse)
   }
 
   /// The `data:` field values of one SSE event: comments (`:`) and non-`data` fields are dropped,

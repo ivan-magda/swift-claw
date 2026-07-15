@@ -103,32 +103,30 @@ actor StreamingAcceptanceProvider: LLMProvider {
     )
   }
 
-  nonisolated func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
-    AsyncThrowingStream { continuation in
-      Task {
-        await self.recordStreamCall()
-        switch await self.currentScript() {
-        case .beforeDelta(let failure):
-          continuation.finish(throwing: failure)
-          return
-        case .success:
-          continuation.yield(.delta("stream "))
-          await self.waitForPostDeltaRelease()
-          continuation.yield(.delta("answer"))
-          continuation.yield(
-            .finished(
-              finishReason: "stop",
-              usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
-              providerCost: 0.0021,
-              toolCalls: []
-            )
+  nonisolated func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { sink in
+      await self.recordStreamCall()
+      switch await self.currentScript() {
+      case .beforeDelta(let failure):
+        return .failed(ProviderFailure(cause: failure, accounting: .notStarted))
+      case .success:
+        try? await sink.sendDelta("stream ")
+        await self.waitForPostDeltaRelease()
+        try? await sink.sendDelta("answer")
+        return .completed(
+          ChatResponse(
+            content: "stream answer",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+            costFromProvider: 0.0021
           )
-          continuation.finish()
-        case .afterDraft(let failure):
-          continuation.yield(.delta("stream "))
-          await self.waitForPostDeltaRelease()
-          continuation.finish(throwing: failure)
-        }
+        )
+      case .afterDraft(let failure):
+        try? await sink.sendDelta("stream ")
+        await self.waitForPostDeltaRelease()
+        return .failed(
+          ProviderFailure(cause: failure, accounting: .mayHaveStarted(observing: 0))
+        )
       }
     }
   }

@@ -383,12 +383,7 @@ private extension LLMStreamOwner {
   }
 
   static func terminalEvent(for response: ChatResponse) -> StreamEvent {
-    .finished(
-      finishReason: response.finishReason,
-      usage: response.usage,
-      providerCost: response.costFromProvider,
-      toolCalls: response.toolCalls
-    )
+    .finished(response)
   }
 
   func close(for terminal: LLMStreamTermination) {

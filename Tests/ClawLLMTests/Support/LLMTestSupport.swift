@@ -170,6 +170,36 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   }
 }
 
+/// Offers exactly the headers and redaction values a test names. `StaticLLMCredentialSource` can
+/// only ever offer `Authorization`, so it cannot drive the adapter's header allowlist at all — that
+/// is precisely what this double exists to reach.
+struct ScriptedLLMCredentialSource: LLMCredentialSource {
+  var headers: [String: String] = [:]
+  var redactionValues: [String] = []
+  var failure: (any Error)?
+
+  func authorization() async throws -> LLMRequestAuthorization {
+    if let failure {
+      throw failure
+    }
+    return LLMRequestAuthorization(
+      headers: headers,
+      redactionValues: redactionValues,
+      generation: .zero
+    )
+  }
+
+  func reject(
+    generation: LLMCredentialGeneration,
+    disposition: LLMCredentialRejection
+  ) async {}
+
+  func shutdown() async throws {}
+}
+
+/// A credential-source error, to prove no request goes out when authorization cannot be resolved.
+struct CredentialUnavailable: Error {}
+
 /// Records the delays the provider asks to sleep for, so `Retry-After` honoring is observable.
 actor SleepRecorder {
   private(set) var delays: [Double] = []
@@ -200,20 +230,41 @@ func makeConfig(
   )
 }
 
+/// Defaults the credential source to the static one composition uses, seeded from the config's key,
+/// so a test that only cares about wire shaping still authorizes exactly the way production does.
 func makeProvider(
   config: LLMConfig,
   http: any HTTPExecuting & HTTPStreaming,
+  credentials: (any LLMCredentialSource)? = nil,
   recorder: SleepRecorder = SleepRecorder(),
   jitter: @escaping @Sendable (Duration) -> Duration = { _ in .zero }
 ) -> OpenAICompatibleProvider {
   OpenAICompatibleProvider(
     config: config,
+    credentials: credentials ?? StaticLLMCredentialSource(bearer: config.apiKey),
     http: http,
     clock: ScriptedClock { delay in
       await recorder.record(delay / .seconds(1))
     },
     jitter: jitter
   )
+}
+
+/// Drains a session and joins it, the way every consumer must. Returns the events and the terminal
+/// so a test can assert on both without repeating the join.
+func drain(
+  _ stream: LLMEventStream
+) async -> (events: [StreamEvent], thrown: (any Error)?, terminal: LLMStreamTermination) {
+  var events: [StreamEvent] = []
+  var thrown: (any Error)?
+  do {
+    for try await event in stream {
+      events.append(event)
+    }
+  } catch {
+    thrown = error
+  }
+  return (events, thrown, await stream.awaitTermination())
 }
 
 func okStep(

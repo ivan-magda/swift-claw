@@ -157,3 +157,21 @@ extension ProviderFailureAccounting {
     .mayHaveStarted(observedCompletionTokens: max(0, observedCompletionTokens))
   }
 }
+
+// MARK: - Ambiguous cancellation
+
+/// Cancellation of an attempt that had already been handed to the transport. A plain
+/// `CancellationError` says the caller changed its mind; this says the model may have been asked
+/// anyway, so the tokens it may have generated still have to be accounted for.
+///
+/// A returned session reports this through its terminal, so only `complete` — which has no session
+/// to report through — throws it.
+public struct ProviderInferenceCancellation: Error, Sendable, Equatable {
+  public let observedCompletionTokens: Int
+
+  /// Floors the count for the same reason `mayHaveStarted(observing:)` does: a miscount must never
+  /// credit a cancelled attempt with negative usage.
+  public init(observing observedCompletionTokens: Int) {
+    self.observedCompletionTokens = max(0, observedCompletionTokens)
+  }
+}

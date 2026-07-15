@@ -241,7 +241,9 @@ private extension AppConfig {
     return LLMConfig(
       baseURL: baseURL,
       model: model,
-      apiKey: "",  // injected at the composition root from Secrets (LLMConfig.withAPIKey)
+      // Vestigial: the key is a secret, and the composition root now hands it to the provider's
+      // credential source rather than through this config.
+      apiKey: "",
       maxTokensField: maxTokensField,
       maxOutputTokens: maxOutputTokens,
       retryBudget: EnvDefaults.retryBudget,
