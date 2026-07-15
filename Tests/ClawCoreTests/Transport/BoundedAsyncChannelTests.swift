@@ -76,6 +76,32 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedSenderCount == 0)
     }
 
+    @Test func boundsElementCountWhenEveryElementWeighsNothing() async throws {
+      // given a channel with room for one unit, and a weight function that costs an element nothing
+      let channel = BoundedAsyncChannel<Int>(capacity: 1) { _ in
+        0
+      }
+      try await channel.send(1)
+
+      // when a second weightless element arrives
+      let producer = Task {
+        try await channel.send(2)
+      }
+      await waitUntil("the weightless producer parks") {
+        channel.suspendedSenderCount == 1
+      }
+
+      // then a free payload still costs its slot: without a floor the buffer would grow forever
+      #expect(channel.suspendedSenderCount == 1)
+      var iterator = channel.makeAsyncIterator()
+      let first = try await iterator.next()
+      try await producer.value
+      let second = try await iterator.next()
+      #expect(first == 1)
+      #expect(second == 2)
+      #expect(channel.suspendedSenderCount == 0)
+    }
+
     @Test func admitsParkedSendersInSendOrder() async throws {
       // given two producers parked on a full channel, in a known order
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
@@ -208,6 +234,28 @@ enum BoundedAsyncChannelTests {
       }
       await #expect(throws: BoundedAsyncChannelError.channelFinished) {
         try await third.value
+      }
+      #expect(channel.suspendedSenderCount == 0)
+    }
+
+    @Test func finishThrowingWakesAParkedProducerWithTheRefusal() async throws {
+      // given a producer parked on a full channel
+      let channel = BoundedAsyncChannel<Int>(capacity: 1)
+      try await channel.send(1)
+      let producer = Task {
+        try await channel.send(2)
+      }
+      await waitUntil("the producer parks on the full buffer") {
+        channel.suspendedSenderCount == 1
+      }
+
+      // when the channel is closed with an error
+      channel.finish(throwing: StreamFailure())
+
+      // then the producer learns its send was refused, not why the sequence ended: the terminal
+      // error is the consumer's to observe
+      await #expect(throws: BoundedAsyncChannelError.channelFinished) {
+        try await producer.value
       }
       #expect(channel.suspendedSenderCount == 0)
     }

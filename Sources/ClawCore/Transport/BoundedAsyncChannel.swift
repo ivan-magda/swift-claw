@@ -23,16 +23,26 @@ public enum BoundedAsyncChannelError: Error, Sendable, Equatable {
 ///
 /// Copies share one close-once state, so any copy can `send`, and any copy can `finish`. The
 /// consumer side is not shareable: exactly one iterator may read the sequence.
+///
+/// The consumer owns teardown. Abandoning the iteration — `break`ing out of a `for try await`
+/// without cancelling the consuming task — strands every parked producer forever, so such a
+/// consumer must call `finish()`. Cancelling the consumer instead unwinds the producers correctly.
 public struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
   private let storage: Storage
 
   /// - Parameter capacity: the greatest total weight the buffer may hold. Must be positive.
   /// - Parameter weight: the cost of one element against `capacity`. Called once per `send`, outside
-  ///   the channel's lock, and must not return a negative weight.
+  ///   the channel's lock, and must not return a negative weight. An element's weight is floored at
+  ///   one: every element holds a buffer slot whatever its payload costs, so the channel bounds
+  ///   element count even for a stream that weighs nothing.
   public init(
     capacity: Int,
     weight: @escaping @Sendable (Element) -> Int = { _ in 1 }
   ) {
+    // Traps where a second iterator or a negative weight is signalled: capacity is a programmer
+    // constant, so a bad one is a build-time bug that fails on the first run and should say so
+    // loudly. The other two depend on runtime behaviour in a long-lived daemon, which a trap would
+    // take down.
     precondition(capacity > 0, "BoundedAsyncChannel needs a positive capacity, got \(capacity)")
     storage = Storage(capacity: capacity, weight: weight)
   }
@@ -197,13 +207,18 @@ extension BoundedAsyncChannel {
 
 extension BoundedAsyncChannel.Storage {
   func send(_ element: Element) async throws {
-    let elementWeight = weight(element)
-    guard elementWeight >= 0 else {
-      throw BoundedAsyncChannelError.negativeWeight(elementWeight)
+    let declaredWeight = weight(element)
+    guard declaredWeight >= 0 else {
+      throw BoundedAsyncChannelError.negativeWeight(declaredWeight)
     }
+    // A weightless element is legal data — an empty body chunk, an empty event — and the channel
+    // never rejects data to hold its bound. It still costs a buffer slot, so charging it one unit
+    // keeps a stream of them from buffering without limit. The floor cannot exceed a capacity that
+    // construction already forced positive, so an empty buffer still admits any accepted element.
+    let elementWeight = max(1, declaredWeight)
     guard elementWeight <= capacity else {
       throw BoundedAsyncChannelError.elementExceedsCapacity(
-        weight: elementWeight,
+        weight: declaredWeight,
         capacity: capacity
       )
     }
@@ -377,8 +392,15 @@ extension BoundedAsyncChannel.Storage {
       }
       current.receivers.removeAll()
       // A consumer only parks on an empty buffer, so a terminal failure reaches it here and there is
-      // nothing left for a later read to fail on.
-      if case .failed = terminal, !wokenReceivers.isEmpty { current.terminal = .finished }
+      // nothing left for a later read to fail on. The assertion pins that coupling: were a send ever
+      // to buffer while a receiver waits, downgrading here would swallow the failure instead.
+      if case .failed = terminal, !wokenReceivers.isEmpty {
+        assert(
+          current.buffer.isEmpty,
+          "a receiver parked behind a non-empty buffer would lose this terminal failure"
+        )
+        current.terminal = .finished
+      }
       return true
     }
     guard didClose else { return }
