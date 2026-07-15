@@ -78,6 +78,7 @@ let package = Package(
         .product(name: "Subprocess", package: "swift-subprocess"),
       ]
     ),
+    .target(name: "ClawAuth", dependencies: ["ClawCore"]),
     .target(name: "ClawTestSupport", dependencies: ["ClawCore", "ClawTools"]),
     .target(
       name: "ClawGateway",
@@ -101,6 +102,10 @@ let package = Package(
       ]
     ),
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore", "ClawTestSupport"]),
+    .testTarget(
+      name: "ClawAuthTests",
+      dependencies: ["ClawAuth", "ClawCore", "ClawTestSupport"]
+    ),
     .testTarget(
       name: "ClawSecretsTests",
       dependencies: [
