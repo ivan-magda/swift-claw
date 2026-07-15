@@ -44,7 +44,18 @@ public struct OpenAICompatibleProvider: LLMProvider {
     let url = chatCompletionsURL()
     let exposure = ProviderAttemptExposure()
 
-    let authorization = try await credentials.authorization()
+    let authorization: LLMRequestAuthorization
+    do {
+      authorization = try await credentials.authorization()
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      // No request goes out without a credential, so nothing was exposed. The cause names the state
+      // rather than the source's error, which is what keeps key material out of the throw — there is
+      // no redactor yet to scrub it with.
+      throw ProviderError.authenticationRequired
+    }
+
     let redactor = SecretRedactor(secretValues: authorization.redactionValues)
     let headers = try headers(for: authorization)
 
@@ -401,8 +412,9 @@ private extension OpenAICompatibleProvider {
   /// belongs here rather than to whoever supplies the credential.
   static let adapterHeaders = ["Content-Type": "application/json"]
 
-  /// The only header name a credential source may contribute to this route.
-  static let allowedCredentialHeaders: Set<String> = ["authorization"]
+  /// The only header a credential source may contribute to this route, keyed by its normalized name
+  /// and mapped to the single spelling that reaches the wire.
+  static let allowedCredentialHeaders = ["authorization": "Authorization"]
 
   func chatCompletionsURL() -> String {
     let base = config.baseURL.hasSuffix("/") ? String(config.baseURL.dropLast()) : config.baseURL
@@ -415,6 +427,9 @@ private extension OpenAICompatibleProvider {
   /// content negotiation, client identity, or session routing on the way to the wire. A name outside
   /// the allowlist, or one the adapter already owns, is refused rather than merged — and the refusal
   /// quotes only the name, never the value it came with.
+  ///
+  /// Merging under the allowlist's own spelling rather than the source's keeps the dictionary from
+  /// seating two casings of one header, which the wire would carry as two headers.
   func headers(for authorization: LLMRequestAuthorization) throws -> [String: String] {
     var merged = Self.adapterHeaders
     let owned = Set(merged.keys.map { name in name.lowercased() })
@@ -422,7 +437,7 @@ private extension OpenAICompatibleProvider {
     // Sorted so a source offering several bad headers always names the same one first.
     for name in authorization.headers.keys.sorted() {
       let normalized = name.lowercased()
-      guard Self.allowedCredentialHeaders.contains(normalized) else {
+      guard let canonical = Self.allowedCredentialHeaders[normalized] else {
         throw ProviderError.terminal(
           status: nil,
           message: "credential header \(name) is not accepted by this route"
@@ -434,7 +449,7 @@ private extension OpenAICompatibleProvider {
           message: "credential header \(name) would replace a wire header"
         )
       }
-      merged[name] = authorization.headers[name]
+      merged[canonical] = authorization.headers[name]
     }
     return merged
   }

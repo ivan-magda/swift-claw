@@ -210,7 +210,7 @@ public struct SSEParser: Sendable {
 extension SSEParser {
   /// The reply built from everything accumulated so far. A server that closes without a `[DONE]`
   /// still has one, which is what lets the caller state an outcome for a stream that simply ended.
-  public var assembledResponse: ChatResponse {
+  var assembledResponse: ChatResponse {
     ChatResponse(
       content: content,
       finishReason: finishReason,
@@ -222,7 +222,7 @@ extension SSEParser {
 
   /// A lower bound on what the reply has been billed for so far, for a caller accounting for an
   /// attempt that may not reach its terminal.
-  public var observedCompletionTokens: Int {
+  var observedCompletionTokens: Int {
     usage?.completionTokens ?? 0
   }
 }

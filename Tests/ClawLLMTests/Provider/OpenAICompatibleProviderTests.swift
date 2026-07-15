@@ -680,6 +680,25 @@ import Testing
     #expect(await exec.recorded.isEmpty)
   }
 
+  @Test func bufferedAuthorizationFailureRequestsLoginWithoutSendingAnything() async throws {
+    // given — the throwing source the streamed path is already proved against
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(
+      config: makeConfig(),
+      http: exec,
+      credentials: ScriptedLLMCredentialSource(failure: CredentialUnavailable())
+    )
+
+    // when
+    let thrown = await #expect(throws: ProviderError.self) {
+      _ = try await provider.complete(request: sampleRequest)
+    }
+
+    // then — both entry points owe the same typed cause, and neither reaches the transport to get it
+    #expect(thrown == .authenticationRequired)
+    #expect(await exec.recorded.isEmpty)
+  }
+
   @Test func providerStateIsNotEncodedByChatCompletions() async throws {
     // given — replay state on the outbound history; this route mints and understands none
     let exec = ScriptedHTTPExecutor([okStep()])
