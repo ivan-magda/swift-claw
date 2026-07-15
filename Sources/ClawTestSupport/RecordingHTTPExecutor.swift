@@ -1,35 +1,55 @@
 import ClawCore
 import Foundation
 
-/// One recorded outbound call, capturing the verb and the request fields tests assert over.
+/// One recorded outbound call, capturing the request fields tests assert over.
 public struct RecordedHTTPRequest: Sendable, Equatable {
-  public enum Method: Sendable, Equatable {
-    case get
-    case post
-  }
-
-  public let method: Method
+  public let method: HTTPMethod
   public let url: String
   public let headers: [String: String]
   public let body: Data?
+  public let timeoutSeconds: Int
+  public let responseBodyPolicy: HTTPResponseBodyPolicy
+  /// The cap the executor applied, picked from the policy by the scripted status. Tests assert on
+  /// this when what matters is which of the two caps was in force, not the pair that was offered.
+  public let selectedBodyCap: Int
+  /// How many times this call's handoff ran. Exactly-once is the property the exposure ledger rests
+  /// on, so the double counts it rather than assuming it.
+  public let handoffCount: Int
 
-  public init(method: Method, url: String, headers: [String: String], body: Data?) {
+  public init(
+    method: HTTPMethod,
+    url: String,
+    headers: [String: String],
+    body: Data?,
+    timeoutSeconds: Int,
+    responseBodyPolicy: HTTPResponseBodyPolicy,
+    selectedBodyCap: Int,
+    handoffCount: Int
+  ) {
     self.method = method
     self.url = url
     self.headers = headers
     self.body = body
+    self.timeoutSeconds = timeoutSeconds
+    self.responseBodyPolicy = responseBodyPolicy
+    self.selectedBodyCap = selectedBodyCap
+    self.handoffCount = handoffCount
   }
 }
 
 /// A configurable `HTTPExecuting` double for tests: it answers each call from a URL-keyed response
-/// map, falling back to an optional canned result, and records the URL, headers, and body of every
-/// call so tests can assert what was (and was not) dispatched. A call that matches neither the map
-/// nor a canned fallback throws, so an unexpected dispatch surfaces as a test failure.
+/// map, falling back to an optional canned result, and records every call so tests can assert what
+/// was (and was not) dispatched. A call that matches neither the map nor a canned fallback throws,
+/// so an unexpected dispatch surfaces as a test failure.
+///
+/// It honours the seam's contract rather than shortcutting it: the body policy must be `.buffered`,
+/// the handoff runs once before the scripted answer is produced, and a scripted body past the
+/// applicable cap comes back truncated exactly as the real executor would deliver it.
 public actor RecordingHTTPExecutor: HTTPExecuting {
   private let responses: [String: HTTPResult]
   private let cannedResult: HTTPResult?
 
-  /// Every call in dispatch order, newest last.
+  /// Every call this double received, in dispatch order, newest last.
   public private(set) var requests: [RecordedHTTPRequest] = []
 
   public init(responses: [String: HTTPResult] = [:], cannedResult: HTTPResult? = nil) {
@@ -37,28 +57,52 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
     self.cannedResult = cannedResult
   }
 
-  public func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult {
-    try record(method: .post, url: url, headers: headers, body: jsonBody)
-  }
+  public func execute(_ request: HTTPRequest) async throws -> HTTPResult {
+    guard case .buffered(let successBytes, let errorBytes) = request.responseBodyPolicy else {
+      throw HTTPTransportFailure(
+        disposition: .definitelyNotSent,
+        safeMessage: "execute needs a buffered response body policy"
+      )
+    }
 
-  public func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    try record(method: .get, url: url, headers: headers, body: nil)
+    let scripted = responses[request.url] ?? cannedResult
+    let cap = (200..<300).contains(scripted?.statusCode ?? 0) ? successBytes : errorBytes
+    var handoffCount = 0
+    if let beginHandoff = request.beginHandoff {
+      handoffCount = 1
+      try beginHandoff()
+    }
+    requests.append(
+      RecordedHTTPRequest(
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body: request.body,
+        timeoutSeconds: request.timeoutSeconds,
+        responseBodyPolicy: request.responseBodyPolicy,
+        selectedBodyCap: cap,
+        handoffCount: handoffCount
+      )
+    )
+
+    guard let scripted else {
+      throw UnscriptedRequest(url: request.url)
+    }
+    return HTTPResult(
+      statusCode: scripted.statusCode,
+      headers: scripted.headers,
+      body: scripted.body.prefix(cap)
+    )
   }
 }
 
 // MARK: - Recorded fields
 
 public extension RecordingHTTPExecutor {
+  struct UnscriptedRequest: Error {
+    public let url: String
+  }
+
   /// URLs of every recorded call, in dispatch order.
   var requestedURLs: [String] {
     requests.map(\.url)
@@ -79,31 +123,5 @@ public extension RecordingHTTPExecutor {
 
   var lastBody: Data? {
     requests.last?.body
-  }
-}
-
-// MARK: - Dispatch
-
-private extension RecordingHTTPExecutor {
-  struct UnscriptedRequest: Error {
-    let url: String
-  }
-
-  func record(
-    method: RecordedHTTPRequest.Method,
-    url: String,
-    headers: [String: String],
-    body: Data?
-  ) throws -> HTTPResult {
-    requests.append(
-      RecordedHTTPRequest(method: method, url: url, headers: headers, body: body)
-    )
-    if let scripted = responses[url] {
-      return scripted
-    }
-    guard let cannedResult else {
-      throw UnscriptedRequest(url: url)
-    }
-    return cannedResult
   }
 }

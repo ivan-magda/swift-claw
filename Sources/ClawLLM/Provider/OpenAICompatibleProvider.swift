@@ -56,7 +56,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
         )
       } catch {
         // Transport failures are retryable; the message may echo the key, so redact it.
-        let message = sanitize(message: "\(error)")
+        let message = sanitize(message: Self.describe(error))
         guard attempt < config.retryBudget else {
           throw ProviderError.retryable(status: nil, message: message)
         }
@@ -94,36 +94,11 @@ public struct OpenAICompatibleProvider: LLMProvider {
           logger.debug(
             "chat stream request model=\(request.model) messages=\(request.messages.count) tools=\(request.tools.count)"
           )
-          let response = try await http.postStream(
-            url: chatCompletionsURL(),
-            headers: requestHeaders(),
-            jsonBody: body,
-            timeoutSeconds: config.requestTimeoutSeconds
-          )
-
-          guard (200..<300).contains(response.head.statusCode) else {
-            let errorBody = try await collectStreamingErrorBody(response.body)
-            let message = sanitize(message: errorMessage(from: errorBody))
-            logger.notice("chat stream status \(response.head.statusCode)")
-
-            if Self.isRetryableStatus(response.head.statusCode) {
-              throw ProviderError.rejected(status: response.head.statusCode, message: message)
-            }
-
-            throw ProviderError.terminal(status: response.head.statusCode, message: message)
-          }
-
-          var parser = SSEParser(fallbackProviderCost: providerCost(from: response.head))
-          for try await chunk in response.body {
-            for event in try parser.push(chunk) {
-              continuation.yield(event)
-            }
-          }
-
-          if let finished = try parser.finish() {
-            continuation.yield(finished)
-          }
+          let exchange = try await http.openStream(streamRequest(body: body))
+          try await consume(exchange: exchange, into: continuation)
           continuation.finish()
+        } catch let error as HTTPTransportFailure {
+          continuation.finish(throwing: sanitize(providerError: Self.providerError(from: error)))
         } catch let error as ProviderError {
           continuation.finish(throwing: sanitize(providerError: error))
         } catch {
@@ -231,6 +206,101 @@ public struct OpenAICompatibleProvider: LLMProvider {
   }
 }
 
+// MARK: - Streaming
+
+private extension OpenAICompatibleProvider {
+  func streamRequest(body: Data) -> HTTPRequest {
+    HTTPRequest(
+      method: .post,
+      url: chatCompletionsURL(),
+      headers: requestHeaders(),
+      body: body,
+      timeoutSeconds: config.requestTimeoutSeconds,
+      responseBodyPolicy: .streaming(
+        maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
+        errorBytes: Self.maxStreamingErrorBodyBytes
+      )
+    )
+  }
+
+  /// Reads the exchange and joins it on the way out, whichever way it ends. The exchange owns the
+  /// transport work behind it, so returning without joining would leave that work running.
+  func consume(
+    exchange: HTTPStreamExchange,
+    into continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
+  ) async throws {
+    do {
+      guard (200..<300).contains(exchange.head.statusCode) else {
+        throw try await rejection(from: exchange)
+      }
+
+      var parser = SSEParser(fallbackProviderCost: providerCost(from: exchange.head))
+      for try await chunk in exchange.body {
+        for event in try parser.push(chunk) {
+          continuation.yield(event)
+        }
+      }
+      try Self.check(termination: await exchange.awaitTermination())
+
+      if let finished = try parser.finish() {
+        continuation.yield(finished)
+      }
+    } catch {
+      _ = await exchange.cancelAndAwait()
+      throw error
+    }
+  }
+
+  /// The body of a non-success head. The executor has already capped it, so reading to the end holds
+  /// no more than the diagnostic allowance.
+  func rejection(from exchange: HTTPStreamExchange) async throws -> ProviderError {
+    var collected = Data()
+    for try await chunk in exchange.body {
+      collected.append(chunk)
+    }
+    let message = sanitize(message: errorMessage(from: collected))
+    logger.notice("chat stream status \(exchange.head.statusCode)")
+
+    if Self.isRetryableStatus(exchange.head.statusCode) {
+      return ProviderError.rejected(status: exchange.head.statusCode, message: message)
+    }
+    return ProviderError.terminal(status: exchange.head.statusCode, message: message)
+  }
+
+  /// The body sequence ending says only that no more bytes are coming; the termination says whether
+  /// the transfer actually finished. A cancelled exchange closes its body cleanly, so trusting the
+  /// sequence alone would read a truncated stream as a complete one.
+  static func check(termination: HTTPStreamTermination) throws {
+    switch termination {
+    case .completed:
+      return
+    case .failed(let failure):
+      throw providerError(from: failure)
+    case .cancelled:
+      throw CancellationError()
+    }
+  }
+
+  /// Maps a transport failure by its typed disposition and never by its text. `definitelyNotSent` is
+  /// precisely what `connectFailed` has always meant to callers: nothing reached the model, so the
+  /// attempt can be replayed.
+  static func providerError(from failure: HTTPTransportFailure) -> ProviderError {
+    switch failure.disposition {
+    case .definitelyNotSent:
+      return .connectFailed(message: failure.safeMessage)
+    case .mayHaveBeenSent:
+      return .retryable(status: nil, message: failure.safeMessage)
+    }
+  }
+
+  /// A transport failure already carries its own diagnostic; interpolating the struct would bury it
+  /// in synthesized field syntax.
+  static func describe(_ error: any Error) -> String {
+    guard let failure = error as? HTTPTransportFailure else { return "\(error)" }
+    return failure.safeMessage
+  }
+}
+
 // MARK: - Request
 
 private extension OpenAICompatibleProvider {
@@ -262,21 +332,6 @@ private extension OpenAICompatibleProvider {
       return String(data: body, encoding: .utf8) ?? "unknown error"
     }
     return message
-  }
-
-  func collectStreamingErrorBody(
-    _ body: AsyncThrowingStream<Data, Error>
-  ) async throws -> Data {
-    var collected = Data()
-
-    for try await chunk in body {
-      collected.append(chunk)
-      if collected.count > Self.maxStreamingErrorBodyBytes {
-        break
-      }
-    }
-
-    return collected
   }
 
   func providerCost(from head: HTTPStreamHead) -> Double? {

@@ -492,9 +492,15 @@ import Testing
   }
 
   @Test func streamConnectFailureIsTypedForRuntimeFallback() async throws {
-    // given
+    // given — a transport failure that proves nothing was sent; the runtime's stream-to-buffered
+    // fallback turns on that fact and nothing else
     let exec = ScriptedHTTPExecutor([
-      .connectFailure(TransportFailure(message: "connection refused sk-test"))
+      .transportFailure(
+        HTTPTransportFailure(
+          disposition: .definitelyNotSent,
+          safeMessage: "connection refused sk-test"
+        )
+      )
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 

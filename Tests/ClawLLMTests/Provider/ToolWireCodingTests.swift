@@ -25,32 +25,20 @@ import Testing
     )
   }
 
+  /// These tests only exercise encoding and parsing, so the transport is never reached; answering
+  /// with a 500 makes an accidental dispatch fail loudly rather than look like a pass.
   private struct UnusedHTTP: HTTPExecuting, HTTPStreaming {
-    func post(
-      url: String,
-      headers: [String: String],
-      jsonBody: Data,
-      timeoutSeconds: Int
-    ) async throws -> HTTPResult {
+    func execute(_ request: HTTPRequest) async throws -> HTTPResult {
       HTTPResult(statusCode: 500, headers: [:], body: Data())
     }
 
-    func get(
-      url: String,
-      headers: [String: String],
-      timeoutSeconds: Int,
-      maxBodyBytes: Int
-    ) async throws -> HTTPResult {
-      HTTPResult(statusCode: 500, headers: [:], body: Data())
-    }
-
-    func postStream(
-      url: String,
-      headers: [String: String],
-      jsonBody: Data,
-      timeoutSeconds: Int
-    ) async throws -> (head: HTTPStreamHead, body: AsyncThrowingStream<Data, Error>) {
-      (HTTPStreamHead(statusCode: 500, headers: [:]), AsyncThrowingStream { $0.finish() })
+    func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
+      HTTPStreamExchange.make(
+        head: HTTPStreamHead(statusCode: 500, headers: [:]),
+        maximumUnreadBodyBytes: 1
+      ) { _ in
+        .completed
+      }
     }
   }
 
