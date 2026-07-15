@@ -279,6 +279,27 @@ enum LLMEventStreamTests {
     }
   }
 
+  // MARK: - Default budget
+
+  @Suite struct DefaultBudget {
+    @Test func pinsTheProviderDefaultBudgetAndItsExactSlotDivision() {
+      // given the budget every stream runs on unless its caller names another
+      let limits = LLMEventBufferLimits.providerDefault
+
+      // when a delta is weighed against it at the slot floor
+      let slotCharge = limits.deltaCharge(forTextBytes: 1)
+
+      // then the three bounds are the ones the budget was agreed at
+      #expect(limits.maximumDeltaCount == 1024)
+      #expect(limits.maximumDeltaBytes == 5 * 1024 * 1024)
+      #expect(limits.reservedTerminalBytes == 5 * 1024 * 1024)
+      // and the count bound spends the byte budget exactly. A count that does not divide the bytes
+      // rounds the slot down and strands the remainder: both bounds still hold, so every other test
+      // here stays green while the queue quietly stops at less than the budget it was given.
+      #expect(slotCharge * limits.maximumDeltaCount == limits.maximumDeltaBytes)
+    }
+  }
+
   // MARK: - Buffer bounds
 
   @Suite struct BufferBounds {
