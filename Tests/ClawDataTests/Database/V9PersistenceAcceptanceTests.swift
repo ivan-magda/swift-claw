@@ -14,6 +14,8 @@ import Testing
 @Suite struct V9PersistenceAcceptanceTests {
   private static let seededAt = Date(timeIntervalSince1970: 1_700_000_000)
   private static let legacySessionKey = "tg:dm:9"
+  /// The run `seedLegacyVEight` writes first, so it takes the first autoincrement id.
+  private static let legacyRunId: Int64 = 1
 
   fileprivate struct Fixture {
     let root: URL
@@ -119,9 +121,10 @@ import Testing
     #expect(try runStatefulTurn(env) == .committed)
 
     // then — the run's rows oldest first: the parked anchor holding the state its round minted,
-    // the observation that round had already collected, the placeholder it pinned, and the final
-    // anchor holding the state the terminal round minted. Each anchor keeps its own, not the
-    // other's, and neither untrusted tool row was given either.
+    // the observation that round had already collected, the placeholder it pinned, the ungated
+    // round's anchor with its own state and the untrusted output it fetched, and the final anchor
+    // holding the state the terminal round minted. Each anchor keeps its own, not another's, and
+    // no untrusted tool row was given any.
     #expect(
       try Self.stateRows(env) == [
         StateRow(
@@ -130,6 +133,12 @@ import Testing
           payload: Self.suspendPayload.databaseValue
         ),
         StateRow(role: MessageRole.tool.rawValue, issuer: .null, payload: .null),
+        StateRow(role: MessageRole.tool.rawValue, issuer: .null, payload: .null),
+        StateRow(
+          role: MessageRole.assistant.rawValue,
+          issuer: Self.exchangeState.issuer.databaseValue,
+          payload: Self.exchangePayload.databaseValue
+        ),
         StateRow(role: MessageRole.tool.rawValue, issuer: .null, payload: .null),
         StateRow(
           role: MessageRole.assistant.rawValue,
@@ -155,22 +164,28 @@ import Testing
     )
 
     // then — the window reads exactly as a pre-v9 window did, state riding along on the anchors
-    #expect(history.map(\.role) == [.assistant, .user, .assistant, .tool, .tool, .assistant])
+    #expect(
+      history.map(\.role) == [
+        .assistant, .user, .assistant, .tool, .tool, .assistant, .tool,
+        .assistant,
+      ]
+    )
     #expect(history.map(\.content).first == "the archived plan")
     #expect(
       history.map(\.providerState) == [
-        nil, nil, Self.suspendState, nil, nil, Self.terminalState,
+        nil, nil, Self.suspendState, nil, nil, Self.exchangeState, nil, Self.terminalState,
       ]
     )
 
     // and no payload reached the text a renderer would carry
     let rendered = history.map(\.content).joined(separator: "\n")
     #expect(rendered.contains(Self.suspendPayloadAsLossyText) == false)
+    #expect(rendered.contains(Self.exchangePayloadAsLossyText) == false)
     #expect(rendered.contains(Self.terminalPayloadAsLossyText) == false)
 
     // and the rebuilt index still spans the migration boundary, matching on text alone
     #expect(try Self.search(env, "plan") == [1, 2])
-    #expect(try Self.search(env, "confirmed") == [6])
+    #expect(try Self.search(env, "confirmed") == [8])
   }
 
   // MARK: - Usage Across The Migrated Paths
@@ -184,13 +199,13 @@ import Testing
     #expect(try runStatefulTurn(env) == .committed)
     let replay = try env.runs.commitAssistantTurn(Self.terminalTurn(env), now: Self.seededAt)
 
-    // then — the run owns one row per logical round, and the replay added neither a third row nor
-    // a second final anchor
+    // then — the run owns one usage row per logical round, and the replay added neither a third of
+    // those nor a repeat of any anchor: the parked one, the ungated round's, and the final one
     #expect(replay == .ignored)
     #expect(
       try Self.callIdentities(env, runId: env.runId) == [Self.toolCallID, Self.terminalCallID]
     )
-    #expect(try Self.assistantRowCount(env) == 2)
+    #expect(try Self.assistantRowCount(env) == 3)
 
     // and the totals are the sum over both rows: the terminal round's late row did not erase the
     // tool round that preceded it
@@ -200,7 +215,7 @@ import Testing
     #expect(totals.costUSD == 0.04)
 
     // and the rows the migration derived identities for are untouched by any of it
-    #expect(try Self.callIdentities(env, runId: 1) == ["legacy:1"])
+    #expect(try Self.callIdentities(env, runId: Self.legacyRunId) == ["legacy:1"])
     #expect(try Self.usageCount(env) == 4)
   }
 
@@ -332,6 +347,7 @@ extension V9PersistenceAcceptanceTests {
   /// Deliberately not valid UTF-8, so a seam that stringified the blob would mangle it rather than
   /// round-trip it, and distinct per anchor so a path that mixed them up cannot read as a pass.
   static let suspendPayload = Data([0x00, 0xC3, 0x28, 0xFF])
+  static let exchangePayload = Data([0x03, 0xF5, 0xBE, 0x81])
   static let terminalPayload = Data([0x80, 0xFE, 0x01, 0x02])
 
   // The lossy conversion is the point here: the failable initializer the rule prefers returns nil
@@ -342,6 +358,7 @@ extension V9PersistenceAcceptanceTests {
   /// can never fail — a `String`'s UTF-8 view cannot emit `0xFF`/`0xFE` — so non-exposure is
   /// asserted against the lossy form a stringifying seam really produces.
   static let suspendPayloadAsLossyText = String(decoding: suspendPayload, as: UTF8.self)
+  static let exchangePayloadAsLossyText = String(decoding: exchangePayload, as: UTF8.self)
   static let terminalPayloadAsLossyText = String(decoding: terminalPayload, as: UTF8.self)
 
   // swiftlint:enable optional_data_string_conversion
@@ -349,6 +366,10 @@ extension V9PersistenceAcceptanceTests {
   static let suspendState = ProviderExchangeState(
     issuer: "openai-chatgpt-responses-v1:suspend",
     payload: suspendPayload
+  )
+  static let exchangeState = ProviderExchangeState(
+    issuer: "openai-chatgpt-responses-v1:exchange",
+    payload: exchangePayload
   )
   static let terminalState = ProviderExchangeState(
     issuer: "openai-chatgpt-responses-v1:terminal",
@@ -427,6 +448,25 @@ private extension V9PersistenceAcceptanceTests {
     )
   }
 
+  /// A round the turn executed without gating, carrying the state its proposal was minted with —
+  /// the one path onto migrated rows that the suspend/resume fixtures never reach.
+  static let statefulExchange = ToolExchange(
+    assistantContent: "let me check the log",
+    toolCalls: [
+      ToolCall(id: "r1", name: "file_read", argumentsJSON: #"{"path":"notes/log.md"}"#)
+    ],
+    observations: [
+      ToolObservation(
+        callId: "r1",
+        toolName: "file_read",
+        content: "raw log text",
+        status: .ok,
+        ingestedUntrusted: true
+      )
+    ],
+    providerState: exchangeState
+  )
+
   static func terminalTurn(_ env: Fixture) -> AssistantTurn {
     AssistantTurn(
       runId: env.runId,
@@ -437,6 +477,7 @@ private extension V9PersistenceAcceptanceTests {
       chunks: [
         OutboxChunk(stepIndex: 0, chatId: 9, payload: "saved and confirmed", payloadHash: "hash2")
       ],
+      exchanges: [statefulExchange],
       providerState: terminalState
     )
   }
@@ -444,7 +485,7 @@ private extension V9PersistenceAcceptanceTests {
   static func usageArguments(
     _ env: Fixture,
     callID: String,
-    model: String? = "gpt-4o"
+    model: String?
   ) -> StatementArguments {
     [
       env.runId, env.sessionId, model, 11, 5, 0.004, CostSource.priceFile.rawValue, false,
