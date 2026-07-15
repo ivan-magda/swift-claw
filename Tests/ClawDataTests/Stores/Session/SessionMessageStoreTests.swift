@@ -574,6 +574,31 @@ extension SessionMessageStoreTests {
     #expect(history.allSatisfy { message in message.providerState == nil })
   }
 
+  @Test func aRowFromASelectThatOmitsTheStateColumnsDropsTheStateRatherThanTrapping() throws {
+    // given — a stored anchor whose state is intact, so a dropped state can only be the SELECT's
+    // doing and not a missing value
+    let fixture = try stateFixture()
+    _ = try insertAnchor(
+      fixture,
+      issuer: Self.issuerText.databaseValue,
+      payload: Self.binaryPayload.databaseValue
+    )
+
+    // when — a caller that forgot `ProviderStateCoding.selection`. GRDB's non-optional row
+    // subscript force-decodes, so an absent column would take the whole daemon down with it.
+    let rows = try fixture.queue.read { db in
+      try Row.fetchAll(db, sql: "SELECT id, role, content FROM messages")
+    }
+
+    // then — the same leniency every other bad-data class gets, rather than a trap
+    #expect(rows.isEmpty == false)
+    #expect(
+      rows.allSatisfy { row in
+        ProviderStateCoding.decode(row) == nil
+      }
+    )
+  }
+
   @Test(arguments: SessionMessageStoreTests.corruptions)
   fileprivate func invalidProviderStateIsDroppedAndTheMessageSurvives(
     _ corruption: StateCorruption

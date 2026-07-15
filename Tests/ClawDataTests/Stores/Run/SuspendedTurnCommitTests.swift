@@ -204,6 +204,17 @@ extension SuspendedTurnCommitTests {
     payload: Data([0x00, 0xC3, 0x28, 0xFF])
   )
 
+  // The lossy conversion is the point here: the failable initializer the rule prefers returns nil
+  // for these bytes, which would assert nothing at all.
+  // swiftlint:disable optional_data_string_conversion
+
+  /// The payload as a leak would actually expose it. Searching audit or prompt text for the raw
+  /// bytes can never fail — a `String`'s UTF-8 view cannot emit `0xFF` — so non-exposure is
+  /// asserted against the lossy form a stringifying seam really produces.
+  static let anchorPayloadAsLossyText = String(decoding: anchorState.payload, as: UTF8.self)
+
+  // swiftlint:enable optional_data_string_conversion
+
   private func statefulCommit(_ fixture: Fixture) -> SuspendedTurnCommit {
     let base = makeCommit(fixture)
     return SuspendedTurnCommit(
@@ -265,7 +276,7 @@ extension SuspendedTurnCommitTests {
       now: Date()
     )
 
-    // then — both surfaces exist and neither holds the issuer or a byte of the payload
+    // then — both surfaces exist and neither holds the issuer or the payload
     let auditRows = try fixture.queue.read { db in
       try Row.fetchAll(db, sql: "SELECT * FROM audit_events").map { row in "\(row)" }
     }
@@ -276,7 +287,7 @@ extension SuspendedTurnCommitTests {
     #expect(prompts.isEmpty == false)
     for text in auditRows + prompts {
       #expect(text.contains(Self.anchorState.issuer) == false)
-      #expect(Data(text.utf8).range(of: Self.anchorState.payload) == nil)
+      #expect(text.contains(Self.anchorPayloadAsLossyText) == false)
     }
   }
 

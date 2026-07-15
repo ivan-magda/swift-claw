@@ -30,18 +30,22 @@ enum ProviderStateCoding {
 
   /// Reads the pair off an already-fetched row, keeping state only when it is intact.
   ///
-  /// Non-throwing by construction, and that is the point: a row is here only because its query
-  /// already succeeded, so anything wrong with these two values is bad data, never a failed read. A
-  /// real SQLite failure surfaces from the fetch itself and reaches the caller's
-  /// `readMapping`/`writeMapping` as a typed `StoreError` — it can never arrive as a dropped state.
+  /// Non-throwing *and* non-fatal by construction, and that is the point: a row is here only
+  /// because its query already succeeded, so anything wrong with these two values is bad data,
+  /// never a failed read. A real SQLite failure surfaces from the fetch itself and reaches the
+  /// caller's `readMapping`/`writeMapping` as a typed `StoreError` — it can never arrive as a
+  /// dropped state.
   ///
   /// Refused: a half-written pair, a payload the `BLOB`-affinity column did not store as bytes, an
-  /// issuer stored as anything but text, and a payload past the per-message cap. Each drops the
-  /// optional state alone; the message it belongs to stays whole, because the state was never what
-  /// made the message usable.
+  /// issuer stored as anything but text, a payload past the per-message cap, and a column the query
+  /// never selected. Each drops the optional state alone; the message it belongs to stays whole,
+  /// because the state was never what made the message usable.
   static func decode(_ row: Row) -> ProviderExchangeState? {
-    let issuerValue: DatabaseValue = row[issuerColumn]
-    let payloadValue: DatabaseValue = row[payloadColumn]
+    // The optional subscript, because GRDB's non-optional one is a `try!` that traps on a column
+    // the SELECT never named. A caller that forgets `selection` should lose the state, not the
+    // process.
+    let issuerValue = row[issuerColumn] as DatabaseValue? ?? .null
+    let payloadValue = row[payloadColumn] as DatabaseValue? ?? .null
 
     // Storage classes, not typed decodes: `row["…"] as Data?` would happily coerce a TEXT value
     // into bytes and hand the adapter a payload no issuer ever wrote.

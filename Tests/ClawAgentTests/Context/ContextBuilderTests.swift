@@ -421,8 +421,20 @@ struct ContextBuilderTests {
 
 extension ContextBuilderTests {
   /// Deliberately not valid UTF-8, so a renderer that stringified the blob into prompt text would
-  /// leave detectable bytes behind rather than silently succeed.
+  /// mangle it rather than round-trip it.
   static let replayPayload = Data([0x00, 0xC3, 0x28, 0xFF, 0xFE])
+
+  // The lossy conversion is the point here: the failable initializer the rule prefers returns nil
+  // for these bytes, which would assert nothing at all.
+  // swiftlint:disable optional_data_string_conversion
+
+  /// The payload as a leak would actually expose it. Searching prompt text for the raw bytes can
+  /// never fail — a `String`'s UTF-8 view cannot emit `0xFF`/`0xFE` — so non-exposure is asserted
+  /// against the lossy form a stringifying renderer really produces, replacement chars and all.
+  static let replayPayloadAsLossyText = String(decoding: replayPayload, as: UTF8.self)
+
+  // swiftlint:enable optional_data_string_conversion
+
   static let replayState = ProviderExchangeState(
     issuer: "openai-chatgpt-responses-v1:zzzsecretissuer",
     payload: replayPayload
@@ -506,11 +518,10 @@ extension ContextBuilderTests {
       origin: .interactive
     )
 
-    // then — the bytes are carried, never rendered: no message's text holds the issuer or the
-    // payload, whatever tier it belongs to
+    // then — the bytes are carried, never rendered, whatever tier the message belongs to
     for message in result.messages {
       #expect(message.content.contains("zzzsecretissuer") == false)
-      #expect(Data(message.content.utf8).range(of: Self.replayPayload) == nil)
+      #expect(message.content.contains(Self.replayPayloadAsLossyText) == false)
     }
     #expect(result.messages.contains { message in message.content.contains("raw page text") })
     #expect(

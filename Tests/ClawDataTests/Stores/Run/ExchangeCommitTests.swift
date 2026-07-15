@@ -304,6 +304,18 @@ extension ExchangeCommitTests {
   static let finalPayload = Data([0x00, 0xC3, 0x28, 0xFF])
   static let exchangePayload = Data([0x80, 0xFE, 0x01, 0x02])
 
+  // The lossy conversion is the point here: the failable initializer the rule prefers returns nil
+  // for these bytes, which would assert nothing at all.
+  // swiftlint:disable optional_data_string_conversion
+
+  /// The payloads as a leak would actually expose them. Searching owner-facing text for the raw
+  /// bytes can never fail — a `String`'s UTF-8 view cannot emit `0xFF`/`0xFE` — so non-exposure is
+  /// asserted against the lossy form a stringifying seam really produces.
+  static let finalPayloadAsLossyText = String(decoding: finalPayload, as: UTF8.self)
+  static let exchangePayloadAsLossyText = String(decoding: exchangePayload, as: UTF8.self)
+
+  // swiftlint:enable optional_data_string_conversion
+
   static let finalState = ProviderExchangeState(
     issuer: "openai-chatgpt-responses-v1:final",
     payload: finalPayload
@@ -462,8 +474,8 @@ extension ExchangeCommitTests {
     for text in deliveries {
       #expect(text.contains(Self.finalState.issuer) == false)
       #expect(text.contains(Self.exchangeState.issuer) == false)
-      #expect(Data(text.utf8).range(of: Self.finalPayload) == nil)
-      #expect(Data(text.utf8).range(of: Self.exchangePayload) == nil)
+      #expect(text.contains(Self.finalPayloadAsLossyText) == false)
+      #expect(text.contains(Self.exchangePayloadAsLossyText) == false)
     }
   }
 
