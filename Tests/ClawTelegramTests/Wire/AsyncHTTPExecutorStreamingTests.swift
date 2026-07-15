@@ -349,7 +349,8 @@ private func withBurstingServer<Result>(
 
   @Test(.timeLimit(.minutes(1)))
   func cancellingAnExchangeJoinsItPromptly() async throws {
-    // given — the server never ends the response, so only cancellation can finish this
+    // given — 3072 bytes of burst against a 48-byte unread window: the server does end the response,
+    // but it cannot outrun that window, so the producer is guaranteed parked mid-transfer below
     try await withBurstingServer(chunkCount: 128) { server in
       try await withExecutor { executor in
         let exchange = try await executor.openStream(
@@ -496,26 +497,36 @@ private func withBurstingServer<Result>(
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func bufferedChunksStayReadableAfterCancellation() async throws {
-    // given
+  func cancellationMidTransferKeepsChunksTheConsumerWasAlreadyOwed() async throws {
+    // given — a producer still working, with a delivered chunk sitting unread behind it
+    let delivered = AsyncGate()
+    let release = AsyncGate()
+    defer { release.open() }
     let exchange = HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: 64) { sink in
       do {
         try await sink.send(Data("first".utf8))
+        delivered.open()
+        await release.waitIgnoringCancellation()
+        try await sink.send(Data("second".utf8))
         return .completed
       } catch {
         return .cancelled(.mayHaveBeenSent)
       }
     }
-    _ = await exchange.awaitTermination()
+    await delivered.wait()
 
-    // when
+    // when — cancelled with the transfer in flight, not after it had already run to completion
     exchange.cancel()
+    release.open()
+    let termination = await exchange.awaitTermination()
     var collected = Data()
     for try await chunk in exchange.body {
       collected.append(chunk)
     }
 
-    // then — closing bounds the producer; it does not discard what the consumer was already owed
+    // then — closing bounds the producer; it does not discard what the consumer was already owed,
+    // and the chunk the cancellation cut off never arrives
     #expect(collected == Data("first".utf8))
+    #expect(termination == .cancelled(.mayHaveBeenSent))
   }
 }

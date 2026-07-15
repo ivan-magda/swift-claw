@@ -122,8 +122,12 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
     }
   }
 
-  /// Records the call and runs its handoff, in the order the real executor does.
+  /// Runs the call's handoff and then, only if it let the attempt through, records the call — the
+  /// order the real executor takes. `recorded` is read as what was dispatched, so a refused attempt
+  /// must leave no trace of a dispatch that never happened.
   private func begin(_ request: HTTPRequest) throws {
+    let tally = HandoffTally()
+    try tally.run(request.beginHandoff)
     recorded.append(
       Recorded(
         url: request.url,
@@ -131,10 +135,9 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
         body: request.body ?? Data(),
         timeoutSeconds: request.timeoutSeconds,
         responseBodyPolicy: request.responseBodyPolicy,
-        handoffCount: request.beginHandoff == nil ? 0 : 1
+        handoffCount: tally.value
       )
     )
-    try request.beginHandoff?()
   }
 
   private static func exchange(

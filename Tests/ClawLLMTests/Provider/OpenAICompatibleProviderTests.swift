@@ -376,6 +376,12 @@ import Testing
     let streamOptions = try #require(body["stream_options"] as? [String: Any])
     #expect(body["stream"] as? Bool == true)
     #expect(streamOptions["include_usage"] as? Bool == true)
+    // The 4 MiB unread allowance is a plan-wide bound, so pin the value the provider actually
+    // plumbs: the exchange tests prove the mechanism, only this proves the number reaches it.
+    #expect(
+      recorded.responseBodyPolicy
+        == .streaming(maximumUnreadBytes: 4 * 1024 * 1024, errorBytes: 64 * 1024)
+    )
     #expect(
       events == [
         .delta("he"),

@@ -71,22 +71,52 @@ import Testing
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func bodyBeyondMaxBodyBytesIsTruncatedToTheCap() async throws {
+  func pageBeyondMaxBodyBytesFailsInsteadOfComingBackShort() async throws {
     // given
     try await withScriptedServer(routes: [
       "/big": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 4096))
     ]) { server in
       // when
+      let failure = await #expect(throws: HTTPTransportFailure.self) {
+        try await withNoRedirectExecutor { executor in
+          try await executor.get(
+            url: server.url("/big"),
+            headers: [:],
+            timeoutSeconds: 5,
+            maxBodyBytes: 128
+          )
+        }
+      }
+
+      // then — this is what lets the fetch tool tell an over-cap page from a whole one and report
+      // it; a truncated page returned as a success would reach the model with no signal at all
+      #expect(failure?.disposition == .mayHaveBeenSent)
+      #expect(failure?.safeMessage.contains("128") == true)
+    }
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func redirectBodyBeyondTheCapIsTruncatedRatherThanFailed() async throws {
+    // given — a 3xx is a diagnostic, not a payload, so its cap truncates
+    try await withScriptedServer(routes: [
+      "/hop": ScriptedResponse(
+        status: .movedPermanently,
+        headers: [("location", "http://127.0.0.1:1/private")],
+        body: String(repeating: "c", count: 4096)
+      )
+    ]) { server in
+      // when
       let result = try await withNoRedirectExecutor { executor in
         try await executor.get(
-          url: server.url("/big"),
+          url: server.url("/hop"),
           headers: [:],
           timeoutSeconds: 5,
           maxBodyBytes: 128
         )
       }
 
-      // then — the cap bounds what is held, and holds it exactly
+      // then — the redirect still reaches the tool's own gate, bounded
+      #expect(result.statusCode == 301)
       #expect(result.body.count == 128)
     }
   }

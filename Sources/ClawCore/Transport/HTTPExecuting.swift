@@ -87,9 +87,12 @@ public struct HTTPTransportFailure: Error, Sendable, Equatable {
 /// as a stream. The success and error caps are separate because they answer different questions: a
 /// success body is the payload, an error body is a diagnostic worth only a few kilobytes.
 public enum HTTPResponseBodyPolicy: Sendable, Equatable {
-  /// Collect the whole body, capped at `successBytes` for a 2xx and `errorBytes` otherwise. A body
-  /// past its cap is delivered truncated to exactly the cap: allocation is what the cap bounds, and
-  /// the first bytes of an oversized error are the useful ones.
+  /// Collect the whole body, capped at `successBytes` for a 2xx and `errorBytes` otherwise. The two
+  /// caps bound the same allocation but part company at their limit, because only one of the two
+  /// bodies survives losing its tail: an over-cap success body fails the request, since a payload
+  /// handed back short is indistinguishable from a complete one, while an over-cap error body is
+  /// delivered truncated to exactly the cap, since the first bytes of a diagnostic are the useful
+  /// ones.
   case buffered(successBytes: Int, errorBytes: Int)
   /// Hand the caller a live body. `maximumUnreadBytes` bounds what may sit unread between the
   /// transport and the parser on a 2xx — the producer suspends there rather than dropping a chunk —
@@ -151,8 +154,8 @@ public struct HTTPRequest: Sendable {
 public protocol HTTPExecuting: Sendable {
   /// Sends `request` and collects its whole body. Requires a `.buffered` policy.
   ///
-  /// - Throws: `HTTPTransportFailure` when the transport fails, or `beginHandoff`'s own error when
-  ///   the caller refuses the submission.
+  /// - Throws: `HTTPTransportFailure` when the transport fails or a success body outgrows its cap,
+  ///   or `beginHandoff`'s own error when the caller refuses the submission.
   func execute(_ request: HTTPRequest) async throws -> HTTPResult
 }
 
@@ -179,8 +182,11 @@ public extension HTTPExecuting {
   }
 
   /// Plain GET for tool fetches. The production client is configured with
-  /// `RedirectConfiguration.disallow`, so a 3xx comes back as an ordinary `HTTPResult`; the body is
-  /// collected up to `maxBodyBytes` and truncated there.
+  /// `RedirectConfiguration.disallow`, so a 3xx comes back as an ordinary `HTTPResult` and is capped
+  /// as a diagnostic. A page past `maxBodyBytes` fails rather than arriving silently short, so a
+  /// caller can tell an over-cap fetch from a whole one and say so.
+  ///
+  /// - Throws: `HTTPTransportFailure` when the transport fails or a success body outgrows the cap.
   func get(
     url: String,
     headers: [String: String],

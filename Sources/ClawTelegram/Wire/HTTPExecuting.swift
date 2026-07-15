@@ -28,16 +28,24 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
 
     let response = try await submit(request)
     let statusCode = Int(response.status.code)
-    let cap = Self.isSuccess(statusCode) ? successBytes : errorBytes
+    let isSuccess = Self.isSuccess(statusCode)
 
     do {
       return HTTPResult(
         statusCode: statusCode,
         headers: Self.responseHeaders(response),
-        body: try await Self.collect(response.body, upTo: cap)
+        body: try await Self.collect(
+          response.body,
+          upTo: isSuccess ? successBytes : errorBytes,
+          whenOversized: isSuccess ? .fails : .truncates
+        )
       )
+    } catch let oversized as HTTPTransportFailure {
+      // `collect` is the only source of this type here — the transport raises its own error types —
+      // so passing it through cannot swallow a failure that still needs classifying.
+      throw oversized
     } catch {
-      throw Self.classify(error)
+      throw Self.classifyPostHead(error)
     }
   }
 
@@ -121,18 +129,37 @@ private extension AsyncHTTPExecutor {
 // MARK: - Body handling
 
 private extension AsyncHTTPExecutor {
-  /// Reads at most `cap` bytes and stops. An over-cap body is delivered truncated to exactly the
-  /// cap: the cap bounds allocation, and the first bytes of an oversized error are the ones worth
-  /// reading. Abandoning the sequence early also stops pulling the rest off the connection.
-  static func collect(_ body: HTTPClientResponse.Body, upTo cap: Int) async throws -> Data {
+  /// What becomes of a body that outgrows its cap. Allocation stops at the cap either way; the
+  /// question this answers is whether what was read is still worth handing back.
+  enum OversizedBodyHandling {
+    /// A payload short of its tail cannot be told apart from a whole one, so the response is
+    /// reported malformed instead of being passed off as complete.
+    case fails
+    /// A diagnostic is still a diagnostic with its tail missing, and its first bytes are the ones
+    /// worth reading.
+    case truncates
+  }
+
+  /// Reads at most `cap` bytes and stops there, leaving `handling` to say what an over-cap body
+  /// means. Leaving the sequence early — by return or by throw — also stops pulling the rest off the
+  /// connection.
+  static func collect(
+    _ body: HTTPClientResponse.Body,
+    upTo cap: Int,
+    whenOversized handling: OversizedBodyHandling
+  ) async throws -> Data {
     var collected = Data()
     for try await buffer in body {
-      let remaining = cap - collected.count
-      guard remaining > 0 else { break }
       let view = buffer.readableBytesView
+      let remaining = cap - collected.count
       guard view.count <= remaining else {
-        collected.append(contentsOf: view.prefix(remaining))
-        break
+        switch handling {
+        case .fails:
+          throw oversizedBody(cap: cap)
+        case .truncates:
+          collected.append(contentsOf: view.prefix(remaining))
+          return collected
+        }
       }
       collected.append(contentsOf: view)
     }
@@ -169,7 +196,7 @@ private extension AsyncHTTPExecutor {
     } catch let error as BoundedAsyncChannelError {
       return terminationForSink(error)
     } catch {
-      return .failed(classify(error))
+      return .failed(classifyPostHead(error))
     }
   }
 
@@ -199,7 +226,7 @@ private extension AsyncHTTPExecutor {
   }
 }
 
-// MARK: - Transport Failure Classification
+// MARK: - Transport Failures
 
 private extension AsyncHTTPExecutor {
   /// A policy of the wrong shape for its entry point is a programming mistake, and it is caught
@@ -208,11 +235,36 @@ private extension AsyncHTTPExecutor {
     HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: message)
   }
 
+  /// A success body past its cap. The disposition is not in doubt: a response head came back, so the
+  /// request plainly reached the server. The message names the cap, never the body.
+  static func oversizedBody(cap: Int) -> HTTPTransportFailure {
+    HTTPTransportFailure(
+      disposition: .mayHaveBeenSent,
+      safeMessage: "response body exceeds the \(cap)-byte limit"
+    )
+  }
+}
+
+// MARK: - Transport Failure Classification
+
+extension AsyncHTTPExecutor {
+  /// Classifies a failure raised before any response head arrived, where the allowlist below is the
+  /// one thing that may find a request clean.
   static func classify(_ error: any Error) -> HTTPTransportFailure {
     HTTPTransportFailure(
       disposition: provesNothingWasSent(error) ? .definitelyNotSent : .mayHaveBeenSent,
       safeMessage: "\(error)"
     )
+  }
+
+  /// Classifies a failure raised once a response head has arrived, which nothing may call clean.
+  ///
+  /// A head is proof that a request channel existed and was written to, so the allowlist's premise —
+  /// that no channel ever became writable — is provably false here, whatever error the transport
+  /// went on to raise. Consulting it after a head could hand a caller a `definitelyNotSent` for a
+  /// request the server has already acted on and billed.
+  static func classifyPostHead(_ error: any Error) -> HTTPTransportFailure {
+    HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "\(error)")
   }
 
   /// The entire allowlist for claiming a request never left, and it rests on one transport fact: the

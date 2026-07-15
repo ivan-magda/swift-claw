@@ -435,17 +435,46 @@ final class HandoffCounter: Sendable {
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func successBodyStopsAtTheSuccessCap() async throws {
+  func successBodyBeyondTheSuccessCapFailsRatherThanArrivingShort() async throws {
     // given
     try await withScriptedServer(routes: [
       "/big": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 4096))
+    ]) { server in
+      // when
+      let failure = await #expect(throws: HTTPTransportFailure.self) {
+        try await withExecutor { executor in
+          try await executor.execute(
+            HTTPRequest(
+              method: .get,
+              url: server.url("/big"),
+              headers: [:],
+              body: nil,
+              timeoutSeconds: 5,
+              responseBodyPolicy: buffered(successBytes: 128, errorBytes: 4096)
+            )
+          )
+        }
+      }
+
+      // then — handing back the first 128 bytes would be indistinguishable from a whole payload, so
+      // the over-cap 2xx is reported as the malformed response it is, naming the cap it stopped at
+      #expect(failure?.disposition == .mayHaveBeenSent)
+      #expect(failure?.safeMessage.contains("128") == true)
+    }
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func successBodyExactlyAtTheSuccessCapIsDeliveredWhole() async throws {
+    // given
+    try await withScriptedServer(routes: [
+      "/exact": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 128))
     ]) { server in
       // when
       let result = try await withExecutor { executor in
         try await executor.execute(
           HTTPRequest(
             method: .get,
-            url: server.url("/big"),
+            url: server.url("/exact"),
             headers: [:],
             body: nil,
             timeoutSeconds: 5,
@@ -454,7 +483,7 @@ final class HandoffCounter: Sendable {
         )
       }
 
-      // then — the success cap bound the allocation, and it is the one that applied to a 2xx
+      // then — the cap is a limit, not a threshold: a body that fits is whole and passes
       #expect(result.statusCode == 200)
       #expect(result.body.count == 128)
     }
@@ -690,6 +719,7 @@ final class HandoffCounter: Sendable {
     // given — the peer reads the request and never answers, so only the deadline ends the call
     try await withBehaviourServer(.neverResponds) { server in
       // when
+      let started = ContinuousClock.now
       let failure = await #expect(throws: HTTPTransportFailure.self) {
         try await withExecutor { executor in
           try await executor.execute(
@@ -704,9 +734,59 @@ final class HandoffCounter: Sendable {
           )
         }
       }
+      let elapsed = ContinuousClock.now - started
 
-      // then — returning at all proves the timeout was carried through, and a timeout is never clean
+      // then — the deadline that fired is the request's own one second, not some larger default a
+      // bare "it failed eventually" would have accepted just as happily
+      #expect(elapsed < .seconds(5))
       #expect(failure?.disposition == .mayHaveBeenSent)
     }
+  }
+}
+
+// MARK: - Classification tests
+
+/// The disposition rules driven directly. A response head is what separates the two classifiers, and
+/// no loopback peer can raise a connection-refused while a body is already arriving — the one error
+/// that would prove the distinction — so the functions themselves are the honest witness here.
+@Suite struct AsyncHTTPExecutorClassificationTests {
+  @Test
+  func connectionRefusedBeforeAnyHeadIsTheSoleProofOfACleanRequest() {
+    // given — the transport typed the failure as a refusal: no channel to write a request on existed
+    let refused = IOError(errnoCode: ECONNREFUSED, reason: "connection refused")
+
+    // when
+    let failure = AsyncHTTPExecutor.classify(refused)
+
+    // then
+    #expect(failure.disposition == .definitelyNotSent)
+  }
+
+  @Test
+  func aResponseHeadRulesOutEveryCleanClaimForWhatFollowsIt() {
+    // given — the very error the pre-head allowlist accepts as proof nothing was written
+    let refused = IOError(errnoCode: ECONNREFUSED, reason: "connection refused")
+
+    // when — the same error, classified on either side of a response head
+    let beforeHead = AsyncHTTPExecutor.classify(refused)
+    let afterHead = AsyncHTTPExecutor.classifyPostHead(refused)
+
+    // then — a head proves the channel existed and was written, so the allowlist's premise cannot
+    // hold once one has arrived: replaying such a turn would re-bill tokens already generated
+    #expect(beforeHead.disposition == .definitelyNotSent)
+    #expect(afterHead.disposition == .mayHaveBeenSent)
+  }
+
+  @Test
+  func connectTimeoutIsNeverCleanSoItCannotBeReplayed() {
+    // given — a connect that timed out: the SYN may have landed and only its answer been lost
+    let timedOut = HTTPClientError.connectTimeout
+
+    // when
+    let failure = AsyncHTTPExecutor.classify(timedOut)
+
+    // then — narrowing the allowlist to a typed refusal is what costs this its clean claim, and with
+    // it the stream-to-buffered replay a `definitelyNotSent` would have licensed
+    #expect(failure.disposition == .mayHaveBeenSent)
   }
 }

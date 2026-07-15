@@ -218,7 +218,7 @@ private extension OpenAICompatibleProvider {
       timeoutSeconds: config.requestTimeoutSeconds,
       responseBodyPolicy: .streaming(
         maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
-        errorBytes: Self.maxStreamingErrorBodyBytes
+        errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
       )
     )
   }
@@ -321,7 +321,6 @@ private extension OpenAICompatibleProvider {
 // MARK: - Response
 
 private extension OpenAICompatibleProvider {
-  static let maxStreamingErrorBodyBytes = 64 * 1024
   static let liteLLMResponseCostHeader = "x-litellm-response-cost"
 
   func errorMessage(from body: Data) -> String {

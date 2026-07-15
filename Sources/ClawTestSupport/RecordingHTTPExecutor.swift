@@ -12,8 +12,8 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
   /// The cap the executor applied, picked from the policy by the scripted status. Tests assert on
   /// this when what matters is which of the two caps was in force, not the pair that was offered.
   public let selectedBodyCap: Int
-  /// How many times this call's handoff ran. Exactly-once is the property the exposure ledger rests
-  /// on, so the double counts it rather than assuming it.
+  /// How many times this call's handoff ran, as tallied by the invocations themselves. Exactly-once
+  /// is the property the exposure ledger rests on, so the double counts it rather than assuming it.
   public let handoffCount: Int
 
   public init(
@@ -44,7 +44,8 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
 ///
 /// It honours the seam's contract rather than shortcutting it: the body policy must be `.buffered`,
 /// the handoff runs once before the scripted answer is produced, and a scripted body past the
-/// applicable cap comes back truncated exactly as the real executor would deliver it.
+/// applicable cap meets the same fate the real executor would give it — a success fails, an error
+/// comes back truncated.
 public actor RecordingHTTPExecutor: HTTPExecuting {
   private let responses: [String: HTTPResult]
   private let cannedResult: HTTPResult?
@@ -66,12 +67,11 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
     }
 
     let scripted = responses[request.url] ?? cannedResult
-    let cap = (200..<300).contains(scripted?.statusCode ?? 0) ? successBytes : errorBytes
-    var handoffCount = 0
-    if let beginHandoff = request.beginHandoff {
-      handoffCount = 1
-      try beginHandoff()
-    }
+    let isSuccess = (200..<300).contains(scripted?.statusCode ?? 0)
+    let cap = isSuccess ? successBytes : errorBytes
+
+    let tally = HandoffTally()
+    try tally.run(request.beginHandoff)
     requests.append(
       RecordedHTTPRequest(
         method: request.method,
@@ -81,12 +81,18 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
         timeoutSeconds: request.timeoutSeconds,
         responseBodyPolicy: request.responseBodyPolicy,
         selectedBodyCap: cap,
-        handoffCount: handoffCount
+        handoffCount: tally.value
       )
     )
 
     guard let scripted else {
       throw UnscriptedRequest(url: request.url)
+    }
+    guard !isSuccess || scripted.body.count <= cap else {
+      throw HTTPTransportFailure(
+        disposition: .mayHaveBeenSent,
+        safeMessage: "response body exceeds the \(cap)-byte limit"
+      )
     }
     return HTTPResult(
       statusCode: scripted.statusCode,
