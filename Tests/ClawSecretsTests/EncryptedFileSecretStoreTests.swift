@@ -27,6 +27,10 @@ import Testing
     // implementation has on disk: a version-1 envelope authenticated under AAD [1], written by
     // Foundation's atomic write (which creates 0644), beside a 0600 key. Nothing about the new
     // read path may lock that owner out of their own secrets.
+    //
+    // The version byte and the AAD are frozen literals, never `envelopeVersion`: what is on those
+    // owners' disks is the number 1, and a fixture that tracked the constant would follow a future
+    // bump straight past the breakage it exists to catch.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
@@ -43,12 +47,11 @@ import Testing
     let sealed = try AES.GCM.seal(
       payload,
       using: SymmetricKey(data: keyData),
-      authenticating: Data([EncryptedFileSecretStore.envelopeVersion])
+      authenticating: Data([1])
     )
     let envelopeURL = stateRoot.appendingPathComponent(SecretFile.envelope)
     let combined = try #require(sealed.combined)
-    try (Data([EncryptedFileSecretStore.envelopeVersion]) + combined)
-      .write(to: envelopeURL, options: .atomic)
+    try (Data([1]) + combined).write(to: envelopeURL, options: .atomic)
 
     // when
     let loaded = try EncryptedFileSecretStore(stateRoot: stateRoot).loadSecrets()

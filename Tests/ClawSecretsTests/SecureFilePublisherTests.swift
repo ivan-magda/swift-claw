@@ -92,16 +92,90 @@ import Testing
     #expect(try entryNames(in: stateRoot) == [SecretStatePaths.credentialEnvelopeName])
   }
 
+  // MARK: - Exclusive publication
+
+  @Test func anExclusivePublishOntoAnExistingPathRefusesToClobberIt() throws {
+    // given — the loser of a create race: an incumbent already holds the name.
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-exclusive")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let target = SecretStatePaths(stateRoot: stateRoot).key
+    let incumbent = try SecureFilePublisher().publish(Data("incumbent".utf8), to: target)
+
+    // when
+    #expect(throws: SecureFileError.alreadyExists(SecretStatePaths.keyName)) {
+      _ = try SecureFilePublisher().publish(Data("challenger".utf8), to: target, mode: .exclusive)
+    }
+
+    // then — the incumbent's inode, not merely its bytes: a clobber that happened to write the same
+    // content would still have destroyed the file the envelope beside it is sealed under.
+    let onDisk = try #require(SecureFilePublisher.facts(ofEntryAt: target))
+    #expect(onDisk.identity == incumbent.identity)
+    #expect(try Data(contentsOf: target) == Data("incumbent".utf8))
+    #expect(try entryNames(in: stateRoot) == [SecretStatePaths.keyName])
+  }
+
+  @Test func anExclusivePublishOntoAFreePathLandsAndLeavesNoTemporaryEntry() throws {
+    // given
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-exclusive")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let target = SecretStatePaths(stateRoot: stateRoot).key
+    let payload = Data("claimed".utf8)
+
+    // when — `link` leaves the temp name pointing at the committed inode, so unlike `rename` the
+    // success path has cleanup of its own to do.
+    let outcome = try SecureFilePublisher().publish(payload, to: target, mode: .exclusive)
+
+    // then
+    #expect(outcome.isCommitUncertain == false)
+    #expect(try Data(contentsOf: target) == payload)
+    #expect(try permissionBits(of: target) == SecureFilePublisher.ownerOnlyPermissions)
+    #expect(try entryNames(in: stateRoot) == [SecretStatePaths.keyName])
+    let onDisk = try #require(SecureFilePublisher.facts(ofEntryAt: target))
+    #expect(outcome.identity == onDisk.identity)
+  }
+
+  @Test func anExclusivePublishRefusesASymlinkStandingAtTheTargetWithoutFollowingIt() throws {
+    // given — a symlink planted at the key path, aimed at a file elsewhere.
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-exclusive")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let target = SecretStatePaths(stateRoot: stateRoot).key
+    let elsewhere = stateRoot.appendingPathComponent("elsewhere.bin")
+    try Data("victim".utf8).write(to: elsewhere)
+    try FileManager.default.createSymbolicLink(at: target, withDestinationURL: elsewhere)
+
+    // when / then — the link is a name that is taken, not a redirect: the write must land nowhere.
+    #expect(throws: SecureFileError.alreadyExists(SecretStatePaths.keyName)) {
+      _ = try SecureFilePublisher().publish(Data("attacker".utf8), to: target, mode: .exclusive)
+    }
+    #expect(try Data(contentsOf: elsewhere) == Data("victim".utf8))
+  }
+
+  @Test func aFailedExclusivePublishLeavesNoTemporaryEntryBehind() throws {
+    // given
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-exclusive")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let target = SecretStatePaths(stateRoot: stateRoot).key
+    _ = try SecureFilePublisher().publish(Data("incumbent".utf8), to: target)
+
+    // when — the challenger's bytes were written and fsync'd before the name was refused.
+    #expect(throws: SecureFileError.self) {
+      _ = try SecureFilePublisher().publish(Data("challenger".utf8), to: target, mode: .exclusive)
+    }
+
+    // then — a stranded temp in the state root is a 0600 copy of a live key nobody will ever clean.
+    #expect(try entryNames(in: stateRoot) == [SecretStatePaths.keyName])
+  }
+
   // MARK: - Failpoints
 
   @Test(
     arguments: [
-      SecureFilePublisher.Failpoint.tempWrite,
-      SecureFilePublisher.Failpoint.fileSync,
-      SecureFilePublisher.Failpoint.rename,
+      SecureFilePublisher.Failpoint.Step.tempWrite,
+      SecureFilePublisher.Failpoint.Step.fileSync,
+      SecureFilePublisher.Failpoint.Step.commit,
     ]
-  ) func everyPreRenameFailpointLeavesTheOldValueAndNoTemporaryEntry(
-    failpoint: SecureFilePublisher.Failpoint
+  ) func everyPreCommitFailpointLeavesTheOldValueAndNoTemporaryEntry(
+    step: SecureFilePublisher.Failpoint.Step
   ) throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
@@ -110,9 +184,9 @@ import Testing
     _ = try SecureFilePublisher().publish(Data("old".utf8), to: target)
 
     // when
-    let failing = SecureFilePublisher(failpoint: failpoint)
+    let failing = SecureFilePublisher(failpoint: SecureFilePublisher.Failpoint(step))
 
-    // then — nothing was renamed, so the old value is still the whole truth on disk.
+    // then — nothing claimed the name, so the old value is still the whole truth on disk.
     #expect(throws: SecureFileError.self) {
       _ = try failing.publish(Data("new".utf8), to: target)
     }
@@ -120,14 +194,14 @@ import Testing
     #expect(try entryNames(in: stateRoot) == [SecretStatePaths.credentialEnvelopeName])
   }
 
-  @Test func aPreRenameFailpointOnAFreshTargetCreatesNothing() throws {
+  @Test func aPreCommitFailpointOnAFreshTargetCreatesNothing() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     let target = SecretStatePaths(stateRoot: stateRoot).credentialEnvelope
 
     // when
-    let failing = SecureFilePublisher(failpoint: .rename)
+    let failing = SecureFilePublisher(failpoint: SecureFilePublisher.Failpoint(.commit))
 
     // then
     #expect(throws: SecureFileError.self) {
@@ -144,7 +218,7 @@ import Testing
     _ = try SecureFilePublisher().publish(Data("old".utf8), to: target)
 
     // when — the rename committed; only its durability is unproven.
-    let outcome = try SecureFilePublisher(failpoint: .directorySync)
+    let outcome = try SecureFilePublisher(failpoint: SecureFilePublisher.Failpoint(.directorySync))
       .publish(Data("new".utf8), to: target)
 
     // then — a caller must not treat this as "nothing was written".

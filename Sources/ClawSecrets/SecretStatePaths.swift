@@ -13,12 +13,10 @@ public struct SecretStatePaths: Sendable, Equatable {
   /// The runtime secrets the daemon boots on: the Telegram token plus the optional LLM and search
   /// keys.
   public static let runtimeEnvelopeName = SecretFile.envelope
-  /// The provider-keyed OAuth credential map. Sealed under associated data distinct from the
-  /// runtime envelope's, so swapping the two files fails authentication rather than decoding.
+  /// The provider-keyed OAuth credential map, encrypted under the same key as the runtime envelope.
   public static let credentialEnvelopeName = "llm-credentials.enc"
-  /// The daemon instance lock. It lives here because the mutating auth commands must hold it to
-  /// touch the files above, so one type names every state-root entry the secret layer coordinates
-  /// on.
+  /// The daemon instance lock, named here so one type names every state-root entry the secret layer
+  /// touches. Today only `clawd run` acquires it.
   public static let instanceLockName = "clawd.lock"
 
   private let stateRoot: URL

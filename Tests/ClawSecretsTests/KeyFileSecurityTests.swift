@@ -1,5 +1,6 @@
 import ClawCore
 import ClawTestSupport
+import Crypto
 import Foundation
 import Testing
 
@@ -105,6 +106,63 @@ import Testing
     #expect(throws: SecretStoreError.self) {
       _ = try EncryptedFileSecretStore.openKey(at: keyURL)
     }
+  }
+
+  // MARK: - Exclusive creation
+
+  @Test func ensureKeyReturnsAnExistingKeyRatherThanMintingOverIt() throws {
+    // given
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+
+    let keyURL = stateRoot.appendingPathComponent(SecretFile.key)
+    try writeKey(at: keyURL, mode: 0o600)
+    let before = try #require(SecureFilePublisher.facts(ofEntryAt: keyURL))
+
+    // when
+    var created = CreatedRuntimeArtifacts()
+    let key = try EncryptedFileSecretStore.ensureKey(
+      at: keyURL,
+      publisher: SecureFilePublisher(),
+      created: &created
+    )
+
+    // then — the incumbent inode survives and its bytes are what came back, so an envelope already
+    // sealed under it stays openable.
+    let after = try #require(SecureFilePublisher.facts(ofEntryAt: keyURL))
+    #expect(after.identity == before.identity)
+    #expect(
+      key
+        == SymmetricKey(
+          data: Data(repeating: 0xAB, count: EncryptedFileSecretStore.keyByteCount)
+        )
+    )
+    // Nothing was created, so rollback has nothing it could unlink.
+    #expect(created.key == nil)
+  }
+
+  @Test func ensureKeyRefusesToMintOverAnUnreadableIncumbent() throws {
+    // given — a key that exists but fails the metadata policy.
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+
+    let keyURL = stateRoot.appendingPathComponent(SecretFile.key)
+    try writeKey(at: keyURL, mode: 0o644)
+    let before = try #require(SecureFilePublisher.facts(ofEntryAt: keyURL))
+
+    // when / then — the answer to a key it cannot open is to stop, never to replace it: overwriting
+    // would strand every envelope already sealed under it.
+    var created = CreatedRuntimeArtifacts()
+    #expect(throws: SecretStoreError.self) {
+      _ = try EncryptedFileSecretStore.ensureKey(
+        at: keyURL,
+        publisher: SecureFilePublisher(),
+        created: &created
+      )
+    }
+    let after = try #require(SecureFilePublisher.facts(ofEntryAt: keyURL))
+    #expect(after.identity == before.identity)
+    #expect(created.key == nil)
   }
 
   // Owner mismatch and file-type are validated through the pure policy seam that

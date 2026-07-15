@@ -107,9 +107,17 @@ public struct EncryptedFileSecretStore: SecretStore {
       }
     }
 
+    let plaintext = try encode(secrets)
+    // `decode` normalizes an empty optional key away, so a `Secrets` carrying one can never come
+    // back out of the envelope byte-identical. Comparing the read-back against the handed-in value
+    // would then condemn — and roll back — a write that is in fact perfect. Compare against what
+    // this plaintext actually decodes to, and reject a genuinely unusable input here rather than
+    // after a key exists on disk.
+    let expected = try decode(plaintext)
+
     let key = try ensureKey(at: paths.key, publisher: publisher, created: &created)
     try publishEnvelope(
-      sealEnvelope(encode(secrets), key: key),
+      sealEnvelope(plaintext, key: key),
       paths: paths,
       publisher: publisher,
       created: &created
@@ -118,7 +126,7 @@ public struct EncryptedFileSecretStore: SecretStore {
     // Read back through the daemon's own load path: the seal is done when what is on disk decrypts
     // to what went in, not when the last syscall returned 0.
     let loaded = try EncryptedFileSecretStore(stateRoot: stateRoot).load()
-    guard loaded == secrets else {
+    guard loaded == expected else {
       throw .decryptionFailed
     }
 
@@ -233,19 +241,32 @@ extension EncryptedFileSecretStore {
     return SymmetricKey(data: data)
   }
 
+  /// Returns the key at `url`, minting one only if the name is free — and proving it was free by
+  /// claiming it exclusively rather than by looking first.
+  ///
+  /// The exclusivity is not a nicety. A checked-then-replaced key lets two concurrent seals both
+  /// see no key and both publish one; the second unlinks the first's inode, and the first's already
+  /// published envelope becomes ciphertext nothing can open. That is unrecoverable, so the loser of
+  /// the race must lose at the kernel, before any key of its own exists on disk.
   static func ensureKey(
     at url: URL,
     publisher: SecureFilePublisher,
     created: inout CreatedRuntimeArtifacts
   ) throws(SecretStoreError) -> SymmetricKey {
-    if SecureFilePublisher.entryExists(at: url) {
-      return try openKey(at: url)
-    }
-
     let key = SymmetricKey(size: .bits256)
     let outcome: SecureFilePublisher.PublicationOutcome
     do {
-      outcome = try publisher.publish(key.withUnsafeBytes { bytes in Data(bytes) }, to: url)
+      outcome = try publisher.publish(
+        key.withUnsafeBytes { bytes in
+          Data(bytes)
+        },
+        to: url,
+        mode: .exclusive
+      )
+    } catch SecureFileError.alreadyExists {
+      // The name was already taken — by an older seal, or by whoever won this race. Their key is the
+      // one any envelope beside it is sealed under; ours was never linked and simply evaporates.
+      return try openKey(at: url)
     } catch {
       throw mapKeyError(error)
     }
@@ -321,6 +342,10 @@ private extension EncryptedFileSecretStore {
     "\(name) was renamed into place but not proven durable — rerun `clawd secrets seal`"
   }
 
+  /// `.alreadyExists` is the one outcome neither map should ever be handed: `ensureKey` answers it
+  /// by opening the incumbent key, and the envelope is published to be replaced. Mapping it to a
+  /// publication failure keeps that assumption from turning a future exclusive caller's silence
+  /// into a wrong diagnosis.
   static func mapKeyError(_ error: SecureFileError) -> SecretStoreError {
     switch error {
     case .insecure(let reason), .unreadable(let reason):
@@ -329,6 +354,8 @@ private extension EncryptedFileSecretStore {
       return .keyFileInsecure("\(SecretStatePaths.keyName) must be \(keyByteCount) bytes")
     case .publicationFailed(let reason):
       return .publicationFailed(reason)
+    case .alreadyExists(let name):
+      return .publicationFailed("\(name) already exists")
     }
   }
 
@@ -340,6 +367,8 @@ private extension EncryptedFileSecretStore {
       return .malformedEnvelope
     case .publicationFailed(let reason):
       return .publicationFailed(reason)
+    case .alreadyExists(let name):
+      return .publicationFailed("\(name) already exists")
     }
   }
 }

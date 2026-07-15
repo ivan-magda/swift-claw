@@ -138,12 +138,12 @@ import Testing
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
-    // when — the envelope's rename never happens.
+    // when — the key lands, then the envelope's commit never happens.
     #expect(throws: SecretStoreError.self) {
       _ = try RuntimeSecretPreparer.prepare(
         stateRoot: stateRoot,
         environment: Self.fullEnvironment,
-        publisher: SecureFilePublisher(failpoint: .rename)
+        publisher: SecureFilePublisher(failpoint: .init(.commit, on: SecretFile.envelope))
       )
     }
 
@@ -163,13 +163,13 @@ import Testing
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
-    // when — the rename landed but its durability is unproven, so the seal cannot be reported as
-    // done; both artifacts it created come back out.
+    // when — the envelope's rename landed but its durability is unproven, so the seal cannot be
+    // reported as done; both artifacts it created come back out.
     #expect(throws: SecretStoreError.self) {
       _ = try RuntimeSecretPreparer.prepare(
         stateRoot: stateRoot,
         environment: Self.fullEnvironment,
-        publisher: SecureFilePublisher(failpoint: .directorySync)
+        publisher: SecureFilePublisher(failpoint: .init(.directorySync, on: SecretFile.envelope))
       )
     }
 
@@ -195,11 +195,11 @@ import Testing
       _ = try EncryptedFileSecretStore.seal(
         Secrets(telegramBotToken: "111:new", llmApiKey: nil),
         stateRoot: stateRoot,
-        publisher: SecureFilePublisher(failpoint: .rename)
+        publisher: SecureFilePublisher(failpoint: .init(.commit, on: SecretFile.envelope))
       )
     }
 
-    // then — a pre-existing artifact is not this operation's to delete, and the pre-rename failure
+    // then — a pre-existing artifact is not this operation's to delete, and the pre-commit failure
     // left the old envelope whole.
     #expect(try Data(contentsOf: paths.key) == keyBefore)
     #expect(try Data(contentsOf: paths.runtimeEnvelope) == envelopeBefore)

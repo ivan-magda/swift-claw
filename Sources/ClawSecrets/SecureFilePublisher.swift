@@ -14,8 +14,11 @@ enum SecureFileError: Error, Sendable, Equatable {
   case insecure(String)
   case unreadable(String)
   case oversized(String)
-  /// Nothing was renamed. Whatever the target held before, it still holds.
+  /// Nothing was linked into place. Whatever the target held before, it still holds.
   case publicationFailed(String)
+  /// An exclusive publication found the target name already taken, so it linked nothing. Only
+  /// `PublicationMode.exclusive` can produce this; a replacing publication takes the name regardless.
+  case alreadyExists(String)
 }
 
 /// Everything one `fstat`/`lstat` tells the protocol about an entry.
@@ -49,22 +52,54 @@ struct SecureFileIdentity: Sendable, Equatable {
 
 /// Crash-safe publication and bounded, no-follow reads for the files `SecretStatePaths` names.
 ///
-/// The type encodes the distinction the callers depend on: **throwing means nothing was renamed**,
-/// so the previous value is intact and a retry is free. **Returning means the rename landed** —
-/// either durably or, when the parent directory could not be proven synced, uncertainly. A caller
-/// holding an uncertain outcome must reload the path rather than assume the write was lost.
+/// The type encodes the distinction the callers depend on: **throwing means nothing was linked into
+/// place**, so the previous value is intact and a retry is free. **Returning means the commit
+/// landed** — either durably or, when the parent directory could not be proven synced, uncertainly.
+/// A caller holding an uncertain outcome must reload the path rather than assume the write was lost.
 struct SecureFilePublisher: Sendable {
   static let ownerOnlyPermissions: UInt32 = 0o600
   /// Strips the file-type bits from `st_mode`.
   static let permissionBitsMask: UInt32 = 0o777
 
-  /// Deterministic injection points for the four failures the protocol must tell apart. Production
+  /// A deterministic injection point for the four failures the protocol must tell apart. Production
   /// constructs the publisher without one; nothing but a test ever sets it.
-  enum Failpoint: Sendable, Equatable, CaseIterable {
-    case tempWrite
-    case fileSync
-    case rename
-    case directorySync
+  ///
+  /// It names an entry as well as a step because one `seal` drives the same publisher for both the
+  /// key and the envelope. A failpoint that could only say "fail the commit" would always fire on
+  /// the key — the first publication — and a test meaning to exercise the envelope's rollback would
+  /// quietly stop reaching the envelope at all.
+  struct Failpoint: Sendable, Equatable {
+    enum Step: Sendable, Equatable {
+      case tempWrite
+      case fileSync
+      /// Claiming the target name: `rename` or `link` depending on the mode.
+      case commit
+      case directorySync
+    }
+
+    let step: Step
+    /// The `lastPathComponent` this fires on. `nil` fires on every publication.
+    let entry: String?
+
+    init(_ step: Step, on entry: String? = nil) {
+      self.step = step
+      self.entry = entry
+    }
+
+    func fires(_ candidate: Step, on name: String) -> Bool {
+      step == candidate && (entry == nil || entry == name)
+    }
+  }
+
+  /// How a publication claims the target name.
+  enum PublicationMode: Sendable, Equatable {
+    /// `rename`: the target is meant to be replaced, and whatever holds the name is clobbered
+    /// atomically.
+    case replace
+    /// `link`: the target must not already exist. A create-if-missing target cannot use `replace`,
+    /// because `rename` would let the loser of a race unlink the winner's inode — and for the key
+    /// that means unlinking the only bytes able to open the envelope published beside it.
+    case exclusive
   }
 
   /// What an existing entry must satisfy before its bytes are read.
@@ -77,12 +112,12 @@ struct SecureFilePublisher: Sendable {
     let requiredPermissionBits: UInt32?
   }
 
-  /// The two ways a rename can have landed. There is no third: a publication that did not rename
-  /// throws instead.
+  /// The two ways a commit can have landed. There is no third: a publication that did not claim the
+  /// target name throws instead.
   enum PublicationOutcome: Sendable, Equatable {
     case published(SecureFileIdentity)
-    /// The rename committed but the parent directory was not proven durable, so a crash now could
-    /// still lose the new name. The bytes are readable at the path either way.
+    /// The name was claimed but the parent directory was not proven durable, so a crash now could
+    /// still lose it. The bytes are readable at the path either way.
     case commitUncertain(SecureFileIdentity)
 
     var identity: SecureFileIdentity {
@@ -107,9 +142,16 @@ struct SecureFilePublisher: Sendable {
   }
 
   /// Publishes `bytes` at `url`: same-directory 0600 temp file, all bytes written, `fsync` the
-  /// file, atomic `rename`, `fsync` the parent directory. The temp entry is unlinked on every path
-  /// that does not rename it away.
-  func publish(_ bytes: Data, to url: URL) throws(SecureFileError) -> PublicationOutcome {
+  /// file, claim the target name, `fsync` the parent directory. The temp entry is unlinked on every
+  /// path, including the successful one. The bytes are durable on their own inode before the name
+  /// ever points at them, so no crash can expose a half-written entry under the target name.
+  ///
+  /// `mode` decides only how the name is claimed; everything above it is identical.
+  func publish(
+    _ bytes: Data,
+    to url: URL,
+    mode: PublicationMode = .replace
+  ) throws(SecureFileError) -> PublicationOutcome {
     let name = url.lastPathComponent
     let directory = url.deletingLastPathComponent()
     let temporary = directory.appendingPathComponent(
@@ -125,7 +167,7 @@ struct SecureFilePublisher: Sendable {
       throw .publicationFailed("create a temporary \(name)")
     }
 
-    var renamed = false
+    var temporaryNameLives = true
     var descriptorOpen = true
     func closeOnce() {
       if descriptorOpen {
@@ -135,7 +177,7 @@ struct SecureFilePublisher: Sendable {
     }
     defer {
       closeOnce()
-      if !renamed {
+      if temporaryNameLives {
         unlink(temporary.path)
       }
     }
@@ -145,27 +187,45 @@ struct SecureFilePublisher: Sendable {
     guard fchmod(descriptor, mode_t(Self.ownerOnlyPermissions)) == 0 else {
       throw .publicationFailed("set the mode of a temporary \(name)")
     }
-    guard failpoint != .tempWrite, Self.writeAll(bytes, to: descriptor) else {
+    guard fires(.tempWrite, on: name) == false, Self.writeAll(bytes, to: descriptor) else {
       throw .publicationFailed("write \(name)")
     }
 
-    // Captured before the rename: `rename` moves the name, not the inode, so this is the identity
-    // that will be sitting at the target.
-    let identity = try Self.facts(ofDescriptor: descriptor, name: name).identity
+    // Captured before the commit: claiming the name attaches it to this inode without moving the
+    // inode, so this is the identity that will be sitting at the target.
+    let identity: SecureFileIdentity
+    do {
+      identity = try Self.facts(ofDescriptor: descriptor, name: name).identity
+    } catch {
+      // `facts` speaks the read path's vocabulary; here the failure is a failure to publish, and
+      // pointing the owner at a read they never asked for would misdirect them.
+      throw .publicationFailed("stat \(name)")
+    }
 
-    guard failpoint != .fileSync, fsync(descriptor) == 0 else {
+    guard fires(.fileSync, on: name) == false, fsync(descriptor) == 0 else {
       throw .publicationFailed("fsync \(name)")
     }
-    guard failpoint != .rename, rename(temporary.path, url.path) == 0 else {
-      throw .publicationFailed("rename \(name) into place")
+    guard fires(.commit, on: name) == false else {
+      throw .publicationFailed("commit \(name) into place")
     }
-    renamed = true
+    try Self.claim(temporary, as: url, mode: mode, name: name)
+
+    // `rename` consumed the temp name; `link` left it as a second name for the committed inode.
+    // Drop it before the directory is synced so no crash can strand it.
+    if mode == .exclusive {
+      unlink(temporary.path)
+    }
+    temporaryNameLives = false
     closeOnce()
 
-    guard failpoint != .directorySync, Self.syncDirectory(directory) else {
+    guard fires(.directorySync, on: name) == false, Self.syncDirectory(directory) else {
       return .commitUncertain(identity)
     }
     return .published(identity)
+  }
+
+  private func fires(_ step: Failpoint.Step, on name: String) -> Bool {
+    failpoint?.fires(step, on: name) == true
   }
 
   /// Opens `url` without following symlinks, proves its metadata against `policy`, and reads its
@@ -244,6 +304,39 @@ struct SecureFilePublisher: Sendable {
     }
     guard facts.byteCount <= policy.maximumByteCount else {
       throw .oversized("\(name) exceeds \(policy.maximumByteCount) bytes")
+    }
+  }
+}
+
+// MARK: - Name claiming
+
+private extension SecureFilePublisher {
+  /// The commit point. Returning means the target name now resolves to the temporary's inode;
+  /// throwing means it does not, and whatever held the name still does.
+  ///
+  /// `link` is what makes exclusivity real rather than advisory: a check-then-`rename` can only
+  /// narrow the race window, while `link` is refused by the kernel the instant the name is taken —
+  /// no lock between the racing processes required.
+  static func claim(
+    _ temporary: URL,
+    as url: URL,
+    mode: PublicationMode,
+    name: String
+  ) throws(SecureFileError) {
+    switch mode {
+    case .replace:
+      guard rename(temporary.path, url.path) == 0 else {
+        throw .publicationFailed("rename \(name) into place")
+      }
+    case .exclusive:
+      guard link(temporary.path, url.path) == 0 else {
+        // `link` does not follow a symlink standing at the target, so a planted link is an entry
+        // that exists rather than a name that redirects the write.
+        guard errno == EEXIST else {
+          throw .publicationFailed("link \(name) into place")
+        }
+        throw .alreadyExists(name)
+      }
     }
   }
 }
