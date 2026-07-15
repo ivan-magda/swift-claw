@@ -819,6 +819,36 @@ func waitForTurnResult(
     #expect(await provider.streamCalls == 0)
   }
 
+  @Test func theStreamToBufferedFallbackKeepsTheRoundOnOneCallIdentity() async throws {
+    // given — the stream connect is refused, so the round is re-issued on the blocking path
+    let provider = StreamingProvider(streamScript: .fail(.connectFailed(message: "refused")))
+    let runtime = makeRuntime(
+      provider: provider,
+      streamingEnabled: true,
+      providerCallIDGenerator: SequentialCallIDGenerator()
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the round reached the provider twice but accounts as one call. Today the identity is
+    // minted outside `roundTrip`, which owns the fallback, so this holds by scope; the assertion
+    // guards the day against a future change that debits the retried attempt separately.
+    #expect(await provider.streamCalls == 1)
+    #expect(await provider.completeCalls == 1)
+    let (_, usage) = try requireCompleted(outcome.result)
+    #expect(usage.providerCallID == ProviderCallID(rawValue: "call-1"))
+  }
+
   @Test func connectFailureFallsBackToBlockingCompleteOnce() async throws {
     // given
     let provider = StreamingProvider(streamScript: .fail(.connectFailed(message: "refused")))

@@ -33,6 +33,29 @@ public struct HangingProvider: LLMProvider {
   }
 }
 
+// MARK: - Provider call identity
+
+/// Mints `call-1`, `call-2`, … in call order, so a test can name the identity a given round-trip
+/// records instead of matching a random UUID. Lock-guarded, not an actor:
+/// `ProviderCallIDGenerating` is synchronous, mirroring the live `UUIDProviderCallIDGenerator` —
+/// a value type needing no coordination — and an actor cannot satisfy a synchronous requirement.
+public final class SequentialCallIDGenerator: ProviderCallIDGenerating, @unchecked Sendable {
+  private let lock = NSLock()
+  private let prefix: String
+  private var issued = 0
+
+  public init(prefix: String = "call") {
+    self.prefix = prefix
+  }
+
+  public func next() -> ProviderCallID {
+    lock.lock()
+    defer { lock.unlock() }
+    issued += 1
+    return ProviderCallID(rawValue: "\(prefix)-\(issued)")
+  }
+}
+
 // MARK: - Dispatcher
 
 /// Scripted tool dispatcher: name → outcome factory; records every dispatched call+context.

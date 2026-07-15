@@ -54,6 +54,9 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   private let gate: BudgetGate
   private let costResolver: CostResolver
   private let usageResolver = UsageResolver()
+  /// Mints the identity the parse's usage row is recorded under. Injected so a test can pin the
+  /// identity rather than assert against a random UUID.
+  private let providerCallIDGenerator: any ProviderCallIDGenerating
 
   private let now: @Sendable () -> Date
   private let clock: any Clock<Duration>
@@ -67,6 +70,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     budget: RunBudget,
     costResolver: CostResolver,
     structuredOutput: StructuredOutputMode = .off,
+    providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
     now: @escaping @Sendable () -> Date = { Date() },
     clock: any Clock<Duration>,
     logger: Logger
@@ -78,6 +82,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     self.usageStore = usageStore
     self.gate = BudgetGate(budget: budget)
     self.costResolver = costResolver
+    self.providerCallIDGenerator = providerCallIDGenerator
 
     self.now = now
     self.clock = clock
@@ -86,6 +91,10 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   }
 
   public func parse(ownerText: String, sessionId: Int64) async -> ScheduleDraftParseResult {
+    // The parse is one provider call, so it is one identity — shared by the reconciled row a reply
+    // yields and the estimate a deadline or brownout forces, since only one of them can ever be
+    // recorded for this call.
+    let callID = providerCallIDGenerator.next()
     let request = ChatRequest(
       model: model,
       messages: [
@@ -134,13 +143,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     } catch is ParseDeadlineExceeded {
       // The request may still be billing server-side; debit the estimate so the day cap
       // sees the spend, exactly like a deadline-hit turn.
-      record(estimatedFor: request, sessionId: sessionId)
+      record(estimatedFor: request, callID: callID, sessionId: sessionId)
       return .providerUnavailable
     } catch ProviderError.retryable, ProviderError.connectFailed {
       // Exhausted retries / transport failure: parity with a turn's `degradedForCaughtError`
       // — debit an estimate so a provider brownout still moves the day cap, rather than
       // letting repeated `/schedule` attempts re-issue the call with the totals frozen.
-      record(estimatedFor: request, sessionId: sessionId)
+      record(estimatedFor: request, callID: callID, sessionId: sessionId)
       return .providerUnavailable
     } catch {
       // Terminal rejection (a 4xx that won't retry): the provider generated and billed nothing,
@@ -148,7 +157,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       return .providerUnavailable
     }
 
-    record(usageFor: response, request: request, sessionId: sessionId)
+    record(usageFor: response, request: request, callID: callID, sessionId: sessionId)
 
     let result = Self.decode(response.content)
     if result == .unparseable {
@@ -276,7 +285,12 @@ private extension ScheduleDraftParser {
 // MARK: - Spend Accounting
 
 private extension ScheduleDraftParser {
-  func record(usageFor response: ChatResponse, request: ChatRequest, sessionId: Int64) {
+  func record(
+    usageFor response: ChatResponse,
+    request: ChatRequest,
+    callID: ProviderCallID,
+    sessionId: Int64
+  ) {
     let resolvedUsage = usageResolver.resolve(response: response, context: request.messages)
     let resolvedCost = costResolver.resolve(
       model: model,
@@ -285,6 +299,7 @@ private extension ScheduleDraftParser {
     )
     persist(
       ProviderUsage(
+        providerCallID: callID,
         runId: nil,
         sessionId: sessionId,
         model: model,
@@ -295,7 +310,7 @@ private extension ScheduleDraftParser {
     )
   }
 
-  func record(estimatedFor request: ChatRequest, sessionId: Int64) {
+  func record(estimatedFor request: ChatRequest, callID: ProviderCallID, sessionId: Int64) {
     let resolvedUsage = usageResolver.estimate(
       context: request.messages,
       maxOutputTokens: Self.maxParseOutputTokens
@@ -307,6 +322,7 @@ private extension ScheduleDraftParser {
     )
     persist(
       ProviderUsage(
+        providerCallID: callID,
         runId: nil,
         sessionId: sessionId,
         model: model,

@@ -227,6 +227,7 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
 
     // when
     let row = ProviderUsage(
+      providerCallID: ProviderCallID(rawValue: "call-1"),
       runId: 1,
       sessionId: 2,
       model: "openai-chatgpt/gpt-5.4-codex",
@@ -261,6 +262,7 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
 
     // when
     let row = ProviderUsage(
+      providerCallID: ProviderCallID(rawValue: "call-1"),
       runId: 1,
       sessionId: 2,
       model: "openai-chatgpt/gpt-5.4-codex",

@@ -195,20 +195,42 @@ private extension RunStoreGRDB {
       return .ignored
     }
 
-    let existingRows =
-      try Int.fetchOne(
-        db,
-        sql: "SELECT COUNT(*) FROM provider_usage WHERE run_id = ?",
-        arguments: [usage.runId]
-      ) ?? 0
-    guard existingRows == 0 else {
+    // Whether this row is new is decided per provider call, not per run. A run legitimately holds
+    // one row per tool-loop round, so asking "does this run have usage yet?" would throw away the
+    // terminal round's spend for every run whose loop got past its first round — while still
+    // double-debiting the one case it meant to guard, a commit retried before its first row
+    // landed. The call identity answers the question the guard was actually asking.
+    guard try insertUsage(db, usage) else {
       return .ignored
     }
 
-    try insertUsage(db, usage)
-    try updateRunUsage(db, usage: usage, now: now)
+    if let runId = usage.runId {
+      try recomputeRunUsageTotals(db, runId: runId, now: now)
+    }
 
     return .usageRecordedAfterTerminal
+  }
+
+  /// Re-derives the run's denormalized totals from every usage row it owns, in the transaction that
+  /// stored the new one. Summing what is stored — rather than adding the row in hand — keeps a row
+  /// arriving after the run terminated from erasing the rounds that preceded it, and needs no
+  /// separate replay guard: a commit whose row was already recorded never reaches this.
+  static func recomputeRunUsageTotals(_ db: Database, runId: Int64, now: Date) throws {
+    try db.execute(
+      sql: """
+        UPDATE runs SET
+          updated_ts = ?,
+          input_tokens = (
+            SELECT COALESCE(SUM(prompt_tokens), 0) FROM provider_usage WHERE run_id = ?
+          ),
+          output_tokens = (
+            SELECT COALESCE(SUM(completion_tokens), 0) FROM provider_usage WHERE run_id = ?
+          ),
+          cost_usd = (SELECT COALESCE(SUM(cost_usd), 0) FROM provider_usage WHERE run_id = ?)
+        WHERE id = ?
+        """,
+      arguments: [now, runId, runId, runId, runId]
+    )
   }
 
   static func updateRunUsage(_ db: Database, usage: ProviderUsage, now: Date) throws {

@@ -805,6 +805,7 @@ func makeStopNewStack(
     let seedRun = try #require(seedClaim.runId)
     try stack.usage.recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-day-cap-seed"),
         runId: seedRun,
         sessionId: seedSession,
         model: "gpt-4o",

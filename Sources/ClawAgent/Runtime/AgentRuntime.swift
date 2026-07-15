@@ -71,6 +71,9 @@ public struct AgentRuntime: Sendable {
 
   private let usageStore: any UsageStore
   private let auditLog: any AuditLog
+  /// Mints the identity each round-trip's usage row is recorded under. Injected so a test can pin
+  /// the identities a run records rather than assert against a random UUID.
+  private let providerCallIDGenerator: any ProviderCallIDGenerating
   /// Developer-facing diagnostics (swift-log). Distinct from `auditLog`, which is the durable
   /// business/security trail. Defaults to a no-op so tests stay silent unless they inject one.
   private let logger: Logger
@@ -89,6 +92,7 @@ public struct AgentRuntime: Sendable {
     toolDispatcher: (any ToolDispatching)? = nil,
     usageStore: any UsageStore,
     auditLog: any AuditLog,
+    providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
     logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
     clock: any Clock<Duration>
   ) {
@@ -106,6 +110,7 @@ public struct AgentRuntime: Sendable {
 
     self.usageStore = usageStore
     self.auditLog = auditLog
+    self.providerCallIDGenerator = providerCallIDGenerator
 
     self.logger = logger
 
@@ -177,6 +182,14 @@ public struct AgentRuntime: Sendable {
     // `runTurn` entry above; only the round count needs to account for rounds already consumed.
     let priorRounds = carryOver?.rounds ?? 0
     for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
+      // One identity per logical round, minted before anything here can debit. Every row this
+      // iteration can produce — the estimate a deadline forces, the reconciled row a response
+      // yields — accounts for the same provider call, so whichever one lands is recorded under the
+      // same key. It is deliberately not minted per wire attempt: the stream-to-buffered fallback
+      // inside `roundTrip` retries the round, and a fresh identity there would let one round debit
+      // the day twice.
+      let callID = providerCallIDGenerator.next()
+
       // Per-round-trip preflight: day totals at run start + everything this run recorded.
       let inputTokens = TokenEstimator.estimateInputTokens(wire)
       // The loop is the one component that grows provider input (proposals + fenced
@@ -222,7 +235,12 @@ public struct AgentRuntime: Sendable {
         return outcome(
           .degraded(
             .providerUnavailable,
-            usage: estimatedDebit(context: wire, runId: runId, sessionId: sessionId)
+            usage: estimatedDebit(
+              callID: callID,
+              context: wire,
+              runId: runId,
+              sessionId: sessionId
+            )
           )
         )
       }
@@ -251,7 +269,12 @@ public struct AgentRuntime: Sendable {
         return outcome(
           .degraded(
             .providerUnavailable,
-            usage: estimatedDebit(context: wire, runId: runId, sessionId: sessionId)
+            usage: estimatedDebit(
+              callID: callID,
+              context: wire,
+              runId: runId,
+              sessionId: sessionId
+            )
           )
         )
       } catch {
@@ -262,21 +285,45 @@ public struct AgentRuntime: Sendable {
         turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
         let degradation =
           streamingEnabled
-          ? degradedForStreamingError(error, context: wire, runId: runId, sessionId: sessionId)
-          : degradedForCaughtError(error, context: wire, runId: runId, sessionId: sessionId)
+          ? degradedForStreamingError(
+            error,
+            callID: callID,
+            context: wire,
+            runId: runId,
+            sessionId: sessionId
+          )
+          : degradedForCaughtError(
+            error,
+            callID: callID,
+            context: wire,
+            runId: runId,
+            sessionId: sessionId
+          )
         return outcome(degradation)
       }
 
       // No proposals → the terminal round-trip; its usage row rides the atomic commit.
       guard response.toolCalls.isEmpty == false else {
         return outcome(
-          classify(response: response, context: wire, runId: runId, sessionId: sessionId)
+          classify(
+            response: response,
+            callID: callID,
+            context: wire,
+            runId: runId,
+            sessionId: sessionId
+          )
         )
       }
 
       // Intermediate round-trip: record its usage row IMMEDIATELY. Spend that cannot be
       // recorded must stop being spent.
-      let intermediate = usageRow(for: response, context: wire, runId: runId, sessionId: sessionId)
+      let intermediate = usageRow(
+        for: response,
+        callID: callID,
+        context: wire,
+        runId: runId,
+        sessionId: sessionId
+      )
       do {
         try usageStore.recordUsage(intermediate)
       } catch StoreError.diskFull {
@@ -304,7 +351,12 @@ public struct AgentRuntime: Sendable {
           return outcome(
             .degraded(
               .providerUnavailable,
-              usage: estimatedDebit(context: wire, runId: runId, sessionId: sessionId)
+              usage: estimatedDebit(
+                callID: callID,
+                context: wire,
+                runId: runId,
+                sessionId: sessionId
+              )
             )
           )
         }
@@ -490,6 +542,7 @@ private extension AgentRuntime {
   /// without the terminal classification.
   func usageRow(
     for response: ChatResponse,
+    callID: ProviderCallID,
     context: [ChatMessage],
     runId: Int64,
     sessionId: Int64
@@ -502,6 +555,7 @@ private extension AgentRuntime {
     )
 
     return ProviderUsage(
+      providerCallID: callID,
       runId: runId,
       sessionId: sessionId,
       model: model,
@@ -589,6 +643,7 @@ private extension AgentRuntime {
 private extension AgentRuntime {
   func degradedForCaughtError(
     _ error: any Error,
+    callID: ProviderCallID,
     context: [ChatMessage],
     runId: Int64,
     sessionId: Int64
@@ -598,7 +653,12 @@ private extension AgentRuntime {
       case .connectFailed, .retryable, .rejected:
         return .degraded(
           .providerUnavailable,
-          usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+          usage: estimatedDebit(
+            callID: callID,
+            context: context,
+            runId: runId,
+            sessionId: sessionId
+          )
         )
       // A route that answered instead of inferring generated nothing, so there is nothing to debit.
       case .terminal, .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
@@ -609,12 +669,13 @@ private extension AgentRuntime {
 
     return .degraded(
       .providerUnavailable,
-      usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+      usage: estimatedDebit(callID: callID, context: context, runId: runId, sessionId: sessionId)
     )
   }
 
   func degradedForStreamingError(
     _ error: any Error,
+    callID: ProviderCallID,
     context: [ChatMessage],
     runId: Int64,
     sessionId: Int64
@@ -625,14 +686,19 @@ private extension AgentRuntime {
         .quotaLimited, .cleanRejection, .invalidProviderState:
         return .degraded(
           .providerUnavailable,
-          usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+          usage: estimatedDebit(
+            callID: callID,
+            context: context,
+            runId: runId,
+            sessionId: sessionId
+          )
         )
       }
     }
 
     return .degraded(
       .providerUnavailable,
-      usage: estimatedDebit(context: context, runId: runId, sessionId: sessionId)
+      usage: estimatedDebit(callID: callID, context: context, runId: runId, sessionId: sessionId)
     )
   }
 
@@ -642,6 +708,7 @@ private extension AgentRuntime {
   /// resolved via `costResolver` (provider cost wins) into the `ProviderUsage` row.
   func classify(
     response: ChatResponse,
+    callID: ProviderCallID,
     context: [ChatMessage],
     runId: Int64,
     sessionId: Int64
@@ -653,6 +720,7 @@ private extension AgentRuntime {
       providerCost: response.costFromProvider
     )
     let usage = ProviderUsage(
+      providerCallID: callID,
       runId: runId,
       sessionId: sessionId,
       model: model,
@@ -677,6 +745,7 @@ private extension AgentRuntime {
   /// best-effort tier. No provider cost exists for a call that never returned, so the resolver's
   /// heuristic tier carries USD (floored, never a silent $0); the row is an estimate.
   func estimatedDebit(
+    callID: ProviderCallID,
     context: [ChatMessage],
     runId: Int64,
     sessionId: Int64
@@ -692,6 +761,7 @@ private extension AgentRuntime {
     )
 
     return ProviderUsage(
+      providerCallID: callID,
       runId: runId,
       sessionId: sessionId,
       model: model,

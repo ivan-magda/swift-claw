@@ -29,6 +29,7 @@ import Testing
     }
     try UsageStoreGRDB(writer: env.queue).recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-proactive-seed"),
         runId: env.runId,
         sessionId: env.sessionId,
         model: "m",

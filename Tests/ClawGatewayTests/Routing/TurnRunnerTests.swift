@@ -694,6 +694,7 @@ private func okResponse(content: String) -> ChatResponse {
     }
     try UsageStoreGRDB(writer: env.queue).recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-proactive-seed"),
         runId: env.runId,
         sessionId: env.sessionId,
         model: "m",
@@ -755,6 +756,7 @@ private func okResponse(content: String) -> ChatResponse {
     }
     try UsageStoreGRDB(writer: env.queue).recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-other-run-seed"),
         runId: otherRunId,
         sessionId: try #require(otherClaim.sessionId),
         model: "m",

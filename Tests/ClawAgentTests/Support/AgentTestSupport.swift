@@ -120,6 +120,7 @@ func makeRuntime(
   toolDispatcher: (any ToolDispatching)? = nil,
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
+  providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
   clock: any Clock<Duration> = ContinuousClock()
 ) -> AgentRuntime {
   AgentRuntime(
@@ -133,6 +134,7 @@ func makeRuntime(
     toolDispatcher: toolDispatcher,
     usageStore: usageStore,
     auditLog: auditLog,
+    providerCallIDGenerator: providerCallIDGenerator,
     clock: clock
   )
 }

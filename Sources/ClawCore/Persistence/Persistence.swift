@@ -219,6 +219,10 @@ public struct SessionContextSnapshot: Sendable, Equatable {
 }
 
 public struct ProviderUsage: Sendable, Equatable {
+  /// The provider round-trip this row accounts for. Stored rows are unique on it, which is what
+  /// makes a re-attempted commit write nothing instead of double-debiting the day: the second
+  /// attempt presents the identity the first one already stored.
+  public let providerCallID: ProviderCallID
   /// The owning run, or `nil` for spend issued outside any run (command-scoped LLM calls such as
   /// the /schedule parse). Plain day totals include nil-run rows; the origin-filtered totals
   /// cannot (the JOIN has nothing to match) — correct, since command spend is owner-interactive.
@@ -233,6 +237,7 @@ public struct ProviderUsage: Sendable, Equatable {
   public let ts: Date
 
   public init(
+    providerCallID: ProviderCallID,
     runId: Int64?,
     sessionId: Int64,
     model: String,
@@ -243,6 +248,7 @@ public struct ProviderUsage: Sendable, Equatable {
     isEstimated: Bool,
     ts: Date
   ) {
+    self.providerCallID = providerCallID
     self.runId = runId
     self.sessionId = sessionId
     self.model = model
@@ -258,6 +264,7 @@ public struct ProviderUsage: Sendable, Equatable {
   /// is the single place the row's `isEstimated` is derived: a row is an estimate iff either input
   /// was guessed.
   public init(
+    providerCallID: ProviderCallID,
     runId: Int64?,
     sessionId: Int64,
     model: String,
@@ -266,6 +273,7 @@ public struct ProviderUsage: Sendable, Equatable {
     ts: Date
   ) {
     self.init(
+      providerCallID: providerCallID,
       runId: runId,
       sessionId: sessionId,
       model: model,

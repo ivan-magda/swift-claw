@@ -339,6 +339,132 @@ import Testing
     #expect(usageCount == 0)
   }
 
+  // MARK: - Terminal Usage Idempotency
+
+  @Test func aLateTerminalRowIsRecordedEvenWhenAnEarlierRoundAlreadySpent() throws {
+    // given — a cancelled run whose tool loop already recorded round one's spend mid-flight. The
+    // run-wide guard this replaces refused exactly this row, silently dropping the terminal
+    // round's spend for every run whose loop got past its first round.
+    let env = try fixture()
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    try env.usage.recordUsage(
+      makeProviderUsage(
+        runId: env.seedRunId,
+        sessionId: env.sessionId,
+        callID: "call-round-1",
+        promptTokens: 10,
+        completionTokens: 20,
+        costUSD: 0.004
+      )
+    )
+    _ = try #require(
+      try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: Date())
+    )
+
+    // when — the terminal round's commit arrives after the cancellation
+    let result = try env.runs.commitAssistantTurn(
+      terminalTurn(env, callID: "call-round-2", promptTokens: 7, completionTokens: 3, costUSD: 0.5),
+      now: Date()
+    )
+
+    // then
+    #expect(result == .usageRecordedAfterTerminal)
+    #expect(try usageRowCount(env) == 2)
+  }
+
+  @Test func recordingALateRowRecomputesTheRunTotalsFromEveryStoredRow() throws {
+    // given
+    let env = try fixture()
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    try env.usage.recordUsage(
+      makeProviderUsage(
+        runId: env.seedRunId,
+        sessionId: env.sessionId,
+        callID: "call-round-1",
+        promptTokens: 10,
+        completionTokens: 20,
+        costUSD: 0.004
+      )
+    )
+    _ = try #require(
+      try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: Date())
+    )
+
+    // when
+    _ = try env.runs.commitAssistantTurn(
+      terminalTurn(env, callID: "call-round-2", promptTokens: 7, completionTokens: 3, costUSD: 0.5),
+      now: Date()
+    )
+
+    // then — the totals are the sum of both rounds, not the late row overwriting the first
+    let totals = try runTotals(env)
+    #expect(totals.input == 17)
+    #expect(totals.output == 23)
+    #expect(abs(totals.cost - 0.504) < 1e-9)
+  }
+
+  @Test func replayingTheTerminalCommitChangesNeitherTotalsNorDayBudgets() throws {
+    // given — a cancelled run whose terminal commit already landed
+    let env = try fixture()
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(
+      try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: Date())
+    )
+    let turn = terminalTurn(
+      env,
+      callID: "call-round-1",
+      promptTokens: 7,
+      completionTokens: 3,
+      costUSD: 0.5
+    )
+    #expect(try env.runs.commitAssistantTurn(turn, now: Date()) == .usageRecordedAfterTerminal)
+    let totalsAfterFirst = try runTotals(env)
+
+    // when — the identical commit is re-presented
+    let replay = try env.runs.commitAssistantTurn(turn, now: Date())
+
+    // then — the unique key absorbs it: no row, no total change, no day debit
+    #expect(replay == .ignored)
+    #expect(try usageRowCount(env) == 1)
+    let totalsAfterReplay = try runTotals(env)
+    #expect(totalsAfterReplay.input == totalsAfterFirst.input)
+    #expect(totalsAfterReplay.output == totalsAfterFirst.output)
+    #expect(totalsAfterReplay.cost == totalsAfterFirst.cost)
+    let (tokens, cost) = try env.usage.todayTokensAndCost(now: Date())
+    #expect(tokens == 10)
+    #expect(abs(cost - 0.5) < 1e-9)
+  }
+
+  @Test func aLateRowIsRecordedAfterSupersessionToo() throws {
+    // given — supersession is the other terminal state a late commit can land against
+    let env = try fixture()
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    try env.usage.recordUsage(
+      makeProviderUsage(
+        runId: env.seedRunId,
+        sessionId: env.sessionId,
+        callID: "call-round-1",
+        promptTokens: 10,
+        completionTokens: 20,
+        costUSD: 0.004
+      )
+    )
+    _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
+
+    // when
+    let result = try env.runs.commitAssistantTurn(
+      terminalTurn(env, callID: "call-round-2", promptTokens: 7, completionTokens: 3, costUSD: 0.5),
+      now: Date()
+    )
+
+    // then
+    #expect(result == .usageRecordedAfterTerminal)
+    #expect(try usageRowCount(env) == 2)
+    let totals = try runTotals(env)
+    #expect(totals.input == 17)
+    #expect(totals.output == 23)
+  }
+
   @Test func corruptOriginFailsClosedAtPickup() throws {
     // given — a PENDING run whose origin left the vocabulary
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -369,5 +495,53 @@ import Testing
       try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
     }
     #expect(state == RunState.pending.rawValue)
+  }
+}
+
+// MARK: - Terminal Usage Helpers
+
+private extension RunStoreTests {
+  /// The turn a tool loop's terminal round commits, named by the call it accounts for.
+  private func terminalTurn(
+    _ env: Fixture,
+    callID: String,
+    promptTokens: Int,
+    completionTokens: Int,
+    costUSD: Double
+  ) -> AssistantTurn {
+    AssistantTurn(
+      runId: env.seedRunId,
+      sessionId: env.sessionId,
+      chatId: 42,
+      content: "answer",
+      usage: makeProviderUsage(
+        runId: env.seedRunId,
+        sessionId: env.sessionId,
+        callID: callID,
+        promptTokens: promptTokens,
+        completionTokens: completionTokens,
+        costUSD: costUSD
+      ),
+      chunks: [OutboxChunk(stepIndex: 0, chatId: 42, payload: "answer", payloadHash: "h")]
+    )
+  }
+
+  private func usageRowCount(_ env: Fixture) throws -> Int {
+    try env.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM provider_usage") ?? -1
+    }
+  }
+
+  private func runTotals(_ env: Fixture) throws -> (input: Int, output: Int, cost: Double) {
+    let row = try #require(
+      try env.queue.read { db in
+        try Row.fetchOne(
+          db,
+          sql: "SELECT input_tokens, output_tokens, cost_usd FROM runs WHERE id = ?",
+          arguments: [env.seedRunId]
+        )
+      }
+    )
+    return (row["input_tokens"], row["output_tokens"], row["cost_usd"])
   }
 }

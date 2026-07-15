@@ -542,16 +542,16 @@ import Testing
       try db.execute(
         sql: """
           INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-            cost_usd, cost_source, is_estimated, ts)
-          VALUES (?, ?, 'm', 100, 20, 0.03, 'price_file', 0, ?)
+            cost_usd, cost_source, is_estimated, ts, provider_call_id)
+          VALUES (?, ?, 'm', 100, 20, 0.03, 'price_file', 0, ?, 'call-round-1')
           """,
         arguments: [env.runId, env.sessionId, Date()]
       )
       try db.execute(
         sql: """
           INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-            cost_usd, cost_source, is_estimated, ts)
-          VALUES (?, ?, 'm', 50, 10, 0.01, 'price_file', 0, ?)
+            cost_usd, cost_source, is_estimated, ts, provider_call_id)
+          VALUES (?, ?, 'm', 50, 10, 0.01, 'price_file', 0, ?, 'call-round-2')
           """,
         arguments: [env.runId, env.sessionId, Date()]
       )
