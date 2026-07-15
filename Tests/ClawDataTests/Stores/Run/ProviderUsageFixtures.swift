@@ -5,12 +5,13 @@ import Foundation
 /// store suites reuse; each test overrides only the field it exercises (token counts, `isEstimated`,
 /// `model`, `costSource`, `ts`). Kept in `ClawDataTests` — no other target seeds usage rows.
 ///
-/// `callID` defaults to a fixed identity rather than a fresh one: rows are unique on it, so a suite
-/// that seeds two rows without naming their calls is asserting on a duplicate and should say so.
+/// `callID` defaults to a fresh identity because rows are unique on it and the store's insert
+/// resolves a conflict by doing nothing: a shared default would let a suite seed two rows, store
+/// one, and still pass. Tests that assert on the identity itself pass an explicit `callID`.
 func makeProviderUsage(
   runId: Int64?,
   sessionId: Int64,
-  callID: String = "call-1",
+  callID: String = UUIDProviderCallIDGenerator().next().rawValue,
   model: String = "m",
   promptTokens: Int = 10,
   completionTokens: Int = 5,

@@ -339,6 +339,23 @@ import Testing
     #expect(usageCount == 0)
   }
 
+  // MARK: - Usage Fixture Distinctness
+
+  @Test func twoUnnamedFixtureRowsBothPersistRatherThanCollapsingIntoOne() throws {
+    // given — a running run, and two spend rows built without naming their calls. Rows are unique
+    // on the call identity and the insert resolves a conflict by doing nothing, so a shared fixture
+    // default would drop the second row here with no error and leave the suite green.
+    let env = try fixture()
+    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+
+    // when
+    try env.usage.recordUsage(makeProviderUsage(runId: env.seedRunId, sessionId: env.sessionId))
+    try env.usage.recordUsage(makeProviderUsage(runId: env.seedRunId, sessionId: env.sessionId))
+
+    // then
+    #expect(try usageRowCount(env) == 2)
+  }
+
   // MARK: - Terminal Usage Idempotency
 
   @Test func aLateTerminalRowIsRecordedEvenWhenAnEarlierRoundAlreadySpent() throws {
