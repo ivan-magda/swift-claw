@@ -216,6 +216,27 @@ import Testing
     #expect(summary.contains("…"))
   }
 
+  @Test func failingLLMAuthRowFailsReportWithoutSuppressingOtherRows() {
+    // given — a healthy config row alongside a failing llm.auth row
+    var report = DoctorReport()
+    report.add(key: "config", value: "OK", group: .config)
+    report.add(
+      key: "llm.auth",
+      value: "provider=openai-chatgpt mode=oauth not logged in; run: clawd auth login",
+      ok: false,
+      group: .llmRuns
+    )
+
+    // when
+    let text = report.renderText()
+
+    // then — the report fails, yet every row still renders
+    #expect(report.ok == false)
+    #expect(text.contains("config"))
+    #expect(text.contains("✗ llm.auth"))
+    #expect(text.contains("clawd auth login"))
+  }
+
   @Test func jsonIncludesGroupAndTopLevelOk() {
     // given
     var report = DoctorReport()

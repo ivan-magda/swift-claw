@@ -29,6 +29,7 @@ let package = Package(
       name: "ClawSecrets",
       dependencies: [
         "ClawCore",
+        "ClawAuth",
         .product(name: "Crypto", package: "swift-crypto"),
       ]
     ),

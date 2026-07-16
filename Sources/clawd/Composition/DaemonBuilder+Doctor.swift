@@ -1,6 +1,7 @@
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawSecrets
 import Foundation
 
 // MARK: - Doctor Report Provider
@@ -9,6 +10,9 @@ struct DaemonDoctorReporter: DoctorReporting {
   let stores: ClawStores
   let config: AppConfig
   let sandbox: SandboxBootstrapResult
+  /// The static bearer already resolved at boot, so the credential row reports the current route's
+  /// key presence without re-reading secrets.
+  let staticAPIKey: String?
 
   func report() async -> DoctorReport {
     var report = DoctorReport()
@@ -17,6 +21,16 @@ struct DaemonDoctorReporter: DoctorReporting {
     report.add(key: "db.writable", value: "true", group: .database)
 
     let now = Date()
+    let auth = LLMAuthDoctor.inspect(
+      route: config.llm.route,
+      staticAPIKey: staticAPIKey,
+      now: now,
+      makeManagedStore: {
+        EncryptedLLMCredentialStore(stateRoot: config.stateRoot)
+      }
+    )
+    report.add(key: "llm.auth", value: auth.value, ok: auth.ok, group: .llmRuns)
+
     report.add(
       contentsOf: HealthRowsBuilder.checks(
         DoctorHealth.inputs(stores: stores, config: config, now: now)
