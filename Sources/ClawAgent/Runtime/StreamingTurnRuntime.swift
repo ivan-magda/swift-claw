@@ -110,10 +110,10 @@ struct StreamingTurnRuntime: Sendable {
 private extension StreamingTurnRuntime {
   /// Iterates the stream, accumulating deltas and publishing drafts, and reports what it saw as a
   /// value — never a throw across the coordinator's group. On the terminal event it claims the race
-  /// for the provider; the authoritative reply metadata is read from the stream's own join, so the
-  /// consumer contributes only the accumulation the drafts have been showing. A cut iteration and a
-  /// failed terminal both defer to that join, which carries the disposition; an overrun is flagged so
-  /// the coordinator can refuse it locally.
+  /// for the provider; the authoritative reply, content included, is read from the stream's own join,
+  /// so the accumulation here feeds live drafts and the overflow check only, never the final reply. A
+  /// cut iteration and a failed terminal both defer to that join, which carries the disposition; an
+  /// overrun is flagged so the coordinator can refuse it locally.
   func consumeStream(
     _ stream: LLMEventStream,
     snapshot: DraftSnapshot,
@@ -135,7 +135,7 @@ private extension StreamingTurnRuntime {
           }
         case .finished:
           _ = box.claim(.provider)
-          return .completed(content)
+          return .completed
         }
       }
       return .cut

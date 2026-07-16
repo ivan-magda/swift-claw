@@ -89,10 +89,11 @@ public enum ProviderCallResult: @unchecked Sendable {
 }
 
 /// What the stream consumer saw. The authoritative terminal comes from the stream's own join; this
-/// reports only whether the consumer reached it (and the content the drafts showed) or was cut, and
-/// flags an accumulation that overran its cap.
+/// reports only whether the consumer reached it or was cut, and flags an accumulation that overran
+/// its cap. The consumer's accumulated text drives live drafts and the overflow refusal — never the
+/// final reply, which the terminal owns — so `completed` carries no content of its own.
 enum StreamConsumerOutcome: Sendable {
-  case completed(String)
+  case completed
   case cut
   case overflowed
 }
@@ -289,9 +290,10 @@ private extension ProviderDeadlineCoordinator {
   }
 
   /// Interprets the joined terminal against what the consumer saw. Overflow is decided first — it is
-  /// a local refusal, not a provider outcome. A completed terminal succeeds, keeping the accumulation
-  /// the drafts showed when the consumer reached the terminal and the terminal's own content when it
-  /// was cut short. A failure keeps its typed cause; a cancellation carries its accounting.
+  /// a local refusal, not a provider outcome. A completed terminal succeeds and is authoritative: its
+  /// content is the final reply, never the consumer's delta accumulation, which drove only live
+  /// drafts and can lag a done item that supersedes the deltas (so persisted text and replay state
+  /// stay in agreement). A failure keeps its typed cause; a cancellation carries its accounting.
   static func streamingOutcome(
     consumer: StreamConsumerOutcome?,
     termination: LLMStreamTermination
@@ -301,22 +303,7 @@ private extension ProviderDeadlineCoordinator {
     }
     switch termination {
     case .completed(let terminal):
-      let content: String
-      if case .completed(let accumulated) = consumer {
-        content = accumulated
-      } else {
-        content = terminal.content
-      }
-      return .response(
-        ChatResponse(
-          content: content,
-          finishReason: terminal.finishReason,
-          usage: terminal.usage,
-          costFromProvider: terminal.costFromProvider,
-          toolCalls: terminal.toolCalls,
-          providerState: terminal.providerState
-        )
-      )
+      return .response(terminal)
     case .failed(let failure):
       return .failed(failure)
     case .cancelled(.notStarted):

@@ -48,20 +48,19 @@ private func awaitCancellation() async {
   }
 }
 
-/// The streaming runtime's consumer, reduced to what a coordinator test needs: accumulate, claim the
-/// race on the terminal, and defer everything else to the stream's own join.
-private let accumulatingConsume:
+/// The streaming runtime's consumer, reduced to what a coordinator test needs: read to the terminal,
+/// claim the race on it, and defer everything else — content included — to the stream's own join.
+private let consumeToTerminal:
   @Sendable (LLMEventStream, ProviderRaceBox) async -> StreamConsumerOutcome = { stream, box in
-    var content = ""
     do {
       for try await event in stream {
         try Task.checkCancellation()
         switch event {
-        case .delta(let delta):
-          content += delta
+        case .delta:
+          continue
         case .finished:
           _ = box.claim(.provider)
-          return .completed(content)
+          return .completed
         }
       }
       return .cut
@@ -409,6 +408,31 @@ private actor GatedSend {
     #expect(response == expected)
   }
 
+  @Test func aTerminalWhoseContentDiffersFromTheDeltasWinsOverTheAccumulation() async throws {
+    // given — the deltas the drafts showed and the terminal's own content diverge (a done item that
+    // supersedes the delta assembly), and the consumer reads all the way to that terminal
+    let terminal = racedResponse(content: "authoritative done text")
+    let stream = LLMEventStream.make { sink in
+      _ = try? await sink.sendDelta("stale ")
+      _ = try? await sink.sendDelta("delta assembly")
+      return .completed(terminal)
+    }
+
+    // when — the deadline parks until cancelled, so the consumer reaches the terminal and wins
+    let outcome = await ProviderDeadlineCoordinator.raceStreaming(
+      stream: stream,
+      deadlineSeconds: 180,
+      clock: deadlineParkedUntilCancelledClock,
+      consume: consumeToTerminal,
+      auxiliary: noAuxiliary
+    )
+
+    // then — the final reply is the terminal verbatim, never the accumulated deltas
+    let response = try requireResponse(outcome)
+    #expect(response == terminal)
+    #expect(response.content == "authoritative done text")
+  }
+
   @Test func aDeadlineBeforeTheTerminalDrainsTheConsumerThenTimesOut() async throws {
     // given — a stream that parks after a partial delta and reports a may-have-started cancellation
     // once released; the deadline fires first
@@ -425,7 +449,7 @@ private actor GatedSend {
         stream: stream,
         deadlineSeconds: 180,
         clock: instantDeadlineClock,
-        consume: accumulatingConsume,
+        consume: consumeToTerminal,
         auxiliary: noAuxiliary
       )
     }
@@ -451,7 +475,7 @@ private actor GatedSend {
         stream: stream,
         deadlineSeconds: 180,
         clock: instantDeadlineClock,
-        consume: accumulatingConsume,
+        consume: consumeToTerminal,
         auxiliary: noAuxiliary
       )
     }
@@ -478,7 +502,7 @@ private actor GatedSend {
       stream: stream,
       deadlineSeconds: 180,
       clock: deadlineParkedUntilCancelledClock,
-      consume: accumulatingConsume,
+      consume: consumeToTerminal,
       auxiliary: noAuxiliary
     )
 
@@ -509,7 +533,7 @@ private actor GatedSend {
         stream: stream,
         deadlineSeconds: 180,
         clock: instantDeadlineClock,
-        consume: accumulatingConsume,
+        consume: consumeToTerminal,
         auxiliary: noAuxiliary
       )
       await returned.markDone()
@@ -582,7 +606,7 @@ private actor GatedSend {
       stream: stream,
       deadlineSeconds: 180,
       clock: deadlineParkedUntilCancelledClock,
-      consume: accumulatingConsume,
+      consume: consumeToTerminal,
       auxiliary: { _ in
         await auxGate.run()
       }

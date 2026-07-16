@@ -72,7 +72,11 @@ struct DaemonBuilder: Sendable {
       sandbox: sandbox
     )
 
-    let turnRunner = makeTurnRunner(coordination: coordination, agentStack: agentStack)
+    let turnRunner = makeTurnRunner(
+      coordination: coordination,
+      agentStack: agentStack,
+      costPolicy: providerStack.costPolicy
+    )
     let approvalFabric = makeApprovalFabric(
       coordination: coordination,
       agentStack: agentStack,
