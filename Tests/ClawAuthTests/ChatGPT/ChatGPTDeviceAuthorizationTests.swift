@@ -90,6 +90,18 @@ private enum Poll {
       #"{"authorization_code":"auth-code-value","code_verifier":"code-verifier-value"}"#
     )
   )
+
+  /// An owner who never approves, answering one poll more than a login that honors its deadline can
+  /// reach. Finite on purpose: a coordinator that stopped honoring the window would poll forever
+  /// against an endless queue and wedge the run, where this exhausts the queue and fails the test.
+  static let neverApproved: [SequencedHTTP.Outcome] = [
+    deviceCode(interval: 890), pending, pending, pending,
+  ]
+
+  /// A vendor that only ever says "slow down", finite for the same reason `neverApproved` is.
+  static let alwaysThrottling: [SequencedHTTP.Outcome] = [
+    deviceCode(interval: 5), throttled(retryAfter: "999999"), throttled(retryAfter: "999999"),
+  ]
 }
 
 @Suite struct ChatGPTDeviceAuthorizationTests {
@@ -232,7 +244,7 @@ private enum Poll {
   /// relative timeout is cut to what is left of the deadline.
   @Test func authorizeCapsEachRequestTimeoutToWhatIsLeftOfTheWindow() async throws {
     // given
-    let http = SequencedHTTP([Poll.deviceCode(interval: 890)], repeatingLast: Poll.pending)
+    let http = SequencedHTTP(Poll.neverApproved)
     let coordinator = ChatGPTDeviceAuthorization(
       client: OAuthFixture.client(http),
       clock: ScriptedClock { _ in }
@@ -252,7 +264,7 @@ private enum Poll {
 
   @Test func authorizeClampsAPollDelayToWhatIsLeftOfTheWindow() async throws {
     // given
-    let http = SequencedHTTP([Poll.deviceCode(interval: 890)], repeatingLast: Poll.pending)
+    let http = SequencedHTTP(Poll.neverApproved)
     let log = SleepLog()
     let coordinator = ChatGPTDeviceAuthorization(
       client: OAuthFixture.client(http),
@@ -272,7 +284,7 @@ private enum Poll {
 
   @Test func authorizeGivesUpOnceTheWindowHasClosed() async throws {
     // given
-    let http = SequencedHTTP([Poll.deviceCode(interval: 890)], repeatingLast: Poll.pending)
+    let http = SequencedHTTP(Poll.neverApproved)
     let coordinator = ChatGPTDeviceAuthorization(
       client: OAuthFixture.client(http),
       clock: ScriptedClock { _ in }
@@ -289,10 +301,7 @@ private enum Poll {
 
   @Test func aThrottleTooLongForTheWindowIsWaitedNoFurtherThanTheWindow() async throws {
     // given
-    let http = SequencedHTTP(
-      [Poll.deviceCode(interval: 5)],
-      repeatingLast: Poll.throttled(retryAfter: "999999")
-    )
+    let http = SequencedHTTP(Poll.alwaysThrottling)
     let log = SleepLog()
     let coordinator = ChatGPTDeviceAuthorization(
       client: OAuthFixture.client(http),

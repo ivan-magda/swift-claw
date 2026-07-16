@@ -43,6 +43,18 @@ public struct ChatGPTAuthorizationGrant: Sendable, Equatable {
   }
 }
 
+/// Nothing about a grant is printable: the code is spendable and the verifier is what proves the
+/// spender is us. There is no field left worth naming, so neither form names one.
+extension ChatGPTAuthorizationGrant: CustomStringConvertible, CustomDebugStringConvertible {
+  public var description: String {
+    "ChatGPTAuthorizationGrant(redacted)"
+  }
+
+  public var debugDescription: String {
+    description
+  }
+}
+
 /// A validated credential pair. Reaching this type means the tokens are already bounded and fit for
 /// a header, and the expiry is a real instant in the future — a caller may spend it without
 /// re-deciding any of that.
@@ -57,6 +69,19 @@ public struct ChatGPTTokenPair: Sendable, Equatable {
     self.accessToken = accessToken
     self.refreshToken = refreshToken
     self.expiresAt = expiresAt
+  }
+}
+
+/// Neither form prints either token. The default mirror would, and an access token is not a bearer
+/// of some pending thing the way a device-auth ID is — it *is* the credential. What is left is what
+/// a log line actually wants to know: when the pair dies, and whether the vendor rotated.
+extension ChatGPTTokenPair: CustomStringConvertible, CustomDebugStringConvertible {
+  public var description: String {
+    "ChatGPTTokenPair(expiresAt: \(expiresAt), rotated: \(refreshToken != nil))"
+  }
+
+  public var debugDescription: String {
+    description
   }
 }
 

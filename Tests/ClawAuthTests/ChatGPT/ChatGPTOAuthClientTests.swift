@@ -349,7 +349,7 @@ private extension RecordedHTTPRequest {
     #expect(device.deviceAuthID == idAtBound)
   }
 
-  // MARK: - Device Code: Redaction
+  // MARK: - Redaction
 
   @Test func aDeviceCodeNeverPrintsItsDeviceAuthID() {
     // given
@@ -361,6 +361,44 @@ private extension RecordedHTTPRequest {
     // then
     #expect(printed.contains(OAuthFixture.deviceAuthID) == false)
     #expect(printed.contains(OAuthFixture.userCode))
+  }
+
+  @Test func anAuthorizationGrantNeverPrintsTheCodeOrTheVerifier() {
+    // given
+    let grant = OAuthFixture.grant
+
+    // when
+    let printed = "\(grant) \(String(describing: grant)) \(String(reflecting: grant))"
+
+    // then
+    #expect(printed.contains(OAuthFixture.authorizationCode) == false)
+    #expect(printed.contains(OAuthFixture.codeVerifier) == false)
+  }
+
+  /// Built through the wire client rather than by hand, because the pair's memberwise init is the
+  /// one the safety gate stands in front of and this suite keeps that the only call to it.
+  @Test func aTokenPairNeverPrintsEitherOfItsTokens() async throws {
+    // given
+    let rotated = "rotated-value"
+    let http = OAuthFixture.executor(
+      ChatGPTProviderMetadata.tokenURL,
+      OAuthFixture.result(
+        200,
+        OAuthFixture.json(
+          #""access_token":"\#(OAuthFixture.accessToken)","refresh_token":"\#(rotated)","expires_in":60"#
+        )
+      )
+    )
+    let pair = try await OAuthFixture.client(http)
+      .refresh(refreshToken: OAuthFixture.refreshToken, timeout: .seconds(30))
+
+    // when
+    let printed = "\(pair) \(String(describing: pair)) \(String(reflecting: pair))"
+
+    // then
+    #expect(printed.contains(OAuthFixture.accessToken) == false)
+    #expect(printed.contains(rotated) == false)
+    #expect(printed.contains("rotated: true"))
   }
 
   // MARK: - Poll: Request Shape

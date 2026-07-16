@@ -225,7 +225,10 @@ private extension ChatGPTOAuthClient {
     do {
       return try encoder.encode(fields)
     } catch {
-      throw ChatGPTOAuthFailure.transport(detail: "the request body could not be encoded")
+      // A dictionary of strings has nothing in it that can fail to encode, so reaching here is a
+      // defect in this file rather than anything the network or the vendor did — not a `transport`,
+      // which a caller would answer by spending its retry budget on a request that cannot improve.
+      throw ChatGPTOAuthFailure.malformedResponse(detail: "the request body could not be encoded")
     }
   }
 
@@ -314,8 +317,13 @@ private extension ChatGPTOAuthClient {
     }
   }
 
-  /// A delay the vendor named, bounded by the longest wait any login could spend. Unreadable, zero,
-  /// and negative values are all absent rather than coerced.
+  /// A delay the vendor named in delta-seconds, bounded by the longest wait any login could spend.
+  /// Unreadable, zero, and negative values are all absent rather than coerced.
+  ///
+  /// The header's other RFC 7231 form, an HTTP-date, is knowingly not read and lands as absent with
+  /// the rest. A caller answers absent with its own pinned interval, so the cost of the narrowing is
+  /// a wait of the wrong length — never a spin — and reading dates can wait for a vendor that sends
+  /// them.
   static func retryAfter(of response: HTTPResult) -> Duration? {
     guard
       let raw = response.getHeader(for: Wire.retryAfterHeader),
