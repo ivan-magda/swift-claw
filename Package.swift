@@ -94,7 +94,7 @@ let package = Package(
       name: "clawd",
       dependencies: [
         "ClawCore", "ClawData", "ClawSecrets", "ClawTelegram", "ClawGateway", "ClawLLM",
-        "ClawAgent", "ClawWorkspace", "ClawTools", "ClawExec",
+        "ClawAgent", "ClawWorkspace", "ClawTools", "ClawExec", "ClawAuth",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
