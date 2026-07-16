@@ -7,7 +7,7 @@ import UnixSignals
 /// daemon stays decoupled from concrete stores/transport. The graceful-shutdown signal set is a
 /// parameter so tests can pass `[]` and cancel the task instead of raising a real signal.
 public struct Daemon: Sendable {
-  private let services: [any Service]
+  let services: [any Service]
 
   private let boot: @Sendable () async -> Void
 

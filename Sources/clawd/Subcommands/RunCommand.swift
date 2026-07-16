@@ -47,7 +47,7 @@ struct RunCommand: AsyncParsableCommand {
     let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
     let botUsername = await Self.fetchBotUsername(transport: transport, logger: logger)
 
-    let daemon = await DaemonBuilder(
+    let bundle = try await DaemonBuilder(
       config: config,
       secrets: secrets,
       stores: stores,
@@ -59,9 +59,32 @@ struct RunCommand: AsyncParsableCommand {
     ).build()
 
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
+    try await Self.serveThenShutDown(
+      bundle: bundle,
+      httpClient: httpClient,
+      toolHTTPClient: toolHTTPClient,
+      redactionValues: secrets.redactionValues,
+      logger: logger
+    )
+  }
+}
+
+// MARK: - Serve & Shutdown
+
+private extension RunCommand {
+  /// Runs the service graph, then sequences dependent-resource teardown in the mandated order. On a
+  /// lane-drain timeout it terminates the process from here — before `run`'s `defer { lock.release()
+  /// }` and any client teardown unwind — so the held instance-lock fd stays owned until termination.
+  static func serveThenShutDown(
+    bundle: DaemonRuntimeBundle,
+    httpClient: HTTPClient,
+    toolHTTPClient: HTTPClient,
+    redactionValues: [String],
+    logger: Logger
+  ) async throws {
     var runFailure: Error?
     do {
-      try await daemon.run()
+      try await bundle.daemon.run()
     } catch {
       // A graceful shutdown returns without throwing; an error here means a service failed
       // unexpectedly. Re-raise after cleanup so the supervisor restarts the process.
@@ -69,13 +92,37 @@ struct RunCommand: AsyncParsableCommand {
       logger.error("daemon exited with error: \(error)")
     }
 
-    try? await httpClient.shutdown()
-    try? await toolHTTPClient.shutdown()
+    // The lane-admission service recorded its drain result as the service graph shut down; a missing
+    // record means the lanes never opened (a boot failure), a clean stop with nothing to drain.
+    let laneDrain = await bundle.laneShutdownOutcome.value() ?? .drained
+    let coordinator = RuntimeShutdownCoordinator(
+      logger: logger,
+      redactor: SecretRedactor(secretValues: redactionValues)
+    )
+    let outcome = await coordinator.shutDown(
+      daemonError: runFailure,
+      laneDrain: laneDrain,
+      dependent: RuntimeShutdownCoordinator.DependentCleanup(
+        commitCredentials: { try await bundle.credentialSource.shutdown() },
+        // The dedicated LLM client is introduced separately; today the LLM shares the Telegram
+        // client, closed under `closeTelegramClient` below.
+        closeLLMClient: {},
+        closeTelegramClient: { try await httpClient.shutdown() },
+        closeToolClient: { try await toolHTTPClient.shutdown() }
+      )
+    )
 
-    if let runFailure {
-      throw runFailure
+    switch outcome {
+    case .clean:
+      logger.info("clawd stopped")
+    case .failed(let error):
+      throw error
+    case .fatalLaneTimeout(let activeRunIDs):
+      try FatalProcessTerminator.production.fatalLaneDrainTimeout(
+        activeRunIDs: activeRunIDs,
+        logger: logger
+      )
     }
-    logger.info("clawd stopped")
   }
 }
 

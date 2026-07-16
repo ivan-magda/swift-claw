@@ -155,6 +155,18 @@ let package = Package(
       dependencies: [
         "ClawGateway", "ClawCore", "ClawData", "ClawAgent", "ClawTelegram", "ClawWorkspace",
         "ClawTools", "ClawTestSupport",
+        .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+        .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
+      ]
+    ),
+    // Composition-root tests: they reach into `clawd` to prove the wiring the executable owns — the
+    // service-graph ordering and the fatal-exit boundary — against the real `ClawGateway` types.
+    .testTarget(
+      name: "ClawdCompositionTests",
+      dependencies: [
+        "clawd", "ClawGateway", "ClawAgent", "ClawTestSupport",
+        .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+        .product(name: "Logging", package: "swift-log"),
       ]
     ),
   ]
