@@ -353,6 +353,33 @@ import Testing
     #expect(try usageRowCount(fixture) == 0)
   }
 
+  @Test func cancelledParseWritesNoUsageRowAndStaysTheGenericOutage() async throws {
+    // given — the command was cancelled once the call reached the provider, before anything billed
+    let fixture = try makeFixture(provider: CancellingProvider())
+
+    // when
+    let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+
+    // then — a cancel is never an owner-facing outage escalation and bills nothing: the plain
+    // unavailable result the run-cancellation UX suppresses, and no usage row (the arm's whole point)
+    #expect(result == .providerUnavailable)
+    #expect(try usageRowCount(fixture) == 0)
+  }
+
+  @Test func terminalRejectStaysTheGenericOutageWithoutDebiting() async throws {
+    // given — a message-carrying terminal reject; its remote text must never reach a typed reply
+    let fixture = try makeFixture(
+      provider: FailingProvider(.terminal(status: 400, message: "internal provider detail"))
+    )
+
+    // when
+    let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+
+    // then — the schedule twin of the turn's terminal reject: generic outage, no leaked text, no row
+    #expect(result == .providerUnavailable)
+    #expect(try usageRowCount(fixture) == 0)
+  }
+
   @Test func includedPlanParseSkipsUSDButRecordsConfirmedZero() async throws {
     // given — a per-run USD ceiling the parse estimate exceeds, but a token ceiling it clears
     let budget = RunBudget(

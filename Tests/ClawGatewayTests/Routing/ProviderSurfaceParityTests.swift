@@ -25,6 +25,11 @@ import Testing
     schedule: DraftSchedule(kind: .weekdays, time: "07:00", timezone: "Europe/Berlin")
   )
 
+  /// The spec's exact recovery sentence, copied here as an independent literal so a reword of the
+  /// constant that still contains `clawd auth login` is caught rather than mirrored.
+  private static let specAuthSentence =
+    "ChatGPT authentication is required. Stop clawd, run `clawd auth login`, then start clawd again."
+
   private func userBuildResult() -> BuildResult {
     BuildResult(
       messages: [ChatMessage(role: .user, content: "hi")],
@@ -103,6 +108,12 @@ import Testing
     try queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM provider_usage") ?? -1
     }
+  }
+
+  @Test func authSentenceMatchesTheSpecCopyByteForByte() {
+    // given / when / then — the shared constant is the spec sentence verbatim, not merely a string
+    // that contains the recovery command; pinned to the literal, drift in either direction fails
+    #expect(Degradation.authenticationRequired == Self.specAuthSentence)
   }
 
   @Test func sameAuthFailureGivesIdenticalCopyAndNoDebitOnBothSurfaces() async throws {

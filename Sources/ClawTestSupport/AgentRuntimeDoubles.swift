@@ -71,6 +71,17 @@ public actor FailingProvider: LLMProvider {
   }
 }
 
+/// Throws a bare `CancellationError` from `complete` — the shape an external cancel (owner `/stop`,
+/// shutdown) takes once it reaches the in-flight provider call, before anything is generated. Drives
+/// the no-debit cancellation arm both the turn and schedule surfaces share.
+public struct CancellingProvider: LLMProvider {
+  public init() {}
+
+  public func complete(request: ChatRequest) async throws -> ChatResponse {
+    throw CancellationError()
+  }
+}
+
 /// Finishes a real reply only after it is cancelled: the provider that races a won deadline and
 /// lands its response anyway. The response is a loser the coordinator drains, so its authoritative
 /// usage survives while the owner still sees the timeout.
