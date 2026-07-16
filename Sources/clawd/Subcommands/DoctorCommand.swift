@@ -149,6 +149,8 @@ private extension DoctorCommand {
   /// fetch, or entitlement check. The managed store is built only for the ChatGPT route, so the
   /// current API route opens no unused OAuth envelope while the daemon is stopped.
   func addLLMAuthRow(to report: inout DoctorReport, config: AppConfig) {
+    // The `secrets` row above owns the decrypt-failure diagnosis and fails loudly there, so an
+    // undecryptable store degrades this row quietly to mode=none rather than double-reporting.
     let staticAPIKey = (try? EnvironmentLoader.loadSecrets(config: config))?.llmApiKey
     let result = LLMAuthDoctor.inspect(
       route: config.llm.route,

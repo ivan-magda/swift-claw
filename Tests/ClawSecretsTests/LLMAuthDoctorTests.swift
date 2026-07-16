@@ -1,5 +1,4 @@
 import ClawCore
-import ClawTestSupport
 import Foundation
 import Testing
 
@@ -368,27 +367,5 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(result.ok == false)
     #expect(result.value.contains("unreadable"))
     #expect(result.value.contains("clawd auth login"))
-  }
-
-  // MARK: - Network-free
-
-  @Test func inspectMakesNoNetworkCall() async {
-    // given — a zero-call HTTP sentinel that the helper has no seam to reach
-    let sentinel = RecordingHTTPExecutor()
-    let store = ScriptedCredentialStore(
-      .value(credential(expiresAt: Date().addingTimeInterval(3600)))
-    )
-
-    // when — a full ChatGPT inspection runs
-    _ = LLMAuthDoctor.inspect(
-      route: chatGPTRoute(),
-      staticAPIKey: nil,
-      credentialStore: store,
-      now: Date()
-    )
-
-    // then — nothing crossed the wire
-    let requests = await sentinel.requests
-    #expect(requests.isEmpty)
   }
 }

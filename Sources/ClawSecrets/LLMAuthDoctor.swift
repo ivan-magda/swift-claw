@@ -19,6 +19,10 @@ public struct LLMAuthDoctorResult: Sendable, Equatable {
 /// disk: the current route reports the presence of the loaded static bearer and never opens an OAuth
 /// envelope, while the ChatGPT route decrypts one stored record and classifies its expiry through the
 /// same skew the live source applies.
+///
+/// Network-freedom is a structural property of the module graph, not a runtime guard: ClawSecrets
+/// links no HTTP, OAuth-flow, or catalog module, so no code path reachable from here can cross the
+/// wire. Enforce it by keeping that dependency surface closed, not by asserting on an unwired sentinel.
 public enum LLMAuthDoctor {
   public static func inspect(
     route: ResolvedLLMRoute,
