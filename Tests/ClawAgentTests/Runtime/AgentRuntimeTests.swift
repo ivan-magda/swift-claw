@@ -336,9 +336,10 @@ struct AgentRuntimeTests {
 
   @Test("the wall-clock deadline degrades and debits the estimate")
   func deadlineDegradesAndDebitsTheEstimate() async throws {
-    // given — the provider hangs; a no-op sleep makes the 180s deadline fire immediately.
+    // given — the provider hangs mid-flight (it reached transport, so it may be billing); a no-op
+    // sleep makes the 180s deadline fire immediately.
     let runtime = makeRuntime(
-      provider: HangingProvider(),
+      provider: HangingInferenceProvider(),
       clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
     )
 
@@ -368,6 +369,85 @@ struct AgentRuntimeTests {
     #expect(recorded.costUSD > 0)  // never a silent $0 (D1/F19)
     #expect(recorded.promptTokens > 0)
     #expect(recorded.completionTokens == RunBudget.default.maxOutputTokens)
+  }
+
+  @Test("a proven-no-start deadline loser writes no usage row")
+  func deadlineWithAProvenNoStartWritesNoRow() async throws {
+    // given — the provider hangs and is cancelled before it reaches transport, so its `complete`
+    // surfaces the bare CancellationError that proves no start. A no-start owes nothing, exactly as
+    // the non-deadline raw-cancellation path books it.
+    let store = RecordingUsageStore()
+    let runtime = makeRuntime(
+      provider: HangingProvider(),
+      usageStore: store,
+      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hello world")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the owner sees the timeout degradation, but nothing is billed
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+  }
+
+  @Test("a raced success under a won deadline books authoritative usage, not an estimate")
+  func racedSuccessUnderTheDeadlineBooksAuthoritativeUsage() async throws {
+    // given — the deadline fires first, but the provider finishes with a real, usage-bearing reply.
+    // Its usage is authoritative, so the booked row must be the reconciled completed-call row — real
+    // counts, provider cost — never the timeout estimate, while the owner still sees the degradation.
+    let store = RecordingUsageStore()
+    let response = okResponse(
+      content: "landed under the deadline",
+      usage: ChatUsage(promptTokens: 11, completionTokens: 13, totalTokens: 24),
+      costFromProvider: 0.0021
+    )
+    let runtime = makeRuntime(
+      provider: RacedSuccessProvider(response: response),
+      usageStore: store,
+      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: BuildResult(
+        messages: [ChatMessage(role: .user, content: "hello world")],
+        ownerNotices: [],
+        hasPrivateDataAccess: false
+      ),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the owner sees the timeout, but the row is authoritative: real counts and provider cost
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    let recorded = try #require(usage)
+    #expect(recorded.isEstimated == false)
+    #expect(recorded.costSource == .providerReturned)
+    #expect(recorded.costUSD == 0.0021)
+    #expect(recorded.promptTokens == 11)
+    #expect(recorded.completionTokens == 13)
   }
 }
 

@@ -141,6 +141,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     let response: ChatResponse
     do {
       response = try await completeBounded(request: request)
+    } catch let racedSuccess as RacedDeadlineSuccess {
+      // A real reply landed alongside the won deadline: book its authoritative usage (real counts,
+      // provider cost), never the estimate a bare timeout forces — while the owner still sees the
+      // same DEG-01 degradation the poller expects.
+      let landed = racedSuccess.response
+      record(usageFor: landed, request: request, callID: callID, sessionId: sessionId)
+      return .providerUnavailable
     } catch is ParseDeadlineExceeded {
       // The request may still be billing server-side; debit the estimate so the day cap
       // sees the spend, exactly like a deadline-hit turn.
@@ -375,6 +382,10 @@ private extension ScheduleDraftParser {
       return response
     case .failed(let error):
       throw error
+    case .timedOut(.completed(let response)):
+      // A reply that landed under the won deadline: surfaced so its authoritative usage is recorded
+      // rather than discarded for the timeout estimate.
+      throw RacedDeadlineSuccess(response: response)
     case .timedOut:
       throw ParseDeadlineExceeded()
     }

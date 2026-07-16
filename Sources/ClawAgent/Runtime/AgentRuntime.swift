@@ -548,34 +548,6 @@ private extension AgentRuntime {
       )
     }
   }
-
-  /// The reconciled usage row for an intermediate round-trip — same resolution as `classify`,
-  /// without the terminal classification.
-  func usageRow(
-    for response: ChatResponse,
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    runId: Int64,
-    sessionId: Int64
-  ) -> ProviderUsage {
-    let resolvedUsage = reservedUsage(for: response, context: context)
-    let resolvedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider,
-      policy: costPolicy
-    )
-
-    return ProviderUsage(
-      providerCallID: callID,
-      runId: runId,
-      sessionId: sessionId,
-      model: configuredReference,
-      usage: resolvedUsage,
-      cost: resolvedCost,
-      ts: Date()
-    )
-  }
 }
 
 // MARK: - Provider Round Trip

@@ -51,9 +51,10 @@ struct TypingTurnRuntime: Sendable {
       case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
         throw ProviderInferenceCancellation(observing: observedCompletionTokens)
       case .timedOut(.completed(let response)):
-        // A response landed under the won deadline: still an owner-visible timeout, but its observed
-        // count survives so the conservative row is never under the tokens the provider returned.
-        throw ProviderInferenceCancellation(observing: response.usage?.completionTokens ?? 0)
+        // A response landed under the won deadline: still an owner-visible timeout, but the whole
+        // response rides along so the runtime books its authoritative usage — real counts, provider
+        // cost — instead of an estimate keyed only on the observed lower bound.
+        throw RacedDeadlineSuccess(response: response)
       }
     }
   }

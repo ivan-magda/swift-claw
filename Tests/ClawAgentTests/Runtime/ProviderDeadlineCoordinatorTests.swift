@@ -242,9 +242,9 @@ private actor GatedSend {
     #expect(error as? ProviderError == failure)
   }
 
-  @Test func rawCancellationUnderAWonDeadlineTimesOutNotStarted() async throws {
-    // given — the deadline fires instantly; the provider, cancelled during authorization, proves it
-    // never started, so the timeout is a no-debit raw cancellation
+  @Test func aNotStartedFailureUnderAWonDeadlineTimesOutNotStarted() async throws {
+    // given — the deadline fires instantly; the provider, cancelled during authorization, hands back
+    // a typed failure tagged `.notStarted`, so the timeout owes nothing
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
       clock: instantDeadlineClock,
@@ -256,6 +256,42 @@ private actor GatedSend {
             accounting: .notStarted
           )
         )
+      }
+    )
+
+    // then
+    let accounting = try requireTimedOut(outcome)
+    #expect(accounting == .notStarted)
+  }
+
+  @Test func aRawCancellationErrorUnderAWonDeadlineTimesOutNotStarted() async throws {
+    // given — the deadline fires first; the provider, cancelled before it reached transport, surfaces
+    // the bare CancellationError its `complete` contract produces for a proven no-start. That is a
+    // no-debit timeout, the same disposition the non-deadline path reads it as.
+    let outcome = await ProviderDeadlineCoordinator.raceBuffered(
+      deadlineSeconds: 180,
+      clock: instantDeadlineClock,
+      call: {
+        await awaitCancellation()
+        return .failed(CancellationError())
+      }
+    )
+
+    // then
+    let accounting = try requireTimedOut(outcome)
+    #expect(accounting == .notStarted)
+  }
+
+  @Test func aBareTerminalProviderErrorUnderAWonDeadlineTimesOutNotStarted() async throws {
+    // given — a bare ProviderError head rejection (a 4xx whose head proves the server answered
+    // instead of inferring) loses under the deadline. Routed through the one accounting reducer, it
+    // resolves to the same no-start the non-deadline path gives it — never a conservative debit.
+    let outcome = await ProviderDeadlineCoordinator.raceBuffered(
+      deadlineSeconds: 180,
+      clock: instantDeadlineClock,
+      call: {
+        await awaitCancellation()
+        return .failed(ProviderError.terminal(status: 400, message: "bad request"))
       }
     )
 

@@ -275,6 +275,40 @@ import Testing
     }
     #expect(estimated == true)
   }
+
+  @Test func racedSuccessUnderTheDeadlineRecordsAuthoritativeUsage() async throws {
+    // given — the deadline fires first, but the provider lands a real, usage-bearing reply anyway.
+    // Its usage is authoritative, so the recorded row must be reconciled, not the timeout estimate.
+    let response = ChatResponse(
+      content: Self.draftJSON,
+      finishReason: "stop",
+      usage: ChatUsage(promptTokens: 11, completionTokens: 13, totalTokens: 24),
+      costFromProvider: 0.004
+    )
+    let fixture = try makeFixture(
+      provider: RacedSuccessProvider(response: response),
+      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
+    )
+
+    // when
+    let result = await fixture.parser.parse(
+      ownerText: "every weekday at 7am",
+      sessionId: fixture.sessionId
+    )
+
+    // then — the owner still sees the timeout, but the recorded row is authoritative (not estimated)
+    #expect(result == .providerUnavailable)
+    let row = try #require(
+      try fixture.queue.read { db in
+        try Row.fetchOne(
+          db,
+          sql: "SELECT is_estimated, completion_tokens FROM provider_usage"
+        )
+      }
+    )
+    #expect(row["is_estimated"] == false)
+    #expect(row["completion_tokens"] == 13)
+  }
 }
 
 /// Stands in for a provider whose retry budget is exhausted (repeated 429/5xx/transport): `complete`

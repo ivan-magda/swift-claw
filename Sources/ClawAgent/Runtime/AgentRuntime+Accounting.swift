@@ -23,6 +23,21 @@ extension AgentRuntime {
     runId: Int64,
     sessionId: Int64
   ) -> TurnResult {
+    if let racedSuccess = error as? RacedDeadlineSuccess {
+      // A real response landed alongside a won deadline: its usage is authoritative, so it is booked
+      // through the same completed-call route a non-raced reply uses — never the conservative
+      // estimate below — while the owner still sees the degraded timeout.
+      return .degraded(
+        .providerUnavailable,
+        usage: usageRow(
+          for: racedSuccess.response,
+          callID: callID,
+          context: context,
+          runId: runId,
+          sessionId: sessionId
+        )
+      )
+    }
     if let cancellation = error as? ProviderInferenceCancellation {
       return .degraded(
         .providerUnavailable,
@@ -117,6 +132,36 @@ extension AgentRuntime {
     }
 
     return .degraded(.providerUnavailable, usage: usage)
+  }
+
+  /// The reconciled usage row for a response that carries authoritative usage — an intermediate
+  /// round-trip, or a reply that landed alongside a won deadline. Same resolution as `classify`
+  /// (provider counts untouched, provider cost wins), without the terminal classification, so every
+  /// completed-call row is booked through one route rather than a second, estimated one.
+  func usageRow(
+    for response: ChatResponse,
+    callID: ProviderCallID,
+    context: [ChatMessage],
+    runId: Int64,
+    sessionId: Int64
+  ) -> ProviderUsage {
+    let resolvedUsage = reservedUsage(for: response, context: context)
+    let resolvedCost = costResolver.resolve(
+      model: configuredReference,
+      usage: resolvedUsage.usage,
+      providerCost: response.costFromProvider,
+      policy: costPolicy
+    )
+
+    return ProviderUsage(
+      providerCallID: callID,
+      runId: runId,
+      sessionId: sessionId,
+      model: configuredReference,
+      usage: resolvedUsage,
+      cost: resolvedCost,
+      ts: Date()
+    )
   }
 
   /// Reconciled usage with the replay-state reservation folded into an *estimated* prompt only.

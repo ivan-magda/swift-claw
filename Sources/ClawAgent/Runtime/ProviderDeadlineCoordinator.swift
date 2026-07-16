@@ -26,6 +26,19 @@ public enum ProviderDeadlineOutcome: @unchecked Sendable {
   case timedOut(ProviderDeadlineAccounting)
 }
 
+/// Thrown by a turn runtime when a real response landed alongside a won deadline. The owner still
+/// sees a timeout, but the response rides the throw so the runtime books its usage through the
+/// authoritative completed-call route — real counts, provider cost — rather than the estimate a bare
+/// timeout would force. It is the error form of `.timedOut(.completed)`, kept distinct from
+/// `ProviderInferenceCancellation` precisely because it carries the response, not just a token bound.
+public struct RacedDeadlineSuccess: Error, Sendable {
+  public let response: ChatResponse
+
+  public init(response: ChatResponse) {
+    self.response = response
+  }
+}
+
 // MARK: - Lock-backed winner
 
 /// The one participant a race settles on first.
@@ -232,8 +245,8 @@ extension ProviderDeadlineCoordinator {
 // MARK: - Outcome Mapping
 
 private extension ProviderDeadlineCoordinator {
-  /// The buffered group's element. `@unchecked Sendable` follows `ProviderCallResult`: the boxed
-  /// error is always a Sendable provider error.
+  /// The buffered group's element. Plainly `Sendable`: `ProviderCallResult` already carries the
+  /// unchecked box for its error, so the enum wrapping it needs no further escape.
   enum BufferedChild: Sendable {
     case provider(ProviderCallResult)
     case deadline
@@ -247,10 +260,12 @@ private extension ProviderDeadlineCoordinator {
   }
 
   /// The timed-out disposition a drained provider loser carries. A response that landed keeps its
-  /// authoritative usage. A provider that proved no start (a `notStarted` failure) owes nothing — the
-  /// no-debit raw case. A typed inference cancellation keeps its observed lower bound; anything else
-  /// the deadline books conservatively, since a bare-cancelled or untyped `complete` that timed out
-  /// may still be billing server-side.
+  /// authoritative usage. A provider that proved no start (a `notStarted` failure) owes nothing, and
+  /// so does a bare `CancellationError` — the contract's proof the attempt never reached transport. A
+  /// typed inference cancellation keeps its observed lower bound. Every remaining shape defers to
+  /// `AgentRuntime.accounting(for:)`, the one reducer the non-deadline path reads, so a bare provider
+  /// error or an untyped failure resolves to the same disposition at both entry points rather than
+  /// being booked conservatively here alone.
   static func timedOut(fromLoser result: ProviderCallResult) -> ProviderDeadlineOutcome {
     switch result {
     case .response(let response):
@@ -269,7 +284,15 @@ private extension ProviderDeadlineCoordinator {
           .mayHaveStarted(observedCompletionTokens: cancellation.observedCompletionTokens)
         )
       }
-      return .timedOut(.mayHaveStarted(observedCompletionTokens: 0))
+      if error is CancellationError {
+        return .timedOut(.notStarted)
+      }
+      switch AgentRuntime.accounting(for: error) {
+      case .notStarted:
+        return .timedOut(.notStarted)
+      case .mayHaveStarted(let observed):
+        return .timedOut(.mayHaveStarted(observedCompletionTokens: observed))
+      }
     }
   }
 

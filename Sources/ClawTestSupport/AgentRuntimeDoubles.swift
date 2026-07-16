@@ -33,6 +33,45 @@ public struct HangingProvider: LLMProvider {
   }
 }
 
+/// Hangs like `HangingProvider`, but — having reached transport — reports the ambiguous inference
+/// cancellation on cancel, the shape the managed route's `complete` produces when a mid-flight
+/// attempt may already be billing. Stands in for the "deadline fires while the model may have been
+/// asked" case, which owes a conservative debit rather than nothing.
+public struct HangingInferenceProvider: LLMProvider {
+  private let observedCompletionTokens: Int
+
+  public init(observing observedCompletionTokens: Int = 0) {
+    self.observedCompletionTokens = observedCompletionTokens
+  }
+
+  public func complete(request: ChatRequest) async throws -> ChatResponse {
+    do {
+      try await Task.sleep(for: .seconds(3600))
+    } catch {
+      throw ProviderInferenceCancellation(observing: observedCompletionTokens)
+    }
+    throw ProviderError.terminal(status: nil, message: "unreachable")
+  }
+}
+
+/// Finishes a real reply only after it is cancelled: the provider that races a won deadline and
+/// lands its response anyway. The response is a loser the coordinator drains, so its authoritative
+/// usage survives while the owner still sees the timeout.
+public struct RacedSuccessProvider: LLMProvider {
+  private let response: ChatResponse
+
+  public init(response: ChatResponse) {
+    self.response = response
+  }
+
+  public func complete(request: ChatRequest) async throws -> ChatResponse {
+    while !Task.isCancelled {
+      await Task.yield()
+    }
+    return response
+  }
+}
+
 // MARK: - Provider call identity
 
 /// Mints `call-1`, `call-2`, … in call order, so a test can name the identity a given round-trip
