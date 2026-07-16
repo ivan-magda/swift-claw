@@ -25,14 +25,22 @@ actor RecordingProvider: LLMProvider {
 
   private let outcome: Outcome
   private let blocksFirstCall: Bool
+  /// Attached to a successful reply so the persistence path threads it onto the assistant anchor —
+  /// the opaque provider replay state whose bytes must never reach FTS, outbox, or audit.
+  private let providerState: ProviderExchangeState?
 
   private(set) var requests: [[ChatMessage]] = []
   private var requestContinuations: [CheckedContinuation<Void, Never>] = []
   private var firstCallRelease: CheckedContinuation<Void, Never>?
 
-  init(_ outcome: Outcome, blocksFirstCall: Bool = false) {
+  init(
+    _ outcome: Outcome,
+    blocksFirstCall: Bool = false,
+    providerState: ProviderExchangeState? = nil
+  ) {
     self.outcome = outcome
     self.blocksFirstCall = blocksFirstCall
+    self.providerState = providerState
   }
 
   var lastMessageCount: Int {
@@ -57,7 +65,8 @@ actor RecordingProvider: LLMProvider {
         content: answer,
         finishReason: "stop",
         usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
-        costFromProvider: 0.0021
+        costFromProvider: 0.0021,
+        providerState: providerState
       )
     case .fail(let error):
       throw error
@@ -312,6 +321,7 @@ func makeStack(
   allow chatId: Int64 = 42,
   outcome: RecordingProvider.Outcome,
   blocksFirstProviderCall: Bool = false,
+  providerState: ProviderExchangeState? = nil,
   workspace: any WorkspaceReading = AcceptanceWorkspace()
 ) throws -> Stack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
@@ -326,7 +336,11 @@ func makeStack(
   let outbox = OutboxStoreGRDB(writer: writer)
   let audit = AuditLogGRDB(writer: writer)
 
-  let provider = RecordingProvider(outcome, blocksFirstCall: blocksFirstProviderCall)
+  let provider = RecordingProvider(
+    outcome,
+    blocksFirstCall: blocksFirstProviderCall,
+    providerState: providerState
+  )
   let transport = RecordingTransport()
   let signal = OutboxSignal()
   let lanes = SessionLaneRegistry()
@@ -1014,6 +1028,98 @@ func makeStopNewStack(
     #expect(secondRequestContent.contains("before one") == false)
     #expect(secondRequestContent.contains("before two") == false)
     #expect(try stack.outbox.pendingOutbound().map(\.payload) == ["fresh reply"])
+  }
+
+  /// §8: opaque provider replay state round-trips onto the assistant anchor through real GRDB, yet its
+  /// bytes never reach any owner-readable text sink. Every absence is paired with a live positive on
+  /// the same turn: the ordinary reply text IS indexed by FTS and IS the outbox payload, while the
+  /// replay marker is in none of FTS, message content, the outbox, or the audit trail.
+  @Test func providerReplayStateRoundTripsButStaysOutOfFTSOutboxAndAudit() async throws {
+    // given — a reply carrying a distinctive replay-state payload
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let marker = "REPLAYSTATESECRETMARKER7f3c"
+    let state = ProviderExchangeState(
+      issuer: "openai-chatgpt-responses-v1:acc",
+      payload: Data(marker.utf8)
+    )
+    let stack = try makeStack(writer: queue, outcome: .respond("stub answer"), providerState: state)
+
+    // when
+    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
+    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+    await stack.dispatcher.drainOnce()
+
+    // then — the assistant anchor kept its provider state (round-trip through real GRDB)
+    let storedStateHasMarker = try await queue.read { db -> Bool in
+      let blob = try Data.fetchOne(
+        db,
+        sql:
+          "SELECT provider_state FROM messages WHERE role = 'assistant' AND provider_state IS NOT NULL"
+      )
+      return blob.map { (String(bytes: $0, encoding: .utf8) ?? "").contains(marker) } ?? false
+    }
+    #expect(storedStateHasMarker)
+
+    // then — live positives: the ordinary reply IS in message content, FTS, and the outbox payload
+    let matches = try await queue.read { db -> (contentHit: Int, ftsHit: Int, outboxHit: Int) in
+      let contentHit =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM messages WHERE content LIKE '%stub answer%'"
+        ) ?? 0
+      let ftsHit =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH 'answer'"
+        )
+        ?? 0
+      let outboxHit =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM outbound_deliveries WHERE payload LIKE '%stub answer%'"
+        )
+        ?? 0
+      return (contentHit, ftsHit, outboxHit)
+    }
+    #expect(matches.contentHit >= 1)
+    #expect(matches.ftsHit >= 1)
+    #expect(matches.outboxHit >= 1)
+
+    // then — the replay marker is absent from every owner-readable text sink
+    let leaks = try await queue.read { db -> (content: Int, fts: Int, outbox: Int, audit: Int) in
+      let content =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM messages WHERE content LIKE ?",
+          arguments: ["%\(marker)%"]
+        )
+        ?? 0
+      let fts =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH ?",
+          arguments: [marker]
+        ) ?? 0
+      let outbox =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM outbound_deliveries WHERE payload LIKE ?",
+          arguments: ["%\(marker)%"]
+        )
+        ?? 0
+      let audit =
+        try Int.fetchOne(
+          db,
+          sql: "SELECT COUNT(*) FROM audit_events WHERE args_redacted LIKE ?",
+          arguments: ["%\(marker)%"]
+        ) ?? 0
+      return (content, fts, outbox, audit)
+    }
+    #expect(leaks.content == 0)
+    #expect(leaks.fts == 0)
+    #expect(leaks.outbox == 0)
+    #expect(leaks.audit == 0)
   }
 }
 // swiftlint:enable function_body_length
