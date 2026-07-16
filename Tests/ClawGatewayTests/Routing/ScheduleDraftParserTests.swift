@@ -33,6 +33,7 @@ import Testing
     provider: any LLMProvider,
     budget: RunBudget = .default,
     structuredOutput: StructuredOutputMode = .off,
+    costPolicy: LLMCostPolicy = .metered,
     clock: any Clock<Duration> = ContinuousClock()
   ) throws -> Fixture {
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -51,15 +52,22 @@ import Testing
     )
     let parser = ScheduleDraftParser(
       provider: provider,
-      model: "test-model",
+      wireModel: "test-model",
       usageStore: UsageStoreGRDB(writer: queue),
       budget: budget,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
+      costPolicy: costPolicy,
       structuredOutput: structuredOutput,
       clock: clock,
       logger: TestLog.silent
     )
     return Fixture(parser: parser, sessionId: claim.sessionId ?? 0, queue: queue)
+  }
+
+  private func usageRowCount(_ fixture: Fixture) throws -> Int {
+    try fixture.queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM provider_usage") ?? -1
+    }
   }
 
   @Test func decodesASingleJSONObjectIntoADraft() async throws {
@@ -308,6 +316,109 @@ import Testing
     )
     #expect(row["is_estimated"] == false)
     #expect(row["completion_tokens"] == 13)
+  }
+
+  @Test func authenticationFailureReturnsTheTypedResultWithoutDebiting() async throws {
+    // given — the credential is refused before any inference (a clean, not-started head)
+    let fixture = try makeFixture(provider: FailingProvider(.authenticationRequired))
+
+    // when
+    let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+
+    // then — the router gets the typed outcome, not a collapsed providerUnavailable, and no row
+    #expect(result == .authenticationRequired)
+    #expect(try usageRowCount(fixture) == 0)
+  }
+
+  @Test func accessDenialReturnsTheTypedResultWithoutDebiting() async throws {
+    // given
+    let fixture = try makeFixture(provider: FailingProvider(.accessDenied))
+
+    // when / then
+    #expect(
+      await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId) == .accessDenied
+    )
+    #expect(try usageRowCount(fixture) == 0)
+  }
+
+  @Test func quotaLimitReturnsTheRetryHintWithoutDebiting() async throws {
+    // given
+    let fixture = try makeFixture(provider: FailingProvider(.quotaLimited(retryAfterSeconds: 15)))
+
+    // when / then — the bounded hint rides the typed outcome; nothing was generated, nothing debited
+    #expect(
+      await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+        == .quotaLimited(retryAfterSeconds: 15)
+    )
+    #expect(try usageRowCount(fixture) == 0)
+  }
+
+  @Test func includedPlanParseSkipsUSDButRecordsConfirmedZero() async throws {
+    // given — a per-run USD ceiling the parse estimate exceeds, but a token ceiling it clears
+    let budget = RunBudget(
+      maxInputTokens: 100_000,
+      maxOutputTokens: 4_096,
+      wallClockDeadlineSeconds: 180,
+      retryBudget: 3,
+      perRunUSD: 0.000_000_1,
+      perDayUSD: 10.00,
+      proactivePerDayUSD: 2.00,
+      referenceUSDPerToken: 0.000_015,
+      dayTokenCeilingOverride: 1_000_000
+    )
+
+    // when — the metered route is denied on the USD gate the subscription route does not answer to
+    let metered = try makeFixture(
+      provider: SequenceProvider([jsonResponse(Self.draftJSON)]),
+      budget: budget,
+      costPolicy: .metered
+    )
+    let meteredResult = await metered.parser.parse(ownerText: "x", sessionId: metered.sessionId)
+
+    // and — the included-plan route proceeds and records a confirmed (not guessed) zero
+    let plan = try makeFixture(
+      provider: SequenceProvider([jsonResponse(Self.draftJSON)]),
+      budget: budget,
+      costPolicy: .includedPlan
+    )
+    let planResult = await plan.parser.parse(ownerText: "x", sessionId: plan.sessionId)
+
+    // then
+    #expect(meteredResult == .budgetDenied(cap: BudgetGate.perRunSpendCap))
+    #expect(planResult == .draft(Self.expectedDraft))
+    let row = try #require(
+      try plan.queue.read { db in
+        try Row.fetchOne(db, sql: "SELECT cost_usd, cost_source FROM provider_usage")
+      }
+    )
+    // A confirmed zero booked under its own source — not a guessed $0 — is what keeps the
+    // never-a-silent-$0 rule satisfied while the USD gate is skipped.
+    #expect(row["cost_usd"] == 0.0)
+    #expect(row["cost_source"] == CostSource.includedPlan.rawValue)
+  }
+
+  @Test func includedPlanParseStillHonorsTheDayTokenCeiling() async throws {
+    // given — a token ceiling the parse estimate alone exceeds; a subscription must not outrun it
+    let budget = RunBudget(
+      maxInputTokens: 100_000,
+      maxOutputTokens: 4_096,
+      wallClockDeadlineSeconds: 180,
+      retryBudget: 3,
+      perRunUSD: 0.50,
+      perDayUSD: 10.00,
+      proactivePerDayUSD: 2.00,
+      referenceUSDPerToken: 0.000_015,
+      dayTokenCeilingOverride: 10
+    )
+    let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
+    let fixture = try makeFixture(provider: provider, budget: budget, costPolicy: .includedPlan)
+
+    // when
+    let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+
+    // then — the token failsafe still binds under includedPlan, and the provider was never called
+    #expect(result == .budgetDenied(cap: BudgetGate.perDayTokenCap))
+    #expect(await provider.requests.isEmpty)
   }
 }
 

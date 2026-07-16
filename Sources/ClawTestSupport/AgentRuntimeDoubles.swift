@@ -54,6 +54,23 @@ public struct HangingInferenceProvider: LLMProvider {
   }
 }
 
+/// Records each request, then throws a fixed `ProviderError` — the shape a clean head rejection
+/// takes (auth / access / quota / replay / terminal). Both the turn and schedule surfaces drive it
+/// to prove one failure maps to one owner reply and one accounting decision.
+public actor FailingProvider: LLMProvider {
+  public private(set) var requests: [ChatRequest] = []
+  private let error: ProviderError
+
+  public init(_ error: ProviderError) {
+    self.error = error
+  }
+
+  public func complete(request: ChatRequest) async throws -> ChatResponse {
+    requests.append(request)
+    throw error
+  }
+}
+
 /// Finishes a real reply only after it is cancelled: the provider that races a won deadline and
 /// lands its response anyway. The response is a loser the coordinator drains, so its authoritative
 /// usage survives while the owner still sees the timeout.

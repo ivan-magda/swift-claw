@@ -2,13 +2,44 @@ import ClawCore
 import Foundation
 import Logging
 
-/// Why a turn produced no usable answer. Maps to a plain-language degradation reply; the
-/// stable `rawValue` is what the audit log records, so it survives case renames.
-public enum DegradationKind: String, Sendable, Equatable {
+/// Why a turn produced no usable answer. Maps to a plain-language degradation reply; the runtime
+/// carries the vendor-neutral provider disposition through to the gateway rather than collapsing
+/// every subscription failure into `providerUnavailable`, so auth/access/quota/replay each earn
+/// distinct owner guidance. The stable `auditDecision` string is what the audit log records, so it
+/// survives case renames.
+public enum DegradationKind: Sendable, Equatable {
   case providerUnavailable
   case outputTruncated
   case contextUnavailable
   case accountingFailed  // usage-write failure mid-run
+  /// The credential is missing, expired, or refused; the owner reply names `clawd auth login` as the
+  /// exact recovery, because no further request can succeed until they log in.
+  case authenticationRequired
+  /// The subscription/account is not entitled to the requested route or model; a re-login would
+  /// change nothing, so its reply deliberately does not tell the owner to log in.
+  case accessDenied
+  /// A clean throttle. `retryAfterSeconds` is the provider's bounded hint when it gave one; the
+  /// reply says to retry after it or after the plan resets, never to log in.
+  case quotaLimited(retryAfterSeconds: Int?)
+  /// Replay state the route would not accept; the reply gives safe `/new` guidance and the attempt
+  /// is never re-issued.
+  case invalidProviderState
+
+  /// The stable string the audit log records for this kind. Held apart from the case names so a
+  /// rename cannot silently rewrite history, and categorical for `quotaLimited` so the retry hint
+  /// never leaks into an audit decision.
+  public var auditDecision: String {
+    switch self {
+    case .providerUnavailable: "providerUnavailable"
+    case .outputTruncated: "outputTruncated"
+    case .contextUnavailable: "contextUnavailable"
+    case .accountingFailed: "accountingFailed"
+    case .authenticationRequired: "authenticationRequired"
+    case .accessDenied: "accessDenied"
+    case .quotaLimited: "quotaLimited"
+    case .invalidProviderState: "invalidProviderState"
+    }
+  }
 }
 
 /// The outcome of one orchestrated turn. `runTurn` never throws — every failure becomes one of
@@ -496,7 +527,7 @@ private extension AgentRuntime {
     case .degraded(let kind, let usage):
       let tokens = usage.map { "\($0.promptTokens + $0.completionTokens)" } ?? "n/a"
       log.warning(
-        "turn finished degraded kind=\(kind.rawValue) tokens=\(tokens) ms=\(elapsedMillis)"
+        "turn finished degraded kind=\(kind.auditDecision) tokens=\(tokens) ms=\(elapsedMillis)"
       )
     case .budgetStopped(let cap):
       log.notice("turn finished budget-stopped cap=\(cap) ms=\(elapsedMillis)")

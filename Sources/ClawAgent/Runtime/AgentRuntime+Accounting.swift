@@ -54,12 +54,16 @@ extension AgentRuntime {
       return .degraded(.providerUnavailable, usage: nil)
     }
 
+    // The vendor-neutral kind is read from the cause, the debit from the accounting disposition —
+    // independently, so an auth/access/quota/replay rejection surfaces its own owner guidance while
+    // an ambiguous transport loss stays the generic outage with a conservative row.
+    let kind = Self.degradationKind(for: error)
     switch Self.accounting(for: error) {
     case .notStarted:
-      return .degraded(.providerUnavailable, usage: nil)
+      return .degraded(kind, usage: nil)
     case .mayHaveStarted(let observedCompletionTokens):
       return .degraded(
-        .providerUnavailable,
+        kind,
         usage: conservativeDebit(
           callID: callID,
           context: context,
@@ -71,23 +75,28 @@ extension AgentRuntime {
     }
   }
 
-  /// The accounting disposition of a thrown error. A `ProviderFailure` carries the provider's own
-  /// verdict; a bare `ProviderError` (the legacy Chat Completions seam, which mints no wrapper) is
-  /// mapped by cause class — a recognized head rejection proves no start, everything else may have.
-  /// An unrecognized error means a body was already handed off, so it too may have started.
+  /// The accounting disposition of a thrown error. Delegates to the one vendor-neutral reducer both
+  /// the turn and schedule paths read, so a failure is charged the same way wherever it surfaces.
   static func accounting(for error: any Error) -> ProviderFailureAccounting {
-    if let failure = error as? ProviderFailure {
-      return failure.accounting
-    }
-    guard let providerError = error as? ProviderError else {
-      return .mayHaveStarted(observing: 0)
-    }
-    switch providerError {
-    case .terminal, .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .invalidProviderState:
-      return .notStarted
-    case .connectFailed, .retryable, .rejected:
-      return .mayHaveStarted(observing: 0)
+    ProviderFailureAccounting.classify(error)
+  }
+
+  /// The owner-facing degradation kind for a thrown provider failure, read from its vendor-neutral
+  /// cause. Only the redaction-safe cases carry a distinct kind; the message-carrying causes
+  /// (terminal / retryable / connect / rejected) and a non-provider error stay the generic outage,
+  /// so no remote diagnostic text can ever reach owner copy through the kind.
+  static func degradationKind(for error: any Error) -> DegradationKind {
+    switch ProviderError.cause(of: error) {
+    case .authenticationRequired:
+      return .authenticationRequired
+    case .accessDenied:
+      return .accessDenied
+    case .quotaLimited(let retryAfterSeconds):
+      return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
+    case .invalidProviderState:
+      return .invalidProviderState
+    case .terminal, .cleanRejection, .retryable, .connectFailed, .rejected, .none:
+      return .providerUnavailable
     }
   }
 
@@ -171,24 +180,9 @@ extension AgentRuntime {
     withReservation(usageResolver.resolve(response: response, context: context), context: context)
   }
 
-  /// Adds the reservation to an estimated prompt; leaves provider-returned usage alone.
+  /// Adds this route's reservation to an estimated prompt; leaves provider-returned usage alone.
   func withReservation(_ base: ResolvedUsage, context: [ChatMessage]) -> ResolvedUsage {
-    guard base.isEstimated else {
-      return base
-    }
-    let reservation = reservationPolicy.additionalTokens(for: context)
-    guard reservation > 0 else {
-      return base
-    }
-    let promptTokens = base.usage.promptTokens + reservation
-    return ResolvedUsage(
-      usage: ChatUsage(
-        promptTokens: promptTokens,
-        completionTokens: base.usage.completionTokens,
-        totalTokens: promptTokens + base.usage.completionTokens
-      ),
-      isEstimated: true
-    )
+    base.addingReservation(reservationPolicy.additionalTokens(for: context))
   }
 
   /// The conservative `ProviderUsage` for a call with no authoritative usage — a deadline, an

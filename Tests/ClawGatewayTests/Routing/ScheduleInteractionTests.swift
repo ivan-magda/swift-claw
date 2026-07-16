@@ -186,6 +186,47 @@ import Testing
     #expect(try harness.jobs.listAll().isEmpty)
   }
 
+  @Test func authenticationParseFailureGivesTheExactLoginCopyAndArmsNothing() async throws {
+    // given — the parse fails because the credential is gone
+    let harness = try makeHarness(parseResults: [.authenticationRequired])
+
+    // when
+    await parkDraft(harness)
+
+    // then — the schedule surface hands the owner the same pinned login sentence a turn does
+    #expect(await harness.transport.sent.last?.text == ScheduleReplies.authenticationRequired)
+    #expect(await harness.transport.sent.last?.text == Degradation.authenticationRequired)
+    #expect(try harness.jobs.listAll().isEmpty)
+  }
+
+  @Test func quotaParseFailureSaysRetryNotLogin() async throws {
+    // given
+    let harness = try makeHarness(parseResults: [.quotaLimited(retryAfterSeconds: 30)])
+
+    // when
+    await parkDraft(harness)
+
+    // then — the quota reply names the retry, never the login command
+    let reply = try #require(await harness.transport.sent.last?.text)
+    #expect(reply == ScheduleReplies.quotaLimited(retryAfterSeconds: 30))
+    #expect(reply.contains("clawd auth login") == false)
+    #expect(try harness.jobs.listAll().isEmpty)
+  }
+
+  @Test func accessDeniedParseFailureNeverTellsTheOwnerToLogIn() async throws {
+    // given
+    let harness = try makeHarness(parseResults: [.accessDenied])
+
+    // when
+    await parkDraft(harness)
+
+    // then
+    let reply = try #require(await harness.transport.sent.last?.text)
+    #expect(reply == ScheduleReplies.accessDenied)
+    #expect(reply.contains("clawd auth login") == false)
+    #expect(try harness.jobs.listAll().isEmpty)
+  }
+
   @Test func helpRendersTheCommandSetAndTheConfirmationRules() async throws {
     // given
     let harness = try makeHarness()

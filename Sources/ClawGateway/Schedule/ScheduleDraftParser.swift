@@ -11,6 +11,14 @@ public enum ScheduleDraftParseResult: Sendable, Equatable {
   case providerUnavailable
   /// The day-spend gate refused before the call was issued; `cap` names the tripped limit.
   case budgetDenied(cap: String)
+  /// The credential is missing or refused. The router gives the same actionable guidance a turn
+  /// does — stop clawd, `clawd auth login`, restart — and, like a turn, debits nothing.
+  case authenticationRequired
+  /// The subscription/account cannot use the requested route or model; re-login would not help, so
+  /// the guidance never says to log in.
+  case accessDenied
+  /// A clean throttle; `retryAfterSeconds` is the provider's bounded hint when it gave one.
+  case quotaLimited(retryAfterSeconds: Int?)
 }
 
 /// Seam for the router so tests script drafts without an LLM. `sessionId` attributes the parse's
@@ -48,13 +56,24 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     """
 
   private let provider: any LLMProvider
-  private let model: String
+  /// What crosses the wire in `ChatRequest.model`.
+  private let wireModel: String
+  /// The accounting identity the parse's usage row keys on. Kept apart from `wireModel` so a
+  /// subscription route's rows read `openai-chatgpt/<model>` and never collide with API-billed rows
+  /// for the same wire model — mirroring `AgentRuntime`, so a turn and a parse account identically.
+  private let configuredReference: String
   private let responseFormat: ResponseFormat?
 
   private let usageStore: any UsageStore
   private let gate: BudgetGate
   private let costResolver: CostResolver
   private let usageResolver = UsageResolver()
+  /// How the route is billed. Injected — the parse never name-checks a model — so `includedPlan`
+  /// records a confirmed zero and skips only the USD gates, exactly like `AgentRuntime`.
+  private let costPolicy: LLMCostPolicy
+  /// The reservation replay state needs on top of text estimation. The parse carries no replay
+  /// state today, but the policy is wired so the parse reserves the same way a turn does.
+  private let reservationPolicy: LLMInputReservationPolicy
   /// Mints the identity the parse's usage row is recorded under. Injected so a test can pin the
   /// identity rather than assert against a random UUID.
   private let providerCallIDGenerator: any ProviderCallIDGenerating
@@ -66,10 +85,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
 
   public init(
     provider: any LLMProvider,
-    model: String,
+    wireModel: String,
+    configuredReference: String? = nil,
     usageStore: any UsageStore,
     budget: RunBudget,
     costResolver: CostResolver,
+    costPolicy: LLMCostPolicy = .metered,
+    reservationPolicy: LLMInputReservationPolicy = .textOnly,
     structuredOutput: StructuredOutputMode = .off,
     providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
     now: @escaping @Sendable () -> Date = { Date() },
@@ -77,12 +99,15 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     logger: Logger
   ) {
     self.provider = provider
-    self.model = model
+    self.wireModel = wireModel
+    self.configuredReference = configuredReference ?? wireModel
     self.responseFormat = Self.responseFormat(for: structuredOutput)
 
     self.usageStore = usageStore
-    self.gate = BudgetGate(budget: budget)
+    self.gate = BudgetGate(budget: budget, costPolicy: costPolicy)
     self.costResolver = costResolver
+    self.costPolicy = costPolicy
+    self.reservationPolicy = reservationPolicy
     self.providerCallIDGenerator = providerCallIDGenerator
 
     self.now = now
@@ -97,45 +122,21 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     // recorded for this call.
     let callID = providerCallIDGenerator.next()
     let request = ChatRequest(
-      model: model,
+      model: wireModel,
       messages: [
         ChatMessage(role: .system, content: Self.systemPrompt),
         ChatMessage(role: .user, content: ownerText),
       ],
       maxOutputTokens: Self.maxParseOutputTokens,
-      responseFormat: responseFormat
+      responseFormat: responseFormat,
+      // The one shared trace identity — the same formatter a turn stamps — so a session's parse and
+      // its turns never split across two trace identities.
+      sessionId: SessionTraceID.format(sessionID: sessionId)
     )
 
-    // Day-cap preflight: the token breaker runs before EVERY provider call, command
-    // parses included. A failed totals read fails closed — no spend without working accounting.
-    let todayTokens: Int
-    let todayUSD: Double
-    do {
-      (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now())
-    } catch {
-      logger.warning("schedule parse: day-totals read failed; refusing to spend: \(error)")
-      return .providerUnavailable
-    }
-
-    let promptTokens = TokenEstimator.estimateInputTokens(request.messages)
-    let estimatedTokens = promptTokens + Self.maxParseOutputTokens
-    let estimatedCost = costResolver.resolve(
-      model: model,
-      usage: ChatUsage(
-        promptTokens: promptTokens,
-        completionTokens: Self.maxParseOutputTokens,
-        totalTokens: estimatedTokens
-      ),
-      providerCost: nil
-    ).costUSD
-
-    if case .deny(let cap) = gate.preflight(
-      todayTokens: todayTokens,
-      todayUSD: todayUSD,
-      estimatedTotalTokens: estimatedTokens,
-      estimatedCostUSD: estimatedCost
-    ) {
-      return .budgetDenied(cap: cap)
+    // Day-cap preflight before issuing: a denial or an accounting failure refuses without a call.
+    if let refusal = preflightRefusal(for: request.messages) {
+      return refusal
     }
 
     let response: ChatResponse
@@ -153,16 +154,20 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       // sees the spend, exactly like a deadline-hit turn.
       record(estimatedFor: request, callID: callID, sessionId: sessionId)
       return .providerUnavailable
-    } catch ProviderError.retryable, ProviderError.connectFailed {
-      // Exhausted retries / transport failure: parity with a turn's `degradedForCaughtError`
-      // — debit an estimate so a provider brownout still moves the day cap, rather than
-      // letting repeated `/schedule` attempts re-issue the call with the totals frozen.
-      record(estimatedFor: request, callID: callID, sessionId: sessionId)
+    } catch is CancellationError {
+      // The command was cancelled: nothing was generated to bill, and cancellation is never an
+      // owner-facing provider outage — the same rule the turn path applies to a raw cancel.
       return .providerUnavailable
     } catch {
-      // Terminal rejection (a 4xx that won't retry): the provider generated and billed nothing,
-      // so there is nothing to account. The owner reply is the same DEG-01 degradation.
-      return .providerUnavailable
+      // One decision for every natural failure, keyed on the same vendor-neutral disposition a turn
+      // reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a brownout
+      // still moves the day cap rather than letting repeated `/schedule` attempts re-issue with the
+      // totals frozen; a proven `notStarted` (terminal 4xx, auth, access, quota, replay) generated
+      // nothing, so it accounts nothing. The typed causes then pick the router's actionable reply.
+      if case .mayHaveStarted = ProviderFailureAccounting.classify(error) {
+        record(estimatedFor: request, callID: callID, sessionId: sessionId)
+      }
+      return Self.parseFailureResult(for: error)
     }
 
     record(usageFor: response, request: request, callID: callID, sessionId: sessionId)
@@ -290,6 +295,74 @@ private extension ScheduleDraftParser {
   }
 }
 
+// MARK: - Preflight
+
+private extension ScheduleDraftParser {
+  /// The offline day-cap gate that runs before EVERY provider call, command parses included. Returns
+  /// the early-exit outcome — `.budgetDenied` when a cap is met, `.providerUnavailable` when the
+  /// totals read fails (fail closed: no spend without working accounting) — or nil to proceed. The
+  /// replay-state reservation rides on ordinary text estimation so a state-carrying wire could not
+  /// slip past the token gate; the parse carries none today but reserves the same way a turn does,
+  /// and the USD figure is resolved under the injected policy so `includedPlan` skips the dollar gate.
+  func preflightRefusal(for messages: [ChatMessage]) -> ScheduleDraftParseResult? {
+    let todayTokens: Int
+    let todayUSD: Double
+    do {
+      (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now())
+    } catch {
+      logger.warning("schedule parse: day-totals read failed; refusing to spend: \(error)")
+      return .providerUnavailable
+    }
+
+    let promptTokens =
+      TokenEstimator.estimateInputTokens(messages)
+      + reservationPolicy.additionalTokens(for: messages)
+    let estimatedTokens = promptTokens + Self.maxParseOutputTokens
+    let estimatedCost = costResolver.resolve(
+      model: configuredReference,
+      usage: ChatUsage(
+        promptTokens: promptTokens,
+        completionTokens: Self.maxParseOutputTokens,
+        totalTokens: estimatedTokens
+      ),
+      providerCost: nil,
+      policy: costPolicy
+    ).costUSD
+
+    if case .deny(let cap) = gate.preflight(
+      todayTokens: todayTokens,
+      todayUSD: todayUSD,
+      estimatedTotalTokens: estimatedTokens,
+      estimatedCostUSD: estimatedCost
+    ) {
+      return .budgetDenied(cap: cap)
+    }
+    return nil
+  }
+}
+
+// MARK: - Failure Mapping
+
+private extension ScheduleDraftParser {
+  /// Maps a thrown provider failure to the router's outcome, from the same vendor-neutral cause a
+  /// turn reads: auth/access/quota get their own actionable results; every other cause (terminal
+  /// reject, brownout, transport loss, replay state, a non-provider error) stays the generic
+  /// unavailable. No remote diagnostic text ever crosses into an owner reply.
+  static func parseFailureResult(for error: any Error) -> ScheduleDraftParseResult {
+    switch ProviderError.cause(of: error) {
+    case .authenticationRequired:
+      return .authenticationRequired
+    case .accessDenied:
+      return .accessDenied
+    case .quotaLimited(let retryAfterSeconds):
+      return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
+    case .terminal, .cleanRejection, .retryable, .connectFailed, .rejected, .invalidProviderState,
+      .none:
+      return .providerUnavailable
+    }
+  }
+}
+
 // MARK: - Spend Accounting
 
 private extension ScheduleDraftParser {
@@ -300,17 +373,19 @@ private extension ScheduleDraftParser {
     sessionId: Int64
   ) {
     let resolvedUsage = usageResolver.resolve(response: response, context: request.messages)
+      .addingReservation(reservationPolicy.additionalTokens(for: request.messages))
     let resolvedCost = costResolver.resolve(
-      model: model,
+      model: configuredReference,
       usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider
+      providerCost: response.costFromProvider,
+      policy: costPolicy
     )
     persist(
       ProviderUsage(
         providerCallID: callID,
         runId: nil,
         sessionId: sessionId,
-        model: model,
+        model: configuredReference,
         usage: resolvedUsage,
         cost: resolvedCost,
         ts: now()
@@ -323,17 +398,19 @@ private extension ScheduleDraftParser {
       context: request.messages,
       maxOutputTokens: Self.maxParseOutputTokens
     )
+    .addingReservation(reservationPolicy.additionalTokens(for: request.messages))
     let resolvedCost = costResolver.resolve(
-      model: model,
+      model: configuredReference,
       usage: resolvedUsage.usage,
-      providerCost: nil
+      providerCost: nil,
+      policy: costPolicy
     )
     persist(
       ProviderUsage(
         providerCallID: callID,
         runId: nil,
         sessionId: sessionId,
-        model: model,
+        model: configuredReference,
         usage: resolvedUsage,
         cost: resolvedCost,
         ts: now()

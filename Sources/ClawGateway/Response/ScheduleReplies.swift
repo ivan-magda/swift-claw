@@ -15,6 +15,40 @@ public enum ScheduleReplies {
     "I couldn't turn that into a schedule. \(exampleLine)"
   }
 
+  // The provider-failure copy for a `/schedule` parse delegates to `Degradation` so a scheduled
+  // parse and an interactive turn hand the owner byte-identical guidance for the same failure — the
+  // auth sentence names the exact recovery command, while access and quota deliberately do not.
+
+  /// A `/schedule` parse that could not reach a usable model (terminal reject, brownout, deadline).
+  public static var providerUnavailable: String { Degradation.providerUnavailable }
+
+  /// The credential is gone or refused; names `clawd auth login` as the exact recovery.
+  public static var authenticationRequired: String { Degradation.authenticationRequired }
+
+  /// The plan/account cannot use the requested route or model; does not tell the owner to log in.
+  public static var accessDenied: String { Degradation.accessDenied }
+
+  /// A clean throttle; says to retry after the provider's hint or the plan reset, never to log in.
+  public static func quotaLimited(retryAfterSeconds: Int?) -> String {
+    Degradation.quotaLimited(retryAfterSeconds: retryAfterSeconds)
+  }
+
+  /// The owner reply for a `/schedule` parse that failed at the provider. Typed failures earn their
+  /// own actionable guidance; every other result falls back to the generic unavailable copy (the
+  /// router only routes provider-failure results here, so the fallback is never reached in practice).
+  public static func providerFailure(_ result: ScheduleDraftParseResult) -> String {
+    switch result {
+    case .authenticationRequired:
+      return authenticationRequired
+    case .accessDenied:
+      return accessDenied
+    case .quotaLimited(let retryAfterSeconds):
+      return quotaLimited(retryAfterSeconds: retryAfterSeconds)
+    case .providerUnavailable, .draft, .unparseable, .budgetDenied:
+      return providerUnavailable
+    }
+  }
+
   public static var emptyList: String {
     "No schedules yet. \(exampleLine)"
   }

@@ -445,7 +445,7 @@ private extension TurnRunner {
         ownerNotices: context.ownerNotices
       ),
       action: .turnDegraded,
-      decision: kind.rawValue,
+      decision: kind.auditDecision,
       at: context.committedAt
     )
     if commitResult != .ignored {
@@ -560,7 +560,7 @@ private extension TurnRunner {
       setPrivateData: false,
       message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
       action: .turnDegraded,
-      decision: DegradationKind.contextUnavailable.rawValue,
+      decision: DegradationKind.contextUnavailable.auditDecision,
       at: committedAt
     )
   }

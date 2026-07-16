@@ -920,6 +920,82 @@ struct AgentRuntimeFailureAccountingTests {
     #expect(row.completionTokens == RunBudget.default.maxOutputTokens)
   }
 
+  @Test("an authentication failure carries the auth kind through and writes no usage row")
+  func authenticationFailureCarriesTheAuthKindAndWritesNoRow() async throws {
+    // given
+    let store = RecordingUsageStore()
+
+    // when
+    let (kind, usage) = try await Self.runDegraded(.fail(.authenticationRequired), store: store)
+
+    // then — the runtime does NOT collapse it into the generic outage; nothing was generated
+    #expect(kind == .authenticationRequired)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+  }
+
+  @Test("an access denial carries its own kind and writes no usage row")
+  func accessDenialCarriesItsOwnKindAndWritesNoRow() async throws {
+    // given
+    let store = RecordingUsageStore()
+
+    // when
+    let (kind, usage) = try await Self.runDegraded(.fail(.accessDenied), store: store)
+
+    // then
+    #expect(kind == .accessDenied)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+  }
+
+  @Test("a quota throttle carries the provider's retry hint and writes no usage row")
+  func quotaThrottleCarriesTheRetryHintAndWritesNoRow() async throws {
+    // given
+    let store = RecordingUsageStore()
+
+    // when
+    let (kind, usage) = try await Self.runDegraded(
+      .fail(.quotaLimited(retryAfterSeconds: 42)),
+      store: store
+    )
+
+    // then — the bounded hint rides the kind so the gateway can name it
+    #expect(kind == .quotaLimited(retryAfterSeconds: 42))
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+  }
+
+  @Test("rejected replay state carries the invalid-state kind and writes no usage row")
+  func rejectedReplayStateCarriesTheInvalidStateKind() async throws {
+    // given
+    let store = RecordingUsageStore()
+
+    // when
+    let (kind, usage) = try await Self.runDegraded(.fail(.invalidProviderState), store: store)
+
+    // then
+    #expect(kind == .invalidProviderState)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+  }
+
+  @Test("a message-carrying terminal reject stays the generic outage, never a typed kind")
+  func terminalRejectStaysTheGenericOutage() async throws {
+    // given — a cause whose payload is remote text; it must never reach a typed owner reply
+    let store = RecordingUsageStore()
+
+    // when
+    let (kind, usage) = try await Self.runDegraded(
+      .fail(.terminal(status: 400, message: "internal provider detail")),
+      store: store
+    )
+
+    // then — generic outage, no row (proven not-started), and no remote text carried on the kind
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+  }
+
   @Test("a notStarted failure after a tool round keeps only the round's recorded row")
   func notStartedAfterAToolRoundKeepsOnlyTheRecordedRow() async throws {
     // given — a first round that proposes a tool (recording usage), then a not-started failure

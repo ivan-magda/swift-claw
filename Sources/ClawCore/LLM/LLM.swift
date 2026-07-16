@@ -393,6 +393,26 @@ public struct ResolvedUsage: Sendable, Equatable {
     self.usage = usage
     self.isEstimated = isEstimated
   }
+
+  /// Folds a replay-state token reservation into an *estimated* prompt only. A provider-returned
+  /// count is authoritative and left untouched; a missing count is estimated, and there the
+  /// reservation is added so a state-carrying wire is never under-accounted. Erring high only
+  /// over-reserves; erring low would let replay state slip past a token gate. The turn and schedule
+  /// surfaces share this so both reserve the same way.
+  public func addingReservation(_ reservation: Int) -> ResolvedUsage {
+    guard isEstimated, reservation > 0 else {
+      return self
+    }
+    let promptTokens = usage.promptTokens + reservation
+    return ResolvedUsage(
+      usage: ChatUsage(
+        promptTokens: promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: promptTokens + usage.completionTokens
+      ),
+      isEstimated: true
+    )
+  }
 }
 
 /// Reconciles the token counts to record. Peer to `CostResolver` (counts vs. price): provider-

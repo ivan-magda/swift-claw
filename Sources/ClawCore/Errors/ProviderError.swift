@@ -26,3 +26,43 @@ public enum ProviderError: Error, Sendable, Equatable {
   /// Replay state the route would not accept. The turn can be re-issued without it.
   case invalidProviderState
 }
+
+// MARK: - Vendor-neutral failure reading
+
+extension ProviderError {
+  /// The vendor-neutral cause of a thrown error, unwrapping a `ProviderFailure`. Both execution
+  /// methods surface the same causes — a bare `ProviderError` from the Chat Completions seam, or one
+  /// wrapped in a `ProviderFailure` by the managed route — so the turn and schedule paths read the
+  /// cause identically regardless of which threw. `nil` for a non-provider error: a body was already
+  /// handed off to produce it, so the caller treats it as ambiguous.
+  public static func cause(of error: any Error) -> ProviderError? {
+    if let failure = error as? ProviderFailure {
+      return failure.cause
+    }
+    return error as? ProviderError
+  }
+}
+
+extension ProviderFailureAccounting {
+  /// The accounting disposition of a thrown error, read identically on every surface so the turn and
+  /// schedule paths debit the same way. A `ProviderFailure` carries the provider's own verdict; a
+  /// bare `ProviderError` is mapped by cause class — a recognized head rejection (auth, access,
+  /// quota, clean rejection, replay state, terminal 4xx) proves nothing was generated, everything
+  /// else may have. An unrecognized error means a body was already handed off, so it too may have
+  /// started.
+  public static func classify(_ error: any Error) -> ProviderFailureAccounting {
+    if let failure = error as? ProviderFailure {
+      return failure.accounting
+    }
+    guard let providerError = error as? ProviderError else {
+      return .mayHaveStarted(observing: 0)
+    }
+    switch providerError {
+    case .terminal, .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
+      .invalidProviderState:
+      return .notStarted
+    case .connectFailed, .retryable, .rejected:
+      return .mayHaveStarted(observing: 0)
+    }
+  }
+}

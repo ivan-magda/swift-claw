@@ -18,10 +18,17 @@ extension DaemonBuilder {
     ScheduleSurface(
       parser: ScheduleDraftParser(
         provider: provider,
-        model: config.llm.model,
+        // The wired provider is the metered OpenAI-compatible route, so the wire model and the
+        // accounting identity are the same configured string and the policies stay at their
+        // metered/text-only defaults — the same injection `makeAgent` gives the turn runtime, so a
+        // subscription route would swap both here and there together.
+        wireModel: config.llm.model,
+        configuredReference: config.llm.model,
         usageStore: stores.usage,
         budget: config.budget,
         costResolver: costResolver,
+        costPolicy: .metered,
+        reservationPolicy: .textOnly,
         structuredOutput: config.llm.structuredOutput,
         clock: ContinuousClock(),
         logger: logger
