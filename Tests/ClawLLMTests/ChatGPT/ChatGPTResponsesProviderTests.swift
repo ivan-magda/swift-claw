@@ -2,7 +2,6 @@ import ClawAuth
 import ClawCore
 import ClawTestSupport
 import Foundation
-import Logging
 import Synchronization
 import Testing
 
@@ -108,6 +107,80 @@ import Testing
     // then — a clean dispatch proves the rejection test fails on the bad headers, not on all headers
     #expect(await harness.http.recorded.count == 1)
     #expect(response.content == "Hello")
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func twoCasingsOfAuthorizationAreRejectedBeforeHTTPRatherThanSilentlyMerged() async throws {
+    // given — a source handing back both spellings of Authorization carrying different bearers, which
+    // the allowlist maps to one canonical key
+    let credentials = ScriptedLLMCredentialSource(
+      headers: ["Authorization": "Bearer canonical", "authorization": "Bearer shadow"],
+      redactionValues: ["canonical", "shadow"]
+    )
+    let harness = ProviderHarness(
+      steps: [.stream(okHead, Fixtures.basicSuccess())],
+      credentials: credentials
+    )
+
+    // when
+    let failure = await requireProviderFailure {
+      try await harness.provider.complete(request: plainRequest)
+    }
+
+    // then — the collision is refused before any dispatch, so sort order never gets to pick the bearer
+    #expect(await harness.http.recorded.isEmpty)
+    #expect(failure.accounting == .notStarted)
+    guard case .terminal(_, let message) = failure.cause else {
+      Issue.record("expected a terminal refusal, got \(failure.cause)")
+      return
+    }
+    #expect(message.contains("more than once"))
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func thePublicInitRunsTheDropPathAndStillDispatches() async throws {
+    // given — the pinned public init (no injected logger or reporter) and a history carrying a foreign
+    // state, so the production drop path runs end to end
+    let http = ScriptedHTTPExecutor([.stream(okHead, Fixtures.basicSuccess())])
+    let sleeps = SleepRecorder()
+    let provider = ChatGPTResponsesProvider(
+      http: http,
+      credentials: Support.defaultCredentials,
+      credentialProfileID: fixedProfileID,
+      buildVersion: "1.2.3-test",
+      retryBudget: 3,
+      requestTimeoutSeconds: 30,
+      clock: ScriptedClock { delay in
+        await sleeps.record(delay / .seconds(1))
+      },
+      jitter: { duration in duration },
+      epochID: { fixedEpoch }
+    )
+    let request = ChatRequest(
+      model: "gpt-5",
+      messages: [
+        ChatMessage(role: .user, content: "hi"),
+        ChatMessage(
+          role: .assistant,
+          content: "answer",
+          providerState: ProviderExchangeState(
+            issuer: "some-other-provider:deadbeef",
+            payload: Data("{}".utf8)
+          )
+        ),
+      ],
+      maxOutputTokens: 256
+    )
+
+    // when — the public path drops the foreign state and still dispatches
+    let response = try await provider.complete(request: request)
+
+    // then — the public constructor wired a live codec and engine rather than throwing the drop away.
+    // The bootstrapped logger's non-silence cannot be asserted here: the public init exposes no logger
+    // or reporter seam, and observing it would need a process-global `LoggingSystem.bootstrap` that
+    // breaks test isolation. Obligation 3's falsifiable coverage stays at the internal-seam test below.
+    #expect(response.content == "Hello")
+    #expect(await http.recorded.count == 1)
   }
 
   // MARK: - complete / stream parity
@@ -395,45 +468,20 @@ import Testing
   }
 }
 
-// MARK: - Harness
+// MARK: - Shared support
 
-private struct ProviderHarness {
-  let http: ScriptedHTTPExecutor
-  let provider: ChatGPTResponsesProvider<ScriptedClock>
+private typealias Support = ChatGPTProviderTestSupport
+private typealias ProviderHarness = Support.Harness
+private typealias Fixtures = Support.Fixtures
 
-  init(
-    steps: [ScriptedHTTPExecutor.Step],
-    credentials: any LLMCredentialSource = ProviderHarness.defaultCredentials,
-    credentialProfileID: UUID? = fixedProfileID,
-    retryBudget: Int = 3,
-    replayDropsReporter: (@Sendable (ChatGPTReplayDrops) -> Void)? = nil
-  ) {
-    let http = ScriptedHTTPExecutor(steps)
-    self.http = http
-    let sleeps = SleepRecorder()
-    self.provider = ChatGPTResponsesProvider(
-      http: http,
-      credentials: credentials,
-      credentialProfileID: credentialProfileID,
-      buildVersion: "1.2.3-test",
-      retryBudget: retryBudget,
-      requestTimeoutSeconds: 30,
-      clock: ScriptedClock { delay in
-        await sleeps.record(delay / .seconds(1))
-      },
-      jitter: { duration in duration },
-      epochID: { fixedEpoch },
-      logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() }),
-      replayDropsReporter: replayDropsReporter
-    )
-  }
+private let fixedProfileID = Support.fixedProfileID
+private let fixedEpoch = Support.fixedEpoch
+private let okHead = Support.okHead
+private let plainRequest = Support.plainRequest
+private let sessionedRequest = Support.sessionedRequest
 
-  static var defaultCredentials: ScriptedLLMCredentialSource {
-    ScriptedLLMCredentialSource(
-      headers: ["Authorization": "Bearer test-token"],
-      redactionValues: ["test-token"]
-    )
-  }
+private func head(_ status: Int) -> HTTPStreamHead {
+  Support.head(status)
 }
 
 // MARK: - Recorders
@@ -489,109 +537,5 @@ private func assistantOutputTexts(_ input: [[String: Any]]) -> [String] {
       return nil
     }
     return content.compactMap { part in part["text"] as? String }.joined()
-  }
-}
-
-// MARK: - Fixtures
-
-private func fixedUUID(_ value: String) -> UUID {
-  guard let parsed = UUID(uuidString: value) else {
-    preconditionFailure("invalid fixed UUID \(value)")
-  }
-  return parsed
-}
-
-private let fixedProfileID = fixedUUID("00000000-0000-0000-0000-0000000000AA")
-private let fixedEpoch = fixedUUID("11111111-1111-1111-1111-111111111111")
-
-private let okHead = HTTPStreamHead(statusCode: 200, headers: [:])
-
-private func head(_ status: Int) -> HTTPStreamHead {
-  HTTPStreamHead(statusCode: status, headers: [:])
-}
-
-private let plainRequest = ChatRequest(
-  model: "gpt-5",
-  messages: [ChatMessage(role: .user, content: "hello")],
-  maxOutputTokens: 256
-)
-
-private let sessionedRequest = ChatRequest(
-  model: "gpt-5",
-  messages: [ChatMessage(role: .user, content: "hello")],
-  maxOutputTokens: 256,
-  sessionId: "sess-1"
-)
-
-private enum Fixtures {
-  static func event(_ json: String) -> Data {
-    Data("data: \(json)\n\n".utf8)
-  }
-
-  /// A minimal success: an announced message, one visible delta, its done item, and a completed
-  /// terminal with usage.
-  static func basicSuccess() -> [Data] {
-    [
-      event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
-      event(
-        #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
-      ),
-      completedTerminal(),
-    ]
-  }
-
-  /// Visible text, reasoning replay material, and a tool call — everything a terminal reply carries,
-  /// so parity is asserted across every field rather than just the visible content.
-  static func richSuccess() -> [Data] {
-    [
-      event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
-      event(
-        #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
-      ),
-      event(
-        #"{"type":"response.output_item.added","output_index":1,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}"#
-      ),
-      event(
-        #"{"type":"response.output_item.done","output_index":1,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}"#
-      ),
-      event(
-        #"{"type":"response.output_item.added","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock"}}"#
-      ),
-      event(
-        #"{"type":"response.output_item.done","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock","arguments":"{}"}}"#
-      ),
-      completedTerminal(),
-    ]
-  }
-
-  /// A late visible delta arriving after its item has already been declared done.
-  static func deltaAfterDone() -> [Data] {
-    [
-      event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
-      event(
-        #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"EXTRA"}"#),
-      completedTerminal(),
-    ]
-  }
-
-  static func errorBody(_ message: String) -> [Data] {
-    [Data(#"{"error":{"message":"\#(message)"}}"#.utf8)]
-  }
-
-  static func completedTerminal() -> Data {
-    event(
-      #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#
-    )
   }
 }

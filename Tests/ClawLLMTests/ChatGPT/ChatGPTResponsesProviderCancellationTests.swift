@@ -2,8 +2,6 @@ import ClawAuth
 import ClawCore
 import ClawTestSupport
 import Foundation
-import Logging
-import Synchronization
 import Testing
 
 @testable import ClawLLM
@@ -146,91 +144,11 @@ private func accounting(of terminal: LLMStreamTermination) -> ProviderFailureAcc
   }
 }
 
-// MARK: - Harness
+// MARK: - Shared support
 
-private struct ProviderHarness {
-  let http: ScriptedHTTPExecutor
-  let provider: ChatGPTResponsesProvider<ScriptedClock>
+private typealias Support = ChatGPTProviderTestSupport
+private typealias ProviderHarness = Support.Harness
+private typealias Fixtures = Support.Fixtures
 
-  init(
-    steps: [ScriptedHTTPExecutor.Step],
-    credentials: any LLMCredentialSource = ProviderHarness.defaultCredentials
-  ) {
-    let http = ScriptedHTTPExecutor(steps)
-    self.http = http
-    let sleeps = SleepRecorder()
-    self.provider = ChatGPTResponsesProvider(
-      http: http,
-      credentials: credentials,
-      credentialProfileID: fixedProfileID,
-      buildVersion: "1.2.3-test",
-      retryBudget: 3,
-      requestTimeoutSeconds: 30,
-      clock: ScriptedClock { delay in
-        await sleeps.record(delay / .seconds(1))
-      },
-      jitter: { duration in duration },
-      epochID: { fixedEpoch },
-      logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() }),
-      replayDropsReporter: nil
-    )
-  }
-
-  static var defaultCredentials: ScriptedLLMCredentialSource {
-    ScriptedLLMCredentialSource(
-      headers: ["Authorization": "Bearer test-token"],
-      redactionValues: ["test-token"]
-    )
-  }
-}
-
-// MARK: - Fixtures
-
-private func fixedUUID(_ value: String) -> UUID {
-  guard let parsed = UUID(uuidString: value) else {
-    preconditionFailure("invalid fixed UUID \(value)")
-  }
-  return parsed
-}
-
-private let fixedProfileID = fixedUUID("00000000-0000-0000-0000-0000000000AA")
-private let fixedEpoch = fixedUUID("11111111-1111-1111-1111-111111111111")
-private let okHead = HTTPStreamHead(statusCode: 200, headers: [:])
-
-private let plainRequest = ChatRequest(
-  model: "gpt-5",
-  messages: [ChatMessage(role: .user, content: "hello")],
-  maxOutputTokens: 256
-)
-
-private enum Fixtures {
-  static func event(_ json: String) -> Data {
-    Data("data: \(json)\n\n".utf8)
-  }
-
-  static func basicSuccess() -> [Data] {
-    [
-      event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
-      event(
-        #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
-      ),
-      event(
-        #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#
-      ),
-    ]
-  }
-
-  /// Announces an item and emits a delta but never states an outcome, so a consumer that abandons
-  /// the iterator mid-stream leaves a turn the model may already have begun.
-  static func slowSuccess() -> [Data] {
-    [
-      event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
-    ]
-  }
-}
+private let okHead = Support.okHead
+private let plainRequest = Support.plainRequest

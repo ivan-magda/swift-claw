@@ -1,0 +1,173 @@
+import ClawAuth
+import ClawCore
+import ClawTestSupport
+import Foundation
+import Logging
+
+@testable import ClawLLM
+
+/// The one home for the ChatGPT provider suites' harness and fixtures.
+///
+/// Namespaced under an enum so its names cannot collide with the file-private `okHead`, `head`,
+/// `fixedUUID`, `Fixtures`, and `Harness` that neighboring ChatGPT test files declare for their own
+/// seams. Both provider suites — the outcome-parity tests and the cancellation-race tests — drive the
+/// provider through this harness so the scripted transport, manual clock, and success fixtures cannot
+/// drift between them.
+enum ChatGPTProviderTestSupport {
+  static func fixedUUID(_ value: String) -> UUID {
+    guard let parsed = UUID(uuidString: value) else {
+      preconditionFailure("invalid fixed UUID \(value)")
+    }
+    return parsed
+  }
+
+  static let fixedProfileID = fixedUUID("00000000-0000-0000-0000-0000000000AA")
+  static let fixedEpoch = fixedUUID("11111111-1111-1111-1111-111111111111")
+  static let okHead = HTTPStreamHead(statusCode: 200, headers: [:])
+
+  static func head(_ status: Int) -> HTTPStreamHead {
+    HTTPStreamHead(statusCode: status, headers: [:])
+  }
+
+  static let plainRequest = ChatRequest(
+    model: "gpt-5",
+    messages: [ChatMessage(role: .user, content: "hello")],
+    maxOutputTokens: 256
+  )
+
+  static let sessionedRequest = ChatRequest(
+    model: "gpt-5",
+    messages: [ChatMessage(role: .user, content: "hello")],
+    maxOutputTokens: 256,
+    sessionId: "sess-1"
+  )
+
+  static var defaultCredentials: ScriptedLLMCredentialSource {
+    ScriptedLLMCredentialSource(
+      headers: ["Authorization": "Bearer test-token"],
+      redactionValues: ["test-token"]
+    )
+  }
+
+  /// The assembled provider over a scripted transport and a manual clock. Every HTTP outcome is a
+  /// scripted step and every delay records on the clock, so nothing here waits on real time. Drives
+  /// the provider through its internal init so a test can capture the replay-drops diagnostic and
+  /// silence logs without widening the pinned public surface.
+  struct Harness {
+    let http: ScriptedHTTPExecutor
+    let provider: ChatGPTResponsesProvider<ScriptedClock>
+
+    init(
+      steps: [ScriptedHTTPExecutor.Step],
+      credentials: any LLMCredentialSource = ChatGPTProviderTestSupport.defaultCredentials,
+      credentialProfileID: UUID? = ChatGPTProviderTestSupport.fixedProfileID,
+      retryBudget: Int = 3,
+      replayDropsReporter: (@Sendable (ChatGPTReplayDrops) -> Void)? = nil
+    ) {
+      let http = ScriptedHTTPExecutor(steps)
+      self.http = http
+      let sleeps = SleepRecorder()
+      self.provider = ChatGPTResponsesProvider(
+        http: http,
+        credentials: credentials,
+        credentialProfileID: credentialProfileID,
+        buildVersion: "1.2.3-test",
+        retryBudget: retryBudget,
+        requestTimeoutSeconds: 30,
+        clock: ScriptedClock { delay in
+          await sleeps.record(delay / .seconds(1))
+        },
+        jitter: { duration in duration },
+        epochID: { ChatGPTProviderTestSupport.fixedEpoch },
+        logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() }),
+        replayDropsReporter: replayDropsReporter
+      )
+    }
+  }
+
+  /// Scripted SSE bodies for the provider suites. Each `event` is one `data:` frame; the fixtures
+  /// assemble the frames a given outcome needs.
+  enum Fixtures {
+    static func event(_ json: String) -> Data {
+      Data("data: \(json)\n\n".utf8)
+    }
+
+    /// A minimal success: an announced message, one visible delta, its done item, and a completed
+    /// terminal with usage.
+    static func basicSuccess() -> [Data] {
+      [
+        event(
+          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+        ),
+        event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
+        event(
+          #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
+        ),
+        completedTerminal(),
+      ]
+    }
+
+    /// Visible text, reasoning replay material, and a tool call — everything a terminal reply carries,
+    /// so parity is asserted across every field rather than just the visible content.
+    static func richSuccess() -> [Data] {
+      [
+        event(
+          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+        ),
+        event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
+        event(
+          #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
+        ),
+        event(
+          #"{"type":"response.output_item.added","output_index":1,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}"#
+        ),
+        event(
+          #"{"type":"response.output_item.done","output_index":1,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}"#
+        ),
+        event(
+          #"{"type":"response.output_item.added","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock"}}"#
+        ),
+        event(
+          #"{"type":"response.output_item.done","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock","arguments":"{}"}}"#
+        ),
+        completedTerminal(),
+      ]
+    }
+
+    /// A late visible delta arriving after its item has already been declared done.
+    static func deltaAfterDone() -> [Data] {
+      [
+        event(
+          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+        ),
+        event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
+        event(
+          #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
+        ),
+        event(#"{"type":"response.output_text.delta","output_index":0,"delta":"EXTRA"}"#),
+        completedTerminal(),
+      ]
+    }
+
+    /// Announces an item and emits a delta but never states an outcome, so a consumer that abandons
+    /// the iterator mid-stream leaves a turn the model may already have begun.
+    static func slowSuccess() -> [Data] {
+      [
+        event(
+          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+        ),
+        event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
+      ]
+    }
+
+    static func errorBody(_ message: String) -> [Data] {
+      [Data(#"{"error":{"message":"\#(message)"}}"#.utf8)]
+    }
+
+    static func completedTerminal() -> Data {
+      event(
+        #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#
+      )
+    }
+  }
+}

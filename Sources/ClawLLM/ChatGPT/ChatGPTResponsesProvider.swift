@@ -50,7 +50,10 @@ where ClockType.Duration == Duration {
       clock: clock,
       jitter: jitter,
       epochID: epochID,
-      logger: Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() }),
+      // The bootstrapped default handler, never a forced no-op: this is the only path production wires
+      // from `clawd`, so silencing it here would sink the replay-drop diagnostic and every engine line
+      // with it. A nil reporter below then routes drops through this same logger, counts only.
+      logger: Logger(label: "clawd.llm"),
       replayDropsReporter: nil
     )
   }
@@ -293,6 +296,15 @@ private extension ChatGPTResponsesProvider {
         throw ProviderError.terminal(
           status: nil,
           message: "credential header \(name) would replace a wire header"
+        )
+      }
+      // Two spellings of the same allowlisted name (e.g. `Authorization` and `authorization`) collapse
+      // to one canonical key, so a silent overwrite would let sort order decide which bearer reaches
+      // the wire. Reject the collision rather than merge it, quoting only the name.
+      guard merged[canonical] == nil else {
+        throw ProviderError.terminal(
+          status: nil,
+          message: "credential header \(name) was supplied more than once"
         )
       }
       merged[canonical] = authorization.headers[name]
