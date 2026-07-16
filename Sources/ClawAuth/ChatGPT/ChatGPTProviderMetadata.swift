@@ -16,11 +16,16 @@ public enum ChatGPTProviderMetadata {
   /// second copy would let the stored credential key and the model an owner types drift apart.
   public static let providerID = LLMProviderDescriptor.openAIChatGPT.providerID
 
-  /// Reconstructs the registry's own prefix rule if the descriptor ever stops carrying one, rather
-  /// than defaulting to an empty prefix that would silently claim every unqualified model.
-  public static let modelPrefix =
-    LLMProviderDescriptor.openAIChatGPT.qualifiedPrefix
-    ?? "\(LLMProviderID.openAIChatGPT.rawValue)/"
+  /// The registered route's prefix, read from the descriptor rather than restated. A qualified route
+  /// must carry one; a nil would mean the registry stopped qualifying this route, and printing an
+  /// unprefixed assignment would send the owner's model to the unqualified fallback instead — so an
+  /// absent prefix fails loudly here rather than misrouting in silence.
+  public static let modelPrefix: String = {
+    guard let prefix = LLMProviderDescriptor.openAIChatGPT.qualifiedPrefix else {
+      preconditionFailure("The ChatGPT route lost its qualified prefix.")
+    }
+    return prefix
+  }()
 
   // MARK: - OAuth
 
@@ -133,5 +138,43 @@ public enum ChatGPTProviderMetadata {
       redactionValues: redactionValues,
       generation: generation
     )
+  }
+
+  // MARK: - Diagnostics
+
+  /// Sanitizes and redacts vendor-supplied text for display, bounded by the diagnostic cap. The one
+  /// wrapper the two wire clients and the result mapper share, so the byte bound they scrub to and the
+  /// sanitizer they route through cannot drift between them.
+  static func safeDiagnostic(_ raw: String, redacting secrets: [String]) -> String {
+    ChatGPTWireValues.safeRemoteDiagnostic(
+      raw,
+      redacting: secrets,
+      maxBytes: maximumDiagnosticBytes
+    )
+  }
+
+  // MARK: - Transport
+
+  /// Runs one request and turns a transport failure into the caller's own failure type through the
+  /// shared diagnostic — one home, so the load-bearing catch order below cannot drift between the two
+  /// wire clients that depend on it.
+  ///
+  /// Cancellation is rethrown untouched ahead of every catch-all: it is the caller walking away, not
+  /// the vendor failing, and reclassifying it would make an abandoned call look retryable.
+  static func execute<Failure: Error>(
+    _ request: HTTPRequest,
+    on http: any HTTPExecuting,
+    redacting secrets: [String],
+    onTransportFailure asFailure: (String) -> Failure
+  ) async throws -> HTTPResult {
+    do {
+      return try await http.execute(request)
+    } catch let cancellation as CancellationError {
+      throw cancellation
+    } catch let failure as HTTPTransportFailure {
+      throw asFailure(safeDiagnostic(failure.safeMessage, redacting: secrets))
+    } catch {
+      throw asFailure(safeDiagnostic("\(error)", redacting: secrets))
+    }
   }
 }

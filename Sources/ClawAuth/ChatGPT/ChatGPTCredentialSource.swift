@@ -519,17 +519,10 @@ private extension ChatGPTCredentialSource {
       state = .stopping(Stopping())
       return
     }
-    if error is CancellationError {
-      // Nothing was decided, so the snapshot stands — but whatever asked for the refresh still wants
-      // it, and the raw cancellation is what the caller must see.
-      state = .ready(
-        credential: flight.credential,
-        generation: flight.baseGeneration,
-        forceRefresh: true
-      )
-      resumeWaiters(with: .failure(error))
-      return
-    }
+    // A cancellation is not special-cased here. The only one this actor ever delivers comes from
+    // shutdown, which sets the stopping state the guard above already caught; any cancellation
+    // reaching this point is one a waiter never asked for, so it earns the transient cooldown below
+    // rather than a false "you cancelled" handed to live turns.
     guard let cooling = cooling(for: error, from: flight) else {
       finish(.authenticationRequired, resuming: .authenticationRequired)
       return

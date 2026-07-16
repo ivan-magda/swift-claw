@@ -168,9 +168,6 @@ private extension ChatGPTOAuthClient {
   /// The one road to the wire. Caps both bodies at read time — the sanitizer downstream bounds what
   /// it *emits*, not what it is handed, so an unbounded body would already have been materialized by
   /// the time anything trimmed it.
-  ///
-  /// Cancellation is rethrown untouched ahead of every catch-all: it is the caller walking away, not
-  /// the vendor failing, and reclassifying it would make an abandoned login look retryable.
   func send(
     to url: String,
     contentType: String,
@@ -190,18 +187,12 @@ private extension ChatGPTOAuthClient {
       )
     )
 
-    do {
-      return try await http.execute(request)
-    } catch let cancellation as CancellationError {
-      throw cancellation
-    } catch let failure as HTTPTransportFailure {
-      throw ChatGPTOAuthFailure.transport(
-        detail: Self.diagnostic(failure.safeMessage, redacting: secrets)
-      )
-    } catch {
-      throw ChatGPTOAuthFailure.transport(
-        detail: Self.diagnostic("\(error)", redacting: secrets)
-      )
+    return try await ChatGPTProviderMetadata.execute(
+      request,
+      on: http,
+      redacting: secrets
+    ) { detail in
+      ChatGPTOAuthFailure.transport(detail: detail)
     }
   }
 
@@ -292,7 +283,10 @@ private extension ChatGPTOAuthClient {
     // failable read would answer a broken vendor with silence.
     // swiftlint:disable:next optional_data_string_conversion
     let body = String(decoding: response.body, as: UTF8.self)
-    let detail = diagnostic("status \(response.statusCode): \(body)", redacting: secrets)
+    let detail = ChatGPTProviderMetadata.safeDiagnostic(
+      "status \(response.statusCode): \(body)",
+      redacting: secrets
+    )
 
     switch response.statusCode {
     case Wire.throttledStatus:
@@ -319,14 +313,6 @@ private extension ChatGPTOAuthClient {
       return nil
     }
     return min(.seconds(seconds), ChatGPTProviderMetadata.maximumLoginWait)
-  }
-
-  static func diagnostic(_ raw: String, redacting secrets: [String]) -> String {
-    ChatGPTWireValues.safeRemoteDiagnostic(
-      raw,
-      redacting: secrets,
-      maxBytes: ChatGPTProviderMetadata.maximumDiagnosticBytes
-    )
   }
 }
 

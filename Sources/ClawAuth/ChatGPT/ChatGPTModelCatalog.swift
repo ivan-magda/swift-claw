@@ -57,7 +57,7 @@ public struct ChatGPTModelCatalog: Sendable, ChatGPTModelCatalogFetching {
       // swiftlint:disable:next optional_data_string_conversion
       let body = String(decoding: response.body, as: UTF8.self)
       throw ChatGPTCatalogFailure.unavailable(
-        detail: Self.diagnostic(
+        detail: ChatGPTProviderMetadata.safeDiagnostic(
           "status \(response.statusCode): \(body)",
           redacting: authorization.redactionValues
         )
@@ -92,10 +92,6 @@ private extension ChatGPTModelCatalog {
   /// Caps both bodies at read time — a success body is the payload, a non-success one is a
   /// diagnostic worth only its first few kilobytes, and neither is worth materializing whole before
   /// anything trims it.
-  ///
-  /// Cancellation is rethrown untouched ahead of every catch-all: the caller walking away is not the
-  /// vendor failing, and reporting it as an unavailable catalog would tell an owner to set a model
-  /// by hand in answer to their own interrupt.
   func send(authorization: LLMRequestAuthorization) async throws -> HTTPResult {
     let request = HTTPRequest(
       method: .get,
@@ -111,27 +107,13 @@ private extension ChatGPTModelCatalog {
       )
     )
 
-    do {
-      return try await http.execute(request)
-    } catch let cancellation as CancellationError {
-      throw cancellation
-    } catch let failure as HTTPTransportFailure {
-      throw ChatGPTCatalogFailure.unavailable(
-        detail: Self.diagnostic(failure.safeMessage, redacting: authorization.redactionValues)
-      )
-    } catch {
-      throw ChatGPTCatalogFailure.unavailable(
-        detail: Self.diagnostic("\(error)", redacting: authorization.redactionValues)
-      )
+    return try await ChatGPTProviderMetadata.execute(
+      request,
+      on: http,
+      redacting: authorization.redactionValues
+    ) { detail in
+      ChatGPTCatalogFailure.unavailable(detail: detail)
     }
-  }
-
-  static func diagnostic(_ raw: String, redacting secrets: [String]) -> String {
-    ChatGPTWireValues.safeRemoteDiagnostic(
-      raw,
-      redacting: secrets,
-      maxBytes: ChatGPTProviderMetadata.maximumDiagnosticBytes
-    )
   }
 }
 

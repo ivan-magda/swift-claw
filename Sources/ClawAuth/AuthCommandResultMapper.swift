@@ -217,10 +217,6 @@ private extension AuthCommandResultMapper {
   /// of whatever renders rather than a promise made somewhere upstream — which is the only form of
   /// it that survives a new caller.
   static func safe(_ detail: String) -> String {
-    ChatGPTWireValues.safeRemoteDiagnostic(
-      detail,
-      redacting: [],
-      maxBytes: ChatGPTProviderMetadata.maximumDiagnosticBytes
-    )
+    ChatGPTProviderMetadata.safeDiagnostic(detail, redacting: [])
   }
 }
