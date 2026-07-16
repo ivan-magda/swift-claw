@@ -131,16 +131,14 @@ private extension ChatGPTReplayIdentity {
 
 // MARK: - Replay Items
 
-/// One reasoning item as it is persisted. `id` is what the backend called it and is dropped before
-/// the payload is written: `store: false` means no later request can resolve a server item ID, so
-/// keeping it would persist a handle to nothing.
+/// One reasoning item as it is persisted. No server item ID is carried: `store: false` means no
+/// later request can resolve one, and the SSE parser already drops it upstream, so there is nothing
+/// here for a handle to point at.
 struct ChatGPTReasoningItem: Sendable, Equatable {
-  let id: String?
   let encryptedContent: String
   let summary: [String]
 
-  init(id: String? = nil, encryptedContent: String, summary: [String] = []) {
-    self.id = id
+  init(encryptedContent: String, summary: [String] = []) {
     self.encryptedContent = encryptedContent
     self.summary = summary
   }
@@ -149,20 +147,17 @@ struct ChatGPTReasoningItem: Sendable, Equatable {
 /// One assistant message item as it is persisted, carrying the status and phase the route stated so
 /// the replayed item reads back as the turn the backend produced rather than a reconstruction of it.
 struct ChatGPTAssistantMessageItem: Sendable, Equatable {
-  let id: String?
   let role: String
   let status: String
   let phase: String?
   let outputText: [String]
 
   init(
-    id: String? = nil,
     role: String = "assistant",
     status: String = "completed",
     phase: String? = nil,
     outputText: [String]
   ) {
-    self.id = id
     self.role = role
     self.status = status
     self.phase = phase

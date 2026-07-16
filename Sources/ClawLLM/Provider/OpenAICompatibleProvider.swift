@@ -21,8 +21,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
   private let credentials: any LLMCredentialSource
   private let http: any HTTPExecuting & HTTPStreaming
 
-  private let clock: any Clock<Duration>
-  private let jitter: @Sendable (Duration) -> Duration
+  private let backoff: RetryBackoff
 
   /// Developer-facing diagnostics (swift-log). Lines self-tag `[ClawLLM]` via the source module; a
   /// no-op default keeps tests silent unless they inject one. Carries no run id by design — the
@@ -45,8 +44,11 @@ public struct OpenAICompatibleProvider: LLMProvider {
     self.credentials = credentials
     self.http = http
 
-    self.clock = clock
-    self.jitter = jitter
+    self.backoff = RetryBackoff(
+      clock: clock,
+      jitter: jitter,
+      requestTimeoutSeconds: config.requestTimeoutSeconds
+    )
 
     self.logger = logger
   }
@@ -93,33 +95,44 @@ public struct OpenAICompatibleProvider: LLMProvider {
         Self.noteIfProvenClean(error, exposure: exposure)
         let message = redactor.redact(Self.describe(error))
         guard attempt < config.retryBudget else {
-          throw ProviderError.retryable(status: nil, message: message)
+          // The exposure carries whether this attempt was proven clean, so the accounting rides the
+          // failure rather than being guessed from the cause's case downstream.
+          throw exposure.failure(.retryable(status: nil, message: message))
         }
         logger.notice(
           "chat transport error (attempt \(attempt)/\(config.retryBudget)); retrying: \(message)"
         )
-        try await backoff(attempt: attempt, retryAfter: nil)
+        try await backoff.wait(retryAfter: nil, attempt: attempt)
         continue
       }
 
       if (200..<300).contains(result.statusCode) {
-        return try parse(result: result, redactor: redactor)
+        do {
+          return try parse(result: result, redactor: redactor)
+        } catch let cause as ProviderError {
+          // The 2xx head was accepted, so the reply was generated and billed. A body we cannot read
+          // is still a failure that must record conservative usage rather than none, so the exposure
+          // (still `mayHaveStarted` here) travels on the failure.
+          throw exposure.failure(cause)
+        }
       }
 
       // The server answered instead of inferring, so this attempt generated nothing.
       exposure.noteProvenClean()
       let message = redactor.redact(errorMessage(from: result.body))
       guard Self.isRetryableStatus(result.statusCode) else {
-        throw ProviderError.terminal(status: result.statusCode, message: message)
+        throw exposure.failure(.terminal(status: result.statusCode, message: message))
       }
       guard attempt < config.retryBudget else {
-        throw ProviderError.retryable(status: result.statusCode, message: message)
+        // Proven clean above, so the failure carries `notStarted` and no phantom usage is debited for
+        // a reply the server rejected before generating.
+        throw exposure.failure(.retryable(status: result.statusCode, message: message))
       }
 
       logger.notice(
         "chat retryable status \(result.statusCode) (attempt \(attempt)/\(config.retryBudget)); retrying"
       )
-      try await backoff(attempt: attempt, retryAfter: retryAfterDelay(from: result))
+      try await backoff.wait(retryAfter: retryAfterDelay(from: result), attempt: attempt)
     }
   }
 
@@ -337,7 +350,7 @@ private extension OpenAICompatibleProvider {
     noteIfProvenClean(error, exposure: exposure)
     return .failed(
       ProviderFailure(
-        cause: redact(cause(for: error), with: redactor),
+        cause: cause(for: error).redacted(with: redactor),
         accounting: exposure.accounting
       )
     )
@@ -443,27 +456,11 @@ private extension OpenAICompatibleProvider {
   /// Merging under the allowlist's own spelling rather than the source's keeps the dictionary from
   /// seating two casings of one header, which the wire would carry as two headers.
   func headers(for authorization: LLMRequestAuthorization) throws -> [String: String] {
-    var merged = Self.adapterHeaders
-    let owned = Set(merged.keys.map { name in name.lowercased() })
-
-    // Sorted so a source offering several bad headers always names the same one first.
-    for name in authorization.headers.keys.sorted() {
-      let normalized = name.lowercased()
-      guard let canonical = Self.allowedCredentialHeaders[normalized] else {
-        throw ProviderError.terminal(
-          status: nil,
-          message: "credential header \(name) is not accepted by this route"
-        )
-      }
-      guard !owned.contains(normalized) else {
-        throw ProviderError.terminal(
-          status: nil,
-          message: "credential header \(name) would replace a wire header"
-        )
-      }
-      merged[canonical] = authorization.headers[name]
-    }
-    return merged
+    try CredentialHeaderMerge.merged(
+      into: Self.adapterHeaders,
+      allowing: Self.allowedCredentialHeaders,
+      from: authorization
+    )
   }
 
   /// The blocking request. `execute` rather than the `post` convenience because only the general
@@ -517,49 +514,14 @@ private extension OpenAICompatibleProvider {
 // MARK: - Retry
 
 private extension OpenAICompatibleProvider {
-  static let baseBackoffSeconds = 0.5
-  static let maxBackoffSeconds = 30.0
-
+  /// The server's `Retry-After` hint as a `Duration`, honoring the millisecond form some routes send
+  /// before falling back to whole/fractional seconds. The wait itself clamps this hint, so the raw
+  /// value is returned here without a ceiling of its own.
   func retryAfterDelay(from result: HTTPResult) -> Duration? {
     if let milliseconds = result.getHeader(for: "retry-after-ms").flatMap(Double.init) {
       return .milliseconds(milliseconds)
     }
     return result.getHeader(for: "retry-after").flatMap(Double.init).map { .seconds($0) }
-  }
-
-  func backoff(attempt: Int, retryAfter: Duration?) async throws {
-    if let retryAfter {
-      try await clock.sleep(for: retryAfter)
-      return
-    }
-    let exponentialSeconds = Self.baseBackoffSeconds * pow(2, Double(attempt - 1))
-    let capped = Duration.seconds(min(exponentialSeconds, Self.maxBackoffSeconds))
-    try await clock.sleep(for: jitter(capped))
-  }
-}
-
-// MARK: - Redaction
-
-private extension OpenAICompatibleProvider {
-  /// Scrubs the quoted diagnostic a failure carries. The text-free cases have nothing to scrub —
-  /// carrying no free text is exactly what makes them safe — so they pass through unchanged.
-  static func redact(
-    _ providerError: ProviderError,
-    with redactor: SecretRedactor
-  ) -> ProviderError {
-    switch providerError {
-    case .connectFailed(let message):
-      return .connectFailed(message: redactor.redact(message))
-    case .retryable(let status, let message):
-      return .retryable(status: status, message: redactor.redact(message))
-    case .rejected(let status, let message):
-      return .rejected(status: status, message: redactor.redact(message))
-    case .terminal(let status, let message):
-      return .terminal(status: status, message: redactor.redact(message))
-    case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .invalidProviderState:
-      return providerError
-    }
   }
 }
 

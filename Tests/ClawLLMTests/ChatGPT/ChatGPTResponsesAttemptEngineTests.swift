@@ -1,3 +1,4 @@
+import ClawAuth
 import ClawCore
 import ClawTestSupport
 import Foundation
@@ -394,6 +395,53 @@ import Testing
       Issue.record("expected a conservative cancellation, got \(outcome)")
     }
   }
+
+  // MARK: - Credential failures
+
+  @Test(.timeLimit(.minutes(1)))
+  func aThrottledCredentialIsQuotaLimitedNotAReLoginPrompt() async {
+    // given — the credential source is in its mandated cooldown after a throttling token-endpoint
+    // response, so authorization throws a typed throttle before any request is encoded
+
+    // when
+    let outcome = await runCredentialFailure(.throttled(retryAfter: .seconds(12)))
+
+    // then — a healthy credential in cooldown surfaces as quota, carrying the bounded wait, and is
+    // never told to re-login; nothing reached the wire, so it is notStarted
+    #expect(failureCause(outcome) == .quotaLimited(retryAfterSeconds: 12))
+    #expect(accounting(outcome) == .notStarted)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func aTransientCredentialOutageIsRetryableNotAReLoginPrompt() async {
+    // given — the refresh flight could not complete for a reason that may not recur
+
+    // when
+    let outcome = await runCredentialFailure(
+      .temporarilyUnavailable(retryAfter: .seconds(5), detail: "the refresh did not complete")
+    )
+
+    // then — a transient outage of an intact credential is retryable, not a login failure
+    guard case .retryable = failureCause(outcome) else {
+      Issue.record(
+        "expected a retryable transient cause, got \(String(describing: failureCause(outcome)))"
+      )
+      return
+    }
+    #expect(accounting(outcome) == .notStarted)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func aDeadCredentialStillRequestsReLogin() async {
+    // given — the stored credential is finished and only a new login repairs it
+
+    // when
+    let outcome = await runCredentialFailure(.authenticationRequired)
+
+    // then — the one condition that genuinely needs a login keeps the terminal prompt
+    #expect(failureCause(outcome) == .authenticationRequired)
+    #expect(accounting(outcome) == .notStarted)
+  }
 }
 
 // MARK: - Assertions
@@ -432,6 +480,36 @@ private func accounting(_ outcome: LLMStreamTermination) -> ProviderFailureAccou
   case .completed:
     return nil
   }
+}
+
+/// Runs the engine against a credential source that throws `error` before any request is encoded, so
+/// the outcome is purely how the engine maps that credential failure.
+private func runCredentialFailure(_ error: ChatGPTCredentialError) async -> LLMStreamTermination {
+  let profileID = fixedUUID("00000000-0000-0000-0000-0000000000AA")
+  let identity = ChatGPTReplayIdentity(
+    profileID: profileID,
+    wireModel: "gpt-5",
+    epoch: fixedUUID("11111111-1111-1111-1111-111111111111")
+  )
+  let engine = ChatGPTResponsesAttemptEngine(
+    credentials: ThrowingCredentialSource(error),
+    http: ScriptedHTTPExecutor([]),
+    clock: ScriptedClock { _ in },
+    jitter: { $0 },
+    retryBudget: 3,
+    requestTimeoutSeconds: 30
+  )
+  let plan = ChatGPTResponsesAttemptPlan(
+    codec: ChatGPTProviderStateCodec(),
+    identity: identity,
+    profileID: profileID,
+    wireModel: "gpt-5",
+    encodeRequest: { _, _, _ in
+      Issue.record("no request should be encoded when authorization fails")
+      throw CancellationError()
+    }
+  )
+  return await engine.run(plan: plan) { _ in }
 }
 
 // MARK: - Harness
@@ -574,6 +652,24 @@ private actor GenerationRecordingCredentialSource: LLMCredentialSource {
       generationValue += 1
     }
   }
+
+  func shutdown() async throws {}
+}
+
+/// A credential source whose `authorization()` always throws a fixed typed credential error, so a
+/// test can prove how the engine maps each `ChatGPTCredentialError` case without a wire script.
+private struct ThrowingCredentialSource: LLMCredentialSource {
+  private let error: ChatGPTCredentialError
+
+  init(_ error: ChatGPTCredentialError) {
+    self.error = error
+  }
+
+  func authorization() async throws -> LLMRequestAuthorization {
+    throw error
+  }
+
+  func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {}
 
   func shutdown() async throws {}
 }

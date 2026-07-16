@@ -270,7 +270,7 @@ private extension ChatGPTResponsesProvider {
     userAgent: String,
     sessionID: String?
   ) throws -> [String: String] {
-    var merged: [String: String] = [
+    var adapterHeaders: [String: String] = [
       "Content-Type": "application/json",
       "Accept": "text/event-stream",
       "OpenAI-Beta": "responses=experimental",
@@ -278,37 +278,13 @@ private extension ChatGPTResponsesProvider {
       "User-Agent": userAgent,
     ]
     if let sessionID {
-      merged["session_id"] = sessionID
-      merged["x-client-request-id"] = sessionID
+      adapterHeaders["session_id"] = sessionID
+      adapterHeaders["x-client-request-id"] = sessionID
     }
-    let owned = Set(merged.keys.map { name in name.lowercased() })
-
-    // Sorted so a source offering several bad headers always names the same one first.
-    for name in authorization.headers.keys.sorted() {
-      let normalized = name.lowercased()
-      guard let canonical = allowedCredentialHeaders[normalized] else {
-        throw ProviderError.terminal(
-          status: nil,
-          message: "credential header \(name) is not accepted by this route"
-        )
-      }
-      guard owned.contains(normalized) == false else {
-        throw ProviderError.terminal(
-          status: nil,
-          message: "credential header \(name) would replace a wire header"
-        )
-      }
-      // Two spellings of the same allowlisted name (e.g. `Authorization` and `authorization`) collapse
-      // to one canonical key, so a silent overwrite would let sort order decide which bearer reaches
-      // the wire. Reject the collision rather than merge it, quoting only the name.
-      guard merged[canonical] == nil else {
-        throw ProviderError.terminal(
-          status: nil,
-          message: "credential header \(name) was supplied more than once"
-        )
-      }
-      merged[canonical] = authorization.headers[name]
-    }
-    return merged
+    return try CredentialHeaderMerge.merged(
+      into: adapterHeaders,
+      allowing: allowedCredentialHeaders,
+      from: authorization
+    )
   }
 }

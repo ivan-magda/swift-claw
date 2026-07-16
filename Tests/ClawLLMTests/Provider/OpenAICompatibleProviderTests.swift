@@ -247,8 +247,10 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.terminal(let status, _) = error else { return false }
-      return status == 400
+      // The buffered path wraps its cause in a ProviderFailure that carries the accounting: a clean
+      // 4xx head generated nothing, so the failure is notStarted.
+      guard case .terminal(let status, _)? = ProviderError.cause(of: error) else { return false }
+      return status == 400 && ProviderFailureAccounting.classify(error) == .notStarted
     }
     let attempts = await exec.recorded.count
     #expect(attempts == 1)
@@ -286,8 +288,10 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.retryable(let status, _) = error else { return false }
-      return status == 500
+      // Each 500 was proven clean before the exhausting throw, so the wrapped failure charges no
+      // phantom usage — it is notStarted, not the case-guessed mayHaveStarted.
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
+      return status == 500 && ProviderFailureAccounting.classify(error) == .notStarted
     }
     let attempts = await exec.recorded.count
     #expect(attempts == 3)
@@ -310,7 +314,7 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.retryable(let status, _) = error else { return false }
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
       return status == 500
     }
 
@@ -335,7 +339,7 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.retryable(_, let message) = error else { return false }
+      guard case .retryable(_, let message)? = ProviderError.cause(of: error) else { return false }
       thrownMessage = message
       return true
     }
@@ -605,7 +609,7 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.retryable(_, let message) = error else { return false }
+      guard case .retryable(_, let message)? = ProviderError.cause(of: error) else { return false }
       thrownMessage = message
       return true
     }

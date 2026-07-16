@@ -501,11 +501,10 @@ import Testing
     // given
     let items = ChatGPTReplayItems(
       reasoning: [
-        ChatGPTReasoningItem(id: "rs_abc123", encryptedContent: "ENC", summary: ["thought"])
+        ChatGPTReasoningItem(encryptedContent: "ENC", summary: ["thought"])
       ],
       assistantMessages: [
         ChatGPTAssistantMessageItem(
-          id: "msg_def456",
           role: "assistant",
           status: "completed",
           phase: "final",
@@ -549,16 +548,16 @@ import Testing
     )
   }
 
-  /// Server item IDs are dropped at the persistence boundary. The absence assertion is against the
-  /// rendered payload, and the round-trip is what proves nothing else went with them.
+  /// No server item ID ever reaches the persisted payload: the durable shape carries no `id` key, and
+  /// the round-trip proves the material it does carry survives intact.
   @Test func serverItemIDsAreRemovedBeforePersistence() throws {
     // given
     let items = ChatGPTReplayItems(
       reasoning: [
-        ChatGPTReasoningItem(id: "rs_zanzibar", encryptedContent: "ENC", summary: ["s"])
+        ChatGPTReasoningItem(encryptedContent: "ENC", summary: ["s"])
       ],
       assistantMessages: [
-        ChatGPTAssistantMessageItem(id: "msg_quartzite", outputText: ["hi"])
+        ChatGPTAssistantMessageItem(outputText: ["hi"])
       ]
     )
 
@@ -571,11 +570,7 @@ import Testing
     let decoded = try #require(Self.decodeItems(state))
 
     // then
-    #expect(rendered.contains("rs_zanzibar") == false)
-    #expect(rendered.contains("msg_quartzite") == false)
     #expect(rendered.contains("\"id\"") == false)
-    #expect(decoded.reasoning.first?.id == nil)
-    #expect(decoded.assistantMessages.first?.id == nil)
     #expect(decoded.reasoning.first?.encryptedContent == "ENC")
     #expect(decoded.reasoning.first?.summary == ["s"])
     #expect(decoded.assistantMessages.first?.outputText == ["hi"])

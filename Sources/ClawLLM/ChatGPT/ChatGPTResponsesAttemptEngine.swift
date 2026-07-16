@@ -48,10 +48,8 @@ struct ChatGPTResponsesAttemptPlan: Sendable {
 struct ChatGPTResponsesAttemptEngine: Sendable {
   private let credentials: any LLMCredentialSource
   private let http: any HTTPStreaming
-  private let clock: any Clock<Duration>
-  private let jitter: @Sendable (Duration) -> Duration
+  private let backoff: RetryBackoff
   private let retryBudget: Int
-  private let requestTimeoutSeconds: Int
   private let logger: Logger
 
   init(
@@ -65,10 +63,12 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
   ) {
     self.credentials = credentials
     self.http = http
-    self.clock = clock
-    self.jitter = jitter
+    self.backoff = RetryBackoff(
+      clock: clock,
+      jitter: jitter,
+      requestTimeoutSeconds: requestTimeoutSeconds
+    )
     self.retryBudget = retryBudget
-    self.requestTimeoutSeconds = requestTimeoutSeconds
     self.logger = logger
   }
 
@@ -93,7 +93,7 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
         continue
       case .retryAfter(let delay):
         do {
-          try await backoff(after: delay, attempt: state.attempt)
+          try await backoff.wait(retryAfter: delay, attempt: state.attempt)
         } catch {
           // Retries only ever follow a clean reset, so a cancelled backoff owes no usage.
           return .cancelled(.notStarted)
@@ -141,9 +141,16 @@ private extension ChatGPTResponsesAttemptEngine {
       authorization = try await credentials.authorization()
     } catch is CancellationError {
       return .stop(.cancelled(.notStarted))
+    } catch let credentialError as ChatGPTCredentialError {
+      // No request goes out without a credential, so nothing was exposed. A throttle or a transient
+      // token-endpoint fault must not be reported as "log in again": it heals on its own, so it maps
+      // to a quota/transient cause. Only a genuinely dead credential keeps authenticationRequired.
+      return .stop(
+        .failed(ProviderFailure(cause: Self.cause(for: credentialError), accounting: .notStarted))
+      )
     } catch {
-      // No request goes out without a credential, so nothing was exposed. The cause names the state
-      // rather than the source's error, keeping any key material out of the terminal.
+      // An unrecognized authorization failure names the state rather than the source's error,
+      // keeping any key material out of the terminal, and stays conservative: a login repairs it.
       return .stop(
         .failed(ProviderFailure(cause: .authenticationRequired, accounting: .notStarted))
       )
@@ -229,6 +236,36 @@ private extension ChatGPTResponsesAttemptEngine {
   }
 }
 
+// MARK: - Credential failure mapping
+
+private extension ChatGPTResponsesAttemptEngine {
+  /// The vendor-neutral cause a credential failure surfaces. The source distinguishes a dead
+  /// credential from a throttle or a brief token-endpoint outage; that distinction has to survive to
+  /// the owner, or a healthy credential in cooldown gets a re-login prompt for a condition that heals
+  /// itself. Every `ChatGPTCredentialError` is documented owner-safe, so mapping its identity leaks
+  /// nothing — and only `.authenticationRequired` earns the terminal login prompt.
+  static func cause(for credentialError: ChatGPTCredentialError) -> ProviderError {
+    switch credentialError {
+    case .authenticationRequired:
+      return .authenticationRequired
+    case .throttled(let retryAfter):
+      return .quotaLimited(retryAfterSeconds: Self.wholeSeconds(retryAfter))
+    case .temporarilyUnavailable, .persistenceFailed, .shuttingDown:
+      // The credential is intact; the token endpoint is briefly unhealthy or the daemon is stopping.
+      // A retry heals it, so this is a transient outage rather than a login failure.
+      return .retryable(status: nil, message: "the ChatGPT credential was temporarily unavailable")
+    }
+  }
+
+  /// A bounded wait rounded up to whole seconds, so a sub-second cooldown still reads as "try again
+  /// in 1 second" rather than "0 seconds".
+  static func wholeSeconds(_ duration: Duration) -> Int {
+    let components = duration.components
+    let seconds = Int(components.seconds)
+    return components.attoseconds > 0 ? seconds + 1 : seconds
+  }
+}
+
 // MARK: - Response context
 
 private extension ChatGPTResponsesAttemptEngine {
@@ -260,27 +297,9 @@ private extension ChatGPTResponsesAttemptEngine {
         return .retryable(status: nil, message: redactor.redact(transport.safeMessage))
       }
       if let providerError = error as? ProviderError {
-        return redact(providerError)
+        return providerError.redacted(with: redactor)
       }
       return .retryable(status: nil, message: redactor.redact("\(error)"))
-    }
-
-    /// Scrubs the quoted diagnostic a cause carries. The text-free cases have nothing to scrub, so
-    /// they pass through unchanged.
-    func redact(_ providerError: ProviderError) -> ProviderError {
-      switch providerError {
-      case .connectFailed(let message):
-        return .connectFailed(message: redactor.redact(message))
-      case .retryable(let status, let message):
-        return .retryable(status: status, message: redactor.redact(message))
-      case .rejected(let status, let message):
-        return .rejected(status: status, message: redactor.redact(message))
-      case .terminal(let status, let message):
-        return .terminal(status: status, message: redactor.redact(message))
-      case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-        .invalidProviderState:
-        return providerError
-      }
     }
   }
 
@@ -446,9 +465,6 @@ private extension ChatGPTResponsesAttemptEngine {
 // MARK: - Head classification
 
 private extension ChatGPTResponsesAttemptEngine {
-  /// The clean-rejection code the poisoned-replay-state recovery keys on.
-  static let invalidEncryptedContentCode = "invalid_encrypted_content"
-
   /// A non-success head reduced to what the classifier needs: its status, its bounded `Retry-After`,
   /// and the sanitized `code`/`message` from its diagnostic body.
   struct HeadDiagnosis: Sendable {
@@ -521,7 +537,7 @@ private extension ChatGPTResponsesAttemptEngine {
       return .fail(.accessDenied)
 
     case 429:
-      let clamped = clampedRetryAfterSeconds(diagnosis.retryAfterSeconds)
+      let clamped = backoff.clampedRetryAfterSeconds(diagnosis.retryAfterSeconds)
       guard canRetry else {
         return .fail(.quotaLimited(retryAfterSeconds: clamped))
       }
@@ -545,11 +561,13 @@ private extension ChatGPTResponsesAttemptEngine {
     canRetry: Bool,
     recoveryUsed: Bool
   ) -> HeadDecision {
-    guard diagnosis.code == Self.invalidEncryptedContentCode else {
+    guard diagnosis.code == ChatGPTRemoteFailure.invalidEncryptedContentCode else {
       return .fail(.terminal(status: diagnosis.status, message: diagnosis.message))
     }
+    // The state is poisoned, but the one recovery is already spent (or the budget is), so it can
+    // never heal within this turn. Surface it as invalid replay state so a fresh session drops it.
     guard recoveryUsed == false, canRetry else {
-      return .fail(.terminal(status: diagnosis.status, message: diagnosis.message))
+      return .fail(.invalidProviderState)
     }
     return .recoverStateFree
   }
@@ -563,35 +581,6 @@ private extension ChatGPTResponsesAttemptEngine {
       return nil
     }
     return seconds
-  }
-}
-
-// MARK: - Backoff
-
-private extension ChatGPTResponsesAttemptEngine {
-  static let baseBackoffSeconds = 0.5
-  static let maxBackoffSeconds = 30.0
-  static let maxRetryAfterSeconds = 30
-
-  /// `Retry-After` is honored as-is once clamped; otherwise the delay grows exponentially and is
-  /// jittered. The clock is injected, so a test drives every wait without real time passing.
-  func backoff(after retryAfter: Duration?, attempt: Int) async throws {
-    if let retryAfter {
-      try await clock.sleep(for: retryAfter)
-      return
-    }
-    let exponentialSeconds = Self.baseBackoffSeconds * pow(2, Double(attempt - 1))
-    let capped = Duration.seconds(min(exponentialSeconds, Self.maxBackoffSeconds))
-    try await clock.sleep(for: jitter(capped))
-  }
-
-  /// Clamps a server hint to the smaller of 30 seconds and the configured request timeout. The
-  /// runtime's remaining-turn deadline can still cancel the wait earlier.
-  func clampedRetryAfterSeconds(_ requested: Int?) -> Int? {
-    guard let requested else {
-      return nil
-    }
-    return min(requested, min(Self.maxRetryAfterSeconds, requestTimeoutSeconds))
   }
 }
 

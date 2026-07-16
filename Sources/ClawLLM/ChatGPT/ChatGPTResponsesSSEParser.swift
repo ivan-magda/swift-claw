@@ -380,8 +380,19 @@ struct ChatGPTResponsesTerminal: Sendable, Equatable {
 /// evidence, and the accumulator that puts it in front of an owner is what owes it a sanitizing
 /// pass.
 struct ChatGPTRemoteFailure: Sendable, Equatable {
+  /// The clean-rejection code the poisoned-replay-state recovery keys on, shared with the head
+  /// classifier so the head path and the in-band path recognize the same rejection.
+  static let invalidEncryptedContentCode = "invalid_encrypted_content"
+
   let code: String?
   let message: String?
+
+  /// Whether this failure is the backend refusing the replayed encrypted state. Such a turn can be
+  /// re-issued without that state, so it maps to `invalidProviderState` rather than a generic
+  /// terminal — the failure downstream turns into actionable `/new` guidance.
+  var isInvalidProviderState: Bool {
+    code == Self.invalidEncryptedContentCode
+  }
 }
 
 // MARK: - Wire Types

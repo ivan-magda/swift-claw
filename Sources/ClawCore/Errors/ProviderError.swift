@@ -27,6 +27,30 @@ public enum ProviderError: Error, Sendable, Equatable {
   case invalidProviderState
 }
 
+// MARK: - Redaction
+
+extension ProviderError {
+  /// Scrubs the quoted diagnostic a message-bearing cause carries, through the supplied redactor.
+  /// The text-free cases carry no free text at all — that is exactly what makes them safe to surface
+  /// — so they pass through unchanged. One home for the classification so the two wire adapters
+  /// cannot disagree about which cases hold secret-bearing text.
+  public func redacted(with redactor: SecretRedactor) -> ProviderError {
+    switch self {
+    case .connectFailed(let message):
+      return .connectFailed(message: redactor.redact(message))
+    case .retryable(let status, let message):
+      return .retryable(status: status, message: redactor.redact(message))
+    case .rejected(let status, let message):
+      return .rejected(status: status, message: redactor.redact(message))
+    case .terminal(let status, let message):
+      return .terminal(status: status, message: redactor.redact(message))
+    case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
+      .invalidProviderState:
+      return self
+    }
+  }
+}
+
 // MARK: - Vendor-neutral failure reading
 
 extension ProviderError {

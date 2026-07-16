@@ -19,6 +19,7 @@ struct ChatGPTResponsesAccumulator: Sendable {
   private var items: [Int: OutputItem] = [:]
   private var order: [Int] = []
   private var accumulatedOutputBytes = 0
+  private var observedTokens = 0
   private var replayBytes = 0
   private var replayOverflowed = false
   private var isDecided = false
@@ -39,19 +40,12 @@ struct ChatGPTResponsesAccumulator: Sendable {
   /// from text that has already passed the accumulated-output cap, through the estimator the rest of
   /// the daemon accounts with. Per item, so each item's rounding adds headroom rather than shaving
   /// it — the same way input estimation sums per message.
+  ///
+  /// Maintained incrementally in `update(_:mutate:)` rather than recomputed here: the caller reads it
+  /// once per delivered chunk, and re-walking every item's whole text on each read would turn a long
+  /// reply's stream consumption quadratic.
   var observedCompletionTokens: Int {
-    order.reduce(0) { running, index in
-      guard let item = items[index] else {
-        return running
-      }
-      return SaturatingArithmetic.sum(
-        running,
-        SaturatingArithmetic.sum(
-          TokenEstimator.estimateTokens(forText: item.visibleText),
-          TokenEstimator.estimateTokens(forText: item.argumentText)
-        )
-      )
-    }
+    observedTokens
   }
 
   /// The bytes held in the raw per-item delta buffers, whether or not any of them can reach the
@@ -133,6 +127,9 @@ private struct OutputItem {
   var arguments: String?
   var done: ChatGPTStreamItem?
   var countedBytes = 0
+  /// This item's contribution to the running completion-token estimate, recomputed alongside
+  /// `countedBytes` when the item changes so the accumulator's per-chunk read stays O(1).
+  var tokenEstimate = 0
 
   /// Whether text for this item can ever reach the owner. Phase and type are frozen at first
   /// sighting, so an item that fails this can never later become visible — its text is read nowhere
@@ -167,6 +164,15 @@ private struct OutputItem {
 
   var budgetBytes: Int {
     SaturatingArithmetic.sum(visibleText.utf8.count, argumentText.utf8.count)
+  }
+
+  /// The completion tokens this item's visible text and tool arguments estimate to, each rounded on
+  /// its own so the per-item headroom matches the summed-per-message input estimate.
+  var estimatedTokens: Int {
+    SaturatingArithmetic.sum(
+      TokenEstimator.estimateTokens(forText: visibleText),
+      TokenEstimator.estimateTokens(forText: argumentText)
+    )
   }
 }
 
@@ -312,15 +318,18 @@ private extension ChatGPTResponsesAccumulator {
     guard var item = items[index] else {
       throw Self.unregisteredItem
     }
-    let released = accumulatedOutputBytes - item.countedBytes
+    let releasedBytes = accumulatedOutputBytes - item.countedBytes
+    let releasedTokens = observedTokens - item.tokenEstimate
     mutate(&item)
     item.countedBytes = item.budgetBytes
+    item.tokenEstimate = item.estimatedTokens
 
-    let total = SaturatingArithmetic.sum(released, item.countedBytes)
+    let total = SaturatingArithmetic.sum(releasedBytes, item.countedBytes)
     guard total <= ChatGPTResponsesBounds.maximumAccumulatedOutputBytes else {
       throw Self.accumulatedOutputTooLarge
     }
     accumulatedOutputBytes = total
+    observedTokens = SaturatingArithmetic.sum(releasedTokens, item.tokenEstimate)
     items[index] = item
   }
 }
@@ -559,6 +568,11 @@ private extension ChatGPTResponsesAccumulator {
     _ remote: ChatGPTRemoteFailure?,
     fallback: String = "the ChatGPT reply failed"
   ) -> ProviderError {
+    // The backend refusing the replayed encrypted state is not a generic terminal: a fresh session
+    // drops that state, so it surfaces as invalid replay state and its downstream `/new` guidance.
+    if remote?.isInvalidProviderState == true {
+      return .invalidProviderState
+    }
     guard let message = remote?.message, message.isEmpty == false else {
       return Self.terminal(fallback)
     }
