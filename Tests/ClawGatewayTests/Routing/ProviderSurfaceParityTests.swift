@@ -122,9 +122,12 @@ import Testing
     let parseQueue = try inMemoryQueue()
     let turnUsage = UsageStoreGRDB(writer: turnQueue)
     let parseUsage = UsageStoreGRDB(writer: parseQueue)
-    let agent = makeAgent(provider: FailingProvider(.authenticationRequired), usageStore: turnUsage)
+    let agent = makeAgent(
+      provider: SequenceProvider([], then: ProviderError.authenticationRequired),
+      usageStore: turnUsage
+    )
     let parser = makeParser(
-      provider: FailingProvider(.authenticationRequired),
+      provider: SequenceProvider([], then: ProviderError.authenticationRequired),
       usageStore: parseUsage
     )
     let parseSession = try claimSession(parseQueue)
@@ -163,11 +166,11 @@ import Testing
     let turnQueue = try inMemoryQueue()
     let parseQueue = try inMemoryQueue()
     let agent = makeAgent(
-      provider: FailingProvider(.quotaLimited(retryAfterSeconds: 30)),
+      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 30)),
       usageStore: UsageStoreGRDB(writer: turnQueue)
     )
     let parser = makeParser(
-      provider: FailingProvider(.quotaLimited(retryAfterSeconds: 30)),
+      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 30)),
       usageStore: UsageStoreGRDB(writer: parseQueue)
     )
     let parseSession = try claimSession(parseQueue)

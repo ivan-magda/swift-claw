@@ -4,6 +4,8 @@ import Testing
 
 @testable import ClawLLM
 
+private typealias Support = ChatGPTProviderTestSupport
+
 @Suite struct ChatGPTResponsesRequestEncoderTests {
   /// The whole body, byte for byte, for a request that advertises no tools. Every value here is a
   /// literal rather than a reference to the constant that produced it: an assertion that re-derives
@@ -56,7 +58,7 @@ import Testing
         ChatMessage(role: .assistant, content: "It is noon."),
       ],
       maxOutputTokens: 4096,
-      tools: [webFetchTool, clockTool]
+      tools: [Support.webFetchTool, Support.clockTool]
     )
 
     // when
@@ -102,7 +104,7 @@ import Testing
       model: "gpt-5",
       messages: messages,
       maxOutputTokens: 4096,
-      tools: [clockTool]
+      tools: [Support.clockTool]
     )
 
     // when
@@ -301,30 +303,6 @@ import Testing
 
 extension ChatGPTResponsesRequestEncoderTests {
   fileprivate var encoder: ChatGPTResponsesRequestEncoder { ChatGPTResponsesRequestEncoder() }
-
-  fileprivate var webFetchTool: ToolDefinition {
-    ToolDefinition(
-      name: "web_fetch",
-      description: "Fetch a URL.",
-      parameters: .object([
-        "type": .string("object"),
-        "properties": .object(["url": .object(["type": .string("string")])]),
-        "required": .array([.string("url")]),
-      ]),
-      egressClass: .arbitraryDestination,
-      riskLevel: .ask
-    )
-  }
-
-  fileprivate var clockTool: ToolDefinition {
-    ToolDefinition(
-      name: "clock",
-      description: "Read the clock.",
-      parameters: .object(["type": .string("object")]),
-      egressClass: .none,
-      riskLevel: .safe
-    )
-  }
 
   fileprivate func encodeBody(_ request: ChatRequest) throws -> String {
     try #require(String(data: encoder.encode(request: request), encoding: .utf8))

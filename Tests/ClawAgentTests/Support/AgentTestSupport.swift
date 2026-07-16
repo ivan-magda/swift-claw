@@ -49,27 +49,6 @@ actor StubProvider: LLMProvider {
   }
 }
 
-/// Returns scripted responses in order, then throws a scripted `ProviderFailure` — so a test can
-/// exercise accounting for a tool loop whose first round records usage and whose next round fails.
-actor RespondThenFailProvider: LLMProvider {
-  private var responses: [ChatResponse]
-  private let failure: ProviderFailure
-  private(set) var calls = 0
-
-  init(responses: [ChatResponse], then failure: ProviderFailure) {
-    self.responses = responses
-    self.failure = failure
-  }
-
-  func complete(request: ChatRequest) async throws -> ChatResponse {
-    calls += 1
-    guard responses.isEmpty == false else {
-      throw failure
-    }
-    return responses.removeFirst()
-  }
-}
-
 /// A provider whose `complete` blocks until `gate` is released (i.e. until typing has fired once).
 actor GatedProvider: LLMProvider {
   private let gate: TypingReleaseGate

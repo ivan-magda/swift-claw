@@ -341,7 +341,9 @@ import Testing
 
   @Test func authenticationFailureReturnsTheTypedResultWithoutDebiting() async throws {
     // given — the credential is refused before any inference (a clean, not-started head)
-    let fixture = try makeFixture(provider: FailingProvider(.authenticationRequired))
+    let fixture = try makeFixture(
+      provider: SequenceProvider([], then: ProviderError.authenticationRequired)
+    )
 
     // when
     let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
@@ -353,7 +355,7 @@ import Testing
 
   @Test func accessDenialReturnsTheTypedResultWithoutDebiting() async throws {
     // given
-    let fixture = try makeFixture(provider: FailingProvider(.accessDenied))
+    let fixture = try makeFixture(provider: SequenceProvider([], then: ProviderError.accessDenied))
 
     // when / then
     #expect(
@@ -364,7 +366,9 @@ import Testing
 
   @Test func quotaLimitReturnsTheRetryHintWithoutDebiting() async throws {
     // given
-    let fixture = try makeFixture(provider: FailingProvider(.quotaLimited(retryAfterSeconds: 15)))
+    let fixture = try makeFixture(
+      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 15))
+    )
 
     // when / then — the bounded hint rides the typed outcome; nothing was generated, nothing debited
     #expect(
@@ -390,7 +394,10 @@ import Testing
   @Test func terminalRejectStaysTheGenericOutageWithoutDebiting() async throws {
     // given — a message-carrying terminal reject; its remote text must never reach a typed reply
     let fixture = try makeFixture(
-      provider: FailingProvider(.terminal(status: 400, message: "internal provider detail"))
+      provider: SequenceProvider(
+        [],
+        then: ProviderError.terminal(status: 400, message: "internal provider detail")
+      )
     )
 
     // when

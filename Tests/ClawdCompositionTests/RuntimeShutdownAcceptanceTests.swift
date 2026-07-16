@@ -279,22 +279,3 @@ private actor StepRecorder {
     events.append(name)
   }
 }
-
-private struct FatalExitSentinel: Error {}
-
-private final class ExitCodeBox: @unchecked Sendable {
-  private let lock = NSLock()
-  private var stored: Int32?
-
-  var value: Int32? {
-    lock.lock()
-    defer { lock.unlock() }
-    return stored
-  }
-
-  func set(_ code: Int32) {
-    lock.lock()
-    defer { lock.unlock() }
-    stored = code
-  }
-}

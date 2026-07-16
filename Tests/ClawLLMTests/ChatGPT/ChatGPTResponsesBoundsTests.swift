@@ -4,6 +4,8 @@ import Testing
 
 @testable import ClawLLM
 
+private typealias Support = ChatGPTProviderTestSupport
+
 /// Every bound the route reads a stream under, exercised exactly at its cap and one byte, event, or
 /// item over it. The pairs matter more than the values: a cap tested only from the failing side
 /// passes just as well when the guard rejects everything.
@@ -113,7 +115,7 @@ import Testing
     let events = try accumulator.consume(try parser.push(Data(stream.utf8)))
 
     // then
-    #expect(Self.finished(events) != nil)
+    #expect(Support.finished(events) != nil)
   }
 
   @Test func oneOutputItemOverTheCapIsRejected() throws {
@@ -138,7 +140,7 @@ import Testing
 
     // when
     let events = try Self.deliver(stream, through: &parser, into: &accumulator)
-    let response = try #require(Self.finished(events))
+    let response = try #require(Support.finished(events))
 
     // then
     #expect(response.content.utf8.count == ChatGPTResponsesBounds.maximumAccumulatedOutputBytes)
@@ -237,7 +239,7 @@ import Testing
 
     // when
     let events = try accumulator.consume(try parser.push(Data(stream.utf8)))
-    let response = try #require(Self.finished(events))
+    let response = try #require(Support.finished(events))
     let state = try #require(response.providerState)
 
     // then
@@ -259,7 +261,7 @@ import Testing
 
     // when
     let events = try accumulator.consume(try parser.push(Data(stream.utf8)))
-    let response = try #require(Self.finished(events))
+    let response = try #require(Support.finished(events))
     let state = try #require(response.providerState)
     let items = try #require(ChatGPTDurableReplayPayload.decode(state.payload))
 
@@ -281,7 +283,7 @@ import Testing
 
     // when
     let events = try Self.deliver(stream, through: &parser, into: &accumulator)
-    let response = try #require(Self.finished(events))
+    let response = try #require(Support.finished(events))
     let state = try #require(response.providerState)
     let items = try #require(ChatGPTDurableReplayPayload.decode(state.payload))
 
@@ -312,7 +314,7 @@ import Testing
       thrown = error
     }
     let failure = try #require(thrown as? ProviderError)
-    let message = try #require(Self.message(of: failure))
+    let message = try #require(Support.message(of: failure))
 
     // then
     #expect(message.contains("sk-live-") == false)
@@ -344,28 +346,6 @@ extension ChatGPTResponsesBoundsTests {
     ChatGPTResponsesAccumulator(
       identity: ChatGPTReplayIdentity(profileID: UUID(), wireModel: "gpt-5", epoch: UUID())
     )
-  }
-
-  fileprivate static func finished(_ events: [StreamEvent]) -> ChatResponse? {
-    events.compactMap { event -> ChatResponse? in
-      guard case .finished(let response) = event else {
-        return nil
-      }
-      return response
-    }
-    .last
-  }
-
-  fileprivate static func message(of failure: ProviderError) -> String? {
-    switch failure {
-    case .connectFailed(let message):
-      return message
-    case .retryable(_, let message), .rejected(_, let message), .terminal(_, let message):
-      return message
-    case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .invalidProviderState:
-      return nil
-    }
   }
 
   fileprivate static func event(_ payload: String) -> String {

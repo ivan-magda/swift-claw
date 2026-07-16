@@ -3,19 +3,31 @@ import Foundation
 
 // MARK: - Providers
 
-/// Scripted multi-round-trip provider: returns responses in order; records every request.
+/// Scripted multi-round-trip provider: returns responses in order, records every request, then
+/// throws `exhaustionError` once the script is spent. The default exhaustion is a fixed terminal
+/// rejection ("unscripted round-trip"); callers that exercise a specific head/accounting failure
+/// pass their own error (e.g. an empty script whose first call fails, or a tool round that succeeds
+/// then fails), so one double covers plain playback, fail-only, and playback-then-fail.
 public actor SequenceProvider: LLMProvider {
   private var responses: [ChatResponse]
+  private let exhaustionError: any Error & Sendable
   public private(set) var requests: [ChatRequest] = []
 
-  public init(_ responses: [ChatResponse]) {
+  public init(
+    _ responses: [ChatResponse],
+    then exhaustionError: any Error & Sendable = ProviderError.terminal(
+      status: nil,
+      message: "unscripted round-trip"
+    )
+  ) {
     self.responses = responses
+    self.exhaustionError = exhaustionError
   }
 
   public func complete(request: ChatRequest) async throws -> ChatResponse {
     requests.append(request)
     guard responses.isEmpty == false else {
-      throw ProviderError.terminal(status: nil, message: "unscripted round-trip")
+      throw exhaustionError
     }
     return responses.removeFirst()
   }
@@ -51,23 +63,6 @@ public struct HangingInferenceProvider: LLMProvider {
       throw ProviderInferenceCancellation(observing: observedCompletionTokens)
     }
     throw ProviderError.terminal(status: nil, message: "unreachable")
-  }
-}
-
-/// Records each request, then throws a fixed `ProviderError` — the shape a clean head rejection
-/// takes (auth / access / quota / replay / terminal). Both the turn and schedule surfaces drive it
-/// to prove one failure maps to one owner reply and one accounting decision.
-public actor FailingProvider: LLMProvider {
-  public private(set) var requests: [ChatRequest] = []
-  private let error: ProviderError
-
-  public init(_ error: ProviderError) {
-    self.error = error
-  }
-
-  public func complete(request: ChatRequest) async throws -> ChatResponse {
-    requests.append(request)
-    throw error
   }
 }
 

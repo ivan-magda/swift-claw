@@ -1000,8 +1000,8 @@ struct AgentRuntimeFailureAccountingTests {
   func notStartedAfterAToolRoundKeepsOnlyTheRecordedRow() async throws {
     // given — a first round that proposes a tool (recording usage), then a not-started failure
     let store = RecordingUsageStore()
-    let provider = RespondThenFailProvider(
-      responses: [toolCallResponse([fetchProposal()], content: "checking")],
+    let provider = SequenceProvider(
+      [toolCallResponse([fetchProposal()], content: "checking")],
       then: ProviderFailure(cause: .retryable(status: 503, message: "x"), accounting: .notStarted)
     )
     let runtime = makeRuntime(
@@ -1026,6 +1026,6 @@ struct AgentRuntimeFailureAccountingTests {
     let (kind, _) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
     #expect(store.recorded.count == 1)
-    #expect(await provider.calls == 2)
+    #expect(await provider.requests.count == 2)
   }
 }

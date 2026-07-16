@@ -5,12 +5,6 @@ import Testing
 
 @testable import ClawSecrets
 
-#if canImport(Glibc)
-  import Glibc
-#else
-  import Darwin
-#endif
-
 @Suite struct SecureFilePublisherTests {
   private let ownerOnly = SecureFilePublisher.ReadPolicy(
     maximumByteCount: 1024,
@@ -20,16 +14,6 @@ import Testing
     maximumByteCount: 1024,
     requiredPermissionBits: nil
   )
-
-  private func permissionBits(of url: URL) throws -> UInt32 {
-    var status = stat()
-    #expect(lstat(url.path, &status) == 0)
-    return UInt32(status.st_mode) & SecureFilePublisher.permissionBitsMask
-  }
-
-  private func entryNames(in directory: URL) throws -> [String] {
-    try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
-  }
 
   // MARK: - Publication
 

@@ -1,6 +1,8 @@
+import AsyncHTTPClient
 import ClawCore
 import ClawData
 import ClawLLM
+import ClawTelegram
 import ClawTestSupport
 import Foundation
 import GRDB
@@ -99,20 +101,27 @@ struct UnscriptedAcceptanceRequest: Error {
 /// refreshes) and records how many times it was opened — the load-count proof.
 final class FreshCredentialStore: LLMCredentialStore, @unchecked Sendable {
   static let profileID = UUID(uuid: (0xCE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1))
-  private let credential: StoredOAuthCredential?
+  private let outcome: Result<StoredOAuthCredential?, LLMCredentialStoreError>
   private let lock = NSLock()
   private var loads = 0
 
   init(present: Bool = true) {
-    credential =
+    outcome = .success(
       present
-      ? StoredOAuthCredential(
-        profileID: Self.profileID,
-        accessToken: "acc-token",
-        refreshToken: "ref-token",
-        expiresAt: Date(timeIntervalSince1970: 4_000_000_000)
-      )
-      : nil
+        ? StoredOAuthCredential(
+          profileID: Self.profileID,
+          accessToken: "acc-token",
+          refreshToken: "ref-token",
+          expiresAt: Date(timeIntervalSince1970: 4_000_000_000)
+        )
+        : nil
+    )
+  }
+
+  /// A store whose `load` throws — the managed-store failure a boot must propagate and close every
+  /// client on.
+  init(failure: LLMCredentialStoreError) {
+    outcome = .failure(failure)
   }
 
   var loadCount: Int {
@@ -125,7 +134,12 @@ final class FreshCredentialStore: LLMCredentialStore, @unchecked Sendable {
     lock.lock()
     loads += 1
     lock.unlock()
-    return credential
+    switch outcome {
+    case .success(let credential):
+      return credential
+    case .failure(let error):
+      throw error
+    }
   }
 
   func save(
@@ -241,6 +255,66 @@ enum CompositionAcceptance {
       SessionMessageStoreGRDB(writer: queue),
       RunStoreGRDB(writer: queue),
       UsageStoreGRDB(writer: queue)
+    )
+  }
+}
+
+// MARK: - Shutdown doubles
+
+/// Thrown by a substitute process terminator in place of the production `_exit`, so a test can prove
+/// control left through `terminate()` without ending the test process itself.
+struct FatalExitSentinel: Error {}
+
+/// A lock-guarded box for the exit code a substitute terminator recorded.
+final class ExitCodeBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var stored: Int32?
+
+  var value: Int32? {
+    lock.lock()
+    defer { lock.unlock() }
+    return stored
+  }
+
+  func set(_ code: Int32) {
+    lock.lock()
+    defer { lock.unlock() }
+    stored = code
+  }
+}
+
+// MARK: - Composition doubles
+
+/// Records the order runtime HTTP clients are closed in, so a failed boot can be proven to leak none.
+actor CloseRecorder {
+  private(set) var order: [RuntimeHTTPClientRole] = []
+
+  func record(_ role: RuntimeHTTPClientRole) {
+    order.append(role)
+  }
+}
+
+/// Captures the one provider stack the assembler received, so a test reads the resolved route without
+/// standing up a real daemon.
+final class StackBox: @unchecked Sendable {
+  var stack: ProviderStack?
+}
+
+/// The runtime HTTP clients wired to real per-role `HTTPClient`s, each of which records its role on
+/// `recorder` as it closes — so a boot-failure test can prove every client was shut down, and in what
+/// order.
+func instrumentedClients(recorder: CloseRecorder) -> RuntimeHTTPClients<RuntimeHTTPClient> {
+  RuntimeHTTPClients { role in
+    let client = HTTPClient(
+      eventLoopGroupProvider: .singleton,
+      configuration: role.egressProfile.configuration
+    )
+    return RuntimeHTTPClient(
+      executor: AsyncHTTPExecutor(client: client),
+      close: {
+        await recorder.record(role)
+        try await client.shutdown()
+      }
     )
   }
 }

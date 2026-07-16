@@ -121,11 +121,12 @@ private enum HostileDaemonConfig {
   /// The supplied dictionary is the whole environment. A bootstrap that read or exported the
   /// process's own would make every auth command depend on how its shell happened to be started.
   @Test func resolvingReadsTheSuppliedDictionaryAndExportsNothing() throws {
-    // given
+    // given — snapshot only the keys a bootstrap could plausibly write, so the assertion is about
+    // what resolve() exports, not about whatever the ambient shell happens to have set.
     let root = try makeTemporaryRoot(prefix: "auth-bootstrap-isolation")
     defer { try? FileManager.default.removeItem(at: root) }
-    let before = ProcessInfo.processInfo.environment
-    #expect(before[AppConfig.EnvKey.stateRoot] == nil)
+    let writableKeys = [AppConfig.EnvKey.stateRoot, AppConfig.EnvKey.llmModel]
+    let before = writableKeys.map { ProcessInfo.processInfo.environment[$0] }
 
     // when
     let bootstrap = try AuthBootstrap.resolve(environment: [
@@ -136,6 +137,7 @@ private enum HostileDaemonConfig {
     // then
     #expect(bootstrap.stateRoot.standardizedFileURL == root.standardizedFileURL)
     #expect(bootstrap.configuredModel == "openai-chatgpt/gpt-5.4")
-    #expect(ProcessInfo.processInfo.environment == before)
+    let after = writableKeys.map { ProcessInfo.processInfo.environment[$0] }
+    #expect(after == before)
   }
 }

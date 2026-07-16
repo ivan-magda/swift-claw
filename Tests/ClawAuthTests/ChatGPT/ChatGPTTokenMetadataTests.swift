@@ -37,6 +37,18 @@ enum TokenBuilder {
     "\(segment(#"{"alg":"none"}"#)).\(rawPayloadSegment).signature-not-verified"
   }
 
+  /// A token carrying the account claim (or a plain `sub` payload when `accountID` is nil). One
+  /// notion of the account-token shape for every suite that needs it.
+  static func accessToken(accountID: String?) -> String {
+    let payload: String
+    if let accountID {
+      payload = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"\#(accountID)"}}"#
+    } else {
+      payload = #"{"sub":"user"}"#
+    }
+    return token(payload: payload)
+  }
+
   /// A payload whose decoded size is `bytes`, padded with a filler claim so the JSON stays valid.
   static func payload(paddedTo bytes: Int, accountID: String) -> String {
     let prefix = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"\#(accountID)"},"pad":""#

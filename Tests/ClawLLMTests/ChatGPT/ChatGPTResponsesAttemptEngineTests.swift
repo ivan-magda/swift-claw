@@ -17,16 +17,16 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func aCleanSuccessStreamsDeltasAndCompletesOnOneAttempt() async throws {
     // given
-    let harness = Harness(steps: [.stream(okHead, Fixtures.successChunks())])
+    let harness = Harness(steps: [.stream(okHead, Fixtures.basicSuccess())])
 
     // when
     let outcome = await harness.run()
 
     // then — exactly one wire attempt, the delta reaches the sink, and the reply is stamped normally
     #expect(await harness.attemptCount == 1)
-    #expect(await harness.deltas == ["hi"])
+    #expect(await harness.deltas == ["Hello"])
     let response = try requireCompleted(outcome)
-    #expect(response.content == "hi")
+    #expect(response.content == "Hello")
     #expect(response.providerState?.issuer == harness.normalIdentity.issuer)
   }
 
@@ -37,8 +37,8 @@ import Testing
     // given — the first attempt's head is a clean 401, the retry succeeds
     let harness = Harness(
       steps: [
-        .stream(head(401), Fixtures.errorChunks(message: "expired")),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(Support.head(401), Fixtures.errorBody("expired")),
+        .stream(okHead, Fixtures.basicSuccess()),
       ]
     )
 
@@ -57,8 +57,8 @@ import Testing
     // given — both attempts answer with a clean 401
     let harness = Harness(
       steps: [
-        .stream(head(401), Fixtures.errorChunks(message: "expired")),
-        .stream(head(401), Fixtures.errorChunks(message: "still expired")),
+        .stream(Support.head(401), Fixtures.errorBody("expired")),
+        .stream(Support.head(401), Fixtures.errorBody("still expired")),
       ]
     )
 
@@ -75,7 +75,7 @@ import Testing
       ]
     )
     #expect(failureCause(outcome) == .authenticationRequired)
-    #expect(accounting(outcome) == .notStarted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
   // MARK: - Access and quota
@@ -83,7 +83,7 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func an403IsAccessDeniedWithoutRefreshOrRetry() async throws {
     // given
-    let harness = Harness(steps: [.stream(head(403), Fixtures.errorChunks(message: "no route"))])
+    let harness = Harness(steps: [.stream(Support.head(403), Fixtures.errorBody("no route"))])
 
     // when
     let outcome = await harness.run()
@@ -92,7 +92,7 @@ import Testing
     #expect(await harness.attemptCount == 1)
     #expect(await harness.credentials.rejections.isEmpty)
     #expect(failureCause(outcome) == .accessDenied)
-    #expect(accounting(outcome) == .notStarted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
   @Test(.timeLimit(.minutes(1)), arguments: [(60, 30), (10, 10)])
@@ -103,8 +103,8 @@ import Testing
     // given — a 429 asks for 300 seconds, retried once then exhausted at budget 2
     let harness = Harness(
       steps: [
-        .stream(head(429, retryAfter: 300), Fixtures.errorChunks(message: "slow down")),
-        .stream(head(429, retryAfter: 300), Fixtures.errorChunks(message: "slow down")),
+        .stream(Support.head(429, retryAfter: 300), Fixtures.errorBody("slow down")),
+        .stream(Support.head(429, retryAfter: 300), Fixtures.errorBody("slow down")),
       ],
       retryBudget: 2,
       requestTimeoutSeconds: timeout
@@ -117,7 +117,7 @@ import Testing
     #expect(await harness.attemptCount == 2)
     #expect(await harness.delays == [Double(expectedClamp)])
     #expect(failureCause(outcome) == .quotaLimited(retryAfterSeconds: expectedClamp))
-    #expect(accounting(outcome) == .notStarted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
   // MARK: - Transient and transport retries
@@ -127,8 +127,8 @@ import Testing
     // given
     let harness = Harness(
       steps: [
-        .stream(head(408), Fixtures.errorChunks(message: "timeout")),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(Support.head(408), Fixtures.errorBody("timeout")),
+        .stream(okHead, Fixtures.basicSuccess()),
       ]
     )
 
@@ -146,8 +146,8 @@ import Testing
     // given
     let harness = Harness(
       steps: [
-        .stream(head(500), Fixtures.errorChunks(message: "boom")),
-        .stream(head(500), Fixtures.errorChunks(message: "boom")),
+        .stream(Support.head(500), Fixtures.errorBody("boom")),
+        .stream(Support.head(500), Fixtures.errorBody("boom")),
       ],
       retryBudget: 2
     )
@@ -158,7 +158,7 @@ import Testing
     // then
     #expect(await harness.attemptCount == 2)
     #expect(failureCause(outcome) == .retryable(status: 500, message: "boom"))
-    #expect(accounting(outcome) == .notStarted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
   @Test(.timeLimit(.minutes(1)))
@@ -169,7 +169,7 @@ import Testing
         .transportFailure(
           HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: "refused")
         ),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(okHead, Fixtures.basicSuccess()),
       ]
     )
 
@@ -190,7 +190,7 @@ import Testing
         .transportFailure(
           HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "dropped")
         ),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(okHead, Fixtures.basicSuccess()),
       ]
     )
 
@@ -200,7 +200,7 @@ import Testing
     // then — a single attempt, conservative accounting, and no second dispatch of the success step
     #expect(await harness.attemptCount == 1)
     #expect(await harness.delays.isEmpty)
-    #expect(accounting(outcome) == .mayHaveStarted(observedCompletionTokens: 0))
+    #expect(Support.accounting(of: outcome) == .mayHaveStarted(observedCompletionTokens: 0))
   }
 
   // MARK: - One shared budget
@@ -210,12 +210,12 @@ import Testing
     // given — three different retry classes, then a success the budget must never reach
     let harness = Harness(
       steps: [
-        .stream(head(401), Fixtures.errorChunks(message: "expired")),
-        .stream(head(500), Fixtures.errorChunks(message: "boom")),
+        .stream(Support.head(401), Fixtures.errorBody("expired")),
+        .stream(Support.head(500), Fixtures.errorBody("boom")),
         .transportFailure(
           HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: "refused")
         ),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(okHead, Fixtures.basicSuccess()),
       ],
       retryBudget: 3
     )
@@ -227,7 +227,7 @@ import Testing
     // stops at three wire attempts and fails
     #expect(await harness.attemptCount == 3)
     #expect(failureCause(outcome) == .retryable(status: nil, message: "refused"))
-    #expect(accounting(outcome) == .notStarted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
   // MARK: - Invalid encrypted content recovery
@@ -238,10 +238,10 @@ import Testing
     let harness = Harness(
       steps: [
         .stream(
-          head(400),
-          Fixtures.errorChunks(code: "invalid_encrypted_content", message: "bad state")
+          Support.head(400),
+          Fixtures.errorBody("bad state", code: "invalid_encrypted_content")
         ),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(okHead, Fixtures.basicSuccess()),
       ]
     )
 
@@ -262,10 +262,10 @@ import Testing
     let harness = Harness(
       steps: [
         .stream(
-          head(400),
-          Fixtures.errorChunks(code: "invalid_encrypted_content", message: "bad state")
+          Support.head(400),
+          Fixtures.errorBody("bad state", code: "invalid_encrypted_content")
         ),
-        .stream(head(500), Fixtures.errorChunks(message: "boom")),
+        .stream(Support.head(500), Fixtures.errorBody("boom")),
       ],
       retryBudget: 2
     )
@@ -287,10 +287,10 @@ import Testing
       steps: [
         .streamFailure(
           okHead,
-          Fixtures.partialDataChunks(),
+          Fixtures.slowSuccess(),
           TransportFailure(message: "dropped mid-stream")
         ),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(okHead, Fixtures.basicSuccess()),
       ]
     )
 
@@ -300,7 +300,7 @@ import Testing
     // then — the boundary closed on the first data byte, so the drop is not retried, and the
     // generated deltas are carried as a conservative lower bound
     #expect(await harness.attemptCount == 1)
-    #expect(isConservative(accounting(outcome)))
+    #expect(Support.isConservative(Support.accounting(of: outcome)))
   }
 
   @Test(.timeLimit(.minutes(1)))
@@ -308,8 +308,8 @@ import Testing
     // given — the poisoned-state error arrives in-band, after a data byte has streamed
     let harness = Harness(
       steps: [
-        .stream(okHead, Fixtures.dataThenErrorChunks(code: "invalid_encrypted_content")),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(okHead, Fixtures.dataThenError(code: "invalid_encrypted_content")),
+        .stream(okHead, Fixtures.basicSuccess()),
       ]
     )
 
@@ -319,7 +319,7 @@ import Testing
     // then — no state-free recovery once the boundary has closed; degrade conservatively instead
     #expect(await harness.attemptCount == 1)
     #expect(harness.includePriorStateLog == [true])
-    #expect(isConservative(accounting(outcome)))
+    #expect(Support.isConservative(Support.accounting(of: outcome)))
   }
 
   @Test(.timeLimit(.minutes(1)))
@@ -327,8 +327,8 @@ import Testing
     // given — a 2xx stream that ends without ever stating an outcome
     let harness = Harness(
       steps: [
-        .stream(okHead, Fixtures.partialDataChunks()),
-        .stream(okHead, Fixtures.successChunks()),
+        .stream(okHead, Fixtures.slowSuccess()),
+        .stream(okHead, Fixtures.basicSuccess()),
       ]
     )
 
@@ -337,7 +337,7 @@ import Testing
 
     // then
     #expect(await harness.attemptCount == 1)
-    #expect(isConservative(accounting(outcome)))
+    #expect(Support.isConservative(Support.accounting(of: outcome)))
   }
 
   // MARK: - Cancellation
@@ -345,7 +345,7 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func cancellationBeforeAuthorizationIsNotStarted() async {
     // given
-    let harness = Harness(steps: [.stream(okHead, Fixtures.successChunks())])
+    let harness = Harness(steps: [.stream(okHead, Fixtures.basicSuccess())])
 
     // when — the run task is already cancelled before it can authorize
     let outcome = await Task {
@@ -365,7 +365,7 @@ import Testing
   func cancellationDuringBackoffIsNotStarted() async {
     // given — a retryable head, and a clock that reports cancellation the moment backoff begins
     let harness = Harness(
-      steps: [.stream(head(500), Fixtures.errorChunks(message: "boom"))],
+      steps: [.stream(Support.head(500), Fixtures.errorBody("boom"))],
       cancelDuringSleep: true
     )
 
@@ -381,7 +381,7 @@ import Testing
   func cancellationAfterDataIsConservative() async {
     // given — a stream whose first delta the consumer refuses by cancelling
     let harness = Harness(
-      steps: [.stream(okHead, Fixtures.successChunks())],
+      steps: [.stream(okHead, Fixtures.basicSuccess())],
       failOnFirstDelta: CancellationError()
     )
 
@@ -409,7 +409,7 @@ import Testing
     // then — a healthy credential in cooldown surfaces as quota, carrying the bounded wait, and is
     // never told to re-login; nothing reached the wire, so it is notStarted
     #expect(failureCause(outcome) == .quotaLimited(retryAfterSeconds: 12))
-    #expect(accounting(outcome) == .notStarted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
   @Test(.timeLimit(.minutes(1)))
@@ -428,7 +428,7 @@ import Testing
       )
       return
     }
-    #expect(accounting(outcome) == .notStarted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
   @Test(.timeLimit(.minutes(1)))
@@ -440,7 +440,7 @@ import Testing
 
     // then — the one condition that genuinely needs a login keeps the terminal prompt
     #expect(failureCause(outcome) == .authenticationRequired)
-    #expect(accounting(outcome) == .notStarted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
   }
 }
 
@@ -461,35 +461,14 @@ private func failureCause(_ outcome: LLMStreamTermination) -> ProviderError? {
   return failure.cause
 }
 
-/// Whether a failure was accounted conservatively and carried the generated deltas as a lower bound.
-/// The exact count belongs to the accumulator's own tests; here it need only prove the tokens the
-/// stream produced before it broke were not silently written off.
-private func isConservative(_ accounting: ProviderFailureAccounting?) -> Bool {
-  guard case .mayHaveStarted(let observed) = accounting else {
-    return false
-  }
-  return observed > 0
-}
-
-private func accounting(_ outcome: LLMStreamTermination) -> ProviderFailureAccounting? {
-  switch outcome {
-  case .failed(let failure):
-    return failure.accounting
-  case .cancelled(let disposition):
-    return disposition
-  case .completed:
-    return nil
-  }
-}
-
 /// Runs the engine against a credential source that throws `error` before any request is encoded, so
 /// the outcome is purely how the engine maps that credential failure.
 private func runCredentialFailure(_ error: ChatGPTCredentialError) async -> LLMStreamTermination {
-  let profileID = fixedUUID("00000000-0000-0000-0000-0000000000AA")
+  let profileID = Support.fixedUUID("00000000-0000-0000-0000-0000000000AA")
   let identity = ChatGPTReplayIdentity(
     profileID: profileID,
     wireModel: "gpt-5",
-    epoch: fixedUUID("11111111-1111-1111-1111-111111111111")
+    epoch: Support.fixedUUID("11111111-1111-1111-1111-111111111111")
   )
   let engine = ChatGPTResponsesAttemptEngine(
     credentials: ThrowingCredentialSource(error),
@@ -535,10 +514,10 @@ private struct Harness: Sendable {
     cancelDuringSleep: Bool = false,
     failOnFirstDelta: (any Error)? = nil
   ) {
-    let profileID = fixedUUID("00000000-0000-0000-0000-0000000000AA")
+    let profileID = Support.fixedUUID("00000000-0000-0000-0000-0000000000AA")
     let wireModel = "gpt-5"
-    let normalEpoch = fixedUUID("11111111-1111-1111-1111-111111111111")
-    let recoveryEpoch = fixedUUID("22222222-2222-2222-2222-222222222222")
+    let normalEpoch = Support.fixedUUID("11111111-1111-1111-1111-111111111111")
+    let recoveryEpoch = Support.fixedUUID("22222222-2222-2222-2222-222222222222")
 
     let codec = ChatGPTProviderStateCodec(newEpoch: { recoveryEpoch })
     self.normalIdentity = ChatGPTReplayIdentity(
@@ -710,73 +689,9 @@ private final class StateLog: Sendable {
   }
 }
 
-// MARK: - Fixtures
+// MARK: - Shared support
 
-/// A fixed, known-valid UUID string. Fails loudly rather than force-unwrapping a literal the test
-/// author controls, so a typo in the vector reads as a build-time preconditions failure.
-private func fixedUUID(_ value: String) -> UUID {
-  guard let parsed = UUID(uuidString: value) else {
-    preconditionFailure("invalid fixed UUID \(value)")
-  }
-  return parsed
-}
+private typealias Support = ChatGPTProviderTestSupport
+private typealias Fixtures = Support.Fixtures
 
-private let okHead = HTTPStreamHead(statusCode: 200, headers: [:])
-
-private func head(_ status: Int, retryAfter: Int? = nil) -> HTTPStreamHead {
-  var headers: [String: String] = [:]
-  if let retryAfter {
-    headers["Retry-After"] = String(retryAfter)
-  }
-  return HTTPStreamHead(statusCode: status, headers: headers)
-}
-
-private enum Fixtures {
-  static func event(_ json: String) -> Data {
-    Data("data: \(json)\n\n".utf8)
-  }
-
-  /// A minimal but complete Responses stream: an announced message item, one visible delta, its done
-  /// item, and a completed terminal with usage.
-  static func successChunks() -> [Data] {
-    [
-      event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"hi"}"#),
-      event(
-        #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"hi"}]}}"#
-      ),
-      event(
-        #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#
-      ),
-    ]
-  }
-
-  /// A stream that announces an item and emits a delta but never states an outcome.
-  static func partialDataChunks() -> [Data] {
-    [
-      event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"hi"}"#),
-    ]
-  }
-
-  /// A stream that emits a data byte and then an in-band error event.
-  static func dataThenErrorChunks(code: String) -> [Data] {
-    [
-      event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
-      ),
-      event(#"{"type":"response.output_text.delta","output_index":0,"delta":"hi"}"#),
-      event(#"{"type":"error","error":{"code":"\#(code)","message":"poisoned"}}"#),
-    ]
-  }
-
-  /// A non-success diagnostic body, carrying an optional error code.
-  static func errorChunks(code: String? = nil, message: String) -> [Data] {
-    let codeField = code.map { "\"code\":\"\($0)\"," } ?? ""
-    return [Data(#"{"error":{\#(codeField)"message":"\#(message)"}}"#.utf8)]
-  }
-}
+private let okHead = Support.okHead

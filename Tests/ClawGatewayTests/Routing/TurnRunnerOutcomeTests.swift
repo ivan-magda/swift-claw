@@ -203,7 +203,7 @@ import Testing
   @Test func authenticationFailureDeliversTheExactLoginCopyAndDebitsNothing() async throws {
     // given — the credential is refused before any inference begins (a clean, not-started head)
     let fixture = try makeFixture(
-      provider: FailingProvider(.authenticationRequired),
+      provider: SequenceProvider([], then: ProviderError.authenticationRequired),
       dispatcher: nil
     )
 
@@ -225,7 +225,7 @@ import Testing
   @Test func quotaFailureSaysRetryNotLoginAndDebitsNothing() async throws {
     // given
     let fixture = try makeFixture(
-      provider: FailingProvider(.quotaLimited(retryAfterSeconds: 30)),
+      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 30)),
       dispatcher: nil
     )
 
@@ -246,7 +246,10 @@ import Testing
 
   @Test func accessDenialDoesNotTellTheOwnerToLogIn() async throws {
     // given
-    let fixture = try makeFixture(provider: FailingProvider(.accessDenied), dispatcher: nil)
+    let fixture = try makeFixture(
+      provider: SequenceProvider([], then: ProviderError.accessDenied),
+      dispatcher: nil
+    )
 
     // when
     try await fixture.runner.run(
@@ -265,7 +268,10 @@ import Testing
 
   @Test func rejectedReplayStateGivesNewGuidanceAndDebitsNothing() async throws {
     // given
-    let fixture = try makeFixture(provider: FailingProvider(.invalidProviderState), dispatcher: nil)
+    let fixture = try makeFixture(
+      provider: SequenceProvider([], then: ProviderError.invalidProviderState),
+      dispatcher: nil
+    )
 
     // when
     try await fixture.runner.run(

@@ -4,6 +4,8 @@ import Testing
 
 @testable import ClawLLM
 
+private typealias Support = ChatGPTProviderTestSupport
+
 @Suite struct ChatGPTResponsesSSEParserTests {
   // MARK: - Reconstruction
 
@@ -451,7 +453,7 @@ import Testing
     #expect(events.contains(.delta("same batch")) == false)
     #expect(afterwards.isEmpty)
     #expect(try accumulator.finish() == nil)
-    #expect(Self.finished(events)?.content == "first")
+    #expect(Support.finished(events)?.content == "first")
   }
 
   /// Two terminals that disagree, already decoded in one delivered batch, are a stream the parser
@@ -509,7 +511,7 @@ import Testing
     )
 
     // then
-    #expect(Self.finished(events)?.content == "decided")
+    #expect(Support.finished(events)?.content == "decided")
     #expect(later.isEmpty)
   }
 
@@ -741,7 +743,7 @@ import Testing
     let failure = try #require(thrown as? ProviderError)
 
     // then
-    let message = try #require(Self.message(of: failure))
+    let message = try #require(Support.message(of: failure))
     #expect(message.contains("upstream exploded retry later"))
     #expect(message.contains("\u{1B}") == false)
     #expect(message.contains("[31m") == false)
@@ -769,7 +771,7 @@ import Testing
     let failure = try #require(thrown as? ProviderError)
 
     // then
-    let message = try #require(Self.message(of: failure))
+    let message = try #require(Support.message(of: failure))
     #expect(message.contains("sk-live-secret") == false)
     #expect(message.contains(SecretRedactor.replacement))
   }
@@ -829,33 +831,11 @@ extension ChatGPTResponsesSSEParserTests {
     }
   }
 
-  fileprivate static func finished(_ events: [StreamEvent]) -> ChatResponse? {
-    events.compactMap { event -> ChatResponse? in
-      guard case .finished(let response) = event else {
-        return nil
-      }
-      return response
-    }
-    .last
-  }
-
   fileprivate static func replayItems(_ response: ChatResponse) -> ChatGPTReplayItems? {
     guard let state = response.providerState else {
       return nil
     }
     return ChatGPTDurableReplayPayload.decode(state.payload)
-  }
-
-  fileprivate static func message(of failure: ProviderError) -> String? {
-    switch failure {
-    case .connectFailed(let message):
-      return message
-    case .retryable(_, let message), .rejected(_, let message), .terminal(_, let message):
-      return message
-    case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .invalidProviderState:
-      return nil
-    }
   }
 
   fileprivate static func fixture(_ name: String) throws -> String {

@@ -14,10 +14,6 @@ import Testing
     EnvKey.searchApiKey: "search-key",
   ]
 
-  private func entryNames(in directory: URL) throws -> [String] {
-    try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
-  }
-
   // MARK: - The transition
 
   @Test func withNeitherArtifactPresentPreparationSealsTheEnvironmentSecrets() throws {

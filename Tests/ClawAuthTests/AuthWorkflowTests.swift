@@ -178,6 +178,25 @@ final class ScriptedCatalog: ChatGPTModelCatalogFetching {
   }
 }
 
+/// A reference slot for the catalog spy `AuthWorld.workflow()` builds, so the value-type world can
+/// expose what the catalog fetch saw without becoming non-copyable.
+final class CatalogSpyBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var catalog: ScriptedCatalog?
+
+  func set(_ value: ScriptedCatalog) {
+    lock.lock()
+    defer { lock.unlock() }
+    catalog = value
+  }
+
+  var seenAuthorization: LLMRequestAuthorization? {
+    lock.lock()
+    defer { lock.unlock() }
+    return catalog?.seenAuthorization.withLock { $0 }
+  }
+}
+
 final class RecordingTerminal: AuthTerminal {
   let isInteractive: Bool
   private let scripted: Mutex<[String]>
@@ -273,12 +292,22 @@ struct AuthWorld: Sendable {
   var catalogOutcome = ScriptedCatalog.Outcome.models(AuthFixture.catalog)
   var profileID = AuthFixture.freshProfileID
 
+  /// The catalog spy the most recent `workflow()` wired, so a test can assert what authorization the
+  /// catalog fetch was handed without hand-copying the whole workflow construction. A reference box
+  /// keeps `AuthWorld` a copyable value while `workflow()` (non-mutating) records into it.
+  private let builtCatalog = CatalogSpyBox()
+
   init(root: URL) {
     self.root = root
     environment = [EnvSecretStore.EnvKey.botToken: AuthFixture.botToken]
   }
 
   var paths: SecretStatePaths { SecretStatePaths(stateRoot: root) }
+
+  /// The authorization the catalog fetch saw during the most recent `workflow().login()`.
+  var seenCatalogAuthorization: LLMRequestAuthorization? {
+    builtCatalog.seenAuthorization
+  }
 
   /// The store as the owner's disk actually holds it, unrecorded — for assertions about what a
   /// command left behind rather than about what it did.
@@ -291,6 +320,8 @@ struct AuthWorld: Sendable {
     let effects = log
     let identity = profileID
     let device = deviceOutcome
+    let catalog = ScriptedCatalog(outcome: catalogOutcome, log: log)
+    builtCatalog.set(catalog)
     return AuthWorkflow(
       bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
       runtimeSecrets: RealRuntimeSecrets(
@@ -314,7 +345,7 @@ struct AuthWorld: Sendable {
         )
       },
       tokenExchange: ScriptedExchange(outcome: exchangeOutcome, log: log),
-      catalog: ScriptedCatalog(outcome: catalogOutcome, log: log),
+      catalog: catalog,
       terminal: terminal,
       profileID: { identity },
       wallDate: { AuthFixture.now }
@@ -788,44 +819,14 @@ extension RecordingTerminal {
   @Test func theCatalogIsFetchedWithTheCredentialLoginJustStored() async throws {
     try await withAuthWorld("auth-login-catalog-bearer") { world in
       // given
-      let catalog = ScriptedCatalog(outcome: .models(AuthFixture.catalog), log: world.log)
-      let identity = world.profileID
-      let stateRoot = world.root
-      let effects = world.log
-      let workflow = AuthWorkflow(
-        bootstrap: AuthBootstrap(stateRoot: world.root, configuredModel: nil),
-        runtimeSecrets: RealRuntimeSecrets(
-          stateRoot: world.root,
-          environment: world.environment,
-          log: world.log
-        ),
-        mutationLock: ScriptedLock(failure: nil, log: world.log),
-        makeCredentialStore: {
-          ObservedCredentialStore(
-            inner: EncryptedLLMCredentialStore(stateRoot: stateRoot),
-            log: effects
-          )
-        },
-        makeDeviceAuthorization: {
-          ScriptedDeviceAuthorization(
-            device: AuthFixture.device,
-            outcome: .granted(AuthFixture.grant),
-            log: effects
-          )
-        },
-        tokenExchange: ScriptedExchange(outcome: .pair(AuthFixture.pair), log: world.log),
-        catalog: catalog,
-        terminal: world.terminal,
-        profileID: { identity },
-        wallDate: { AuthFixture.now }
-      )
+      let workflow = world.workflow()
 
       // when
       let result = await workflow.login()
 
       // then
       #expect(result.exit == .success)
-      let seen = try #require(catalog.seenAuthorization.withLock { $0 })
+      let seen = try #require(world.seenCatalogAuthorization)
       #expect(seen.headers["Authorization"] == "Bearer \(AuthFixture.accessToken)")
     }
   }

@@ -28,12 +28,12 @@ import Testing
   /// distinct** HTTP client identities in order — llm, telegram, tool.
   @Test func chatGPTRouteComposesIncludedPlanStackAndClosesThreeClientsOnFailure() async throws {
     // given
-    let recorder = CloseOrderRecorder()
+    let recorder = CloseRecorder()
     let store = FreshCredentialStore(present: false)
-    let box = ComposedStackBox()
+    let box = StackBox()
     var composition = try Self.makeComposition(recorder: recorder, store: store)
     composition.buildDaemon = { _, stack in
-      box.value = stack
+      box.stack = stack
       throw StopBuild()
     }
 
@@ -42,10 +42,10 @@ import Testing
       _ = try await composition.compose()
     }
     #expect(store.loadCount == 1)
-    #expect(box.value?.costPolicy == .includedPlan)
-    #expect(box.value?.reservationPolicy == .chatGPTReplayState)
-    #expect(box.value?.configuredReference == CompositionAcceptance.qualifiedModel)
-    #expect(box.value?.wireModel == CompositionAcceptance.wireModel)
+    #expect(box.stack?.costPolicy == .includedPlan)
+    #expect(box.stack?.reservationPolicy == .chatGPTReplayState)
+    #expect(box.stack?.configuredReference == CompositionAcceptance.qualifiedModel)
+    #expect(box.stack?.wireModel == CompositionAcceptance.wireModel)
     #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 
@@ -577,7 +577,7 @@ import Testing
   }
 
   private static func makeComposition(
-    recorder: CloseOrderRecorder,
+    recorder: CloseRecorder,
     store: any LLMCredentialStore
   ) throws -> RunComposition {
     let config = try CompositionAcceptance.chatGPTConfig()
@@ -587,21 +587,7 @@ import Testing
       stores: try EnvironmentLoader.openStores(config: config),
       logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
     )
-    composition.makeClients = {
-      RuntimeHTTPClients { role in
-        let client = HTTPClient(
-          eventLoopGroupProvider: .singleton,
-          configuration: role.egressProfile.configuration
-        )
-        return RuntimeHTTPClient(
-          executor: AsyncHTTPExecutor(client: client),
-          close: {
-            await recorder.record(role)
-            try await client.shutdown()
-          }
-        )
-      }
-    }
+    composition.makeClients = { instrumentedClients(recorder: recorder) }
     composition.makeManagedStore = { _ in store }
     composition.fetchBotUsername = { _, _ in nil }
     return composition
@@ -611,18 +597,6 @@ import Testing
 // MARK: - Doubles
 
 private struct StopBuild: Error {}
-
-private actor CloseOrderRecorder {
-  private(set) var order: [RuntimeHTTPClientRole] = []
-
-  func record(_ role: RuntimeHTTPClientRole) {
-    order.append(role)
-  }
-}
-
-private final class ComposedStackBox: @unchecked Sendable {
-  var value: ProviderStack?
-}
 
 private extension Data {
   var utf8String: String { String(bytes: self, encoding: .utf8) ?? "" }

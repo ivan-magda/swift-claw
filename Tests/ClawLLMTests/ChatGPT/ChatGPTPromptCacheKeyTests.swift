@@ -33,12 +33,12 @@ import Testing
     // given
     let first = makeRequest(
       instructions: ["You are helpful."],
-      tools: [clockTool],
+      tools: [Support.clockTool],
       sessionId: "clawd-session-1"
     )
     let second = makeRequest(
       instructions: ["You are helpful."],
-      tools: [clockTool],
+      tools: [Support.clockTool],
       sessionId: "clawd-session-2"
     )
 
@@ -55,8 +55,14 @@ import Testing
   /// the whole rule: the key sorts, the array does not.
   @Test func cacheKeyIsStableAcrossToolInsertionOrder() throws {
     // given
-    let forward = makeRequest(instructions: ["S"], tools: [webFetchTool, clockTool])
-    let reversed = makeRequest(instructions: ["S"], tools: [clockTool, webFetchTool])
+    let forward = makeRequest(
+      instructions: ["S"],
+      tools: [Support.webFetchTool, Support.clockTool]
+    )
+    let reversed = makeRequest(
+      instructions: ["S"],
+      tools: [Support.clockTool, Support.webFetchTool]
+    )
 
     // when
     let forwardBody = try decodeBody(encoder.encode(request: forward))
@@ -87,7 +93,7 @@ import Testing
 
   @Test func cacheKeyChangesWithToolSchema() throws {
     // given
-    let original = makeRequest(instructions: ["S"], tools: [clockTool])
+    let original = makeRequest(instructions: ["S"], tools: [Support.clockTool])
     let altered = makeRequest(
       instructions: ["S"],
       tools: [
@@ -114,7 +120,7 @@ import Testing
 
   @Test func cacheKeyChangesWithToolDescription() throws {
     // given
-    let original = makeRequest(instructions: ["S"], tools: [clockTool])
+    let original = makeRequest(instructions: ["S"], tools: [Support.clockTool])
     let altered = makeRequest(
       instructions: ["S"],
       tools: [
@@ -247,32 +253,10 @@ import Testing
 
 // MARK: - Fixtures
 
+private typealias Support = ChatGPTProviderTestSupport
+
 extension ChatGPTPromptCacheKeyTests {
   fileprivate var encoder: ChatGPTResponsesRequestEncoder { ChatGPTResponsesRequestEncoder() }
-
-  fileprivate var clockTool: ToolDefinition {
-    ToolDefinition(
-      name: "clock",
-      description: "Read the clock.",
-      parameters: .object(["type": .string("object")]),
-      egressClass: .none,
-      riskLevel: .safe
-    )
-  }
-
-  fileprivate var webFetchTool: ToolDefinition {
-    ToolDefinition(
-      name: "web_fetch",
-      description: "Fetch a URL.",
-      parameters: .object([
-        "type": .string("object"),
-        "properties": .object(["url": .object(["type": .string("string")])]),
-        "required": .array([.string("url")]),
-      ]),
-      egressClass: .arbitraryDestination,
-      riskLevel: .ask
-    )
-  }
 
   fileprivate func makeRequest(
     instructions: [String],

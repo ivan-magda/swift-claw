@@ -25,8 +25,81 @@ enum ChatGPTProviderTestSupport {
   static let fixedEpoch = fixedUUID("11111111-1111-1111-1111-111111111111")
   static let okHead = HTTPStreamHead(statusCode: 200, headers: [:])
 
-  static func head(_ status: Int) -> HTTPStreamHead {
-    HTTPStreamHead(statusCode: status, headers: [:])
+  static func head(_ status: Int, retryAfter: Int? = nil) -> HTTPStreamHead {
+    var headers: [String: String] = [:]
+    if let retryAfter {
+      headers["Retry-After"] = String(retryAfter)
+    }
+    return HTTPStreamHead(statusCode: status, headers: headers)
+  }
+
+  // MARK: - Tool fixtures
+
+  static let clockTool = ToolDefinition(
+    name: "clock",
+    description: "Read the clock.",
+    parameters: .object(["type": .string("object")]),
+    egressClass: .none,
+    riskLevel: .safe
+  )
+
+  static let webFetchTool = ToolDefinition(
+    name: "web_fetch",
+    description: "Fetch a URL.",
+    parameters: .object([
+      "type": .string("object"),
+      "properties": .object(["url": .object(["type": .string("string")])]),
+      "required": .array([.string("url")]),
+    ]),
+    egressClass: .arbitraryDestination,
+    riskLevel: .ask
+  )
+
+  // MARK: - Termination inspection
+
+  /// Whether a failure was accounted conservatively and carried the generated deltas as a lower
+  /// bound — the model may have been asked, so its tokens are carried rather than written off.
+  static func isConservative(_ accounting: ProviderFailureAccounting?) -> Bool {
+    guard case .mayHaveStarted(let observed) = accounting else {
+      return false
+    }
+    return observed > 0
+  }
+
+  /// The accounting a stream termination carries, or nil when it completed cleanly.
+  static func accounting(of terminal: LLMStreamTermination) -> ProviderFailureAccounting? {
+    switch terminal {
+    case .failed(let failure):
+      return failure.accounting
+    case .cancelled(let disposition):
+      return disposition
+    case .completed:
+      return nil
+    }
+  }
+
+  /// The owner-facing message a provider error carries, or nil for the errors that carry none.
+  static func message(of failure: ProviderError) -> String? {
+    switch failure {
+    case .connectFailed(let message):
+      return message
+    case .retryable(_, let message), .rejected(_, let message), .terminal(_, let message):
+      return message
+    case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
+      .invalidProviderState:
+      return nil
+    }
+  }
+
+  /// The last `finished` response in a run of parser events, if the stream reached a terminal.
+  static func finished(_ events: [StreamEvent]) -> ChatResponse? {
+    events.compactMap { event -> ChatResponse? in
+      guard case .finished(let response) = event else {
+        return nil
+      }
+      return response
+    }
+    .last
   }
 
   static let plainRequest = ChatRequest(
@@ -160,8 +233,22 @@ enum ChatGPTProviderTestSupport {
       ]
     }
 
-    static func errorBody(_ message: String) -> [Data] {
-      [Data(#"{"error":{"message":"\#(message)"}}"#.utf8)]
+    /// A non-success diagnostic body, carrying an optional error code alongside the message.
+    static func errorBody(_ message: String, code: String? = nil) -> [Data] {
+      let codeField = code.map { "\"code\":\"\($0)\"," } ?? ""
+      return [Data(#"{"error":{\#(codeField)"message":"\#(message)"}}"#.utf8)]
+    }
+
+    /// A stream that emits a visible delta and then an in-band error event carrying `code`, so a
+    /// mid-stream poisoning after real deltas can be exercised.
+    static func dataThenError(code: String) -> [Data] {
+      [
+        event(
+          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+        ),
+        event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
+        event(#"{"type":"error","error":{"code":"\#(code)","message":"poisoned"}}"#),
+      ]
     }
 
     static func completedTerminal() -> Data {

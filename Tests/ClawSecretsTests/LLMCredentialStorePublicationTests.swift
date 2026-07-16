@@ -232,15 +232,6 @@ private extension LLMCredentialStorePublicationTests {
     [SecretStatePaths.credentialEnvelopeName, SecretFile.key, SecretFile.envelope].sorted()
   }
 
-  func makeSealedRoot() throws -> URL {
-    let stateRoot = try makeTemporaryRoot(prefix: "claw-credential-publish")
-    try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:runtime", llmApiKey: nil),
-      stateRoot: stateRoot
-    )
-    return stateRoot
-  }
-
   /// A store whose publisher fails `step` on the credential envelope only. Naming the entry is what
   /// keeps the failpoint off the runtime seal that built the fixture.
   func makeStore(
@@ -258,24 +249,7 @@ private extension LLMCredentialStorePublicationTests {
     )
   }
 
-  func makeCredential(accessToken: String = "access-token") -> StoredOAuthCredential {
-    StoredOAuthCredential(
-      profileID: UUID(),
-      accessToken: accessToken,
-      refreshToken: "refresh-token",
-      expiresAt: Date(timeIntervalSince1970: 1_800_000_000)
-    )
-  }
-
-  func envelopeURL(in stateRoot: URL) -> URL {
-    SecretStatePaths(stateRoot: stateRoot).credentialEnvelope
-  }
-
   func openKey(in stateRoot: URL) throws -> SymmetricKey {
     try EncryptedFileSecretStore.openKey(at: SecretStatePaths(stateRoot: stateRoot).key)
-  }
-
-  func entryNames(in directory: URL) throws -> [String] {
-    try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
   }
 }

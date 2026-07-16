@@ -15,59 +15,12 @@ import Testing
 /// that every client was closed afterward — is all the test has to observe.
 private struct BuildStopped: Error {}
 
-/// Records the order clients are closed in, proving a failed boot leaks none.
-private actor CloseRecorder {
-  private(set) var order: [RuntimeHTTPClientRole] = []
-
-  func record(_ role: RuntimeHTTPClientRole) {
-    order.append(role)
-  }
-}
-
-/// Captures the one provider stack the assembler received, so a test reads the route the factory
-/// resolved without a real daemon.
-private final class StackBox: @unchecked Sendable {
-  var stack: ProviderStack?
-}
-
 /// Flips when the managed-store factory is built, so the current route can be proven never to open an
 /// OAuth envelope.
 private final class InvocationFlag: @unchecked Sendable {
   private(set) var invoked = false
 
   func mark() { invoked = true }
-}
-
-/// A managed store whose one behavior a test scripts, counting loads.
-private final class StoreProbe: LLMCredentialStore, @unchecked Sendable {
-  enum Behavior: Sendable {
-    case value(StoredOAuthCredential?)
-    case failure(LLMCredentialStoreError)
-  }
-
-  let behavior: Behavior
-  private(set) var loadCount = 0
-
-  init(_ behavior: Behavior) {
-    self.behavior = behavior
-  }
-
-  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
-    loadCount += 1
-    switch behavior {
-    case .value(let credential):
-      return credential
-    case .failure(let error):
-      throw error
-    }
-  }
-
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {}
-
-  func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
 }
 
 @Suite struct ProviderCompositionTests {
@@ -89,24 +42,6 @@ private final class StoreProbe: LLMCredentialStore, @unchecked Sendable {
     Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
   }
 
-  private func instrumentedClients(
-    recorder: CloseRecorder
-  ) -> RuntimeHTTPClients<RuntimeHTTPClient> {
-    RuntimeHTTPClients { role in
-      let client = HTTPClient(
-        eventLoopGroupProvider: .singleton,
-        configuration: role.egressProfile.configuration
-      )
-      return RuntimeHTTPClient(
-        executor: AsyncHTTPExecutor(client: client),
-        close: {
-          await recorder.record(role)
-          try await client.shutdown()
-        }
-      )
-    }
-  }
-
   private func composition(
     config: AppConfig,
     recorder: CloseRecorder,
@@ -121,7 +56,7 @@ private final class StoreProbe: LLMCredentialStore, @unchecked Sendable {
       stores: try EnvironmentLoader.openStores(config: config),
       logger: silentLogger
     )
-    composition.makeClients = { self.instrumentedClients(recorder: recorder) }
+    composition.makeClients = { instrumentedClients(recorder: recorder) }
     composition.makeManagedStore = makeManagedStore
     composition.fetchBotUsername = { _, _ in nil }
     composition.buildDaemon = buildDaemon
@@ -139,7 +74,7 @@ private final class StoreProbe: LLMCredentialStore, @unchecked Sendable {
       recorder: recorder,
       makeManagedStore: { _ in
         storeBuilt.mark()
-        return StoreProbe(.value(nil))
+        return FreshCredentialStore(present: false)
       },
       buildDaemon: { _, stack in
         box.stack = stack
@@ -164,7 +99,7 @@ private final class StoreProbe: LLMCredentialStore, @unchecked Sendable {
     let composition = try composition(
       config: config(model: "openai-chatgpt/gpt-5.4", baseURL: nil),
       recorder: recorder,
-      makeManagedStore: { _ in StoreProbe(.failure(.malformedStorage)) },
+      makeManagedStore: { _ in FreshCredentialStore(failure: .malformedStorage) },
       buildDaemon: { _, _ in
         Issue.record("assembly must not run when the stack build fails")
         throw BuildStopped()

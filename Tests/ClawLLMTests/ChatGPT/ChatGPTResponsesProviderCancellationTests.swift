@@ -65,7 +65,7 @@ import Testing
     // ambiguous end first, the tokens the stream produced are never silently written off: the
     // accounting stays conservative rather than resetting to notStarted
     let terminal = await stream.awaitTermination()
-    #expect(isConservative(accounting(of: terminal)))
+    #expect(Support.isConservative(Support.accounting(of: terminal)))
   }
 
   @Test(.timeLimit(.minutes(1)))
@@ -122,26 +122,6 @@ private struct GatedCredentialSource: LLMCredentialSource {
   func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {}
 
   func shutdown() async throws {}
-}
-
-/// Whether an outcome was accounted conservatively — the model may have been asked, so its tokens
-/// are carried rather than written off.
-private func isConservative(_ accounting: ProviderFailureAccounting?) -> Bool {
-  guard case .mayHaveStarted(let observed) = accounting else {
-    return false
-  }
-  return observed > 0
-}
-
-private func accounting(of terminal: LLMStreamTermination) -> ProviderFailureAccounting? {
-  switch terminal {
-  case .failed(let failure):
-    return failure.accounting
-  case .cancelled(let disposition):
-    return disposition
-  case .completed:
-    return nil
-  }
 }
 
 // MARK: - Shared support

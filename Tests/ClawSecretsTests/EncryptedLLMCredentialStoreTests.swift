@@ -6,12 +6,6 @@ import Testing
 
 @testable import ClawSecrets
 
-#if canImport(Glibc)
-  import Glibc
-#else
-  import Darwin
-#endif
-
 @Suite struct EncryptedLLMCredentialStoreTests {
   /// A second provider that is never the subject of a save or a delete. Every mutation test carries
   /// it so "preserves unrelated records" is proven by a record the operation had no reason to touch.
@@ -668,53 +662,9 @@ private extension EncryptedLLMCredentialStoreTests {
     """
 }
 
-// MARK: - Fixtures
-
-private extension EncryptedLLMCredentialStoreTests {
-  var runtimeSecrets: Secrets {
-    Secrets(telegramBotToken: "123:runtime", llmApiKey: nil)
-  }
-
-  /// A state root as login leaves it: the runtime secrets sealed, so `secret.key` exists and the
-  /// credential store has something to seal under.
-  func makeSealedRoot() throws -> URL {
-    let stateRoot = try makeTemporaryRoot(prefix: "claw-credentials")
-    try EncryptedFileSecretStore.seal(runtimeSecrets, stateRoot: stateRoot)
-    return stateRoot
-  }
-
-  func makeCredential(
-    accessToken: String = "access-token",
-    refreshToken: String = "refresh-token",
-    profileID: UUID = UUID(),
-    expiresAt: Date = Date(timeIntervalSince1970: 1_800_000_000)
-  ) -> StoredOAuthCredential {
-    StoredOAuthCredential(
-      profileID: profileID,
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      expiresAt: expiresAt
-    )
-  }
-}
-
 // MARK: - Disk Inspection
 
 private extension EncryptedLLMCredentialStoreTests {
-  func envelopeURL(in stateRoot: URL) -> URL {
-    SecretStatePaths(stateRoot: stateRoot).credentialEnvelope
-  }
-
-  func entryNames(in directory: URL) throws -> [String] {
-    try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
-  }
-
-  func permissionBits(of url: URL) throws -> UInt32 {
-    var status = stat()
-    #expect(lstat(url.path, &status) == 0)
-    return UInt32(status.st_mode) & SecureFilePublisher.permissionBitsMask
-  }
-
   func setPermissions(_ bits: Int, on url: URL) throws {
     try FileManager.default.setAttributes([.posixPermissions: bits], ofItemAtPath: url.path)
   }

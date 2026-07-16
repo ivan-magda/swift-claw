@@ -4,24 +4,6 @@ import Testing
 
 @testable import ClawAuth
 
-/// Builds a JWT-shaped access token carrying the given account claim. The parser never verifies a
-/// signature, so the third segment is arbitrary text.
-private func accessToken(accountID: String?) -> String {
-  let payload: String
-  if let accountID {
-    payload = #"{"https://api.openai.com/auth":{"chatgpt_account_id":"\#(accountID)"}}"#
-  } else {
-    payload = #"{"sub":"user"}"#
-  }
-  func encode(_ json: String) -> String {
-    Data(json.utf8).base64EncodedString()
-      .replacingOccurrences(of: "+", with: "-")
-      .replacingOccurrences(of: "/", with: "_")
-      .replacingOccurrences(of: "=", with: "")
-  }
-  return "\(encode(#"{"alg":"none"}"#)).\(encode(payload)).signature-not-verified"
-}
-
 @Suite struct ChatGPTProviderMetadataTests {
   // MARK: - Pinned Protocol Values
 
@@ -96,7 +78,7 @@ private func accessToken(accountID: String?) -> String {
 
   @Test func authorizationCarriesTheBearerAndTheCallersGeneration() {
     // given
-    let token = accessToken(accountID: nil)
+    let token = TokenBuilder.accessToken(accountID: nil)
 
     // when
     let authorization = ChatGPTProviderMetadata.authorization(
@@ -111,7 +93,7 @@ private func accessToken(accountID: String?) -> String {
 
   @Test func authorizationRedactsTheAccessTokenItPutsOnTheWire() {
     // given
-    let token = accessToken(accountID: nil)
+    let token = TokenBuilder.accessToken(accountID: nil)
 
     // when
     let authorization = ChatGPTProviderMetadata.authorization(
@@ -127,7 +109,7 @@ private func accessToken(accountID: String?) -> String {
 
   @Test func authorizationAddsAndRedactsAUsableAccountClaim() {
     // given
-    let token = accessToken(accountID: "acct-abc-123")
+    let token = TokenBuilder.accessToken(accountID: "acct-abc-123")
 
     // when
     let authorization = ChatGPTProviderMetadata.authorization(
@@ -143,19 +125,19 @@ private func accessToken(accountID: String?) -> String {
 
   @Test(arguments: [
     // No account claim at all.
-    accessToken(accountID: nil),
+    TokenBuilder.accessToken(accountID: nil),
     // An empty account value.
-    accessToken(accountID: ""),
+    TokenBuilder.accessToken(accountID: ""),
     // A value that would smuggle a second header past a naive builder.
-    accessToken(accountID: #"acct\r\nX-Injected: yes"#),
+    TokenBuilder.accessToken(accountID: #"acct\r\nX-Injected: yes"#),
     // Whitespace and controls a header value must never carry.
-    accessToken(accountID: "acct with space"),
-    accessToken(accountID: #"acct\u0000nul"#),
-    accessToken(accountID: #"acct\u001b[31m"#),
+    TokenBuilder.accessToken(accountID: "acct with space"),
+    TokenBuilder.accessToken(accountID: #"acct\u0000nul"#),
+    TokenBuilder.accessToken(accountID: #"acct\u001b[31m"#),
     // Non-ASCII bytes.
-    accessToken(accountID: "acct-é"),
+    TokenBuilder.accessToken(accountID: "acct-é"),
     // Over the 256-byte bar.
-    accessToken(accountID: String(repeating: "a", count: 257)),
+    TokenBuilder.accessToken(accountID: String(repeating: "a", count: 257)),
     // Not a JWT at all.
     "not-a-jwt",
     "",
@@ -195,7 +177,7 @@ private func accessToken(accountID: String?) -> String {
     // given
     // Content type, originator, and user agent belong to the wire adapter; a credential source
     // that also owned them would leak provider transport concerns into the auth seam.
-    let token = accessToken(accountID: "acct-1")
+    let token = TokenBuilder.accessToken(accountID: "acct-1")
 
     // when
     let authorization = ChatGPTProviderMetadata.authorization(
