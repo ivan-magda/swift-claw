@@ -3,7 +3,10 @@ import Foundation
 public struct AppConfig: Sendable, Equatable {
   public enum EnvKey {
     static let allowlist = "CLAW_ALLOWLIST"
-    static let stateRoot = "CLAW_STATE_ROOT"
+    /// Public because the auth commands resolve the same state root without loading this config.
+    /// The daemon and `clawd auth` have to read the one variable, or they diverge on where an
+    /// owner's credentials live.
+    public static let stateRoot = "CLAW_STATE_ROOT"
     static let pollTimeout = "CLAW_POLL_TIMEOUT"
 
     static let llmBaseURL = "CLAW_LLM_BASE_URL"
@@ -47,7 +50,6 @@ public struct AppConfig: Sendable, Equatable {
 
   enum EnvDefaults {
     static let pollTimeoutSeconds = 30
-    static let stateDirectoryName = ".swift-claw"
     static let maxTokensField = MaxTokensField.maxCompletionTokens
     static let structuredOutput = StructuredOutputMode.off
     static let maxOutputTokens = RunDefaults.maxOutputTokens
@@ -71,8 +73,6 @@ public struct AppConfig: Sendable, Equatable {
     static let execCPUs = 4
     static let execTimeoutSeconds = 30
   }
-
-  private static let stateRootPermissions = 0o700
 
   public let allowlist: Set<Int64>
   public let stateRoot: URL
@@ -140,7 +140,7 @@ public struct AppConfig: Sendable, Equatable {
   /// allowlist is allowed so onboarding can still boot.
   public static func load(environment env: [String: String]) throws -> AppConfig {
     let allowlist = try parseAllowlist(from: env[EnvKey.allowlist])
-    let stateRoot = try createStateRootURL(for: env[EnvKey.stateRoot])
+    let stateRoot = try StateRootResolver.createStateRoot(for: env[EnvKey.stateRoot])
     let pollTimeoutSeconds =
       env[EnvKey.pollTimeout].flatMap(Int.init) ?? EnvDefaults.pollTimeoutSeconds
     let llm = try parseLLMConfig(from: env)
@@ -430,7 +430,7 @@ extension AppConfig {
   }
 }
 
-// MARK: - Allowlist & State Root
+// MARK: - Allowlist
 
 private extension AppConfig {
   static func parseAllowlist(from environmentValue: String?) throws -> Set<Int64> {
@@ -454,31 +454,6 @@ private extension AppConfig {
     }
 
     return allowlist
-  }
-
-  static func createStateRootURL(for rawPath: String?) throws -> URL {
-    let trimmedPath = rawPath?.trimmingCharacters(in: .whitespaces)
-    let stateRootURL =
-      if let path = trimmedPath, !path.isEmpty {
-        URL(fileURLWithPath: path, isDirectory: true)
-      } else {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
-          EnvDefaults.stateDirectoryName,
-          isDirectory: true
-        )
-      }
-
-    do {
-      try FileManager.default.createDirectory(
-        at: stateRootURL,
-        withIntermediateDirectories: true,
-        attributes: [.posixPermissions: stateRootPermissions]
-      )
-    } catch {
-      throw ConfigError.unwritableStateRoot(stateRootURL.path)
-    }
-
-    return stateRootURL
   }
 }
 

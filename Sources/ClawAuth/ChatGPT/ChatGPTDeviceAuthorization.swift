@@ -50,6 +50,11 @@ where ClockType.Duration == Duration {
   }
 }
 
+/// The device flow as the login sequence depends on it: one call, one grant. `authorize` above
+/// already is that call, so the conformance adds no behavior — it only lets a caller name the
+/// outcome it needs without also naming the clock the poll loop is generic over.
+extension ChatGPTDeviceAuthorization: ChatGPTDeviceAuthorizing {}
+
 // MARK: - The Login Window
 
 private extension ChatGPTDeviceAuthorization {

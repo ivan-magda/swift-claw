@@ -102,9 +102,12 @@ let package = Package(
       ]
     ),
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore", "ClawTestSupport"]),
+    // `ClawSecrets` and `ClawGateway` are test-only: the auth workflow is proven against the real
+    // secret preparer, credential store, and instance lock it will be composed with, while
+    // production `ClawAuth` still depends on `ClawCore` alone.
     .testTarget(
       name: "ClawAuthTests",
-      dependencies: ["ClawAuth", "ClawCore", "ClawTestSupport"]
+      dependencies: ["ClawAuth", "ClawCore", "ClawSecrets", "ClawGateway", "ClawTestSupport"]
     ),
     .testTarget(
       name: "ClawSecretsTests",
