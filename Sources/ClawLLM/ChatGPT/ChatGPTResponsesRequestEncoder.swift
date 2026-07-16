@@ -230,9 +230,13 @@ enum ChatGPTWireInputItem: Encodable {
     var container = encoder.container(keyedBy: CodingKeys.self)
     switch self {
     case .userText(let text):
+      // The route infers this type when it is absent, but the Codex client shape this request
+      // impersonates states it, and it is that shape the backend is expecting to read.
+      try container.encode("message", forKey: .type)
       try container.encode("user", forKey: .role)
       try container.encode([ChatGPTWireContent(type: "input_text", text: text)], forKey: .content)
     case .assistantText(let text):
+      try container.encode("message", forKey: .type)
       try container.encode("assistant", forKey: .role)
       // Replayed history, never a turn in flight: the route is being told what was already said.
       try container.encode("completed", forKey: .status)

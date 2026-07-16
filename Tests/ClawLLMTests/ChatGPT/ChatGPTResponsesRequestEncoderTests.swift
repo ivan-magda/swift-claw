@@ -27,7 +27,8 @@ import Testing
     #expect(
       body == """
         {"include":["reasoning.encrypted_content"],\
-        "input":[{"content":[{"text":"hello","type":"input_text"}],"role":"user"}],\
+        "input":[\
+        {"content":[{"text":"hello","type":"input_text"}],"role":"user","type":"message"}],\
         "instructions":"You are helpful.\\n\\nBe brief.",\
         "model":"gpt-5",\
         "prompt_cache_key":"swift-claw:cbcece245430edb08f8e6a62",\
@@ -66,13 +67,13 @@ import Testing
       body == """
         {"include":["reasoning.encrypted_content"],\
         "input":[\
-        {"content":[{"text":"u","type":"input_text"}],"role":"user"},\
+        {"content":[{"text":"u","type":"input_text"}],"role":"user","type":"message"},\
         {"content":[{"text":"thinking out loud","type":"output_text"}],\
-        "role":"assistant","status":"completed"},\
+        "role":"assistant","status":"completed","type":"message"},\
         {"arguments":"{}","call_id":"call_1","name":"clock","type":"function_call"},\
         {"call_id":"call_1","output":"12:00","type":"function_call_output"},\
         {"content":[{"text":"It is noon.","type":"output_text"}],\
-        "role":"assistant","status":"completed"}],\
+        "role":"assistant","status":"completed","type":"message"}],\
         "instructions":"S",\
         "model":"gpt-5",\
         "parallel_tool_calls":true,\
