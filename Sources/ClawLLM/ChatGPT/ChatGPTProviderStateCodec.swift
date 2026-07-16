@@ -325,6 +325,12 @@ struct ChatGPTProviderStateCodec: Sendable {
 
   /// Stamps a response's reasoning material with the identity that can replay it.
   ///
+  /// State loss degrades continuity, never the turn — the same rule the read side keeps. By the time
+  /// this runs the text and the tool calls have already arrived and the turn has succeeded, so
+  /// reasoning too large to store is stamped as the empty payload rather than refused: the epoch
+  /// survives, and only the replay continuity is lost. The throw is left for material that cannot be
+  /// rendered at all.
+  ///
   /// Empty items are still a state. A recovered turn that produced no reasoning has only its epoch
   /// to say, and that stamp is the entire record a restart derives the epoch from: without it the
   /// newest compatible state in history is the poisoned one again, and the recovery is undone on
@@ -333,14 +339,12 @@ struct ChatGPTProviderStateCodec: Sendable {
     items: ChatGPTReplayItems,
     identity: ChatGPTReplayIdentity
   ) throws -> ProviderExchangeState {
-    guard let json = CanonicalJSON.encode(ChatGPTDurableReplayPayload(items)) else {
-      throw Self.unencodableState
-    }
-    let payload = Data(json.utf8)
-    // Refused here, where the turn is still whole, rather than written and then dropped on every
-    // read for the rest of the session's life.
+    let payload = try Self.canonicalPayload(items)
     guard payload.count <= Self.maximumStateBytes else {
-      throw Self.unencodableState
+      return ProviderExchangeState(
+        issuer: identity.issuer,
+        payload: try Self.canonicalPayload(ChatGPTReplayItems())
+      )
     }
     return ProviderExchangeState(issuer: identity.issuer, payload: payload)
   }
@@ -356,8 +360,17 @@ struct ChatGPTProviderStateCodec: Sendable {
 private extension ChatGPTProviderStateCodec {
   static let unencodableState = ProviderError.terminal(
     status: nil,
-    message: "the ChatGPT reply produced replay state that could not be stored"
+    message: "the ChatGPT reply produced replay state that could not be encoded"
   )
+
+  /// The canonical bytes of a payload. Size is not this function's question — only whether the
+  /// material renders at all, which is the one failure the write side has no lenient answer to.
+  static func canonicalPayload(_ items: ChatGPTReplayItems) throws -> Data {
+    guard let json = CanonicalJSON.encode(ChatGPTDurableReplayPayload(items)) else {
+      throw unencodableState
+    }
+    return Data(json.utf8)
+  }
 
   /// One history state that survived every check, with the weight it will actually cost the request.
   struct Candidate {

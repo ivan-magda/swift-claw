@@ -191,7 +191,7 @@ import Testing
   ])
   func malformedOrForeignIssuersAreDropped(_ issuer: String) throws {
     // given
-    let payload = try Self.payload(reasoning: "ENC", identity: Self.identity(epoch: Self.epoch))
+    let payload = try Self.state(reasoning: "ENC", identity: Self.identity(epoch: Self.epoch))
     let history = [
       ChatMessage(
         role: .assistant,
@@ -751,9 +751,11 @@ import Testing
     #expect(refused.drops.oversized == 1)
   }
 
-  /// A response too large to persist is refused where the refusal is still cheap, rather than
-  /// written and dropped on every read forever after.
-  @Test func encodingRefusesAStateOverThePerStateCap() {
+  /// The mirror of the drop above, and the write side's half of the codec's one rule. By the time a
+  /// response is stamped its text and its tool calls have already arrived, so reasoning too large to
+  /// store costs the turn its replay continuity and nothing else: the epoch is still written, and a
+  /// restart still reads the stamp back as the live generation.
+  @Test func encodingOverThePerStateCapKeepsTheEpochAndDropsTheReasoning() throws {
     // given
     let oversized = ChatGPTReplayItems(
       reasoning: [
@@ -763,16 +765,28 @@ import Testing
             count: ChatGPTProviderStateCodec.maximumStateBytes + 1
           )
         )
-      ]
+      ],
+      assistantMessages: [ChatGPTAssistantMessageItem(outputText: ["the answer"])]
+    )
+
+    // when
+    let stamp = try Self.codec().encodeResponseState(
+      items: oversized,
+      identity: Self.identity(epoch: Self.epoch)
+    )
+    let reloaded = Self.codec().decodeCompatibleHistory(
+      messages: [ChatMessage(role: .assistant, content: "the answer", providerState: stamp)],
+      profileID: Self.profileID,
+      wireModel: Self.wireModel
     )
 
     // then
-    #expect(throws: ProviderError.self) {
-      try Self.codec().encodeResponseState(
-        items: oversized,
-        identity: Self.identity(epoch: Self.epoch)
-      )
-    }
+    #expect(stamp.issuer == Self.goldenIssuer)
+    #expect(stamp.payload.count <= ChatGPTProviderStateCodec.maximumStateBytes)
+    #expect(Self.decodeItems(stamp) == ChatGPTReplayItems())
+    #expect(reloaded.identity.epoch == Self.epoch)
+    #expect(reloaded.turns[0]?.reasoning.isEmpty == true)
+    #expect(reloaded.drops.isEmpty)
   }
 
   /// Four states summing to exactly the aggregate cap all travel. This is the positive half that
@@ -997,13 +1011,6 @@ extension ChatGPTProviderStateCodecTests {
         recorder?.record(drops)
       }
     )
-  }
-
-  fileprivate static func payload(
-    reasoning: String,
-    identity: ChatGPTReplayIdentity
-  ) throws -> ProviderExchangeState {
-    try state(reasoning: reasoning, identity: identity)
   }
 
   fileprivate static func state(
