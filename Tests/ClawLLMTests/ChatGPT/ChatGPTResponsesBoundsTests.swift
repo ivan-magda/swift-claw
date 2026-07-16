@@ -175,6 +175,52 @@ import Testing
     }
   }
 
+  // MARK: - Non-Visible Delta Retention
+
+  /// A commentary item can never become owner-visible, so its `output_text.delta` events are read by
+  /// no path — not the answer, not replay, not the observed-token estimate. Retaining them would let
+  /// a stream materialize megabytes of write-only text under the per-event and buffer caps, which
+  /// charge only text that can reach the owner. So they are dropped as they arrive: the retained
+  /// buffers stay empty across a flood that would weigh megabytes if it were kept.
+  @Test func textDeltasForANonVisibleItemAreDroppedNotRetained() throws {
+    // given
+    var accumulator = Self.accumulator()
+    var parser = ChatGPTResponsesSSEParser()
+    let deltaCount = 8_192
+    let fragment = String(repeating: "x", count: 256)
+    var stream = Self.addedMessage(index: 0, phase: "commentary")
+    for _ in 0..<deltaCount {
+      stream += Self.textDeltaEvent(index: 0, text: fragment)
+    }
+
+    // when
+    _ = try Self.deliver(stream, through: &parser, into: &accumulator)
+
+    // then
+    #expect(accumulator.retainedDeltaBytes == 0)
+  }
+
+  /// Arguments streamed at a non-function-call item are dispatched by no path, so like non-visible
+  /// text they are dropped rather than buffered. The carrier is a visible message item, which proves
+  /// the drop turns on the item's type and not on its phase.
+  @Test func argumentDeltasForANonFunctionCallItemAreDroppedNotRetained() throws {
+    // given
+    var accumulator = Self.accumulator()
+    var parser = ChatGPTResponsesSSEParser()
+    let deltaCount = 8_192
+    let fragment = String(repeating: "a", count: 256)
+    var stream = Self.addedMessage(index: 0, phase: "final")
+    for _ in 0..<deltaCount {
+      stream += Self.argumentDeltaEvent(index: 0, callID: "call_0", fragment: fragment)
+    }
+
+    // when
+    _ = try Self.deliver(stream, through: &parser, into: &accumulator)
+
+    // then
+    #expect(accumulator.retainedDeltaBytes == 0)
+  }
+
   // MARK: - Response State Bytes
 
   /// Replay state that fits is kept whole. The payload weighs exactly the cap, which is the boundary
@@ -390,6 +436,34 @@ extension ChatGPTResponsesBoundsTests {
       emitted += try parser.push(Data(batch.utf8)).count
     }
     return emitted
+  }
+
+  /// A message item added but not yet done, at the given phase. The carrier for a delta flood whose
+  /// item never resolves, so the accumulator's retained buffers are what the test weighs.
+  fileprivate static func addedMessage(index: Int, phase: String) -> String {
+    event(
+      #"{"type":"response.output_item.added","output_index":\#(index),"#
+        + #""item":{"id":"msg_\#(index)","type":"message","role":"assistant","#
+        + #""status":"in_progress","phase":"\#(phase)","content":[]}}"#
+    )
+  }
+
+  fileprivate static func textDeltaEvent(index: Int, text: String) -> String {
+    event(
+      #"{"type":"response.output_text.delta","output_index":\#(index),"#
+        + #""item_id":"msg_\#(index)","delta":"\#(text)"}"#
+    )
+  }
+
+  fileprivate static func argumentDeltaEvent(
+    index: Int,
+    callID: String,
+    fragment: String
+  ) -> String {
+    event(
+      #"{"type":"response.function_call_arguments.delta","output_index":\#(index),"#
+        + #""call_id":"\#(callID)","delta":"\#(fragment)"}"#
+    )
   }
 
   /// `count` distinct commentary items, each added and done, followed by a successful terminal.

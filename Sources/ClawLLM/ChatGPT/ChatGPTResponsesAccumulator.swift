@@ -54,6 +54,22 @@ struct ChatGPTResponsesAccumulator: Sendable {
     }
   }
 
+  /// The bytes held in the raw per-item delta buffers, whether or not any of them can reach the
+  /// owner. Distinct from the accumulated-output budget, which charges only text the owner may see:
+  /// this weighs the buffers themselves, so a memory-bound test can prove deltas for an item no path
+  /// will ever read are dropped as they arrive rather than retained under the byte caps.
+  var retainedDeltaBytes: Int {
+    order.reduce(0) { running, index in
+      guard let item = items[index] else {
+        return running
+      }
+      return SaturatingArithmetic.sum(
+        running,
+        SaturatingArithmetic.sum(item.deltaText.utf8.count, item.argumentDeltas.utf8.count)
+      )
+    }
+  }
+
   /// Consumes one delivered batch, emitting the deltas the owner may see and, once the stream states
   /// its outcome, the whole reply.
   ///
@@ -118,10 +134,24 @@ private struct OutputItem {
   var done: ChatGPTStreamItem?
   var countedBytes = 0
 
+  /// Whether text for this item can ever reach the owner. Phase and type are frozen at first
+  /// sighting, so an item that fails this can never later become visible — its text is read nowhere
+  /// and is dropped as it arrives rather than buffered.
+  var retainsText: Bool {
+    type == .message && phase.isOwnerVisible
+  }
+
+  /// Whether arguments for this item can ever be dispatched. Type is frozen at first sighting, so an
+  /// item that fails this proposes no call — its arguments are read nowhere and are dropped rather
+  /// than buffered.
+  var retainsArguments: Bool {
+    type == .functionCall
+  }
+
   /// The text of this item the owner may see. A done item is the source of truth; the delta assembly
   /// stands in only while none has arrived.
   var visibleText: String {
-    guard type == .message, phase.isOwnerVisible else {
+    guard retainsText else {
       return ""
     }
     return doneText ?? deltaText
@@ -129,7 +159,7 @@ private struct OutputItem {
 
   /// The raw arguments this item proposes, reconciled where the stream said so.
   var argumentText: String {
-    guard type == .functionCall else {
+    guard retainsArguments else {
       return ""
     }
     return arguments ?? argumentDeltas
@@ -199,28 +229,38 @@ private extension ChatGPTResponsesAccumulator {
     try retainForReplay(item, at: index)
   }
 
-  /// Publishes visible text and buffers the rest. An empty delta is never published: a consumer that
-  /// republished a draft with no new text would repaint it for nothing.
+  /// Publishes and retains visible text. Text for an item that can never surface is dropped as it
+  /// arrives rather than buffered, so a stream of non-visible deltas cannot exhaust memory under the
+  /// per-event and buffer caps. An empty delta is never published: republishing a draft with no new
+  /// text would repaint it for nothing.
   mutating func appendText(index: Int, text: String) throws -> String? {
-    // Text whose phase was never registered has no filter to pass, and publishing it would mean
+    // Text whose item was never announced has no filter to pass, and publishing it would mean
     // guessing that unannounced text is the answer.
     guard let existing = items[index] else {
       throw Self.unregisteredItem
     }
+    guard existing.retainsText else {
+      return nil
+    }
     try update(index) { accumulated in
       accumulated.deltaText += text
     }
-    guard existing.type == .message, existing.phase.isOwnerVisible, text.isEmpty == false else {
+    guard text.isEmpty == false else {
       return nil
     }
     return text
   }
 
   mutating func appendArguments(index: Int, callID: String?, fragment: String) throws {
-    guard items[index] != nil else {
+    guard let existing = items[index] else {
       throw Self.unregisteredItem
     }
     try reconcileCallID(index: index, callID: callID)
+    // Arguments for an item that proposes no call are dispatched nowhere, so they are dropped rather
+    // than buffered — a stream of them cannot exhaust memory under the per-event and buffer caps.
+    guard existing.retainsArguments else {
+      return
+    }
     try update(index) { accumulated in
       accumulated.argumentDeltas += fragment
     }
