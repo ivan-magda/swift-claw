@@ -211,6 +211,29 @@ actor SleepRecorder {
 
 // MARK: - Builders
 
+/// Resolves a current-route `LLMConfig` for a configured endpoint. The wire endpoint and the
+/// output-token field ride alongside it — the reshaped `LLMConfig` carries neither — so `makeProvider`
+/// can hand the adapter the same three values composition does.
+struct TestProviderConfig {
+  let config: LLMConfig
+  let endpoint: String
+  let maxTokensField: MaxTokensField
+  let apiKey: String
+}
+
+/// A current-route resolution for a configured endpoint, so a test needing only the wire adapter does
+/// not restate the descriptor.
+func makeCurrentRoute(
+  endpoint: String = "https://api.test/v1",
+  model: String = "gpt-4o"
+) -> ResolvedLLMRoute {
+  ResolvedLLMRoute(
+    descriptor: .openAICompatible(endpoint: endpoint),
+    configuredReference: model,
+    wireModel: model
+  )
+}
+
 func makeConfig(
   baseURL: String = "https://api.test/v1",
   maxTokensField: MaxTokensField = .maxCompletionTokens,
@@ -218,29 +241,33 @@ func makeConfig(
   model: String = "gpt-4o",
   maxOutputTokens: Int = 256,
   retryBudget: Int = 3
-) -> LLMConfig {
-  LLMConfig(
-    baseURL: baseURL,
-    model: model,
-    apiKey: apiKey,
+) -> TestProviderConfig {
+  TestProviderConfig(
+    config: LLMConfig(
+      route: makeCurrentRoute(endpoint: baseURL, model: model),
+      maxOutputTokens: maxOutputTokens,
+      retryBudget: retryBudget,
+      requestTimeoutSeconds: 30
+    ),
+    endpoint: baseURL,
     maxTokensField: maxTokensField,
-    maxOutputTokens: maxOutputTokens,
-    retryBudget: retryBudget,
-    requestTimeoutSeconds: 30
+    apiKey: apiKey
   )
 }
 
 /// Defaults the credential source to the static one composition uses, seeded from the config's key,
 /// so a test that only cares about wire shaping still authorizes exactly the way production does.
 func makeProvider(
-  config: LLMConfig,
+  config: TestProviderConfig,
   http: any HTTPExecuting & HTTPStreaming,
   credentials: (any LLMCredentialSource)? = nil,
   recorder: SleepRecorder = SleepRecorder(),
   jitter: @escaping @Sendable (Duration) -> Duration = { _ in .zero }
 ) -> OpenAICompatibleProvider {
   OpenAICompatibleProvider(
-    config: config,
+    config: config.config,
+    endpoint: config.endpoint,
+    maxTokensField: config.maxTokensField,
     credentials: credentials ?? StaticLLMCredentialSource(bearer: config.apiKey),
     http: http,
     clock: ScriptedClock { delay in

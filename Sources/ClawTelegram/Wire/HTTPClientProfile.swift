@@ -30,4 +30,15 @@ public enum HTTPClientProfile {
     configuration.decompression = .enabled(limit: .size(maximumDecompressedResponseBytes))
     return configuration
   }
+
+  /// The Telegram transport's profile: bounded decompression, but redirects left at the library
+  /// default. Telegram's Bot API answers a moved method with a redirect this client is expected to
+  /// follow, and the token it carries is a bot token bound to Telegram's own hosts — not a bearer a
+  /// redirect could walk onto a third party. Kept a named profile of its own so the redirect posture
+  /// that separates it from `protectedEgress` is a deliberate choice rather than an omission.
+  public static var telegram: HTTPClient.Configuration {
+    var configuration = HTTPClient.Configuration()
+    configuration.decompression = .enabled(limit: .size(maximumDecompressedResponseBytes))
+    return configuration
+  }
 }

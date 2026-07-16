@@ -165,7 +165,9 @@ let package = Package(
       name: "ClawdCompositionTests",
       dependencies: [
         "clawd", "ClawGateway", "ClawAgent", "ClawTestSupport",
+        "ClawCore", "ClawAuth", "ClawSecrets", "ClawLLM", "ClawData", "ClawTelegram",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+        .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "Logging", package: "swift-log"),
       ]
     ),

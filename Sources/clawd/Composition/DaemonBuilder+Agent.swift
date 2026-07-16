@@ -18,21 +18,8 @@ extension DaemonBuilder {
     let contextBuilder: ContextBuilder
   }
 
-  func makeProvider(credentials: any LLMCredentialSource) -> OpenAICompatibleProvider {
-    OpenAICompatibleProvider(
-      config: config.llm,
-      credentials: credentials,
-      http: executor,
-      clock: ContinuousClock(),
-      jitter: { cap in
-        Duration.seconds(Double.random(in: 0...(cap / .seconds(1))))
-      },
-      logger: logger
-    )
-  }
-
   func makeAgentStack(
-    provider: OpenAICompatibleProvider,
+    providerStack: ProviderStack,
     workspace: FileSystemWorkspace,
     costResolver: CostResolver,
     sandbox: SandboxStack
@@ -40,7 +27,7 @@ extension DaemonBuilder {
     let toolDispatcher = makeToolDispatcher(workspace: workspace, sandbox: sandbox)
     let staticSubhash = policyStaticSubhash(toolDispatcher: toolDispatcher, workspace: workspace)
     let agent = makeAgent(
-      provider: provider,
+      providerStack: providerStack,
       toolDispatcher: toolDispatcher,
       costResolver: costResolver
     )
@@ -84,30 +71,33 @@ extension DaemonBuilder {
     )
   }
 
-  /// Assembles the LLM agent stack: the OpenAI-compatible provider, the injected offline-first cost
+  /// Assembles the LLM agent stack: the route-resolved provider, the injected offline-first cost
   /// resolver (shared with the /schedule parse), and the `AgentRuntime` that orchestrates one turn.
+  /// The stack carries the erased provider, both model identities, and both policies, so this seam
+  /// takes no concrete provider type and stamps whichever billing and reservation the route selected.
   /// Kept separate from the service wiring so the composition root reads as "build the agent → feed
   /// the turn runner → register the services".
   func makeAgent(
-    provider: OpenAICompatibleProvider,
+    providerStack: ProviderStack,
     toolDispatcher: GatedToolDispatcher,
     costResolver: CostResolver
   ) -> AgentRuntime {
     AgentRuntime(
-      provider: provider,
+      provider: providerStack.provider,
       typingIndicator: TelegramTypingIndicator(transport: transport),
       draftStreamer: TelegramRichDraftStreamer(transport: transport),
       streamingEnabled: config.llm.streamingEnabled,
       costResolver: costResolver,
       budget: config.budget,
-      // The wired provider is the metered OpenAI-compatible route, so the wire model and the
-      // accounting reference are the same configured string and the policies stay at their
-      // metered/text-only defaults. A managed subscription route would inject the split identity
-      // and its policies here instead.
-      wireModel: config.llm.model,
-      configuredReference: config.llm.model,
-      costPolicy: .metered,
-      reservationPolicy: .textOnly,
+      // The wire model reaches `ChatRequest`; the configured reference reaches accounting and safe
+      // diagnostics. The route split them so subscription and API-billed calls for one wire model
+      // never share a usage identity — and the policies ride the same stack, so the ChatGPT route is
+      // billed as an included plan and reserves for replay state while the current route stays
+      // metered and text-only.
+      wireModel: providerStack.wireModel,
+      configuredReference: providerStack.configuredReference,
+      costPolicy: providerStack.costPolicy,
+      reservationPolicy: providerStack.reservationPolicy,
       toolDispatcher: toolDispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,

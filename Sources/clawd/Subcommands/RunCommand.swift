@@ -1,5 +1,4 @@
 import ArgumentParser
-import AsyncHTTPClient
 import ClawCore
 import ClawData
 import ClawGateway
@@ -26,43 +25,26 @@ struct RunCommand: AsyncParsableCommand {
     let stores = try Self.openStoresOrExit(config: config, logger: logger)
     try Self.ensureWorkspaceDirectoryOrExit(config: config)
 
-    // Shared HTTP client for both Telegram and the LLM; gzip decompression is a client-wide toggle
-    // (the executor only advertises `accept-encoding`), so it's configured here at the root.
-    var httpConfig = HTTPClient.Configuration()
-    httpConfig.decompression = .enabled(limit: .size(16 * 1024 * 1024))
-    let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: httpConfig)
-    let executor = AsyncHTTPExecutor(client: httpClient)
-
-    // Tool fetches get a DEDICATED client with redirects disabled: AsyncHTTPClient
-    // configures redirect behavior per client, and the Telegram/LLM client must keep its defaults.
-    var toolHTTPConfig = HTTPClient.Configuration()
-    toolHTTPConfig.redirectConfiguration = .disallow
-    toolHTTPConfig.decompression = .enabled(limit: .size(16 * 1024 * 1024))
-    let toolHTTPClient = HTTPClient(
-      eventLoopGroupProvider: .singleton,
-      configuration: toolHTTPConfig
-    )
-    let toolExecutor = AsyncHTTPExecutor(client: toolHTTPClient)
-
-    let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
-    let botUsername = await Self.fetchBotUsername(transport: transport, logger: logger)
-
-    let bundle = try await DaemonBuilder(
-      config: config,
-      secrets: secrets,
-      stores: stores,
-      executor: executor,
-      toolExecutor: toolExecutor,
-      transport: transport,
-      botUsername: botUsername,
-      logger: logger
-    ).build()
+    // Three independent clients — Telegram on its redirect-following profile, LLM and tool on the
+    // protected redirect-disabled one — plus the route-resolved provider stack and the assembled
+    // bundle. A malformed managed credential envelope fails here; the composition closes every client
+    // it opened before the error reaches this mapping, and a missing record boots logged out.
+    let composed: RunComposition.Composed
+    do {
+      composed = try await RunComposition(
+        config: config,
+        secrets: secrets,
+        stores: stores,
+        logger: logger
+      ).compose()
+    } catch let error as LLMCredentialStoreError {
+      FileHandle.standardError.write(Data("credential store error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
+    }
 
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
     try await Self.serveThenShutDown(
-      bundle: bundle,
-      httpClient: httpClient,
-      toolHTTPClient: toolHTTPClient,
+      composed: composed,
       redactionValues: secrets.redactionValues,
       logger: logger
     )
@@ -76,12 +58,13 @@ private extension RunCommand {
   /// lane-drain timeout it terminates the process from here — before `run`'s `defer { lock.release()
   /// }` and any client teardown unwind — so the held instance-lock fd stays owned until termination.
   static func serveThenShutDown(
-    bundle: DaemonRuntimeBundle,
-    httpClient: HTTPClient,
-    toolHTTPClient: HTTPClient,
+    composed: RunComposition.Composed,
     redactionValues: [String],
     logger: Logger
   ) async throws {
+    let bundle = composed.bundle
+    let clients = composed.clients
+
     var runFailure: Error?
     do {
       try await bundle.daemon.run()
@@ -109,11 +92,12 @@ private extension RunCommand {
       laneDrain: laneDrain,
       dependent: RuntimeShutdownCoordinator.DependentCleanup(
         commitCredentials: { try await bundle.credentialSource.shutdown() },
-        // The dedicated LLM client is introduced separately; today the LLM shares the Telegram
-        // client, closed under `closeTelegramClient` below.
-        closeLLMClient: {},
-        closeTelegramClient: { try await httpClient.shutdown() },
-        closeToolClient: { try await toolHTTPClient.shutdown() }
+        // The dedicated redirect-disabled LLM client, now its own resource rather than the Telegram
+        // client it shared: its transport stays alive across the credential commit above so a
+        // refresh's token rotation can finish, then closes here.
+        closeLLMClient: { try await clients.llm.close() },
+        closeTelegramClient: { try await clients.telegram.close() },
+        closeToolClient: { try await clients.tool.close() }
       )
     )
 
@@ -216,16 +200,5 @@ private extension RunCommand {
     }
 
     return stores
-  }
-
-  static func fetchBotUsername(transport: TelegramClient, logger: Logger) async -> String? {
-    do {
-      return try await transport.getMe().username
-    } catch {
-      logger.warning(
-        "failed to fetch bot identity; command mentions will require bare commands: \(error)"
-      )
-      return nil
-    }
   }
 }

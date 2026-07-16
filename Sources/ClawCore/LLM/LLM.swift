@@ -190,13 +190,16 @@ extension StructuredOutputMode: CustomStringConvertible {
   public var description: String { rawValue }
 }
 
-/// Static LLM wiring loaded from the environment. `apiKey` defaults to "" — local servers
-/// need none, so a missing key is not a config error.
+/// The provider-neutral LLM settings the composition root wires a stack from. It carries the resolved
+/// route — the parsed `CLAW_LLM_MODEL` with its provider descriptor, accounting reference, wire model,
+/// and egress identity — plus the settings no route owns: the local output reservation, the retry and
+/// timeout budgets, the Telegram streaming-presentation toggle, and the structured-output mode.
+///
+/// It holds no base URL, raw model, or API key: the base URL lives inside the route's egress identity,
+/// the wire and accounting model identities live on the route, and the key is a secret the composition
+/// root routes into a credential source rather than through this value.
 public struct LLMConfig: Sendable, Equatable {
-  public let baseURL: String
-  public let model: String
-  public let apiKey: String
-  public let maxTokensField: MaxTokensField
+  public let route: ResolvedLLMRoute
   public let maxOutputTokens: Int
   public let retryBudget: Int
   public let requestTimeoutSeconds: Int
@@ -204,43 +207,19 @@ public struct LLMConfig: Sendable, Equatable {
   public let structuredOutput: StructuredOutputMode
 
   public init(
-    baseURL: String,
-    model: String,
-    apiKey: String,
-    maxTokensField: MaxTokensField,
+    route: ResolvedLLMRoute,
     maxOutputTokens: Int,
     retryBudget: Int,
     requestTimeoutSeconds: Int,
     streamingEnabled: Bool = true,
     structuredOutput: StructuredOutputMode = .off
   ) {
-    self.baseURL = baseURL
-    self.model = model
-    self.apiKey = apiKey
-    self.maxTokensField = maxTokensField
+    self.route = route
     self.maxOutputTokens = maxOutputTokens
     self.retryBudget = retryBudget
     self.requestTimeoutSeconds = requestTimeoutSeconds
     self.streamingEnabled = streamingEnabled
     self.structuredOutput = structuredOutput
-  }
-}
-
-extension LLMConfig {
-  /// Returns a copy with the runtime secret injected. `AppConfig` carries no key (it's a secret);
-  /// the composition root combines the non-secret LLM config with `Secrets.llmApiKey`.
-  public func withAPIKey(_ apiKey: String) -> LLMConfig {
-    LLMConfig(
-      baseURL: baseURL,
-      model: model,
-      apiKey: apiKey,
-      maxTokensField: maxTokensField,
-      maxOutputTokens: maxOutputTokens,
-      retryBudget: retryBudget,
-      requestTimeoutSeconds: requestTimeoutSeconds,
-      streamingEnabled: streamingEnabled,
-      structuredOutput: structuredOutput
-    )
   }
 }
 

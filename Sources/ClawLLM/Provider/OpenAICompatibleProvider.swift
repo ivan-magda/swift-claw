@@ -10,6 +10,14 @@ import Logging
 /// source, and the only header that source may contribute is `Authorization`.
 public struct OpenAICompatibleProvider: LLMProvider {
   private let config: LLMConfig
+  /// The resolved endpoint the route selected. Kept as its own value rather than pulled back out of
+  /// the route on every call: this adapter owns the wire URL and applies its own single-slash path
+  /// rule to what it is handed, so the endpoint arrives already resolved and is never re-canonicalized
+  /// here.
+  private let endpoint: String
+  /// Which JSON key carries the output cap on this route's wire. The route's descriptor decides it,
+  /// so a second copy of the field-selection rule cannot drift from what configuration validated.
+  private let maxTokensField: MaxTokensField
   private let credentials: any LLMCredentialSource
   private let http: any HTTPExecuting & HTTPStreaming
 
@@ -23,6 +31,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
 
   public init(
     config: LLMConfig,
+    endpoint: String,
+    maxTokensField: MaxTokensField,
     credentials: any LLMCredentialSource,
     http: any HTTPExecuting & HTTPStreaming,
     clock: any Clock<Duration>,
@@ -30,6 +40,8 @@ public struct OpenAICompatibleProvider: LLMProvider {
     logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
   ) {
     self.config = config
+    self.endpoint = endpoint
+    self.maxTokensField = maxTokensField
     self.credentials = credentials
     self.http = http
 
@@ -160,11 +172,11 @@ public struct OpenAICompatibleProvider: LLMProvider {
       )
     }
 
-    let sessionId = Self.baseURLIsOpenRouter(config.baseURL) ? request.sessionId : nil
+    let sessionId = Self.baseURLIsOpenRouter(endpoint) ? request.sessionId : nil
     let payload = RequestBody(
       model: request.model,
       messages: wireMessages,
-      maxTokensKey: config.maxTokensField.rawValue,
+      maxTokensKey: maxTokensField.rawValue,
       maxOutputTokens: request.maxOutputTokens,
       stop: request.stop,
       stream: streaming,
@@ -417,7 +429,7 @@ private extension OpenAICompatibleProvider {
   static let allowedCredentialHeaders = ["authorization": "Authorization"]
 
   func chatCompletionsURL() -> String {
-    let base = config.baseURL.hasSuffix("/") ? String(config.baseURL.dropLast()) : config.baseURL
+    let base = endpoint.hasSuffix("/") ? String(endpoint.dropLast()) : endpoint
     return "\(base)/chat/completions"
   }
 

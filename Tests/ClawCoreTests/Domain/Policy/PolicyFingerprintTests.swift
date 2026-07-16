@@ -51,7 +51,7 @@ import Testing
 
   private func subhash(
     tools: [ToolDefinition] = [],
-    llm: String = "https://llm.example",
+    egress: LLMEgressIdentity = .configuredEndpoint("https://llm.example"),
     search: Bool = false,
     root: String = "/workspace",
     exempt: [CIDR] = [],
@@ -60,7 +60,7 @@ import Testing
     PolicyFingerprint.staticSubhash(
       inputs: PolicyFingerprint.StaticInputs(
         tools: tools,
-        llmBaseURL: llm,
+        llmEgress: egress,
         searchEndpointPresent: search,
         workspaceRoot: root,
         webFetchExemptCIDRs: exempt,
@@ -126,9 +126,34 @@ import Testing
     )
   }
 
-  @Test func llmBaseURLIsAnInputClass() {
-    // given / when / then — the pinned llm base URL is a hashed config class (§3.2)
-    #expect(subhash(llm: "https://a") != subhash(llm: "https://b"))
+  @Test func llmEgressEndpointIsAnInputClass() {
+    // given / when / then — the configured egress endpoint is a hashed config class
+    #expect(
+      subhash(egress: .configuredEndpoint("https://a"))
+        != subhash(egress: .configuredEndpoint("https://b"))
+    )
+  }
+
+  @Test func llmEgressDiffersBetweenCurrentAndManagedSinks() {
+    // given — a configured endpoint and a managed provider whose fixed endpoint happens to be the
+    // same string; the case prefix must still tell them apart so switching sinks voids an approval
+    let sharedEndpoint = "https://chatgpt.com/backend-api/codex/responses"
+
+    // when / then — the current and managed cases never collide, even on an identical endpoint
+    #expect(
+      subhash(egress: .configuredEndpoint(sharedEndpoint))
+        != subhash(
+          egress: .managed(providerID: .openAIChatGPT, endpoint: sharedEndpoint)
+        )
+    )
+  }
+
+  @Test func llmEgressManagedProviderIDIsAnInputClass() {
+    // given / when / then — two managed sinks on the same endpoint but different providers hash apart
+    #expect(
+      subhash(egress: .managed(providerID: .openAIChatGPT, endpoint: "https://x"))
+        != subhash(egress: .managed(providerID: .openAICompatible, endpoint: "https://x"))
+    )
   }
 
   @Test func searchEndpointPresenceIsAnInputClass() {

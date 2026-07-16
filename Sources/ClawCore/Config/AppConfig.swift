@@ -193,20 +193,75 @@ public struct AppConfig: Sendable, Equatable {
 // MARK: - LLM Config Parsing
 
 private extension AppConfig {
-  /// `apiKey` is optional — local servers need none.
+  /// Resolves the route from the model first, so a managed model that names no base URL is not
+  /// rejected for lacking one it never uses. The base URL is an autoclosure the registry evaluates
+  /// only for the current route, and the wire output-token field is applied only where the route
+  /// honors one — the managed ChatGPT route ignores `CLAW_LLM_MAX_TOKENS_FIELD` because it carries no
+  /// wire cap. The API key is not read here: it is a secret the composition root hands a credential
+  /// source.
   static func parseLLMConfig(from env: [String: String]) throws -> LLMConfig {
+    guard
+      let model = env[EnvKey.llmModel]?.trimmingCharacters(in: .whitespaces),
+      !model.isEmpty
+    else {
+      throw ConfigError.missingLLMModel
+    }
+
+    let resolved = try LLMProviderRegistry.resolve(
+      modelReference: model,
+      configuredBaseURL: try requiredBaseURL(from: env)
+    )
+    let route = try routeApplyingWireOutputField(to: resolved, env: env)
+
+    let rawMaxTokens = env[EnvKey.llmMaxTokens]?.trimmingCharacters(in: .whitespaces) ?? ""
+    let maxOutputTokens: Int
+    if rawMaxTokens.isEmpty {
+      maxOutputTokens = EnvDefaults.maxOutputTokens
+    } else if let parsedMaxTokens = Int(rawMaxTokens), parsedMaxTokens > 0 {
+      maxOutputTokens = parsedMaxTokens
+    } else {
+      throw ConfigError.invalidMaxTokens(rawMaxTokens)
+    }
+
+    let structuredOutput = try parseStructuredOutput(from: env, route: route)
+
+    return LLMConfig(
+      route: route,
+      maxOutputTokens: maxOutputTokens,
+      retryBudget: EnvDefaults.retryBudget,
+      requestTimeoutSeconds: EnvDefaults.requestTimeoutSeconds,
+      streamingEnabled: try boolValue(
+        env[EnvKey.llmStreaming],
+        key: EnvKey.llmStreaming,
+        default: true
+      ),
+      structuredOutput: structuredOutput
+    )
+  }
+
+  /// The current route's required base URL, thrown lazily so the registry evaluates it only when the
+  /// model resolves to that route. A managed model leaves this unevaluated, which is what lets
+  /// `CLAW_LLM_BASE_URL` stay absent for it.
+  static func requiredBaseURL(from env: [String: String]) throws -> String {
     guard
       let baseURL = env[EnvKey.llmBaseURL]?.trimmingCharacters(in: .whitespaces),
       !baseURL.isEmpty
     else {
       throw ConfigError.missingLLMBaseURL
     }
+    return baseURL
+  }
 
-    guard
-      let model = env[EnvKey.llmModel]?.trimmingCharacters(in: .whitespaces),
-      !model.isEmpty
-    else {
-      throw ConfigError.missingLLMModel
+  /// Rebuilds the route's wire output-token field from `CLAW_LLM_MAX_TOKENS_FIELD`, but only when the
+  /// resolved descriptor carries a configured field. A route that omits the wire cap honors no such
+  /// variable, so it is neither read nor validated there — parsing it would resurrect a value the
+  /// route ignores and reject a value it never consults.
+  static func routeApplyingWireOutputField(
+    to route: ResolvedLLMRoute,
+    env: [String: String]
+  ) throws -> ResolvedLLMRoute {
+    guard case .configured = route.descriptor.capabilities.outputTokenField else {
+      return route
     }
 
     let rawField = env[EnvKey.llmMaxTokensField]?.trimmingCharacters(in: .whitespaces) ?? ""
@@ -219,16 +274,34 @@ private extension AppConfig {
       throw ConfigError.invalidMaxTokensField(rawField)
     }
 
-    let rawMaxTokens = env[EnvKey.llmMaxTokens]?.trimmingCharacters(in: .whitespaces) ?? ""
-    let maxOutputTokens: Int
-    if rawMaxTokens.isEmpty {
-      maxOutputTokens = EnvDefaults.maxOutputTokens
-    } else if let parsedMaxTokens = Int(rawMaxTokens), parsedMaxTokens > 0 {
-      maxOutputTokens = parsedMaxTokens
-    } else {
-      throw ConfigError.invalidMaxTokens(rawMaxTokens)
-    }
+    let capabilities = route.descriptor.capabilities
+    let rebuilt = LLMProviderDescriptor(
+      providerID: route.descriptor.providerID,
+      qualifiedPrefix: route.descriptor.qualifiedPrefix,
+      egress: route.descriptor.egress,
+      credentialMode: route.descriptor.credentialMode,
+      capabilities: LLMProviderCapabilities(
+        supportsTools: capabilities.supportsTools,
+        usesStreamingWire: capabilities.usesStreamingWire,
+        supportsStructuredOutput: capabilities.supportsStructuredOutput,
+        supportsStopStrings: capabilities.supportsStopStrings,
+        outputTokenField: .configured(maxTokensField)
+      )
+    )
+    return ResolvedLLMRoute(
+      descriptor: rebuilt,
+      configuredReference: route.configuredReference,
+      wireModel: route.wireModel
+    )
+  }
 
+  /// Parses `CLAW_LLM_STRUCTURED_OUTPUT` and enforces the route's capability: a route with no
+  /// relied-upon structured-output contract accepts only `off`, and any other value fails closed with
+  /// the route named rather than being silently sent to a wire that cannot honor it.
+  static func parseStructuredOutput(
+    from env: [String: String],
+    route: ResolvedLLMRoute
+  ) throws -> StructuredOutputMode {
     let rawStructuredOutput =
       env[EnvKey.llmStructuredOutput]?.trimmingCharacters(in: .whitespaces) ?? ""
     let structuredOutput: StructuredOutputMode
@@ -240,23 +313,13 @@ private extension AppConfig {
       throw ConfigError.invalidStructuredOutput(rawStructuredOutput)
     }
 
-    return LLMConfig(
-      baseURL: baseURL,
-      model: model,
-      // Vestigial: the key is a secret, and the composition root now hands it to the provider's
-      // credential source rather than through this config.
-      apiKey: "",
-      maxTokensField: maxTokensField,
-      maxOutputTokens: maxOutputTokens,
-      retryBudget: EnvDefaults.retryBudget,
-      requestTimeoutSeconds: EnvDefaults.requestTimeoutSeconds,
-      streamingEnabled: try boolValue(
-        env[EnvKey.llmStreaming],
-        key: EnvKey.llmStreaming,
-        default: true
-      ),
-      structuredOutput: structuredOutput
-    )
+    if structuredOutput != .off, !route.descriptor.capabilities.supportsStructuredOutput {
+      throw ConfigError.structuredOutputUnsupportedOnRoute(
+        providerID: route.descriptor.providerID,
+        mode: structuredOutput
+      )
+    }
+    return structuredOutput
   }
 }
 

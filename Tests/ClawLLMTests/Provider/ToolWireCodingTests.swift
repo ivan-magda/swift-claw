@@ -9,14 +9,13 @@ import Testing
   private func makeProvider() -> OpenAICompatibleProvider {
     OpenAICompatibleProvider(
       config: LLMConfig(
-        baseURL: "http://localhost/v1",
-        model: "m",
-        apiKey: "",
-        maxTokensField: .maxTokens,
+        route: makeCurrentRoute(endpoint: "http://localhost/v1", model: "m"),
         maxOutputTokens: 100,
         retryBudget: 1,
         requestTimeoutSeconds: 5
       ),
+      endpoint: "http://localhost/v1",
+      maxTokensField: .maxTokens,
       credentials: StaticLLMCredentialSource(bearer: nil),
       http: UnusedHTTP(),
       clock: ScriptedClock { _ in

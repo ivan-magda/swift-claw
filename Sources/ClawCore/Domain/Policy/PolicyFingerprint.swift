@@ -25,11 +25,14 @@ public enum PolicyFingerprint {
   }
 
   /// The policy-relevant surface the static sub-hash is computed over: the tool-registry surface,
-  /// the llm base URL, the search-endpoint presence, the canonical workspace root, the web_fetch
-  /// SSRF exemption list, and the exec block. Secret values are never included.
+  /// the LLM egress identity, the search-endpoint presence, the canonical workspace root, the
+  /// web_fetch SSRF exemption list, and the exec block. Secret values are never included.
   public struct StaticInputs: Sendable {
     public let tools: [ToolDefinition]
-    public let llmBaseURL: String
+    /// Where inference leaves for — a configured endpoint or a managed provider's fixed one — never a
+    /// credential. Folded in so switching sinks (current ↔ managed, or one configured endpoint to
+    /// another) voids a parked approval even when no base URL is configured at all.
+    public let llmEgress: LLMEgressIdentity
     public let searchEndpointPresent: Bool
     public let workspaceRoot: String
     public let webFetchExemptCIDRs: [CIDR]
@@ -37,14 +40,14 @@ public enum PolicyFingerprint {
 
     public init(
       tools: [ToolDefinition],
-      llmBaseURL: String,
+      llmEgress: LLMEgressIdentity,
       searchEndpointPresent: Bool,
       workspaceRoot: String,
       webFetchExemptCIDRs: [CIDR],
       exec: ExecConfig
     ) {
       self.tools = tools
-      self.llmBaseURL = llmBaseURL
+      self.llmEgress = llmEgress
       self.searchEndpointPresent = searchEndpointPresent
       self.workspaceRoot = workspaceRoot
       self.webFetchExemptCIDRs = webFetchExemptCIDRs
@@ -77,7 +80,7 @@ public enum PolicyFingerprint {
       parts.append(tool.riskLevel.rawValue)
       parts.append(egressLabel(tool.egressClass))
     }
-    parts.append(inputs.llmBaseURL)
+    parts.append(egressIdentityLabel(inputs.llmEgress))
     parts.append(inputs.searchEndpointPresent ? "search:present" : "search:absent")
     parts.append(inputs.workspaceRoot)
     let exemptLabel = inputs.webFetchExemptCIDRs.map(\.description).sorted().joined(separator: ",")
@@ -114,6 +117,19 @@ private extension PolicyFingerprint {
     case .none: "none"
     case .fixedEndpoint: "fixed_endpoint"
     case .arbitraryDestination: "arbitrary_destination"
+    }
+  }
+
+  /// A stable, credential-free label for the LLM egress identity: the case, the provider id for a
+  /// managed sink, and the endpoint (already canonical from route resolution). The current and
+  /// managed cases carry distinct prefixes so no configured endpoint can ever collide with a managed
+  /// one, which is what makes switching between them void an outstanding approval.
+  static func egressIdentityLabel(_ egress: LLMEgressIdentity) -> String {
+    switch egress {
+    case .configuredEndpoint(let endpoint):
+      return "llm_egress:configured:\(endpoint)"
+    case .managed(let providerID, let endpoint):
+      return "llm_egress:managed:\(providerID.rawValue):\(endpoint)"
     }
   }
 }
