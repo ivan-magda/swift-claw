@@ -4,7 +4,7 @@ import Foundation
 /// Bounds and sanitizers for values that arrive from the vendor. Every field the device flow reads
 /// off the wire passes through one of these before it reaches a header, a terminal, or an owner's
 /// chat, so a hostile or merely broken response cannot widen what the daemon emits.
-enum ChatGPTWireValues {
+package enum ChatGPTWireValues {
   /// A whole, strictly positive count encoded as either a JSON number or an ASCII decimal string —
   /// the two encodings the vendor is observed to use interchangeably for `interval` and
   /// `expires_in`. Everything else, including a zero or fractional interval that would spin the
@@ -51,7 +51,7 @@ enum ChatGPTWireValues {
   /// Order is load-bearing. Sanitizing precedes redaction so that text which only *becomes* a
   /// secret once its escapes are stripped is still matched, and truncation comes last so it can
   /// only ever cut a placeholder rather than expose the prefix of a token that outran the bound.
-  static func safeRemoteDiagnostic(
+  package static func safeRemoteDiagnostic(
     _ raw: String,
     redacting values: [String],
     maxBytes: Int

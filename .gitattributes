@@ -1,0 +1,4 @@
+# SSE fixtures are a wire format, not source. An event is terminated by a blank line, so the blank
+# line at end of file is the final event's delimiter — without it that event never frames. Exempt
+# them from the whitespace checks that would read it as stray padding and invite its removal.
+*.sse -whitespace

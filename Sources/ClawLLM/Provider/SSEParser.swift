@@ -54,7 +54,7 @@ public struct SSEParser: Sendable {
     }
 
     var events: [StreamEvent] = []
-    while let delimiter = delimiterRange(in: buffer) {
+    while let delimiter = SSEFraming.delimiterRange(in: buffer) {
       let eventData = Data(buffer[..<delimiter.lowerBound])
       buffer.removeSubrange(..<delimiter.upperBound)
 
@@ -96,7 +96,7 @@ public struct SSEParser: Sendable {
       throw SSEParserError.malformedJSON("invalid UTF-8")
     }
 
-    let payloadLines = Self.dataPayloadLines(in: text)
+    let payloadLines = SSEFraming.dataPayloadLines(in: text)
     guard !payloadLines.isEmpty else {
       return []
     }
@@ -185,24 +185,6 @@ public struct SSEParser: Sendable {
       throw SSEParserError.malformedJSON("\(error)")
     }
   }
-
-  private func delimiterRange(in data: Data) -> Range<Data.Index>? {
-    let lineFeed = Data([0x0A, 0x0A])  // \n\n
-    let crlf = Data([0x0D, 0x0A, 0x0D, 0x0A])  // \r\n\r\n
-    let lfRange = data.range(of: lineFeed)
-    let crlfRange = data.range(of: crlf)
-
-    switch (lfRange, crlfRange) {
-    case (nil, nil):
-      return nil
-    case (.some(let range), nil):
-      return range
-    case (nil, .some(let range)):
-      return range
-    case (.some(let left), .some(let right)):
-      return left.lowerBound < right.lowerBound ? left : right
-    }
-  }
 }
 
 // MARK: - Event Assembly
@@ -232,35 +214,6 @@ private extension SSEParser {
   /// paths can never drift.
   var finishedEvent: StreamEvent {
     .finished(assembledResponse)
-  }
-
-  /// The `data:` field values of one SSE event: comments (`:`) and non-`data` fields are dropped,
-  /// a single leading space after the colon is stripped, per the SSE field-parsing rules.
-  static func dataPayloadLines(in text: String) -> [String] {
-    let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
-    return normalized.split(separator: "\n", omittingEmptySubsequences: false)
-      .compactMap { rawLine -> String? in
-        var line = String(rawLine)
-
-        if line.last == "\r" {
-          line.removeLast()
-        }
-
-        if line.hasPrefix(":") {
-          return nil
-        }
-
-        guard line.hasPrefix("data:") else {
-          return nil
-        }
-        var value = String(line.dropFirst(5))
-
-        if value.first == " " {
-          value.removeFirst()
-        }
-
-        return value
-      }
   }
 
   mutating func record(_ chunkUsage: WireUsage) {
