@@ -69,6 +69,16 @@ public enum LLMInputReservationPolicy: Sendable, Equatable {
   }
 }
 
+/// What replay state may weigh: one state, and one request's worth of them.
+///
+/// They live beside the reservation policy rather than inside the adapter because the token gate
+/// reserves against the same aggregate the adapter selects under. Stated twice they would drift, and
+/// a gate reserving for a budget nobody selects by is a gate that no longer describes what is sent.
+public enum LLMReplayStateBounds {
+  public static let maximumStateBytes = 1024 * 1024
+  public static let maximumAggregateBytes = 4 * 1024 * 1024
+}
+
 extension LLMInputReservationPolicy {
   /// The managed ChatGPT route's reservation, matching the aggregate byte budget the adapter selects
   /// replay state under. Two tokens per byte plus per-state framing is the overshoot that covers
@@ -76,7 +86,7 @@ extension LLMInputReservationPolicy {
   public static let chatGPTReplayState = LLMInputReservationPolicy.replayState(
     tokensPerByte: 2,
     framingTokensPerState: 256,
-    aggregateByteCap: 4 * 1024 * 1024
+    aggregateByteCap: LLMReplayStateBounds.maximumAggregateBytes
   )
 }
 
@@ -126,13 +136,13 @@ private extension LLMInputReservationPolicy {
 /// Clamping rather than trapping. Every caller is totalling a budget — tokens to reserve, bytes to
 /// hold — so a sum this large has already passed the limit it feeds: clamping refuses the work,
 /// which is the safe direction, instead of taking the daemon down mid-turn.
-enum SaturatingArithmetic {
-  static func sum(_ lhs: Int, _ rhs: Int) -> Int {
+public enum SaturatingArithmetic {
+  public static func sum(_ lhs: Int, _ rhs: Int) -> Int {
     let (total, overflowed) = lhs.addingReportingOverflow(rhs)
     return overflowed ? .max : total
   }
 
-  static func product(_ lhs: Int, _ rhs: Int) -> Int {
+  public static func product(_ lhs: Int, _ rhs: Int) -> Int {
     let (total, overflowed) = lhs.multipliedReportingOverflow(by: rhs)
     return overflowed ? .max : total
   }
