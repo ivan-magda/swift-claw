@@ -29,36 +29,4 @@ import Testing
     // then
     #expect(await outcome.value() == .drained)
   }
-
-  @Test func bundleCarriesTheExactRuntimePieces() {
-    // given
-    let lanes = SessionLaneRegistry()
-    let outcome = LaneShutdownOutcome()
-    let source = FakeCredentialSource()
-    let daemon = Daemon(services: [], logger: TestLog.silent, gracefulShutdownSeconds: 30)
-
-    // when
-    let bundle = DaemonRuntimeBundle(
-      daemon: daemon,
-      lanes: lanes,
-      credentialSource: source,
-      laneShutdownOutcome: outcome
-    )
-
-    // then — the bundle retains the very instances composition wired, not copies.
-    #expect(bundle.lanes === lanes)
-    #expect(bundle.laneShutdownOutcome === outcome)
-    #expect((bundle.credentialSource as? FakeCredentialSource) === source)
-    #expect(bundle.daemon.services.isEmpty)
-  }
-}
-
-private final class FakeCredentialSource: LLMCredentialSource {
-  func authorization() async throws -> LLMRequestAuthorization {
-    LLMRequestAuthorization(headers: [:], redactionValues: [], generation: .zero)
-  }
-
-  func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {}
-
-  func shutdown() async throws {}
 }

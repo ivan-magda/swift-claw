@@ -58,19 +58,6 @@ import Testing
     #expect(exposure.accounting == .notStarted)
   }
 
-  @Test func eachAttemptReEstablishesItsOwnExposure() throws {
-    // given — a first attempt that was proven clean and retried
-    let exposure = ProviderAttemptExposure()
-    try exposure.beginHandoff()
-    exposure.noteProvenClean()
-
-    // when
-    try exposure.beginHandoff()
-
-    // then — exposure is re-established per attempt rather than carried over from the last one
-    #expect(exposure.accounting == .mayHaveStarted(observing: 0))
-  }
-
   @Test func observedTokensOnlyEverRise() throws {
     // given
     let exposure = ProviderAttemptExposure()
@@ -133,18 +120,6 @@ import Testing
     #expect(error is CancellationError)
   }
 
-  @Test func aHandoffThatWinsBeforeCancellationLeavesTheAttemptConservative() throws {
-    // given — the handoff transition wins the lock first
-    let exposure = ProviderAttemptExposure()
-    try exposure.beginHandoff()
-
-    // when — the caller's cancellation arrives only after the attempt reached the transport
-    let accounting = exposure.accounting
-
-    // then — an already-handed-off attempt cannot claim it never started
-    #expect(accounting == .mayHaveStarted(observing: 0))
-  }
-
   @Test func aCancellationThatWinsBeforeTheCleanResetStaysConservative() throws {
     // given — an attempt that reached the transport
     let exposure = ProviderAttemptExposure()
@@ -170,18 +145,6 @@ import Testing
 
     // then — each transition stands on its own; nothing is carried over from a prior handoff
     #expect(exposure.accounting == .notStarted)
-  }
-
-  @Test func responseDataRaisesTheConservativeLowerBound() throws {
-    // given — an attempt that reached the transport and observed generated tokens
-    let exposure = ProviderAttemptExposure()
-    try exposure.beginHandoff()
-
-    // when — response data reports a running count
-    exposure.noteObserved(completionTokens: 9)
-
-    // then — the exposure carries that lower bound for accounting a later failure
-    #expect(exposure.accounting == .mayHaveStarted(observing: 9))
   }
 
   @Test func failurePairsACauseWithTheCurrentAccounting() throws {

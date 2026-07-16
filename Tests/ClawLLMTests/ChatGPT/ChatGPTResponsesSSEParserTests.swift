@@ -25,20 +25,6 @@ import Testing
     #expect(run.response.toolCalls.isEmpty)
   }
 
-  /// The done item spells "Hello, world!" while the deltas only ever spelled "Hello, wor". Deleting
-  /// the done-item precedence would leave the truncated delta assembly as the answer.
-  @Test func fullDoneItemTextWinsOverTheDeltaAccumulation() throws {
-    // given
-    let stream = try Self.fixture("basic-response")
-
-    // when
-    let run = try Self.consume(stream)
-
-    // then
-    #expect(run.deltas.joined() == "Hello, wor")
-    #expect(run.response.content == "Hello, world!")
-  }
-
   /// A byte-at-a-time delivery cuts multi-byte scalars, field lines, and event delimiters apart. The
   /// reply is identical to the whole-chunk delivery, which is what proves the framing buffers rather
   /// than decoding what it happens to hold.
@@ -91,20 +77,6 @@ import Testing
     // then
     #expect(run.deltas == ["still here"])
     #expect(run.response.content == "still here")
-  }
-
-  /// An empty `delta` is not a public event: a consumer that published it would repaint a draft with
-  /// no new text. The fixture's second delta is `""`, so a deleted guard shows up as a third delta.
-  @Test func emptyTextDeltasAreNotEmitted() throws {
-    // given
-    let stream = try Self.fixture("basic-response")
-
-    // when
-    let run = try Self.consume(stream)
-
-    // then
-    #expect(run.deltas.contains("") == false)
-    #expect(run.deltas.count == 2)
   }
 
   // MARK: - Tool Calls

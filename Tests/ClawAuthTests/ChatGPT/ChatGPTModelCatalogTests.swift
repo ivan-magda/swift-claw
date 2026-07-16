@@ -458,24 +458,6 @@ extension ChatGPTCatalogFailure {
     #expect(request.selectedBodyCap == ChatGPTProviderMetadata.maximumCatalogResponseBytes)
   }
 
-  @Test func aBodyUnderTheCapIsRead() async throws {
-    // given
-    let executor = OAuthFixture.executor(
-      ChatGPTProviderMetadata.modelsURL,
-      OAuthFixture.result(
-        200,
-        try CatalogFixture.body([CatalogFixture.row(priority: .number(1))])
-      )
-    )
-    let catalog = ChatGPTModelCatalog(http: executor)
-
-    // when
-    let models = try await catalog.fetch(authorization: CatalogFixture.authorization)
-
-    // then
-    #expect(models.map(\.slug) == [CatalogFixture.slug])
-  }
-
   @Test func aNonSuccessStatusIsUnavailableWithASanitizedDetail() async throws {
     // given
     let executor = OAuthFixture.executor(

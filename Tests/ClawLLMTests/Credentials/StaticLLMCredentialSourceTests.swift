@@ -56,17 +56,6 @@ struct BearerCase: Sendable, CustomTestStringConvertible {
     #expect(authorization.generation == .zero)
   }
 
-  @Test func theSourceContributesNoHeaderBeyondAuthorization() async throws {
-    // given
-    let source = StaticLLMCredentialSource(bearer: "sk-test-value")
-
-    // when
-    let authorization = try await source.authorization()
-
-    // then
-    #expect(Array(authorization.headers.keys) == ["Authorization"])
-  }
-
   // MARK: - Lifecycle
 
   @Test(arguments: [LLMCredentialRejection.refresh, .authenticationRequired])

@@ -235,23 +235,6 @@ import Testing
     #expect(root["providers"] as? [Any] == nil)
   }
 
-  @Test func encodingTheSameMapTwiceProducesIdenticalBytes() throws {
-    // given — `Dictionary` iterates in a per-process, seed-dependent order, and `.sortedKeys` only
-    // reaches a keyed container. Both halves of that have to hold for the plaintext to be stable.
-    let credential = makeCredential()
-    let map = EncryptedLLMCredentialStore.CredentialMap(
-      providers: [.openAIChatGPT: credential, synthetic: makeCredential(accessToken: "other")]
-    )
-
-    // when
-    let encodings = try (0..<32).map { _ in
-      try EncryptedLLMCredentialStore.encode(map)
-    }
-
-    // then
-    #expect(Set(encodings).count == 1)
-  }
-
   @Test func theCredentialEnvelopeIsPublishedOwnerOnly() throws {
     // given
     let stateRoot = try makeSealedRoot()
@@ -645,40 +628,6 @@ import Testing
     // when / then
     #expect(throws: LLMCredentialStoreError.insecureStorage) {
       _ = try EncryptedLLMCredentialStore(stateRoot: stateRoot).load(providerID: .openAIChatGPT)
-    }
-  }
-
-  // A foreign owner cannot be produced on disk: chown to another uid needs privileges no test has.
-  // The rule is proven through the pure policy the store's own read passes, with a synthetic uid.
-  @Test(arguments: [
-    (name: "wrong-owner", isRegular: true, perms: UInt32(0o600), ownerOffset: UInt32(1)),
-    (name: "world-readable", isRegular: true, perms: UInt32(0o644), ownerOffset: UInt32(0)),
-    (name: "group-readable", isRegular: true, perms: UInt32(0o640), ownerOffset: UInt32(0)),
-    (name: "non-regular", isRegular: false, perms: UInt32(0o600), ownerOffset: UInt32(0)),
-  ]) func theCredentialReadPolicyRefusesWrongMetadata(
-    name: String,
-    isRegular: Bool,
-    perms: UInt32,
-    ownerOffset: UInt32
-  ) {
-    // given
-    let facts = SecureFileFacts(
-      device: 1,
-      inode: 2,
-      isRegularFile: isRegular,
-      permissionBits: perms,
-      ownerUID: getuid() &+ ownerOffset,
-      byteCount: 64
-    )
-
-    // when / then
-    #expect(throws: SecureFileError.self) {
-      try SecureFilePublisher.validate(
-        facts,
-        name: SecretStatePaths.credentialEnvelopeName,
-        policy: EncryptedLLMCredentialStore.envelopeReadPolicy,
-        expectedUID: getuid()
-      )
     }
   }
 

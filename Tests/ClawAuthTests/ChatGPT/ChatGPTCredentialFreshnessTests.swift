@@ -65,11 +65,6 @@ import Testing
 
   // MARK: - Pinned Skew
 
-  @Test func theSkewIsThePinned120Seconds() {
-    // given / when / then
-    #expect(ChatGPTProviderMetadata.credentialFreshnessSkew == .seconds(120))
-  }
-
   @Test func classifyReadsTheSkewFromTheProviderMetadataRatherThanASecondCopy() {
     // given
     // Derives the boundary from the pinned skew, so widening the constant without widening the

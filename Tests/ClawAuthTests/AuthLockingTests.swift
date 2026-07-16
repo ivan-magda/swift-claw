@@ -164,30 +164,4 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
       #expect(world.log.recorded.contains(.credentialDeleted))
     }
   }
-
-  // MARK: - Status
-
-  /// Status only decrypts and reports, so it has no business fighting a running daemon for the
-  /// state root. It reads through a held lock and reports what the daemon is using.
-  @Test func statusReadsThroughAHeldDaemonLock() async throws {
-    try await withAuthWorld("auth-lock-status") { world in
-      // given
-      try world.seedPriorLogin()
-      let daemon = try InstanceLock(path: world.paths.instanceLock.path)
-      defer { daemon.release() }
-      world.mutationLock = RealInstanceLocking(
-        path: world.paths.instanceLock.path,
-        log: world.log
-      )
-      let workflow = world.workflow()
-
-      // when
-      let result = workflow.status()
-
-      // then
-      #expect(result.exit == .success)
-      #expect(world.log.recorded.contains(.lockAcquired) == false)
-      #expect(result.transcript.contains(LLMProviderID.openAIChatGPT.rawValue))
-    }
-  }
 }

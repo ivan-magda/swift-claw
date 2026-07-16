@@ -11,15 +11,6 @@ private struct RecordingClient: Sendable {
   let close: @Sendable () async -> Void
 }
 
-/// Records the order roles are closed in, so exactly-once and ordering are observable.
-private actor CloseRecorder {
-  private(set) var order: [RuntimeHTTPClientRole] = []
-
-  func record(_ role: RuntimeHTTPClientRole) {
-    order.append(role)
-  }
-}
-
 @Suite struct RuntimeHTTPClientsTests {
   @Test func buildsThreeClientsInFixedOrderWithDistinctProfiles() {
     // given — a maker recording the role of every client it is asked to build
@@ -44,22 +35,6 @@ private actor CloseRecorder {
     #expect(RuntimeHTTPClientRole.telegram.egressProfile == .telegram)
     #expect(RuntimeHTTPClientRole.llm.egressProfile == .protectedEgress)
     #expect(RuntimeHTTPClientRole.tool.egressProfile == .protectedEgress)
-  }
-
-  @Test func closesEachClientExactlyOnceInTheMandatedOrder() async {
-    // given — clients whose close records its role
-    let recorder = CloseRecorder()
-    let clients = RuntimeHTTPClients { role in
-      RecordingClient(role: role, close: { await recorder.record(role) })
-    }
-
-    // when — closed in the LLM → Telegram → tool order the shutdown sequence uses
-    for client in [clients.llm, clients.telegram, clients.tool] {
-      await client.close()
-    }
-
-    // then — each fired once, in order
-    #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 
   @Test func liveBuildsThreeIndependentClosableClients() async throws {

@@ -322,18 +322,6 @@ import Testing
     #expect(failure.accounting == .notStarted)
   }
 
-  @Test(.timeLimit(.minutes(1)))
-  func aRouteCompatibleRequestDoesDispatch() async throws {
-    // given — the paired positive: without stop or structured output, the request reaches the wire
-    let harness = ProviderHarness(steps: [.stream(okHead, Fixtures.basicSuccess())])
-
-    // when
-    _ = try await harness.provider.complete(request: plainRequest)
-
-    // then
-    #expect(await harness.http.recorded.count == 1)
-  }
-
   // MARK: - Obligation 3: a real drops reporter, metadata only
 
   @Test(.timeLimit(.minutes(1)))

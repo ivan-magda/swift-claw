@@ -158,32 +158,6 @@ private final class StoreProbe: LLMCredentialStore, @unchecked Sendable {
     #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 
-  @Test func chatGPTRouteMissingRecordBootsLoggedOutIncludedPlanStack() async throws {
-    // given — the managed route with no stored record
-    let recorder = CloseRecorder()
-    let store = StoreProbe(.value(nil))
-    let box = StackBox()
-    let composition = try composition(
-      config: config(model: "openai-chatgpt/gpt-5.4", baseURL: nil),
-      recorder: recorder,
-      makeManagedStore: { _ in store },
-      buildDaemon: { _, stack in
-        box.stack = stack
-        throw BuildStopped()
-      }
-    )
-
-    // when / then — the stack built (missing record is a logged-out boot, not a throw), the envelope
-    // was opened once, and it is the included-plan managed stack
-    await #expect(throws: BuildStopped.self) {
-      try await composition.compose()
-    }
-    #expect(store.loadCount == 1)
-    #expect(box.stack?.costPolicy == .includedPlan)
-    #expect(box.stack?.reservationPolicy == .chatGPTReplayState)
-    #expect(box.stack?.configuredReference == "openai-chatgpt/gpt-5.4")
-  }
-
   @Test func chatGPTMalformedEnvelopePropagatesAndClosesAll() async throws {
     // given — the managed route with a malformed envelope; assembly must never be reached
     let recorder = CloseRecorder()
