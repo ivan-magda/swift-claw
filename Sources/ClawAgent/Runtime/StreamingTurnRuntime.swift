@@ -151,9 +151,11 @@ private extension StreamingTurnRuntime {
         }
       }
     } catch let failure as ProviderFailure {
-      // The turn's one-time stream-to-buffered fallback turns on the typed cause, so hand that cause
-      // on rather than an envelope no caller upstream matches.
-      throw failure.cause
+      // Hand the whole failure on, not its bare cause: the runtime's accounting reads the provider's
+      // own disposition off it — a proven no-start writes no usage row, a may-have-started keeps its
+      // observed count — which a cause alone cannot carry. The buffered fallback matches the
+      // reissuable causes through the envelope, so nothing upstream needs it unwrapped.
+      throw failure
     }
 
     // A cancelled consumer ends iteration with nil instead of throwing. Rather than re-check and
@@ -167,13 +169,13 @@ private extension StreamingTurnRuntime {
   /// A terminal that reached here is never `.completed`: that case returns from the loop above with
   /// its reserved event. Cancellation carries its accounting disposition on: a may-have-started
   /// interruption becomes the typed marker so the runtime records conservative usage, while a
-  /// no-start one stays a plain cancel that bills nothing. The bare `failure.cause` is deliberate —
-  /// the one-time stream-to-buffered fallback matches on the typed cause, and a wrapper no upstream
-  /// caller unwraps would defeat it.
+  /// no-start one stays a plain cancel that bills nothing. A `.failed` terminal hands the whole
+  /// failure on rather than its bare cause, so the runtime's accounting reads the provider's own
+  /// disposition — a proven no-start owes no row, a may-have-started keeps its observed count.
   static func error(for termination: LLMStreamTermination) -> any Error {
     switch termination {
     case .failed(let failure):
-      return failure.cause
+      return failure
     case .cancelled(.mayHaveStarted(let observedCompletionTokens)):
       return ProviderInferenceCancellation(observing: observedCompletionTokens)
     case .cancelled(.notStarted):

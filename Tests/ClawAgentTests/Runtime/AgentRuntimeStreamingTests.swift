@@ -16,7 +16,12 @@ actor StreamingProvider: LLMProvider {
     case timed([TimedStreamEvent])
     case gated(TypingReleaseGate, [StreamEvent])
     case gatedBetween([StreamEvent], TypingReleaseGate, [StreamEvent])
-    case fail(ProviderError)
+    /// Carries the provider's own disposition, not just the cause, so a test states whether the
+    /// failed attempt could already owe tokens — the fact the runtime's accounting reads.
+    case fail(ProviderFailure)
+    /// Reports the given cancellation disposition as the stream's terminal without sending anything,
+    /// exercising `error(for:)`'s mapping of a `.cancelled(.notStarted)`/`.mayHaveStarted` terminal.
+    case reportsCancel(ProviderFailureAccounting)
     case neverFinishes
     case ignoresCancellation(NonCooperativeStreamGate)
   }
@@ -72,8 +77,10 @@ actor StreamingProvider: LLMProvider {
         }
         await gate.awaitRelease()
         return await Self.play(suffix, into: sink) ?? .completed(Self.emptyReply)
-      case .fail(let error):
-        return .failed(ProviderFailure(cause: error, accounting: .notStarted))
+      case .fail(let failure):
+        return .failed(failure)
+      case .reportsCancel(let accounting):
+        return .cancelled(accounting)
       case .neverFinishes:
         while !Task.isCancelled {
           try? await Task.sleep(for: .milliseconds(10))
@@ -821,7 +828,11 @@ func waitForTurnResult(
 
   @Test func theStreamToBufferedFallbackKeepsTheRoundOnOneCallIdentity() async throws {
     // given — the stream connect is refused, so the round is re-issued on the blocking path
-    let provider = StreamingProvider(streamScript: .fail(.connectFailed(message: "refused")))
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(cause: .connectFailed(message: "refused"), accounting: .notStarted)
+      )
+    )
     let runtime = makeRuntime(
       provider: provider,
       streamingEnabled: true,
@@ -851,7 +862,11 @@ func waitForTurnResult(
 
   @Test func connectFailureFallsBackToBlockingCompleteOnce() async throws {
     // given
-    let provider = StreamingProvider(streamScript: .fail(.connectFailed(message: "refused")))
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(cause: .connectFailed(message: "refused"), accounting: .notStarted)
+      )
+    )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
@@ -877,7 +892,12 @@ func waitForTurnResult(
     // given — a clean 429 on the response head: nothing was generated, so one blocking
     // re-attempt is double-charge-safe; mid-stream failures keep degrading
     let provider = StreamingProvider(
-      streamScript: .fail(.rejected(status: 429, message: "rate limited"))
+      streamScript: .fail(
+        ProviderFailure(
+          cause: .rejected(status: 429, message: "rate limited"),
+          accounting: .notStarted
+        )
+      )
     )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
@@ -951,8 +971,16 @@ func waitForTurnResult(
   }
 
   @Test func postSendStreamFailureDegradesWithoutBlockingFallback() async throws {
-    // given
-    let provider = StreamingProvider(streamScript: .fail(.retryable(status: nil, message: "drop")))
+    // given — a mid-stream drop that may already have generated tokens, so a conservative row is owed
+    // and the retryable cause is not re-attempted on the buffered path
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(
+          cause: .retryable(status: nil, message: "drop"),
+          accounting: .mayHaveStarted(observing: 0)
+        )
+      )
+    )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
@@ -976,7 +1004,11 @@ func waitForTurnResult(
 
   @Test func terminalStreamFailureDegradesWithoutDebit() async throws {
     // given — a recognized terminal head proves inference never started, so no tokens are owed
-    let provider = StreamingProvider(streamScript: .fail(.terminal(status: 400, message: "bad")))
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(cause: .terminal(status: 400, message: "bad"), accounting: .notStarted)
+      )
+    )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
@@ -995,6 +1027,102 @@ func waitForTurnResult(
     let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
     #expect(usage == nil)
+    #expect(await provider.completeCalls == 0)
+    #expect(await provider.streamCalls == 1)
+  }
+
+  @Test func notStartedStreamFailureWritesNoUsageRow() async throws {
+    // given — the streaming twin of the buffered no-row proof: the engine's budget-exhausted clean
+    // 5xx, a retryable status thrown before the stream opened but tagged notStarted, so the model
+    // was proven never asked and nothing is owed
+    let store = RecordingUsageStore()
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(
+          cause: .retryable(status: 503, message: "budget exhausted"),
+          accounting: .notStarted
+        )
+      )
+    )
+    let runtime = makeRuntime(provider: provider, streamingEnabled: true, usageStore: store)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the disposition, not the cause class, decides: no row is written on either transport
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+    #expect(await provider.completeCalls == 0)
+    #expect(await provider.streamCalls == 1)
+  }
+
+  @Test func mayHaveStartedStreamFailureKeepsTheObservedCount() async throws {
+    // given — a streamed may-have-started whose observed lower bound overshoots the local output cap
+    let observed = RunBudget.default.maxOutputTokens + 5_000
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(
+          cause: .retryable(status: nil, message: "lost"),
+          accounting: .mayHaveStarted(observing: observed)
+        )
+      )
+    )
+    let runtime = makeRuntime(provider: provider, streamingEnabled: true)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the observed count survives the envelope: completion is n, not the capped 0
+    let (_, usage) = try requireDegraded(outcome.result)
+    let row = try #require(usage)
+    #expect(row.isEstimated)
+    #expect(row.completionTokens == observed)
+    #expect(await provider.completeCalls == 0)
+  }
+
+  @Test func notStartedStreamCancellationWritesNoUsageRow() async throws {
+    // given — a stream that reports a no-start cancellation as its terminal
+    let store = RecordingUsageStore()
+    let provider = StreamingProvider(streamScript: .reportsCancel(.notStarted))
+    let runtime = makeRuntime(provider: provider, streamingEnabled: true, usageStore: store)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — a no-start cancel bills nothing, mirroring the raw-cancellation buffered case
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
     #expect(await provider.completeCalls == 0)
     #expect(await provider.streamCalls == 1)
   }

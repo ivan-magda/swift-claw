@@ -606,11 +606,21 @@ private extension AgentRuntime {
         request: request,
         deadlineSeconds: deadlineSeconds
       )
-    } catch ProviderError.connectFailed, ProviderError.rejected {
+    } catch let providerError as ProviderError where providerError.allowsBufferedReattempt {
       // connectFailed: nothing was transmitted. rejected: the head carried an error status before
       // any SSE bytes, so the server generated nothing — the no-double-issue rationale does
       // not apply. Either way one blocking attempt is safe; `complete` brings its own retry
       // budget, backoff, and Retry-After handling, all inside the remaining wall-clock window.
+      return try await runTypingTurn(
+        chatId: chatId,
+        request: request,
+        deadlineSeconds: deadlineSeconds
+      )
+    } catch let failure as ProviderFailure where failure.cause.allowsBufferedReattempt {
+      // The streaming runtime now hands its failures on as the intact envelope so accounting reads
+      // the provider's disposition; the same pre-stream head failures the bare catch above
+      // re-attempts arrive wrapped, so match them here too or the wrapper would silently defeat the
+      // one-time buffered fallback.
       return try await runTypingTurn(
         chatId: chatId,
         request: request,
@@ -647,5 +657,24 @@ private extension AgentRuntime {
       clock: clock
     )
     return try await runtime.run(chatId: chatId, request: request)
+  }
+}
+
+// MARK: - Buffered Fallback Eligibility
+
+private extension ProviderError {
+  /// The pre-stream head failures a streaming round may re-attempt once on the buffered path:
+  /// `connectFailed` transmitted nothing, and `rejected` is an error status on the response head
+  /// before any SSE bytes, so the server generated nothing and a re-issue cannot double-charge.
+  /// Every other cause either may already owe tokens or would only fail the same way again, so the
+  /// round degrades instead of re-attempting.
+  var allowsBufferedReattempt: Bool {
+    switch self {
+    case .connectFailed, .rejected:
+      return true
+    case .retryable, .terminal, .authenticationRequired, .accessDenied, .quotaLimited,
+      .cleanRejection, .invalidProviderState:
+      return false
+    }
   }
 }
