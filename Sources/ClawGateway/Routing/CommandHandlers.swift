@@ -52,10 +52,8 @@ struct CommandHandlers: Sendable {
       await coordinator.signal(approvalId: approvalId, .denied(.cancelled))
     }
 
-    if result.sessionId != nil, result.cancelledRunIds.isEmpty == false {
-      for runId in result.cancelledRunIds {
-        await lanes.cancel(runID: runId)
-      }
+    for runId in result.cancelledRunIds {
+      await lanes.cancel(runID: runId)
     }
 
     let reply =

@@ -81,6 +81,9 @@ public actor SessionLaneRegistry {
     let predecessor = sessionTails[sessionID]?.task
 
     let task = Task {
+      // `defer` so any future early-return or added throw still unregisters. This task inherits the
+      // registry's isolation, so the finalize hop is a synchronous same-actor call.
+      defer { self.finalize(operationID: operationID) }
       if let predecessor {
         // A cancelled queued turn still waits out its predecessor, then still runs its body — a turn
         // observes cancellation and self-aborts its durable row rather than being silently dropped.
@@ -88,10 +91,6 @@ public actor SessionLaneRegistry {
         await predecessor.value
       }
       await work()
-      // Guaranteed final scope: neither the predecessor wait nor `work` can throw, so finalization
-      // is always reached, including for a turn cancelled while awaiting its predecessor. This task
-      // inherits the registry's isolation, so the finalize hop is a synchronous same-actor call.
-      self.finalize(operationID: operationID)
     }
 
     operations[operationID] = ActiveOperation(
@@ -135,6 +134,14 @@ public actor SessionLaneRegistry {
   /// then reports `.drained`, or `.timedOut` with the runs still in flight. Races a waiter that the
   /// finalizer resumes against a cancellation-aware deadline child; the loser is cancelled and
   /// consumed, so no deadline child or waiter continuation survives the call. Idempotent.
+  ///
+  /// Not cancellation-aware toward its caller by design: cancelling the calling task does not end
+  /// the drain early — it is bounded solely by the injected timeout, and its owner (the shutdown
+  /// coordinator) must await it, never cancel it. Making the join cancellable would mean an
+  /// unstructured deadline child that outlives a cancelled caller and leaks its sleep; instead the
+  /// deadline child ignores caller cancellation and always fires, keeping the bound intact. Assumes
+  /// a single concurrent drain: a timeout resumes every parked waiter, so two overlapping drains
+  /// with different deadlines could resume each other early.
   public func drain<ClockType: Clock>(
     timeout: Duration,
     clock: ClockType
@@ -179,7 +186,7 @@ private extension SessionLaneRegistry {
   /// Unregisters a completed turn. Compares the operation ID, never the `Task` handle or the map's
   /// emptiness: a stale completion must not clear a newer tail a later enqueue installed for the
   /// same session while this turn was still running. Resumes drain waiters once the last turn goes.
-  func finalize(operationID: Int64) {
+  private func finalize(operationID: Int64) {
     guard let operation = operations.removeValue(forKey: operationID) else {
       return
     }
@@ -207,7 +214,7 @@ private extension SessionLaneRegistry {
 
   /// The deadline child's callback: resumes any still-parked waiter with `.timedOut`. A no-op once
   /// the finalizer already resumed them, since resumption takes and clears the waiters atomically.
-  func signalDrainTimeout() {
+  private func signalDrainTimeout() {
     resumeDrainWaiters(with: .timedOut)
   }
 

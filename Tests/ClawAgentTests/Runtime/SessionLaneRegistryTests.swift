@@ -448,6 +448,54 @@ import Testing
     #expect(await registry.activeRunIDs() == [])
     clockHold.open()
   }
+
+  @Test(.timeLimit(.minutes(1)))
+  func drainIgnoresCallerCancellationAndStaysBoundedByTheTimeout() async {
+    // given — a wedged turn keeps the registry non-empty, so the drain can only end at its deadline.
+    // The contract Task 28's shutdown coordinator relies on: it awaits the drain and never cancels
+    // it, so a cancelled caller must NOT end the drain early — the injected timeout is the sole
+    // bound. This pins that a future edit toward a caller-cancellation-aware drain would break.
+    let registry = SessionLaneRegistry()
+    let recorder = Recorder()
+    let turnHold = AsyncGate()
+    let drainEntered = AsyncGate()
+    let clockHold = AsyncGate()
+
+    _ = await registry.enqueue(sessionID: 1, runID: 99) {
+      await turnHold.wait()
+    }
+
+    // The clock signals when the drain has entered (installed its waiter, then started the deadline
+    // child's sleep) and parks until the test releases it — the deadline fires only on clockHold.
+    let drainClock = ScriptedClock { _ in
+      drainEntered.open()
+      await clockHold.wait()
+    }
+    let drainTask = Task {
+      let result = await registry.drain(timeout: .seconds(30), clock: drainClock)
+      await recorder.record("drain-returned")
+      return result
+    }
+    await drainEntered.wait()
+
+    // when — cancel the calling task while the drain is parked in flight. A cancellation-aware drain
+    // would resume its waiter now; this one must ignore its caller and stay parked on the deadline.
+    drainTask.cancel()
+    await yieldRepeatedly()
+
+    // then — still parked despite the cancellation: the timeout has not fired, so nothing recorded.
+    #expect(await recorder.snapshot() == [])
+
+    // and — releasing the clock fires the injected deadline, the sole thing that ends the drain. The
+    // cancelled caller gets .timedOut with the wedged run, never an early cancel.
+    clockHold.open()
+    let result = await drainTask.value
+    #expect(result == .timedOut(activeRunIDs: [99]))
+    #expect(await recorder.snapshot() == ["drain-returned"])
+
+    // cleanup — release the wedged turn so nothing is stranded.
+    turnHold.open()
+  }
 }
 
 // MARK: - Cancellation Recorder
