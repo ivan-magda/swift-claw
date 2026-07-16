@@ -43,7 +43,6 @@ public actor SessionLaneRegistry {
   /// mid-turn. `true` = open.
   private let admissionOpen = Mutex(true)
 
-  private var accepting = true
   private var nextOperationID: Int64 = 0
   private var operations: [Int64: ActiveOperation] = [:]
   private var sessionTails: [Int64: SessionTail] = [:]
@@ -72,7 +71,7 @@ public actor SessionLaneRegistry {
     let admitted = admissionOpen.withLock { open in
       open
     }
-    guard admitted, accepting else {
+    guard admitted else {
       return .shuttingDown
     }
 
@@ -119,9 +118,9 @@ public actor SessionLaneRegistry {
   }
 
   /// Stops admitting and cancels every registered turn in one actor turn — the shutdown entry.
-  /// Idempotent.
+  /// Idempotent. Closing the admission gate is the single authority on admission; `enqueue` reads it
+  /// inside the same actor turn it registers a tail, so no post-close call is ever accepted.
   public func stopAcceptingAndCancel() {
-    accepting = false
     admissionOpen.withLock { open in
       open = false
     }

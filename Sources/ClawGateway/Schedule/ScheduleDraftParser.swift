@@ -58,22 +58,16 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   private let provider: any LLMProvider
   /// What crosses the wire in `ChatRequest.model`.
   private let wireModel: String
-  /// The accounting identity the parse's usage row keys on. Kept apart from `wireModel` so a
-  /// subscription route's rows read `openai-chatgpt/<model>` and never collide with API-billed rows
-  /// for the same wire model — mirroring `AgentRuntime`, so a turn and a parse account identically.
-  private let configuredReference: String
   private let responseFormat: ResponseFormat?
 
   private let usageStore: any UsageStore
   private let gate: BudgetGate
-  private let costResolver: CostResolver
-  private let usageResolver = UsageResolver()
-  /// How the route is billed. Injected — the parse never name-checks a model — so `includedPlan`
-  /// records a confirmed zero and skips only the USD gates, exactly like `AgentRuntime`.
-  private let costPolicy: LLMCostPolicy
-  /// The reservation replay state needs on top of text estimation. The parse carries no replay
-  /// state today, but the policy is wired so the parse reserves the same way a turn does.
-  private let reservationPolicy: LLMInputReservationPolicy
+  /// The one place every usage row is minted, shared with `AgentRuntime` so a parse and a turn
+  /// account identically by construction rather than through parallel copies. It owns the cost
+  /// identity (`openai-chatgpt/<model>` for a subscription route, never colliding with API-billed
+  /// rows for the same wire model), the billing and reservation policies, and the resolvers; the
+  /// parse's `now` is its timestamp source.
+  private let accountant: ProviderUsageAccountant
   /// Mints the identity the parse's usage row is recorded under. Injected so a test can pin the
   /// identity rather than assert against a random UUID.
   private let providerCallIDGenerator: any ProviderCallIDGenerating
@@ -100,14 +94,18 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   ) {
     self.provider = provider
     self.wireModel = wireModel
-    self.configuredReference = configuredReference ?? wireModel
     self.responseFormat = Self.responseFormat(for: structuredOutput)
 
     self.usageStore = usageStore
     self.gate = BudgetGate(budget: budget, costPolicy: costPolicy)
-    self.costResolver = costResolver
-    self.costPolicy = costPolicy
-    self.reservationPolicy = reservationPolicy
+    self.accountant = ProviderUsageAccountant(
+      configuredReference: configuredReference ?? wireModel,
+      costPolicy: costPolicy,
+      reservationPolicy: reservationPolicy,
+      costResolver: costResolver,
+      outputCap: Self.maxParseOutputTokens,
+      now: now
+    )
     self.providerCallIDGenerator = providerCallIDGenerator
 
     self.now = now
@@ -314,26 +312,12 @@ private extension ScheduleDraftParser {
       return .providerUnavailable
     }
 
-    let promptTokens =
-      TokenEstimator.estimateInputTokens(messages)
-      + reservationPolicy.additionalTokens(for: messages)
-    let estimatedTokens = promptTokens + Self.maxParseOutputTokens
-    let estimatedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: ChatUsage(
-        promptTokens: promptTokens,
-        completionTokens: Self.maxParseOutputTokens,
-        totalTokens: estimatedTokens
-      ),
-      providerCost: nil,
-      policy: costPolicy
-    ).costUSD
-
+    let estimate = accountant.preflightEstimate(context: messages)
     if case .deny(let cap) = gate.preflight(
       todayTokens: todayTokens,
       todayUSD: todayUSD,
-      estimatedTotalTokens: estimatedTokens,
-      estimatedCostUSD: estimatedCost
+      estimatedTotalTokens: estimate.totalTokens,
+      estimatedCostUSD: estimate.costUSD
     ) {
       return .budgetDenied(cap: cap)
     }
@@ -366,54 +350,36 @@ private extension ScheduleDraftParser {
 // MARK: - Spend Accounting
 
 private extension ScheduleDraftParser {
+  /// The reconciled row for a reply that returned (or landed alongside a won deadline). Run-less
+  /// (`runId: nil`), routed through the shared accountant so it prices exactly as a turn's row does.
   func record(
     usageFor response: ChatResponse,
     request: ChatRequest,
     callID: ProviderCallID,
     sessionId: Int64
   ) {
-    let resolvedUsage = usageResolver.resolve(response: response, context: request.messages)
-      .addingReservation(reservationPolicy.additionalTokens(for: request.messages))
-    let resolvedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider,
-      policy: costPolicy
-    )
     persist(
-      ProviderUsage(
-        providerCallID: callID,
+      accountant.reconciledRow(
+        for: response,
+        callID: callID,
+        context: request.messages,
         runId: nil,
-        sessionId: sessionId,
-        model: configuredReference,
-        usage: resolvedUsage,
-        cost: resolvedCost,
-        ts: now()
+        sessionId: sessionId
       )
     )
   }
 
+  /// The conservative estimate a deadline or brownout that may have started forces. Run-less, capped
+  /// at the parse output ceiling, and routed through the shared accountant so it matches a turn's
+  /// conservative row.
   func record(estimatedFor request: ChatRequest, callID: ProviderCallID, sessionId: Int64) {
-    let resolvedUsage = usageResolver.estimate(
-      context: request.messages,
-      maxOutputTokens: Self.maxParseOutputTokens
-    )
-    .addingReservation(reservationPolicy.additionalTokens(for: request.messages))
-    let resolvedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: resolvedUsage.usage,
-      providerCost: nil,
-      policy: costPolicy
-    )
     persist(
-      ProviderUsage(
-        providerCallID: callID,
+      accountant.conservativeRow(
+        callID: callID,
+        context: request.messages,
+        observedCompletionTokens: 0,
         runId: nil,
-        sessionId: sessionId,
-        model: configuredReference,
-        usage: resolvedUsage,
-        cost: resolvedCost,
-        ts: now()
+        sessionId: sessionId
       )
     )
   }
@@ -432,14 +398,17 @@ private extension ScheduleDraftParser {
 // MARK: - Bounded Call
 
 private extension ScheduleDraftParser {
-  /// Marker for a won deadline; maps to the estimated-debit degradation path.
+  /// Marker for a won deadline whose attempt may already be billing server-side; maps to the
+  /// estimated-debit degradation path. A deadline that provably beat the attempt off the ground
+  /// carries no such debt and surfaces as a bare `CancellationError` instead.
   struct ParseDeadlineExceeded: Error {}
 
   /// Races the provider call against `parseDeadlineSeconds` through the deadline coordinator (the
   /// turn runtimes' pattern): both children return values, no loser is discarded, and the provider is
   /// cancelled and drained if the deadline wins. Cancellation propagates promptly — `complete`'s HTTP
-  /// call and backoff sleeps both observe it. Any timeout disposition maps to the same estimated
-  /// debit the poller expects; a provider that wins with its own failure rethrows for the typed
+  /// call and backoff sleeps both observe it. The timeout carries the drained loser's accounting
+  /// disposition — a proven no-start owes nothing, a may-have-started owes the estimate — rather than
+  /// collapsing both into one debit; a provider that wins with its own failure rethrows for the typed
   /// catches above.
   func completeBounded(request: ChatRequest) async throws -> ChatResponse {
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
@@ -463,7 +432,12 @@ private extension ScheduleDraftParser {
       // A reply that landed under the won deadline: surfaced so its authoritative usage is recorded
       // rather than discarded for the timeout estimate.
       throw RacedDeadlineSuccess(response: response)
-    case .timedOut:
+    case .timedOut(.notStarted):
+      // The deadline provably beat the attempt off the ground: nothing was generated, so — like the
+      // turn path's proven no-start — it maps to a bare cancellation that writes no row.
+      throw CancellationError()
+    case .timedOut(.mayHaveStarted):
+      // The attempt may already be billing server-side; the estimate keeps the day cap honest.
       throw ParseDeadlineExceeded()
     }
   }

@@ -271,14 +271,6 @@ private extension ProviderDeadlineCoordinator {
     case .response(let response):
       return .timedOut(.completed(response))
     case .failed(let error):
-      if let failure = error as? ProviderFailure {
-        switch failure.accounting {
-        case .notStarted:
-          return .timedOut(.notStarted)
-        case .mayHaveStarted(let observed):
-          return .timedOut(.mayHaveStarted(observedCompletionTokens: observed))
-        }
-      }
       if let cancellation = error as? ProviderInferenceCancellation {
         return .timedOut(
           .mayHaveStarted(observedCompletionTokens: cancellation.observedCompletionTokens)

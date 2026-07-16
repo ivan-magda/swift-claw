@@ -314,8 +314,8 @@ import Testing
     #expect(outcome.exchanges.count == 1)  // the executed exchange still rides the commit
   }
 
-  @Test func deadlineSpansToolExecutionToo() async throws {
-    // given — a dispatcher slower than the whole-run deadline
+  @Test func aDeadlineAlreadyElapsedBeforeSendDegradesWithoutDebiting() async throws {
+    // given — a whole-run deadline already elapsed at loop entry, so the first round never issues
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal()]),
       okResponse(),
@@ -338,10 +338,11 @@ import Testing
     // when
     let outcome = try await run(runtime)
 
-    // then — the estimated-debit degradation, before any provider call
+    // then — the request provably never issued (no provider call), so the degradation writes no row,
+    // the same doctrine every other proven no-start follows
     let degraded = try requireDegraded(outcome.result)
     #expect(degraded.kind == .providerUnavailable)
-    #expect(degraded.usage != nil)
+    #expect(degraded.usage == nil)
     #expect(await provider.requests.isEmpty)
   }
 

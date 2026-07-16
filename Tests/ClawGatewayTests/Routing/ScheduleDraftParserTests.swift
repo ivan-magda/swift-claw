@@ -267,8 +267,12 @@ import Testing
   }
 
   @Test func deadlineWinsOverAHungProviderAndDebitsAnEstimate() async throws {
-    // given — an instant deadline child: the injected sleep returns immediately
-    let fixture = try makeFixture(provider: HangingProvider(), clock: ScriptedClock { _ in })
+    // given — an instant deadline child (the injected sleep returns immediately) over a provider that
+    // reached transport, so its cancel proves the attempt may have started and may be billing
+    let fixture = try makeFixture(
+      provider: HangingInferenceProvider(),
+      clock: ScriptedClock { _ in }
+    )
 
     // when
     let result = await fixture.parser.parse(
@@ -282,6 +286,23 @@ import Testing
       try Bool.fetchOne(db, sql: "SELECT is_estimated FROM provider_usage")
     }
     #expect(estimated == true)
+  }
+
+  @Test func aProvenNoStartDeadlineLoserWritesNoUsageRow() async throws {
+    // given — an instant deadline child over a provider cancelled before it reached transport, so its
+    // `complete` surfaces the bare CancellationError that proves no start. A no-start owes nothing,
+    // exactly as the turn path books it.
+    let fixture = try makeFixture(provider: HangingProvider(), clock: ScriptedClock { _ in })
+
+    // when
+    let result = await fixture.parser.parse(
+      ownerText: "every weekday at 7am",
+      sessionId: fixture.sessionId
+    )
+
+    // then — the poller still sees the timeout degradation, but nothing is billed
+    #expect(result == .providerUnavailable)
+    #expect(try usageRowCount(fixture) == 0)
   }
 
   @Test func racedSuccessUnderTheDeadlineRecordsAuthoritativeUsage() async throws {

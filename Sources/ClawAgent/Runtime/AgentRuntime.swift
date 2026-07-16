@@ -96,10 +96,13 @@ public struct AgentRuntime: Sendable {
   private let streamingEnabled: Bool
 
   // The cost/usage/reservation collaborators and identities are `internal`, not `private`, because
-  // the accounting extension that reads them lives in `AgentRuntime+Accounting.swift`.
+  // the loop and the accounting extension in `AgentRuntime+Accounting.swift` both read them.
   let costResolver: CostResolver
   let usageResolver: UsageResolver
   let budget: RunBudget
+  /// The one place every usage row is minted, shared with the schedule parser so a turn and a parse
+  /// account identically by construction rather than through parallel copies.
+  let accountant: ProviderUsageAccountant
   /// What crosses the wire in `ChatRequest.model`.
   private let wireModel: String
   /// The accounting, cost-identity, and safe-diagnostic reference. Kept apart from `wireModel` so a
@@ -157,6 +160,14 @@ public struct AgentRuntime: Sendable {
     self.configuredReference = configuredReference
     self.costPolicy = costPolicy
     self.reservationPolicy = reservationPolicy
+    self.accountant = ProviderUsageAccountant(
+      configuredReference: configuredReference,
+      costPolicy: costPolicy,
+      reservationPolicy: reservationPolicy,
+      costResolver: costResolver,
+      usageResolver: usageResolver,
+      outputCap: budget.maxOutputTokens
+    )
 
     self.toolDispatcher = toolDispatcher
 
@@ -230,14 +241,16 @@ public struct AgentRuntime: Sendable {
       )
     }
 
-    // The three wall-clock exits — exhausted before the send, exceeded during it, exceeded
-    // mid-dispatch — all owe the estimate for the round they ended, over the wire that round was
-    // (or would have been) sent. `wire` only grows once a round completes, so it reads the same at
-    // each of them.
+    // The mid-dispatch wall-clock exit: the round's provider call already returned and its
+    // intermediate row was recorded above under this same `callID`, so the conservative estimate this
+    // books is idempotent on that identity — it degrades the turn without re-debiting the round. The
+    // other two exits are handled elsewhere and account differently: the pre-send exit writes no row
+    // (the call provably never issued), and a deadline that wins during the send surfaces as a thrown
+    // cancellation marker the generic failure path classifies by its accounting disposition.
     func deadlineDegradation(_ callID: ProviderCallID) -> TurnResult {
       .degraded(
         .providerUnavailable,
-        usage: conservativeDebit(
+        usage: accountant.conservativeRow(
           callID: callID,
           context: wire,
           observedCompletionTokens: 0,
@@ -263,38 +276,26 @@ public struct AgentRuntime: Sendable {
       // reservation for replay-state bytes rides on ordinary text estimation so a state-carrying
       // wire cannot slip past a token gate; the loop reserves against those bytes without decoding
       // them.
-      let inputTokens =
-        TokenEstimator.estimateInputTokens(wire) + reservationPolicy.additionalTokens(for: wire)
+      let preflight = accountant.preflightEstimate(context: wire)
       // The loop is the one component that grows provider input (proposals + fenced
       // observations) and nothing re-fits the wire mid-run — without this check the
       // provider's context window is the de facto enforcement: an HTTP 400 classified terminal,
       // surfacing as an undiagnosable "provider unavailable". `budget.maxInputTokens` otherwise
       // binds only at assembly, which cannot see mid-run growth.
-      if inputTokens > budget.maxInputTokens {
+      if preflight.inputTokens > budget.maxInputTokens {
         return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
       }
-      let estimate = inputTokens + budget.maxOutputTokens
-      let estimatedCost = costResolver.resolve(
-        model: configuredReference,
-        usage: ChatUsage(
-          promptTokens: inputTokens,
-          completionTokens: budget.maxOutputTokens,
-          totalTokens: estimate
-        ),
-        providerCost: nil,
-        policy: costPolicy
-      ).costUSD
       // The run-accumulated per-run check lives here, not in BudgetGate — and, like BudgetGate's
       // USD caps, it is a dollar gate a subscription call does not answer to. The token, input,
       // turn, and tool bounds above and below it stay live either way.
-      if costPolicy == .metered, recordedRunUSD + estimatedCost > budget.perRunUSD {
+      if costPolicy == .metered, recordedRunUSD + preflight.costUSD > budget.perRunUSD {
         return outcome(.budgetStopped(cap: "per-run spend"))
       }
       if case .deny(let cap) = gate.preflight(
         todayTokens: todayTokens + recordedRunTokens,
         todayUSD: todayUSD + recordedRunUSD,
-        estimatedTotalTokens: estimate,
-        estimatedCostUSD: estimatedCost,
+        estimatedTotalTokens: preflight.totalTokens,
+        estimatedCostUSD: preflight.costUSD,
         origin: origin,
         proactiveTodayUSD: proactiveTodayUSD + recordedRunUSD
       ) {
@@ -307,12 +308,14 @@ public struct AgentRuntime: Sendable {
 
       let remaining = deadline - ContinuousClock.now
       guard remaining > .zero else {
+        // Exhausted before the request could be issued: the model was provably never asked, so — like
+        // every other proven no-start — no usage row is written.
         turnLog.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
-        return outcome(deadlineDegradation(callID))
+        return outcome(.degraded(.providerUnavailable, usage: nil))
       }
 
       turnLog.debug(
-        "round-trip \(roundTripIndex) inputTokens~=\(inputTokens) estCostUSD=\(USD.precise(estimatedCost))"
+        "round-trip \(roundTripIndex) inputTokens~=\(preflight.inputTokens) estCostUSD=\(USD.precise(preflight.costUSD))"
       )
       let request = ChatRequest(
         model: wireModel,
@@ -330,9 +333,6 @@ public struct AgentRuntime: Sendable {
           request: request,
           deadlineSeconds: max(1, Int(remaining.components.seconds))
         )
-      } catch is DeadlineExceeded {
-        turnLog.notice("round-trip \(roundTripIndex) exceeded the wall-clock deadline; degrading")
-        return outcome(deadlineDegradation(callID))
       } catch {
         // One accounting decision for every natural failure and cancellation, keyed on the
         // vendor-neutral disposition the provider tagged the failure with — never on whether the
@@ -365,7 +365,7 @@ public struct AgentRuntime: Sendable {
 
       // Intermediate round-trip: record its usage row IMMEDIATELY. Spend that cannot be
       // recorded must stop being spent.
-      let intermediate = usageRow(
+      let intermediate = accountant.reconciledRow(
         for: response,
         callID: callID,
         context: wire,
@@ -497,14 +497,6 @@ public struct AgentRuntime: Sendable {
   // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
 }
 
-// MARK: - Deadline Signal
-
-extension AgentRuntime {
-  /// Marker error thrown by turn-runtime deadline children when the wall-clock window elapses; the
-  /// `runTurn` shell maps it to the estimated-debit degradation path.
-  struct DeadlineExceeded: Error {}
-}
-
 // MARK: - Turn Diagnostics
 
 private extension AgentRuntime {
@@ -602,6 +594,11 @@ private extension AgentRuntime {
       )
     }
 
+    // The streaming attempt can burn part of the round's window on a slow connect before it fails,
+    // so the buffered reattempt is bounded by what is LEFT, not the round's original window — else one
+    // round could run up to roughly twice the turn's remaining wall clock before the outer loop
+    // re-checks the deadline.
+    let streamStart = ContinuousClock.now
     do {
       return try await runStreamingTurn(
         chatId: chatId,
@@ -617,7 +614,7 @@ private extension AgentRuntime {
       return try await runTypingTurn(
         chatId: chatId,
         request: request,
-        deadlineSeconds: deadlineSeconds
+        deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart)
       )
     } catch let failure as ProviderFailure where failure.cause.allowsBufferedReattempt {
       // The streaming runtime now hands its failures on as the intact envelope so accounting reads
@@ -627,9 +624,17 @@ private extension AgentRuntime {
       return try await runTypingTurn(
         chatId: chatId,
         request: request,
-        deadlineSeconds: deadlineSeconds
+        deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart)
       )
     }
+  }
+
+  /// The wall-clock budget left for the buffered reattempt after the streaming attempt consumed part
+  /// of the round's window. Floored at one second so `complete` still receives a positive bound even
+  /// when the streaming attempt already exhausted the window.
+  static func remainingDeadlineSeconds(total: Int, since start: ContinuousClock.Instant) -> Int {
+    let elapsed = Int((ContinuousClock.now - start).components.seconds)
+    return max(1, total - elapsed)
   }
 
   func runStreamingTurn(

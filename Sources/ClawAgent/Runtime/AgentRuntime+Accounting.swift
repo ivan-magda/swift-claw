@@ -29,7 +29,7 @@ extension AgentRuntime {
       // estimate below — while the owner still sees the degraded timeout.
       return .degraded(
         .providerUnavailable,
-        usage: usageRow(
+        usage: accountant.reconciledRow(
           for: racedSuccess.response,
           callID: callID,
           context: context,
@@ -41,7 +41,7 @@ extension AgentRuntime {
     if let cancellation = error as? ProviderInferenceCancellation {
       return .degraded(
         .providerUnavailable,
-        usage: conservativeDebit(
+        usage: accountant.conservativeRow(
           callID: callID,
           context: context,
           observedCompletionTokens: cancellation.observedCompletionTokens,
@@ -64,7 +64,7 @@ extension AgentRuntime {
     case .mayHaveStarted(let observedCompletionTokens):
       return .degraded(
         kind,
-        usage: conservativeDebit(
+        usage: accountant.conservativeRow(
           callID: callID,
           context: context,
           observedCompletionTokens: observedCompletionTokens,
@@ -102,8 +102,9 @@ extension AgentRuntime {
 
   /// Maps a returned response to a result, debiting the reconciled usage (real, or estimated when
   /// the provider omits it): non-empty content → `.completed`; empty + `finishReason == "length"` →
-  /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`. Cost is
-  /// resolved via `costResolver` (provider cost wins) into the `ProviderUsage` row.
+  /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`. The row is
+  /// minted through the shared accountant (provider cost wins), the same route an intermediate
+  /// round-trip books through.
   func classify(
     response: ChatResponse,
     callID: ProviderCallID,
@@ -111,21 +112,12 @@ extension AgentRuntime {
     runId: Int64,
     sessionId: Int64
   ) -> TurnResult {
-    let resolvedUsage = reservedUsage(for: response, context: context)
-    let resolvedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider,
-      policy: costPolicy
-    )
-    let usage = ProviderUsage(
-      providerCallID: callID,
+    let usage = accountant.reconciledRow(
+      for: response,
+      callID: callID,
+      context: context,
       runId: runId,
-      sessionId: sessionId,
-      model: configuredReference,
-      usage: resolvedUsage,
-      cost: resolvedCost,
-      ts: Date()
+      sessionId: sessionId
     )
 
     if !response.content.isEmpty {
@@ -141,90 +133,5 @@ extension AgentRuntime {
     }
 
     return .degraded(.providerUnavailable, usage: usage)
-  }
-
-  /// The reconciled usage row for a response that carries authoritative usage — an intermediate
-  /// round-trip, or a reply that landed alongside a won deadline. Same resolution as `classify`
-  /// (provider counts untouched, provider cost wins), without the terminal classification, so every
-  /// completed-call row is booked through one route rather than a second, estimated one.
-  func usageRow(
-    for response: ChatResponse,
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    runId: Int64,
-    sessionId: Int64
-  ) -> ProviderUsage {
-    let resolvedUsage = reservedUsage(for: response, context: context)
-    let resolvedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider,
-      policy: costPolicy
-    )
-
-    return ProviderUsage(
-      providerCallID: callID,
-      runId: runId,
-      sessionId: sessionId,
-      model: configuredReference,
-      usage: resolvedUsage,
-      cost: resolvedCost,
-      ts: Date()
-    )
-  }
-
-  /// Reconciled usage with the replay-state reservation folded into an *estimated* prompt only.
-  /// Provider-returned counts are authoritative and stay untouched; a missing count is estimated,
-  /// and there the reservation is added so a state-carrying wire is never under-accounted.
-  func reservedUsage(for response: ChatResponse, context: [ChatMessage]) -> ResolvedUsage {
-    withReservation(usageResolver.resolve(response: response, context: context), context: context)
-  }
-
-  /// Adds this route's reservation to an estimated prompt; leaves provider-returned usage alone.
-  func withReservation(_ base: ResolvedUsage, context: [ChatMessage]) -> ResolvedUsage {
-    base.addingReservation(reservationPolicy.additionalTokens(for: context))
-  }
-
-  /// The conservative `ProviderUsage` for a call with no authoritative usage — a deadline, an
-  /// exhausted retry, an ambiguous failure, or a cancellation that may have generated tokens.
-  /// Prompt is estimated from context plus the replay-state reservation; completion is the larger
-  /// of the local output reservation and any count production code observed, so a partial reply
-  /// already seen is never under-charged. No provider cost exists for a call that never reconciled,
-  /// so cost comes from the best-effort tier (floored, never a silent $0) — or a confirmed zero
-  /// under `includedPlan`. The row is an estimate.
-  func conservativeDebit(
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    observedCompletionTokens: Int,
-    runId: Int64,
-    sessionId: Int64
-  ) -> ProviderUsage {
-    let promptTokens =
-      TokenEstimator.estimateInputTokens(context) + reservationPolicy.additionalTokens(for: context)
-    let completionTokens = max(budget.maxOutputTokens, observedCompletionTokens)
-    let resolvedUsage = ResolvedUsage(
-      usage: ChatUsage(
-        promptTokens: promptTokens,
-        completionTokens: completionTokens,
-        totalTokens: promptTokens + completionTokens
-      ),
-      isEstimated: true
-    )
-    let resolvedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: resolvedUsage.usage,
-      providerCost: nil,
-      policy: costPolicy
-    )
-
-    return ProviderUsage(
-      providerCallID: callID,
-      runId: runId,
-      sessionId: sessionId,
-      model: configuredReference,
-      usage: resolvedUsage,
-      cost: resolvedCost,
-      ts: Date()
-    )
   }
 }
