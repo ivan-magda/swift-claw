@@ -92,8 +92,13 @@ private extension RunCommand {
       logger.error("daemon exited with error: \(error)")
     }
 
-    // The lane-admission service recorded its drain result as the service graph shut down; a missing
-    // record means the lanes never opened (a boot failure), a clean stop with nothing to drain.
+    // The lane-admission service records its drain result as the service graph shuts down, so a
+    // missing record is not a silently-skipped drain: once its run() starts, every path — graceful
+    // shutdown OR a sibling-failure cancellation — reaches record, so a live turn can never coexist
+    // with a missing record. The record is absent only when run() was never invoked, which happens
+    // solely when the ServiceGroup never started its service tasks (a pre-serve boot failure). The
+    // poller that admits turns lives in that same group, so if it never ran, nothing was ever
+    // enqueued: there is nothing live to drain and `.drained` is the safe default, not fail-open.
     let laneDrain = await bundle.laneShutdownOutcome.value() ?? .drained
     let coordinator = RuntimeShutdownCoordinator(
       logger: logger,

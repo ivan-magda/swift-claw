@@ -21,7 +21,7 @@ public struct Daemon: Sendable {
     boot: @escaping @Sendable () async -> Void = {},
     logger: Logger,
     gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint],
-    gracefulShutdownSeconds: Int = 30
+    gracefulShutdownSeconds: Int
   ) {
     self.services = services
 

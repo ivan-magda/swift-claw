@@ -35,7 +35,7 @@ import Testing
     let lanes = SessionLaneRegistry()
     let outcome = LaneShutdownOutcome()
     let source = FakeCredentialSource()
-    let daemon = Daemon(services: [], logger: TestLog.silent)
+    let daemon = Daemon(services: [], logger: TestLog.silent, gracefulShutdownSeconds: 30)
 
     // when
     let bundle = DaemonRuntimeBundle(
