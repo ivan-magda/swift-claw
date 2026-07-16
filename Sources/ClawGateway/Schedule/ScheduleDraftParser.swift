@@ -1,3 +1,4 @@
+import ClawAgent
 import ClawCore
 import Foundation
 import Logging
@@ -347,27 +348,35 @@ private extension ScheduleDraftParser {
 // MARK: - Bounded Call
 
 private extension ScheduleDraftParser {
-  /// Marker thrown by the deadline child; maps to the estimated-debit degradation path.
+  /// Marker for a won deadline; maps to the estimated-debit degradation path.
   struct ParseDeadlineExceeded: Error {}
 
-  /// Races the provider call against `parseDeadlineSeconds` (the turn runtimes' pattern).
-  /// Cancellation propagates promptly: `complete`'s HTTP call and backoff sleeps both observe it.
+  /// Races the provider call against `parseDeadlineSeconds` through the deadline coordinator (the
+  /// turn runtimes' pattern): both children return values, no loser is discarded, and the provider is
+  /// cancelled and drained if the deadline wins. Cancellation propagates promptly — `complete`'s HTTP
+  /// call and backoff sleeps both observe it. Any timeout disposition maps to the same estimated
+  /// debit the poller expects; a provider that wins with its own failure rethrows for the typed
+  /// catches above.
   func completeBounded(request: ChatRequest) async throws -> ChatResponse {
-    try await withThrowingTaskGroup(of: ChatResponse.self) { group in
-      defer { group.cancelAll() }
+    let outcome = await ProviderDeadlineCoordinator.raceBuffered(
+      deadlineSeconds: Self.parseDeadlineSeconds,
+      clock: clock,
+      call: {
+        do {
+          return .response(try await provider.complete(request: request))
+        } catch {
+          return .failed(error)
+        }
+      }
+    )
 
-      group.addTask {
-        try await provider.complete(request: request)
-      }
-      group.addTask {
-        try await clock.sleep(for: .seconds(Self.parseDeadlineSeconds))
-        throw ParseDeadlineExceeded()
-      }
-
-      guard let response = try await group.next() else {
-        throw ParseDeadlineExceeded()
-      }
+    switch outcome {
+    case .response(let response):
       return response
+    case .failed(let error):
+      throw error
+    case .timedOut:
+      throw ParseDeadlineExceeded()
     }
   }
 }

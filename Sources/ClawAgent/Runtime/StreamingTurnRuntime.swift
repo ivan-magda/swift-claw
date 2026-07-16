@@ -21,13 +21,12 @@ private actor DraftSnapshot {
   }
 }
 
-/// Races three children: the SSE consumer (accumulates deltas, returns the response), a
-/// draft/typing loop (throttled rich-draft frames once content exists, "typing…" re-issued
-/// while waiting for the first token), and the wall-clock deadline. The winning response is
+/// Races three children through the deadline coordinator: the SSE consumer (accumulates deltas and
+/// publishes drafts), a draft/typing loop ("typing…" re-issued while waiting for the first token),
+/// and the wall-clock deadline. The consumer and the deadline contend for the coordinator's lock; no
+/// loser is discarded, and every child is drained before an outcome is read. The winning response is
 /// finalized with one awaited, deadline-bounded full-content draft.
 struct StreamingTurnRuntime: Sendable {
-  private struct AccumulatedStreamContentTooLarge: Error {}
-
   /// Probe cadence for the draft/typing child. Sends are rate-limited in ticks so the wire
   /// cadence stays near the spec's ~1.2s min-interval while the first frame still goes out on
   /// the next probe after content appears.
@@ -69,32 +68,39 @@ struct StreamingTurnRuntime: Sendable {
     request: ChatRequest
   ) async throws -> ChatResponse {
     let snapshot = DraftSnapshot()
+    // Built before the race children start, so the runtime holds the cancel-and-join handle before
+    // any authorization or network work can race the deadline.
+    let stream = provider.stream(request: request)
 
-    return try await withThrowingTaskGroup(of: ChatResponse?.self) { group in
-      defer { group.cancelAll() }
+    let outcome = await ProviderDeadlineCoordinator.raceStreaming(
+      stream: stream,
+      deadlineSeconds: wallClockDeadlineSeconds,
+      clock: clock,
+      consume: { stream, box in
+        await consumeStream(stream, snapshot: snapshot, box: box)
+      },
+      auxiliary: { box in
+        await runDraftAndTypingLoop(chatId: chatId, draftId: draftId, snapshot: snapshot, box: box)
+      }
+    )
 
-      group.addTask {
-        try await consumeStream(request: request, snapshot: snapshot)
-      }
-      group.addTask {
-        await runDraftAndTypingLoop(chatId: chatId, draftId: draftId, snapshot: snapshot)
-        return nil
-      }
-      group.addTask {
-        try await clock.sleep(for: .seconds(wallClockDeadlineSeconds))
-        throw AgentRuntime.DeadlineExceeded()
-      }
-
-      for try await outcome in group {
-        guard let response = outcome else {
-          continue
-        }
-        group.cancelAll()
-        await sendFinalDraft(response.content, chatId: chatId, draftId: draftId)
-        return response
-      }
-
-      throw AgentRuntime.DeadlineExceeded()
+    switch outcome {
+    case .response(let response):
+      await sendFinalDraft(response.content, chatId: chatId, draftId: draftId)
+      return response
+    case .failed(let error):
+      throw error
+    case .timedOut(.notStarted):
+      // A no-start deadline generated nothing, so it bills nothing: a bare cancel writes no row.
+      throw CancellationError()
+    case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
+      // The interrupted attempt may already owe tokens, so the typed marker carries the observed
+      // lower bound for the runtime's conservative row.
+      throw ProviderInferenceCancellation(observing: observedCompletionTokens)
+    case .timedOut(.completed(let response)):
+      // A completed stream is surfaced as `.response` above; kept exhaustive for the enum.
+      await sendFinalDraft(response.content, chatId: chatId, draftId: draftId)
+      return response
     }
   }
 }
@@ -102,27 +108,17 @@ struct StreamingTurnRuntime: Sendable {
 // MARK: - Stream Consumption
 
 private extension StreamingTurnRuntime {
-  /// Joins the session on every way out. The session owns the inference and, through it, the HTTP
-  /// transfer, so returning without joining would leave both running behind a finished turn.
+  /// Iterates the stream, accumulating deltas and publishing drafts, and reports what it saw as a
+  /// value — never a throw across the coordinator's group. On the terminal event it claims the race
+  /// for the provider; the authoritative reply metadata is read from the stream's own join, so the
+  /// consumer contributes only the accumulation the drafts have been showing. A cut iteration and a
+  /// failed terminal both defer to that join, which carries the disposition; an overrun is flagged so
+  /// the coordinator can refuse it locally.
   func consumeStream(
-    request: ChatRequest,
-    snapshot: DraftSnapshot
-  ) async throws -> ChatResponse {
-    let stream = provider.stream(request: request)
-    do {
-      let response = try await accumulate(from: stream, snapshot: snapshot)
-      _ = await stream.awaitTermination()
-      return response
-    } catch {
-      _ = await stream.cancelAndAwait()
-      throw error
-    }
-  }
-
-  func accumulate(
-    from stream: LLMEventStream,
-    snapshot: DraftSnapshot
-  ) async throws -> ChatResponse {
+    _ stream: LLMEventStream,
+    snapshot: DraftSnapshot,
+    box: ProviderRaceBox
+  ) async -> StreamConsumerOutcome {
     var content = ""
     var contentBytes = 0
 
@@ -137,54 +133,19 @@ private extension StreamingTurnRuntime {
           if !content.isEmpty {
             await snapshot.publish(content)
           }
-        case .finished(let response):
-          // The accumulation, not the terminal's own copy, is what the drafts have been showing;
-          // taking the reply from anywhere else would let the final frame disagree with them.
-          return ChatResponse(
-            content: content,
-            finishReason: response.finishReason,
-            usage: response.usage,
-            costFromProvider: response.costFromProvider,
-            toolCalls: response.toolCalls,
-            providerState: response.providerState
-          )
+        case .finished:
+          _ = box.claim(.provider)
+          return .completed(content)
         }
       }
-    } catch let failure as ProviderFailure {
-      // Hand the whole failure on, not its bare cause: the runtime's accounting reads the provider's
-      // own disposition off it — a proven no-start writes no usage row, a may-have-started keeps its
-      // observed count — which a cause alone cannot carry. The buffered fallback matches the
-      // reissuable causes through the envelope, so nothing upstream needs it unwrapped.
-      throw failure
-    }
-
-    // A cancelled consumer ends iteration with nil instead of throwing. Rather than re-check and
-    // surface a bare cancel here — which would drop the accounting the terminal carries and let a
-    // partial accumulation read as a completed reply — the join below decides: a dry queue means the
-    // reply is not whole, and the terminal says why, including whether the interrupted attempt may
-    // already owe tokens.
-    throw Self.error(for: await stream.awaitTermination())
-  }
-
-  /// A terminal that reached here is never `.completed`: that case returns from the loop above with
-  /// its reserved event. Cancellation carries its accounting disposition on: a may-have-started
-  /// interruption becomes the typed marker so the runtime records conservative usage, while a
-  /// no-start one stays a plain cancel that bills nothing. A `.failed` terminal hands the whole
-  /// failure on rather than its bare cause, so the runtime's accounting reads the provider's own
-  /// disposition — a proven no-start owes no row, a may-have-started keeps its observed count.
-  static func error(for termination: LLMStreamTermination) -> any Error {
-    switch termination {
-    case .failed(let failure):
-      return failure
-    case .cancelled(.mayHaveStarted(let observedCompletionTokens)):
-      return ProviderInferenceCancellation(observing: observedCompletionTokens)
-    case .cancelled(.notStarted):
-      return CancellationError()
-    case .completed:
-      return ProviderError.retryable(
-        status: nil,
-        message: "streamed reply ended without a terminal"
-      )
+      return .cut
+    } catch is AccumulatedStreamContentTooLarge {
+      return .overflowed
+    } catch {
+      // A cancelled consumer ends here (checkCancellation), and a failed terminal throws its cause.
+      // Either way the authoritative outcome is the stream's own termination, read by the coordinator
+      // — a cut reply is never surfaced as a whole one.
+      return .cut
     }
   }
 
@@ -209,7 +170,8 @@ private extension StreamingTurnRuntime {
   func runDraftAndTypingLoop(
     chatId: Int64,
     draftId: Int64,
-    snapshot: DraftSnapshot
+    snapshot: DraftSnapshot,
+    box: ProviderRaceBox
   ) async {
     var lastSeenVersion = 0
     var sentAnyDraft = false
@@ -218,7 +180,9 @@ private extension StreamingTurnRuntime {
     var ticksSinceDraft = Self.minTicksBetweenDrafts
     var ticksSinceTyping = Self.ticksBetweenTyping
 
-    while !Task.isCancelled {
+    // Stops the moment the race is decided — a won provider or a won deadline — before cancellation
+    // has to propagate, so the loop never draws a frame over a turn that has already resolved.
+    while box.decided == nil, !Task.isCancelled {
       let latest = await snapshot.newer(than: lastSeenVersion)
       let mayDraft = !sentAnyDraft || ticksSinceDraft >= Self.minTicksBetweenDrafts
 
@@ -251,30 +215,13 @@ private extension StreamingTurnRuntime {
     await sendDraftBounded(content, chatId: chatId, draftId: draftId)
   }
 
-  /// Awaits the sink but abandons it at `draftSendDeadline`: turn completion must never wedge on
-  /// a stalled draft POST. Task groups always await their children, so the
-  /// send/deadline pair is deliberately unstructured — first to finish wins, termination cancels
-  /// both, and an abandoned send is harmless (the draft is ephemeral, best-effort UX).
+  /// Awaits the sink but abandons it at `draftSendDeadline`: turn completion must never wedge on a
+  /// stalled draft POST. The coordinator owns both children, so the abandoned send is cancelled and
+  /// drained rather than left to outlive the turn — a structured replacement for the old detached
+  /// send/deadline race.
   func sendDraftBounded(_ markdown: String, chatId: Int64, draftId: Int64) async {
-    let firstDone = AsyncStream<Void> { continuation in
-      let sendTask = Task {
-        await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)
-        continuation.yield()
-        continuation.finish()
-      }
-      let deadlineTask = Task {
-        try? await clock.sleep(for: Self.draftSendDeadline)
-        continuation.yield()
-        continuation.finish()
-      }
-      continuation.onTermination = { @Sendable _ in
-        sendTask.cancel()
-        deadlineTask.cancel()
-      }
-    }
-
-    for await _ in firstDone {
-      break
+    await ProviderDeadlineCoordinator.sendBounded(timeout: Self.draftSendDeadline, clock: clock) {
+      await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)
     }
   }
 }

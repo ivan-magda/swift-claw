@@ -19,32 +19,41 @@ struct TypingTurnRuntime: Sendable {
     self.clock = clock
   }
 
-  /// Races the provider call against the wall-clock deadline while pulsing the typing indicator.
-  /// Returns the provider response if it wins, rethrows provider errors, and throws
-  /// `AgentRuntime.DeadlineExceeded` if the deadline wins.
+  /// Races the provider call against the wall-clock deadline while pulsing the typing indicator. The
+  /// coordinator hands back a typed outcome — no loser discarded, both children drained — which maps
+  /// to the return/throw contract the runtime's accounting reads: a response returns, a typed failure
+  /// rethrows, and a won deadline throws the cancellation marker its disposition names.
   func run(
     chatId: Int64,
     request: ChatRequest
   ) async throws -> ChatResponse {
     try await withTypingPulse(chatId: chatId, indicator: typingIndicator, clock: clock) {
-      try await withThrowingTaskGroup(of: ChatResponse?.self) { group in
-        defer { group.cancelAll() }
-
-        group.addTask {
-          try await provider.complete(request: request)
-        }
-        group.addTask {
-          try await clock.sleep(for: .seconds(wallClockDeadlineSeconds))
-          throw AgentRuntime.DeadlineExceeded()
-        }
-
-        for try await outcome in group {
-          if let response = outcome {
-            return response
+      let outcome = await ProviderDeadlineCoordinator.raceBuffered(
+        deadlineSeconds: wallClockDeadlineSeconds,
+        clock: clock,
+        call: {
+          do {
+            return .response(try await provider.complete(request: request))
+          } catch {
+            return .failed(error)
           }
         }
+      )
 
-        throw AgentRuntime.DeadlineExceeded()
+      switch outcome {
+      case .response(let response):
+        return response
+      case .failed(let error):
+        throw error
+      case .timedOut(.notStarted):
+        // Nothing was generated, so nothing is billed: a bare cancel writes no row.
+        throw CancellationError()
+      case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
+        throw ProviderInferenceCancellation(observing: observedCompletionTokens)
+      case .timedOut(.completed(let response)):
+        // A response landed under the won deadline: still an owner-visible timeout, but its observed
+        // count survives so the conservative row is never under the tokens the provider returned.
+        throw ProviderInferenceCancellation(observing: response.usage?.completionTokens ?? 0)
       }
     }
   }

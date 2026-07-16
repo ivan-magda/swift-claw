@@ -340,6 +340,7 @@ actor BlockingDrafts: RichDraftStreaming {
   private var blockedWaiters: [CheckedContinuation<Void, Never>] = []
 
   private var released = false
+  private var cancelled = false
   private var firstSendBlocked = false
 
   func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
@@ -352,8 +353,18 @@ actor BlockingDrafts: RichDraftStreaming {
       waiter.resume()
     }
     blockedWaiters.removeAll()
-    await withCheckedContinuation { continuation in
-      waiters.append(continuation)
+    // The bounded-send coordinator now cancels AND drains an abandoned send, so a blocked send must
+    // unwind on cancellation or the drain would wedge — exactly as a production HTTP POST does.
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        if cancelled || released {
+          continuation.resume()
+        } else {
+          waiters.append(continuation)
+        }
+      }
+    } onCancel: {
+      Task { await self.cancelWaiters() }
     }
   }
 
@@ -366,6 +377,15 @@ actor BlockingDrafts: RichDraftStreaming {
 
   func release() {
     released = true
+    resumeWaiters()
+  }
+
+  private func cancelWaiters() {
+    cancelled = true
+    resumeWaiters()
+  }
+
+  private func resumeWaiters() {
     for waiter in waiters {
       waiter.resume()
     }
