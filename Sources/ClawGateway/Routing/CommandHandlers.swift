@@ -52,10 +52,9 @@ struct CommandHandlers: Sendable {
       await coordinator.signal(approvalId: approvalId, .denied(.cancelled))
     }
 
-    if let sessionId = result.sessionId, result.cancelledRunIds.isEmpty == false {
-      let lane = await lanes.actor(for: sessionId)
+    if result.sessionId != nil, result.cancelledRunIds.isEmpty == false {
       for runId in result.cancelledRunIds {
-        await lane.cancel(runId: runId)
+        await lanes.cancel(runID: runId)
       }
     }
 
@@ -98,8 +97,7 @@ struct CommandHandlers: Sendable {
     }
 
     if let sessionId = result.sessionId {
-      let lane = await lanes.actor(for: sessionId)
-      await lane.cancelAll()
+      await lanes.cancelAll(sessionID: sessionId)
       await pendingConfirmations.clear(sessionId: sessionId)
     }
 

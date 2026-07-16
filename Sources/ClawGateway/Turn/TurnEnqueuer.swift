@@ -22,9 +22,8 @@ struct TurnEnqueuer: Sendable {
   ) async {
     let runLog = log ?? logger
     let runner = turns
-    let lane = await lanes.actor(for: sessionId)
 
-    await lane.enqueue(runId: runId) {
+    let result = await lanes.enqueue(sessionID: sessionId, runID: runId) {
       do {
         try await runner.run(
           runId: runId,
@@ -37,6 +36,12 @@ struct TurnEnqueuer: Sendable {
       } catch {
         runLog.error("run \(runId) error (handled in-band): \(error)")
       }
+    }
+
+    if result == .shuttingDown {
+      // Admission closed between the durable claim and the lane hop: the run stays PENDING for the
+      // boot reconciler to recover on the next start rather than executing under a draining daemon.
+      runLog.notice("run \(runId) not enqueued; lane admission is shutting down")
     }
   }
 

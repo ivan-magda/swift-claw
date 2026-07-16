@@ -5,7 +5,7 @@ import Logging
 /// The single execution locus: the parked task that turns a coordinator resolution signal into
 /// the approve resume or the deny finalization. Resolvers (callback handler, ticker, command
 /// path) only CAS the durable row and `signal` the coordinator; the waiter — always running on
-/// the session lane via `SessionActor.enqueue`, at suspend time and boot re-park — performs the
+/// the session lane via the registry's `enqueue`, at suspend time and boot re-park — performs the
 /// observation update, run transition, owner notice, and button disarm.
 ///
 /// Conforms to the `ApprovalParking` seam (which refines `Sendable`) so `TurnRunner` can

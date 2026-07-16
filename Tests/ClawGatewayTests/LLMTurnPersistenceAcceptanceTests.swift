@@ -890,9 +890,8 @@ func makeStopNewStack(
       sessionKey: SessionKey.telegramDM(chatId: stack.chatId),
       now: Date()
     )
-    let lane = await stack.lanes.actor(for: sessionId)
     let gate = Gate()
-    await lane.enqueue(runId: -1) {
+    _ = await stack.lanes.enqueue(sessionID: sessionId, runID: -1) {
       await gate.wait()
     }
 
