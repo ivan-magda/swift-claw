@@ -11,14 +11,18 @@ import Foundation
 /// which exposes fixed names only, so there is no argument that could aim this store at another
 /// vendor's credential file.
 public struct EncryptedLLMCredentialStore: LLMCredentialStore {
-  /// Current envelope version. Single-version today; bound as AAD so a future multi-version world
-  /// dispatches on it AND authenticates it.
+  /// The version this store writes. Its AAD labels the credential file's purpose alongside this byte.
   static let envelopeVersion: UInt8 = 1
   /// Current version of the JSON map inside the envelope. It moves independently of the envelope's:
   /// a new record shape does not imply new cryptography.
   static let mapVersion = 1
-  /// Cap on the envelope before its plaintext is allocated.
-  static let maximumEnvelopeByteCount = 256 * 1024
+  static let maximumEnvelopeByteCount = AESGCMEnvelope.maximumByteCount
+
+  /// The shared codec bound to this store's version and its purpose-labeled AAD.
+  static let envelopeCodec = AESGCMEnvelope(
+    version: envelopeVersion,
+    associatedData: associatedData(version: envelopeVersion)
+  )
 
   /// Unlike the runtime envelope, whose 0644 predates the publication protocol and must keep
   /// opening, nothing anywhere has ever written this file except through the protocol below. It is
@@ -30,8 +34,12 @@ public struct EncryptedLLMCredentialStore: LLMCredentialStore {
 
   private let paths: SecretStatePaths
   private let publisher: SecureFilePublisher
-  /// Serializes read-modify-write. Two saves that each read the same map and published their own
-  /// record would each drop the other's, which for a provider map is silent credential loss.
+  /// Serializes read-modify-write cycles that share this one store instance. Two interleaved saves
+  /// would each read the same map and publish their own record, dropping the other's — silent
+  /// credential loss for a provider map. The lock lives on the instance, so it guards only concurrent
+  /// callers of the same store; safety across separately constructed stores against one state root is
+  /// owned elsewhere — by the daemon's credential actor and by the instance lock the mutating CLI
+  /// commands hold — not here.
   private let mutation = NSLock()
 
   public init(stateRoot: URL) {
@@ -234,42 +242,28 @@ extension EncryptedLLMCredentialStore {
     _ plaintext: Data,
     key: SymmetricKey
   ) throws(LLMCredentialStoreError) -> Data {
-    guard
-      let sealedBox = try? AES.GCM.seal(
-        plaintext,
-        using: key,
-        authenticating: associatedData(version: envelopeVersion)
-      ),
-      let combined = sealedBox.combined
-    else {
+    do {
+      return try envelopeCodec.seal(plaintext, key: key)
+    } catch {
       throw .publicationFailed
     }
-    return Data([envelopeVersion]) + combined
   }
 
   static func openEnvelope(
     _ envelope: Data,
     key: SymmetricKey
   ) throws(LLMCredentialStoreError) -> Data {
-    guard let version = envelope.first else {
-      throw .malformedStorage
-    }
-    // Dispatch fails closed before any cryptography: an unknown version is a build that cannot read
-    // this file, which is a different thing to tell an owner than a file that has been tampered with.
-    guard version == envelopeVersion else {
+    do {
+      return try envelopeCodec.open(envelope, key: key)
+    } catch AESGCMEnvelopeError.unsupportedVersion {
+      // An unknown version is a build that cannot read this file — a different thing to tell an owner
+      // than a tampered file, so it keeps its own remedy.
       throw .unsupportedVersion
-    }
-    guard
-      let sealedBox = try? AES.GCM.SealedBox(combined: Data(envelope.dropFirst())),
-      let plaintext = try? AES.GCM.open(
-        sealedBox,
-        using: key,
-        authenticating: associatedData(version: version)
-      )
-    else {
+    } catch {
+      // A missing version byte or a failed tag: naming which would quote the decrypted refresh token
+      // the decoder chokes on, so both collapse into one plaintext-free refusal.
       throw .malformedStorage
     }
-    return plaintext
   }
 }
 

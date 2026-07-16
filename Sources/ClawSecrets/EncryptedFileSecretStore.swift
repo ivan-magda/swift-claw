@@ -9,7 +9,6 @@ import Foundation
 /// partial state the resolver refuses to boot on.
 struct CreatedRuntimeArtifacts {
   struct Step: Sendable, Equatable {
-    let name: String
     let url: URL
     let identity: SecureFileIdentity
   }
@@ -39,12 +38,16 @@ struct CreatedRuntimeArtifacts {
 /// the version byte is bound as **AEAD associated data**, so it can't be swapped without failing
 /// authentication. The 256-bit key is 32 random bytes in `secret.key` (safe-opened by `openKey`).
 public struct EncryptedFileSecretStore: SecretStore {
-  /// Current envelope version. Single-version today; bound as AAD so a future multi-version world
-  /// dispatches on it AND authenticates it.
+  /// The version this store writes. The runtime envelope authenticates a bare version byte as its AAD.
   static let envelopeVersion: UInt8 = 1
   static let keyByteCount = 32  // 256-bit symmetric key
-  /// Cap on the envelope before its plaintext is allocated.
-  static let maximumEnvelopeByteCount = 256 * 1024
+  static let maximumEnvelopeByteCount = AESGCMEnvelope.maximumByteCount
+
+  /// The shared codec bound to this store's version and its bare-version-byte AAD.
+  static let envelopeCodec = AESGCMEnvelope(
+    version: envelopeVersion,
+    associatedData: Data([envelopeVersion])
+  )
 
   static let keyReadPolicy = SecureFilePublisher.ReadPolicy(
     maximumByteCount: keyByteCount,
@@ -139,33 +142,23 @@ public struct EncryptedFileSecretStore: SecretStore {
 
 extension EncryptedFileSecretStore {
   static func sealEnvelope(_ plaintext: Data, key: SymmetricKey) throws(SecretStoreError) -> Data {
-    let associatedData = Data([envelopeVersion])
-
-    guard
-      let sealedBox = try? AES.GCM.seal(plaintext, using: key, authenticating: associatedData),
-      let combined = sealedBox.combined
-    else {
+    do {
+      return try envelopeCodec.seal(plaintext, key: key)
+    } catch {
       throw .publicationFailed("seal \(SecretStatePaths.runtimeEnvelopeName)")
     }
-
-    return associatedData + combined
   }
 
+  /// This seam does not tell an absent version byte from a wrong one — an older installation's disk
+  /// carries neither remedy the credential store distinguishes, so both frame the same malformed row.
   static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(SecretStoreError) -> Data {
-    guard let version = envelope.first, version == envelopeVersion else {
+    do {
+      return try envelopeCodec.open(envelope, key: key)
+    } catch AESGCMEnvelopeError.missingVersion, AESGCMEnvelopeError.unsupportedVersion {
       throw .malformedEnvelope
-    }
-
-    let associatedData = Data([version])
-
-    guard
-      let sealedBox = try? AES.GCM.SealedBox(combined: Data(envelope.dropFirst())),
-      let plaintext = try? AES.GCM.open(sealedBox, using: key, authenticating: associatedData)
-    else {
+    } catch {
       throw .decryptionFailed
     }
-
-    return plaintext
   }
 }
 
@@ -272,7 +265,6 @@ extension EncryptedFileSecretStore {
     }
 
     created.key = CreatedRuntimeArtifacts.Step(
-      name: SecretStatePaths.keyName,
       url: url,
       identity: outcome.identity
     )
@@ -320,7 +312,6 @@ extension EncryptedFileSecretStore {
 
     if !existed {
       created.envelope = CreatedRuntimeArtifacts.Step(
-        name: SecretStatePaths.runtimeEnvelopeName,
         url: url,
         identity: outcome.identity
       )

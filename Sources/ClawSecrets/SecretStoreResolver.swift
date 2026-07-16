@@ -47,24 +47,13 @@ public enum SecretStoreResolver {
 
 // MARK: - Doctor row
 
-/// The doctor "secrets" row: backend label + an `ok` flag, computed by a **real decrypt without
-/// booting**. Used by `doctor --check-config` to validate decrypt early.
-public struct SecretsDoctorResult: Sendable, Equatable {
-  public let value: String
-  public let ok: Bool
-
-  public init(value: String, ok: Bool) {
-    self.value = value
-    self.ok = ok
-  }
-}
-
 extension SecretStoreResolver {
-  /// Resolves the backend and performs a real `loadSecrets()` (no daemon boot).
+  /// The doctor "secrets" row: backend label + an `ok` flag, computed by a **real decrypt without
+  /// booting**. Used by `doctor --check-config` to validate decrypt early.
   public static func doctorRow(
     stateRoot: URL,
     environment: [String: String]
-  ) -> SecretsDoctorResult {
+  ) -> DoctorRowResult {
     let resolution = resolve(
       stateRoot: stateRoot,
       environment: environment,
@@ -75,12 +64,12 @@ extension SecretStoreResolver {
       _ = try resolution.store.loadSecrets()
       switch resolution.backend {
       case .encrypted:
-        return SecretsDoctorResult(value: "backend=encrypted", ok: true)
+        return DoctorRowResult(value: "backend=encrypted", ok: true)
       case .env:
-        return SecretsDoctorResult(value: "backend=env (WARN: plaintext)", ok: true)
+        return DoctorRowResult(value: "backend=env (WARN: plaintext)", ok: true)
       }
     } catch {
-      return SecretsDoctorResult(value: "FAIL: \(error)", ok: false)
+      return DoctorRowResult(value: "FAIL: \(error)", ok: false)
     }
   }
 }

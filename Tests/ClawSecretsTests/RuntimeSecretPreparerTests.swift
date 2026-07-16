@@ -233,6 +233,7 @@ import Testing
 
     // then — the envelope goes first: the key alone is inert, whereas an envelope pointing at a
     // key that is already gone is the exact partial state the resolver refuses to boot on.
-    #expect(plan.map(\.name) == [SecretStatePaths.runtimeEnvelopeName, SecretStatePaths.keyName])
+    let paths = SecretStatePaths(stateRoot: stateRoot)
+    #expect(plan.map(\.url) == [paths.runtimeEnvelope, paths.key])
   }
 }
