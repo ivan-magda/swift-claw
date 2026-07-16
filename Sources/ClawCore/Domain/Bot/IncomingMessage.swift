@@ -43,6 +43,25 @@ public struct RawCallback: Sendable, Equatable {
   }
 }
 
+/// The wire-agnostic voice attachment: the download handle plus the metadata the pipeline
+/// guards on before fetching a single byte (duration and declared size caps).
+public struct VoiceAttachment: Sendable, Equatable {
+  /// The pluralized noun the wire layer and the canned "can't read X yet" reply share.
+  public static let mediaKindDescription = "voice messages"
+
+  public let fileId: String
+  public let durationSeconds: Int
+  public let mimeType: String?
+  public let fileSizeBytes: Int64?
+
+  public init(fileId: String, durationSeconds: Int, mimeType: String?, fileSizeBytes: Int64?) {
+    self.fileId = fileId
+    self.durationSeconds = durationSeconds
+    self.mimeType = mimeType
+    self.fileSizeBytes = fileSizeBytes
+  }
+}
+
 public struct RawMessage: Sendable, Equatable {
   public let messageId: Int64
   public let fromUserId: Int64?
@@ -51,6 +70,7 @@ public struct RawMessage: Sendable, Equatable {
   public let caption: String?
   /// Pluralized noun for unsupported media ("photos", "voice messages"), else nil.
   public let mediaKind: String?
+  public let voice: VoiceAttachment?
 
   public init(
     messageId: Int64,
@@ -58,7 +78,8 @@ public struct RawMessage: Sendable, Equatable {
     chatId: Int64,
     text: String?,
     caption: String?,
-    mediaKind: String?
+    mediaKind: String?,
+    voice: VoiceAttachment? = nil
   ) {
     self.messageId = messageId
     self.fromUserId = fromUserId
@@ -66,12 +87,14 @@ public struct RawMessage: Sendable, Equatable {
     self.text = text
     self.caption = caption
     self.mediaKind = mediaKind
+    self.voice = voice
   }
 }
 
 public struct IncomingMessage: Sendable, Equatable {
   public enum Content: Sendable, Equatable {
     case text(String)
+    case voice(VoiceAttachment)
     case unsupported(kind: String)
   }
 
@@ -100,7 +123,9 @@ public struct IncomingMessage: Sendable, Equatable {
 
   /// Pure normalization (no I/O). Returns nil when there's nothing actionable:
   /// no message/edited_message, no numeric sender, or empty content.
-  /// A media caption counts as text; bare media maps to `.unsupported`.
+  /// A media caption counts as text; a bare voice note maps to `.voice` (written text always
+  /// outranks the attachment — a captioned voice stays a text message); other bare media maps
+  /// to `.unsupported`.
   public static func normalize(from raw: RawUpdate) -> IncomingMessage? {
     guard
       let message = raw.message ?? raw.editedMessage,
@@ -114,6 +139,8 @@ public struct IncomingMessage: Sendable, Equatable {
       content = .text(text)
     } else if let caption = message.caption {
       content = .text(caption)
+    } else if let voice = message.voice {
+      content = .voice(voice)
     } else if let mediaKind = message.mediaKind {
       content = .unsupported(kind: mediaKind)
     } else {

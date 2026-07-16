@@ -761,4 +761,44 @@ import Testing
       try AppConfig.load(environment: env)
     }
   }
+
+  @Test func voiceTranscriptionDefaultsOffWithTheDefaultLocale() throws {
+    // given
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.voice == VoiceConfig.disabledDefault)
+    #expect(config.voice.enabled == false)
+    #expect(config.voice.localeIdentifier == AppConfig.EnvDefaults.voiceLocale)
+  }
+
+  @Test func voiceTranscriptionParsesFlagAndLocale() throws {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.voiceTranscription] = "true"
+    env[EnvKey.voiceLocale] = "de-DE"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.voice.enabled)
+    #expect(config.voice.localeIdentifier == "de-DE")
+  }
+
+  @Test func malformedVoiceBooleanFailsClosed() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.voiceTranscription] = "sometimes"
+
+    // when / then
+    #expect(
+      throws: ConfigError.invalidBool(key: EnvKey.voiceTranscription, value: "sometimes")
+    ) {
+      try AppConfig.load(environment: env)
+    }
+  }
 }

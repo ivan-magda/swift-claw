@@ -9,7 +9,8 @@ import Testing
     chat: Int64 = 42,
     text: String? = nil,
     caption: String? = nil,
-    media: String? = nil
+    media: String? = nil,
+    voice: VoiceAttachment? = nil
   ) -> RawMessage {
     RawMessage(
       messageId: messageId,
@@ -17,9 +18,17 @@ import Testing
       chatId: chat,
       text: text,
       caption: caption,
-      mediaKind: media
+      mediaKind: media,
+      voice: voice
     )
   }
+
+  private let voiceNote = VoiceAttachment(
+    fileId: "voice-file-1",
+    durationSeconds: 8,
+    mimeType: "audio/ogg",
+    fileSizeBytes: 31_942
+  )
 
   @Test func plainTextMessageNormalizes() throws {
     // given
@@ -60,6 +69,40 @@ import Testing
 
     // then
     #expect(incoming.content == .unsupported(kind: "voice messages"))
+  }
+
+  @Test func bareVoiceNoteNormalizesToVoiceContent() throws {
+    // given — the real Telegram client shape: a voice attachment, no text, no caption
+    let raw = RawUpdate(
+      updateId: 4,
+      message: msg(media: VoiceAttachment.mediaKindDescription, voice: voiceNote),
+      editedMessage: nil
+    )
+
+    // when
+    let incoming = try #require(IncomingMessage.normalize(from: raw))
+
+    // then
+    #expect(incoming.content == .voice(voiceNote))
+  }
+
+  @Test func captionedVoiceStaysATextMessage() throws {
+    // given — written text always outranks the attachment
+    let raw = RawUpdate(
+      updateId: 5,
+      message: msg(
+        caption: "listen to this",
+        media: VoiceAttachment.mediaKindDescription,
+        voice: voiceNote
+      ),
+      editedMessage: nil
+    )
+
+    // when
+    let incoming = try #require(IncomingMessage.normalize(from: raw))
+
+    // then
+    #expect(incoming.content == .text("listen to this"))
   }
 
   @Test func editedMessageIsFlagged() throws {

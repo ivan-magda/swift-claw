@@ -44,7 +44,13 @@ struct RunCommand: AsyncParsableCommand {
     )
     let toolExecutor = AsyncHTTPExecutor(client: toolHTTPClient)
 
-    let transport = TelegramClient(token: secrets.telegramBotToken, http: executor)
+    // Voice-file downloads ride the no-redirect executor: file_path is server-controlled and a
+    // followed redirect would be an SSRF primitive (see TelegramClient.downloadVoiceFile).
+    let transport = TelegramClient(
+      token: secrets.telegramBotToken,
+      http: executor,
+      downloadHTTP: toolExecutor
+    )
     let botUsername = await Self.fetchBotUsername(transport: transport, logger: logger)
 
     let daemon = await DaemonBuilder(

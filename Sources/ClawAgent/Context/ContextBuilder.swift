@@ -15,6 +15,10 @@ public struct ContextBuilder: Sendable {
 
   private static let historyTruncatedMarker = "\n\n[…earlier conversation truncated]"
 
+  /// Fence label for `.user` history rows persisted with `.untrusted` provenance
+  /// (machine-derived inbound text such as a voice transcript).
+  static let untrustedUserLabel = "untrusted_user_message"
+
   private let systemPrompt: String
   private let proactiveSystemPrompt: String
 
@@ -546,6 +550,18 @@ private extension ContextBuilder {
               role: .assistant,
               content: message.content,
               toolCalls: message.toolCallsJSON.map(ToolCallCoding.decode) ?? []
+            )
+          )
+        case .user where message.provenance == .untrusted:
+          // Machine-derived inbound text (a voice transcript): fenced like a tool observation,
+          // with a fresh nonce per assembly, so spoken content is data — never instructions.
+          rendered.append(
+            ChatMessage(
+              role: .user,
+              content: LabeledContextFactory.make(
+                label: Self.untrustedUserLabel,
+                content: message.content
+              ).render()
             )
           )
         case .user, .system:

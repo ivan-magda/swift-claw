@@ -12,7 +12,12 @@ import Testing
     return SessionMessageStoreGRDB(writer: queue)
   }
 
-  private func inbound(updateId: Int64, chatId: Int64 = 42, text: String) -> InboundMessage {
+  private func inbound(
+    updateId: Int64,
+    chatId: Int64 = 42,
+    text: String,
+    provenance: Provenance = .trusted
+  ) -> InboundMessage {
     InboundMessage(
       updateId: updateId,
       sessionKey: SessionKey.telegramDM(chatId: chatId),
@@ -20,8 +25,52 @@ import Testing
       userId: chatId,
       text: text,
       isEdited: false,
+      provenance: provenance,
       ts: Date()
     )
+  }
+
+  @Test func untrustedInboundPersistsItsProvenanceAndTaintsTheSession() throws {
+    // given
+    let store = try freshStore()
+
+    // when — a machine-derived inbound (a voice transcript) lands
+    let result = try store.claimAndPersistInbound(
+      inbound(updateId: 1, text: "spoken words", provenance: .untrusted)
+    )
+
+    // then — the row keeps the untrusted tier and the session is tainted in the same write
+    let sessionId = try #require(result.sessionId)
+    let triggerMessageId = try #require(result.triggerMessageId)
+    let snapshot = try store.loadContextSnapshot(
+      sessionId: sessionId,
+      throughMessageId: triggerMessageId,
+      limit: 10
+    )
+    #expect(
+      snapshot.history == [
+        StoredMessage(role: .user, content: "spoken words", provenance: .untrusted)
+      ]
+    )
+    #expect(snapshot.isTainted)
+  }
+
+  @Test func trustedInboundLeavesTheSessionUntainted() throws {
+    // given
+    let store = try freshStore()
+
+    // when
+    let result = try store.claimAndPersistInbound(inbound(updateId: 1, text: "typed words"))
+
+    // then
+    let sessionId = try #require(result.sessionId)
+    let triggerMessageId = try #require(result.triggerMessageId)
+    let snapshot = try store.loadContextSnapshot(
+      sessionId: sessionId,
+      throughMessageId: triggerMessageId,
+      limit: 10
+    )
+    #expect(snapshot.isTainted == false)
   }
 
   @Test func claimAndPersistCreatesPendingRunBoundToTriggerMessage() throws {

@@ -153,17 +153,7 @@ private extension ScratchWorkspace {
 private extension ScratchWorkspace {
   static func ensurePrivateDirectory(_ url: URL) throws {
     do {
-      try FileManager.default.createDirectory(
-        at: url,
-        withIntermediateDirectories: true,
-        attributes: [.posixPermissions: 0o700]
-      )
-
-      guard chmod(url.path, 0o700) == 0 else {
-        throw ScratchWorkspaceError.fileSystem("cannot set private directory mode")
-      }
-    } catch let error as ScratchWorkspaceError {
-      throw error
+      try PrivateDirectory.ensure(at: url)
     } catch {
       throw ScratchWorkspaceError.fileSystem("cannot create private directory")
     }

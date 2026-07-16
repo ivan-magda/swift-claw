@@ -27,6 +27,36 @@ struct TChat: Decodable {
 /// Media markers — presence is all that's needed to classify an unsupported kind.
 struct TPresence: Decodable {}
 
+/// Bot API `Voice`: the download handle plus the metadata the pipeline guards on before fetching.
+/// Every field is optional on purpose — a voice payload that is missing `file_id` (malformed or a
+/// future API shape) must degrade to the presence-only "can't read voice messages" path, never
+/// fail the whole `getUpdates` batch and stall intake.
+struct TVoice: Decodable {
+  let file_id: String?
+  let duration: Int?
+  let mime_type: String?
+  let file_size: Int64?
+
+  var attachment: VoiceAttachment? {
+    guard let file_id else {
+      return nil
+    }
+    return VoiceAttachment(
+      fileId: file_id,
+      durationSeconds: duration ?? 0,
+      mimeType: mime_type,
+      fileSizeBytes: file_size
+    )
+  }
+}
+
+/// Bot API `File` (the `getFile` result); `file_path` feeds the file-download URL and can be
+/// absent while Telegram is still preparing the file.
+struct TFile: Decodable {
+  let file_id: String
+  let file_path: String?
+}
+
 struct TMessage: Decodable {
   let message_id: Int64
   let from: TUser?
@@ -34,7 +64,7 @@ struct TMessage: Decodable {
   let text: String?
   let caption: String?
   let photo: [TPresence]?
-  let voice: TPresence?
+  let voice: TVoice?
   let document: TPresence?
   let sticker: TPresence?
   let video: TPresence?
@@ -42,7 +72,7 @@ struct TMessage: Decodable {
 
   var mediaKind: String? {
     if photo != nil { return "photos" }
-    if voice != nil { return "voice messages" }
+    if voice != nil { return VoiceAttachment.mediaKindDescription }
     if document != nil { return "documents" }
     if sticker != nil { return "stickers" }
     if video != nil { return "videos" }
@@ -57,7 +87,8 @@ struct TMessage: Decodable {
       chatId: chat.id,
       text: text,
       caption: caption,
-      mediaKind: mediaKind
+      mediaKind: mediaKind,
+      voice: voice?.attachment
     )
   }
 }

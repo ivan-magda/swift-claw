@@ -1,3 +1,4 @@
+import ClawAppleSpeech
 import ClawCore
 import ClawGateway
 import ClawTools
@@ -30,6 +31,7 @@ extension DaemonBuilder {
       lanes: coordination.lanes,
       schedule: scheduleSurface,
       approvalCallbacks: approvalCallbacks,
+      voice: makeVoiceService(),
       coordinator: coordination.approvalCoordinator,
       doctor: doctor,
       logger: logger
@@ -48,6 +50,42 @@ extension DaemonBuilder {
       logger: logger
     )
     return (poller: poller, dispatcher: dispatcher)
+  }
+
+  /// The voice-transcription pipeline, or nil when the flag is off or the host has no on-device
+  /// speech engine (Linux, macOS < 26) — the router then falls back to the canned
+  /// "can't read voice messages yet" reply, exactly as before the feature existed.
+  private func makeVoiceService() -> VoiceMessageService? {
+    VoiceMessageService.sweepStaging(under: config.stateRoot)
+
+    guard config.voice.enabled else {
+      return nil
+    }
+    guard
+      let transcriber = SystemVoiceTranscriber.make(
+        localeIdentifier: config.voice.localeIdentifier,
+        maxAudioDurationSeconds: VoiceMessageService.defaultMaxDurationSeconds
+      )
+    else {
+      logger.warning(
+        """
+        voice transcription is enabled but no on-device speech engine is available; \
+        voice messages will get the canned unsupported reply
+        """
+      )
+      return nil
+    }
+
+    return VoiceMessageService(
+      fetcher: transport,
+      transcriber: transcriber,
+      stagingDirectory: config.stateRoot.appending(
+        path: VoiceMessageService.stagingDirectoryName,
+        directoryHint: .isDirectory
+      ),
+      redactor: SecretRedactor(secretValues: secrets.redactionValues),
+      logger: logger
+    )
   }
 
   /// Assembles the v1 tool catalog behind its policy gate. Tool fetches use the dedicated

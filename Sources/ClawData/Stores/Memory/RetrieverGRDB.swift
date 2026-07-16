@@ -24,12 +24,16 @@ public struct RetrieverGRDB: Retriever {
     return try database.readMapping { db in
       // messages_fts.rowid == messages.id (external content). BM25 is negative; lower = better, so
       // ORDER BY is ASC. RecallScore negates it back so higher = better for policy/telemetry.
+      // Trusted rows only: an untrusted user row (a voice transcript) is attacker-influenceable
+      // content — resurfacing it into a later or detainted session would re-ingest it without
+      // re-arming session taint, leaving the trifecta gate unarmed (ARCHITECTURE.md §12).
       var sql = """
         SELECT m.id, m.session_id, m.role, m.content, m.ts, bm25(messages_fts) AS bm25_score
         FROM messages m
         JOIN messages_fts ON messages_fts.rowid = m.id
         WHERE messages_fts MATCH ?
           AND m.role IN ('\(MessageRole.user.rawValue)', '\(MessageRole.assistant.rawValue)')
+          AND m.provenance = '\(Provenance.trusted.rawValue)'
         """
       var arguments: StatementArguments = [pattern]
 

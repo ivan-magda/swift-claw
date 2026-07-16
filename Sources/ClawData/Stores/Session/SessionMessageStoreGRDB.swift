@@ -65,8 +65,9 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
       }
 
       let sessionId = try Self.upsertSession(db, sessionKey: inbound.sessionKey, now: inbound.ts)
-      // Owner input is trusted-tier by definition; taint from tool/web output is tracked
-      // separately via session.tainted, not at the message row.
+      // Owner-typed input is trusted-tier; machine-derived inbound text (a voice transcript)
+      // arrives `.untrusted` and taints the session in this same fused write, so context assembly
+      // fences it and the exfil gate arms without any tool having run.
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, role, content, provenance, ts)
@@ -76,11 +77,15 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
           sessionId,
           MessageRole.user.rawValue,
           inbound.text,
-          Provenance.trusted.rawValue,
+          inbound.provenance.rawValue,
           inbound.ts,
         ]
       )
       let messageId = db.lastInsertedRowID
+
+      if inbound.provenance == .untrusted {
+        try RunStoreGRDB.setSessionTainted(db, sessionId: sessionId, now: inbound.ts)
+      }
 
       try db.execute(
         sql: """

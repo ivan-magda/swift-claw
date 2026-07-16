@@ -12,12 +12,21 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
   public let url: String
   public let headers: [String: String]
   public let body: Data?
+  /// The body cap passed to a bounded GET; nil for POSTs (the seam has no POST-side cap).
+  public let maxBodyBytes: Int?
 
-  public init(method: Method, url: String, headers: [String: String], body: Data?) {
+  public init(
+    method: Method,
+    url: String,
+    headers: [String: String],
+    body: Data?,
+    maxBodyBytes: Int? = nil
+  ) {
     self.method = method
     self.url = url
     self.headers = headers
     self.body = body
+    self.maxBodyBytes = maxBodyBytes
   }
 }
 
@@ -27,13 +36,19 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
 /// nor a canned fallback throws, so an unexpected dispatch surfaces as a test failure.
 public actor RecordingHTTPExecutor: HTTPExecuting {
   private let responses: [String: HTTPResult]
+  private let errors: [String: any Error & Sendable]
   private let cannedResult: HTTPResult?
 
   /// Every call in dispatch order, newest last.
   public private(set) var requests: [RecordedHTTPRequest] = []
 
-  public init(responses: [String: HTTPResult] = [:], cannedResult: HTTPResult? = nil) {
+  public init(
+    responses: [String: HTTPResult] = [:],
+    errors: [String: any Error & Sendable] = [:],
+    cannedResult: HTTPResult? = nil
+  ) {
     self.responses = responses
+    self.errors = errors
     self.cannedResult = cannedResult
   }
 
@@ -43,7 +58,7 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
     jsonBody: Data,
     timeoutSeconds: Int
   ) async throws -> HTTPResult {
-    try record(method: .post, url: url, headers: headers, body: jsonBody)
+    try record(method: .post, url: url, headers: headers, body: jsonBody, maxBodyBytes: nil)
   }
 
   public func get(
@@ -52,7 +67,7 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
     timeoutSeconds: Int,
     maxBodyBytes: Int
   ) async throws -> HTTPResult {
-    try record(method: .get, url: url, headers: headers, body: nil)
+    try record(method: .get, url: url, headers: headers, body: nil, maxBodyBytes: maxBodyBytes)
   }
 }
 
@@ -93,11 +108,21 @@ private extension RecordingHTTPExecutor {
     method: RecordedHTTPRequest.Method,
     url: String,
     headers: [String: String],
-    body: Data?
+    body: Data?,
+    maxBodyBytes: Int?
   ) throws -> HTTPResult {
     requests.append(
-      RecordedHTTPRequest(method: method, url: url, headers: headers, body: body)
+      RecordedHTTPRequest(
+        method: method,
+        url: url,
+        headers: headers,
+        body: body,
+        maxBodyBytes: maxBodyBytes
+      )
     )
+    if let scriptedError = errors[url] {
+      throw scriptedError
+    }
     if let scripted = responses[url] {
       return scripted
     }

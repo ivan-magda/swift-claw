@@ -10,6 +10,12 @@ public struct TelegramClient: TelegramTransport {
 
   private let token: String
   private let http: any HTTPExecuting
+  /// File downloads go through a REDIRECT-DISALLOWING executor: `file_path` is server-controlled
+  /// text and a followed redirect would hand a hostile response an SSRF primitive whose fetched
+  /// bytes then enter the model context. A legitimate Telegram file download never redirects, so
+  /// a 3xx surfaces as a non-200 `HTTPResult` and is refused. Falls back to `http` when nil —
+  /// acceptable only for test doubles, which never follow redirects anyway.
+  private let downloadHTTP: (any HTTPExecuting)?
   private let baseURL: String
   /// HTTP read timeout must exceed the long-poll timeout so the socket doesn't fire first.
   private let httpTimeoutSlackSeconds: Int
@@ -17,11 +23,13 @@ public struct TelegramClient: TelegramTransport {
   public init(
     token: String,
     http: any HTTPExecuting,
+    downloadHTTP: (any HTTPExecuting)? = nil,
     baseURL: String = "https://api.telegram.org",
     httpTimeoutSlackSeconds: Int = TelegramClient.defaultHTTPTimeoutSlackSeconds
   ) {
     self.token = token
     self.http = http
+    self.downloadHTTP = downloadHTTP
     self.baseURL = baseURL
     self.httpTimeoutSlackSeconds = httpTimeoutSlackSeconds
   }
@@ -154,12 +162,61 @@ public struct TelegramClient: TelegramTransport {
   }
 }
 
+// MARK: - Voice file download
+
+extension TelegramClient: VoiceMediaFetching {
+  /// `getFile` then a bounded GET of `/file/bot<token>/<file_path>`. The URL carries the bot
+  /// token, so every failure message passes through `sanitize` before it can be thrown or logged.
+  public func downloadVoiceFile(fileId: String, maxBytes: Int) async throws -> Data {
+    let request = GetFileRequest(fileId: fileId)
+    let file: TFile = try await callMethod(
+      "getFile",
+      body: request,
+      httpTimeout: Timeout.shortRequestSeconds
+    )
+
+    guard let path = file.file_path, isSafeFilePath(path) else {
+      throw TelegramError.transport("getFile returned no usable file_path")
+    }
+
+    let result: HTTPResult
+    do {
+      result = try await (downloadHTTP ?? http).get(
+        url: "\(baseURL)/file/bot\(token)/\(path)",
+        headers: [:],
+        timeoutSeconds: Timeout.fileDownloadSeconds,
+        maxBodyBytes: maxBytes
+      )
+    } catch {
+      throw TelegramError.transport(sanitize("voice download: \(error)"))
+    }
+
+    guard result.statusCode == 200 else {
+      throw TelegramError.apiError(code: result.statusCode, description: "voice download failed")
+    }
+
+    return result.body
+  }
+
+  /// `file_path` is server-controlled text interpolated into a URL; refuse anything that could
+  /// escape the `/file/bot<token>/` prefix (absolute paths, traversal, query/fragment splits).
+  private func isSafeFilePath(_ path: String) -> Bool {
+    !path.isEmpty
+      && !path.hasPrefix("/")
+      && !path.contains("..")
+      && !path.contains("?")
+      && !path.contains("#")
+      && !path.contains("\\")
+  }
+}
+
 // MARK: - Bot API transport
 
 extension TelegramClient {
   private enum Timeout {
     static let shortRequestSeconds = 15
     static let sendMessageSeconds = 30
+    static let fileDownloadSeconds = 60
   }
 
   private static let encoder: JSONEncoder = {
@@ -234,6 +291,10 @@ private struct GetUpdatesRequest: Encodable {
   let offset: Int64?
   let timeout: Int
   let allowedUpdates: [String]
+}
+
+private struct GetFileRequest: Encodable {
+  let fileId: String
 }
 
 private struct SendMessageRequest: Encodable {

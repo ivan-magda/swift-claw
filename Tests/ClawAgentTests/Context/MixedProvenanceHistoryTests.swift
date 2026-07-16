@@ -128,6 +128,37 @@ import Testing
     #expect(toolMessage.content.contains("raw page text"))
   }
 
+  @Test func untrustedUserRowsRenderFencedTrustedOnesVerbatim() throws {
+    // given — a voice transcript persisted `.untrusted` next to ordinary typed text
+    let history = [
+      StoredMessage(role: .user, content: "typed question", provenance: .trusted),
+      StoredMessage(role: .assistant, content: "answer", provenance: .trusted),
+      StoredMessage(role: .user, content: "spoken transcript", provenance: .untrusted),
+    ]
+
+    // when
+    let result = try makeBuilder().assemble(
+      snapshot: makeSnapshot(history),
+      sessionId: 1,
+      origin: .interactive
+    )
+
+    // then — the transcript is fenced as data with the untrusted-user label; typed text is not
+    let fenced = try #require(
+      result.messages.first { message in
+        message.role == .user && message.content.contains("spoken transcript")
+      }
+    )
+    #expect(fenced.content.contains("<claw-untrusted"))
+    #expect(fenced.content.contains("label=\"\(ContextBuilder.untrustedUserLabel)\""))
+    let typed = try #require(
+      result.messages.first { message in
+        message.role == .user && message.content.contains("typed question")
+      }
+    )
+    #expect(typed.content == "typed question")
+  }
+
   @Test func duplicateToolCallIdsInAnchorDoNotTrapRendering() throws {
     // given — a provider-authored anchor that (malformedly) declares the same call id twice;
     // rendering must tolerate it rather than trap building the id→name lookup (§12 contract).

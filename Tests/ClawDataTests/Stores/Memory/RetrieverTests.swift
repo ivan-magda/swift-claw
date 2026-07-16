@@ -45,18 +45,51 @@ import Testing
     _ corpus: Corpus,
     sessionId: Int64,
     content: String,
+    provenance: Provenance = .trusted,
     at seconds: TimeInterval
   ) throws -> Int64 {
     try corpus.queue.write { db in
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, role, content, provenance, ts)
-          VALUES (?, 'user', ?, 'trusted', ?)
+          VALUES (?, 'user', ?, ?, ?)
           """,
-        arguments: [sessionId, content, Date(timeIntervalSince1970: seconds)]
+        arguments: [
+          sessionId, content, provenance.rawValue, Date(timeIntervalSince1970: seconds),
+        ]
       )
       return db.lastInsertedRowID
     }
+  }
+
+  @Test func untrustedRowsAreNeverRecalled() throws {
+    // given — a voice transcript persisted `.untrusted` alongside an ordinary trusted row
+    let corpus = try makeCorpus()
+    let trustedId = try insertMessage(
+      corpus,
+      sessionId: corpus.sessionOne,
+      content: "swift concurrency typed by the owner",
+      at: 10
+    )
+    try insertMessage(
+      corpus,
+      sessionId: corpus.sessionOne,
+      content: "swift concurrency spoken in a forwarded voice note",
+      provenance: .untrusted,
+      at: 20
+    )
+
+    // when
+    let hits = try corpus.retriever.searchRelevantMessages(
+      query: "swift concurrency",
+      currentSessionId: corpus.sessionTwo,
+      windowStartMessageId: nil,
+      excludedMessageIds: [],
+      limit: 10
+    )
+
+    // then — resurfacing untrusted content would re-ingest it without re-arming session taint
+    #expect(hits.map(\.id) == [trustedId])
   }
 
   @Test func returnsHitsOrderedByBm25BestFirst() throws {

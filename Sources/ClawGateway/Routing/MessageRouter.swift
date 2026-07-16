@@ -29,6 +29,7 @@ public struct MessageRouter: Sendable {
   private let confirmations: ConfirmationResolver
   private let turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
+  private let voice: (any VoiceMessageTranscribing)?
 
   private let doctor: any DoctorReporting
   private let logger: Logger
@@ -47,6 +48,7 @@ public struct MessageRouter: Sendable {
     lanes: SessionLaneRegistry,
     schedule: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
+    voice: (any VoiceMessageTranscribing)? = nil,
     coordinator: ApprovalCoordinator,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = { Date() },
@@ -56,6 +58,7 @@ public struct MessageRouter: Sendable {
 
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
+    self.voice = voice
 
     self.doctor = doctor
     self.logger = logger
@@ -151,12 +154,61 @@ private extension MessageRouter {
         chatId: message.chatId,
         text: reply
       )
+    case .voice(let attachment):
+      return try await routeVoice(
+        attachment,
+        rawUpdate: rawUpdate,
+        message: message,
+        isAllowed: isAllowed
+      )
     case .text(let text):
       let command = Command.parse(text, botUsername: botUsername)
       if isAllowed {
         return try await routeAllowed(command, rawUpdate: rawUpdate, message: message)
       }
       return await denyAccess(command, rawUpdate: rawUpdate, message: message)
+    }
+  }
+
+  /// A stranger's voice note gets the same private-bot line as any other content (never a
+  /// download, never a capability reveal). The owner's is transcribed and dispatched **directly**
+  /// as an untrusted-provenance turn: spoken text is machine-derived and possibly forwarded, so it
+  /// must never parse as a command and never resolve a parked confirmation — both are deliberate
+  /// bypasses of the `.text` path, enforced here in code.
+  func routeVoice(
+    _ attachment: VoiceAttachment,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    isAllowed: Bool
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    guard isAllowed else {
+      return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
+    }
+    guard let voice else {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: Self.unsupportedMediaText(kind: VoiceAttachment.mediaKindDescription)
+      )
+    }
+
+    switch await voice.transcribe(attachment) {
+    case .success(let transcript):
+      return try await turnDispatch.dispatch(
+        rawUpdate: rawUpdate,
+        message: message,
+        text: transcript,
+        provenance: .untrusted
+      )
+    case .failure(.storageFull):
+      // Same contract as a disk-full store write: notice + poller backoff, cursor NOT advanced.
+      return await replies.storageFull(chatId: message.chatId)
+    case .failure(let failure):
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: failure.ownerReplyText
+      )
     }
   }
 

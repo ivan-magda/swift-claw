@@ -210,6 +210,39 @@ error row rather than silently degrading.
 
 ---
 
+## Voice-message transcription (macOS 26)
+
+Telegram voice notes are transcribed **on-device** with Apple's `SpeechAnalyzer` stack and the
+transcript enters the normal turn flow — fenced and session-tainting, since a forwarded voice note
+is indistinguishable from the owner's own (see `ARCHITECTURE.md` §6.1/§12). Off by default; one
+line enables it:
+
+```bash
+CLAW_VOICE_TRANSCRIPTION=true
+```
+
+`CLAW_VOICE_LOCALE` picks the transcription language (BCP-47, default `en-US`; there is no
+audio-language auto-detection). The **first** voice message in a locale downloads its speech model
+(one-time, needs network, no UI); transcription itself runs offline. File-based transcription
+needs no TCC grant, entitlement, or app bundle.
+
+On Linux, macOS 15, or hardware the speech stack rejects, the flag is inert and voice messages get
+the canned "I can't read voice messages yet." reply — same behavior as before the feature. (The
+research roadmap's `DictationTranscriber` fallback tier for `SpeechTranscriber`-ineligible hardware
+is deliberately not implemented yet; such hosts get the canned reply.)
+
+The suite's engine test is opt-in (first model download needs network):
+
+```bash
+CLAW_SPEECH_LIVE_TESTS=1 swift test --filter AppleSpeechTranscriberLiveTests
+```
+
+Background research (verified capability matrix, the Ogg/Opus decode findings, the
+LaunchDaemon-vs-LaunchAgent open question):
+`docs/research/telegram-voice-transcription-2026-07-16.md`.
+
+---
+
 ## Secrets
 
 ### Seal (first-time setup)

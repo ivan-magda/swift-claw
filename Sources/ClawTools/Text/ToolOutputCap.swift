@@ -9,14 +9,6 @@ public enum ToolOutputCap {
   public static let truncationMarker = TextTruncation.marker
 
   public static func cap(_ text: String, maxGraphemes: Int = ToolOutputCap.maxGraphemes) -> String {
-    guard text.count > maxGraphemes else {
-      return text
-    }
-
-    guard maxGraphemes > truncationMarker.count else {
-      return String(truncationMarker.prefix(maxGraphemes))
-    }
-
-    return String(text.prefix(maxGraphemes - truncationMarker.count)) + truncationMarker
+    TextTruncation.cap(text, maxGraphemes: maxGraphemes)
   }
 }

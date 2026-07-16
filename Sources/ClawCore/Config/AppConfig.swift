@@ -34,6 +34,9 @@ public struct AppConfig: Sendable, Equatable {
 
     public static let webFetchExemptCIDRs = "CLAW_WEBFETCH_EXEMPT_CIDRS"
 
+    static let voiceTranscription = "CLAW_VOICE_TRANSCRIPTION"
+    static let voiceLocale = "CLAW_VOICE_LOCALE"
+
     static let execEnabled = "CLAW_EXEC_ENABLED"
     static let execImage = "CLAW_EXEC_IMAGE"
     static let execImageRegistries = "CLAW_EXEC_IMAGE_REGISTRIES"
@@ -64,6 +67,8 @@ public struct AppConfig: Sendable, Equatable {
     static let approvalExpiryFloor = 60
     static let approvalExpiryCeiling = 86_400
 
+    public static let voiceLocale = "en-US"
+
     static let execImageRegistries = ["cgr.dev"]
     static let execMemoryMiB = 1024
     static let execCPUs = 4
@@ -92,6 +97,7 @@ public struct AppConfig: Sendable, Equatable {
   public let approvalExpirySeconds: Int
   public let webFetchExemptCIDRs: [CIDR]
   public let exec: ExecConfig
+  public let voice: VoiceConfig
 
   public init(
     allowlist: Set<Int64>,
@@ -109,7 +115,8 @@ public struct AppConfig: Sendable, Equatable {
     heartbeatMaxPerDay: Int,
     approvalExpirySeconds: Int,
     webFetchExemptCIDRs: [CIDR],
-    exec: ExecConfig
+    exec: ExecConfig,
+    voice: VoiceConfig
   ) {
     self.allowlist = allowlist
     self.stateRoot = stateRoot
@@ -131,6 +138,7 @@ public struct AppConfig: Sendable, Equatable {
     self.approvalExpirySeconds = approvalExpirySeconds
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
     self.exec = exec
+    self.voice = voice
   }
 
   /// Loads and validates non-secret config from the environment. Secrets (the bot token / LLM key)
@@ -166,6 +174,7 @@ public struct AppConfig: Sendable, Equatable {
     let approvalExpirySeconds = try parseApprovalExpiry(env[EnvKey.approvalExpiry])
     let webFetchExemptCIDRs = try parseWebFetchExemptCIDRs(from: env[EnvKey.webFetchExemptCIDRs])
     let exec = try parseExecConfig(from: env)
+    let voice = try parseVoiceConfig(from: env)
 
     return AppConfig(
       allowlist: allowlist,
@@ -183,7 +192,8 @@ public struct AppConfig: Sendable, Equatable {
       heartbeatMaxPerDay: heartbeat.maxPerDay,
       approvalExpirySeconds: approvalExpirySeconds,
       webFetchExemptCIDRs: webFetchExemptCIDRs,
-      exec: exec
+      exec: exec,
+      voice: voice
     )
   }
 }
