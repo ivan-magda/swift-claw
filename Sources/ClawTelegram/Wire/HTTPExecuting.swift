@@ -3,6 +3,7 @@ import ClawCore
 import Foundation
 import NIOCore
 import NIOFoundationCompat
+import NIOPosix
 
 #if canImport(Glibc)
   import Glibc
@@ -270,18 +271,35 @@ extension AsyncHTTPExecutor {
   /// The entire allowlist for claiming a request never left, and it rests on one transport fact: the
   /// peer refused the connection, so no channel to write a request on ever existed.
   ///
+  /// The transport spells that refusal differently by platform: a bare `IOError`/`NWPOSIXError` on
+  /// the direct-connect paths, and — from NIOPosix's happy-eyeballs connector on Linux — a
+  /// `NIOConnectionError` bundling every per-target attempt. The bundle is clean only when it holds
+  /// at least one attempt and every attempt refused; a mix or an empty set means some channel may
+  /// have opened, so it stays conservative.
+  ///
   /// Everything else stays conservative — a connect timeout, a deadline, an unknown pre-head failure
   /// can all race request bytes onto the wire, and an error the transport does not type as a refusal
   /// proves nothing. Only these typed facts decide; an error's text never does.
   static func provesNothingWasSent(_ error: any Error) -> Bool {
-    if let ioError = error as? IOError {
-      return ioError.errnoCode == ECONNREFUSED
+    if isConnectionRefused(error) {
+      return true
     }
     #if canImport(Network)
       if let posixError = error as? HTTPClient.NWPOSIXError {
         return posixError.errorCode == .ECONNREFUSED
       }
     #endif
+    if let connectionError = error as? NIOConnectionError {
+      return !connectionError.connectionErrors.isEmpty
+        && connectionError.connectionErrors.allSatisfy { isConnectionRefused($0.error) }
+    }
     return false
+  }
+
+  static func isConnectionRefused(_ error: any Error) -> Bool {
+    guard let ioError = error as? IOError else {
+      return false
+    }
+    return ioError.errnoCode == ECONNREFUSED
   }
 }
