@@ -59,6 +59,7 @@ let package = Package(
       name: "ClawLLM",
       dependencies: [
         "ClawCore",
+        "ClawAuth",
         .product(name: "Logging", package: "swift-log"),
       ],
       resources: [.copy("Pricing/Prices.json")]
