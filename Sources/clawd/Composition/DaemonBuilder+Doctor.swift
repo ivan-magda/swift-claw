@@ -13,6 +13,10 @@ struct DaemonDoctorReporter: DoctorReporting {
   /// The static bearer already resolved at boot, so the credential row reports the current route's
   /// key presence without re-reading secrets.
   let staticAPIKey: String?
+  /// The same managed-store factory the provider stack is built on, so the `llm.auth` row inspects the
+  /// credential state the running daemon actually authenticates with — including a store a composition
+  /// test scripts — rather than re-reading the real state root behind the daemon's back.
+  let makeManagedStore: @Sendable () -> any LLMCredentialStore
 
   func report() async -> DoctorReport {
     var report = DoctorReport()
@@ -25,9 +29,7 @@ struct DaemonDoctorReporter: DoctorReporting {
       route: config.llm.route,
       staticAPIKey: staticAPIKey,
       now: now,
-      makeManagedStore: {
-        EncryptedLLMCredentialStore(stateRoot: config.stateRoot)
-      }
+      makeManagedStore: makeManagedStore
     )
     report.add(key: "llm.auth", value: auth.value, ok: auth.ok, group: .llmRuns)
 

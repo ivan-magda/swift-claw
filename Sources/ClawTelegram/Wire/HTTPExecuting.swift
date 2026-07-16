@@ -24,12 +24,14 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
 
   public func execute(_ request: HTTPRequest) async throws -> HTTPResult {
     guard case .buffered(let successBytes, let errorBytes) = request.responseBodyPolicy else {
-      throw Self.policyMismatch("execute needs a buffered response body policy")
+      throw HTTPTransportFailure.policyMismatch(
+        HTTPResponseBodyPolicy.bufferedPolicyRequiredMessage
+      )
     }
 
     let response = try await submit(request)
     let statusCode = Int(response.status.code)
-    let isSuccess = Self.isSuccess(statusCode)
+    let isSuccess = HTTPResponseBodyPolicy.isSuccess(statusCode)
 
     do {
       return HTTPResult(
@@ -53,12 +55,14 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
   public func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
     guard case .streaming(let maximumUnreadBytes, let errorBytes) = request.responseBodyPolicy
     else {
-      throw Self.policyMismatch("openStream needs a streaming response body policy")
+      throw HTTPTransportFailure.policyMismatch(
+        HTTPResponseBodyPolicy.streamingPolicyRequiredMessage
+      )
     }
 
     let response = try await submit(request)
     let statusCode = Int(response.status.code)
-    let isSuccess = Self.isSuccess(statusCode)
+    let isSuccess = HTTPResponseBodyPolicy.isSuccess(statusCode)
     let body = response.body
 
     // A non-success body is a diagnostic, so the whole of it is capped and it can never outgrow the
@@ -121,10 +125,6 @@ private extension AsyncHTTPExecutor {
     }
     return result
   }
-
-  static func isSuccess(_ statusCode: Int) -> Bool {
-    (200..<300).contains(statusCode)
-  }
 }
 
 // MARK: - Body handling
@@ -156,7 +156,7 @@ private extension AsyncHTTPExecutor {
       guard view.count <= remaining else {
         switch handling {
         case .fails:
-          throw oversizedBody(cap: cap)
+          throw HTTPTransportFailure.oversizedBody(cap: cap)
         case .truncates:
           collected.append(contentsOf: view.prefix(remaining))
           return collected
@@ -224,25 +224,6 @@ private extension AsyncHTTPExecutor {
         )
       )
     }
-  }
-}
-
-// MARK: - Transport Failures
-
-private extension AsyncHTTPExecutor {
-  /// A policy of the wrong shape for its entry point is a programming mistake, and it is caught
-  /// before the handoff — so nothing was submitted and saying so proves itself.
-  static func policyMismatch(_ message: String) -> HTTPTransportFailure {
-    HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: message)
-  }
-
-  /// A success body past its cap. The disposition is not in doubt: a response head came back, so the
-  /// request plainly reached the server. The message names the cap, never the body.
-  static func oversizedBody(cap: Int) -> HTTPTransportFailure {
-    HTTPTransportFailure(
-      disposition: .mayHaveBeenSent,
-      safeMessage: "response body exceeds the \(cap)-byte limit"
-    )
   }
 }
 

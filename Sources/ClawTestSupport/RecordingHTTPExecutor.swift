@@ -12,9 +12,11 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
   /// The cap the executor applied, picked from the policy by the scripted status. Tests assert on
   /// this when what matters is which of the two caps was in force, not the pair that was offered.
   public let selectedBodyCap: Int
-  /// How many times this call's handoff ran, as tallied by the invocations themselves. Exactly-once
-  /// is the property the exposure ledger rests on, so the double counts it rather than assuming it.
-  public let handoffCount: Int
+  /// Whether this call carried a linearization handoff, which the double ran before recording. A
+  /// fresh double runs a request's handoff at most once, so it can record only that one was present,
+  /// never observe a second invocation: genuine exactly-once verification belongs to the test that
+  /// authors the handoff and closes over its own counter, as the real executor's tests do.
+  public let carriedHandoff: Bool
 
   public init(
     method: HTTPMethod,
@@ -24,7 +26,7 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
     timeoutSeconds: Int,
     responseBodyPolicy: HTTPResponseBodyPolicy,
     selectedBodyCap: Int,
-    handoffCount: Int
+    carriedHandoff: Bool
   ) {
     self.method = method
     self.url = url
@@ -33,7 +35,7 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
     self.timeoutSeconds = timeoutSeconds
     self.responseBodyPolicy = responseBodyPolicy
     self.selectedBodyCap = selectedBodyCap
-    self.handoffCount = handoffCount
+    self.carriedHandoff = carriedHandoff
   }
 }
 
@@ -60,18 +62,18 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
 
   public func execute(_ request: HTTPRequest) async throws -> HTTPResult {
     guard case .buffered(let successBytes, let errorBytes) = request.responseBodyPolicy else {
-      throw HTTPTransportFailure(
-        disposition: .definitelyNotSent,
-        safeMessage: "execute needs a buffered response body policy"
+      throw HTTPTransportFailure.policyMismatch(
+        HTTPResponseBodyPolicy.bufferedPolicyRequiredMessage
       )
     }
 
     let scripted = responses[request.url] ?? cannedResult
-    let isSuccess = (200..<300).contains(scripted?.statusCode ?? 0)
+    let isSuccess = HTTPResponseBodyPolicy.isSuccess(scripted?.statusCode ?? 0)
     let cap = isSuccess ? successBytes : errorBytes
 
-    let tally = HandoffTally()
-    try tally.run(request.beginHandoff)
+    // The linearization point runs before the call is recorded, the order the real executor takes: a
+    // refused handoff throws here and leaves no trace of a dispatch that never happened.
+    try request.beginHandoff?()
     requests.append(
       RecordedHTTPRequest(
         method: request.method,
@@ -81,7 +83,7 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
         timeoutSeconds: request.timeoutSeconds,
         responseBodyPolicy: request.responseBodyPolicy,
         selectedBodyCap: cap,
-        handoffCount: tally.value
+        carriedHandoff: request.beginHandoff != nil
       )
     )
 
@@ -89,10 +91,7 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
       throw UnscriptedRequest(url: request.url)
     }
     guard !isSuccess || scripted.body.count <= cap else {
-      throw HTTPTransportFailure(
-        disposition: .mayHaveBeenSent,
-        safeMessage: "response body exceeds the \(cap)-byte limit"
-      )
+      throw HTTPTransportFailure.oversizedBody(cap: cap)
     }
     return HTTPResult(
       statusCode: scripted.statusCode,

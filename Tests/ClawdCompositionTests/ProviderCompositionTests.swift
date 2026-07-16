@@ -123,7 +123,7 @@ private final class StoreProbe: LLMCredentialStore, @unchecked Sendable {
     )
     composition.makeClients = { self.instrumentedClients(recorder: recorder) }
     composition.makeManagedStore = makeManagedStore
-    composition.fetchBotUsername = { _ in nil }
+    composition.fetchBotUsername = { _, _ in nil }
     composition.buildDaemon = buildDaemon
     return composition
   }

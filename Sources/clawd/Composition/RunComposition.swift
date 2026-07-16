@@ -35,9 +35,18 @@ struct RunComposition {
   }
 
   /// Reads the bot identity for command-mention parsing. Injectable so a composition test never opens
-  /// a socket to Telegram.
-  var fetchBotUsername: @Sendable (TelegramClient) async -> String? = { transport in
-    (try? await transport.getMe())?.username
+  /// a socket to Telegram. A transient failure is logged with its consequence — mention parsing falls
+  /// back to bare commands — so a daemon that boots while Telegram is unreachable does not run its
+  /// whole lifetime with degraded `/cmd@bot` handling and no operator signal.
+  var fetchBotUsername: @Sendable (TelegramClient, Logger) async -> String? = { transport, logger in
+    do {
+      return try await transport.getMe().username
+    } catch {
+      logger.warning(
+        "failed to fetch bot identity; command mentions will require bare commands: \(error)"
+      )
+      return nil
+    }
   }
 
   /// Assembles the daemon bundle from the provider stack. Injectable so a test forces a post-clients
@@ -60,7 +69,7 @@ struct RunComposition {
       http: clients.telegram.executor
     )
     do {
-      let botUsername = await fetchBotUsername(transport)
+      let botUsername = await fetchBotUsername(transport, logger)
       let builder = DaemonBuilder(
         config: config,
         secrets: secrets,

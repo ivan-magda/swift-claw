@@ -2,22 +2,6 @@ import AsyncHTTPClient
 
 // MARK: - Roles and profiles
 
-/// Which egress profile a runtime client is built on. Named as a value the factory assigns per role —
-/// rather than a bare `HTTPClient.Configuration`, whose redirect posture no test can read back — so a
-/// test can prove the LLM and tool clients are the redirect-disabled ones and the Telegram client is
-/// not.
-public enum RuntimeHTTPEgressProfile: Sendable, Equatable {
-  case telegram
-  case protectedEgress
-
-  public var configuration: HTTPClient.Configuration {
-    switch self {
-    case .telegram: return HTTPClientProfile.telegram
-    case .protectedEgress: return HTTPClientProfile.protectedEgress
-    }
-  }
-}
-
 /// The three clients a running daemon points at a third party, each an identity of its own. Splitting
 /// the LLM client off Telegram is a behavior change, not a rename: the shared Telegram/LLM client
 /// followed redirects at the library default, and moving LLM to `protectedEgress` stops LLM traffic
@@ -31,7 +15,7 @@ public enum RuntimeHTTPClientRole: Sendable, CaseIterable, Equatable {
   /// The LLM and tool clients share the protected redirect-disabled profile so neither a static nor a
   /// subscription bearer can follow a redirect off its pinned host; Telegram keeps the
   /// redirect-following default it has always used.
-  public var egressProfile: RuntimeHTTPEgressProfile {
+  public var egressProfile: HTTPClientProfile {
     switch self {
     case .telegram: return .telegram
     case .llm, .tool: return .protectedEgress

@@ -92,7 +92,8 @@ struct DaemonBuilder: Sendable {
         stores: stores,
         config: config,
         sandbox: sandbox,
-        staticAPIKey: secrets.llmApiKey
+        staticAPIKey: secrets.llmApiKey,
+        makeManagedStore: makeManagedStore
       )
     )
     let (scheduler, heartbeatOwner) = makeScheduler(

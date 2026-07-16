@@ -82,6 +82,25 @@ public struct HTTPTransportFailure: Error, Sendable, Equatable {
   }
 }
 
+public extension HTTPTransportFailure {
+  /// A policy of the wrong shape for its entry point is a programming mistake, and it is caught before
+  /// the handoff — so nothing was submitted and saying so proves itself. Shared so the production
+  /// executor and every test double raise the identical contract refusal rather than three copies of
+  /// it that can drift apart.
+  static func policyMismatch(_ message: String) -> HTTPTransportFailure {
+    HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: message)
+  }
+
+  /// A success body past its cap. The disposition is not in doubt: a response head came back, so the
+  /// request plainly reached the server. The message names the cap, never the body.
+  static func oversizedBody(cap: Int) -> HTTPTransportFailure {
+    HTTPTransportFailure(
+      disposition: .mayHaveBeenSent,
+      safeMessage: "response body exceeds the \(cap)-byte limit"
+    )
+  }
+}
+
 /// How much of a response body an executor may hold, and whether the caller reads it as one value or
 /// as a stream. The success and error caps are separate because they answer different questions: a
 /// success body is the payload, an error body is a diagnostic worth only a few kilobytes.
@@ -107,6 +126,19 @@ public extension HTTPResponseBodyPolicy {
   static let diagnosticBodyBytes = 64 * 1024
   /// What a convenience request collects when its caller states no cap of its own.
   static let defaultBufferedBodyBytes = 16 * 1024 * 1024
+
+  /// The refusal message the buffered entry point raises for a policy of the wrong shape. Shared so
+  /// production and its doubles state the one contract, not three copies.
+  static let bufferedPolicyRequiredMessage = "execute needs a buffered response body policy"
+  /// The refusal message the streaming entry point raises for a policy of the wrong shape.
+  static let streamingPolicyRequiredMessage = "openStream needs a streaming response body policy"
+
+  /// Whether a status code selects the success side of the two-cap contract: the success cap over the
+  /// error cap, and the payload disposition over the diagnostic one. The single definition every
+  /// executor consults so a change to the success band cannot leave a double asserting a stale one.
+  static func isSuccess(_ statusCode: Int) -> Bool {
+    (200..<300).contains(statusCode)
+  }
 }
 
 /// One outbound request. Every executor path is built from this value, so an authentication form

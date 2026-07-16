@@ -603,7 +603,7 @@ import Testing
       }
     }
     composition.makeManagedStore = { _ in store }
-    composition.fetchBotUsername = { _ in nil }
+    composition.fetchBotUsername = { _, _ in nil }
     return composition
   }
 }

@@ -48,7 +48,7 @@ private func probe(_ url: String) -> HTTPRequest {
         ]
       ) { origin in
         // when
-        let profile = HTTPClientProfile.protectedEgress
+        let profile = HTTPClientProfile.protectedEgress.configuration
         let result = try await withExecutor(configuration: profile) { executor in
           try await executor.execute(probe(origin.url(redirectPath)))
         }
@@ -74,7 +74,7 @@ private func probe(_ url: String) -> HTTPRequest {
       routes: [stolenPath: ScriptedResponse(status: .ok, body: arrivedBody)]
     ) { elsewhere in
       // when
-      let profile = HTTPClientProfile.protectedEgress
+      let profile = HTTPClientProfile.protectedEgress.configuration
       let result = try await withExecutor(configuration: profile) { executor in
         try await executor.execute(probe(elsewhere.url(stolenPath)))
       }

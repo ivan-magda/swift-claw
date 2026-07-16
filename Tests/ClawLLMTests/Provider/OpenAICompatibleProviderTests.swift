@@ -23,8 +23,8 @@ import Testing
     #expect(body["messages"] is [Any])
     #expect(recorded.headers["Authorization"] == "Bearer sk-test")
     #expect(recorded.headers["Content-Type"] == "application/json")
-    // One linearization per wire attempt, immediately before the request is submitted.
-    #expect(recorded.handoffCount == 1)
+    // The wire attempt carried its linearization handoff, run before the request was recorded.
+    #expect(recorded.carriedHandoff)
     #expect(recorded.url == "https://api.test/v1/chat/completions")
   }
 
@@ -388,8 +388,8 @@ import Testing
       recorded.responseBodyPolicy
         == .streaming(maximumUnreadBytes: 4 * 1024 * 1024, errorBytes: 64 * 1024)
     )
-    // The attempt is linearized exactly once, immediately before the request reaches the transport.
-    #expect(recorded.handoffCount == 1)
+    // The attempt carried its linearization handoff, run before the request reached the transport.
+    #expect(recorded.carriedHandoff)
     #expect(thrown == nil)
 
     let reply = ChatResponse(

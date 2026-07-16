@@ -77,7 +77,7 @@ struct AuthCommand: AsyncParsableCommand {
       // await the shutdown, and a dropped client is a hung process rather than a leaked one.
       let httpClient = HTTPClient(
         eventLoopGroupProvider: .singleton,
-        configuration: HTTPClientProfile.protectedEgress
+        configuration: HTTPClientProfile.protectedEgress.configuration
       )
       let result = await AuthCommand.workflow(
         bootstrap: bootstrap,

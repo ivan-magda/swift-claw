@@ -38,7 +38,7 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
     let body: Data
     let timeoutSeconds: Int
     let responseBodyPolicy: HTTPResponseBodyPolicy
-    let handoffCount: Int
+    let carriedHandoff: Bool
   }
 
   private var steps: [Step]
@@ -50,9 +50,8 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
 
   func execute(_ request: HTTPRequest) async throws -> HTTPResult {
     guard case .buffered = request.responseBodyPolicy else {
-      throw HTTPTransportFailure(
-        disposition: .definitelyNotSent,
-        safeMessage: "execute needs a buffered response body policy"
+      throw HTTPTransportFailure.policyMismatch(
+        HTTPResponseBodyPolicy.bufferedPolicyRequiredMessage
       )
     }
     try begin(request)
@@ -72,9 +71,8 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
     guard case .streaming(let maximumUnreadBytes, let errorBytes) = request.responseBodyPolicy
     else {
-      throw HTTPTransportFailure(
-        disposition: .definitelyNotSent,
-        safeMessage: "openStream needs a streaming response body policy"
+      throw HTTPTransportFailure.policyMismatch(
+        HTTPResponseBodyPolicy.streamingPolicyRequiredMessage
       )
     }
     try begin(request)
@@ -126,8 +124,7 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   /// order the real executor takes. `recorded` is read as what was dispatched, so a refused attempt
   /// must leave no trace of a dispatch that never happened.
   private func begin(_ request: HTTPRequest) throws {
-    let tally = HandoffTally()
-    try tally.run(request.beginHandoff)
+    try request.beginHandoff?()
     recorded.append(
       Recorded(
         url: request.url,
@@ -135,7 +132,7 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
         body: request.body ?? Data(),
         timeoutSeconds: request.timeoutSeconds,
         responseBodyPolicy: request.responseBodyPolicy,
-        handoffCount: tally.value
+        carriedHandoff: request.beginHandoff != nil
       )
     )
   }
@@ -150,7 +147,7 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   ) -> HTTPStreamExchange {
     HTTPStreamExchange.make(
       head: head,
-      maximumUnreadBodyBytes: (200..<300).contains(head.statusCode) ? unread : error
+      maximumUnreadBodyBytes: HTTPResponseBodyPolicy.isSuccess(head.statusCode) ? unread : error
     ) { sink in
       if let gate {
         await gate.waitIgnoringCancellation()

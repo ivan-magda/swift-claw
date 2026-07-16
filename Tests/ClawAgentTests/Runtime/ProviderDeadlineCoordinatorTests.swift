@@ -150,55 +150,31 @@ private func requireTimedOut(
 
 /// A send that blocks until released OR cancelled — the ephemeral-send analog of a production HTTP
 /// POST, so the bounded-send drain can abandon it without wedging on a sink that ignores cancellation.
+/// Both blocking halves are `AsyncGate`s, so this observes cancellation without hand-rolling its own
+/// continuation bookkeeping.
 private actor GatedSend {
-  private var waiters: [CheckedContinuation<Void, Never>] = []
-  private var finished = false
-  private(set) var started = false
+  private let startGate = AsyncGate()
+  private let releaseGate = AsyncGate()
   private(set) var observedCancellation = false
-  private var startWaiters: [CheckedContinuation<Void, Never>] = []
+
+  /// True once `run` has begun, so a test can wait for the send to be in flight before cancelling it.
+  var started: Bool { startGate.isOpen }
 
   func run() async {
-    started = true
-    for waiter in startWaiters {
-      waiter.resume()
-    }
-    startWaiters.removeAll()
-    await withTaskCancellationHandler {
-      await withCheckedContinuation { continuation in
-        if finished {
-          continuation.resume()
-        } else {
-          waiters.append(continuation)
-        }
-      }
-    } onCancel: {
-      Task { await self.markCancelled() }
+    startGate.open()
+    await releaseGate.wait()
+    // `wait` returns on release or on cancellation; only the latter leaves the gate unopened.
+    if !releaseGate.isOpen {
+      observedCancellation = true
     }
   }
 
   func waitUntilStarted() async {
-    guard !started else { return }
-    await withCheckedContinuation { continuation in
-      startWaiters.append(continuation)
-    }
+    await startGate.waitIgnoringCancellation()
   }
 
   func release() {
-    finished = true
-    resumeAll()
-  }
-
-  private func markCancelled() {
-    observedCancellation = true
-    finished = true
-    resumeAll()
-  }
-
-  private func resumeAll() {
-    for waiter in waiters {
-      waiter.resume()
-    }
-    waiters.removeAll()
+    releaseGate.open()
   }
 }
 
