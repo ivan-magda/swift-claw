@@ -16,6 +16,15 @@ actor StubProvider: LLMProvider {
   enum Outcome: Sendable {
     case respond(ChatResponse)
     case fail(ProviderError)
+    /// A vendor-neutral provider failure carrying its own accounting disposition — the shape the
+    /// managed route throws, so the runtime's debit decision can be exercised on `.accounting`
+    /// rather than the cause class.
+    case failFailure(ProviderFailure)
+    /// The ambiguous cancellation marker: the model may have been asked, so conservative usage is
+    /// still owed.
+    case failInferenceCancellation(ProviderInferenceCancellation)
+    /// Plain task cancellation: nothing was generated to bill.
+    case failCancellation
   }
 
   private let outcome: Outcome
@@ -33,7 +42,31 @@ actor StubProvider: LLMProvider {
     switch outcome {
     case .respond(let response): return response
     case .fail(let error): throw error
+    case .failFailure(let failure): throw failure
+    case .failInferenceCancellation(let cancellation): throw cancellation
+    case .failCancellation: throw CancellationError()
     }
+  }
+}
+
+/// Returns scripted responses in order, then throws a scripted `ProviderFailure` — so a test can
+/// exercise accounting for a tool loop whose first round records usage and whose next round fails.
+actor RespondThenFailProvider: LLMProvider {
+  private var responses: [ChatResponse]
+  private let failure: ProviderFailure
+  private(set) var calls = 0
+
+  init(responses: [ChatResponse], then failure: ProviderFailure) {
+    self.responses = responses
+    self.failure = failure
+  }
+
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    calls += 1
+    guard responses.isEmpty == false else {
+      throw failure
+    }
+    return responses.removeFirst()
   }
 }
 
@@ -116,6 +149,9 @@ func makeRuntime(
   costResolver: CostResolver = makeCostResolver(),
   budget: RunBudget = .default,
   model: String = "gpt-4o",
+  configuredReference: String? = nil,
+  costPolicy: LLMCostPolicy = .metered,
+  reservationPolicy: LLMInputReservationPolicy = .textOnly,
   streamingEnabled: Bool = false,
   toolDispatcher: (any ToolDispatching)? = nil,
   usageStore: any UsageStore = RecordingUsageStore(),
@@ -130,7 +166,10 @@ func makeRuntime(
     streamingEnabled: streamingEnabled,
     costResolver: costResolver,
     budget: budget,
-    model: model,
+    wireModel: model,
+    configuredReference: configuredReference ?? model,
+    costPolicy: costPolicy,
+    reservationPolicy: reservationPolicy,
     toolDispatcher: toolDispatcher,
     usageStore: usageStore,
     auditLog: auditLog,
@@ -174,5 +213,23 @@ func makeBuildResult(hasPrivateDataAccess: Bool = false) -> BuildResult {
     messages: [ChatMessage(role: .user, content: "go")],
     ownerNotices: [],
     hasPrivateDataAccess: hasPrivateDataAccess
+  )
+}
+
+/// Opaque replay state of a chosen byte size. The runtime reserves against these bytes without
+/// decoding them, so the payload is arbitrary filler; only its length matters to the reservation.
+func replayState(issuer: String = "openai-chatgpt", bytes: Int) -> ProviderExchangeState {
+  ProviderExchangeState(issuer: issuer, payload: Data(repeating: 0x61, count: bytes))
+}
+
+/// A one-message build result whose sole user turn carries opaque replay state, for exercising the
+/// input reservation in the runtime's gates and estimated rows.
+func buildResultCarryingState(bytes: Int) -> BuildResult {
+  BuildResult(
+    messages: [
+      ChatMessage(role: .user, content: "go", providerState: replayState(bytes: bytes))
+    ],
+    ownerNotices: [],
+    hasPrivateDataAccess: false
   )
 }

@@ -625,7 +625,8 @@ func makeEnv(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: budget,
-    model: "gpt-4o",
+    wireModel: "gpt-4o",
+    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()

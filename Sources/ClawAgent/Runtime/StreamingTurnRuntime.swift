@@ -156,22 +156,27 @@ private extension StreamingTurnRuntime {
       throw failure.cause
     }
 
-    // A cancelled consumer ends iteration with nil instead of throwing, so re-check here or a
-    // /stop-style cancel would surface the partial accumulation as a completed reply.
-    try Task.checkCancellation()
-
-    // Only a completed inference reserves a terminal, so the queue running dry without one means
-    // the reply is not whole — the join says why.
+    // A cancelled consumer ends iteration with nil instead of throwing. Rather than re-check and
+    // surface a bare cancel here — which would drop the accounting the terminal carries and let a
+    // partial accumulation read as a completed reply — the join below decides: a dry queue means the
+    // reply is not whole, and the terminal says why, including whether the interrupted attempt may
+    // already owe tokens.
     throw Self.error(for: await stream.awaitTermination())
   }
 
   /// A terminal that reached here is never `.completed`: that case returns from the loop above with
-  /// its reserved event.
+  /// its reserved event. Cancellation carries its accounting disposition on: a may-have-started
+  /// interruption becomes the typed marker so the runtime records conservative usage, while a
+  /// no-start one stays a plain cancel that bills nothing. The bare `failure.cause` is deliberate —
+  /// the one-time stream-to-buffered fallback matches on the typed cause, and a wrapper no upstream
+  /// caller unwraps would defeat it.
   static func error(for termination: LLMStreamTermination) -> any Error {
     switch termination {
     case .failed(let failure):
       return failure.cause
-    case .cancelled:
+    case .cancelled(.mayHaveStarted(let observedCompletionTokens)):
+      return ProviderInferenceCancellation(observing: observedCompletionTokens)
+    case .cancelled(.notStarted):
       return CancellationError()
     case .completed:
       return ProviderError.retryable(

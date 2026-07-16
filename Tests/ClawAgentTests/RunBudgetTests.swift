@@ -173,4 +173,49 @@ struct RunBudgetTests {
     // then
     #expect(decision == .allow)
   }
+
+  @Test("the included-plan policy skips every USD cap but keeps the daily token ceiling")
+  func includedPlanPreflightSkipsUSDButKeepsTokenCeiling() {
+    // given — a subscription gate whose day already crossed both the per-day and per-run USD caps
+    let gate = BudgetGate(budget: .default, costPolicy: .includedPlan)
+
+    // when — the USD figures alone would deny under `metered`, but the estimate stays under the
+    // token ceiling
+    let underToken = gate.preflight(
+      todayTokens: 0,
+      todayUSD: RunBudget.default.perDayUSD * 3,
+      estimatedTotalTokens: 5_000,
+      estimatedCostUSD: RunBudget.default.perRunUSD * 3,
+      origin: .heartbeat,
+      proactiveTodayUSD: RunBudget.default.proactivePerDayUSD * 3
+    )
+    // then — no USD comparison can reject a subscription call
+    #expect(underToken == .allow)
+
+    // when — the same policy still meets the hard offline token failsafe
+    let overToken = gate.preflight(
+      todayTokens: RunBudget.default.dayTokenCeiling,
+      todayUSD: 0,
+      estimatedTotalTokens: 1
+    )
+    // then — the token ceiling remains a live gate under the subscription policy
+    #expect(overToken == .deny(cap: BudgetGate.perDayTokenCap))
+  }
+
+  @Test("a metered call over the per-day USD cap is still rejected")
+  func meteredPreflightStillRejectsOnUSDCap() {
+    // given — the metered counterpart of the included-plan skip, so the skip is not vacuous
+    let gate = BudgetGate(budget: .default, costPolicy: .metered)
+
+    // when
+    let decision = gate.preflight(
+      todayTokens: 0,
+      todayUSD: RunBudget.default.perDayUSD,
+      estimatedTotalTokens: 5_000,
+      estimatedCostUSD: 0.01
+    )
+
+    // then
+    #expect(decision == .deny(cap: BudgetGate.perDaySpendCap))
+  }
 }

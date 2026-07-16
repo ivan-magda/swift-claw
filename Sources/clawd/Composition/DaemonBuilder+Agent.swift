@@ -100,7 +100,14 @@ extension DaemonBuilder {
       streamingEnabled: config.llm.streamingEnabled,
       costResolver: costResolver,
       budget: config.budget,
-      model: config.llm.model,
+      // The wired provider is the metered OpenAI-compatible route, so the wire model and the
+      // accounting reference are the same configured string and the policies stay at their
+      // metered/text-only defaults. A managed subscription route would inject the split identity
+      // and its policies here instead.
+      wireModel: config.llm.model,
+      configuredReference: config.llm.model,
+      costPolicy: .metered,
+      reservationPolicy: .textOnly,
       toolDispatcher: toolDispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,

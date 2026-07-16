@@ -87,15 +87,25 @@ public struct BudgetGate: Sendable {
   public static let perRunInputTokenCap = "per-run input-token"
 
   public let budget: RunBudget
+  /// How the route is billed. Injected — never inferred from a model name — so a subscription call
+  /// skips the USD comparisons while every token, turn, and tool bound still binds. A metered
+  /// caller keeps the full set, which is why the default is `.metered`: a gate that had not been
+  /// taught about a subscription must not silently stop enforcing dollars.
+  public let costPolicy: LLMCostPolicy
 
-  public init(budget: RunBudget) {
+  public init(budget: RunBudget, costPolicy: LLMCostPolicy = .metered) {
     self.budget = budget
+    self.costPolicy = costPolicy
   }
 
   /// Deny when any spend bound is met. The offline-guaranteed token failsafe is checked
   /// before the best-effort USD caps, so it still trips when no price is known (`estimatedCostUSD`
   /// defaults to 0). Global checks run first, unchanged order — then, iff the run is proactive
   /// (`origin != .interactive`), the nested proactive pool is consulted.
+  ///
+  /// Under `includedPlan` every USD comparison is skipped — a subscription dollar figure is not a
+  /// gate — but the daily token ceiling still binds, so a subscription call cannot outrun the hard
+  /// offline failsafe.
   public func preflight(
     todayTokens: Int,
     todayUSD: Double,
@@ -104,19 +114,19 @@ public struct BudgetGate: Sendable {
     origin: RunOrigin = .interactive,
     proactiveTodayUSD: Double = 0
   ) -> BudgetDecision {
-    if todayUSD >= budget.perDayUSD {
+    if enforcesUSD, todayUSD >= budget.perDayUSD {
       return .deny(cap: Self.perDaySpendCap)
     }
     if todayTokens + estimatedTotalTokens > budget.dayTokenCeiling {
       return .deny(cap: Self.perDayTokenCap)
     }
-    if estimatedCostUSD > budget.perRunUSD {
+    if enforcesUSD, estimatedCostUSD > budget.perRunUSD {
       return .deny(cap: Self.perRunSpendCap)
     }
-    if todayUSD + estimatedCostUSD > budget.perDayUSD {
+    if enforcesUSD, todayUSD + estimatedCostUSD > budget.perDayUSD {
       return .deny(cap: Self.perDaySpendCap)
     }
-    if origin != .interactive {
+    if enforcesUSD, origin != .interactive {
       if proactiveTodayUSD >= budget.proactivePerDayUSD {
         return .deny(cap: Self.proactivePerDayCap)
       }
@@ -125,5 +135,11 @@ public struct BudgetGate: Sendable {
       }
     }
     return .allow
+  }
+
+  /// Whether USD caps can reject this route. A subscription's dollars are recorded for audit but
+  /// never gate, so only the metered policy compares them.
+  private var enforcesUSD: Bool {
+    costPolicy == .metered
   }
 }

@@ -342,7 +342,8 @@ func makeStack(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    model: "gpt-4o",
+    wireModel: "gpt-4o",
+    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()
@@ -436,7 +437,8 @@ func makeStreamingStack(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    model: "gpt-4o",
+    wireModel: "gpt-4o",
+    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()
@@ -522,7 +524,8 @@ func makeStopNewStack(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    model: "gpt-4o",
+    wireModel: "gpt-4o",
+    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()

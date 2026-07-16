@@ -974,8 +974,8 @@ func waitForTurnResult(
     #expect(await provider.completeCalls == 0)
   }
 
-  @Test func terminalStreamFailureDegradesAndDebitsTheEstimate() async throws {
-    // given
+  @Test func terminalStreamFailureDegradesWithoutDebit() async throws {
+    // given — a recognized terminal head proves inference never started, so no tokens are owed
     let provider = StreamingProvider(streamScript: .fail(.terminal(status: 400, message: "bad")))
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
@@ -994,7 +994,7 @@ func waitForTurnResult(
     // then
     let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
-    #expect(try #require(usage).isEstimated)
+    #expect(usage == nil)
     #expect(await provider.completeCalls == 0)
     #expect(await provider.streamCalls == 1)
   }

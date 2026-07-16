@@ -495,3 +495,381 @@ extension AgentRuntimeTests {
     #expect(toolRow.content.contains("round-one") == false)
   }
 }
+
+// MARK: - Provider policies: cost, identity, reservation
+
+@Suite("AgentRuntime provider policies")
+struct AgentRuntimePolicyTests {
+  private static func userBuildResult(_ content: String = "hi") -> BuildResult {
+    BuildResult(
+      messages: [ChatMessage(role: .user, content: content)],
+      ownerNotices: [],
+      hasPrivateDataAccess: false
+    )
+  }
+
+  @Test("an included-plan call records a confirmed zero under the qualified reference")
+  func includedPlanProviderUsageWritesConfirmedZero() async throws {
+    // given — a subscription route whose provider even reports dollars
+    let store = RecordingUsageStore()
+    let provider = StubProvider(.respond(okResponse(content: "hi", costFromProvider: 9.99)))
+    let runtime = makeRuntime(
+      provider: provider,
+      model: "gpt-5",
+      configuredReference: "openai-chatgpt/gpt-5",
+      costPolicy: .includedPlan,
+      usageStore: store
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: Self.userBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — cost is a confirmed zero, keyed on the qualified reference, and not an estimate since
+    // the token counts were provider-returned
+    let (_, usage, _) = try requireCompleted(outcome.result)
+    #expect(usage.costUSD == 0)
+    #expect(usage.costSource == .includedPlan)
+    #expect(usage.isEstimated == false)
+    #expect(usage.model == "openai-chatgpt/gpt-5")
+    // the wire still carries the bare model
+    #expect(await provider.lastRequest?.model == "gpt-5")
+  }
+
+  @Test(
+    "an included-plan call with missing counts estimates tokens yet keeps cost a confirmed zero"
+  )
+  func includedPlanMissingUsageEstimatesTokensButCostStaysZero() async throws {
+    // given — a subscription route whose provider omits the usage object
+    let provider = StubProvider(.respond(okResponse(content: "hi", usage: nil)))
+    let runtime = makeRuntime(
+      provider: provider,
+      model: "gpt-5",
+      configuredReference: "openai-chatgpt/gpt-5",
+      costPolicy: .includedPlan
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: Self.userBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the missing tokens are estimated (so isEstimated is true), but the confirmed zero and
+    // its own source are the durable proof the $0 is not silent
+    let (_, usage, _) = try requireCompleted(outcome.result)
+    #expect(usage.isEstimated == true)
+    #expect(usage.costUSD == 0)
+    #expect(usage.costSource == .includedPlan)
+  }
+
+  @Test(
+    "an included-plan call is not rejected by the USD cap, yet the token ceiling still stops it"
+  )
+  func includedPlanSkipsUSDButTokenCeilingStillStops() async throws {
+    // given — a day already far over the USD cap
+    let overUSD = RunBudget.default.perDayUSD * 5
+
+    // when — a metered run is refused before any call
+    let meteredProvider = StubProvider(.respond(okResponse()))
+    let meteredOutcome = try await makeRuntime(provider: meteredProvider).runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: Self.userBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: overUSD
+    )
+    // then — the metered USD cap rejects, so the skip below is not vacuous
+    guard case .budgetStopped = meteredOutcome.result else {
+      Issue.record("expected the metered run to be budget-stopped, got \(meteredOutcome.result)")
+      return
+    }
+    #expect(await meteredProvider.calls == 0)
+
+    // when — the same day under the included-plan policy reaches the provider
+    let planProvider = StubProvider(.respond(okResponse(content: "answer")))
+    let planOutcome = try await makeRuntime(
+      provider: planProvider,
+      costPolicy: .includedPlan
+    ).runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: Self.userBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: overUSD
+    )
+    // then — a subscription USD figure is not a gate
+    _ = try requireCompleted(planOutcome.result)
+    #expect(await planProvider.calls == 1)
+
+    // when — but the hard daily token ceiling still binds under the subscription policy
+    let tokenProvider = StubProvider(.respond(okResponse()))
+    let tokenOutcome = try await makeRuntime(
+      provider: tokenProvider,
+      costPolicy: .includedPlan
+    ).runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: Self.userBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: RunBudget.default.dayTokenCeiling,
+      todayUSD: 0
+    )
+    // then — a token cap is not a USD cap, so it still stops the subscription call
+    #expect(tokenOutcome.result == .budgetStopped(cap: BudgetGate.perDayTokenCap))
+    #expect(await tokenProvider.calls == 0)
+  }
+
+  @Test("the replay-state reservation participates in the per-call input gate")
+  func replayStateReservationEntersTheInputGate() async throws {
+    // given — state whose two-tokens-per-byte reservation alone overshoots the input cap
+    let stateBytes = 60_000
+
+    // when — under text-only estimation the tiny wire clears the gate
+    let textOnlyProvider = StubProvider(.respond(okResponse(content: "answer")))
+    let textOnlyOutcome = try await makeRuntime(provider: textOnlyProvider).runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: buildResultCarryingState(bytes: stateBytes),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+    // then — text-only reserves nothing for the bytes, so the call goes out
+    _ = try requireCompleted(textOnlyOutcome.result)
+    #expect(await textOnlyProvider.calls == 1)
+
+    // when — the same wire under the replay-state reservation
+    let reservedProvider = StubProvider(.respond(okResponse()))
+    let reservedOutcome = try await makeRuntime(
+      provider: reservedProvider,
+      reservationPolicy: .chatGPTReplayState
+    ).runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: buildResultCarryingState(bytes: stateBytes),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+    // then — replay state cannot bypass the token gate; the provider is never reached
+    #expect(reservedOutcome.result == .budgetStopped(cap: BudgetGate.perRunInputTokenCap))
+    #expect(await reservedProvider.calls == 0)
+  }
+
+  @Test("the reservation inflates the estimated prompt of a missing-usage row")
+  func replayStateReservationInflatesTheMissingUsageEstimate() async throws {
+    // given — a small state that does not trip the input gate, and a provider that omits usage
+    let stateBytes = 1_000
+    let expectedReservation = 2 * stateBytes + 256
+
+    func recordedPrompt(reservation: LLMInputReservationPolicy) async throws -> Int {
+      let outcome = try await makeRuntime(
+        provider: StubProvider(.respond(okResponse(content: "hi", usage: nil))),
+        reservationPolicy: reservation
+      ).runTurn(
+        runId: 1,
+        sessionId: 2,
+        chatId: 3,
+        buildResult: buildResultCarryingState(bytes: stateBytes),
+        sessionTainted: false,
+        sessionHasPrivateData: false,
+        todayTokens: 0,
+        todayUSD: 0
+      )
+      return try requireCompleted(outcome.result).usage.promptTokens
+    }
+
+    // when
+    let textOnlyPrompt = try await recordedPrompt(reservation: .textOnly)
+    let reservedPrompt = try await recordedPrompt(reservation: .chatGPTReplayState)
+
+    // then — the difference is exactly the reservation the policy charges for those bytes
+    #expect(reservedPrompt - textOnlyPrompt == expectedReservation)
+  }
+}
+
+// MARK: - Conservative failure and cancellation accounting
+
+@Suite("AgentRuntime failure accounting")
+struct AgentRuntimeFailureAccountingTests {
+  private static func userBuildResult() -> BuildResult {
+    BuildResult(
+      messages: [ChatMessage(role: .user, content: "hi")],
+      ownerNotices: [],
+      hasPrivateDataAccess: false
+    )
+  }
+
+  private static func runDegraded(
+    _ outcome: StubProvider.Outcome,
+    store: RecordingUsageStore
+  ) async throws -> (kind: DegradationKind, usage: ProviderUsage?) {
+    let outcome = try await makeRuntime(
+      provider: StubProvider(outcome),
+      usageStore: store
+    ).runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: userBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+    return try requireDegraded(outcome.result)
+  }
+
+  @Test("a budget-exhausted clean failure — notStarted — writes no usage row")
+  func notStartedFailureWritesNoUsageRow() async throws {
+    // given — the shape a budget-exhausted 5xx takes: a retryable cause, but proven not-started
+    let store = RecordingUsageStore()
+
+    // when
+    let (kind, usage) = try await Self.runDegraded(
+      .failFailure(
+        ProviderFailure(cause: .retryable(status: 503, message: "x"), accounting: .notStarted)
+      ),
+      store: store
+    )
+
+    // then — the disposition, not the cause class, decides: nothing was generated, nothing is owed
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+  }
+
+  @Test("a may-have-started failure writes a conservative row bounded below by the observed count")
+  func mayHaveStartedFailureWritesConservativeRow() async throws {
+    // given — an observed lower bound far above the local output reservation
+    let observed = RunBudget.default.maxOutputTokens + 5_000
+    let store = RecordingUsageStore()
+
+    // when
+    let (_, usage) = try await Self.runDegraded(
+      .failFailure(
+        ProviderFailure(
+          cause: .retryable(status: nil, message: "lost"),
+          accounting: .mayHaveStarted(observing: observed)
+        )
+      ),
+      store: store
+    )
+
+    // then — completion is the larger of the reservation and the observed estimate
+    let row = try #require(usage)
+    #expect(row.isEstimated)
+    #expect(row.completionTokens == observed)
+  }
+
+  @Test("a may-have-started failure below the reservation still reserves the local output cap")
+  func mayHaveStartedBelowReservationKeepsTheOutputCap() async throws {
+    // given — a small observed count
+    let store = RecordingUsageStore()
+
+    // when
+    let (_, usage) = try await Self.runDegraded(
+      .failFailure(
+        ProviderFailure(
+          cause: .retryable(status: nil, message: "lost"),
+          accounting: .mayHaveStarted(observing: 3)
+        )
+      ),
+      store: store
+    )
+
+    // then — the output reservation wins the max
+    #expect(try #require(usage).completionTokens == RunBudget.default.maxOutputTokens)
+  }
+
+  @Test("raw task cancellation writes nothing")
+  func rawCancellationWritesNothing() async throws {
+    // given
+    let store = RecordingUsageStore()
+
+    // when
+    let (kind, usage) = try await Self.runDegraded(.failCancellation, store: store)
+
+    // then
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+  }
+
+  @Test("typed inference cancellation writes conservative usage")
+  func inferenceCancellationWritesConservativeUsage() async throws {
+    // given
+    let store = RecordingUsageStore()
+
+    // when
+    let (_, usage) = try await Self.runDegraded(
+      .failInferenceCancellation(ProviderInferenceCancellation(observing: 7)),
+      store: store
+    )
+
+    // then — the model may have been asked, so a conservative row is owed on the degraded result
+    let row = try #require(usage)
+    #expect(row.isEstimated)
+    #expect(row.completionTokens == RunBudget.default.maxOutputTokens)
+  }
+
+  @Test("a notStarted failure after a tool round keeps only the round's recorded row")
+  func notStartedAfterAToolRoundKeepsOnlyTheRecordedRow() async throws {
+    // given — a first round that proposes a tool (recording usage), then a not-started failure
+    let store = RecordingUsageStore()
+    let provider = RespondThenFailProvider(
+      responses: [toolCallResponse([fetchProposal()], content: "checking")],
+      then: ProviderFailure(cause: .retryable(status: 503, message: "x"), accounting: .notStarted)
+    )
+    let runtime = makeRuntime(
+      provider: provider,
+      toolDispatcher: ScriptedDispatcher(respond: okOutcome(ingestedUntrusted: false)),
+      usageStore: store
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: Self.userBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the failed second round adds no row; only the first round's usage stands
+    let (kind, _) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(store.recorded.count == 1)
+    #expect(await provider.calls == 2)
+  }
+}

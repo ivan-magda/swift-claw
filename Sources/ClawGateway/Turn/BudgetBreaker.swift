@@ -6,21 +6,31 @@ import Foundation
 /// is in-memory by design — a missed DM after a crash is acceptable, a missed refusal is not.
 public actor BudgetBreaker {
   private let budget: RunBudget
+  /// How the route is billed. Injected — never inferred from a model name — so a subscription
+  /// daemon never fires a daily USD-cap DM against dollars earlier metered usage rang up, while the
+  /// hard token breaker still can. Defaults to `.metered` so a breaker not taught about a
+  /// subscription keeps watching dollars.
+  private let costPolicy: LLMCostPolicy
   /// The UTC day whose trip has already been DMed; resets implicitly when `now` rolls to a new day.
   private var notifiedDay: Date?
   /// The UTC day whose PROACTIVE-cap trip has already been DMed — a second latch
   /// beside the global one, so a proactive trip and a global trip each notify at most once/day.
   private var notifiedProactiveDay: Date?
 
-  public init(budget: RunBudget) {
+  public init(budget: RunBudget, costPolicy: LLMCostPolicy = .metered) {
     self.budget = budget
+    self.costPolicy = costPolicy
   }
 
   /// The caller's once-per-day signal to DM the owner: `true` only when today's actuals meet either
   /// cap, and only the first such call per UTC day — the `now.startOfUTCDay` latch collapses repeated
   /// trips within a day to a single DM, even when both `TurnRunner` branches call it.
+  ///
+  /// The USD leg is consulted only under `metered`; a subscription route's dollars are not a cap, so
+  /// only the token ceiling can trip its DM.
   public func shouldNotifyTrip(todayTokens: Int, todayUSD: Double, now: Date) -> Bool {
-    let capIsMet = todayUSD >= budget.perDayUSD || todayTokens >= budget.dayTokenCeiling
+    let usdCapMet = costPolicy == .metered && todayUSD >= budget.perDayUSD
+    let capIsMet = usdCapMet || todayTokens >= budget.dayTokenCeiling
     guard capIsMet else {
       return false
     }

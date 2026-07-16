@@ -64,10 +64,23 @@ public struct AgentRuntime: Sendable {
   private let draftStreamer: any RichDraftStreaming
   private let streamingEnabled: Bool
 
-  private let costResolver: CostResolver
-  private let usageResolver: UsageResolver
-  private let budget: RunBudget
-  private let model: String
+  // The cost/usage/reservation collaborators and identities are `internal`, not `private`, because
+  // the accounting extension that reads them lives in `AgentRuntime+Accounting.swift`.
+  let costResolver: CostResolver
+  let usageResolver: UsageResolver
+  let budget: RunBudget
+  /// What crosses the wire in `ChatRequest.model`.
+  private let wireModel: String
+  /// The accounting, cost-identity, and safe-diagnostic reference. Kept apart from `wireModel` so a
+  /// subscription route's usage rows key on `openai-chatgpt/<model>` and never collide with
+  /// API-billed rows for the same wire model.
+  let configuredReference: String
+  /// How the route is billed. Injected — the loop never name-checks a model — so `includedPlan`
+  /// records a confirmed zero and skips only the USD gates.
+  let costPolicy: LLMCostPolicy
+  /// The token reservation replay state needs on top of ordinary text estimation. Injected, so the
+  /// loop reserves against persisted provider-state bytes it never decodes.
+  let reservationPolicy: LLMInputReservationPolicy
 
   private let toolDispatcher: (any ToolDispatching)?
 
@@ -90,7 +103,10 @@ public struct AgentRuntime: Sendable {
     costResolver: CostResolver,
     usageResolver: UsageResolver = UsageResolver(),
     budget: RunBudget,
-    model: String,
+    wireModel: String,
+    configuredReference: String,
+    costPolicy: LLMCostPolicy = .metered,
+    reservationPolicy: LLMInputReservationPolicy = .textOnly,
     toolDispatcher: (any ToolDispatching)? = nil,
     usageStore: any UsageStore,
     auditLog: any AuditLog,
@@ -106,7 +122,10 @@ public struct AgentRuntime: Sendable {
     self.costResolver = costResolver
     self.usageResolver = usageResolver
     self.budget = budget
-    self.model = model
+    self.wireModel = wireModel
+    self.configuredReference = configuredReference
+    self.costPolicy = costPolicy
+    self.reservationPolicy = reservationPolicy
 
     self.toolDispatcher = toolDispatcher
 
@@ -140,7 +159,7 @@ public struct AgentRuntime: Sendable {
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDispatcher?.definitions ?? []
-    let gate = BudgetGate(budget: budget)
+    let gate = BudgetGate(budget: budget, costPolicy: costPolicy)
 
     // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
     // ties the round-trips, tool calls, and outcome of a single turn together.
@@ -150,7 +169,7 @@ public struct AgentRuntime: Sendable {
     }
     let turnStart = ContinuousClock.now
     turnLog.info(
-      "turn started model=\(model) origin=\(origin) contextMessages=\(buildResult.messages.count) streaming=\(streamingEnabled) tools=\(definitions.count)"
+      "turn started model=\(configuredReference) origin=\(origin) contextMessages=\(buildResult.messages.count) streaming=\(streamingEnabled) tools=\(definitions.count)"
     )
 
     var wire = buildResult.messages
@@ -187,7 +206,13 @@ public struct AgentRuntime: Sendable {
     func deadlineDegradation(_ callID: ProviderCallID) -> TurnResult {
       .degraded(
         .providerUnavailable,
-        usage: estimatedDebit(callID: callID, context: wire, runId: runId, sessionId: sessionId)
+        usage: conservativeDebit(
+          callID: callID,
+          context: wire,
+          observedCompletionTokens: 0,
+          runId: runId,
+          sessionId: sessionId
+        )
       )
     }
 
@@ -203,8 +228,12 @@ public struct AgentRuntime: Sendable {
       // the day twice.
       let callID = providerCallIDGenerator.next()
 
-      // Per-round-trip preflight: day totals at run start + everything this run recorded.
-      let inputTokens = TokenEstimator.estimateInputTokens(wire)
+      // Per-round-trip preflight: day totals at run start + everything this run recorded. The
+      // reservation for replay-state bytes rides on ordinary text estimation so a state-carrying
+      // wire cannot slip past a token gate; the loop reserves against those bytes without decoding
+      // them.
+      let inputTokens =
+        TokenEstimator.estimateInputTokens(wire) + reservationPolicy.additionalTokens(for: wire)
       // The loop is the one component that grows provider input (proposals + fenced
       // observations) and nothing re-fits the wire mid-run — without this check the
       // provider's context window is the de facto enforcement: an HTTP 400 classified terminal,
@@ -215,16 +244,19 @@ public struct AgentRuntime: Sendable {
       }
       let estimate = inputTokens + budget.maxOutputTokens
       let estimatedCost = costResolver.resolve(
-        model: model,
+        model: configuredReference,
         usage: ChatUsage(
           promptTokens: inputTokens,
           completionTokens: budget.maxOutputTokens,
           totalTokens: estimate
         ),
-        providerCost: nil
+        providerCost: nil,
+        policy: costPolicy
       ).costUSD
-      // The run-accumulated per-run check lives here, not in BudgetGate.
-      if recordedRunUSD + estimatedCost > budget.perRunUSD {
+      // The run-accumulated per-run check lives here, not in BudgetGate — and, like BudgetGate's
+      // USD caps, it is a dollar gate a subscription call does not answer to. The token, input,
+      // turn, and tool bounds above and below it stay live either way.
+      if costPolicy == .metered, recordedRunUSD + estimatedCost > budget.perRunUSD {
         return outcome(.budgetStopped(cap: "per-run spend"))
       }
       if case .deny(let cap) = gate.preflight(
@@ -252,11 +284,11 @@ public struct AgentRuntime: Sendable {
         "round-trip \(roundTripIndex) inputTokens~=\(inputTokens) estCostUSD=\(USD.precise(estimatedCost))"
       )
       let request = ChatRequest(
-        model: model,
+        model: wireModel,
         messages: wire,
         maxOutputTokens: budget.maxOutputTokens,
         tools: definitions,
-        sessionId: Self.sessionTraceId(sessionId: sessionId)
+        sessionId: SessionTraceID.format(sessionID: sessionId)
       )
 
       let response: ChatResponse
@@ -271,28 +303,20 @@ public struct AgentRuntime: Sendable {
         turnLog.notice("round-trip \(roundTripIndex) exceeded the wall-clock deadline; degrading")
         return outcome(deadlineDegradation(callID))
       } catch {
-        // Streaming can partially deliver before a terminal error, so its terminal case still debits
-        // an ESTIMATED row (`degradedForStreamingError`); the typing path debits nil for a terminal
-        // (`degradedForCaughtError`). Keeps
-        // `terminalStreamFailureDegradesAndDebitsTheEstimate` green and both helpers live.
+        // One accounting decision for every natural failure and cancellation, keyed on the
+        // vendor-neutral disposition the provider tagged the failure with — never on whether the
+        // call went out through `stream` or `complete`. A proven no-start writes no row; anything
+        // that may have generated tokens writes a conservative one.
         turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
-        let degradation =
-          streamingEnabled
-          ? degradedForStreamingError(
+        return outcome(
+          failureOutcome(
             error,
             callID: callID,
             context: wire,
             runId: runId,
             sessionId: sessionId
           )
-          : degradedForCaughtError(
-            error,
-            callID: callID,
-            context: wire,
-            runId: runId,
-            sessionId: sessionId
-          )
-        return outcome(degradation)
+        )
       }
 
       // No proposals → the terminal round-trip; its usage row rides the atomic commit.
@@ -459,10 +483,6 @@ private extension AgentRuntime {
     ["run": "\(runId)", "session": "\(sessionId)"]
   }
 
-  static func sessionTraceId(sessionId: Int64) -> String {
-    "clawd-session-\(sessionId)"
-  }
-
   /// Emits the one finished line for a turn; its level reflects severity — completed → info,
   /// budget-stopped → notice (an expected guard), degraded → warning (something went wrong). Only
   /// safe fields (counts, tokens, cost, elapsed) are logged, never the reply text.
@@ -538,18 +558,19 @@ private extension AgentRuntime {
     runId: Int64,
     sessionId: Int64
   ) -> ProviderUsage {
-    let resolvedUsage = usageResolver.resolve(response: response, context: context)
+    let resolvedUsage = reservedUsage(for: response, context: context)
     let resolvedCost = costResolver.resolve(
-      model: model,
+      model: configuredReference,
       usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider
+      providerCost: response.costFromProvider,
+      policy: costPolicy
     )
 
     return ProviderUsage(
       providerCallID: callID,
       runId: runId,
       sessionId: sessionId,
-      model: model,
+      model: configuredReference,
       usage: resolvedUsage,
       cost: resolvedCost,
       ts: Date()
@@ -626,143 +647,5 @@ private extension AgentRuntime {
       clock: clock
     )
     return try await runtime.run(chatId: chatId, request: request)
-  }
-}
-
-// MARK: - Result Classification
-
-private extension AgentRuntime {
-  func degradedForCaughtError(
-    _ error: any Error,
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    runId: Int64,
-    sessionId: Int64
-  ) -> TurnResult {
-    if let providerError = error as? ProviderError {
-      switch providerError {
-      case .connectFailed, .retryable, .rejected:
-        return .degraded(
-          .providerUnavailable,
-          usage: estimatedDebit(
-            callID: callID,
-            context: context,
-            runId: runId,
-            sessionId: sessionId
-          )
-        )
-      // A route that answered instead of inferring generated nothing, so there is nothing to debit.
-      case .terminal, .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-        .invalidProviderState:
-        return .degraded(.providerUnavailable, usage: nil)
-      }
-    }
-
-    return .degraded(
-      .providerUnavailable,
-      usage: estimatedDebit(callID: callID, context: context, runId: runId, sessionId: sessionId)
-    )
-  }
-
-  func degradedForStreamingError(
-    _ error: any Error,
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    runId: Int64,
-    sessionId: Int64
-  ) -> TurnResult {
-    if let providerError = error as? ProviderError {
-      switch providerError {
-      case .connectFailed, .retryable, .rejected, .terminal, .authenticationRequired, .accessDenied,
-        .quotaLimited, .cleanRejection, .invalidProviderState:
-        return .degraded(
-          .providerUnavailable,
-          usage: estimatedDebit(
-            callID: callID,
-            context: context,
-            runId: runId,
-            sessionId: sessionId
-          )
-        )
-      }
-    }
-
-    return .degraded(
-      .providerUnavailable,
-      usage: estimatedDebit(callID: callID, context: context, runId: runId, sessionId: sessionId)
-    )
-  }
-
-  /// Maps a returned response to a result, debiting the reconciled usage (real, or estimated when
-  /// the provider omits it): non-empty content → `.completed`; empty + `finishReason == "length"` →
-  /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`. Cost is
-  /// resolved via `costResolver` (provider cost wins) into the `ProviderUsage` row.
-  func classify(
-    response: ChatResponse,
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    runId: Int64,
-    sessionId: Int64
-  ) -> TurnResult {
-    let resolvedUsage = usageResolver.resolve(response: response, context: context)
-    let resolvedCost = costResolver.resolve(
-      model: model,
-      usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider
-    )
-    let usage = ProviderUsage(
-      providerCallID: callID,
-      runId: runId,
-      sessionId: sessionId,
-      model: model,
-      usage: resolvedUsage,
-      cost: resolvedCost,
-      ts: Date()
-    )
-
-    if !response.content.isEmpty {
-      return .completed(
-        content: response.content,
-        usage: usage,
-        providerState: response.providerState
-      )
-    }
-
-    if response.finishReason == "length" {
-      return .degraded(.outputTruncated, usage: usage)
-    }
-
-    return .degraded(.providerUnavailable, usage: usage)
-  }
-
-  /// The pre-call estimated `ProviderUsage` debited when no real usage exists (deadline /
-  /// exhausted retries): prompt from context, completion reserved at the output cap, cost via the
-  /// best-effort tier. No provider cost exists for a call that never returned, so the resolver's
-  /// heuristic tier carries USD (floored, never a silent $0); the row is an estimate.
-  func estimatedDebit(
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    runId: Int64,
-    sessionId: Int64
-  ) -> ProviderUsage {
-    let resolvedUsage = usageResolver.estimate(
-      context: context,
-      maxOutputTokens: budget.maxOutputTokens
-    )
-    let resolvedCost = costResolver.resolve(
-      model: model,
-      usage: resolvedUsage.usage,
-      providerCost: nil
-    )
-
-    return ProviderUsage(
-      providerCallID: callID,
-      runId: runId,
-      sessionId: sessionId,
-      model: model,
-      usage: resolvedUsage,
-      cost: resolvedCost,
-      ts: Date()
-    )
   }
 }
