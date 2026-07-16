@@ -393,18 +393,6 @@ import Testing
     }
   }
 
-  @Test func streamingDisabledStillLeavesTheManagedWireStreaming() throws {
-    // given — the owner-facing presentation toggle off on the managed route
-    let env = chatGPTEnv([EnvKey.llmStreaming: "false"])
-
-    // when
-    let config = try AppConfig.load(environment: env)
-
-    // then — presentation is off, but the wire is still SSE (the toggle never moves the transport)
-    #expect(config.llm.streamingEnabled == false)
-    #expect(config.llm.route.descriptor.capabilities.usesStreamingWire)
-  }
-
   @Test func nonOffStructuredOutputIsRejectedOnTheManagedRoute() {
     // given — a structured-output mode the managed route has no contract to honor
     let env = chatGPTEnv([EnvKey.llmStructuredOutput: "json_object"])

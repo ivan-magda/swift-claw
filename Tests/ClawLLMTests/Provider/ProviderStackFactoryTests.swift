@@ -273,10 +273,7 @@ private extension ProviderStackFactoryTests {
         egress: egress,
         credentialMode: .noneOrStaticBearer,
         capabilities: LLMProviderCapabilities(
-          supportsTools: true,
-          usesStreamingWire: false,
           supportsStructuredOutput: true,
-          supportsStopStrings: true,
           outputTokenField: .configured(.maxCompletionTokens)
         )
       ),
@@ -294,10 +291,7 @@ private extension ProviderStackFactoryTests {
         egress: .configuredEndpoint("https://api.test/v1"),
         credentialMode: .noneOrStaticBearer,
         capabilities: LLMProviderCapabilities(
-          supportsTools: true,
-          usesStreamingWire: false,
           supportsStructuredOutput: true,
-          supportsStopStrings: true,
           outputTokenField: field
         )
       ),

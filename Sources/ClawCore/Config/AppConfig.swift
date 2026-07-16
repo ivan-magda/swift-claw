@@ -281,10 +281,7 @@ private extension AppConfig {
       egress: route.descriptor.egress,
       credentialMode: route.descriptor.credentialMode,
       capabilities: LLMProviderCapabilities(
-        supportsTools: capabilities.supportsTools,
-        usesStreamingWire: capabilities.usesStreamingWire,
         supportsStructuredOutput: capabilities.supportsStructuredOutput,
-        supportsStopStrings: capabilities.supportsStopStrings,
         outputTokenField: .configured(maxTokensField)
       )
     )

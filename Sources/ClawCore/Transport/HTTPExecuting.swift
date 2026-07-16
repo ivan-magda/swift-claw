@@ -1,5 +1,4 @@
 import Foundation
-import Synchronization
 
 // MARK: - Responses
 
@@ -250,12 +249,21 @@ public struct HTTPStreamExchange: Sendable {
     let channel = BoundedAsyncChannel<Data>(capacity: maximumUnreadBodyBytes) { chunk in
       chunk.count
     }
-    let owner = HTTPStreamOwner(channel: channel)
+    let owner = HTTPStreamOwner(
+      channel: channel,
+      // A body transfer reports its own terminal fact; nothing about a pending cancellation reshapes
+      // what the producer already observed, so the reported outcome stands as decided.
+      resolve: { reported, _ in reported },
+      channelError: { terminal in
+        guard case .failed(let failure) = terminal else { return nil }
+        return failure
+      }
+    )
     // A task always runs its body, even when cancelled before it starts, so `finish` always lands
     // and a join can never wait on a producer that silently never reported.
     let producer = Task {
       let termination = await operation(HTTPBodySink(channel: channel))
-      owner.finish(with: termination)
+      owner.finish(reporting: termination)
     }
     owner.attach(producer: producer)
 
@@ -308,14 +316,14 @@ public struct HTTPBodySequence: AsyncSequence, Sendable {
   public func makeAsyncIterator() -> AsyncIterator {
     AsyncIterator(
       base: channel.makeAsyncIterator(),
-      lease: HTTPStreamAbandonmentLease(owner: owner)
+      lease: StreamAbandonmentLease { owner.cancel() }
     )
   }
 
   public struct AsyncIterator: AsyncIteratorProtocol {
     fileprivate var base: BoundedAsyncChannel<Data>.Iterator
     /// Held, never read: dropping the iterator is what the lease is here to notice.
-    fileprivate let lease: HTTPStreamAbandonmentLease
+    fileprivate let lease: StreamAbandonmentLease
 
     public mutating func next() async throws -> Data? {
       try await base.next()
@@ -325,101 +333,7 @@ public struct HTTPBodySequence: AsyncSequence, Sendable {
 
 // MARK: - Stream ownership
 
-/// Cancels the exchange when the iteration that held it is dropped. A consumer that breaks out of a
-/// `for try await` and walks away would otherwise leave the producer parked on a full buffer
-/// forever. It is a backstop against that leak, not a substitute for the join: the lease stops the
-/// work, and only the join reports what the work did — which is why an abandoning caller can still
-/// `awaitTermination()` afterwards and read `.cancelled`.
-///
-/// Dropping an iterator that already read to the end cancels a producer that has finished, which
-/// does nothing.
-private final class HTTPStreamAbandonmentLease: Sendable {
-  private let owner: HTTPStreamOwner
-
-  init(owner: HTTPStreamOwner) {
-    self.owner = owner
-  }
-
-  deinit {
-    owner.cancel()
-  }
-}
-
-/// The one piece of shared state behind an exchange: the producer task, the terminal outcome, and
-/// whoever is waiting for it.
-///
-/// Locked rather than an actor because `cancel()` must be synchronous — a `deinit` cannot `await` —
-/// and because a continuation has to be resumed outside the lock, which actor isolation could not
-/// enforce across an `await`.
-private final class HTTPStreamOwner: Sendable {
-  private struct State {
-    var producer: Task<Void, Never>?
-    var terminal: HTTPStreamTermination?
-    var waiters: [CheckedContinuation<HTTPStreamTermination, Never>] = []
-  }
-
-  private let state = Mutex(State())
-  private let channel: BoundedAsyncChannel<Data>
-
-  init(channel: BoundedAsyncChannel<Data>) {
-    self.channel = channel
-  }
-
-  func attach(producer: Task<Void, Never>) {
-    state.withLock { current in
-      current.producer = producer
-    }
-  }
-
-  /// Runs once, as the producer's last act, so a resumed joiner knows the transfer has stopped.
-  func finish(with termination: HTTPStreamTermination) {
-    switch termination {
-    case .completed, .cancelled:
-      channel.finish()
-    case .failed(let failure):
-      channel.finish(throwing: failure)
-    }
-
-    let waiters = state.withLock { current -> [CheckedContinuation<HTTPStreamTermination, Never>] in
-      guard current.terminal == nil else { return [] }
-      current.terminal = termination
-      let parked = current.waiters
-      current.waiters.removeAll()
-      return parked
-    }
-    for waiter in waiters {
-      waiter.resume(returning: termination)
-    }
-  }
-
-  func cancel() {
-    let producer = state.withLock { current in
-      current.producer
-    }
-    producer?.cancel()
-    // Closing as well as cancelling: a producer parked on a full buffer unwinds on whichever of the
-    // two reaches it first, and neither alone covers a producer that has not yet observed the other.
-    channel.finish()
-  }
-
-  /// Deliberately without a cancellation handler: a join reports what the producer did, and a
-  /// joiner's own cancellation must not fabricate an answer before the producer has stopped.
-  func awaitTermination() async -> HTTPStreamTermination {
-    await withCheckedContinuation { continuation in
-      park(continuation)
-    }
-  }
-
-  /// Resumes outside the lock: resuming under it would run the woken task's next step on this
-  /// thread while the lock is still held.
-  private func park(_ continuation: CheckedContinuation<HTTPStreamTermination, Never>) {
-    let cached = state.withLock { current -> HTTPStreamTermination? in
-      if let terminal = current.terminal { return terminal }
-      current.waiters.append(continuation)
-      return nil
-    }
-    if let cached {
-      continuation.resume(returning: cached)
-    }
-  }
-}
+/// A body transfer's owner: the shared termination machinery, closing the channel with the transport
+/// failure a `.failed` outcome carries. A body reports the terminal fact it observed, so nothing
+/// reshapes it at commit.
+private typealias HTTPStreamOwner = StreamTerminationOwner<Data, HTTPStreamTermination>

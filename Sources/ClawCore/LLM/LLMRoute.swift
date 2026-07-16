@@ -43,33 +43,19 @@ public enum LLMWireOutputTokenField: Sendable, Equatable {
   case omitted
 }
 
-/// What a route's wire contract offers. Composition validates configuration against these before
-/// any network I/O; the agent loop never reads them.
+/// What a route's wire contract offers, held to the capabilities composition actually validates
+/// configuration against before any network I/O: whether the route honors a structured-output
+/// request, and which wire key — if any — carries the output-token cap. The agent loop never reads
+/// them.
 public struct LLMProviderCapabilities: Sendable, Equatable {
-  public let supportsTools: Bool
-  /// Whether SSE is the route's only transport, buffered replies included: a `complete()` here
-  /// drains the very event stream a `stream()` does. This is not "offers streaming" — `stream()` is
-  /// a protocol requirement every conformer exposes, so its presence distinguishes no route from
-  /// another — and the owner-facing streaming toggle never moves it, governing whether partial text
-  /// reaches the owner rather than what crosses the wire. False marks a route whose buffered and
-  /// streamed calls are genuinely different transports, and which can therefore fall back from one
-  /// to the other.
-  public let usesStreamingWire: Bool
   public let supportsStructuredOutput: Bool
-  public let supportsStopStrings: Bool
   public let outputTokenField: LLMWireOutputTokenField
 
   public init(
-    supportsTools: Bool,
-    usesStreamingWire: Bool,
     supportsStructuredOutput: Bool,
-    supportsStopStrings: Bool,
     outputTokenField: LLMWireOutputTokenField
   ) {
-    self.supportsTools = supportsTools
-    self.usesStreamingWire = usesStreamingWire
     self.supportsStructuredOutput = supportsStructuredOutput
-    self.supportsStopStrings = supportsStopStrings
     self.outputTokenField = outputTokenField
   }
 }
@@ -115,18 +101,16 @@ extension LLMProviderDescriptor {
   public static let chatGPTResponsesEndpoint = "https://chatgpt.com/backend-api/codex/responses"
 
   /// The managed ChatGPT route. The studied backend honors no output-token cap and offers no
-  /// relied-upon structured-output or stop-string contract, so those are refused at configuration
-  /// rather than silently degraded at runtime.
+  /// relied-upon structured-output contract, so a structured-output request is refused at
+  /// configuration rather than silently degraded and the cap degrades to a local reservation. A stop
+  /// string — which the Responses wire cannot express at all — is refused per request by the adapter.
   public static let openAIChatGPT = LLMProviderDescriptor(
     providerID: .openAIChatGPT,
     qualifiedPrefix: "openai-chatgpt/",
     egress: .managed(providerID: .openAIChatGPT, endpoint: chatGPTResponsesEndpoint),
     credentialMode: .managedOAuth,
     capabilities: LLMProviderCapabilities(
-      supportsTools: true,
-      usesStreamingWire: true,
       supportsStructuredOutput: false,
-      supportsStopStrings: false,
       outputTokenField: .omitted
     )
   )
@@ -140,10 +124,7 @@ extension LLMProviderDescriptor {
       egress: .configuredEndpoint(endpoint),
       credentialMode: .noneOrStaticBearer,
       capabilities: LLMProviderCapabilities(
-        supportsTools: true,
-        usesStreamingWire: false,
         supportsStructuredOutput: true,
-        supportsStopStrings: true,
         outputTokenField: .configured(AppConfig.EnvDefaults.maxTokensField)
       )
     )

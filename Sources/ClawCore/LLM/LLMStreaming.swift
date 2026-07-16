@@ -1,5 +1,3 @@
-import Synchronization
-
 // MARK: - Failures
 
 /// A provider failure paired with the one fact the runtime's accounting needs: whether the attempt
@@ -55,12 +53,15 @@ public struct LLMEventBufferLimits: Sendable, Equatable {
     self.reservedTerminalBytes = reservedTerminalBytes
   }
 
-  /// 5 MiB of deltas across at most 1,024 of them, and another 5 MiB reserved for the terminal — 4
-  /// MiB of visible text and tool arguments alongside 1 MiB of replay state.
+  /// 5 MiB of deltas across at most 1,024 of them, and a terminal reservation composed from the two
+  /// bounds a maximal reply is charged against — the visible-text-and-tool-argument budget plus the
+  /// replay-state cap — so raising either upstream bound widens the reservation with it instead of
+  /// silently leaving a whole reply unable to land.
   public static let providerDefault = LLMEventBufferLimits(
     maximumDeltaCount: 1024,
     maximumDeltaBytes: 5 * 1024 * 1024,
-    reservedTerminalBytes: 5 * 1024 * 1024
+    reservedTerminalBytes: LLMStreamLimits.maxAccumulatedContentBytes
+      + LLMReplayStateBounds.maximumStateBytes
   )
 }
 
@@ -89,7 +90,16 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     let channel = BoundedAsyncChannel<String>(capacity: limits.maximumDeltaBytes) { text in
       limits.deltaCharge(forTextBytes: text.utf8.count)
     }
-    let owner = LLMStreamOwner(channel: channel, limits: limits)
+    let owner = LLMStreamOwner(
+      channel: channel,
+      resolve: { reported, isCancelRequested in
+        limits.resolvedTermination(reported, isCancelRequested: isCancelRequested)
+      },
+      channelError: { terminal in
+        guard case .failed(let failure) = terminal else { return nil }
+        return failure
+      }
+    )
     // A task always runs its body, even when cancelled before it starts, so `finish` always lands
     // and a join can never wait on a producer that silently never reported.
     let producer = Task {
@@ -122,7 +132,7 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     AsyncIterator(
       base: channel.makeAsyncIterator(),
       owner: owner,
-      lease: LLMStreamAbandonmentLease(owner: owner)
+      lease: StreamAbandonmentLease { owner.cancel() }
     )
   }
 
@@ -132,7 +142,7 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     fileprivate var base: BoundedAsyncChannel<String>.Iterator
     fileprivate let owner: LLMStreamOwner
     /// Held, never read: dropping the iterator is what the lease is here to notice.
-    fileprivate let lease: LLMStreamAbandonmentLease
+    fileprivate let lease: StreamAbandonmentLease
     /// The terminal event sits outside the queue, so the queue running dry is not the end of the
     /// sequence. This latch is what makes it the end exactly once.
     fileprivate var isTerminalDelivered = false
@@ -143,9 +153,11 @@ public struct LLMEventStream: AsyncSequence, Sendable {
       }
       guard !isTerminalDelivered else { return nil }
       isTerminalDelivered = true
-      // Only a completed inference reserved one. A cancelled or failed stream ends without it, which
-      // is what keeps a truncated reply from reading as a whole one.
-      return owner.reservedTerminalEvent
+      // Only a completed inference reserved one — read off the outcome the producer committed before
+      // it closed the queue. A cancelled or failed stream ends without it, which is what keeps a
+      // truncated reply from reading as a whole one.
+      guard case .completed(let response) = owner.terminal else { return nil }
+      return .finished(response)
     }
   }
 }
@@ -213,146 +225,11 @@ extension LLMEventBufferLimits {
     }
     return total
   }
-}
-
-// MARK: - Stream ownership
-
-/// Cancels the stream when the iteration that held it is dropped. A consumer that breaks out of a
-/// `for try await` and walks away would otherwise leave the producer parked on a full queue forever.
-/// It is a backstop against that leak, not a substitute for the join: the lease stops the work, and
-/// only the join reports what the work did — which is why an abandoning caller can still
-/// `awaitTermination()` afterwards and read `.cancelled`.
-///
-/// Dropping an iterator that already read to the end cancels a producer that has finished, which
-/// does nothing.
-private final class LLMStreamAbandonmentLease: Sendable {
-  private let owner: LLMStreamOwner
-
-  init(owner: LLMStreamOwner) {
-    self.owner = owner
-  }
-
-  deinit {
-    owner.cancel()
-  }
-}
-
-/// The one piece of shared state behind a stream: the producer task, the terminal outcome, the event
-/// the outcome reserved, and whoever is waiting for it.
-///
-/// Locked rather than an actor because `cancel()` must be synchronous — a `deinit` cannot `await` —
-/// and because a continuation has to be resumed outside the lock, which actor isolation could not
-/// enforce across an `await`.
-private final class LLMStreamOwner: Sendable {
-  private struct State {
-    var producer: Task<Void, Never>?
-    var terminal: LLMStreamTermination?
-    /// Filled by the terminal commit, in the same lock operation that caches `terminal`, so the
-    /// event is readable before the queue closes and can never arrive after it.
-    var terminalEvent: StreamEvent?
-    var isCancelRequested = false
-    var joiners: [CheckedContinuation<LLMStreamTermination, Never>] = []
-  }
-
-  /// The outcome of the one lock operation that decides a stream's fate: what it settled on, and who
-  /// must be told once the queue has been closed to match.
-  fileprivate struct Commit {
-    let terminal: LLMStreamTermination
-    let joiners: [CheckedContinuation<LLMStreamTermination, Never>]
-  }
-
-  private let state = Mutex(State())
-  private let channel: BoundedAsyncChannel<String>
-  private let limits: LLMEventBufferLimits
-
-  init(channel: BoundedAsyncChannel<String>, limits: LLMEventBufferLimits) {
-    self.channel = channel
-    self.limits = limits
-  }
-
-  var parkedJoinerCount: Int {
-    state.withLock { current in
-      current.joiners.count
-    }
-  }
-
-  var reservedTerminalEvent: StreamEvent? {
-    state.withLock { current in
-      current.terminalEvent
-    }
-  }
-
-  func attach(producer: Task<Void, Never>) {
-    state.withLock { current in
-      current.producer = producer
-    }
-  }
-
-  /// Latches the request, stops the producer, and closes the queue. Closing as well as cancelling: a
-  /// producer parked on a full queue unwinds on whichever of the two reaches it first, and neither
-  /// alone covers a producer that has not yet observed the other.
-  ///
-  /// It decides no outcome and releases no joiner — that is the producer's job, and doing it here
-  /// would report the inference stopped while it was still unwinding.
-  func cancel() {
-    let producer = state.withLock { current -> Task<Void, Never>? in
-      current.isCancelRequested = true
-      return current.producer
-    }
-    producer?.cancel()
-    channel.finish()
-  }
-
-  /// Runs once, as the producer's last act, so a resumed joiner knows the inference has stopped and
-  /// every transfer nested inside it with it.
-  func finish(reporting termination: LLMStreamTermination) {
-    guard let commit = commit(termination) else { return }
-    // Caching before closing is what resolves the terminal-versus-cancellation race: a consumer that
-    // sees the queue end can always read the reserved event that a completed commit had already put
-    // there, so the outcome — never the timing of the last event — decides what it saw.
-    close(for: commit.terminal)
-    for joiner in commit.joiners {
-      joiner.resume(returning: commit.terminal)
-    }
-  }
-
-  /// Deliberately without a cancellation handler: a join reports what the producer did, and a
-  /// joiner's own cancellation must not fabricate an answer before the producer has stopped.
-  func awaitTermination() async -> LLMStreamTermination {
-    await withCheckedContinuation { continuation in
-      park(continuation)
-    }
-  }
-}
-
-// MARK: - Terminal commit
-
-private extension LLMStreamOwner {
-  /// The one lock operation that linearizes a stream's terminal. It reserves the event, caches the
-  /// outcome, and hands back the joiners to resume once the queue has been closed to match. A
-  /// cancellation that took the lock first wins here; one that takes it afterwards finds the outcome
-  /// latched and changes nothing.
-  ///
-  /// Returns nil for a second report, which is how the first outcome stays the only one.
-  func commit(_ termination: LLMStreamTermination) -> Commit? {
-    state.withLock { current -> Commit? in
-      guard current.terminal == nil else { return nil }
-      let decided = resolve(termination, isCancelRequested: current.isCancelRequested)
-      if case .completed(let response) = decided {
-        current.terminalEvent = Self.terminalEvent(for: response)
-      }
-      current.terminal = decided
-      let parked = current.joiners
-      current.joiners.removeAll()
-      return Commit(terminal: decided, joiners: parked)
-    }
-  }
 
   /// Settles what the producer reported against what the holder asked for and what the reservation
-  /// can hold.
-  ///
-  /// Reads only immutable configuration, which is what lets `commit` call it with the lock held.
-  func resolve(
+  /// can hold. Reads only immutable configuration, which is what lets the owner run it under its
+  /// commit lock.
+  func resolvedTermination(
     _ termination: LLMStreamTermination,
     isCancelRequested: Bool
   ) -> LLMStreamTermination {
@@ -365,7 +242,7 @@ private extension LLMStreamOwner {
     if isCancelRequested {
       return .cancelled(.mayHaveStarted(observing: observedTokens))
     }
-    guard limits.terminalCharge(for: response) <= limits.reservedTerminalBytes else {
+    guard terminalCharge(for: response) <= reservedTerminalBytes else {
       return .failed(
         ProviderFailure(
           // Names the reservation and nothing else: the reply that overran it is the very value
@@ -373,7 +250,7 @@ private extension LLMStreamOwner {
           cause: .terminal(
             status: nil,
             message:
-              "streamed reply exceeded the \(limits.reservedTerminalBytes)-byte terminal reservation"
+              "streamed reply exceeded the \(reservedTerminalBytes)-byte terminal reservation"
           ),
           accounting: .mayHaveStarted(observing: observedTokens)
         )
@@ -381,34 +258,12 @@ private extension LLMStreamOwner {
     }
     return termination
   }
-
-  static func terminalEvent(for response: ChatResponse) -> StreamEvent {
-    .finished(response)
-  }
-
-  func close(for terminal: LLMStreamTermination) {
-    switch terminal {
-    case .completed, .cancelled:
-      channel.finish()
-    case .failed(let failure):
-      channel.finish(throwing: failure)
-    }
-  }
 }
 
-// MARK: - Joining
+// MARK: - Stream ownership
 
-private extension LLMStreamOwner {
-  /// Resumes outside the lock: resuming under it would run the woken task's next step on this
-  /// thread while the lock is still held.
-  func park(_ continuation: CheckedContinuation<LLMStreamTermination, Never>) {
-    let cached = state.withLock { current -> LLMStreamTermination? in
-      if let terminal = current.terminal { return terminal }
-      current.joiners.append(continuation)
-      return nil
-    }
-    if let cached {
-      continuation.resume(returning: cached)
-    }
-  }
-}
+/// An inference stream's owner: the shared termination machinery, settling a completed reply against
+/// a pending cancellation and the terminal reservation before it commits, and closing the queue with
+/// the `ProviderFailure` a `.failed` outcome carries. The reserved terminal event is derived from the
+/// committed outcome rather than stored, so it is readable before the queue closes and never after.
+private typealias LLMStreamOwner = StreamTerminationOwner<String, LLMStreamTermination>

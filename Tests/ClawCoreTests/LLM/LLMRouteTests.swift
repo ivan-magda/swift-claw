@@ -96,10 +96,7 @@ private enum ProbeFailure: Error, Equatable {
     let capabilities = route.descriptor.capabilities
     #expect(route.descriptor.qualifiedPrefix == "openai-chatgpt/")
     #expect(route.descriptor.credentialMode == .managedOAuth)
-    #expect(capabilities.supportsTools)
-    #expect(capabilities.usesStreamingWire)
     #expect(capabilities.supportsStructuredOutput == false)
-    #expect(capabilities.supportsStopStrings == false)
     #expect(capabilities.outputTokenField == .omitted)
   }
 
@@ -279,10 +276,7 @@ private enum ProbeFailure: Error, Equatable {
     let capabilities = route.descriptor.capabilities
     #expect(route.descriptor.qualifiedPrefix == nil)
     #expect(route.descriptor.credentialMode == .noneOrStaticBearer)
-    #expect(capabilities.supportsTools)
-    #expect(capabilities.usesStreamingWire == false)
     #expect(capabilities.supportsStructuredOutput)
-    #expect(capabilities.supportsStopStrings)
     #expect(capabilities.outputTokenField == .configured(.maxCompletionTokens))
   }
 

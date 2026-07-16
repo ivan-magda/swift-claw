@@ -37,7 +37,7 @@ extension RunStoreGRDB {
       }
 
       // No usage insert here — the suspending round's `provider_usage` row was already written
-      // mid-loop by `AgentRuntime`; re-inserting would double-debit the budget and resume carry-over.
+      // mid-loop by `AgentRuntime`, so the commit has nothing left to persist.
 
       try Self.enqueuePromptChunks(
         db,

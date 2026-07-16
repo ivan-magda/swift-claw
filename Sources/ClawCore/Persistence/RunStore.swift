@@ -36,9 +36,8 @@ public struct SuspendedTurnCommit: Sendable {
 
   public let expiresTs: Date  // now + approval_expiry
   // NOTE: no `usage` field. The suspending round-trip's `provider_usage` row is already written
-  // mid-loop by `AgentRuntime` before dispatch (crash-safe); re-inserting it here would double the
-  // day budget AND the resume carry-over, since `provider_usage` has no dedup key and both
-  // totals SUM every row. The commit persists the checkpoint only, never usage.
+  // mid-loop by `AgentRuntime` before dispatch (crash-safe), so the commit has nothing left to
+  // persist: it carries the checkpoint only, never usage.
 
   public init(
     assistantContent: String,
