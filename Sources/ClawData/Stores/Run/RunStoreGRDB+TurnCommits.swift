@@ -224,15 +224,47 @@ private extension RunStoreGRDB {
     )
   }
 
-  /// Writes one exchange as rows: the assistant anchor (tool_calls JSON, trusted, carrying the
-  /// state the proposal was minted with) then each observation (raw content, untrusted,
-  /// tool_call_id). Observations get no state — the round produced one, and it belongs to the
-  /// proposal that made it, not to the untrusted output it fetched.
+  /// Writes one completed exchange as rows by encoding its tool calls and handing the anchor plus
+  /// observations to the shared write sequence. Observations get no state — the round produced one,
+  /// and it belongs to the proposal that made it, not to the untrusted output it fetched.
   static func insertExchangeRows(
     _ db: Database,
     sessionId: Int64,
     runId: Int64,
     exchange: ToolExchange,
+    now: Date
+  ) throws {
+    try insertAnchoredObservationRows(
+      db,
+      sessionId: sessionId,
+      runId: runId,
+      assistantContent: exchange.assistantContent,
+      toolCallsJSON: ToolCallCoding.encode(exchange.toolCalls),
+      providerState: exchange.providerState,
+      observations: exchange.observations.map { observation in
+        (toolCallId: observation.callId, content: observation.content)
+      },
+      now: now
+    )
+  }
+}
+
+// MARK: - Shared Anchor-Plus-Observations Write Sequence
+
+extension RunStoreGRDB {
+  /// The one anchor-plus-observations write sequence: the assistant anchor (tool_calls JSON,
+  /// trusted, carrying the state the proposal was minted with) then each observation (raw content,
+  /// untrusted, tool_call_id, no state). Both the completed-exchange commit and the suspend park
+  /// write through here, so the column lists and their ordering have a single home and cannot drift
+  /// between the two paths.
+  static func insertAnchoredObservationRows(  // swiftlint:disable:this function_parameter_count
+    _ db: Database,
+    sessionId: Int64,
+    runId: Int64,
+    assistantContent: String,
+    toolCallsJSON: String?,
+    providerState: ProviderExchangeState?,
+    observations: [(toolCallId: String, content: String)],
     now: Date
   ) throws {
     try MessageRowInsert.execute(
@@ -242,14 +274,14 @@ private extension RunStoreGRDB {
         sessionId,
         runId,
         MessageRole.assistant.rawValue,
-        exchange.assistantContent,
+        assistantContent,
         Provenance.trusted.rawValue,
         now,
-        ToolCallCoding.encode(exchange.toolCalls),
+        toolCallsJSON,
       ],
-      providerState: exchange.providerState
+      providerState: providerState
     )
-    for observation in exchange.observations {
+    for observation in observations {
       try MessageRowInsert.execute(
         db,
         columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_call_id"],
@@ -260,7 +292,7 @@ private extension RunStoreGRDB {
           observation.content,
           Provenance.untrusted.rawValue,
           now,
-          observation.callId,
+          observation.toolCallId,
         ],
         providerState: nil
       )

@@ -13,8 +13,9 @@ import GRDB
 enum ProviderStateCoding {
   /// Per-message replay-state ceiling. State past it is refused at load rather than replayed: a
   /// payload this large is corruption or a foreign writer, and either way the anchor is more useful
-  /// without it than the session is broken by it.
-  static let maxPayloadBytes = 1 << 20
+  /// without it than the session is broken by it. Shares the write-side cap so a change to one bound
+  /// cannot silently strand states the other still admits.
+  static let maxPayloadBytes = LLMReplayStateBounds.maximumStateBytes
 
   static let issuerColumn = "provider_state_issuer"
   static let payloadColumn = "provider_state"

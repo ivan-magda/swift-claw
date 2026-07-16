@@ -368,54 +368,22 @@ private extension RunStoreGRDB {
     commit: SuspendedTurnCommit,
     now: Date
   ) throws -> (approvalId: Int64, observationMessageId: Int64) {
-    try MessageRowInsert.execute(
+    // Anchor + completed observations + the PLACEHOLDER, in the one write sequence the
+    // exchange-commit path shares, so the column lists cannot drift between them. The PLACEHOLDER
+    // goes last: a real `tool` row satisfying the anchor's expected tool_call_id so `HistoryHygiene`
+    // keeps the exchange while parked (resolution UPDATEs it in place; v4 FTS triggers cover the
+    // edit), and being last leaves `lastInsertedRowID` pointing at it.
+    try insertAnchoredObservationRows(
       db,
-      columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_calls"],
-      values: [
-        sessionId,
-        runId,
-        MessageRole.assistant.rawValue,
-        commit.assistantContent,
-        Provenance.trusted.rawValue,
-        now,
-        commit.toolCallsJSON,
-      ],
-      providerState: commit.providerState
-    )
-
-    for observation in commit.completedObservations {
-      try MessageRowInsert.execute(
-        db,
-        columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_call_id"],
-        values: [
-          sessionId,
-          runId,
-          MessageRole.tool.rawValue,
-          observation.content,
-          Provenance.untrusted.rawValue,
-          now,
-          observation.toolCallId,
-        ],
-        providerState: nil
-      )
-    }
-    // The PLACEHOLDER pins rowid adjacency: a real `tool` row satisfying the anchor's expected
-    // tool_call_id so `HistoryHygiene` keeps the exchange while parked. Resolution UPDATEs
-    // it in place (v4 FTS triggers cover the edit).
-    try db.execute(
-      sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        sessionId,
-        runId,
-        MessageRole.tool.rawValue,
-        placeholderObservationContent,
-        Provenance.untrusted.rawValue,
-        now,
-        commit.pending.toolCallId,
-      ]
+      sessionId: sessionId,
+      runId: runId,
+      assistantContent: commit.assistantContent,
+      toolCallsJSON: commit.toolCallsJSON,
+      providerState: commit.providerState,
+      observations: commit.completedObservations.map { observation in
+        (toolCallId: observation.toolCallId, content: observation.content)
+      } + [(toolCallId: commit.pending.toolCallId, content: placeholderObservationContent)],
+      now: now
     )
     let observationMessageId = db.lastInsertedRowID
 
