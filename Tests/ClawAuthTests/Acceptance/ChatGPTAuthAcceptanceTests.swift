@@ -206,10 +206,14 @@ import Testing
       // when
       let result = workflow.status()
 
-      // then — read-only: no lock taken, no wire call, no token text
+      // then — read-only: no lock taken, no wire call, and real status output that names the
+      // provider and the seeded credential — so the token-absence check below is over a real
+      // transcript, not a vacuously empty one.
       #expect(result.exit == .success)
       #expect(world.log.recorded.contains(.lockAcquired) == false)
       #expect(await http.requestedURLs.isEmpty)
+      #expect(result.transcript.contains("provider: openai-chatgpt"))
+      #expect(result.transcript.contains("credential: present"))
       #expect(
         result.transcript.contains(AcceptanceAuthFixture.priorCredential.accessToken) == false
       )

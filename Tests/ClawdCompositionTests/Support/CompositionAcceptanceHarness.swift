@@ -174,6 +174,14 @@ enum CompositionAcceptance {
 
   static let okHead = HTTPStreamHead(statusCode: 200, headers: [:])
 
+  /// A clean head rejection naming poisoned replay state — the trigger for a state-free retry that
+  /// marks a fresh epoch. The body is a plain diagnostic (not an SSE frame), as a non-2xx head sends.
+  static let invalidEncryptedContentHead = HTTPStreamHead(statusCode: 400, headers: [:])
+
+  static func invalidEncryptedContentBody() -> [Data] {
+    [Data(#"{"error":{"code":"invalid_encrypted_content","message":"bad state"}}"#.utf8)]
+  }
+
   /// A tool-round reply: visible text, encrypted reasoning replay material, and one function call.
   static func toolRound(callID: String, tokens: (input: Int, output: Int)) -> [Data] {
     [

@@ -95,7 +95,7 @@ import Testing
   /// The load-bearing replay proof: a tool round mints provider state, it is committed to and reloaded
   /// from **real GRDB**, and the terminal round replays it to the same issuer. The replayed reasoning
   /// input item's exact bytes are pinned so any future shape change (e.g. the `summary` field) is a
-  /// visible diff, and the two rounds carry two distinct call IDs.
+  /// visible diff, and the final assistant reply carries the same derived replay identity.
   @Test func multiTurnReplayRoundTripThroughGRDBWithByteGolden() async throws {
     // given — a real session and a RUNNING run
     let stores = try CompositionAcceptance.makeStores()
@@ -116,8 +116,10 @@ import Testing
     let runId = try #require(claim.runId)
     _ = try stores.runs.pickUp(runId: runId, policyVersion: nil, now: now)
 
+    // A fixed key for turn 1's usage row: this test keys accounting rows, it does not exercise the
+    // live per-round ID generator. That the generator mints distinct, lowercase, non-empty IDs is
+    // proven by `LLMAccountingTests.theLiveGeneratorMintsDistinctLowercaseIdentifiers`.
     let firstCallID = ProviderCallID(rawValue: "acc-call-1")
-    let secondCallID = ProviderCallID(rawValue: "acc-call-2")
 
     // given — one composed provider drives both rounds; turn 1 mints replay state
     let http = AcceptanceStreamingHTTP(streamScripts: [
@@ -202,8 +204,175 @@ import Testing
     #expect(secondBody.contains("Let me check."))  // the replayed assistant message text
     #expect(secondReply.content == "It is noon.")
 
-    // then — two distinct call IDs across the rounds
-    #expect(firstCallID != secondCallID)
+    // then — the final assistant reply is stamped too, with the identity this history derived: no
+    // recovery here, so its issuer is the reloaded state's epoch, not a fresh one.
+    #expect(secondReply.providerState?.issuer == reloadedState.issuer)
+  }
+
+  // MARK: - Invalid-state epoch recovery surviving restart
+
+  /// The Task-20 recovery, proven to survive a restart. A turn whose replayed state the backend
+  /// rejects as `invalid_encrypted_content` recovers state-free into a NEW epoch and stamps the reply
+  /// with it (even the empty payload of a reasoning-free terminal round); that epoch is committed to
+  /// **real GRDB**. A simulated restart — a fresh composed provider/codec reloading the same history —
+  /// derives the new epoch from the newest compatible state and never replays the older poisoned
+  /// material again. Without the empty stamp surviving, the newest compatible state on reload would be
+  /// the poisoned one and the recovery would be undone; this pins that it is not.
+  @Test func invalidStateEpochRecoverySurvivesRestart() async throws {
+    // given — a real session and a RUNNING run
+    let stores = try CompositionAcceptance.makeStores()
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let chatId: Int64 = 5150
+    let claim = try stores.sessions.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 1,
+        sessionKey: SessionKey.telegramDM(chatId: chatId),
+        chatId: chatId,
+        userId: chatId,
+        text: "what time is it?",
+        isEdited: false,
+        ts: now
+      )
+    )
+    let sessionId = try #require(claim.sessionId)
+    let firstRunId = try #require(claim.runId)
+    _ = try stores.runs.pickUp(runId: firstRunId, policyVersion: nil, now: now)
+
+    // given — turn 1 mints replay state carrying the reasoning ENC-A under an initial epoch; turn 2
+    // then replays it, the backend rejects it as poisoned, and the state-free recovery succeeds.
+    let firstHTTP = AcceptanceStreamingHTTP(streamScripts: [
+      .init(
+        head: CompositionAcceptance.okHead,
+        chunks: CompositionAcceptance.toolRound(callID: "call_a", tokens: (7, 3))
+      ),
+      .init(
+        head: CompositionAcceptance.invalidEncryptedContentHead,
+        chunks: CompositionAcceptance.invalidEncryptedContentBody()
+      ),
+      .init(
+        head: CompositionAcceptance.okHead,
+        chunks: CompositionAcceptance.terminalRound(tokens: (9, 4))
+      ),
+    ])
+    let firstStack = try CompositionAcceptance.makeStack(
+      http: firstHTTP,
+      store: FreshCredentialStore()
+    )
+
+    // when — turn 1, then commit its assistant anchor + poisoned-epoch state
+    let firstReply = try await firstStack.provider.complete(
+      request: ChatRequest(
+        model: firstStack.wireModel,
+        messages: [ChatMessage(role: .user, content: "what time is it?")],
+        maxOutputTokens: 256
+      )
+    )
+    let poisonedState = try #require(firstReply.providerState)
+    let firstCommit = try commitAssistantAnchor(
+      stores,
+      runId: firstRunId,
+      sessionId: sessionId,
+      chatId: chatId,
+      content: firstReply.content,
+      state: poisonedState,
+      callID: "epoch-r1",
+      now: now
+    )
+    #expect(firstCommit == .committed)
+
+    // when — turn 2 replays the poisoned anchor; the backend rejects it and the provider recovers
+    let poisonedAnchor = try #require(
+      try stores.sessions
+        .loadContext(sessionId: sessionId, throughMessageId: .max, limit: 50)
+        .first { $0.role == .assistant }
+    )
+    let poisonedAnchorState = try #require(poisonedAnchor.providerState)
+    let recoveredReply = try await firstStack.provider.complete(
+      request: ChatRequest(
+        model: firstStack.wireModel,
+        messages: [
+          ChatMessage(role: .user, content: "what time is it?"),
+          ChatMessage(
+            role: .assistant,
+            content: poisonedAnchor.content,
+            providerState: poisonedAnchorState
+          ),
+          ChatMessage(role: .user, content: "and the date?"),
+        ],
+        maxOutputTokens: 256
+      )
+    )
+
+    // then — recovery ran (reject then state-free retry), stamped a NEW epoch, and did not resend
+    // the poisoned reasoning on the retry
+    let recoveredState = try #require(recoveredReply.providerState)
+    #expect(recoveredState.issuer != poisonedState.issuer)
+    #expect(await firstHTTP.recorded.count == 3)
+    let retryBody = try #require(await firstHTTP.recorded.last?.body).utf8String
+    #expect(retryBody.contains("ENC-A") == false)
+
+    // the recovered epoch is the record a restart must derive from, even with an empty payload —
+    // committed on its own run, as each turn is in production
+    let secondClaim = try stores.sessions.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 2,
+        sessionKey: SessionKey.telegramDM(chatId: chatId),
+        chatId: chatId,
+        userId: chatId,
+        text: "and the date?",
+        isEdited: false,
+        ts: now
+      )
+    )
+    let secondRunId = try #require(secondClaim.runId)
+    _ = try stores.runs.pickUp(runId: secondRunId, policyVersion: nil, now: now)
+    let recoveredCommit = try commitAssistantAnchor(
+      stores,
+      runId: secondRunId,
+      sessionId: sessionId,
+      chatId: chatId,
+      content: recoveredReply.content,
+      state: recoveredState,
+      callID: "epoch-r2",
+      now: now
+    )
+    #expect(recoveredCommit == .committed)
+
+    // when — RESTART: a fresh composed provider/codec over the same GRDB history threads the whole
+    // conversation — both the poisoned anchor and the recovered one — into the next turn
+    let restartHTTP = AcceptanceStreamingHTTP(streamScripts: [
+      .init(
+        head: CompositionAcceptance.okHead,
+        chunks: CompositionAcceptance.terminalRound(tokens: (2, 1))
+      )
+    ])
+    let restartStack = try CompositionAcceptance.makeStack(
+      http: restartHTTP,
+      store: FreshCredentialStore()
+    )
+    let anchors = try stores.sessions
+      .loadContext(sessionId: sessionId, throughMessageId: .max, limit: 50)
+      .filter { $0.role == .assistant }
+    #expect(anchors.count == 2)  // both epochs are on disk
+
+    let threaded =
+      [ChatMessage(role: .user, content: "what time is it?")]
+      + anchors.map { anchor in
+        ChatMessage(role: .assistant, content: anchor.content, providerState: anchor.providerState)
+      }
+      + [ChatMessage(role: .user, content: "still there?")]
+    _ = try await restartStack.provider.complete(
+      request: ChatRequest(
+        model: restartStack.wireModel,
+        messages: threaded,
+        maxOutputTokens: 256
+      )
+    )
+
+    // then — the restart derived the recovered epoch from the newest compatible state and never
+    // reintroduced the older poisoned material
+    let restartBody = try #require(await restartHTTP.recorded.last?.body).utf8String
+    #expect(restartBody.contains("ENC-A") == false)
   }
 
   // MARK: - Doctor (network-free llm.auth row, end to end)
@@ -260,8 +429,10 @@ import Testing
 
   // MARK: - Included-plan accounting
 
-  /// A subscription call resolves to a confirmed zero-dollar `included_plan` cost, and estimated
-  /// tokens keep that zero while flipping only the combined estimation flag.
+  /// A subscription call resolves to a confirmed zero-dollar `included_plan` cost through the real
+  /// resolver. That an estimated-token row keeps that zero while flipping only the estimation flag is
+  /// covered by `LLMAccountingTests.missingCountsRecordAnEstimatedIncludedPlanRowWhoseZeroStaysConfirmed`;
+  /// asserting fields of a locally-built `ProviderUsage` here would prove only the initializer.
   @Test func includedPlanResolvesConfirmedZeroUSD() {
     // given
     let resolver = CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_002)
@@ -279,25 +450,6 @@ import Testing
     #expect(confirmed.costUSD == 0)
     #expect(confirmed.source == .includedPlan)
     #expect(confirmed.isEstimated == false)
-
-    // when — the row combines cost source with token estimation; estimated tokens still cost zero
-    let estimatedRow = ProviderUsage(
-      providerCallID: ProviderCallID(rawValue: "acc-est"),
-      runId: nil,
-      sessionId: 1,
-      model: CompositionAcceptance.qualifiedModel,
-      promptTokens: 100,
-      completionTokens: 40,
-      costUSD: confirmed.costUSD,
-      costSource: confirmed.source,
-      isEstimated: true,
-      ts: Date()
-    )
-
-    // then
-    #expect(estimatedRow.costUSD == 0)
-    #expect(estimatedRow.costSource == .includedPlan)
-    #expect(estimatedRow.isEstimated)
   }
 
   /// Two tool-loop rounds each record usage keyed by a distinct `ProviderCallID`; replaying a commit
@@ -374,6 +526,48 @@ import Testing
     report.add(key: "config", value: "OK", group: .config)
     report.add(key: "llm.auth", value: result.value, ok: result.ok, group: .llmRuns)
     return (report.renderText(), report.ok)
+  }
+
+  /// Commits one assistant anchor carrying `state` and a zero-cost included-plan usage row keyed by
+  /// `callID` — the real GRDB round-trip an epoch must survive.
+  private func commitAssistantAnchor(
+    _ stores: (
+      writer: any DatabaseWriter,
+      sessions: SessionMessageStoreGRDB,
+      runs: RunStoreGRDB,
+      usage: UsageStoreGRDB
+    ),
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    content: String,
+    state: ProviderExchangeState,
+    callID: String,
+    now: Date
+  ) throws -> RunCommitResult {
+    try stores.runs.commitAssistantTurn(
+      AssistantTurn(
+        runId: runId,
+        sessionId: sessionId,
+        chatId: chatId,
+        content: content,
+        usage: ProviderUsage(
+          providerCallID: ProviderCallID(rawValue: callID),
+          runId: runId,
+          sessionId: sessionId,
+          model: CompositionAcceptance.qualifiedModel,
+          promptTokens: 0,
+          completionTokens: 0,
+          costUSD: 0,
+          costSource: .includedPlan,
+          isEstimated: false,
+          ts: now
+        ),
+        chunks: [],
+        providerState: state
+      ),
+      now: now
+    )
   }
 
   private func readUsageRowCount(_ writer: any DatabaseWriter) throws -> Int {
