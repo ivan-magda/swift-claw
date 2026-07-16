@@ -18,6 +18,18 @@ struct ChatGPTResponsesRequestEncoder: Sendable {
   static let encryptedReasoningInclude = "reasoning.encrypted_content"
 
   func encode(request: ChatRequest) throws -> Data {
+    try encode(request: request, replaying: nil, includePriorState: false)
+  }
+
+  /// Encodes a request that may carry replayed reasoning continuity. `selection` supplies, per
+  /// history index, the reasoning and assistant-message material that stands in for the synthesized
+  /// assistant text; `includePriorState` is false on the single state-free recovery attempt, where
+  /// the poisoned replay state is dropped and only synthesized text is sent.
+  func encode(
+    request: ChatRequest,
+    replaying selection: ChatGPTReplaySelection?,
+    includePriorState: Bool
+  ) throws -> Data {
     // Dropping stop strings quietly would run the model against a contract the caller did not ask
     // for; the studied Codex route provides none to honor, so the request is refused whole.
     guard request.stop == nil else {
@@ -37,7 +49,11 @@ struct ChatGPTResponsesRequestEncoder: Sendable {
     let body = ChatGPTWireRequest(
       model: Self.unqualifiedModel(request.model),
       instructions: instructions,
-      input: request.messages.flatMap(Self.inputItems),
+      input: Self.inputItems(
+        for: request.messages,
+        replaying: selection,
+        includePriorState: includePriorState
+      ),
       store: false,
       stream: true,
       include: [Self.encryptedReasoningInclude],
@@ -49,6 +65,16 @@ struct ChatGPTResponsesRequestEncoder: Sendable {
       throw Self.unencodableBody
     }
     return Data(json.utf8)
+  }
+}
+
+// MARK: - Model Naming
+
+extension ChatGPTResponsesRequestEncoder {
+  /// The wire model an owner's qualified reference resolves to, exposed so the provider derives the
+  /// same value it stamps replay identities with rather than re-deriving the prefix rule.
+  static func wireModel(for model: String) -> String {
+    unqualifiedModel(model)
   }
 }
 
@@ -81,6 +107,49 @@ private extension ChatGPTResponsesRequestEncoder {
         message.content
       }
       .joined(separator: "\n\n")
+  }
+
+  /// Walks the history in its own order, emitting each turn's replayed reasoning material where the
+  /// selection has some and synthesizing text otherwise. The selection keys turns by index, so the
+  /// chronological order is this walk's doing — the codec only says which indices may replay.
+  static func inputItems(
+    for messages: [ChatMessage],
+    replaying selection: ChatGPTReplaySelection?,
+    includePriorState: Bool
+  ) -> [ChatGPTWireInputItem] {
+    messages.enumerated().flatMap { index, message -> [ChatGPTWireInputItem] in
+      guard includePriorState, let turn = selection?.turns[index] else {
+        return inputItems(for: message)
+      }
+      return replayItems(for: turn)
+    }
+  }
+
+  /// A replayed assistant turn as input items: its reasoning material first, then the assistant
+  /// message the backend stated, then the calls — read from the message rather than from the state,
+  /// so state dropped for damage or budget can never take a tool proposal down with it.
+  static func replayItems(for turn: ChatGPTReplayTurn) -> [ChatGPTWireInputItem] {
+    var items: [ChatGPTWireInputItem] = []
+    for reasoning in turn.reasoning {
+      items.append(
+        .reasoning(encryptedContent: reasoning.encryptedContent, summary: reasoning.summary)
+      )
+    }
+    for assistant in turn.assistantMessages {
+      items.append(
+        .assistantMessage(
+          role: assistant.role,
+          status: assistant.status,
+          outputText: assistant.outputText
+        )
+      )
+    }
+    for call in turn.toolCalls {
+      items.append(
+        .functionCall(callID: call.id, name: call.name, arguments: call.argumentsJSON)
+      )
+    }
+    return items
   }
 
   static func inputItems(for message: ChatMessage) -> [ChatGPTWireInputItem] {
@@ -214,6 +283,12 @@ enum ChatGPTWireInputItem: Encodable {
   case assistantText(String)
   case functionCall(callID: String, name: String, arguments: String)
   case functionCallOutput(callID: String, output: String)
+  /// Replayed reasoning continuity: the opaque `encrypted_content` the backend minted and its
+  /// normalized summary, passed back so a `store: false` turn stays coherent with the one before it.
+  case reasoning(encryptedContent: String, summary: [String])
+  /// A replayed assistant message, carrying the status and every output-text part the backend
+  /// stated rather than a single reconstructed string.
+  case assistantMessage(role: String, status: String, outputText: [String])
 
   private enum CodingKeys: String, CodingKey {
     case type
@@ -224,6 +299,8 @@ enum ChatGPTWireInputItem: Encodable {
     case name
     case arguments
     case output
+    case encryptedContent = "encrypted_content"
+    case summary
   }
 
   func encode(to encoder: any Encoder) throws {
@@ -250,6 +327,20 @@ enum ChatGPTWireInputItem: Encodable {
       try container.encode("function_call_output", forKey: .type)
       try container.encode(callID, forKey: .callID)
       try container.encode(output, forKey: .output)
+    case .reasoning(let encryptedContent, let summary):
+      try container.encode("reasoning", forKey: .type)
+      try container.encode(encryptedContent, forKey: .encryptedContent)
+      try container.encode(summary, forKey: .summary)
+    case .assistantMessage(let role, let status, let outputText):
+      try container.encode("message", forKey: .type)
+      try container.encode(role, forKey: .role)
+      try container.encode(status, forKey: .status)
+      try container.encode(
+        outputText.map { text in
+          ChatGPTWireContent(type: "output_text", text: text)
+        },
+        forKey: .content
+      )
     }
   }
 }

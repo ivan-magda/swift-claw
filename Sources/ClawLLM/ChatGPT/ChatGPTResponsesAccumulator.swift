@@ -242,6 +242,12 @@ private extension ChatGPTResponsesAccumulator {
     guard existing.retainsText else {
       return nil
     }
+    // Once the item's done has arrived its whole text is the source of truth, so a late delta cannot
+    // add to what the owner sees. Publishing it anyway would let a streamed draft transiently exceed
+    // the final answer, which excludes it. Drop it rather than buffer it.
+    guard existing.done == nil else {
+      return nil
+    }
     try update(index) { accumulated in
       accumulated.deltaText += text
     }
