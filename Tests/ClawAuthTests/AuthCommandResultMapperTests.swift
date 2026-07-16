@@ -89,6 +89,32 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
     #expect(result.events.map(\.text).joined(separator: "\n").contains("clawd secrets seal"))
   }
 
+  /// A seal cannot succeed until the owner supplies the token it would seal, so the guidance must not
+  /// hand them a first step that lands back on this same failure.
+  @Test func aMissingTokenIsToldToSupplyItRatherThanToSealNothing() throws {
+    // given
+    let missing = SecretStoreError.missingTelegramToken
+
+    // when
+    let rendered = AuthCommandResultMapper.runtimeSecretResult(for: missing)
+      .events.map(\.text).joined(separator: "\n")
+
+    // then
+    #expect(rendered.contains("Telegram bot token"))
+    // Supplying the token comes first and the seal second, because the reverse order is the circle:
+    // a seal run now would fail for exactly the reason being reported.
+    let supply = try #require(rendered.range(of: "environment"))
+    let seal = try #require(rendered.range(of: "clawd secrets seal"))
+    #expect(supply.lowerBound < seal.lowerBound)
+
+    // The pairing: a backend that is merely broken is still sent straight to the seal, so this is
+    // not passing by having dropped the guidance for everyone.
+    let broken = AuthCommandResultMapper.runtimeSecretResult(for: SecretStoreError.decryptionFailed)
+      .events.map(\.text).joined(separator: "\n")
+    #expect(broken.contains("clawd secrets seal"))
+    #expect(broken.contains("Telegram bot token") == false)
+  }
+
   @Test(arguments: [
     LLMCredentialStoreError.missingRuntimeKey,
     .insecureStorage,

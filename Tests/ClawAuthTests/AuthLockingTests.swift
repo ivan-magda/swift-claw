@@ -63,7 +63,7 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
 
       // then
       #expect(blocked.exit == .commandFailure)
-      #expect(blocked.transcript.lowercased().contains("stop"))
+      #expect(world.terminal.transcript.lowercased().contains("stop"))
       #expect(world.log.recorded.isEmpty)
       #expect(encryptedArtifacts(in: world) == [false, false, false])
 

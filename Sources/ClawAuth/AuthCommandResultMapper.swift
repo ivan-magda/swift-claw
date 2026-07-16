@@ -36,10 +36,13 @@ public enum AuthCommandExit: Sendable, Equatable {
 public struct AuthCommandResult: Sendable, Equatable {
   public let exit: AuthCommandExit
 
-  /// Everything the command wanted an owner to see, in order. Login has already streamed these
-  /// through its terminal by the time it returns, because a device code is only useful while the
-  /// window it belongs to is open; status and logout have not, because neither has anything to say
-  /// until it is done. Either way this is the whole transcript.
+  /// Everything the command still wants an owner to see, in order, and none of it shown yet — so a
+  /// renderer prints all of it, for every command, without asking which one it is holding.
+  ///
+  /// The invariant is what makes that safe, and it is why login returns nothing here. Login must
+  /// stream as it goes, because a device code an owner has not been shown is a code for a window
+  /// that will close before they see it; having already presented every line, it has none left to
+  /// hand over. Status and logout say nothing until they are done, so theirs is the whole report.
   public let events: [AuthPresentationEvent]
 
   public init(exit: AuthCommandExit, events: [AuthPresentationEvent]) {
@@ -88,8 +91,9 @@ public enum AuthCommandResultMapper {
   /// matters here: it would tell a supervisor to try again on a condition that will never fix
   /// itself.
   public static func runtimeSecretResult(for error: any Error) -> AuthCommandResult {
+    let named = error as? SecretStoreError
     let cause =
-      if let named = error as? SecretStoreError {
+      if let named {
         describe(named)
       } else {
         "the runtime secrets could not be prepared"
@@ -99,12 +103,7 @@ public enum AuthCommandResultMapper {
       exit: .secretLoadFailure,
       events: [
         .error("Login stopped before touching your credentials: \(cause)."),
-        .error(
-          """
-          Both \(SecretFile.key) and \(SecretFile.envelope) must be present and readable. \
-          Run `clawd secrets seal` to repair the encrypted secret backend, then log in again.
-          """
-        ),
+        .error(repair(for: named)),
       ]
     )
   }
@@ -139,6 +138,24 @@ public enum AuthCommandResultMapper {
 // MARK: - Wording
 
 private extension AuthCommandResultMapper {
+  /// What to actually do about it, which is not the same sentence for every cause. A seal is the
+  /// repair for an encrypted backend that is broken or half-written — but not for a missing bot
+  /// token, because there is nothing to seal until the owner supplies one, and telling them to seal
+  /// first would send them back to this same failure. The token is named by its role rather than by
+  /// its variable: which environment the daemon reads belongs to the concrete store, not here.
+  static func repair(for error: SecretStoreError?) -> String {
+    if error == .missingTelegramToken {
+      return """
+        Put the Telegram bot token in the daemon's environment first — there is nothing to seal \
+        without it — then run `clawd secrets seal` and log in again.
+        """
+    }
+    return """
+      Both \(SecretFile.key) and \(SecretFile.envelope) must be present and readable. \
+      Run `clawd secrets seal` to repair the encrypted secret backend, then log in again.
+      """
+  }
+
   static func describe(_ error: SecretStoreError) -> String {
     switch error {
     case .missingTelegramToken:

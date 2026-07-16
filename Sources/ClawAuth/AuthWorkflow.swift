@@ -1,6 +1,5 @@
 import ClawCore
 import Foundation
-import Synchronization
 
 // MARK: - Seams
 
@@ -455,38 +454,29 @@ private extension AuthWorkflow {
 
 // MARK: - Transcript
 
-/// Login's output, streamed as it happens and kept as it goes.
+/// Login's output, streamed as it happens.
 ///
-/// Both halves are load-bearing. Streaming is what makes the flow usable at all — an owner cannot
-/// approve a code they have not been shown, and a transcript printed after the poll loop would be a
-/// code for a window that has closed. Keeping is what makes it testable: one value carrying
-/// everything an owner saw is what lets "the device-auth ID never reaches a terminal" be a single
-/// assertion rather than a search.
-private final class AuthTranscript: Sendable {
+/// Streaming is what makes the flow usable at all: an owner cannot approve a code they have not been
+/// shown, and a transcript printed after the poll loop would be a code for a window that has closed.
+/// What this type adds over writing to the terminal directly is the ending — `finish` presents a
+/// result's events and hands back the exit alone, which is what keeps login's promise that nothing
+/// in `events` has been shown yet. A login that also returned what it had already printed would
+/// leave every renderer one `for` loop away from showing the owner each line twice.
+private struct AuthTranscript: Sendable {
   private let terminal: any AuthTerminal
-  private let recorded = Mutex<[AuthPresentationEvent]>([])
 
   init(terminal: any AuthTerminal) {
     self.terminal = terminal
   }
 
   func emit(_ events: [AuthPresentationEvent]) async {
-    recorded.withLock { written in
-      written.append(contentsOf: events)
-    }
     for event in events {
       await terminal.write(event)
     }
   }
 
-  /// Streams the ending and returns the whole transcript under its exit.
   func finish(_ result: AuthCommandResult) async -> AuthCommandResult {
     await emit(result.events)
-    return AuthCommandResult(
-      exit: result.exit,
-      events: recorded.withLock { written in
-        written
-      }
-    )
+    return AuthCommandResult(exit: result.exit, events: [])
   }
 }

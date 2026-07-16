@@ -340,11 +340,21 @@ func withAuthWorld<Value>(
   return try await body(&world)
 }
 
-/// The whole transcript as one string. Redaction claims are about everything an owner could see, so
-/// they are asserted against everything the command emitted rather than a line a test picked.
+/// The whole report as one string. Redaction claims are about everything an owner could see, so they
+/// are asserted against everything the command emitted rather than a line a test picked. Only status
+/// and logout answer through here: login has already presented its lines, and returns none.
 extension AuthCommandResult {
   var transcript: String {
     events.map(\.text).joined(separator: "\n")
+  }
+}
+
+/// Everything the owner actually saw, in order — which for login is the whole of it, since login
+/// streams rather than returns. The two spellings are deliberately the same word: a test asserts
+/// against whichever end the command in question presents through.
+extension RecordingTerminal {
+  var transcript: String {
+    written.map(\.text).joined(separator: "\n")
   }
 }
 
@@ -389,8 +399,31 @@ extension AuthCommandResult {
 
       // then
       #expect(result.exit == .success)
-      #expect(result.transcript.contains(AuthFixture.device.userCode))
-      #expect(result.transcript.contains(ChatGPTProviderMetadata.verificationURL))
+      #expect(world.terminal.transcript.contains(AuthFixture.device.userCode))
+      #expect(world.terminal.transcript.contains(ChatGPTProviderMetadata.verificationURL))
+    }
+  }
+
+  /// The contract every renderer leans on: nothing left in `events` has been shown. Login streams as
+  /// it goes, so by the time it returns it has nothing to hand over — which is what lets Task 18
+  /// print `events` for all three commands without printing login's transcript a second time.
+  @Test func loginReturnsNoEventsBecauseItHasAlreadyPresentedThemAll() async throws {
+    try await withAuthWorld("auth-login-streamed") { world in
+      // given
+      let workflow = world.workflow()
+
+      // when
+      let result = await workflow.login()
+
+      // then
+      #expect(result.exit == .success)
+      #expect(result.events.isEmpty)
+      // The pairing: empty because the owner has already seen every line, not because login went
+      // quiet. The terminal holds the whole ordered transcript.
+      #expect(world.terminal.written.isEmpty == false)
+      #expect(world.terminal.transcript.contains(AuthFixture.device.userCode))
+      #expect(world.terminal.transcript.contains("Logged in to"))
+      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4"))
     }
   }
 
@@ -406,11 +439,12 @@ extension AuthCommandResult {
       let result = await workflow.login()
 
       // then
-      #expect(result.transcript.contains(AuthFixture.deviceAuthID) == false)
-      #expect(result.transcript.contains(AuthFixture.accessToken) == false)
-      #expect(result.transcript.contains(AuthFixture.refreshToken) == false)
+      #expect(result.exit == .success)
+      #expect(world.terminal.transcript.contains(AuthFixture.deviceAuthID) == false)
+      #expect(world.terminal.transcript.contains(AuthFixture.accessToken) == false)
+      #expect(world.terminal.transcript.contains(AuthFixture.refreshToken) == false)
       // The pairing: the transcript really did carry the login's printable half.
-      #expect(result.transcript.contains(AuthFixture.device.userCode))
+      #expect(world.terminal.transcript.contains(AuthFixture.device.userCode))
     }
   }
 
@@ -482,9 +516,11 @@ extension AuthCommandResult {
       let result = await workflow.login()
 
       // then
-      #expect(result.transcript.lowercased().contains("stop"))
-      #expect(result.transcript.lowercased().contains("running"))
-      #expect(result.events.allSatisfy { $0.destination == .standardError })
+      #expect(world.terminal.transcript.lowercased().contains("stop"))
+      #expect(world.terminal.transcript.lowercased().contains("running"))
+      #expect(world.terminal.written.allSatisfy { $0.destination == .standardError })
+      // A refusal is presented like everything else login says, so it too has nothing left over.
+      #expect(result.events.isEmpty)
     }
   }
 
@@ -547,7 +583,7 @@ extension AuthCommandResult {
 
       // then
       #expect(result.exit == .secretLoadFailure)
-      #expect(result.transcript.contains("clawd secrets seal"))
+      #expect(world.terminal.transcript.contains("clawd secrets seal"))
       #expect(world.log.recorded == [.lockAcquired, .lockReleased])
       // The half that was already there is untouched, and no credential joined it.
       #expect(FileManager.default.fileExists(atPath: world.paths.key.path))
@@ -649,7 +685,7 @@ extension AuthCommandResult {
 
       // then
       #expect(result.exit == .success)
-      #expect(result.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4"))
+      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4"))
     }
   }
 
@@ -663,7 +699,8 @@ extension AuthCommandResult {
       let result = await workflow.login()
 
       // then
-      #expect(result.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4-mini"))
+      #expect(result.exit == .success)
+      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4-mini"))
     }
   }
 
@@ -678,7 +715,7 @@ extension AuthCommandResult {
 
       // then
       #expect(result.exit == .success)
-      #expect(result.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4-mini"))
+      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4-mini"))
     }
   }
 
@@ -693,7 +730,7 @@ extension AuthCommandResult {
 
       // then
       #expect(result.exit == .success)
-      #expect(result.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4"))
+      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4"))
     }
   }
 
@@ -710,7 +747,7 @@ extension AuthCommandResult {
 
       // then
       #expect(result.exit == .success)
-      #expect(result.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4"))
+      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4"))
     }
   }
 
@@ -728,7 +765,7 @@ extension AuthCommandResult {
       // then
       #expect(result.exit == .success)
       #expect(world.storedCredential?.profileID == AuthFixture.freshProfileID)
-      #expect(result.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/<model>"))
+      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/<model>"))
     }
   }
 
@@ -744,7 +781,7 @@ extension AuthCommandResult {
       // then
       #expect(result.exit == .success)
       #expect(world.storedCredential?.profileID == AuthFixture.freshProfileID)
-      #expect(result.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/<model>"))
+      #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/<model>"))
     }
   }
 
