@@ -38,7 +38,11 @@ enum ChatGPTRefreshPolicy {
   /// Doubling, and clamped to the same ceiling as a cooldown so no single retry can outlast the
   /// wait a caller would have been given for giving up entirely.
   static func backoff(afterAttempt attempt: Int) -> Duration {
-    min(.seconds(1 << (attempt - 1)), maximumCooldown)
+    // The shift is clamped rather than trusted to `attemptBudget`: a shift wide enough to overflow
+    // is undefined, and a budget raised in another decade must not turn a wait into a crash. The
+    // ceiling below already flattens everything past this point, so the clamp costs no behaviour.
+    let doublings = min(attempt - 1, 5)
+    return min(.seconds(1 << doublings), maximumCooldown)
   }
 }
 
@@ -377,6 +381,11 @@ private extension ChatGPTCredentialSource {
 private extension ChatGPTCredentialSource {
   /// Starts exactly one flight and records it before anything can suspend, so the next caller through
   /// the door finds it rather than starting a second.
+  ///
+  /// Unlike `retryPublication`, this does not check for cancellation first: a caller that is already
+  /// cancelled still starts the flight and only then abandons it in `join`. That asymmetry is
+  /// deliberate. The rotation is under way and its answer lands durably for whoever comes next,
+  /// whereas a publication retry would spend a rotation the vendor may already have consumed.
   func startFlight(
     from credential: ChatGPTValidatedCredential,
     replacing generation: LLMCredentialGeneration
@@ -552,10 +561,10 @@ private extension ChatGPTCredentialSource {
     case .malformedResponse(let detail), .transport(let detail):
       reason = .unavailable(detail: detail)
       delay = ChatGPTRefreshPolicy.maximumCooldown
-    case .deadlineExceeded:
-      reason = .unavailable(detail: "the refresh did not finish in time")
-      delay = ChatGPTRefreshPolicy.maximumCooldown
-    case nil:
+    // `.deadlineExceeded` names a login window that closed, which only the device-code poll can
+    // reach; a refresh cannot raise it. It shares the catch-all rather than claiming an event of
+    // its own so no caller is ever told a story about a deadline this path does not keep.
+    case nil, .deadlineExceeded:
       reason = .unavailable(detail: "the refresh did not complete")
       delay = ChatGPTRefreshPolicy.maximumCooldown
     }

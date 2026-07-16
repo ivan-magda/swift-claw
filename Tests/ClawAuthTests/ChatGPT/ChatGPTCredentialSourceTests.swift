@@ -80,11 +80,11 @@ actor ScriptedRefresh: ChatGPTOAuthRefreshing {
   /// the worker has a complete pair in hand.
   enum Hold: Sendable {
     case none
-    /// Parks until released or cancelled, then reports the cancellation: a flight stopped before it
-    /// decoded anything.
+    /// Parks until released, cancelled, or a backstop expires, then reports any cancellation: a
+    /// flight stopped before it decoded anything.
     case reportingCancellation(AsyncGate)
-    /// Parks until released or cancelled and answers either way: the commit point, reached exactly
-    /// when cancellation is racing the handoff.
+    /// Parks until released, cancelled, or a backstop expires, and answers either way: the commit
+    /// point, reached exactly when cancellation is racing the handoff.
     case answeringAfterCancellation(AsyncGate)
     /// Parks until released, cancellation or not: network work a shutdown must wait out.
     case ignoringCancellation(AsyncGate)
@@ -110,10 +110,10 @@ actor ScriptedRefresh: ChatGPTOAuthRefreshing {
     case .none:
       break
     case .reportingCancellation(let gate):
-      await gate.wait()
+      await Self.waitWithBackstop(on: gate)
       try Task.checkCancellation()
     case .answeringAfterCancellation(let gate):
-      await gate.wait()
+      await Self.waitWithBackstop(on: gate)
     case .ignoringCancellation(let gate):
       await gate.waitIgnoringCancellation()
     }
@@ -121,6 +121,32 @@ actor ScriptedRefresh: ChatGPTOAuthRefreshing {
       throw ChatGPTOAuthFailure.grantRejected(detail: "unscripted refresh")
     }
     return try script.removeFirst().get()
+  }
+
+  /// How long a park waits for a cancellation that a correct shutdown delivers at once. Sized to
+  /// lose every race on the correct path, and to be far inside the suite's time limit on the
+  /// broken one.
+  private static let backstop = Duration.seconds(5)
+
+  /// Parks until the gate opens, the task is cancelled, or `backstop` expires — first to land wins.
+  ///
+  /// The sleep orders nothing, and on correct code it never fires: cancellation releases the gate
+  /// instantly and wins the race every time. It exists only so that code which never cancels ends
+  /// the park anyway, letting the flight run on and trip a real assertion. Without it such a bug
+  /// wedges the caller until the suite's time limit, which can name a hang but cannot fail it — and
+  /// a test that hangs under a mutation is worth less than one that goes red. Do not "simplify"
+  /// this back to a bare `wait()`.
+  private static func waitWithBackstop(on gate: AsyncGate) async {
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask {
+        await gate.wait()
+      }
+      group.addTask {
+        try? await ContinuousClock().sleep(for: backstop)
+      }
+      await group.next()
+      group.cancelAll()
+    }
   }
 }
 
@@ -639,13 +665,11 @@ struct ChatGPTCredentialSourceTests {
     #expect(thrown?.unavailableDelay == .seconds(30))
   }
 
-  @Test(arguments: [
-    ChatGPTOAuthFailure.malformedResponse(detail: "not JSON"),
-    ChatGPTOAuthFailure.deadlineExceeded,
-  ])
-  func anUnusableAnswerCoolsDownWithoutRetrying(failure: ChatGPTOAuthFailure) async throws {
+  /// A vendor body nobody can parse is not evidence the credential is dead, so this cools down
+  /// rather than demanding a login: forcing one here would log the owner out over a vendor bug.
+  @Test func anUnusableAnswerCoolsDownWithoutRetrying() async throws {
     // given
-    let oauth = ScriptedRefresh([.failure(failure)])
+    let oauth = ScriptedRefresh([.failure(.malformedResponse(detail: "not JSON"))])
     let source = CredentialFixture.source(
       credential: CredentialFixture.stored(expiresIn: 10),
       oauth: oauth
