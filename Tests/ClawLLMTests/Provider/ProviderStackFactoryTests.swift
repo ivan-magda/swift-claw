@@ -122,6 +122,40 @@ private final class InvocationFlag: @unchecked Sendable {
     #expect(recorded.map(\.url) == ["https://api.test/v1/chat/completions"])
   }
 
+  // MARK: - Registry defects fail closed
+
+  @Test func aCurrentRouteWithoutAConfiguredEndpointFailsClosedRatherThanComposing() {
+    // given — a static-bearer route carrying a managed egress: impossible for a registered descriptor,
+    // so a registry defect, not configuration
+    let route = currentRouteWithEgress(
+      .managed(providerID: .openAICompatible, endpoint: "https://managed.invalid")
+    )
+
+    // then — the factory throws the typed composition error rather than composing a wire URL that
+    // points at nothing
+    #expect(
+      throws: ProviderStackFactory.CompositionError.currentRouteMissingConfiguredEndpoint(
+        providerID: .openAICompatible
+      )
+    ) {
+      _ = try makeStack(route: route)
+    }
+  }
+
+  @Test func aCurrentRouteWithoutAConfiguredOutputFieldFailsClosedRatherThanComposing() {
+    // given — a static-bearer route whose output-token field is omitted: again a registry defect
+    let route = currentRouteWithOutputField(.omitted)
+
+    // then — the factory throws rather than degrading to an unchosen wire key
+    #expect(
+      throws: ProviderStackFactory.CompositionError.currentRouteMissingOutputField(
+        providerID: .openAICompatible
+      )
+    ) {
+      _ = try makeStack(route: route)
+    }
+  }
+
   // MARK: - ChatGPT route
 
   @Test func chatGPTRouteBuildsTheIncludedPlanResponsesStackAndReadsNoStaticBearer() throws {
@@ -185,5 +219,90 @@ private final class InvocationFlag: @unchecked Sendable {
         buildVersion: "0.0.0-test"
       )
     }
+  }
+
+  @Test func chatGPTRouteSendsToTheFixedResponsesURLWithTheStoreSeededBearer() async throws {
+    // given — the composed managed provider over a store-seeded credential and a scripted success. The
+    // seeded token is unexpired, so the source spends it directly rather than opening a refresh flight.
+    let credential = storedCredential()
+    let http = ScriptedHTTPExecutor([
+      .stream(ChatGPTProviderTestSupport.okHead, ChatGPTProviderTestSupport.Fixtures.basicSuccess())
+    ])
+    let stack = try ProviderStackFactory.make(
+      route: chatGPTRoute,
+      settings: settings(route: chatGPTRoute),
+      loadStaticBearer: { nil },
+      makeManagedCredentialStore: { ScriptedCredentialStore(.value(credential)) },
+      http: http,
+      buildVersion: "0.0.0-test"
+    )
+
+    // when
+    _ = try await stack.provider.complete(request: sampleRequest)
+
+    // then — the factory wired the fixed Codex Responses URL and the store-seeded bearer reached it,
+    // the symmetric twin of the current-route wire assertion
+    let recorded = try #require(await http.recorded.first)
+    #expect(recorded.url == ChatGPTProviderMetadata.responsesURL)
+    #expect(recorded.headers["Authorization"] == "Bearer \(credential.accessToken)")
+  }
+}
+
+// MARK: - Builders
+
+private extension ProviderStackFactoryTests {
+  /// Composes a stack over stubbed seams, so a route-shape test asserts only the factory's decision.
+  func makeStack(route: ResolvedLLMRoute) throws -> ProviderStack {
+    try ProviderStackFactory.make(
+      route: route,
+      settings: settings(route: route),
+      loadStaticBearer: { "sk-test" },
+      makeManagedCredentialStore: { ScriptedCredentialStore(.value(nil)) },
+      http: ScriptedHTTPExecutor([]),
+      buildVersion: "0.0.0-test"
+    )
+  }
+
+  /// A static-bearer route carrying an arbitrary egress, to reach the current-route composition path
+  /// with a shape a registered descriptor never produces.
+  func currentRouteWithEgress(_ egress: LLMEgressIdentity) -> ResolvedLLMRoute {
+    ResolvedLLMRoute(
+      descriptor: LLMProviderDescriptor(
+        providerID: .openAICompatible,
+        qualifiedPrefix: nil,
+        egress: egress,
+        credentialMode: .noneOrStaticBearer,
+        capabilities: LLMProviderCapabilities(
+          supportsTools: true,
+          usesStreamingWire: false,
+          supportsStructuredOutput: true,
+          supportsStopStrings: true,
+          outputTokenField: .configured(.maxCompletionTokens)
+        )
+      ),
+      configuredReference: "gpt-4o",
+      wireModel: "gpt-4o"
+    )
+  }
+
+  /// A static-bearer route carrying an arbitrary output-token field, for the same reason.
+  func currentRouteWithOutputField(_ field: LLMWireOutputTokenField) -> ResolvedLLMRoute {
+    ResolvedLLMRoute(
+      descriptor: LLMProviderDescriptor(
+        providerID: .openAICompatible,
+        qualifiedPrefix: nil,
+        egress: .configuredEndpoint("https://api.test/v1"),
+        credentialMode: .noneOrStaticBearer,
+        capabilities: LLMProviderCapabilities(
+          supportsTools: true,
+          usesStreamingWire: false,
+          supportsStructuredOutput: true,
+          supportsStopStrings: true,
+          outputTokenField: field
+        )
+      ),
+      configuredReference: "gpt-4o",
+      wireModel: "gpt-4o"
+    )
   }
 }

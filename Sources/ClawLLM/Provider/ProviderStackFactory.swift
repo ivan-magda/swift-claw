@@ -45,6 +45,18 @@ public struct ProviderStack: Sendable {
 /// the executable so a test executes the production selection logic — which route builds which adapter,
 /// which credential seam it opens, and which policies it stamps — instead of re-deriving it.
 public enum ProviderStackFactory {
+  /// A route reached the factory in a shape its credential mode structurally forbids. Every case is
+  /// impossible for a correctly registered descriptor, so it names a registry defect, not a
+  /// configuration error: the factory fails closed at boot rather than composing a broken wire.
+  public enum CompositionError: Error, Equatable {
+    /// A current route (`.noneOrStaticBearer`) carried a non-`.configuredEndpoint` egress, so no
+    /// endpoint was chosen. Composing would point the wire at nothing; this surfaces instead.
+    case currentRouteMissingConfiguredEndpoint(providerID: LLMProviderID)
+    /// A current route (`.noneOrStaticBearer`) carried a non-`.configured` output-token field, so no
+    /// wire key was chosen. Composing would silently pick an unchosen default; this surfaces instead.
+    case currentRouteMissingOutputField(providerID: LLMProviderID)
+  }
+
   // The pinned route-directed signature carries six inputs by design — the resolved route, the neutral
   // settings, the two lazy per-route credential seams, the dedicated executor, and the build version.
   // swiftlint:disable function_parameter_count
@@ -70,7 +82,7 @@ public enum ProviderStackFactory {
   ) throws -> ProviderStack {
     switch route.descriptor.credentialMode {
     case .noneOrStaticBearer:
-      return currentStack(
+      return try currentStack(
         route: route,
         settings: settings,
         bearer: loadStaticBearer(),
@@ -100,12 +112,12 @@ private extension ProviderStackFactory {
     settings: LLMConfig,
     bearer: String?,
     http: any HTTPExecuting & HTTPStreaming
-  ) -> ProviderStack {
+  ) throws -> ProviderStack {
     let credentialSource = StaticLLMCredentialSource(bearer: bearer)
     let provider = OpenAICompatibleProvider(
       config: settings,
-      endpoint: configuredEndpoint(of: route),
-      maxTokensField: wireOutputField(of: route),
+      endpoint: try configuredEndpoint(of: route),
+      maxTokensField: try wireOutputField(of: route),
       credentials: credentialSource,
       http: http,
       clock: ContinuousClock(),
@@ -122,21 +134,25 @@ private extension ProviderStackFactory {
     )
   }
 
-  static func configuredEndpoint(of route: ResolvedLLMRoute) -> String {
+  static func configuredEndpoint(of route: ResolvedLLMRoute) throws -> String {
     guard case .configuredEndpoint(let endpoint) = route.descriptor.egress else {
       // A none-or-static-bearer route resolves to a configured endpoint by construction; a managed
-      // egress here would be a registry defect, not configuration, so the fixed fallback keeps the
-      // wire from silently pointing at nothing rather than pretending to a URL nobody chose.
-      return ""
+      // egress reaching here is a registry defect, not configuration. Fail closed at boot rather
+      // than compose a wire URL pointed at nothing.
+      throw CompositionError.currentRouteMissingConfiguredEndpoint(
+        providerID: route.descriptor.providerID
+      )
     }
     return endpoint
   }
 
-  static func wireOutputField(of route: ResolvedLLMRoute) -> MaxTokensField {
+  static func wireOutputField(of route: ResolvedLLMRoute) throws -> MaxTokensField {
     guard case .configured(let field) = route.descriptor.capabilities.outputTokenField else {
-      // A none-or-static-bearer route always carries a configured field; this fallback exists only so
-      // a registry defect degrades to the default key rather than trapping mid-composition.
-      return .maxCompletionTokens
+      // A none-or-static-bearer route always carries a configured field by construction; its absence
+      // here is a registry defect. Fail closed at boot rather than degrade to an unchosen wire key.
+      throw CompositionError.currentRouteMissingOutputField(
+        providerID: route.descriptor.providerID
+      )
     }
     return field
   }
