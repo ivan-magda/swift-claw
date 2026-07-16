@@ -137,7 +137,10 @@ let package = Package(
       dependencies: [
         "ClawLLM", "ClawCore", "ClawTestSupport",
         .product(name: "Logging", package: "swift-log"),
-      ]
+      ],
+      // Read by absolute #filePath in ChatGPTResponsesSSEParserTests, never via Bundle.module,
+      // so they stay on disk as plain sources rather than bundled resources.
+      exclude: ["ChatGPT/Fixtures"]
     ),
     .testTarget(
       name: "ClawAgentTests",

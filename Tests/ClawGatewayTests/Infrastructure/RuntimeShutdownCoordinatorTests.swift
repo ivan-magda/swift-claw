@@ -218,15 +218,7 @@ private struct CapturingLogHandler: LogHandler {
     set { metadata[key] = newValue }
   }
 
-  func log(
-    level: Logger.Level,
-    message: Logger.Message,
-    metadata: Logger.Metadata?,
-    source: String,
-    file: String,
-    function: String,
-    line: UInt
-  ) {
-    capture.append("\(message)")
+  func log(event: LogEvent) {
+    capture.append("\(event.message)")
   }
 }
