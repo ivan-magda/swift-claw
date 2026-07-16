@@ -132,4 +132,82 @@ import Testing
     // then
     #expect(error is CancellationError)
   }
+
+  @Test func aHandoffThatWinsBeforeCancellationLeavesTheAttemptConservative() throws {
+    // given — the handoff transition wins the lock first
+    let exposure = ProviderAttemptExposure()
+    try exposure.beginHandoff()
+
+    // when — the caller's cancellation arrives only after the attempt reached the transport
+    let accounting = exposure.accounting
+
+    // then — an already-handed-off attempt cannot claim it never started
+    #expect(accounting == .mayHaveStarted(observing: 0))
+  }
+
+  @Test func aCancellationThatWinsBeforeTheCleanResetStaysConservative() throws {
+    // given — an attempt that reached the transport
+    let exposure = ProviderAttemptExposure()
+    try exposure.beginHandoff()
+
+    // when — cancellation is read before any clean-rejection reset has run
+    let error = exposure.cancellationError()
+
+    // then — with no proven-clean reset yet, the model may have been asked, so accounting is typed
+    #expect(error as? ProviderInferenceCancellation == ProviderInferenceCancellation(observing: 0))
+  }
+
+  @Test func repeatedHandoffsDoNotWalkExposureBackToNotStarted() throws {
+    // given — an attempt whose clean reset returned it to `notStarted`
+    let exposure = ProviderAttemptExposure()
+    try exposure.beginHandoff()
+    exposure.noteProvenClean()
+
+    // when — the same instance is handed off again and then reset again
+    try exposure.beginHandoff()
+    #expect(exposure.accounting == .mayHaveStarted(observing: 0))
+    exposure.noteProvenClean()
+
+    // then — each transition stands on its own; nothing is carried over from a prior handoff
+    #expect(exposure.accounting == .notStarted)
+  }
+
+  @Test func responseDataRaisesTheConservativeLowerBound() throws {
+    // given — an attempt that reached the transport and observed generated tokens
+    let exposure = ProviderAttemptExposure()
+    try exposure.beginHandoff()
+
+    // when — response data reports a running count
+    exposure.noteObserved(completionTokens: 9)
+
+    // then — the exposure carries that lower bound for accounting a later failure
+    #expect(exposure.accounting == .mayHaveStarted(observing: 9))
+  }
+
+  @Test func failurePairsACauseWithTheCurrentAccounting() throws {
+    // given — an attempt that reached the transport and observed some output
+    let exposure = ProviderAttemptExposure()
+    try exposure.beginHandoff()
+    exposure.noteObserved(completionTokens: 4)
+
+    // when — the engine builds a natural failure through the reducer
+    let failure = exposure.failure(.terminal(status: nil, message: "boom"))
+
+    // then — the reducer is the single source of the accounting the failure carries
+    #expect(failure.cause == .terminal(status: nil, message: "boom"))
+    #expect(failure.accounting == .mayHaveStarted(observing: 4))
+  }
+
+  @Test func failureOnAProvenCleanAttemptIsNotStarted() throws {
+    // given — a recognized non-success head returned the attempt to `notStarted`
+    let exposure = ProviderAttemptExposure()
+    try exposure.beginHandoff()
+    exposure.noteProvenClean()
+
+    // when
+    let failure = exposure.failure(.accessDenied)
+
+    // then — a clean rejection writes no estimated usage row
+    #expect(failure.accounting == .notStarted)
+  }
 }

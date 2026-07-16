@@ -12,8 +12,11 @@ import Synchronization
 /// nothing was written — so it cannot await anything, and the cancellation check and the transition
 /// it guards have to happen in one lock operation or a cancellation could slip between them.
 ///
-/// One instance spans a call, not an attempt: a retry re-enters through `beginHandoff()`, so
-/// exposure is re-established per attempt rather than carried over from the last one.
+/// Exposure is re-established per attempt, never carried between two. Two disciplines reach that same
+/// guarantee, and both are in use: the Chat Completions path reuses one instance across a call and
+/// resets it through `noteProvenClean()` before each retry, while the Responses attempt engine mints
+/// a fresh instance for every wire attempt so a clean reset cannot leak across the retry boundary
+/// even in principle. Either way a retry re-enters through `beginHandoff()` from `notStarted`.
 final class ProviderAttemptExposure: Sendable {
   private struct State {
     /// The whole phase. `notStarted` is a claim that nothing reached the model, so only a transport
@@ -70,6 +73,13 @@ final class ProviderAttemptExposure: Sendable {
     state.withLock { current in
       current.observedCompletionTokens = max(current.observedCompletionTokens, completionTokens)
     }
+  }
+
+  /// Pairs a natural failure's cause with this attempt's exposure, read in one lock operation so the
+  /// accounting a caller reports is the one true reading rather than a second, possibly-changed one.
+  /// The reducer stays the single source of that fact for every failure site the engine builds.
+  func failure(_ cause: ProviderError) -> ProviderFailure {
+    ProviderFailure(cause: cause, accounting: accounting)
   }
 
   /// The error a cancelled attempt owes its caller. `complete` has no session to report accounting
