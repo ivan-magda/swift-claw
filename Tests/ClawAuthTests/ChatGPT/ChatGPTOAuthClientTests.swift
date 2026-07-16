@@ -7,7 +7,10 @@ import Testing
 
 /// Fails every call with a freshly built error. A factory rather than a stored value, because an
 /// `any Error` is not `Sendable` and the seam it is handed to is.
-private struct FailingHTTP: HTTPExecuting {
+///
+/// Module-scoped for the same reason `OAuthFixture` is: every ChatGPT suite needs the same "the
+/// transport threw" arrangement, and a second copy would be one.
+struct FailingHTTP: HTTPExecuting {
   let makeFailure: @Sendable () -> any Error
 
   func execute(_ request: HTTPRequest) async throws -> HTTPResult {

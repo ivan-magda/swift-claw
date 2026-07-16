@@ -202,6 +202,15 @@ public enum LLMProviderRegistry {
       wireModel: modelReference
     )
   }
+
+  /// Whether `suffix` is a model a qualified reference may name. It answers the same question
+  /// `resolve` asks of an owner's configuration, for callers holding a candidate that has no
+  /// configured reference to be blamed in an error — a model offered by a provider's catalog, say.
+  /// One rule, two entry points: a second copy would let what a provider may offer drift from what
+  /// an owner may configure.
+  public static func isValidQualifiedModelSuffix(_ suffix: String) -> Bool {
+    qualifiedSuffixRejection(suffix) == nil
+  }
 }
 
 // MARK: - Route Selection
@@ -231,17 +240,39 @@ private extension LLMProviderRegistry {
 // MARK: - Suffix Validation
 
 private extension LLMProviderRegistry {
+  /// Why a suffix was refused, separated from the error it becomes so that the rule itself can also
+  /// be asked as a plain question by a caller with no `reference` to name.
+  enum QualifiedSuffixRejection {
+    case empty
+    case oversized
+    case unsafe
+  }
+
   /// Enforces `[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}` by scalar membership: a bounded walk over a
   /// fixed set, with no regex engine reachable from a configured string.
-  static func validateQualifiedSuffix(_ suffix: String, reference: String) throws {
+  static func qualifiedSuffixRejection(_ suffix: String) -> QualifiedSuffixRejection? {
     let scalars = suffix.unicodeScalars
     guard let leading = scalars.first else {
-      throw ConfigError.emptyQualifiedModelSuffix(reference: reference)
+      return .empty
     }
     guard scalars.count <= maximumQualifiedSuffixScalars else {
-      throw ConfigError.oversizedQualifiedModelSuffix(reference: reference)
+      return .oversized
     }
     guard isAlphanumeric(leading), scalars.dropFirst().allSatisfy(isSafeTrailing) else {
+      return .unsafe
+    }
+    return nil
+  }
+
+  static func validateQualifiedSuffix(_ suffix: String, reference: String) throws {
+    switch qualifiedSuffixRejection(suffix) {
+    case nil:
+      return
+    case .empty:
+      throw ConfigError.emptyQualifiedModelSuffix(reference: reference)
+    case .oversized:
+      throw ConfigError.oversizedQualifiedModelSuffix(reference: reference)
+    case .unsafe:
       throw ConfigError.unsafeQualifiedModelSuffix(reference: reference)
     }
   }

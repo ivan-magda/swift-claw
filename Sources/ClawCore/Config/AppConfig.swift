@@ -7,7 +7,9 @@ public struct AppConfig: Sendable, Equatable {
     static let pollTimeout = "CLAW_POLL_TIMEOUT"
 
     static let llmBaseURL = "CLAW_LLM_BASE_URL"
-    static let llmModel = "CLAW_LLM_MODEL"
+    /// Public because login prints the assignment an owner must set. The variable it names and the
+    /// variable configuration reads have to be the same word.
+    public static let llmModel = "CLAW_LLM_MODEL"
     static let llmMaxTokensField = "CLAW_LLM_MAX_TOKENS_FIELD"
     static let llmMaxTokens = "CLAW_LLM_MAX_TOKENS"
     static let llmStreaming = "CLAW_LLM_STREAMING"

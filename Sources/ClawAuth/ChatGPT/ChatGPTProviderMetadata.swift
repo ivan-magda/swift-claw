@@ -69,6 +69,19 @@ public enum ChatGPTProviderMetadata {
     max(requested, minimumPollInterval)
   }
 
+  /// A relative timeout as the whole seconds the transport counts in. Rounded up and floored at one
+  /// second: a zero would read as "no timeout at all" to a transport, which is the exact opposite of
+  /// what a closing window is asking for. The sub-second overshoot cannot compound, because a caller
+  /// with a deadline recomputes what is left before every call.
+  public static func transportSeconds(_ timeout: Duration) -> Int {
+    let parts = timeout.components
+    let whole = Int(clamping: parts.seconds)
+    guard parts.attoseconds > 0, whole < Int.max else {
+      return max(1, whole)
+    }
+    return max(1, whole + 1)
+  }
+
   // MARK: - Bounds
 
   /// What a response may cost to read. The two caps part company because they answer different
@@ -78,6 +91,11 @@ public enum ChatGPTProviderMetadata {
   /// that would have trimmed it ever runs.
   public static let maximumAuthResponseBytes = 256 * 1024
   public static let maximumDiagnosticBytes = 8 * 1024
+
+  /// The catalog's own success cap. It is roomier than an auth response because it carries a row per
+  /// offered model rather than a handful of fields, and it is still a cap: nothing downstream keeps
+  /// more than a bounded, deduplicated slice of what arrives.
+  public static let maximumCatalogResponseBytes = 1024 * 1024
 
   /// What the vendor's own values may weigh. Each is measured in UTF-8 bytes, generously above any
   /// value the flow is observed to carry, and present so that a hostile or broken response cannot

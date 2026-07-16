@@ -183,7 +183,7 @@ private extension ChatGPTOAuthClient {
       url: url,
       headers: [Wire.contentTypeHeader: contentType],
       body: body,
-      timeoutSeconds: Self.wholeSeconds(timeout),
+      timeoutSeconds: ChatGPTProviderMetadata.transportSeconds(timeout),
       responseBodyPolicy: .buffered(
         successBytes: ChatGPTProviderMetadata.maximumAuthResponseBytes,
         errorBytes: ChatGPTProviderMetadata.maximumDiagnosticBytes
@@ -203,19 +203,6 @@ private extension ChatGPTOAuthClient {
         detail: Self.diagnostic("\(error)", redacting: secrets)
       )
     }
-  }
-
-  /// A relative timeout as the whole seconds the transport counts in. Rounded up and floored at one
-  /// second: a zero would read as "no timeout at all" to a transport, which is the exact opposite of
-  /// what a closing window is asking for. The sub-second overshoot cannot compound, because the
-  /// caller recomputes what is left before every call.
-  static func wholeSeconds(_ timeout: Duration) -> Int {
-    let parts = timeout.components
-    let whole = Int(clamping: parts.seconds)
-    guard parts.attoseconds > 0, whole < Int.max else {
-      return max(1, whole)
-    }
-    return max(1, whole + 1)
   }
 
   static func jsonBody(_ fields: [String: String]) throws -> Data {
