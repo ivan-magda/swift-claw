@@ -4,12 +4,6 @@ import Foundation
 
 /// Continuity a route cannot express as text or tool calls — reasoning material that must be
 /// replayed to the same issuer to keep a conversation coherent.
-///
-/// It is opaque outside the adapter that produced it: never rendered into a prompt, FTS-indexed,
-/// recall-eligible, or exposed to tools, audit arguments, logs, Telegram, or memory. `issuer` is a
-/// structured logical identity binding the state to the credential profile, model, and replay epoch
-/// it was minted under, so state from a foreign origin is recognized and dropped rather than
-/// replayed. Only the owning adapter may interpret either field.
 public struct ProviderExchangeState: Sendable, Equatable, Codable {
   public let issuer: String
   public let payload: Data
@@ -30,7 +24,6 @@ public struct ChatMessage: Sendable, Equatable {
   public let content: String
   public let toolCalls: [ToolCall]
   public let toolCallId: String?
-  /// Set only by a route that mints replay state, and carried back to that same route untouched.
   public let providerState: ProviderExchangeState?
 
   public init(
@@ -109,8 +102,6 @@ public struct ChatResponse: Sendable, Equatable {
   public let usage: ChatUsage?
   public let costFromProvider: Double?
   public let toolCalls: [ToolCall]
-  /// The replay state produced with this reply, for the runtime to carry alongside the assistant
-  /// message it appends. A route that mints none leaves it nil.
   public let providerState: ProviderExchangeState?
 
   public init(
@@ -325,8 +316,6 @@ public struct CostResolver: Sendable {
     self.referenceUSDPerToken = referenceUSDPerToken
   }
 
-  /// `policy` defaults to `metered` so a caller that has not been taught about subscription routes
-  /// keeps billing its calls rather than silently recording them as free.
   public func resolve(
     model: String,
     usage: ChatUsage,
@@ -337,9 +326,6 @@ public struct CostResolver: Sendable {
     case .metered:
       break
     case .includedPlan:
-      // A subscription call costs nothing regardless of what the route reports in dollars, and the
-      // zero is confirmed rather than guessed — token estimation is `ResolvedUsage`'s verdict, and
-      // `ProviderUsage` ORs the two into the row's single flag.
       return ResolvedCost(costUSD: 0, source: .includedPlan, isEstimated: false)
     }
 
@@ -356,6 +342,7 @@ public struct CostResolver: Sendable {
 
     let raw = Double(usage.totalTokens) * referenceUSDPerToken
     let cost = raw == 0 ? Self.heuristicFloorUSD : raw
+
     return ResolvedCost(costUSD: cost, source: .heuristic, isEstimated: true)
   }
 }
