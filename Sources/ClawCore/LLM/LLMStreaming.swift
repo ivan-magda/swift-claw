@@ -12,9 +12,6 @@ public struct ProviderFailure: Error, Sendable, Equatable {
   }
 }
 
-/// How a streamed inference ended. This — not the event sequence reaching its end — is the
-/// authoritative outcome: a cancelled stream closes its events cleanly, so a consumer that only
-/// watched the sequence could not tell a truncated reply from a whole one.
 public enum LLMStreamTermination: Sendable, Equatable {
   case completed(ChatResponse)
   case failed(ProviderFailure)
@@ -23,12 +20,6 @@ public enum LLMStreamTermination: Sendable, Equatable {
 
 // MARK: - Buffer limits
 
-/// What one stream may hold in memory: a bounded delta queue, plus a reservation the terminal
-/// always fits inside.
-///
-/// The reservation is held apart from the queue rather than inside it, which is what lets a whole
-/// reply land while the queue is full — the case that matters, since a consumer that has stopped
-/// draining is exactly when the terminal must still get through.
 public struct LLMEventBufferLimits: Sendable, Equatable {
   public let maximumDeltaCount: Int
   public let maximumDeltaBytes: Int
@@ -40,8 +31,6 @@ public struct LLMEventBufferLimits: Sendable, Equatable {
   /// - Parameter reservedTerminalBytes: what the terminal reply may weigh. A reply past it is
   ///   refused rather than held.
   public init(maximumDeltaCount: Int, maximumDeltaBytes: Int, reservedTerminalBytes: Int) {
-    // Trapping rather than clamping: all three are programmer constants, so a bad one is a
-    // build-time bug that shows on the first run and should say so loudly.
     precondition(maximumDeltaCount > 0, "a stream needs room for a delta, got \(maximumDeltaCount)")
     precondition(maximumDeltaBytes > 0, "a stream needs delta bytes, got \(maximumDeltaBytes)")
     precondition(
@@ -90,18 +79,20 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     let channel = BoundedAsyncChannel<String>(capacity: limits.maximumDeltaBytes) { text in
       limits.deltaCharge(forTextBytes: text.utf8.count)
     }
+
     let owner = LLMStreamOwner(
       channel: channel,
       resolve: { reported, isCancelRequested in
         limits.resolvedTermination(reported, isCancelRequested: isCancelRequested)
       },
       channelError: { terminal in
-        guard case .failed(let failure) = terminal else { return nil }
+        guard case .failed(let failure) = terminal else {
+          return nil
+        }
         return failure
       }
     )
-    // A task always runs its body, even when cancelled before it starts, so `finish` always lands
-    // and a join can never wait on a producer that silently never reported.
+
     let producer = Task {
       let termination = await operation(LLMEventSink(channel: channel))
       owner.finish(reporting: termination)
@@ -111,19 +102,15 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     return LLMEventStream(channel: channel, owner: owner)
   }
 
-  /// Stops the inference without waiting. Idempotent, and safe to call from a `deinit` or a task
-  /// cancellation handler.
   public func cancel() {
     owner.cancel()
   }
 
-  /// Stops the inference and joins it.
   public func cancelAndAwait() async -> LLMStreamTermination {
     owner.cancel()
     return await owner.awaitTermination()
   }
 
-  /// Joins the inference, returning the one cached outcome once the producer has stopped.
   public func awaitTermination() async -> LLMStreamTermination {
     await owner.awaitTermination()
   }
@@ -136,27 +123,28 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     )
   }
 
-  /// Single-consumer: a second iterator throws rather than silently splitting the stream between the
-  /// two.
   public struct AsyncIterator: AsyncIteratorProtocol {
     fileprivate var base: BoundedAsyncChannel<String>.Iterator
     fileprivate let owner: LLMStreamOwner
-    /// Held, never read: dropping the iterator is what the lease is here to notice.
+
     fileprivate let lease: StreamAbandonmentLease
-    /// The terminal event sits outside the queue, so the queue running dry is not the end of the
-    /// sequence. This latch is what makes it the end exactly once.
+
     fileprivate var isTerminalDelivered = false
 
     public mutating func next() async throws -> StreamEvent? {
       if let text = try await base.next() {
         return .delta(text)
       }
-      guard !isTerminalDelivered else { return nil }
+
+      guard !isTerminalDelivered else {
+        return nil
+      }
       isTerminalDelivered = true
-      // Only a completed inference reserved one — read off the outcome the producer committed before
-      // it closed the queue. A cancelled or failed stream ends without it, which is what keeps a
-      // truncated reply from reading as a whole one.
-      guard case .completed(let response) = owner.terminal else { return nil }
+
+      guard case .completed(let response) = owner.terminal else {
+        return nil
+      }
+
       return .finished(response)
     }
   }
@@ -165,14 +153,10 @@ public struct LLMEventStream: AsyncSequence, Sendable {
 // MARK: - Suspension observation
 
 extension LLMEventStream {
-  /// Producers currently suspended on a full delta queue. Suspending rather than dropping is the
-  /// contract, so tests observe it here; production reads neither of these.
   var suspendedDeltaSenderCount: Int {
     channel.suspendedSenderCount
   }
 
-  /// Joiners currently parked on an undecided terminal. That they park until the producer's last act
-  /// — rather than resuming the moment an outcome is known — is the contract under observation.
   var parkedJoinerCount: Int {
     owner.parkedJoinerCount
   }
@@ -214,15 +198,18 @@ extension LLMEventBufferLimits {
   /// it, not just the visible text, because replay state and tool arguments are held just as long.
   func terminalCharge(for response: ChatResponse) -> Int {
     var total = response.content.utf8.count
+
     for call in response.toolCalls {
       total = SaturatingArithmetic.sum(total, call.id.utf8.count)
       total = SaturatingArithmetic.sum(total, call.name.utf8.count)
       total = SaturatingArithmetic.sum(total, call.argumentsJSON.utf8.count)
     }
+
     if let state = response.providerState {
       total = SaturatingArithmetic.sum(total, state.issuer.utf8.count)
       total = SaturatingArithmetic.sum(total, state.payload.count)
     }
+
     return total
   }
 
@@ -234,19 +221,18 @@ extension LLMEventBufferLimits {
     isCancelRequested: Bool
   ) -> LLMStreamTermination {
     guard case .completed(let response) = termination else {
-      // A failure keeps the typed cause the producer gave it even against a racing cancellation:
-      // the producer knows why it stopped, and a join must not erase that.
       return termination
     }
+
     let observedTokens = response.usage?.completionTokens ?? 0
+
     if isCancelRequested {
       return .cancelled(.mayHaveStarted(observing: observedTokens))
     }
+
     guard terminalCharge(for: response) <= reservedTerminalBytes else {
       return .failed(
         ProviderFailure(
-          // Names the reservation and nothing else: the reply that overran it is the very value
-          // least safe to quote.
           cause: .terminal(
             status: nil,
             message:
@@ -256,14 +242,11 @@ extension LLMEventBufferLimits {
         )
       )
     }
+
     return termination
   }
 }
 
 // MARK: - Stream ownership
 
-/// An inference stream's owner: the shared termination machinery, settling a completed reply against
-/// a pending cancellation and the terminal reservation before it commits, and closing the queue with
-/// the `ProviderFailure` a `.failed` outcome carries. The reserved terminal event is derived from the
-/// committed outcome rather than stored, so it is readable before the queue closes and never after.
 private typealias LLMStreamOwner = StreamTerminationOwner<String, LLMStreamTermination>
