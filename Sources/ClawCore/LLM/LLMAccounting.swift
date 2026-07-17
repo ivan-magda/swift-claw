@@ -134,7 +134,7 @@ extension ProviderFailureAccounting {
 /// Cancellation of an attempt that had already been handed to the transport.
 public struct ProviderInferenceCancellation: Error, Sendable, Equatable {
   public let observedCompletionTokens: Int
-º
+
   public init(observing observedCompletionTokens: Int) {
     self.observedCompletionTokens = max(0, observedCompletionTokens)
   }
