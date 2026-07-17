@@ -319,8 +319,6 @@ public struct ToolExchange: Sendable, Equatable {
   public let assistantContent: String  // may be "" (pure tool-call rounds)
   public let toolCalls: [ToolCall]
   public let observations: [ToolObservation]
-  /// The replay state of the intermediate assistant proposal this exchange records, kept with the
-  /// proposal so a resumed run replays the round it actually took.
   public let providerState: ProviderExchangeState?
 
   public init(
