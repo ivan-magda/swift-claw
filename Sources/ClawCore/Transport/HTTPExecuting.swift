@@ -33,19 +33,19 @@ public struct HTTPStreamHead: Sendable, Equatable {
 }
 
 private extension Dictionary where Key == String, Value == String {
-  /// Case-insensitive header lookup: HTTP field names are case-insensitive, but the header maps
-  /// preserve the wire casing, so match on a lowercased key.
   func caseInsensitiveValue(for key: String) -> String? {
     let target = key.lowercased()
     return first { $0.key.lowercased() == target }?.value
   }
 
-  /// Supplies `value` only when the caller named no header of its own for `name`. A caller's field
-  /// must replace the default outright: adding both would put the same field on the wire twice.
   func addingDefault(_ name: String, _ value: String) -> [String: String] {
-    guard caseInsensitiveValue(for: name) == nil else { return self }
+    guard caseInsensitiveValue(for: name) == nil else {
+      return self
+    }
+
     var merged = self
     merged[name] = value
+
     return merged
   }
 }
@@ -57,23 +57,16 @@ public enum HTTPMethod: String, Sendable, Equatable {
   case post = "POST"
 }
 
-/// Whether an attempt could have reached the server. It answers one question: may the far end have
-/// acted on this request — billed it, sent a message — even though no response came back?
+/// Whether an attempt could have reached the server.
 public enum HTTPTransmissionDisposition: Sendable, Equatable {
-  /// No byte of the request could have been written. Only a transport fact may establish this, and
-  /// only this disposition lets a caller replay the attempt without risking a double charge.
+  /// No byte of the request could have been written.
   case definitelyNotSent
-  /// The request may have been written and acted upon. The conservative default: anything an
-  /// executor cannot *prove* clean lands here, including every timeout and unknown failure.
+  /// The request may have been written and acted upon.
   case mayHaveBeenSent
 }
 
-/// A transport failure carrying the one fact a caller's exposure accounting needs.
 public struct HTTPTransportFailure: Error, Sendable, Equatable {
   public let disposition: HTTPTransmissionDisposition
-  /// Diagnostic text for logs. It describes the transport only — never a request header or body —
-  /// but an underlying error can still name the URL, so a caller whose URL embeds a secret (a bot
-  /// token in a path, say) still redacts before logging.
   public let safeMessage: String
 
   public init(disposition: HTTPTransmissionDisposition, safeMessage: String) {
@@ -83,16 +76,10 @@ public struct HTTPTransportFailure: Error, Sendable, Equatable {
 }
 
 public extension HTTPTransportFailure {
-  /// A policy of the wrong shape for its entry point is a programming mistake, and it is caught before
-  /// the handoff — so nothing was submitted and saying so proves itself. Shared so the production
-  /// executor and every test double raise the identical contract refusal rather than three copies of
-  /// it that can drift apart.
   static func policyMismatch(_ message: String) -> HTTPTransportFailure {
     HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: message)
   }
 
-  /// A success body past its cap. The disposition is not in doubt: a response head came back, so the
-  /// request plainly reached the server. The message names the cap, never the body.
   static func oversizedBody(cap: Int) -> HTTPTransportFailure {
     HTTPTransportFailure(
       disposition: .mayHaveBeenSent,
@@ -152,13 +139,7 @@ public struct HTTPRequest: Sendable {
   public let responseBodyPolicy: HTTPResponseBodyPolicy
 
   /// The attempt's linearization point, invoked exactly once immediately before the request is
-  /// handed to the transport. It is the caller's chance to decide, under its own lock, whether this
-  /// attempt is allowed to reach the wire: returning normally moves the attempt's exposure from
-  /// "not started" to "may have started", and throwing refuses the submission outright.
-  ///
-  /// A refusal is rethrown unchanged and nothing is sent — the caller authored that error and is the
-  /// only code that knows what it means. Once this closure has returned, cancellation is
-  /// conservative: the request may have been written even if no response head ever arrives.
+  /// handed to the transport.
   public let beginHandoff: (@Sendable () throws -> Void)?
 
   public init(
@@ -191,8 +172,6 @@ public protocol HTTPExecuting: Sendable {
 }
 
 public extension HTTPExecuting {
-  /// JSON POST. Supplies `Content-Type` unless the caller named one, and caps both the success and
-  /// the error body at `maxBodyBytes`.
   func post(
     url: String,
     headers: [String: String],
@@ -212,12 +191,6 @@ public extension HTTPExecuting {
     )
   }
 
-  /// Plain GET for tool fetches. The production client is configured with
-  /// `RedirectConfiguration.disallow`, so a 3xx comes back as an ordinary `HTTPResult` and is capped
-  /// as a diagnostic. A page past `maxBodyBytes` fails rather than arriving silently short, so a
-  /// caller can tell an over-cap fetch from a whole one and say so.
-  ///
-  /// - Throws: `HTTPTransportFailure` when the transport fails or a success body outgrows the cap.
   func get(
     url: String,
     headers: [String: String],
@@ -248,9 +221,7 @@ public protocol HTTPStreaming: Sendable {
 
 // MARK: - Stream exchange
 
-/// How a stream's body transfer ended. This — not the body sequence reaching its end — is the
-/// authoritative outcome: a cancelled exchange closes its body cleanly, so a consumer that only
-/// watched the sequence could not tell a truncated transfer from a complete one.
+/// How a stream's body transfer ended.
 public enum HTTPStreamTermination: Sendable, Equatable {
   case completed
   case failed(HTTPTransportFailure)
@@ -259,10 +230,6 @@ public enum HTTPStreamTermination: Sendable, Equatable {
 
 /// An owning, bounded streaming response: the head, a single-consumer body, and the producer that
 /// fills it. The exchange owns that producer's lifetime, so joining the exchange joins the transfer.
-///
-/// Every consumer exit path joins — `awaitTermination()` after a full read, `cancelAndAwait()`
-/// otherwise. Both ignore the joiner's own cancellation and return one cached result once the
-/// producer has actually stopped, so a caller can rely on there being no work left behind it.
 public struct HTTPStreamExchange: Sendable {
   public let head: HTTPStreamHead
   public let body: HTTPBodySequence
@@ -281,18 +248,20 @@ public struct HTTPStreamExchange: Sendable {
     let channel = BoundedAsyncChannel<Data>(capacity: maximumUnreadBodyBytes) { chunk in
       chunk.count
     }
+
     let owner = HTTPStreamOwner(
       channel: channel,
-      // A body transfer reports its own terminal fact; nothing about a pending cancellation reshapes
-      // what the producer already observed, so the reported outcome stands as decided.
-      resolve: { reported, _ in reported },
+      resolve: { reported, _ in
+        reported
+      },
       channelError: { terminal in
-        guard case .failed(let failure) = terminal else { return nil }
+        guard case .failed(let failure) = terminal else {
+          return nil
+        }
         return failure
       }
     )
-    // A task always runs its body, even when cancelled before it starts, so `finish` always lands
-    // and a join can never wait on a producer that silently never reported.
+
     let producer = Task {
       let termination = await operation(HTTPBodySink(channel: channel))
       owner.finish(reporting: termination)
@@ -306,18 +275,15 @@ public struct HTTPStreamExchange: Sendable {
     )
   }
 
-  /// Stops the transfer without waiting. Idempotent, and safe to call from a `deinit`.
   public func cancel() {
     owner.cancel()
   }
 
-  /// Stops the transfer and joins it.
   public func cancelAndAwait() async -> HTTPStreamTermination {
     owner.cancel()
     return await owner.awaitTermination()
   }
 
-  /// Joins the transfer, returning the one cached outcome once the producer has stopped.
   public func awaitTermination() async -> HTTPStreamTermination {
     await owner.awaitTermination()
   }
@@ -365,7 +331,4 @@ public struct HTTPBodySequence: AsyncSequence, Sendable {
 
 // MARK: - Stream ownership
 
-/// A body transfer's owner: the shared termination machinery, closing the channel with the transport
-/// failure a `.failed` outcome carries. A body reports the terminal fact it observed, so nothing
-/// reshapes it at commit.
 private typealias HTTPStreamOwner = StreamTerminationOwner<Data, HTTPStreamTermination>
