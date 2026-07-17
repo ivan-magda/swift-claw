@@ -44,8 +44,6 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
         )
       )
     } catch let oversized as HTTPTransportFailure {
-      // `collect` is the only source of this type here — the transport raises its own error types —
-      // so passing it through cannot swallow a failure that still needs classifying.
       throw oversized
     } catch {
       throw Self.classifyPostHead(error)
@@ -53,7 +51,8 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
   }
 
   public func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
-    guard case .streaming(let maximumUnreadBytes, let errorBytes) = request.responseBodyPolicy
+    guard
+      case .streaming(let maximumUnreadBytes, let errorBytes) = request.responseBodyPolicy
     else {
       throw HTTPTransportFailure.policyMismatch(
         HTTPResponseBodyPolicy.streamingPolicyRequiredMessage
@@ -65,10 +64,11 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
     let isSuccess = HTTPResponseBodyPolicy.isSuccess(statusCode)
     let body = response.body
 
-    // A non-success body is a diagnostic, so the whole of it is capped and it can never outgrow the
-    // buffer; a successful body is the payload, and the producer suspends rather than lose a byte.
     return HTTPStreamExchange.make(
-      head: HTTPStreamHead(statusCode: statusCode, headers: Self.responseHeaders(response)),
+      head: HTTPStreamHead(
+        statusCode: statusCode,
+        headers: Self.responseHeaders(response)
+      ),
       maximumUnreadBodyBytes: isSuccess ? maximumUnreadBytes : errorBytes
     ) { sink in
       await Self.forward(body, into: sink, totalBytes: isSuccess ? nil : errorBytes)
@@ -79,13 +79,8 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
 // MARK: - Submission
 
 private extension AsyncHTTPExecutor {
-  /// The only road to the wire. Both entry points funnel through here so the handoff cannot drift
-  /// out of step between them: it is invoked once, unconditionally, with nothing but the submission
-  /// after it.
   func submit(_ request: HTTPRequest) async throws -> HTTPClientResponse {
     let clientRequest = makeClientRequest(request)
-    // The linearization point. A refusal is the caller's own error and is rethrown untouched: it
-    // authored that error, and nothing has been sent.
     try request.beginHandoff?()
 
     do {
@@ -106,23 +101,29 @@ private extension AsyncHTTPExecutor {
     case .post:
       clientRequest.method = .POST
     }
+
     for (name, value) in request.headers {
       clientRequest.headers.add(name: name, value: value)
     }
+
     if !clientRequest.headers.contains(name: "accept-encoding") {
       clientRequest.headers.add(name: "accept-encoding", value: "gzip")
     }
+
     if let body = request.body {
       clientRequest.body = .bytes(ByteBuffer(bytes: body))
     }
+
     return clientRequest
   }
 
   static func responseHeaders(_ response: HTTPClientResponse) -> [String: String] {
     var result: [String: String] = [:]
+
     for header in response.headers {
       result[header.name] = header.value
     }
+
     return result
   }
 }
@@ -130,14 +131,8 @@ private extension AsyncHTTPExecutor {
 // MARK: - Body handling
 
 private extension AsyncHTTPExecutor {
-  /// What becomes of a body that outgrows its cap. Allocation stops at the cap either way; the
-  /// question this answers is whether what was read is still worth handing back.
   enum OversizedBodyHandling {
-    /// A payload short of its tail cannot be told apart from a whole one, so the response is
-    /// reported malformed instead of being passed off as complete.
     case fails
-    /// A diagnostic is still a diagnostic with its tail missing, and its first bytes are the ones
-    /// worth reading.
     case truncates
   }
 
@@ -150,9 +145,11 @@ private extension AsyncHTTPExecutor {
     whenOversized handling: OversizedBodyHandling
   ) async throws -> Data {
     var collected = Data()
+
     for try await buffer in body {
       let view = buffer.readableBytesView
       let remaining = cap - collected.count
+
       guard view.count <= remaining else {
         switch handling {
         case .fails:
@@ -162,8 +159,10 @@ private extension AsyncHTTPExecutor {
           return collected
         }
       }
+
       collected.append(contentsOf: view)
     }
+
     return collected
   }
 
@@ -177,18 +176,26 @@ private extension AsyncHTTPExecutor {
     totalBytes: Int?
   ) async -> HTTPStreamTermination {
     var forwarded = 0
+
     do {
       for try await buffer in body {
         let view = buffer.readableBytesView
         let chunk: Data
+
         if let totalBytes {
           let remaining = totalBytes - forwarded
-          guard remaining > 0 else { break }
+
+          guard remaining > 0 else {
+            break
+          }
+
           chunk = view.count > remaining ? Data(view.prefix(remaining)) : Data(view)
         } else {
           chunk = Data(view)
         }
+
         forwarded += chunk.count
+
         try await sink.send(chunk)
       }
       return .completed
@@ -204,17 +211,14 @@ private extension AsyncHTTPExecutor {
   static func terminationForSink(_ error: BoundedAsyncChannelError) -> HTTPStreamTermination {
     switch error {
     case .elementExceedsCapacity(let weight, let capacity):
-      // The one bound suspending cannot absorb: no amount of draining would ever admit this chunk,
-      // so the transfer fails instead of parking forever.
       return .failed(
         HTTPTransportFailure(
           disposition: .mayHaveBeenSent,
-          safeMessage: "response body chunk of \(weight) bytes exceeds the \(capacity)-byte "
-            + "unread limit"
+          safeMessage:
+            "response body chunk of \(weight) bytes exceeds the \(capacity)-byte unread limit"
         )
       )
     case .channelFinished:
-      // Nothing but `cancel()` closes the body ahead of its producer.
       return .cancelled(.mayHaveBeenSent)
     case .negativeWeight, .multipleIterators:
       return .failed(
@@ -230,8 +234,6 @@ private extension AsyncHTTPExecutor {
 // MARK: - Transport Failure Classification
 
 extension AsyncHTTPExecutor {
-  /// Classifies a failure raised before any response head arrived, where the allowlist below is the
-  /// one thing that may find a request clean.
   static func classify(_ error: any Error) -> HTTPTransportFailure {
     HTTPTransportFailure(
       disposition: provesNothingWasSent(error) ? .definitelyNotSent : .mayHaveBeenSent,
@@ -239,41 +241,26 @@ extension AsyncHTTPExecutor {
     )
   }
 
-  /// Classifies a failure raised once a response head has arrived, which nothing may call clean.
-  ///
-  /// A head is proof that a request channel existed and was written to, so the allowlist's premise —
-  /// that no channel ever became writable — is provably false here, whatever error the transport
-  /// went on to raise. Consulting it after a head could hand a caller a `definitelyNotSent` for a
-  /// request the server has already acted on and billed.
   static func classifyPostHead(_ error: any Error) -> HTTPTransportFailure {
     HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "\(error)")
   }
 
-  /// The entire allowlist for claiming a request never left, and it rests on one transport fact: the
-  /// peer refused the connection, so no channel to write a request on ever existed.
-  ///
-  /// The transport spells that refusal differently by platform: a bare `IOError`/`NWPOSIXError` on
-  /// the direct-connect paths, and — from NIOPosix's happy-eyeballs connector on Linux — a
-  /// `NIOConnectionError` bundling every per-target attempt. The bundle is clean only when it holds
-  /// at least one attempt and every attempt refused; a mix or an empty set means some channel may
-  /// have opened, so it stays conservative.
-  ///
-  /// Everything else stays conservative — a connect timeout, a deadline, an unknown pre-head failure
-  /// can all race request bytes onto the wire, and an error the transport does not type as a refusal
-  /// proves nothing. Only these typed facts decide; an error's text never does.
   static func provesNothingWasSent(_ error: any Error) -> Bool {
     if isConnectionRefused(error) {
       return true
     }
+
     #if canImport(Network)
       if let posixError = error as? HTTPClient.NWPOSIXError {
         return posixError.errorCode == .ECONNREFUSED
       }
     #endif
+
     if let connectionError = error as? NIOConnectionError {
       return !connectionError.connectionErrors.isEmpty
         && connectionError.connectionErrors.allSatisfy { isConnectionRefused($0.error) }
     }
+
     return false
   }
 
