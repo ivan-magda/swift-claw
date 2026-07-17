@@ -541,8 +541,6 @@ private extension ContextBuilder {
             )
           )
         case .assistant:
-          // The state rides the anchor it was minted with and is never rendered into `content`:
-          // it is the issuing route's material, not the model's prompt.
           rendered.append(
             ChatMessage(
               role: .assistant,
