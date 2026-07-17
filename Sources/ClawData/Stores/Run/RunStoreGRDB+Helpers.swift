@@ -158,13 +158,24 @@ extension RunStoreGRDB {
     return RunState(rawValue: rawState)
   }
 
-  static func insertUsage(_ db: Database, _ usage: ProviderUsage) throws {
+  /// The conflict target is named rather than left bare: an untargeted `DO NOTHING` silences every
+  /// uniqueness failure the row could hit, so a genuinely corrupt insert would return the same
+  /// "wrote nothing" the caller reads as a harmless replay. Naming `provider_call_id` silences
+  /// re-presentation of an already-recorded call and nothing else — a NOT NULL, CHECK, or foreign
+  /// key failure still raises.
+  static let insertUsageStatement = """
+    INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+      cost_usd, cost_source, is_estimated, ts, provider_call_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(provider_call_id) DO NOTHING
+    """
+
+  /// - Returns: whether this call's row was newly stored. `false` means the identity was already
+  ///   recorded, so every total derived from these rows already counts it.
+  @discardableResult
+  static func insertUsage(_ db: Database, _ usage: ProviderUsage) throws -> Bool {
     try db.execute(
-      sql: """
-        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-          cost_usd, cost_source, is_estimated, ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+      sql: insertUsageStatement,
       arguments: [
         usage.runId,
         usage.sessionId,
@@ -175,8 +186,10 @@ extension RunStoreGRDB {
         usage.costSource.rawValue,
         usage.isEstimated,
         usage.ts,
+        usage.providerCallID.rawValue,
       ]
     )
+    return db.changesCount > 0
   }
 
   static func insertOutbox(

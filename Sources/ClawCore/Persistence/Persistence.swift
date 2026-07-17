@@ -87,6 +87,10 @@ public enum CostSource: String, Sendable, Equatable {
   case providerReturned = "provider_returned"
   case priceFile = "price_file"
   case heuristic
+  /// A subscription route's confirmed zero. It is a distinct source rather than a $0
+  /// `providerReturned` so an audit can tell "the plan covered this" from "the provider billed
+  /// nothing", and so the never-a-silent-$0 rule is satisfied rather than bypassed.
+  case includedPlan = "included_plan"
 }
 
 public enum SessionKey {
@@ -175,19 +179,22 @@ public struct StoredMessage: Sendable, Equatable {
   public let provenance: Provenance
   public let toolCallsJSON: String?
   public let toolCallId: String?
+  public let providerState: ProviderExchangeState?
 
   public init(
     role: MessageRole,
     content: String,
     provenance: Provenance,
     toolCallsJSON: String? = nil,
-    toolCallId: String? = nil
+    toolCallId: String? = nil,
+    providerState: ProviderExchangeState? = nil
   ) {
     self.role = role
     self.content = content
     self.provenance = provenance
     self.toolCallsJSON = toolCallsJSON
     self.toolCallId = toolCallId
+    self.providerState = providerState
   }
 }
 
@@ -216,6 +223,10 @@ public struct SessionContextSnapshot: Sendable, Equatable {
 }
 
 public struct ProviderUsage: Sendable, Equatable {
+  /// The provider round-trip this row accounts for. Stored rows are unique on it, which is what
+  /// makes a re-attempted commit write nothing instead of double-debiting the day: the second
+  /// attempt presents the identity the first one already stored.
+  public let providerCallID: ProviderCallID
   /// The owning run, or `nil` for spend issued outside any run (command-scoped LLM calls such as
   /// the /schedule parse). Plain day totals include nil-run rows; the origin-filtered totals
   /// cannot (the JOIN has nothing to match) — correct, since command spend is owner-interactive.
@@ -230,6 +241,7 @@ public struct ProviderUsage: Sendable, Equatable {
   public let ts: Date
 
   public init(
+    providerCallID: ProviderCallID,
     runId: Int64?,
     sessionId: Int64,
     model: String,
@@ -240,6 +252,7 @@ public struct ProviderUsage: Sendable, Equatable {
     isEstimated: Bool,
     ts: Date
   ) {
+    self.providerCallID = providerCallID
     self.runId = runId
     self.sessionId = sessionId
     self.model = model
@@ -255,6 +268,7 @@ public struct ProviderUsage: Sendable, Equatable {
   /// is the single place the row's `isEstimated` is derived: a row is an estimate iff either input
   /// was guessed.
   public init(
+    providerCallID: ProviderCallID,
     runId: Int64?,
     sessionId: Int64,
     model: String,
@@ -263,6 +277,7 @@ public struct ProviderUsage: Sendable, Equatable {
     ts: Date
   ) {
     self.init(
+      providerCallID: providerCallID,
       runId: runId,
       sessionId: sessionId,
       model: model,
@@ -337,6 +352,9 @@ public struct AssistantTurn: Sendable, Equatable {
   public let setTainted: Bool
   /// Sticky private-data flag — persisted like `setTainted`, on every commit path.
   public let setPrivateData: Bool
+  /// The final assistant message's replay state, committed in the same transaction as the message
+  /// it belongs to so an anchor and its state can never be persisted apart.
+  public let providerState: ProviderExchangeState?
 
   public init(
     runId: Int64,
@@ -347,7 +365,8 @@ public struct AssistantTurn: Sendable, Equatable {
     chunks: [OutboxChunk],
     exchanges: [ToolExchange] = [],
     setTainted: Bool = false,
-    setPrivateData: Bool = false
+    setPrivateData: Bool = false,
+    providerState: ProviderExchangeState? = nil
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -358,6 +377,7 @@ public struct AssistantTurn: Sendable, Equatable {
     self.exchanges = exchanges
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
+    self.providerState = providerState
   }
 }
 

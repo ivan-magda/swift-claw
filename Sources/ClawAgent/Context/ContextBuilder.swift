@@ -549,7 +549,8 @@ private extension ContextBuilder {
             ChatMessage(
               role: .assistant,
               content: message.content,
-              toolCalls: message.toolCallsJSON.map(ToolCallCoding.decode) ?? []
+              toolCalls: message.toolCallsJSON.map(ToolCallCoding.decode) ?? [],
+              providerState: message.providerState
             )
           )
         case .user where message.provenance == .untrusted:

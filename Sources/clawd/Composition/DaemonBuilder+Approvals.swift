@@ -29,7 +29,11 @@ extension DaemonBuilder {
     let expiry: ApprovalExpiryService
   }
 
-  func makeTurnRunner(coordination: TurnCoordination, agentStack: AgentStack) -> TurnRunner {
+  func makeTurnRunner(
+    coordination: TurnCoordination,
+    agentStack: AgentStack,
+    costPolicy: LLMCostPolicy
+  ) -> TurnRunner {
     let outboxSignal = coordination.outboxSignal
     return TurnRunner(
       sessionMessages: stores.sessionMessages,
@@ -40,7 +44,9 @@ extension DaemonBuilder {
       budget: config.budget,
       contextBuilder: agentStack.contextBuilder,
       notifyOutbox: { outboxSignal.poke() },
-      breaker: BudgetBreaker(budget: config.budget),
+      // The resolved route's billing, not the init default: a subscription route must not fire a
+      // daily USD-cap DM against dollars earlier metered usage rang up.
+      breaker: BudgetBreaker(budget: config.budget, costPolicy: costPolicy),
       delivery: transport,
       parker: coordination.deferredParker,
       approvalExpirySeconds: config.approvalExpirySeconds,

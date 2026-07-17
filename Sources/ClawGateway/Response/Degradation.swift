@@ -20,6 +20,34 @@ public enum Degradation {
   public static let accountingFailed =
     "I hit an internal storage problem and stopped to be safe. Please try again."
 
+  /// The credential is gone or refused. The sentence names the exact recovery — the daemon must be
+  /// stopped, re-authenticated, and started again, because a running daemon holds the process lock.
+  /// Pinned verbatim: it is the one degradation reply that tells the owner to log in.
+  public static let authenticationRequired =
+    "ChatGPT authentication is required. Stop clawd, run `clawd auth login`, then start clawd again."
+
+  /// The subscription/account cannot use the requested route or model. It deliberately does NOT tell
+  /// the owner to log in: the credential is valid, so re-authenticating would change nothing.
+  public static let accessDenied =
+    "Your ChatGPT plan can't use the requested model or route. Logging in again won't change that — "
+    + "adjust the configured model or your plan."
+
+  /// Replay state the route rejected. Safe `/new` guidance: a fresh session drops the state, and the
+  /// rejected attempt is never re-issued.
+  public static let invalidProviderState =
+    "I lost the thread of this conversation. Send /new to start fresh, then try again."
+
+  /// A clean throttle. Says to retry after the provider's bounded hint when it gave one, else after
+  /// the plan resets — never to log in. The hint is a structured number the provider returned, not
+  /// remote free text, so echoing the count interpolates no untrusted string.
+  public static func quotaLimited(retryAfterSeconds: Int?) -> String {
+    if let retryAfterSeconds {
+      return "That hit ChatGPT's rate limit. Try again in \(retryAfterSeconds) seconds, "
+        + "or after your plan's quota resets."
+    }
+    return "That hit ChatGPT's rate limit. Try again after your plan's quota resets."
+  }
+
   /// The spend-breaker reply; `cap` names the tripped limit (e.g. "per-run spend" / "per-day token").
   public static func budget(cap: String) -> String {
     "I stopped because I hit the \(cap) cap."
@@ -46,6 +74,14 @@ public enum Degradation {
       return contextUnavailable
     case .accountingFailed:
       return accountingFailed
+    case .authenticationRequired:
+      return authenticationRequired
+    case .accessDenied:
+      return accessDenied
+    case .quotaLimited(let retryAfterSeconds):
+      return quotaLimited(retryAfterSeconds: retryAfterSeconds)
+    case .invalidProviderState:
+      return invalidProviderState
     }
   }
 }

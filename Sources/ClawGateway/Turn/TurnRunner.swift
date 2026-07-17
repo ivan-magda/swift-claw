@@ -323,8 +323,14 @@ private extension TurnRunner {
     )
 
     switch outcome.result {
-    case .completed(let content, let usage):
-      try await commitCompleted(content: content, usage: usage, outcome: outcome, in: context)
+    case .completed(let content, let usage, let providerState):
+      try await commitCompleted(
+        content: content,
+        usage: usage,
+        providerState: providerState,
+        outcome: outcome,
+        in: context
+      )
     case .degraded(let degradationKind, let usage):
       try await commitDegraded(kind: degradationKind, usage: usage, outcome: outcome, in: context)
     case .budgetStopped(let cap):
@@ -337,6 +343,7 @@ private extension TurnRunner {
   func commitCompleted(
     content: String,
     usage: ProviderUsage,
+    providerState: ProviderExchangeState?,
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
@@ -364,7 +371,8 @@ private extension TurnRunner {
       chunks: chunks,
       exchanges: outcome.exchanges,
       setTainted: outcome.ingestedUntrusted,
-      setPrivateData: outcome.hadPrivateData
+      setPrivateData: outcome.hadPrivateData,
+      providerState: providerState
     )
 
     switch try runs.commitAssistantTurn(turn, now: context.committedAt) {
@@ -437,7 +445,7 @@ private extension TurnRunner {
         ownerNotices: context.ownerNotices
       ),
       action: .turnDegraded,
-      decision: kind.rawValue,
+      decision: kind.auditDecision,
       at: context.committedAt
     )
     if commitResult != .ignored {
@@ -552,7 +560,7 @@ private extension TurnRunner {
       setPrivateData: false,
       message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
       action: .turnDegraded,
-      decision: DegradationKind.contextUnavailable.rawValue,
+      decision: DegradationKind.contextUnavailable.auditDecision,
       at: committedAt
     )
   }
@@ -609,6 +617,7 @@ private extension TurnRunner {
       ),
       setTainted: outcome.ingestedUntrusted,
       setPrivateData: outcome.hadPrivateData,
+      providerState: anchor.providerState,
       expiresTs: context.committedAt.addingTimeInterval(TimeInterval(approvalExpirySeconds))
     )
 

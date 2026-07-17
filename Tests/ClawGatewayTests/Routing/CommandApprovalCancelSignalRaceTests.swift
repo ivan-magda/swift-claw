@@ -141,8 +141,7 @@ private extension CommandApprovalCancelSignalRaceTests {
     let waiter = makeWaiter(harness)
     let laneFreed = Latch()
 
-    let lane = await harness.lanes.actor(for: harness.sessionId)
-    await lane.enqueue(runId: harness.runId) {
+    _ = await harness.lanes.enqueue(sessionID: harness.sessionId, runID: harness.runId) {
       await waiter.park(
         approvalId: harness.approvalId,
         runId: harness.runId,
@@ -154,7 +153,7 @@ private extension CommandApprovalCancelSignalRaceTests {
     // A plain unit of lane work queued BEHIND the park: FIFO chaining means it can only run once
     // the parked waiter completes, so its execution proves the lane was freed.
     let trailingRunId = harness.runId + 1_000_000
-    await lane.enqueue(runId: trailingRunId) {
+    _ = await harness.lanes.enqueue(sessionID: harness.sessionId, runID: trailingRunId) {
       await laneFreed.open()
     }
 

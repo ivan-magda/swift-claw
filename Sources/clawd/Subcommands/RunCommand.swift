@@ -1,5 +1,4 @@
 import ArgumentParser
-import AsyncHTTPClient
 import ClawCore
 import ClawData
 import ClawGateway
@@ -26,48 +25,49 @@ struct RunCommand: AsyncParsableCommand {
     let stores = try Self.openStoresOrExit(config: config, logger: logger)
     try Self.ensureWorkspaceDirectoryOrExit(config: config)
 
-    // Shared HTTP client for both Telegram and the LLM; gzip decompression is a client-wide toggle
-    // (the executor only advertises `accept-encoding`), so it's configured here at the root.
-    var httpConfig = HTTPClient.Configuration()
-    httpConfig.decompression = .enabled(limit: .size(16 * 1024 * 1024))
-    let httpClient = HTTPClient(eventLoopGroupProvider: .singleton, configuration: httpConfig)
-    let executor = AsyncHTTPExecutor(client: httpClient)
-
-    // Tool fetches get a DEDICATED client with redirects disabled: AsyncHTTPClient
-    // configures redirect behavior per client, and the Telegram/LLM client must keep its defaults.
-    var toolHTTPConfig = HTTPClient.Configuration()
-    toolHTTPConfig.redirectConfiguration = .disallow
-    toolHTTPConfig.decompression = .enabled(limit: .size(16 * 1024 * 1024))
-    let toolHTTPClient = HTTPClient(
-      eventLoopGroupProvider: .singleton,
-      configuration: toolHTTPConfig
-    )
-    let toolExecutor = AsyncHTTPExecutor(client: toolHTTPClient)
-
-    // Voice-file downloads ride the no-redirect executor: file_path is server-controlled and a
-    // followed redirect would be an SSRF primitive (see TelegramClient.downloadVoiceFile).
-    let transport = TelegramClient(
-      token: secrets.telegramBotToken,
-      http: executor,
-      downloadHTTP: toolExecutor
-    )
-    let botUsername = await Self.fetchBotUsername(transport: transport, logger: logger)
-
-    let daemon = await DaemonBuilder(
-      config: config,
-      secrets: secrets,
-      stores: stores,
-      executor: executor,
-      toolExecutor: toolExecutor,
-      transport: transport,
-      botUsername: botUsername,
-      logger: logger
-    ).build()
+    // Three independent clients — Telegram on its redirect-following profile, LLM and tool on the
+    // protected redirect-disabled one — plus the route-resolved provider stack and the assembled
+    // bundle. A malformed managed credential envelope fails here; the composition closes every client
+    // it opened before the error reaches this mapping, and a missing record boots logged out.
+    let composed: RunComposition.Composed
+    do {
+      composed = try await RunComposition(
+        config: config,
+        secrets: secrets,
+        stores: stores,
+        logger: logger
+      ).compose()
+    } catch let error as LLMCredentialStoreError {
+      FileHandle.standardError.write(Data("credential store error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
+    }
 
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
+    try await Self.serveThenShutDown(
+      composed: composed,
+      redactionValues: secrets.redactionValues,
+      logger: logger
+    )
+  }
+}
+
+// MARK: - Serve & Shutdown
+
+private extension RunCommand {
+  /// Runs the service graph, then sequences dependent-resource teardown in the mandated order. On a
+  /// lane-drain timeout it terminates the process from here — before `run`'s `defer { lock.release()
+  /// }` and any client teardown unwind — so the held instance-lock fd stays owned until termination.
+  static func serveThenShutDown(
+    composed: RunComposition.Composed,
+    redactionValues: [String],
+    logger: Logger
+  ) async throws {
+    let bundle = composed.bundle
+    let clients = composed.clients
+
     var runFailure: Error?
     do {
-      try await daemon.run()
+      try await bundle.daemon.run()
     } catch {
       // A graceful shutdown returns without throwing; an error here means a service failed
       // unexpectedly. Re-raise after cleanup so the supervisor restarts the process.
@@ -75,13 +75,43 @@ struct RunCommand: AsyncParsableCommand {
       logger.error("daemon exited with error: \(error)")
     }
 
-    try? await httpClient.shutdown()
-    try? await toolHTTPClient.shutdown()
+    // The lane-admission service records its drain result as the service graph shuts down, so a
+    // missing record is not a silently-skipped drain: once its run() starts, every path — graceful
+    // shutdown OR a sibling-failure cancellation — reaches record, so a live turn can never coexist
+    // with a missing record. The record is absent only when run() was never invoked, which happens
+    // solely when the ServiceGroup never started its service tasks (a pre-serve boot failure). The
+    // poller that admits turns lives in that same group, so if it never ran, nothing was ever
+    // enqueued: there is nothing live to drain and `.drained` is the safe default, not fail-open.
+    let laneDrain = await bundle.laneShutdownOutcome.value() ?? .drained
+    let coordinator = RuntimeShutdownCoordinator(
+      logger: logger,
+      redactor: SecretRedactor(secretValues: redactionValues)
+    )
+    let outcome = await coordinator.shutDown(
+      daemonError: runFailure,
+      laneDrain: laneDrain,
+      dependent: RuntimeShutdownCoordinator.DependentCleanup(
+        commitCredentials: { try await bundle.credentialSource.shutdown() },
+        // The dedicated redirect-disabled LLM client, now its own resource rather than the Telegram
+        // client it shared: its transport stays alive across the credential commit above so a
+        // refresh's token rotation can finish, then closes here.
+        closeLLMClient: { try await clients.llm.close() },
+        closeTelegramClient: { try await clients.telegram.close() },
+        closeToolClient: { try await clients.tool.close() }
+      )
+    )
 
-    if let runFailure {
-      throw runFailure
+    switch outcome {
+    case .clean:
+      logger.info("clawd stopped")
+    case .failed(let error):
+      throw error
+    case .fatalLaneTimeout(let activeRunIDs):
+      try FatalProcessTerminator.production.fatalLaneDrainTimeout(
+        activeRunIDs: activeRunIDs,
+        logger: logger
+      )
     }
-    logger.info("clawd stopped")
   }
 }
 
@@ -170,16 +200,5 @@ private extension RunCommand {
     }
 
     return stores
-  }
-
-  static func fetchBotUsername(transport: TelegramClient, logger: Logger) async -> String? {
-    do {
-      return try await transport.getMe().username
-    } catch {
-      logger.warning(
-        "failed to fetch bot identity; command mentions will require bare commands: \(error)"
-      )
-      return nil
-    }
   }
 }

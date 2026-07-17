@@ -248,6 +248,10 @@ public enum ClawDatabase {
         table.add(column: "reply_markup", .text)
       }
     }
+    migrator.registerMigration("v9") { db in
+      try rebuildMessagesWithProviderState(db)
+      try rebuildProviderUsageWithCallIdentity(db)
+    }
     return migrator
   }
 

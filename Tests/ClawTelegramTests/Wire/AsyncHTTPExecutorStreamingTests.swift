@@ -1,171 +1,118 @@
 import AsyncHTTPClient
 import ClawCore
-import ClawTelegram
+import ClawTestSupport
 import Foundation
 import NIOCore
 import NIOHTTP1
 import NIOPosix
+import Synchronization
 import Testing
 
-private actor StreamProbe {
-  private var started = false
-  private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+@testable import ClawTelegram
 
-  func markStarted() {
-    started = true
-    for waiter in startedWaiters {
-      waiter.resume()
-    }
-    startedWaiters.removeAll()
-  }
+// MARK: - Streaming loopback server
 
-  func waitStarted() async {
-    guard !started else { return }
-    await withCheckedContinuation { continuation in
-      startedWaiters.append(continuation)
-    }
-  }
-}
-
-private final class StreamingHandler: ChannelInboundHandler, @unchecked Sendable {
+/// Writes a head and a burst of chunks, then ends the response. The gate opens once the last write
+/// has actually left, so a test can wait for the whole burst to be in flight instead of guessing.
+private final class BurstingHandler: ChannelInboundHandler, @unchecked Sendable {
   typealias InboundIn = HTTPServerRequestPart
   typealias OutboundOut = HTTPServerResponsePart
 
-  private let probe: StreamProbe
+  private let written: AsyncGate
   private let chunkCount: Int
+  private let chunkBytes: Int
 
-  init(probe: StreamProbe, chunkCount: Int) {
-    self.probe = probe
+  init(written: AsyncGate, chunkCount: Int, chunkBytes: Int) {
+    self.written = written
     self.chunkCount = chunkCount
+    self.chunkBytes = chunkBytes
   }
 
   func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-    guard case .end = unwrapInboundIn(data) else {
-      return
-    }
+    guard case .end = unwrapInboundIn(data) else { return }
 
     let headers = HTTPHeaders([("content-type", "text/event-stream")])
-    let head = HTTPResponseHead(version: .http1_1, status: .ok, headers: headers)
-    context.write(wrapOutboundOut(.head(head)), promise: nil)
-    let finalWrite = context.eventLoop.makePromise(of: Void.self)
+    context.write(
+      wrapOutboundOut(.head(HTTPResponseHead(version: .http1_1, status: .ok, headers: headers))),
+      promise: nil
+    )
     for chunkIndex in 0..<chunkCount {
-      var buffer = context.channel.allocator.buffer(capacity: 32)
-      buffer.writeString("data: {\"index\":\(chunkIndex)}\n\n")
-      let promise = chunkIndex == chunkCount - 1 ? finalWrite : nil
-      context.write(wrapOutboundOut(.body(.byteBuffer(buffer))), promise: promise)
+      var buffer = context.channel.allocator.buffer(capacity: chunkBytes)
+      buffer.writeString(BurstingServer.chunkText(index: chunkIndex, bytes: chunkBytes))
+      context.write(wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
     }
-    context.flush()
-    finalWrite.futureResult.whenComplete { _ in
-      Task { await self.probe.markStarted() }
+    let finalWrite = context.eventLoop.makePromise(of: Void.self)
+    context.writeAndFlush(wrapOutboundOut(.end(nil)), promise: finalWrite)
+    finalWrite.futureResult.whenComplete { [written] _ in
+      written.open()
     }
   }
 }
 
-private final class StreamingHTTPServer {
-  let group: MultiThreadedEventLoopGroup
-  let channel: Channel
-  let probe: StreamProbe
+private final class BurstingServer: @unchecked Sendable {
+  private let group: MultiThreadedEventLoopGroup
+  private let channel: Channel
+  let written: AsyncGate
+  let port: Int
 
-  func streamURL() throws -> String {
-    let localAddress = try #require(channel.localAddress)
-    let port = try #require(localAddress.port)
-    return "http://127.0.0.1:\(port)/stream"
+  /// Chunks are fixed width so a test can state the expected transfer exactly, and carry their index
+  /// so a dropped or reordered one shows up as a mismatch rather than a byte count that still adds up.
+  static func chunkText(index: Int, bytes: Int) -> String {
+    let marker = "data:\(index);"
+    return marker.count >= bytes
+      ? String(marker.prefix(bytes))
+      : marker + String(repeating: "-", count: bytes - marker.count)
   }
 
-  private init(group: MultiThreadedEventLoopGroup, channel: Channel, probe: StreamProbe) {
+  static func expectedBody(chunkCount: Int, chunkBytes: Int) -> Data {
+    Data(
+      (0..<chunkCount).map { index in
+        chunkText(index: index, bytes: chunkBytes)
+      }
+      .joined()
+      .utf8
+    )
+  }
+
+  private init(group: MultiThreadedEventLoopGroup, channel: Channel, written: AsyncGate) {
     self.group = group
     self.channel = channel
-    self.probe = probe
+    self.written = written
+    port = channel.localAddress?.port ?? 0
   }
 
-  static func start(chunkCount: Int = 1) async throws -> StreamingHTTPServer {
-    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-    let probe = StreamProbe()
-    let bootstrap = ServerBootstrap(group: group)
-      .serverChannelOption(ChannelOptions.backlog, value: 16)
-      .childChannelInitializer { channel in
-        channel.pipeline.configureHTTPServerPipeline().flatMap {
-          channel.pipeline.addHandler(StreamingHandler(probe: probe, chunkCount: chunkCount))
-        }
-      }
-
-    let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
-    return StreamingHTTPServer(group: group, channel: channel, probe: probe)
+  func url() -> String {
+    "http://127.0.0.1:\(port)/stream"
   }
 
-  func close() async throws {
-    try await channel.close().get()
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      group.shutdownGracefully { error in
-        if let error {
-          continuation.resume(throwing: error)
-        } else {
-          continuation.resume()
-        }
-      }
-    }
-  }
-}
-
-private final class CloseAfterRequestHandler: ChannelInboundHandler, @unchecked Sendable {
-  typealias InboundIn = HTTPServerRequestPart
-
-  func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-    guard case .end = unwrapInboundIn(data) else {
-      return
-    }
-    context.close(promise: nil)
-  }
-}
-
-private final class ClosingHTTPServer {
-  let group: MultiThreadedEventLoopGroup
-  let channel: Channel
-
-  func url() throws -> String {
-    let localAddress = try #require(channel.localAddress)
-    let port = try #require(localAddress.port)
-    return "http://127.0.0.1:\(port)/stream"
-  }
-
-  private init(group: MultiThreadedEventLoopGroup, channel: Channel) {
-    self.group = group
-    self.channel = channel
-  }
-
-  static func start() async throws -> ClosingHTTPServer {
+  static func start(chunkCount: Int, chunkBytes: Int) async throws -> BurstingServer {
+    let written = AsyncGate()
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
     let bootstrap = ServerBootstrap(group: group)
       .serverChannelOption(ChannelOptions.backlog, value: 16)
       .childChannelInitializer { channel in
         channel.pipeline.configureHTTPServerPipeline().flatMap {
-          channel.pipeline.addHandler(CloseAfterRequestHandler())
+          channel.pipeline.addHandler(
+            BurstingHandler(written: written, chunkCount: chunkCount, chunkBytes: chunkBytes)
+          )
         }
       }
-
     let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
-    return ClosingHTTPServer(group: group, channel: channel)
+    return BurstingServer(group: group, channel: channel, written: written)
   }
 
   func close() async throws {
     try await channel.close().get()
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      group.shutdownGracefully { error in
-        if let error {
-          continuation.resume(throwing: error)
-        } else {
-          continuation.resume()
-        }
-      }
-    }
+    try await group.shutdownGracefully()
   }
 }
 
-private func withStreamingHTTPServer<Result>(
+private func withBurstingServer<Result>(
   chunkCount: Int = 1,
-  _ operation: (StreamingHTTPServer) async throws -> Result
+  chunkBytes: Int = 24,
+  _ operation: (BurstingServer) async throws -> Result
 ) async throws -> Result {
-  let server = try await StreamingHTTPServer.start(chunkCount: chunkCount)
+  let server = try await BurstingServer.start(chunkCount: chunkCount, chunkBytes: chunkBytes)
   do {
     let result = try await operation(server)
     try await server.close()
@@ -176,223 +123,414 @@ private func withStreamingHTTPServer<Result>(
   }
 }
 
-private func withClosingHTTPServer<Result>(
-  _ operation: (ClosingHTTPServer) async throws -> Result
-) async throws -> Result {
-  let server = try await ClosingHTTPServer.start()
-  do {
-    let result = try await operation(server)
-    try await server.close()
-    return result
-  } catch {
-    try? await server.close()
-    throw error
+// MARK: - Executor streaming tests
+
+@Suite(.serialized) struct AsyncHTTPExecutorStreamingTests {
+  private func streaming(
+    maximumUnreadBytes: Int = 4 * 1024 * 1024,
+    errorBytes: Int = 64 * 1024
+  ) -> HTTPResponseBodyPolicy {
+    .streaming(maximumUnreadBytes: maximumUnreadBytes, errorBytes: errorBytes)
   }
-}
 
-private func closedLocalPort() async throws -> Int {
-  let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-  let bootstrap = ServerBootstrap(group: group)
-    .serverChannelOption(ChannelOptions.backlog, value: 1)
-    .childChannelInitializer { channel in
-      channel.eventLoop.makeSucceededFuture(())
-    }
-  let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
-  let port = try #require(channel.localAddress?.port)
-  try await channel.close().get()
-  try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-    group.shutdownGracefully { error in
-      if let error {
-        continuation.resume(throwing: error)
-      } else {
-        continuation.resume()
-      }
-    }
+  private func streamRequest(
+    url: String,
+    policy: HTTPResponseBodyPolicy,
+    timeoutSeconds: Int = 30,
+    beginHandoff: (@Sendable () throws -> Void)? = nil
+  ) -> HTTPRequest {
+    HTTPRequest(
+      method: .post,
+      url: url,
+      headers: [:],
+      body: Data("{}".utf8),
+      timeoutSeconds: timeoutSeconds,
+      responseBodyPolicy: policy,
+      beginHandoff: beginHandoff
+    )
   }
-  return port
-}
 
-private func withHTTPClient<Result>(
-  configuration: HTTPClient.Configuration = HTTPClient.Configuration(),
-  _ operation: (HTTPClient) async throws -> Result
-) async throws -> Result {
-  let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: configuration)
-  do {
-    let result = try await operation(client)
-    try await client.shutdown()
-    return result
-  } catch {
-    try? await client.shutdown()
-    throw error
-  }
-}
-
-private enum TimeoutError: Error {
-  case timedOut
-}
-
-private func withTimeout<Result: Sendable>(
-  seconds: UInt64,
-  operation: @escaping @Sendable () async throws -> Result
-) async throws -> Result {
-  return try await withThrowingTaskGroup(of: Result.self) { group in
-    group.addTask {
-      try await operation()
-    }
-    group.addTask {
-      try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
-      throw TimeoutError.timedOut
-    }
-
-    guard let result = try await group.next() else {
-      throw TimeoutError.timedOut
-    }
-    group.cancelAll()
-    return result
-  }
-}
-
-@Suite struct AsyncHTTPExecutorStreamingTests {
   @Test(.timeLimit(.minutes(1)))
-  func postStreamYieldsHeadAndBodyChunksWithoutCollecting() async throws {
+  func openStreamYieldsTheHeadThenEveryChunk() async throws {
     // given
-    try await withStreamingHTTPServer { server in
-      try await withHTTPClient { client in
-        let executor = AsyncHTTPExecutor(client: client)
-
+    try await withBurstingServer(chunkCount: 4) { server in
+      try await withExecutor { executor in
         // when
-        let response = try await executor.postStream(
-          url: try server.streamURL(),
-          headers: [:],
-          jsonBody: Data("{}".utf8),
-          timeoutSeconds: 5
+        let exchange = try await executor.openStream(
+          streamRequest(url: server.url(), policy: streaming())
         )
-        var iterator = response.body.makeAsyncIterator()
-        let firstChunk = try await iterator.next()
-        let firstText = firstChunk.flatMap { String(data: $0, encoding: .utf8) }
+        var collected = Data()
+        for try await chunk in exchange.body {
+          collected.append(chunk)
+        }
+        let termination = await exchange.awaitTermination()
 
         // then
-        #expect(response.head.statusCode == 200)
-        #expect(firstText?.contains("data:") == true)
+        #expect(exchange.head.statusCode == 200)
+        #expect(exchange.head.getHeader(for: "Content-Type") == "text/event-stream")
+        #expect(collected == BurstingServer.expectedBody(chunkCount: 4, chunkBytes: 24))
+        #expect(termination == .completed)
       }
     }
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func cancellingStreamConsumerTerminatesTheReader() async throws {
-    // given
-    try await withStreamingHTTPServer { server in
-      try await withHTTPClient { client in
-        let executor = AsyncHTTPExecutor(client: client)
-        let response = try await executor.postStream(
-          url: try server.streamURL(),
-          headers: [:],
-          jsonBody: Data("{}".utf8),
-          timeoutSeconds: 30
-        )
-
-        // when
-        let reader = Task {
-          var iterator = response.body.makeAsyncIterator()
-          while try await iterator.next() != nil {}
-        }
-        await server.probe.waitStarted()
-        reader.cancel()
-        try await withTimeout(seconds: 1) {
-          try await reader.value
-        }
-
-        // then
-        #expect(reader.isCancelled)
-      }
-    }
-  }
-
-  @Test(.timeLimit(.minutes(1)))
-  func slowStreamConsumerStillReceivesEveryChunk() async throws {
-    // given
+  func slowConsumerBehindATinyUnreadCapStillReceivesEveryByte() async throws {
+    // given — an unread allowance far smaller than the burst, so the producer must suspend repeatedly
     let chunkCount = 128
-    let expected = Data((0..<chunkCount).map { "data: {\"index\":\($0)}\n\n" }.joined().utf8)
-    try await withStreamingHTTPServer(chunkCount: chunkCount) { server in
-      try await withHTTPClient { client in
-        let executor = AsyncHTTPExecutor(client: client)
-        let response = try await executor.postStream(
-          url: try server.streamURL(),
-          headers: [:],
-          jsonBody: Data("{}".utf8),
-          timeoutSeconds: 30
+    let chunkBytes = 24
+    try await withBurstingServer(chunkCount: chunkCount, chunkBytes: chunkBytes) { server in
+      try await withExecutor { executor in
+        let exchange = try await executor.openStream(
+          // Room for a handful of chunks against a burst of 128: enough to force the producer to
+          // park over and over, loose enough not to rest on exactly how the transport frames them.
+          streamRequest(url: server.url(), policy: streaming(maximumUnreadBytes: chunkBytes * 4))
         )
 
-        // when — wait until the producer has queued the full burst before reading a single chunk
-        await server.probe.waitStarted()
-        let received = try await withTimeout(seconds: 5) {
-          var collected = Data()
-          for try await chunk in response.body {
-            collected.append(chunk)
-            if collected.count >= expected.count {
-              break
-            }
-          }
-          return collected
+        // when — the whole burst is on the wire before a single chunk is read
+        await server.written.wait()
+        var collected = Data()
+        for try await chunk in exchange.body {
+          collected.append(chunk)
         }
+        let termination = await exchange.awaitTermination()
 
-        // then
-        #expect(received == expected)
+        // then — bounding the queue suspends the producer; it never costs a byte
+        #expect(
+          collected == BurstingServer.expectedBody(chunkCount: chunkCount, chunkBytes: chunkBytes)
+        )
+        #expect(termination == .completed)
       }
     }
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func connectionFailureBeforeResponseHeadIsConnectFailed() async throws {
+  func chunkLargerThanTheWholeUnreadCapFailsTheExchange() async throws {
+    // given — a chunk no amount of draining could ever admit
+    try await withBurstingServer(chunkCount: 1, chunkBytes: 64) { server in
+      try await withExecutor { executor in
+        let exchange = try await executor.openStream(
+          streamRequest(url: server.url(), policy: streaming(maximumUnreadBytes: 8))
+        )
+
+        // when
+        var collected = Data()
+        let thrown = await #expect(throws: HTTPTransportFailure.self) {
+          for try await chunk in exchange.body {
+            collected.append(chunk)
+          }
+        }
+        let termination = await exchange.awaitTermination()
+
+        // then — the transfer fails rather than parking forever, and says so to a joiner
+        #expect(collected.isEmpty)
+        #expect(thrown?.disposition == .mayHaveBeenSent)
+        #expect(termination == .failed(try #require(thrown)))
+      }
+    }
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func nonSuccessStreamBodyIsCappedAtTheErrorAllowance() async throws {
     // given
-    let port = try await closedLocalPort()
-    let configuration = HTTPClient.Configuration(timeout: .init(connect: .milliseconds(10)))
-    try await withHTTPClient(configuration: configuration) { client in
-      let executor = AsyncHTTPExecutor(client: client)
+    try await withScriptedServer(routes: [
+      "/stream": ScriptedResponse(
+        status: .tooManyRequests,
+        body: String(repeating: "e", count: 4096)
+      )
+    ]) { server in
+      try await withExecutor { executor in
+        // when
+        let exchange = try await executor.openStream(
+          streamRequest(
+            url: server.url("/stream"),
+            policy: streaming(maximumUnreadBytes: 4 * 1024 * 1024, errorBytes: 100)
+          )
+        )
+        var collected = Data()
+        for try await chunk in exchange.body {
+          collected.append(chunk)
+        }
+        let termination = await exchange.awaitTermination()
+
+        // then — a diagnostic body is read whole, and the whole of it is what the cap bounds
+        #expect(exchange.head.statusCode == 429)
+        #expect(collected.count == 100)
+        #expect(termination == .completed)
+      }
+    }
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func handoffRunsExactlyOnceBeforeAStreamingSubmission() async throws {
+    // given
+    let counter = HandoffCounter()
+    try await withBurstingServer(chunkCount: 1) { server in
+      try await withExecutor { executor in
+        // when
+        let exchange = try await executor.openStream(
+          streamRequest(url: server.url(), policy: streaming(), beginHandoff: counter.callback)
+        )
+        for try await _ in exchange.body {}
+        _ = await exchange.awaitTermination()
+
+        // then — reading the body must not re-run the linearization point
+        #expect(counter.value == 1)
+      }
+    }
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func handoffRefusalPreventsAStreamingSubmission() async throws {
+    // given
+    let counter = HandoffCounter()
+    let routes = ["/stream": ScriptedResponse(status: .ok, body: "x")]
+    try await withScriptedServer(routes: routes) { server in
+      // when
+      await #expect(throws: HandoffRefusal.self) {
+        try await withExecutor { executor in
+          _ = try await executor.openStream(
+            streamRequest(
+              url: server.url("/stream"),
+              policy: streaming(),
+              beginHandoff: counter.refusingCallback
+            )
+          )
+        }
+      }
 
       // then
-      await #expect {
-        _ = try await executor.postStream(
-          url: "http://127.0.0.1:\(port)/stream",
-          headers: [:],
-          jsonBody: Data("{}".utf8),
-          timeoutSeconds: 1
-        )
-      } throws: { error in
-        guard case ProviderError.connectFailed = error else {
-          return false
-        }
-        return true
-      }
+      #expect(counter.value == 1)
+      #expect(server.recorder.received.isEmpty)
     }
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func closeAfterRequestBeforeResponseHeadIsRetryable() async throws {
+  func refusedConnectionBeforeHeadIsDefinitelyNotSent() async throws {
     // given
-    try await withClosingHTTPServer { server in
-      let configuration = HTTPClient.Configuration(timeout: .init(connect: .milliseconds(100)))
-      try await withHTTPClient(configuration: configuration) { client in
-        let executor = AsyncHTTPExecutor(client: client)
+    let port = try await closedLocalPort()
+    var configuration = HTTPClient.Configuration()
+    // Network.framework parks a refused connect as "waiting" rather than failing it, so this bound is
+    // what ends the wait and surfaces the typed refusal. It clears the ~1-2ms the transport takes to
+    // record that refusal by two orders of magnitude, so a loaded machine cannot make the deadline
+    // land first and yield an untyped connect timeout instead.
+    configuration.timeout = .init(connect: .milliseconds(200))
 
-        // then
-        await #expect {
-          _ = try await executor.postStream(
-            url: try server.url(),
-            headers: [:],
-            jsonBody: Data("{}".utf8),
+    // when
+    let failure = await #expect(throws: HTTPTransportFailure.self) {
+      try await withExecutor(configuration: configuration) { executor in
+        _ = try await executor.openStream(
+          streamRequest(
+            url: "http://127.0.0.1:\(port)/stream",
+            policy: streaming(),
             timeoutSeconds: 1
           )
-        } throws: { error in
-          guard let providerError = error as? ProviderError else {
-            return false
-          }
-          guard case .retryable(let status, _) = providerError else {
-            return false
-          }
-          return status == nil
-        }
+        )
       }
     }
+
+    // then
+    #expect(failure?.disposition == .definitelyNotSent)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func closeBeforeHeadIsMayHaveBeenSent() async throws {
+    // given
+    try await withBehaviourServer(.closesBeforeHead) { server in
+      // when
+      let failure = await #expect(throws: HTTPTransportFailure.self) {
+        try await withExecutor { executor in
+          _ = try await executor.openStream(
+            streamRequest(url: server.url("/stream"), policy: streaming(), timeoutSeconds: 5)
+          )
+        }
+      }
+
+      // then
+      #expect(failure?.disposition == .mayHaveBeenSent)
+    }
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func cancellingAnExchangeJoinsItPromptly() async throws {
+    // given — 3072 bytes of burst against a 48-byte unread window: the server does end the response,
+    // but it cannot outrun that window, so the producer is guaranteed parked mid-transfer below
+    try await withBurstingServer(chunkCount: 128) { server in
+      try await withExecutor { executor in
+        let exchange = try await executor.openStream(
+          streamRequest(url: server.url(), policy: streaming(maximumUnreadBytes: 48))
+        )
+        var iterator = exchange.body.makeAsyncIterator()
+        _ = try await iterator.next()
+
+        // when
+        let termination = await exchange.cancelAndAwait()
+
+        // then
+        #expect(termination == .cancelled(.mayHaveBeenSent))
+      }
+    }
+  }
+}
+
+// MARK: - Exchange ownership tests
+
+/// The ownership rules exercised directly, where a producer's exit can be driven rather than raced:
+/// the transport tests above prove the executor builds an exchange, these prove what an exchange
+/// promises whoever joins it.
+@Suite(.serialized) struct HTTPStreamExchangeOwnershipTests {
+  private let head = HTTPStreamHead(statusCode: 200, headers: [:])
+
+  @Test(.timeLimit(.minutes(1)))
+  func joinReturnsOnlyAfterTheProducerHasExited() async throws {
+    // given
+    let started = AsyncGate()
+    let release = AsyncGate()
+    defer { release.open() }
+    let hasExited = Mutex(false)
+    let exchange = HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: 64) { _ in
+      started.open()
+      await release.waitIgnoringCancellation()
+      hasExited.withLock { current in
+        current = true
+      }
+      return .completed
+    }
+
+    // when
+    let joiner = Task {
+      await exchange.awaitTermination()
+    }
+    await started.wait()
+    release.open()
+    let termination = await joiner.value
+
+    // then — the join cannot report an outcome the producer has not reached yet
+    #expect(hasExited.withLock { current in current })
+    #expect(termination == .completed)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func repeatedJoinsReturnTheSameCachedTermination() async throws {
+    // given
+    let failure = HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "gone")
+    let exchange = HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: 64) { _ in
+      .failed(failure)
+    }
+
+    // when
+    let first = await exchange.awaitTermination()
+    let second = await exchange.awaitTermination()
+    let third = await exchange.cancelAndAwait()
+
+    // then — one outcome, however many times it is asked for
+    #expect(first == .failed(failure))
+    #expect(second == first)
+    #expect(third == first)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func joinIgnoresTheJoinersOwnCancellation() async throws {
+    // given
+    let release = AsyncGate()
+    defer { release.open() }
+    let exchange = HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: 64) { _ in
+      await release.waitIgnoringCancellation()
+      return .completed
+    }
+
+    // when — the joiner is cancelled while the producer is still working
+    let joiner = Task {
+      await exchange.awaitTermination()
+    }
+    joiner.cancel()
+    release.open()
+    let termination = await joiner.value
+
+    // then — a join reports what the producer did, never the joiner's own cancellation
+    #expect(termination == .completed)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func cancelWakesAProducerSuspendedOnAFullBuffer() async throws {
+    // given — capacity for one chunk and no consumer, so the second send has nowhere to go
+    let filled = AsyncGate()
+    let exchange = HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: 4) { sink in
+      do {
+        try await sink.send(Data(repeating: 0x61, count: 4))
+        filled.open()
+        try await sink.send(Data(repeating: 0x62, count: 4))
+        return .completed
+      } catch {
+        return .cancelled(.mayHaveBeenSent)
+      }
+    }
+
+    // when — yielding drives the producer to its suspension point rather than waiting on a clock
+    await filled.wait()
+    for _ in 0..<10 {
+      await Task.yield()
+    }
+    let termination = await exchange.cancelAndAwait()
+
+    // then — a producer parked on a full buffer is woken, not stranded: no consumer ever read
+    #expect(termination == .cancelled(.mayHaveBeenSent))
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func abandoningTheBodyIterationCancelsTheExchange() async throws {
+    // given — an endless producer that only a cancellation can stop
+    let exchange = HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: 8) { sink in
+      do {
+        while true {
+          try await sink.send(Data(repeating: 0x63, count: 4))
+        }
+      } catch {
+        return .cancelled(.mayHaveBeenSent)
+      }
+    }
+
+    // when — the consumer takes one chunk and walks away, dropping the iterator
+    for try await _ in exchange.body {
+      break
+    }
+    let termination = await exchange.awaitTermination()
+
+    // then — the abandoned iteration stopped the work behind it, and the join still reports it
+    #expect(termination == .cancelled(.mayHaveBeenSent))
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func cancellationMidTransferKeepsChunksTheConsumerWasAlreadyOwed() async throws {
+    // given — a producer still working, with a delivered chunk sitting unread behind it
+    let delivered = AsyncGate()
+    let release = AsyncGate()
+    defer { release.open() }
+    let exchange = HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: 64) { sink in
+      do {
+        try await sink.send(Data("first".utf8))
+        delivered.open()
+        await release.waitIgnoringCancellation()
+        try await sink.send(Data("second".utf8))
+        return .completed
+      } catch {
+        return .cancelled(.mayHaveBeenSent)
+      }
+    }
+    await delivered.wait()
+
+    // when — cancelled with the transfer in flight, not after it had already run to completion
+    exchange.cancel()
+    release.open()
+    let termination = await exchange.awaitTermination()
+    var collected = Data()
+    for try await chunk in exchange.body {
+      collected.append(chunk)
+    }
+
+    // then — closing bounds the producer; it does not discard what the consumer was already owed,
+    // and the chunk the cancellation cut off never arrives
+    #expect(collected == Data("first".utf8))
+    #expect(termination == .cancelled(.mayHaveBeenSent))
   }
 }

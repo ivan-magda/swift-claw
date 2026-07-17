@@ -29,6 +29,7 @@ let package = Package(
       name: "ClawSecrets",
       dependencies: [
         "ClawCore",
+        "ClawAuth",
         .product(name: "Crypto", package: "swift-crypto"),
       ]
     ),
@@ -53,12 +54,14 @@ let package = Package(
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "NIOCore", package: "swift-nio"),
         .product(name: "NIOFoundationCompat", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
       ]
     ),
     .target(
       name: "ClawLLM",
       dependencies: [
         "ClawCore",
+        "ClawAuth",
         .product(name: "Logging", package: "swift-log"),
       ],
       resources: [.copy("Pricing/Prices.json")]
@@ -79,6 +82,7 @@ let package = Package(
         .product(name: "Subprocess", package: "swift-subprocess"),
       ]
     ),
+    .target(name: "ClawAuth", dependencies: ["ClawCore"]),
     .target(name: "ClawTestSupport", dependencies: ["ClawCore", "ClawTools"]),
     .target(
       name: "ClawGateway",
@@ -94,7 +98,7 @@ let package = Package(
       name: "clawd",
       dependencies: [
         "ClawCore", "ClawData", "ClawSecrets", "ClawTelegram", "ClawGateway", "ClawLLM",
-        "ClawAgent", "ClawWorkspace", "ClawTools", "ClawExec", "ClawAppleSpeech",
+        "ClawAgent", "ClawWorkspace", "ClawTools", "ClawExec", "ClawAuth", "ClawAppleSpeech",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
@@ -102,6 +106,13 @@ let package = Package(
       ]
     ),
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore", "ClawTestSupport"]),
+    // `ClawSecrets` and `ClawGateway` are test-only: the auth workflow is proven against the real
+    // secret preparer, credential store, and instance lock it will be composed with, while
+    // production `ClawAuth` still depends on `ClawCore` alone.
+    .testTarget(
+      name: "ClawAuthTests",
+      dependencies: ["ClawAuth", "ClawCore", "ClawSecrets", "ClawGateway", "ClawTestSupport"]
+    ),
     .testTarget(
       name: "ClawSecretsTests",
       dependencies: [
@@ -128,7 +139,10 @@ let package = Package(
       dependencies: [
         "ClawLLM", "ClawCore", "ClawTestSupport",
         .product(name: "Logging", package: "swift-log"),
-      ]
+      ],
+      // Read by absolute #filePath in ChatGPTResponsesSSEParserTests, never via Bundle.module,
+      // so they stay on disk as plain sources rather than bundled resources.
+      exclude: ["ChatGPT/Fixtures"]
     ),
     .testTarget(
       name: "ClawAgentTests",
@@ -152,6 +166,21 @@ let package = Package(
       dependencies: [
         "ClawGateway", "ClawCore", "ClawData", "ClawAgent", "ClawTelegram", "ClawWorkspace",
         "ClawTools", "ClawTestSupport",
+        .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+        .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
+      ]
+    ),
+    // Composition-root tests: they reach into `clawd` to prove the wiring the executable owns — the
+    // service-graph ordering and the fatal-exit boundary — against the real `ClawGateway` types.
+    .testTarget(
+      name: "ClawdCompositionTests",
+      dependencies: [
+        "clawd", "ClawGateway", "ClawAgent", "ClawTestSupport",
+        "ClawCore", "ClawAuth", "ClawSecrets", "ClawLLM", "ClawData", "ClawTelegram",
+        .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+        .product(name: "AsyncHTTPClient", package: "async-http-client"),
+        .product(name: "GRDB", package: "GRDB.swift"),
+        .product(name: "Logging", package: "swift-log"),
       ]
     ),
   ]

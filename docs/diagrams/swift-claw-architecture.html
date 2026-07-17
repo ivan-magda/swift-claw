@@ -578,7 +578,7 @@ h2 {
     <p class="section-desc">
       A single long-running supervised daemon (<code>clawd</code>) owns all connectivity, state, policy, routing, sessions, and tools.
       Telegram is the only surface in v1 (long-polling, no listen socket — better secure-by-default posture).
-      The LLM is reached via one OpenAI-compatible Chat Completions contract. All state is local-first on the owner's machine.
+      The LLM is reached via one <code>LLMProvider</code> contract with two wire adapters (a Chat Completions adapter and a ChatGPT Responses adapter, selected by the <code>CLAW_LLM_MODEL</code> route). All state is local-first on the owner's machine.
     </p>
 
     <div class="diagram-shell">

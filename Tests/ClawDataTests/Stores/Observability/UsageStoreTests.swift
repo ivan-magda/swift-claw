@@ -28,6 +28,7 @@ import Testing
     let now = Date()
     try usage.recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-1"),
         runId: runId,
         sessionId: sessionId,
         model: "m",
@@ -88,6 +89,7 @@ import Testing
     let now = Date()
     try usage.recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-interactive"),
         runId: interactiveRunId,
         sessionId: try #require(interactiveClaim.sessionId),
         model: "m",
@@ -101,6 +103,7 @@ import Testing
     )
     try usage.recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-scheduled"),
         runId: scheduledRunId,
         sessionId: try #require(scheduledClaim.sessionId),
         model: "m",
@@ -157,6 +160,7 @@ import Testing
     // when — previous-day (excluded), exactly at the UTC day start (included via `>=`), and midday
     try usage.recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-previous-day"),
         runId: runId,
         sessionId: sessionId,
         model: "m",
@@ -170,6 +174,7 @@ import Testing
     )
     try usage.recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-day-start"),
         runId: runId,
         sessionId: sessionId,
         model: "m",
@@ -183,6 +188,7 @@ import Testing
     )
     try usage.recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-midday"),
         runId: runId,
         sessionId: sessionId,
         model: "m",
@@ -200,5 +206,152 @@ import Testing
     #expect(tokens == 160)
     #expect(abs(cost - 0.0173) < 1e-9)
     #expect(try usage.costSourceMix(now: now) == [.providerReturned: 2])
+  }
+
+  // MARK: - Call Idempotency
+
+  @Test func recordingTheSameCallTwiceStoresOneRowAndDebitsTheDayOnce() throws {
+    // given — the shape a commit retried after its first attempt already landed produces
+    let env = try Self.fixture()
+    let row = Self.usage(callID: "call-1", runId: env.runId, sessionId: env.sessionId)
+
+    // when
+    try env.usage.recordUsage(row)
+    try env.usage.recordUsage(row)
+
+    // then
+    #expect(try Self.rowCount(env.queue) == 1)
+    let (tokens, cost) = try env.usage.todayTokensAndCost(now: Self.fixedNow)
+    #expect(tokens == 15)
+    #expect(abs(cost - 0.002) < 1e-9)
+  }
+
+  @Test func twoDifferentCallsForOneRunBothStoreAndBothDebitTheDay() throws {
+    // given — a run's tool loop legitimately spends once per round
+    let env = try Self.fixture()
+
+    // when
+    try env.usage.recordUsage(
+      Self.usage(callID: "call-1", runId: env.runId, sessionId: env.sessionId)
+    )
+    try env.usage.recordUsage(
+      Self.usage(callID: "call-2", runId: env.runId, sessionId: env.sessionId)
+    )
+
+    // then — idempotency is per call, never per run
+    #expect(try Self.rowCount(env.queue) == 2)
+    let (tokens, cost) = try env.usage.todayTokensAndCost(now: Self.fixedNow)
+    #expect(tokens == 30)
+    #expect(abs(cost - 0.004) < 1e-9)
+  }
+
+  @Test func aRunlessScheduleParseIsIdempotentOnItsOwnCall() throws {
+    // given — command spend carries no run, so the run can not be what distinguishes its rows
+    let env = try Self.fixture()
+    let row = Self.usage(callID: "call-parse", runId: nil, sessionId: env.sessionId)
+
+    // when
+    try env.usage.recordUsage(row)
+    try env.usage.recordUsage(row)
+
+    // then
+    #expect(try Self.rowCount(env.queue) == 1)
+    #expect(try env.usage.todayTokensAndCost(now: Self.fixedNow).tokens == 15)
+  }
+
+  @Test func twoRunlessParsesWithDistinctCallsBothStore() throws {
+    // given — the run id is NULL on both, so only the call identity separates them
+    let env = try Self.fixture()
+
+    // when
+    try env.usage.recordUsage(Self.usage(callID: "call-a", runId: nil, sessionId: env.sessionId))
+    try env.usage.recordUsage(Self.usage(callID: "call-b", runId: nil, sessionId: env.sessionId))
+
+    // then
+    #expect(try Self.rowCount(env.queue) == 2)
+    #expect(try env.usage.todayTokensAndCost(now: Self.fixedNow).tokens == 30)
+  }
+
+  @Test func aRecordNamingAnUnknownRunSurfacesTheFailureRatherThanBeingSilenced() throws {
+    // given — the conflict clause silences a repeated call identity and nothing else; a corrupt
+    // row must not reach the caller wearing the same "already recorded, nothing to do" face
+    let env = try Self.fixture()
+
+    // when / then
+    #expect(throws: StoreError.self) {
+      try env.usage.recordUsage(
+        Self.usage(callID: "call-orphan", runId: 9999, sessionId: env.sessionId)
+      )
+    }
+    #expect(try Self.rowCount(env.queue) == 0)
+  }
+
+  @Test func aRecordNamingAnUnknownSessionSurfacesTheFailureRatherThanBeingSilenced() throws {
+    // given
+    let env = try Self.fixture()
+
+    // when / then
+    #expect(throws: StoreError.self) {
+      try env.usage.recordUsage(
+        Self.usage(callID: "call-orphan", runId: env.runId, sessionId: 9999)
+      )
+    }
+    #expect(try Self.rowCount(env.queue) == 0)
+  }
+}
+
+// MARK: - Fixture
+
+private extension UsageStoreTests {
+  struct Fixture {
+    let queue: DatabaseQueue
+    let usage: UsageStoreGRDB
+    let sessionId: Int64
+    let runId: Int64
+  }
+
+  static let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
+
+  static func fixture() throws -> Fixture {
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
+      InboundMessage(
+        updateId: 1,
+        sessionKey: SessionKey.telegramDM(chatId: 42),
+        chatId: 42,
+        userId: 42,
+        text: "seed",
+        isEdited: false,
+        ts: fixedNow
+      )
+    )
+    return Fixture(
+      queue: queue,
+      usage: UsageStoreGRDB(writer: queue),
+      sessionId: try #require(claim.sessionId),
+      runId: try #require(claim.runId)
+    )
+  }
+
+  static func usage(callID: String, runId: Int64?, sessionId: Int64) -> ProviderUsage {
+    ProviderUsage(
+      providerCallID: ProviderCallID(rawValue: callID),
+      runId: runId,
+      sessionId: sessionId,
+      model: "m",
+      promptTokens: 10,
+      completionTokens: 5,
+      costUSD: 0.002,
+      costSource: .providerReturned,
+      isEstimated: false,
+      ts: fixedNow
+    )
+  }
+
+  static func rowCount(_ queue: DatabaseQueue) throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM provider_usage") ?? -1
+    }
   }
 }

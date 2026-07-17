@@ -1,0 +1,23 @@
+: keep-alive
+
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_basic","status":"in_progress"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"msg_1","type":"message","role":"assistant","status":"in_progress","phase":"final","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":0,"item_id":"msg_1","delta":"Hello"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":0,"item_id":"msg_1","delta":""}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":0,"item_id":"msg_1","delta":", wor"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"id":"msg_1","type":"message","role":"assistant","status":"completed","phase":"final","content":[{"type":"output_text","text":"Hello, world!"}]}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_basic","status":"completed","output":null,"usage":{"input_tokens":11,"output_tokens":5,"total_tokens":16}}}
+

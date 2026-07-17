@@ -29,8 +29,11 @@ import Testing
     // then
     #expect(config.allowlist == [42, 99])
     #expect(config.pollTimeoutSeconds == 20)
-    #expect(config.llm.model == "gpt-4o")
-    #expect(config.llm.apiKey.isEmpty)  // the secret is injected at the root, not parsed here
+    #expect(config.llm.route.wireModel == "gpt-4o")
+    #expect(config.llm.route.configuredReference == "gpt-4o")
+    // The unqualified model resolves to the configured current route; the key is a secret injected
+    // into a credential source at the root, never parsed into this config.
+    #expect(config.llm.route.descriptor.providerID == .openAICompatible)
   }
 
   @Test(arguments: [
@@ -111,7 +114,9 @@ import Testing
     let config = try AppConfig.load(environment: env)
 
     // then
-    #expect(config.llm.maxTokensField == .maxCompletionTokens)
+    #expect(
+      config.llm.route.descriptor.capabilities.outputTokenField == .configured(.maxCompletionTokens)
+    )
     #expect(config.llm.maxOutputTokens == 4096)
   }
 
@@ -123,8 +128,8 @@ import Testing
     // when
     let config = try AppConfig.load(environment: env)
 
-    // then
-    #expect(config.llm.maxTokensField == .maxTokens)
+    // then — the override is applied to the current route's wire output-token field
+    #expect(config.llm.route.descriptor.capabilities.outputTokenField == .configured(.maxTokens))
   }
 
   @Test func structuredOutputDefaultsToOff() throws {
@@ -201,20 +206,6 @@ import Testing
     }
   }
 
-  @Test func withAPIKeyInjectsSecretWithoutMutatingTheRest() throws {
-    // given
-    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-    let config = try AppConfig.load(environment: env)
-
-    // when
-    let withKey = config.llm.withAPIKey("sk-injected")
-
-    // then
-    #expect(withKey.apiKey == "sk-injected")
-    #expect(withKey.model == config.llm.model)
-    #expect(withKey.baseURL == config.llm.baseURL)
-  }
-
   @Test func streamingDefaultsToOn() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -261,6 +252,169 @@ import Testing
     #expect(throws: ConfigError.invalidBool(key: EnvKey.llmStreaming, value: "sometimes")) {
       try AppConfig.load(environment: env)
     }
+  }
+
+  // MARK: - Route resolution matrix
+
+  /// A ChatGPT model with no base URL and no key at all, to prove the managed route neither reads nor
+  /// requires either.
+  private func chatGPTEnv(_ overrides: [String: String] = [:]) -> [String: String] {
+    [
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+      EnvKey.llmModel: "openai-chatgpt/gpt-5.4",
+    ].merging(overrides) { _, new in new }
+  }
+
+  @Test func chatGPTPrefixResolvesTheManagedRouteWithoutBaseURLOrKey() throws {
+    // given — the exact qualified prefix, and neither CLAW_LLM_BASE_URL nor CLAW_LLM_API_KEY present
+    let env = chatGPTEnv()
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — managed route, split identities, fixed managed egress, no wire output field
+    let route = config.llm.route
+    #expect(route.descriptor.providerID == .openAIChatGPT)
+    #expect(route.configuredReference == "openai-chatgpt/gpt-5.4")
+    #expect(route.wireModel == "gpt-5.4")
+    #expect(route.configuredReference != route.wireModel)
+    #expect(route.descriptor.credentialMode == .managedOAuth)
+    #expect(
+      route.descriptor.egress
+        == .managed(
+          providerID: .openAIChatGPT,
+          endpoint: LLMProviderDescriptor.chatGPTResponsesEndpoint
+        )
+    )
+    #expect(route.descriptor.capabilities.outputTokenField == .omitted)
+  }
+
+  @Test func staleBaseURLAndKeyAreIgnoredOnTheManagedRoute() throws {
+    // given — a leftover base URL from a prior current-route install; the managed route must not read
+    // it into its egress
+    let env = chatGPTEnv([EnvKey.llmBaseURL: "https://leftover.example/v1"])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — the egress stays the fixed managed endpoint, never the stale configured one
+    #expect(
+      config.llm.route.descriptor.egress
+        == .managed(
+          providerID: .openAIChatGPT,
+          endpoint: LLMProviderDescriptor.chatGPTResponsesEndpoint
+        )
+    )
+  }
+
+  @Test func currentRouteBothIdentitiesAreTheConfiguredModel() throws {
+    // given — an unqualified model
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let route = try AppConfig.load(environment: env).llm.route
+
+    // then — wire and accounting identities collapse only for the current route
+    #expect(route.configuredReference == route.wireModel)
+    #expect(route.wireModel == "gpt-4o")
+  }
+
+  @Test(arguments: [
+    ("openai-chatgpt/", ConfigError.emptyQualifiedModelSuffix(reference: "openai-chatgpt/")),
+    (
+      "openai-chatgpt/ bad",
+      ConfigError.unsafeQualifiedModelSuffix(reference: "openai-chatgpt/ bad")
+    ),
+  ]) func invalidChatGPTSuffixFailsClosed(model: String, expected: ConfigError) {
+    // given — a recognized prefix with a suffix that is not a model this route may name
+    let env = chatGPTEnv([EnvKey.llmModel: model])
+
+    // then — the model is validated before any base URL is demanded
+    #expect(throws: expected) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func oversizedChatGPTSuffixFailsClosed() {
+    // given — a suffix past the 200-scalar bound
+    let model = "openai-chatgpt/" + String(repeating: "a", count: 201)
+    let env = chatGPTEnv([EnvKey.llmModel: model])
+
+    // then
+    #expect(throws: ConfigError.oversizedQualifiedModelSuffix(reference: model)) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test(arguments: ["openrouter/openai/gpt-5.4", "openai-chatgpt", "OpenAI-ChatGPT/gpt"])
+  func slashModelsAndNearMissPrefixesKeepTheCurrentRoute(model: String) throws {
+    // given — a slash alone, an unslashed near-miss, and a wrong-case prefix all stay raw models
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory(), EnvKey.llmModel: model])
+
+    // when
+    let route = try AppConfig.load(environment: env).llm.route
+
+    // then — the current route, carrying the whole value as both identities
+    #expect(route.descriptor.providerID == .openAICompatible)
+    #expect(route.wireModel == model)
+    #expect(route.configuredReference == model)
+  }
+
+  @Test func currentRouteRequiresBaseURL() {
+    // given — an unqualified model with no base URL
+    let env = [EnvKey.stateRoot: NSTemporaryDirectory(), EnvKey.llmModel: "gpt-4o"]
+
+    // then — the current route demands the base URL the managed route never reads
+    #expect(throws: ConfigError.missingLLMBaseURL) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func chatGPTRouteIgnoresMaxTokensFieldEvenWhenInvalid() throws {
+    // given — a value that would fail on the current route; the managed route consults no wire cap,
+    // so it must neither read nor reject it
+    let env = chatGPTEnv([EnvKey.llmMaxTokensField: "not_a_field"])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — the field stays omitted and load succeeds
+    #expect(config.llm.route.descriptor.capabilities.outputTokenField == .omitted)
+  }
+
+  @Test func currentRouteStillRejectsInvalidMaxTokensField() {
+    // given — the pairing to the ignore-on-ChatGPT case: the current route DOES honor the variable
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.llmMaxTokensField] = "not_a_field"
+
+    // then
+    #expect(throws: ConfigError.invalidMaxTokensField("not_a_field")) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func nonOffStructuredOutputIsRejectedOnTheManagedRoute() {
+    // given — a structured-output mode the managed route has no contract to honor
+    let env = chatGPTEnv([EnvKey.llmStructuredOutput: "json_object"])
+
+    // then — rejected with the route named
+    #expect(
+      throws: ConfigError.structuredOutputUnsupportedOnRoute(
+        providerID: .openAIChatGPT,
+        mode: .jsonObject
+      )
+    ) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func offStructuredOutputIsAcceptedOnTheManagedRoute() throws {
+    // given — the one structured-output value the managed route accepts
+    let env = chatGPTEnv([EnvKey.llmStructuredOutput: "off"])
+
+    // when / then — load succeeds
+    let config = try AppConfig.load(environment: env)
+    #expect(config.llm.structuredOutput == .off)
   }
 
   @Test func schedulerAndHeartbeatDefaultsArePinned() throws {

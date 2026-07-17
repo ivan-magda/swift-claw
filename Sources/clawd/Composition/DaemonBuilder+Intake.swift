@@ -163,7 +163,7 @@ extension DaemonBuilder {
     PolicyFingerprint.staticSubhash(
       inputs: PolicyFingerprint.StaticInputs(
         tools: toolDispatcher.definitions,
-        llmBaseURL: config.llm.baseURL,
+        llmEgress: config.llm.route.descriptor.egress,
         searchEndpointPresent: secrets.searchApiKey != nil,
         workspaceRoot: workspace.root.path,
         webFetchExemptCIDRs: config.webFetchExemptCIDRs,

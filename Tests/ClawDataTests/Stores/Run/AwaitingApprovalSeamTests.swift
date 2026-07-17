@@ -117,6 +117,7 @@ import Testing
       chatId: 7,
       content: "late reply",
       usage: ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-late"),
         runId: env.runId,
         sessionId: env.sessionId,
         model: "m",

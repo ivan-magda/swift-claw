@@ -322,6 +322,7 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
       chatId: doneChatId,
       content: "all done",
       usage: ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-done"),
         runId: doneRunId,
         sessionId: doneSessionId,
         model: "gpt-4o",

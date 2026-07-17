@@ -1,0 +1,39 @@
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC-ONE"}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC-ONE"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":1,"item":{"id":"msg_c","type":"message","role":"assistant","status":"in_progress","phase":"commentary","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":1,"item_id":"msg_c","delta":"weighing the options"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":1,"item":{"id":"msg_c","type":"message","role":"assistant","status":"completed","phase":"commentary","content":[{"type":"output_text","text":"weighing the options"}]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":2,"item":{"id":"msg_a","type":"message","role":"assistant","status":"in_progress","phase":"analysis","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":2,"item_id":"msg_a","delta":"scratch work"}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":3,"item":{"id":"rs_2","type":"reasoning","encrypted_content":"ENC-TWO","summary":[{"type":"summary_text","text":"Checked the clock."}]}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":3,"item":{"id":"rs_2","type":"reasoning","encrypted_content":"ENC-TWO","summary":[{"type":"summary_text","text":"Checked the clock."}]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":4,"item":{"id":"msg_f","type":"message","role":"assistant","status":"in_progress","phase":"final_answer","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":4,"item_id":"msg_f","delta":"The answer."}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":4,"item":{"id":"msg_f","type":"message","role":"assistant","status":"completed","phase":"final_answer","content":[{"type":"output_text","text":"The answer."}]}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_reasoning","status":"completed","output":null,"usage":{"input_tokens":30,"output_tokens":12,"total_tokens":42}}}
+

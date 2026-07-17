@@ -1,5 +1,6 @@
 import ArgumentParser
 import ClawCore
+import ClawGateway
 import ClawSecrets
 import Foundation
 
@@ -40,15 +41,11 @@ struct SecretsCommand: AsyncParsableCommand {
         throw ExitCode(error.exitCode)
       }
 
-      do {
-        try EncryptedFileSecretStore.seal(secrets, stateRoot: config.stateRoot)
-      } catch {
-        FileHandle.standardError.write(Data("secrets seal failed: \(error)\n".utf8))
-        throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
-      }
+      try Self.sealUnderInstanceLock(secrets, stateRoot: config.stateRoot)
 
-      let envelopePath = config.stateRoot.appendingPathComponent(SecretFile.envelope).path
-      let keyPath = config.stateRoot.appendingPathComponent(SecretFile.key).path
+      let paths = SecretStatePaths(stateRoot: config.stateRoot)
+      let envelopePath = paths.runtimeEnvelope.path
+      let keyPath = paths.key.path
       // swiftlint:disable:next no_print_in_production
       print(
         """
@@ -59,6 +56,46 @@ struct SecretsCommand: AsyncParsableCommand {
         \(EnvSecretStore.EnvKey.searchApiKey) from the env.
         """
       )
+    }
+  }
+}
+
+// MARK: - Seal
+
+extension SecretsCommand.Seal {
+  /// Seals while holding the state-root instance lock, so a concurrent seal-capable command — another
+  /// `secrets seal`, an `auth login`, or a running daemon — cannot race the key-adoption-and-rollback
+  /// window that a lone seal defends only against itself: without serialization a losing seal can
+  /// adopt the winner's key inode and then be orphaned when the winner's rollback unlinks it. The lock
+  /// is released the moment the seal returns.
+  static func sealUnderInstanceLock(_ secrets: Secrets, stateRoot: URL) throws {
+    let lock = try acquireInstanceLockOrExit(stateRoot: stateRoot)
+    defer { lock.release() }
+
+    // The same hardened operation the login transition runs: it publishes crash-safely, proves the
+    // result decrypts, and unwinds anything it created if it cannot.
+    do {
+      try EncryptedFileSecretStore.seal(secrets, stateRoot: stateRoot)
+    } catch let error {
+      FileHandle.standardError.write(Data("secrets seal failed: \(error)\n".utf8))
+      throw ExitCode(error.exitCode)
+    }
+  }
+
+  /// Takes the single-instance lock the daemon and the login transition also hold; a held lock exits
+  /// with the daemon's own already-running code, so a supervisor treats it as non-retryable.
+  static func acquireInstanceLockOrExit(stateRoot: URL) throws -> InstanceLock {
+    let lockPath = SecretStatePaths(stateRoot: stateRoot).instanceLock.path
+    do {
+      return try InstanceLock(path: lockPath)
+    } catch InstanceLock.LockError.alreadyLocked {
+      FileHandle.standardError.write(
+        Data(
+          "secrets seal: another clawd process holds the state-root lock; stop it before sealing\n"
+            .utf8
+        )
+      )
+      throw ExitCode(ClawExitCode.alreadyRunning.rawValue)
     }
   }
 }

@@ -36,7 +36,7 @@ import Testing
       await executor.requests.first { request in request.method == .get }
     )
     #expect(getCall.url == Self.downloadURL)
-    #expect(getCall.maxBodyBytes == 1024)
+    #expect(getCall.responseBodyPolicy == .buffered(successBytes: 1024, errorBytes: 1024))
   }
 
   @Test func missingFilePathThrowsWithoutDownloading() async throws {
@@ -84,7 +84,7 @@ import Testing
 
   @Test func transportErrorIsRedactedBeforeThrowing() async throws {
     // given — a transport failure whose description echoes the token-bearing URL
-    struct URLEchoError: Error, CustomStringConvertible {
+    struct URLEchoError: Error, Sendable, CustomStringConvertible {
       let url: String
       var description: String { "connection to \(url) failed" }
     }

@@ -684,8 +684,8 @@ import Testing
       try db.execute(
         sql: """
           INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-            cost_usd, cost_source, is_estimated, ts)
-          VALUES (?, ?, 'm', 10, 5, ?, 'heuristic', 1, ?)
+            cost_usd, cost_source, is_estimated, ts, provider_call_id)
+          VALUES (?, ?, 'm', 10, 5, ?, 'heuristic', 1, ?, 'call-proactive-seed')
           """,
         arguments: [runId, sessionId, costUSD, now]
       )

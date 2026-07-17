@@ -1,3 +1,4 @@
+import ClawAgent
 import ClawCore
 import Foundation
 import Logging
@@ -10,6 +11,14 @@ public enum ScheduleDraftParseResult: Sendable, Equatable {
   case providerUnavailable
   /// The day-spend gate refused before the call was issued; `cap` names the tripped limit.
   case budgetDenied(cap: String)
+  /// The credential is missing or refused. The router gives the same actionable guidance a turn
+  /// does — stop clawd, `clawd auth login`, restart — and, like a turn, debits nothing.
+  case authenticationRequired
+  /// The subscription/account cannot use the requested route or model; re-login would not help, so
+  /// the guidance never says to log in.
+  case accessDenied
+  /// A clean throttle; `retryAfterSeconds` is the provider's bounded hint when it gave one.
+  case quotaLimited(retryAfterSeconds: Int?)
 }
 
 /// Seam for the router so tests script drafts without an LLM. `sessionId` attributes the parse's
@@ -47,13 +56,21 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     """
 
   private let provider: any LLMProvider
-  private let model: String
+  /// What crosses the wire in `ChatRequest.model`.
+  private let wireModel: String
   private let responseFormat: ResponseFormat?
 
   private let usageStore: any UsageStore
   private let gate: BudgetGate
-  private let costResolver: CostResolver
-  private let usageResolver = UsageResolver()
+  /// The one place every usage row is minted, shared with `AgentRuntime` so a parse and a turn
+  /// account identically by construction rather than through parallel copies. It owns the cost
+  /// identity (`openai-chatgpt/<model>` for a subscription route, never colliding with API-billed
+  /// rows for the same wire model), the billing and reservation policies, and the resolvers; the
+  /// parse's `now` is its timestamp source.
+  private let accountant: ProviderUsageAccountant
+  /// Mints the identity the parse's usage row is recorded under. Injected so a test can pin the
+  /// identity rather than assert against a random UUID.
+  private let providerCallIDGenerator: any ProviderCallIDGenerating
 
   private let now: @Sendable () -> Date
   private let clock: any Clock<Duration>
@@ -62,22 +79,34 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
 
   public init(
     provider: any LLMProvider,
-    model: String,
+    wireModel: String,
+    configuredReference: String? = nil,
     usageStore: any UsageStore,
     budget: RunBudget,
     costResolver: CostResolver,
+    costPolicy: LLMCostPolicy = .metered,
+    reservationPolicy: LLMInputReservationPolicy = .textOnly,
     structuredOutput: StructuredOutputMode = .off,
+    providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
     now: @escaping @Sendable () -> Date = { Date() },
     clock: any Clock<Duration>,
     logger: Logger
   ) {
     self.provider = provider
-    self.model = model
+    self.wireModel = wireModel
     self.responseFormat = Self.responseFormat(for: structuredOutput)
 
     self.usageStore = usageStore
-    self.gate = BudgetGate(budget: budget)
-    self.costResolver = costResolver
+    self.gate = BudgetGate(budget: budget, costPolicy: costPolicy)
+    self.accountant = ProviderUsageAccountant(
+      configuredReference: configuredReference ?? wireModel,
+      costPolicy: costPolicy,
+      reservationPolicy: reservationPolicy,
+      costResolver: costResolver,
+      outputCap: Self.maxParseOutputTokens,
+      now: now
+    )
+    self.providerCallIDGenerator = providerCallIDGenerator
 
     self.now = now
     self.clock = clock
@@ -86,69 +115,60 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   }
 
   public func parse(ownerText: String, sessionId: Int64) async -> ScheduleDraftParseResult {
+    // The parse is one provider call, so it is one identity — shared by the reconciled row a reply
+    // yields and the estimate a deadline or brownout forces, since only one of them can ever be
+    // recorded for this call.
+    let callID = providerCallIDGenerator.next()
     let request = ChatRequest(
-      model: model,
+      model: wireModel,
       messages: [
         ChatMessage(role: .system, content: Self.systemPrompt),
         ChatMessage(role: .user, content: ownerText),
       ],
       maxOutputTokens: Self.maxParseOutputTokens,
-      responseFormat: responseFormat
+      responseFormat: responseFormat,
+      // The one shared trace identity — the same formatter a turn stamps — so a session's parse and
+      // its turns never split across two trace identities.
+      sessionId: SessionTraceID.format(sessionID: sessionId)
     )
 
-    // Day-cap preflight: the token breaker runs before EVERY provider call, command
-    // parses included. A failed totals read fails closed — no spend without working accounting.
-    let todayTokens: Int
-    let todayUSD: Double
-    do {
-      (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now())
-    } catch {
-      logger.warning("schedule parse: day-totals read failed; refusing to spend: \(error)")
-      return .providerUnavailable
-    }
-
-    let promptTokens = TokenEstimator.estimateInputTokens(request.messages)
-    let estimatedTokens = promptTokens + Self.maxParseOutputTokens
-    let estimatedCost = costResolver.resolve(
-      model: model,
-      usage: ChatUsage(
-        promptTokens: promptTokens,
-        completionTokens: Self.maxParseOutputTokens,
-        totalTokens: estimatedTokens
-      ),
-      providerCost: nil
-    ).costUSD
-
-    if case .deny(let cap) = gate.preflight(
-      todayTokens: todayTokens,
-      todayUSD: todayUSD,
-      estimatedTotalTokens: estimatedTokens,
-      estimatedCostUSD: estimatedCost
-    ) {
-      return .budgetDenied(cap: cap)
+    // Day-cap preflight before issuing: a denial or an accounting failure refuses without a call.
+    if let refusal = preflightRefusal(for: request.messages) {
+      return refusal
     }
 
     let response: ChatResponse
     do {
       response = try await completeBounded(request: request)
+    } catch let racedSuccess as RacedDeadlineSuccess {
+      // A real reply landed alongside the won deadline: book its authoritative usage (real counts,
+      // provider cost), never the estimate a bare timeout forces — while the owner still sees the
+      // same DEG-01 degradation the poller expects.
+      let landed = racedSuccess.response
+      record(usageFor: landed, request: request, callID: callID, sessionId: sessionId)
+      return .providerUnavailable
     } catch is ParseDeadlineExceeded {
       // The request may still be billing server-side; debit the estimate so the day cap
       // sees the spend, exactly like a deadline-hit turn.
-      record(estimatedFor: request, sessionId: sessionId)
+      record(estimatedFor: request, callID: callID, sessionId: sessionId)
       return .providerUnavailable
-    } catch ProviderError.retryable, ProviderError.connectFailed {
-      // Exhausted retries / transport failure: parity with a turn's `degradedForCaughtError`
-      // — debit an estimate so a provider brownout still moves the day cap, rather than
-      // letting repeated `/schedule` attempts re-issue the call with the totals frozen.
-      record(estimatedFor: request, sessionId: sessionId)
+    } catch is CancellationError {
+      // The command was cancelled: nothing was generated to bill, and cancellation is never an
+      // owner-facing provider outage — the same rule the turn path applies to a raw cancel.
       return .providerUnavailable
     } catch {
-      // Terminal rejection (a 4xx that won't retry): the provider generated and billed nothing,
-      // so there is nothing to account. The owner reply is the same DEG-01 degradation.
-      return .providerUnavailable
+      // One decision for every natural failure, keyed on the same vendor-neutral disposition a turn
+      // reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a brownout
+      // still moves the day cap rather than letting repeated `/schedule` attempts re-issue with the
+      // totals frozen; a proven `notStarted` (terminal 4xx, auth, access, quota, replay) generated
+      // nothing, so it accounts nothing. The typed causes then pick the router's actionable reply.
+      if case .mayHaveStarted = ProviderFailureAccounting.classify(error) {
+        record(estimatedFor: request, callID: callID, sessionId: sessionId)
+      }
+      return Self.parseFailureResult(for: error)
     }
 
-    record(usageFor: response, request: request, sessionId: sessionId)
+    record(usageFor: response, request: request, callID: callID, sessionId: sessionId)
 
     let result = Self.decode(response.content)
     if result == .unparseable {
@@ -273,46 +293,93 @@ private extension ScheduleDraftParser {
   }
 }
 
+// MARK: - Preflight
+
+private extension ScheduleDraftParser {
+  /// The offline day-cap gate that runs before EVERY provider call, command parses included. Returns
+  /// the early-exit outcome — `.budgetDenied` when a cap is met, `.providerUnavailable` when the
+  /// totals read fails (fail closed: no spend without working accounting) — or nil to proceed. The
+  /// replay-state reservation rides on ordinary text estimation so a state-carrying wire could not
+  /// slip past the token gate; the parse carries none today but reserves the same way a turn does,
+  /// and the USD figure is resolved under the injected policy so `includedPlan` skips the dollar gate.
+  func preflightRefusal(for messages: [ChatMessage]) -> ScheduleDraftParseResult? {
+    let todayTokens: Int
+    let todayUSD: Double
+    do {
+      (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now())
+    } catch {
+      logger.warning("schedule parse: day-totals read failed; refusing to spend: \(error)")
+      return .providerUnavailable
+    }
+
+    let estimate = accountant.preflightEstimate(context: messages)
+    if case .deny(let cap) = gate.preflight(
+      todayTokens: todayTokens,
+      todayUSD: todayUSD,
+      estimatedTotalTokens: estimate.totalTokens,
+      estimatedCostUSD: estimate.costUSD
+    ) {
+      return .budgetDenied(cap: cap)
+    }
+    return nil
+  }
+}
+
+// MARK: - Failure Mapping
+
+private extension ScheduleDraftParser {
+  /// Maps a thrown provider failure to the router's outcome, from the same vendor-neutral cause a
+  /// turn reads: auth/access/quota get their own actionable results; every other cause (terminal
+  /// reject, brownout, transport loss, replay state, a non-provider error) stays the generic
+  /// unavailable. No remote diagnostic text ever crosses into an owner reply.
+  static func parseFailureResult(for error: any Error) -> ScheduleDraftParseResult {
+    switch ProviderError.cause(of: error) {
+    case .authenticationRequired:
+      return .authenticationRequired
+    case .accessDenied:
+      return .accessDenied
+    case .quotaLimited(let retryAfterSeconds):
+      return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
+    case .terminal, .cleanRejection, .retryable, .connectFailed, .rejected, .invalidProviderState,
+      .none:
+      return .providerUnavailable
+    }
+  }
+}
+
 // MARK: - Spend Accounting
 
 private extension ScheduleDraftParser {
-  func record(usageFor response: ChatResponse, request: ChatRequest, sessionId: Int64) {
-    let resolvedUsage = usageResolver.resolve(response: response, context: request.messages)
-    let resolvedCost = costResolver.resolve(
-      model: model,
-      usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider
-    )
+  /// The reconciled row for a reply that returned (or landed alongside a won deadline). Run-less
+  /// (`runId: nil`), routed through the shared accountant so it prices exactly as a turn's row does.
+  func record(
+    usageFor response: ChatResponse,
+    request: ChatRequest,
+    callID: ProviderCallID,
+    sessionId: Int64
+  ) {
     persist(
-      ProviderUsage(
+      accountant.reconciledRow(
+        for: response,
+        callID: callID,
+        context: request.messages,
         runId: nil,
-        sessionId: sessionId,
-        model: model,
-        usage: resolvedUsage,
-        cost: resolvedCost,
-        ts: now()
+        sessionId: sessionId
       )
     )
   }
 
-  func record(estimatedFor request: ChatRequest, sessionId: Int64) {
-    let resolvedUsage = usageResolver.estimate(
-      context: request.messages,
-      maxOutputTokens: Self.maxParseOutputTokens
-    )
-    let resolvedCost = costResolver.resolve(
-      model: model,
-      usage: resolvedUsage.usage,
-      providerCost: nil
-    )
+  /// The conservative estimate a deadline or brownout that may have started forces. Run-less, capped
+  /// at the parse output ceiling, and routed through the shared accountant so it matches a turn's
+  /// conservative row.
+  func record(estimatedFor request: ChatRequest, callID: ProviderCallID, sessionId: Int64) {
     persist(
-      ProviderUsage(
+      accountant.conservativeRow(
+        callID: callID,
+        context: request.messages,
+        observedCompletionTokens: 0,
         runId: nil,
-        sessionId: sessionId,
-        model: model,
-        usage: resolvedUsage,
-        cost: resolvedCost,
-        ts: now()
+        sessionId: sessionId
       )
     )
   }
@@ -331,27 +398,47 @@ private extension ScheduleDraftParser {
 // MARK: - Bounded Call
 
 private extension ScheduleDraftParser {
-  /// Marker thrown by the deadline child; maps to the estimated-debit degradation path.
+  /// Marker for a won deadline whose attempt may already be billing server-side; maps to the
+  /// estimated-debit degradation path. A deadline that provably beat the attempt off the ground
+  /// carries no such debt and surfaces as a bare `CancellationError` instead.
   struct ParseDeadlineExceeded: Error {}
 
-  /// Races the provider call against `parseDeadlineSeconds` (the turn runtimes' pattern).
-  /// Cancellation propagates promptly: `complete`'s HTTP call and backoff sleeps both observe it.
+  /// Races the provider call against `parseDeadlineSeconds` through the deadline coordinator (the
+  /// turn runtimes' pattern): both children return values, no loser is discarded, and the provider is
+  /// cancelled and drained if the deadline wins. Cancellation propagates promptly — `complete`'s HTTP
+  /// call and backoff sleeps both observe it. The timeout carries the drained loser's accounting
+  /// disposition — a proven no-start owes nothing, a may-have-started owes the estimate — rather than
+  /// collapsing both into one debit; a provider that wins with its own failure rethrows for the typed
+  /// catches above.
   func completeBounded(request: ChatRequest) async throws -> ChatResponse {
-    try await withThrowingTaskGroup(of: ChatResponse.self) { group in
-      defer { group.cancelAll() }
+    let outcome = await ProviderDeadlineCoordinator.raceBuffered(
+      deadlineSeconds: Self.parseDeadlineSeconds,
+      clock: clock,
+      call: {
+        do {
+          return .response(try await provider.complete(request: request))
+        } catch {
+          return .failed(error)
+        }
+      }
+    )
 
-      group.addTask {
-        try await provider.complete(request: request)
-      }
-      group.addTask {
-        try await clock.sleep(for: .seconds(Self.parseDeadlineSeconds))
-        throw ParseDeadlineExceeded()
-      }
-
-      guard let response = try await group.next() else {
-        throw ParseDeadlineExceeded()
-      }
+    switch outcome {
+    case .response(let response):
       return response
+    case .failed(let error):
+      throw error
+    case .timedOut(.completed(let response)):
+      // A reply that landed under the won deadline: surfaced so its authoritative usage is recorded
+      // rather than discarded for the timeout estimate.
+      throw RacedDeadlineSuccess(response: response)
+    case .timedOut(.notStarted):
+      // The deadline provably beat the attempt off the ground: nothing was generated, so — like the
+      // turn path's proven no-start — it maps to a bare cancellation that writes no row.
+      throw CancellationError()
+    case .timedOut(.mayHaveStarted):
+      // The attempt may already be billing server-side; the estimate keeps the day cap honest.
+      throw ParseDeadlineExceeded()
     }
   }
 }

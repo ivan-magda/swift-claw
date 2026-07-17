@@ -41,13 +41,15 @@ struct ScheduleHandlers: Sendable {
       return replies.skipDuplicate(updateId: rawUpdate.updateId)
     }
 
-    switch await schedule.parser.parse(ownerText: text, sessionId: sessionId) {
-    case .providerUnavailable:
-      // An LLM/API failure degrades exactly like any turn; nothing armed.
+    let parseResult = await schedule.parser.parse(ownerText: text, sessionId: sessionId)
+    switch parseResult {
+    case .providerUnavailable, .authenticationRequired, .accessDenied, .quotaLimited:
+      // Every provider-side failure gives the same actionable guidance a turn does and arms nothing:
+      // the auth reply names `clawd auth login`; access and quota deliberately do NOT say to log in.
       return await replies.sendCommandAck(
         updateId: rawUpdate.updateId,
         chatId: message.chatId,
-        text: Degradation.providerUnavailable
+        text: ScheduleReplies.providerFailure(parseResult)
       )
     case .budgetDenied(let cap):
       // The day-spend gate refused before the call issued; nothing armed, plain-language stop.

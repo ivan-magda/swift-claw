@@ -1,5 +1,19 @@
 import Foundation
 
+// MARK: - Provider replay state
+
+/// Continuity a route cannot express as text or tool calls — reasoning material that must be
+/// replayed to the same issuer to keep a conversation coherent.
+public struct ProviderExchangeState: Sendable, Equatable, Codable {
+  public let issuer: String
+  public let payload: Data
+
+  public init(issuer: String, payload: Data) {
+    self.issuer = issuer
+    self.payload = payload
+  }
+}
+
 // MARK: - Chat contract
 
 /// One message in an OpenAI-compatible chat exchange. `toolCalls` carries assistant proposals
@@ -10,17 +24,20 @@ public struct ChatMessage: Sendable, Equatable {
   public let content: String
   public let toolCalls: [ToolCall]
   public let toolCallId: String?
+  public let providerState: ProviderExchangeState?
 
   public init(
     role: MessageRole,
     content: String,
     toolCalls: [ToolCall] = [],
-    toolCallId: String? = nil
+    toolCallId: String? = nil,
+    providerState: ProviderExchangeState? = nil
   ) {
     self.role = role
     self.content = content
     self.toolCalls = toolCalls
     self.toolCallId = toolCallId
+    self.providerState = providerState
   }
 }
 
@@ -85,30 +102,31 @@ public struct ChatResponse: Sendable, Equatable {
   public let usage: ChatUsage?
   public let costFromProvider: Double?
   public let toolCalls: [ToolCall]
+  public let providerState: ProviderExchangeState?
 
   public init(
     content: String,
     finishReason: String?,
     usage: ChatUsage?,
     costFromProvider: Double?,
-    toolCalls: [ToolCall] = []
+    toolCalls: [ToolCall] = [],
+    providerState: ProviderExchangeState? = nil
   ) {
     self.content = content
     self.finishReason = finishReason
     self.usage = usage
     self.costFromProvider = costFromProvider
     self.toolCalls = toolCalls
+    self.providerState = providerState
   }
 }
 
+/// One event from a streamed inference. The terminal carries the whole reply rather than the
+/// metadata around it: a consumer that stitched deltas together could not tell a truncated
+/// accumulation from a whole one, and the reply is the thing an outcome has to be able to state.
 public enum StreamEvent: Sendable, Equatable {
   case delta(String)
-  case finished(
-    finishReason: String?,
-    usage: ChatUsage?,
-    providerCost: Double?,
-    toolCalls: [ToolCall]
-  )
+  case finished(ChatResponse)
 }
 
 public enum LLMStreamLimits {
@@ -118,16 +136,25 @@ public enum LLMStreamLimits {
 }
 
 /// The single provider seam. The concrete impl lives in `ClawLLM`.
+///
+/// `stream` returns without suspending, so the caller holds the cancellation-and-join handle before
+/// any authorization or network work can race a deadline. Receiving a session claims nothing about
+/// whether inference started — the session's own terminal says.
 public protocol LLMProvider: Sendable {
   func complete(request: ChatRequest) async throws -> ChatResponse
-  func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error>
+  func stream(request: ChatRequest) -> LLMEventStream
 }
 
 extension LLMProvider {
-  public func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
-    AsyncThrowingStream { continuation in
-      continuation.finish(
-        throwing: ProviderError.terminal(status: nil, message: "streaming not implemented")
+  /// A session that reports the same refusal every non-streaming provider has always given, rather
+  /// than an empty stream a consumer would read as a whole, empty reply.
+  public func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { _ in
+      .failed(
+        ProviderFailure(
+          cause: .terminal(status: nil, message: "streaming not implemented"),
+          accounting: .notStarted
+        )
       )
     }
   }
@@ -148,13 +175,22 @@ public enum StructuredOutputMode: String, Sendable, Equatable {
   case jsonSchema = "json_schema"
 }
 
-/// Static LLM wiring loaded from the environment. `apiKey` defaults to "" — local servers
-/// need none, so a missing key is not a config error.
+extension StructuredOutputMode: CustomStringConvertible {
+  /// The wire spelling an owner sets `CLAW_LLM_STRUCTURED_OUTPUT` to, so a config error names the
+  /// value they typed rather than the Swift case that parsed it.
+  public var description: String { rawValue }
+}
+
+/// The provider-neutral LLM settings the composition root wires a stack from. It carries the resolved
+/// route — the parsed `CLAW_LLM_MODEL` with its provider descriptor, accounting reference, wire model,
+/// and egress identity — plus the settings no route owns: the local output reservation, the retry and
+/// timeout budgets, the Telegram streaming-presentation toggle, and the structured-output mode.
+///
+/// It holds no base URL, raw model, or API key: the base URL lives inside the route's egress identity,
+/// the wire and accounting model identities live on the route, and the key is a secret the composition
+/// root routes into a credential source rather than through this value.
 public struct LLMConfig: Sendable, Equatable {
-  public let baseURL: String
-  public let model: String
-  public let apiKey: String
-  public let maxTokensField: MaxTokensField
+  public let route: ResolvedLLMRoute
   public let maxOutputTokens: Int
   public let retryBudget: Int
   public let requestTimeoutSeconds: Int
@@ -162,43 +198,19 @@ public struct LLMConfig: Sendable, Equatable {
   public let structuredOutput: StructuredOutputMode
 
   public init(
-    baseURL: String,
-    model: String,
-    apiKey: String,
-    maxTokensField: MaxTokensField,
+    route: ResolvedLLMRoute,
     maxOutputTokens: Int,
     retryBudget: Int,
     requestTimeoutSeconds: Int,
     streamingEnabled: Bool = true,
     structuredOutput: StructuredOutputMode = .off
   ) {
-    self.baseURL = baseURL
-    self.model = model
-    self.apiKey = apiKey
-    self.maxTokensField = maxTokensField
+    self.route = route
     self.maxOutputTokens = maxOutputTokens
     self.retryBudget = retryBudget
     self.requestTimeoutSeconds = requestTimeoutSeconds
     self.streamingEnabled = streamingEnabled
     self.structuredOutput = structuredOutput
-  }
-}
-
-extension LLMConfig {
-  /// Returns a copy with the runtime secret injected. `AppConfig` carries no key (it's a secret);
-  /// the composition root combines the non-secret LLM config with `Secrets.llmApiKey`.
-  public func withAPIKey(_ apiKey: String) -> LLMConfig {
-    LLMConfig(
-      baseURL: baseURL,
-      model: model,
-      apiKey: apiKey,
-      maxTokensField: maxTokensField,
-      maxOutputTokens: maxOutputTokens,
-      retryBudget: retryBudget,
-      requestTimeoutSeconds: requestTimeoutSeconds,
-      streamingEnabled: streamingEnabled,
-      structuredOutput: structuredOutput
-    )
   }
 }
 
@@ -287,10 +299,11 @@ public struct ResolvedCost: Sendable, Equatable {
   }
 }
 
-/// Best-effort USD cost — never a silent $0. The first known source wins:
+/// Best-effort USD cost — never a silent $0. Under `metered` the first known source wins:
 /// provider-returned (incl. a confirmed $0) → vendored price-file (incl. a free model's $0) →
 /// reference-rate heuristic. Only the heuristic is `isEstimated`, and only it is floored at
-/// `heuristicFloorUSD`, so a *guessed* cost is never recorded as $0.
+/// `heuristicFloorUSD`, so a *guessed* cost is never recorded as $0. Under `includedPlan` the plan
+/// already paid, and `CostSource.includedPlan` is the durable proof of that.
 public struct CostResolver: Sendable {
   /// The never-silent-$0 floor for a heuristic tier that computes to 0.
   public static let heuristicFloorUSD = 0.000_001
@@ -306,8 +319,16 @@ public struct CostResolver: Sendable {
   public func resolve(
     model: String,
     usage: ChatUsage,
-    providerCost: Double?
+    providerCost: Double?,
+    policy: LLMCostPolicy = .metered
   ) -> ResolvedCost {
+    switch policy {
+    case .metered:
+      break
+    case .includedPlan:
+      return ResolvedCost(costUSD: 0, source: .includedPlan, isEstimated: false)
+    }
+
     if let providerCost {
       return ResolvedCost(costUSD: providerCost, source: .providerReturned, isEstimated: false)
     }
@@ -321,6 +342,7 @@ public struct CostResolver: Sendable {
 
     let raw = Double(usage.totalTokens) * referenceUSDPerToken
     let cost = raw == 0 ? Self.heuristicFloorUSD : raw
+
     return ResolvedCost(costUSD: cost, source: .heuristic, isEstimated: true)
   }
 }
@@ -336,6 +358,26 @@ public struct ResolvedUsage: Sendable, Equatable {
   public init(usage: ChatUsage, isEstimated: Bool) {
     self.usage = usage
     self.isEstimated = isEstimated
+  }
+
+  /// Folds a replay-state token reservation into an *estimated* prompt only. A provider-returned
+  /// count is authoritative and left untouched; a missing count is estimated, and there the
+  /// reservation is added so a state-carrying wire is never under-accounted. Erring high only
+  /// over-reserves; erring low would let replay state slip past a token gate. The turn and schedule
+  /// surfaces share this so both reserve the same way.
+  public func addingReservation(_ reservation: Int) -> ResolvedUsage {
+    guard isEstimated, reservation > 0 else {
+      return self
+    }
+    let promptTokens = usage.promptTokens + reservation
+    return ResolvedUsage(
+      usage: ChatUsage(
+        promptTokens: promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: promptTokens + usage.completionTokens
+      ),
+      isEstimated: true
+    )
   }
 }
 

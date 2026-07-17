@@ -71,7 +71,15 @@ import Testing
     let estCost = ResolvedCost(costUSD: 0.01, source: .heuristic, isEstimated: true)
 
     func row(_ usage: ResolvedUsage, _ cost: ResolvedCost) -> ProviderUsage {
-      ProviderUsage(runId: 1, sessionId: 2, model: "m", usage: usage, cost: cost, ts: Date())
+      ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-1"),
+        runId: 1,
+        sessionId: 2,
+        model: "m",
+        usage: usage,
+        cost: cost,
+        ts: Date()
+      )
     }
 
     // then — a row is an estimate iff either input was guessed

@@ -30,11 +30,14 @@ public struct SuspendedTurnCommit: Sendable {
   public let setTainted: Bool
   public let setPrivateData: Bool
 
+  /// The parked anchor's replay state, committed in the same transaction as the checkpoint so a
+  /// resume replays the round the run actually took rather than a stateless reconstruction of it.
+  public let providerState: ProviderExchangeState?
+
   public let expiresTs: Date  // now + approval_expiry
   // NOTE: no `usage` field. The suspending round-trip's `provider_usage` row is already written
-  // mid-loop by `AgentRuntime` before dispatch (crash-safe); re-inserting it here would double the
-  // day budget AND the resume carry-over, since `provider_usage` has no dedup key and both
-  // totals SUM every row. The commit persists the checkpoint only, never usage.
+  // mid-loop by `AgentRuntime` before dispatch (crash-safe), so the commit has nothing left to
+  // persist: it carries the checkpoint only, never usage.
 
   public init(
     assistantContent: String,
@@ -46,6 +49,7 @@ public struct SuspendedTurnCommit: Sendable {
     promptChunks: [OutboxChunk],
     setTainted: Bool,
     setPrivateData: Bool,
+    providerState: ProviderExchangeState? = nil,
     expiresTs: Date
   ) {
     self.assistantContent = assistantContent
@@ -61,6 +65,8 @@ public struct SuspendedTurnCommit: Sendable {
 
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
+
+    self.providerState = providerState
 
     self.expiresTs = expiresTs
   }
