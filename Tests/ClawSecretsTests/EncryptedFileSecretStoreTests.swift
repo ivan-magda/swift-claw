@@ -22,6 +22,72 @@ import Testing
     #expect(loaded == original)
   }
 
+  @Test func anEnvelopeWrittenBeforeThePublicationProtocolStillDecrypts() throws {
+    // given — a byte-for-byte reconstruction of what an installation sealed by the previous
+    // implementation has on disk: a version-1 envelope authenticated under AAD [1], written by
+    // Foundation's atomic write (which creates 0644), beside a 0600 key. Nothing about the new
+    // read path may lock that owner out of their own secrets.
+    //
+    // The version byte and the AAD are frozen literals, never `envelopeVersion`: what is on those
+    // owners' disks is the number 1, and a fixture that tracked the constant would follow a future
+    // bump straight past the breakage it exists to catch.
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+
+    let keyData = Data(repeating: 0x5A, count: EncryptedFileSecretStore.keyByteCount)
+    let keyURL = stateRoot.appendingPathComponent(SecretFile.key)
+    try keyData.write(to: keyURL)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyURL.path)
+
+    let payload = try JSONEncoder().encode([
+      "telegram_bot_token": "123:legacy",
+      "llm_api_key": "sk-legacy",
+      "search_api_key": "search-legacy",
+    ])
+    let sealed = try AES.GCM.seal(
+      payload,
+      using: SymmetricKey(data: keyData),
+      authenticating: Data([1])
+    )
+    let envelopeURL = stateRoot.appendingPathComponent(SecretFile.envelope)
+    let combined = try #require(sealed.combined)
+    try (Data([1]) + combined).write(to: envelopeURL, options: .atomic)
+
+    // when
+    let loaded = try EncryptedFileSecretStore(stateRoot: stateRoot).loadSecrets()
+
+    // then
+    #expect(
+      loaded
+        == Secrets(
+          telegramBotToken: "123:legacy",
+          llmApiKey: "sk-legacy",
+          searchApiKey: "search-legacy"
+        )
+    )
+  }
+
+  @Test func sealPublishesTheEnvelopeOwnerOnly() throws {
+    // given
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+
+    // when — going forward the envelope is published owner-only even though the reader tolerates
+    // the 0644 that Foundation's atomic write left on older installations.
+    try EncryptedFileSecretStore.seal(
+      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      stateRoot: stateRoot
+    )
+
+    // then
+    for name in [SecretFile.key, SecretFile.envelope] {
+      let attributes = try FileManager.default.attributesOfItem(
+        atPath: stateRoot.appendingPathComponent(name).path
+      )
+      #expect(attributes[.posixPermissions] as? NSNumber == 0o600)
+    }
+  }
+
   @Test func sealedEnvelopeContainsNoPlaintextToken() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")

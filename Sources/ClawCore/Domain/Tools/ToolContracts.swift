@@ -319,10 +319,17 @@ public struct ToolExchange: Sendable, Equatable {
   public let assistantContent: String  // may be "" (pure tool-call rounds)
   public let toolCalls: [ToolCall]
   public let observations: [ToolObservation]
+  public let providerState: ProviderExchangeState?
 
-  public init(assistantContent: String, toolCalls: [ToolCall], observations: [ToolObservation]) {
+  public init(
+    assistantContent: String,
+    toolCalls: [ToolCall],
+    observations: [ToolObservation],
+    providerState: ProviderExchangeState? = nil
+  ) {
     self.assistantContent = assistantContent
     self.toolCalls = toolCalls
     self.observations = observations
+    self.providerState = providerState
   }
 }

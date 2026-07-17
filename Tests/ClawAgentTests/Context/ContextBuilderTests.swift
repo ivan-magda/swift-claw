@@ -417,6 +417,132 @@ struct ContextBuilderTests {
   }
 }
 
+// MARK: - Provider Replay State
+
+extension ContextBuilderTests {
+  /// Deliberately not valid UTF-8, so a renderer that stringified the blob into prompt text would
+  /// mangle it rather than round-trip it.
+  static let replayPayload = Data([0x00, 0xC3, 0x28, 0xFF, 0xFE])
+
+  // The lossy conversion is the point here: the failable initializer the rule prefers returns nil
+  // for these bytes, which would assert nothing at all.
+  // swiftlint:disable optional_data_string_conversion
+
+  /// The payload as a leak would actually expose it. Searching prompt text for the raw bytes can
+  /// never fail — a `String`'s UTF-8 view cannot emit `0xFF`/`0xFE` — so non-exposure is asserted
+  /// against the lossy form a stringifying renderer really produces, replacement chars and all.
+  static let replayPayloadAsLossyText = String(decoding: replayPayload, as: UTF8.self)
+
+  // swiftlint:enable optional_data_string_conversion
+
+  static let replayState = ProviderExchangeState(
+    issuer: "openai-chatgpt-responses-v1:zzzsecretissuer",
+    payload: replayPayload
+  )
+
+  /// A window whose assistant anchor proposed a tool call, ran it, and answered — one row of each
+  /// kind the renderer can meet, with state on the anchors alone.
+  private func statefulSnapshot() -> SessionContextSnapshot {
+    SessionContextSnapshot(
+      history: [
+        StoredMessage(role: .user, content: "fetch the page", provenance: .trusted),
+        StoredMessage(
+          role: .assistant,
+          content: "on it",
+          provenance: .trusted,
+          toolCallsJSON: #"[{"id":"c1","name":"web_fetch","arguments":"{}"}]"#,
+          providerState: Self.replayState
+        ),
+        StoredMessage(
+          role: .tool,
+          content: "raw page text",
+          provenance: .untrusted,
+          toolCallId: "c1"
+        ),
+        StoredMessage(
+          role: .assistant,
+          content: "here is the summary",
+          provenance: .trusted,
+          providerState: Self.replayState
+        ),
+      ],
+      historyMessageIds: [10, 11, 12, 13],
+      windowStartMessageId: 0,
+      isTainted: false,
+      hasPrivateData: false
+    )
+  }
+
+  @Test func assistantAnchorsCarryTheirProviderStateOntoTheWire() throws {
+    // given
+    let builder = makeBuilder()
+
+    // when
+    let result = try builder.assemble(
+      snapshot: statefulSnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then — the route that minted the state gets it back on exactly the messages it belongs to
+    #expect(result.messages.map(\.role) == [.system, .user, .assistant, .tool, .assistant])
+    #expect(result.messages[2].providerState == Self.replayState)
+    #expect(result.messages[4].providerState == Self.replayState)
+    for message in result.messages where message.role != .assistant {
+      #expect(message.providerState == nil)
+    }
+  }
+
+  @Test func providerStateNeverBecomesPromptContent() throws {
+    // given — a retriever that would surface the same window text again, and a recall query drawn
+    // from it, so every text-bearing seam of one assembly is covered at once
+    let builder = makeBuilder(
+      retriever: FakeRetriever(
+        hits: [
+          RecallHit(
+            id: 99,
+            sessionId: 2,
+            role: .assistant,
+            content: "an older answer",
+            score: RecallScore(value: 10),
+            createdAt: Date(timeIntervalSince1970: 0)
+          )
+        ]
+      )
+    )
+
+    // when
+    let result = try builder.assemble(
+      snapshot: statefulSnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then — the bytes are carried, never rendered, whatever tier the message belongs to
+    for message in result.messages {
+      #expect(message.content.contains("zzzsecretissuer") == false)
+      #expect(message.content.contains(Self.replayPayloadAsLossyText) == false)
+    }
+    #expect(result.messages.contains { message in message.content.contains("raw page text") })
+    #expect(
+      result.ownerNotices.allSatisfy { notice in notice.contains("zzzsecretissuer") == false }
+    )
+  }
+
+  @Test func historyHygienePreservesTheStateOfAnAnchorItKeeps() throws {
+    // given — the sanitizer is the last seam between a loaded row and the wire
+    let history = statefulSnapshot().history
+
+    // when
+    let sanitized = HistoryHygiene.sanitize(history)
+
+    // then
+    #expect(sanitized.count == 4)
+    #expect(sanitized[1].providerState == Self.replayState)
+    #expect(sanitized[3].providerState == Self.replayState)
+  }
+}
+
 private func makeBuilder(
   policyStaticSubhash: String = "",
   workspace: FakeWorkspace = FakeWorkspace(),

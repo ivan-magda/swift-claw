@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -21,6 +22,10 @@ import Testing
     #expect(body["model"] as? String == "gpt-4o")
     #expect(body["messages"] is [Any])
     #expect(recorded.headers["Authorization"] == "Bearer sk-test")
+    #expect(recorded.headers["Content-Type"] == "application/json")
+    // The wire attempt carried its linearization handoff, run before the request was recorded.
+    #expect(recorded.carriedHandoff)
+    #expect(recorded.url == "https://api.test/v1/chat/completions")
   }
 
   @Test func switchesToMaxTokensFieldAndOmitsAuthWhenKeyEmpty() async throws {
@@ -242,8 +247,10 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.terminal(let status, _) = error else { return false }
-      return status == 400
+      // The buffered path wraps its cause in a ProviderFailure that carries the accounting: a clean
+      // 4xx head generated nothing, so the failure is notStarted.
+      guard case .terminal(let status, _)? = ProviderError.cause(of: error) else { return false }
+      return status == 400 && ProviderFailureAccounting.classify(error) == .notStarted
     }
     let attempts = await exec.recorded.count
     #expect(attempts == 1)
@@ -281,8 +288,10 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.retryable(let status, _) = error else { return false }
-      return status == 500
+      // Each 500 was proven clean before the exhausting throw, so the wrapped failure charges no
+      // phantom usage — it is notStarted, not the case-guessed mayHaveStarted.
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
+      return status == 500 && ProviderFailureAccounting.classify(error) == .notStarted
     }
     let attempts = await exec.recorded.count
     #expect(attempts == 3)
@@ -305,7 +314,7 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.retryable(let status, _) = error else { return false }
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
       return status == 500
     }
 
@@ -316,12 +325,18 @@ import Testing
   }
 
   @Test func transportErrorRedactsTheApiKey() async throws {
-    // given — a transport error whose text embeds the key; retried then surfaced
+    // given — a proven-clean transport error whose text embeds the key; retried then surfaced. The
+    // disposition is definitely-not-sent so the retry-through-to-exhaustion path this test covers is
+    // the one the new rule still permits.
     let apiKey = "sk-super-secret-123"
+    let failure = HTTPTransportFailure(
+      disposition: .definitelyNotSent,
+      safeMessage: "connection reset with key \(apiKey)"
+    )
     let exec = ScriptedHTTPExecutor([
-      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
-      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
-      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
+      .transportFailure(failure),
+      .transportFailure(failure),
+      .transportFailure(failure),
     ])
     let provider = makeProvider(config: makeConfig(apiKey: apiKey, retryBudget: 3), http: exec)
 
@@ -330,7 +345,7 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.retryable(_, let message) = error else { return false }
+      guard case .retryable(_, let message)? = ProviderError.cause(of: error) else { return false }
       thrownMessage = message
       return true
     }
@@ -341,6 +356,54 @@ import Testing
     #expect(message.contains(SecretRedactor.replacement))
     let attempts = await exec.recorded.count
     #expect(attempts == 3)
+  }
+
+  @Test func definitelyNotSentTransportFailureRetriesUpToBudget() async throws {
+    // given — two proven-clean transport failures then a success; nothing could have reached the
+    // model, so the attempt is safe to replay up to the budget
+    let exec = ScriptedHTTPExecutor([
+      .transportFailure(
+        HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: "refused")
+      ),
+      .transportFailure(
+        HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: "refused")
+      ),
+      okStep(content: "recovered"),
+    ])
+    let provider = makeProvider(config: makeConfig(retryBudget: 3), http: exec)
+
+    // when
+    let response = try await provider.complete(request: sampleRequest)
+
+    // then — the success is returned only after both clean failures were replayed
+    #expect(response.content == "recovered")
+    #expect(await exec.recorded.count == 3)
+  }
+
+  @Test func mayHaveBeenSentTransportFailureIsNotRetried() async throws {
+    // given — an ambiguous send a retry could double-charge; a success step waits behind it that the
+    // provider must never reach
+    let exec = ScriptedHTTPExecutor([
+      .transportFailure(
+        HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "dropped")
+      ),
+      okStep(content: "must-not-be-reached"),
+    ])
+    let provider = makeProvider(config: makeConfig(retryBudget: 3), http: exec)
+
+    // when
+    await #expect {
+      _ = try await provider.complete(request: sampleRequest)
+    } throws: { error in
+      // The attempt reached the transport and cannot be proven clean, so the failure carries
+      // conservative accounting rather than being replayed.
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
+      return status == nil
+        && ProviderFailureAccounting.classify(error) == .mayHaveStarted(observing: 0)
+    }
+
+    // then — exactly one dispatch; the queued success was never asked for
+    #expect(await exec.recorded.count == 1)
   }
 
   @Test func streamRequestEnablesStreamOptionsAndYieldsEvents() async throws {
@@ -365,10 +428,7 @@ import Testing
     let provider = makeProvider(config: makeConfig(), http: exec)
 
     // when
-    var events: [StreamEvent] = []
-    for try await event in provider.stream(request: sampleRequest) {
-      events.append(event)
-    }
+    let (events, thrown, terminal) = await drain(provider.stream(request: sampleRequest))
 
     // then
     let recorded = try #require(await exec.recorded.first)
@@ -376,18 +436,25 @@ import Testing
     let streamOptions = try #require(body["stream_options"] as? [String: Any])
     #expect(body["stream"] as? Bool == true)
     #expect(streamOptions["include_usage"] as? Bool == true)
+    // The 4 MiB unread allowance is a plan-wide bound, so pin the value the provider actually
+    // plumbs: the exchange tests prove the mechanism, only this proves the number reaches it.
     #expect(
-      events == [
-        .delta("he"),
-        .delta("llo"),
-        .finished(
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
-          providerCost: nil,
-          toolCalls: []
-        ),
-      ]
+      recorded.responseBodyPolicy
+        == .streaming(maximumUnreadBytes: 4 * 1024 * 1024, errorBytes: 64 * 1024)
     )
+    // The attempt carried its linearization handoff, run before the request reached the transport.
+    #expect(recorded.carriedHandoff)
+    #expect(thrown == nil)
+
+    let reply = ChatResponse(
+      content: "hello",
+      finishReason: "stop",
+      usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
+      costFromProvider: nil
+    )
+    #expect(events == [.delta("he"), .delta("llo"), .finished(reply)])
+    // Joining the session reports the same reply the terminal event carried.
+    #expect(terminal == .completed(reply))
   }
 
   @Test func streamUsesLiteLLMCostHeaderWhenUsageCostIsAbsent() async throws {
@@ -411,19 +478,18 @@ import Testing
     let provider = makeProvider(config: makeConfig(), http: exec)
 
     // when
-    var events: [StreamEvent] = []
-    for try await event in provider.stream(request: sampleRequest) {
-      events.append(event)
-    }
+    let (events, _, _) = await drain(provider.stream(request: sampleRequest))
 
     // then
     #expect(
       events.last
         == .finished(
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
-          providerCost: 0.0034,
-          toolCalls: []
+          ChatResponse(
+            content: "hello",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 4, completionTokens: 2, totalTokens: 6),
+            costFromProvider: 0.0034
+          )
         )
     )
   }
@@ -436,15 +502,21 @@ import Testing
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
-    // then
-    await #expect {
-      for try await _ in provider.stream(request: sampleRequest) {}
-    } throws: { error in
-      guard case ProviderError.terminal(let status, let message) = error else {
-        return false
-      }
-      return status == 401 && message == "bad auth"
-    }
+    // when
+    let (_, thrown, terminal) = await drain(provider.stream(request: sampleRequest))
+
+    // then — a recognized error head proves the server answered instead of inferring, so the
+    // attempt is accounted as never having started
+    #expect(
+      terminal
+        == .failed(
+          ProviderFailure(
+            cause: .terminal(status: 401, message: "bad auth"),
+            accounting: .notStarted
+          )
+        )
+    )
+    #expect((thrown as? ProviderFailure)?.cause == .terminal(status: 401, message: "bad auth"))
     #expect(await exec.recorded.count == 1)
   }
 
@@ -456,15 +528,22 @@ import Testing
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
-    // then — classified once as a clean pre-stream rejection; the stream itself never retries
-    await #expect {
-      for try await _ in provider.stream(request: sampleRequest) {}
-    } throws: { error in
-      guard case ProviderError.rejected(let status, let message) = error else {
-        return false
-      }
-      return status == 429 && message == "rate limited"
-    }
+    // when
+    let (_, thrown, terminal) = await drain(provider.stream(request: sampleRequest))
+
+    // then — classified once as a clean pre-stream rejection; the stream itself never retries.
+    // `.rejected` is what the turn's one-time buffered fallback keys on, so the case is load-bearing
+    // and not an implementation detail.
+    #expect(
+      terminal
+        == .failed(
+          ProviderFailure(
+            cause: .rejected(status: 429, message: "rate limited"),
+            accounting: .notStarted
+          )
+        )
+    )
+    #expect((thrown as? ProviderFailure)?.cause == .rejected(status: 429, message: "rate limited"))
     #expect(await exec.recorded.count == 1)
   }
 
@@ -479,34 +558,235 @@ import Testing
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
-    // then
-    await #expect {
-      for try await _ in provider.stream(request: sampleRequest) {}
-    } throws: { error in
-      guard case ProviderError.retryable(let status, let message) = error else {
-        return false
-      }
-      return status == nil && message.contains("dropped after request")
+    // when
+    let (_, thrown, terminal) = await drain(provider.stream(request: sampleRequest))
+
+    // then — the head was fine, so the failure came after the request was written: retryable, and
+    // conservatively accounted since the model may already have generated
+    let failure = try #require(thrown as? ProviderFailure)
+    guard case .retryable(let status, let message) = failure.cause else {
+      Issue.record("expected a retryable cause, got \(failure.cause)")
+      return
     }
+    #expect(status == nil)
+    #expect(message.contains("dropped after request"))
+    #expect(failure.accounting == .mayHaveStarted(observing: 0))
+    #expect(terminal == .failed(failure))
     #expect(await exec.recorded.count == 1)
   }
 
-  @Test func streamConnectFailureIsTypedForRuntimeFallback() async throws {
-    // given
+  @Test func cancellingTheStreamJoinsItsHTTPExchange() async throws {
+    // given — a transfer whose producer acknowledges nothing until its gate opens, so the join
+    // cannot resolve early by luck
+    let gate = AsyncGate()
+    defer { gate.open() }
     let exec = ScriptedHTTPExecutor([
-      .connectFailure(TransportFailure(message: "connection refused sk-test"))
+      .blockedStream(
+        HTTPStreamHead(statusCode: 200, headers: [:]),
+        [Data("data: [DONE]\n\n".utf8)],
+        gate
+      )
+    ])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+    let stream = provider.stream(request: sampleRequest)
+
+    // Let the producer get inside its exchange; cancelling before the request is dispatched would
+    // test the authorization path instead of the join.
+    while await exec.recorded.isEmpty {
+      await Task.yield()
+    }
+
+    // when
+    let joined = CompletionFlag()
+    let joinTask = Task { () -> LLMStreamTermination in
+      let terminal = await stream.cancelAndAwait()
+      await joined.markDone()
+      return terminal
+    }
+    // A yield lets an (incorrect) join that abandoned its exchange surface, without a wall-clock
+    // window.
+    await Task.yield()
+    let joinedWhileTransferParked = await joined.done
+    gate.open()
+    let terminal = await joinTask.value
+
+    // then — joining the session waits out the transfer nested inside it
+    #expect(joinedWhileTransferParked == false)
+    // The request reached the transport, so cancellation is conservative.
+    #expect(terminal == .cancelled(.mayHaveStarted(observing: 0)))
+  }
+
+  @Test func streamConnectFailureIsTypedForRuntimeFallback() async throws {
+    // given — a transport failure that proves nothing was sent; the runtime's stream-to-buffered
+    // fallback turns on that fact and nothing else
+    let exec = ScriptedHTTPExecutor([
+      .transportFailure(
+        HTTPTransportFailure(
+          disposition: .definitelyNotSent,
+          safeMessage: "connection refused sk-test"
+        )
+      )
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
+    // when
+    let (_, thrown, terminal) = await drain(provider.stream(request: sampleRequest))
+
     // then
-    await #expect {
-      for try await _ in provider.stream(request: sampleRequest) {}
-    } throws: { error in
-      guard case ProviderError.connectFailed(let message) = error else {
-        return false
-      }
-      return message.contains("sk-test") == false && message.contains(SecretRedactor.replacement)
+    let failure = try #require(thrown as? ProviderFailure)
+    guard case .connectFailed(let message) = failure.cause else {
+      Issue.record("expected a connectFailed cause, got \(failure.cause)")
+      return
     }
+    #expect(message.contains("sk-test") == false)
+    #expect(message.contains(SecretRedactor.replacement))
+    // A definitely-not-sent failure proves the attempt generated nothing.
+    #expect(failure.accounting == .notStarted)
+    #expect(terminal == .failed(failure))
+  }
+
+  @Test func staticSourceSuppliesTheBearerAndItsRedaction() async throws {
+    // given — the composition-root pairing: a configured key reaches the wire through the static
+    // source, and the same value is what a diagnostic gets scrubbed of
+    let apiKey = "sk-static-999"
+    let exec = ScriptedHTTPExecutor([
+      .fail(TransportFailure(message: "reset with key \(apiKey)"))
+    ])
+    let provider = makeProvider(
+      config: makeConfig(apiKey: "ignored-by-the-source", retryBudget: 1),
+      http: exec,
+      credentials: StaticLLMCredentialSource(bearer: apiKey)
+    )
+
+    // when
+    var thrownMessage: String?
+    await #expect {
+      _ = try await provider.complete(request: sampleRequest)
+    } throws: { error in
+      guard case .retryable(_, let message)? = ProviderError.cause(of: error) else { return false }
+      thrownMessage = message
+      return true
+    }
+
+    // then — the source's bearer, not the config's, is on the wire and is what gets redacted
+    let recorded = try #require(await exec.recorded.first)
+    #expect(recorded.headers["Authorization"] == "Bearer \(apiKey)")
+    let message = try #require(thrownMessage)
+    #expect(message.contains(apiKey) == false)
+    #expect(message.contains(SecretRedactor.replacement))
+  }
+
+  @Test func credentialHeadersOutsideTheAllowlistAreRefusedBeforeAnyRequest() async throws {
+    // given — a source that tries to redirect the exchange through the header seam
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(
+      config: makeConfig(),
+      http: exec,
+      credentials: ScriptedLLMCredentialSource(
+        headers: ["Authorization": "Bearer ok", "Host": "evil.test", "X-Route": "elsewhere"]
+      )
+    )
+
+    // when
+    await #expect {
+      _ = try await provider.complete(request: sampleRequest)
+    } throws: { error in
+      guard case ProviderError.terminal(let status, let message) = error else { return false }
+      return status == nil && message.contains("Host")
+    }
+
+    // then — refused before dispatch, so nothing reached the transport at all
+    #expect(await exec.recorded.isEmpty)
+  }
+
+  @Test func credentialSourceCannotReplaceAnAdapterOwnedHeader() async throws {
+    // given — a source offering the one header the adapter owns
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(
+      config: makeConfig(),
+      http: exec,
+      credentials: ScriptedLLMCredentialSource(headers: ["content-type": "text/plain"])
+    )
+
+    // when / then — content negotiation is the adapter's, whatever casing the source spells it in
+    await #expect {
+      _ = try await provider.complete(request: sampleRequest)
+    } throws: { error in
+      guard case ProviderError.terminal(_, let message) = error else { return false }
+      return message.contains("content-type")
+    }
+    #expect(await exec.recorded.isEmpty)
+  }
+
+  @Test func authorizationFailureRequestsLoginWithoutSendingAnything() async throws {
+    // given
+    let exec = ScriptedHTTPExecutor([.stream(HTTPStreamHead(statusCode: 200, headers: [:]), [])])
+    let provider = makeProvider(
+      config: makeConfig(),
+      http: exec,
+      credentials: ScriptedLLMCredentialSource(failure: CredentialUnavailable())
+    )
+
+    // when
+    let (_, _, terminal) = await drain(provider.stream(request: sampleRequest))
+
+    // then — a redaction-safe cause that names the state rather than the source's own error
+    #expect(
+      terminal
+        == .failed(ProviderFailure(cause: .authenticationRequired, accounting: .notStarted))
+    )
+    #expect(await exec.recorded.isEmpty)
+  }
+
+  @Test func bufferedAuthorizationFailureRequestsLoginWithoutSendingAnything() async throws {
+    // given — the throwing source the streamed path is already proved against
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(
+      config: makeConfig(),
+      http: exec,
+      credentials: ScriptedLLMCredentialSource(failure: CredentialUnavailable())
+    )
+
+    // when
+    let thrown = await #expect(throws: ProviderError.self) {
+      _ = try await provider.complete(request: sampleRequest)
+    }
+
+    // then — both entry points owe the same typed cause, and neither reaches the transport to get it
+    #expect(thrown == .authenticationRequired)
+    #expect(await exec.recorded.isEmpty)
+  }
+
+  @Test func providerStateIsNotEncodedByChatCompletions() async throws {
+    // given — replay state on the outbound history; this route mints and understands none
+    let exec = ScriptedHTTPExecutor([okStep()])
+    let provider = makeProvider(config: makeConfig(), http: exec)
+    let request = ChatRequest(
+      model: "gpt-4o",
+      messages: [
+        ChatMessage(
+          role: .assistant,
+          content: "earlier",
+          providerState: ProviderExchangeState(issuer: "other-route", payload: Data("op".utf8))
+        ),
+        ChatMessage(role: .user, content: "hello"),
+      ],
+      maxOutputTokens: 256
+    )
+
+    // when
+    let response = try await provider.complete(request: request)
+
+    // then — nothing of it rides the wire, and none comes back
+    let recorded = try #require(await exec.recorded.first)
+    let raw = try #require(String(data: recorded.body, encoding: .utf8))
+    #expect(raw.contains("providerState") == false)
+    #expect(raw.contains("provider_state") == false)
+    #expect(raw.contains("other-route") == false)
+    let messages = try #require(try decodeBody(recorded.body)["messages"] as? [[String: Any]])
+    #expect(messages.count == 2)
+    #expect(messages[0].keys.sorted() == ["content", "role"])
+    #expect(response.providerState == nil)
   }
 
   @Test func isReasoningModelDetectsKnownPrefixes() {

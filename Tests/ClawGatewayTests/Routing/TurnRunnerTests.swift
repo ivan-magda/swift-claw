@@ -625,7 +625,8 @@ func makeEnv(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: budget,
-    model: "gpt-4o",
+    wireModel: "gpt-4o",
+    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()
@@ -694,6 +695,7 @@ private func okResponse(content: String) -> ChatResponse {
     }
     try UsageStoreGRDB(writer: env.queue).recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-proactive-seed"),
         runId: env.runId,
         sessionId: env.sessionId,
         model: "m",
@@ -755,6 +757,7 @@ private func okResponse(content: String) -> ChatResponse {
     }
     try UsageStoreGRDB(writer: env.queue).recordUsage(
       ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-other-run-seed"),
         runId: otherRunId,
         sessionId: try #require(otherClaim.sessionId),
         model: "m",

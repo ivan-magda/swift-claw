@@ -5,12 +5,23 @@ import Logging
 /// OpenAI-compatible Chat Completions client over the `HTTPExecuting` seam: request shaping
 /// (output-cap field switch, no sampling params), defensive response parse, status→`ProviderError`
 /// mapping, and retry with `Retry-After`-aware backoff. Storeless — budget persistence is upstream.
+///
+/// It owns the wire, never the credential: authorization arrives per request from an injected
+/// source, and the only header that source may contribute is `Authorization`.
 public struct OpenAICompatibleProvider: LLMProvider {
   private let config: LLMConfig
+  /// The resolved endpoint the route selected. Kept as its own value rather than pulled back out of
+  /// the route on every call: this adapter owns the wire URL and applies its own single-slash path
+  /// rule to what it is handed, so the endpoint arrives already resolved and is never re-canonicalized
+  /// here.
+  private let endpoint: String
+  /// Which JSON key carries the output cap on this route's wire. The route's descriptor decides it,
+  /// so a second copy of the field-selection rule cannot drift from what configuration validated.
+  private let maxTokensField: MaxTokensField
+  private let credentials: any LLMCredentialSource
   private let http: any HTTPExecuting & HTTPStreaming
 
-  private let clock: any Clock<Duration>
-  private let jitter: @Sendable (Duration) -> Duration
+  private let backoff: RetryBackoff
 
   /// Developer-facing diagnostics (swift-log). Lines self-tag `[ClawLLM]` via the source module; a
   /// no-op default keeps tests silent unless they inject one. Carries no run id by design — the
@@ -19,16 +30,25 @@ public struct OpenAICompatibleProvider: LLMProvider {
 
   public init(
     config: LLMConfig,
+    endpoint: String,
+    maxTokensField: MaxTokensField,
+    credentials: any LLMCredentialSource,
     http: any HTTPExecuting & HTTPStreaming,
     clock: any Clock<Duration>,
     jitter: @escaping @Sendable (Duration) -> Duration,
     logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
   ) {
     self.config = config
+    self.endpoint = endpoint
+    self.maxTokensField = maxTokensField
+    self.credentials = credentials
     self.http = http
 
-    self.clock = clock
-    self.jitter = jitter
+    self.backoff = RetryBackoff(
+      clock: clock,
+      jitter: jitter,
+      requestTimeoutSeconds: config.requestTimeoutSeconds
+    )
 
     self.logger = logger
   }
@@ -36,7 +56,22 @@ public struct OpenAICompatibleProvider: LLMProvider {
   public func complete(request: ChatRequest) async throws -> ChatResponse {
     let body = try encode(request: request)
     let url = chatCompletionsURL()
-    let headers = requestHeaders()
+    let exposure = ProviderAttemptExposure()
+
+    let authorization: LLMRequestAuthorization
+    do {
+      authorization = try await credentials.authorization()
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      // No request goes out without a credential, so nothing was exposed. The cause names the state
+      // rather than the source's error, which is what keeps key material out of the throw — there is
+      // no redactor yet to scrub it with.
+      throw ProviderError.authenticationRequired
+    }
+
+    let redactor = SecretRedactor(secretValues: authorization.redactionValues)
+    let headers = try headers(for: authorization)
 
     logger.debug(
       "chat request model=\(request.model) messages=\(request.messages.count) tools=\(request.tools.count)"
@@ -48,91 +83,66 @@ public struct OpenAICompatibleProvider: LLMProvider {
 
       let result: HTTPResult
       do {
-        result = try await http.post(
-          url: url,
-          headers: headers,
-          jsonBody: body,
-          timeoutSeconds: config.requestTimeoutSeconds
+        result = try await http.execute(
+          bufferedRequest(url: url, headers: headers, body: body, exposure: exposure)
         )
+      } catch is CancellationError {
+        // The handoff refused, or the transport unwound: whether the model was asked anyway is the
+        // reducer's to answer, and retrying a call the caller has abandoned would ask it again.
+        throw exposure.cancellationError()
       } catch {
-        // Transport failures are retryable; the message may echo the key, so redact it.
-        let message = sanitize(message: "\(error)")
-        guard attempt < config.retryBudget else {
-          throw ProviderError.retryable(status: nil, message: message)
+        // Only a failure proven to have sent nothing may be replayed; anything that may already have
+        // reached the model is terminal, so a reply that was generated and billed is never asked for
+        // twice. The message may echo the key, so redact it.
+        let provenClean = Self.provesNothingWasSent(error)
+        Self.noteIfProvenClean(error, exposure: exposure)
+        let message = redactor.redact(Self.describe(error))
+        guard provenClean, attempt < config.retryBudget else {
+          // A proven-clean exhaustion carries `notStarted`; a may-have-been-sent failure keeps
+          // `mayHaveStarted`, so the conservative accounting rides the failure rather than being
+          // guessed from the cause's case downstream.
+          throw exposure.failure(.retryable(status: nil, message: message))
         }
         logger.notice(
           "chat transport error (attempt \(attempt)/\(config.retryBudget)); retrying: \(message)"
         )
-        try await backoff(attempt: attempt, retryAfter: nil)
+        try await backoff.wait(retryAfter: nil, attempt: attempt)
         continue
       }
 
       if (200..<300).contains(result.statusCode) {
-        return try parse(result: result)
+        do {
+          return try parse(result: result, redactor: redactor)
+        } catch let cause as ProviderError {
+          // The 2xx head was accepted, so the reply was generated and billed. A body we cannot read
+          // is still a failure that must record conservative usage rather than none, so the exposure
+          // (still `mayHaveStarted` here) travels on the failure.
+          throw exposure.failure(cause)
+        }
       }
 
-      let message = sanitize(message: errorMessage(from: result.body))
+      // The server answered instead of inferring, so this attempt generated nothing.
+      exposure.noteProvenClean()
+      let message = redactor.redact(errorMessage(from: result.body))
       guard Self.isRetryableStatus(result.statusCode) else {
-        throw ProviderError.terminal(status: result.statusCode, message: message)
+        throw exposure.failure(.terminal(status: result.statusCode, message: message))
       }
       guard attempt < config.retryBudget else {
-        throw ProviderError.retryable(status: result.statusCode, message: message)
+        // Proven clean above, so the failure carries `notStarted` and no phantom usage is debited for
+        // a reply the server rejected before generating.
+        throw exposure.failure(.retryable(status: result.statusCode, message: message))
       }
 
       logger.notice(
         "chat retryable status \(result.statusCode) (attempt \(attempt)/\(config.retryBudget)); retrying"
       )
-      try await backoff(attempt: attempt, retryAfter: retryAfterDelay(from: result))
+      try await backoff.wait(retryAfter: retryAfterDelay(from: result), attempt: attempt)
     }
   }
 
-  public func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
-    AsyncThrowingStream { continuation in
-      let task = Task {
-        do {
-          let body = try encode(request: request, streaming: true)
-          logger.debug(
-            "chat stream request model=\(request.model) messages=\(request.messages.count) tools=\(request.tools.count)"
-          )
-          let response = try await http.postStream(
-            url: chatCompletionsURL(),
-            headers: requestHeaders(),
-            jsonBody: body,
-            timeoutSeconds: config.requestTimeoutSeconds
-          )
-
-          guard (200..<300).contains(response.head.statusCode) else {
-            let errorBody = try await collectStreamingErrorBody(response.body)
-            let message = sanitize(message: errorMessage(from: errorBody))
-            logger.notice("chat stream status \(response.head.statusCode)")
-
-            if Self.isRetryableStatus(response.head.statusCode) {
-              throw ProviderError.rejected(status: response.head.statusCode, message: message)
-            }
-
-            throw ProviderError.terminal(status: response.head.statusCode, message: message)
-          }
-
-          var parser = SSEParser(fallbackProviderCost: providerCost(from: response.head))
-          for try await chunk in response.body {
-            for event in try parser.push(chunk) {
-              continuation.yield(event)
-            }
-          }
-
-          if let finished = try parser.finish() {
-            continuation.yield(finished)
-          }
-          continuation.finish()
-        } catch let error as ProviderError {
-          continuation.finish(throwing: sanitize(providerError: error))
-        } catch {
-          continuation.finish(
-            throwing: ProviderError.retryable(status: nil, message: sanitize(message: "\(error)"))
-          )
-        }
-      }
-      continuation.onTermination = { _ in task.cancel() }
+  public func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { sink in
+      await infer(request: request, into: sink)
     }
   }
 
@@ -179,11 +189,11 @@ public struct OpenAICompatibleProvider: LLMProvider {
       )
     }
 
-    let sessionId = Self.baseURLIsOpenRouter(config.baseURL) ? request.sessionId : nil
+    let sessionId = Self.baseURLIsOpenRouter(endpoint) ? request.sessionId : nil
     let payload = RequestBody(
       model: request.model,
       messages: wireMessages,
-      maxTokensKey: config.maxTokensField.rawValue,
+      maxTokensKey: maxTokensField.rawValue,
       maxOutputTokens: request.maxOutputTokens,
       stop: request.stop,
       stream: streaming,
@@ -195,14 +205,14 @@ public struct OpenAICompatibleProvider: LLMProvider {
     return try JSONEncoder().encode(payload)
   }
 
-  func parse(result: HTTPResult) throws -> ChatResponse {
+  func parse(result: HTTPResult, redactor: SecretRedactor) throws -> ChatResponse {
     let decoded: ResponseBody
     do {
       decoded = try JSONDecoder().decode(ResponseBody.self, from: result.body)
     } catch {
       throw ProviderError.terminal(
         status: result.statusCode,
-        message: sanitize(message: "malformed response: \(error)")
+        message: redactor.redact("malformed response: \(error)")
       )
     }
 
@@ -231,27 +241,266 @@ public struct OpenAICompatibleProvider: LLMProvider {
   }
 }
 
+// MARK: - Streaming
+
+private extension OpenAICompatibleProvider {
+  /// The whole streamed inference, reported rather than thrown: the session owns this operation, so
+  /// its return value *is* the outcome the session caches and hands to every joiner.
+  func infer(request: ChatRequest, into sink: LLMEventSink) async -> LLMStreamTermination {
+    let exposure = ProviderAttemptExposure()
+
+    let authorization: LLMRequestAuthorization
+    do {
+      authorization = try await credentials.authorization()
+    } catch is CancellationError {
+      return .cancelled(.notStarted)
+    } catch {
+      // No request goes out without a credential, so nothing was exposed. The cause names the state
+      // rather than the source's error, which is what keeps key material out of the terminal.
+      return .failed(ProviderFailure(cause: .authenticationRequired, accounting: .notStarted))
+    }
+
+    let redactor = SecretRedactor(secretValues: authorization.redactionValues)
+    do {
+      let body = try encode(request: request, streaming: true)
+      let headers = try headers(for: authorization)
+      logger.debug(
+        "chat stream request model=\(request.model) messages=\(request.messages.count) tools=\(request.tools.count)"
+      )
+      let exchange = try await http.openStream(
+        streamRequest(headers: headers, body: body, exposure: exposure)
+      )
+      return await consume(exchange: exchange, into: sink, exposure: exposure, redactor: redactor)
+    } catch {
+      return Self.termination(for: error, exposure: exposure, redactor: redactor)
+    }
+  }
+
+  func streamRequest(
+    headers: [String: String],
+    body: Data,
+    exposure: ProviderAttemptExposure
+  ) -> HTTPRequest {
+    HTTPRequest(
+      method: .post,
+      url: chatCompletionsURL(),
+      headers: headers,
+      body: body,
+      timeoutSeconds: config.requestTimeoutSeconds,
+      responseBodyPolicy: .streaming(
+        maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
+        errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
+      ),
+      beginHandoff: { try exposure.beginHandoff() }
+    )
+  }
+
+  /// Reads the exchange and joins it on the way out, whichever way it ends. The exchange owns the
+  /// transport work behind it, so returning without joining would leave that work running — and the
+  /// session's own joiners would be told the inference had stopped while it had not.
+  func consume(
+    exchange: HTTPStreamExchange,
+    into sink: LLMEventSink,
+    exposure: ProviderAttemptExposure,
+    redactor: SecretRedactor
+  ) async -> LLMStreamTermination {
+    do {
+      guard (200..<300).contains(exchange.head.statusCode) else {
+        // A recognized non-success head proves the server answered instead of inferring, so the
+        // attempt returns to `notStarted` before its diagnostic body is even read.
+        exposure.noteProvenClean()
+        let cause = try await rejection(from: exchange, redactor: redactor)
+        _ = await exchange.cancelAndAwait()
+        return .failed(ProviderFailure(cause: cause, accounting: exposure.accounting))
+      }
+
+      var parser = SSEParser(fallbackProviderCost: providerCost(from: exchange.head))
+      var terminal: ChatResponse?
+      for try await chunk in exchange.body {
+        for event in try parser.push(chunk) {
+          switch event {
+          case .delta(let text):
+            try await sink.sendDelta(text)
+          case .finished(let response):
+            terminal = response
+          }
+        }
+        exposure.noteObserved(completionTokens: parser.observedCompletionTokens)
+      }
+      try Self.check(termination: await exchange.awaitTermination())
+
+      if case .finished(let response)? = try parser.finish() {
+        terminal = response
+      }
+      // A server that closed without a `[DONE]` still delivered a reply; the parser's accumulation
+      // is it.
+      return .completed(terminal ?? parser.assembledResponse)
+    } catch {
+      _ = await exchange.cancelAndAwait()
+      return Self.termination(for: error, exposure: exposure, redactor: redactor)
+    }
+  }
+
+  /// The outcome a natural failure reports. Cancellation is reported as cancellation rather than
+  /// dressed up as a provider failure, so a joiner can tell "we stopped it" from "it broke".
+  static func termination(
+    for error: any Error,
+    exposure: ProviderAttemptExposure,
+    redactor: SecretRedactor
+  ) -> LLMStreamTermination {
+    if error is CancellationError {
+      return .cancelled(exposure.accounting)
+    }
+    noteIfProvenClean(error, exposure: exposure)
+    return .failed(
+      ProviderFailure(
+        cause: cause(for: error).redacted(with: redactor),
+        accounting: exposure.accounting
+      )
+    )
+  }
+
+  static func cause(for error: any Error) -> ProviderError {
+    if let failure = error as? HTTPTransportFailure {
+      return providerError(from: failure)
+    }
+    if let providerError = error as? ProviderError {
+      return providerError
+    }
+    return .retryable(status: nil, message: "\(error)")
+  }
+
+  /// Only a transport fact may return an attempt to `notStarted`; an error's text never can.
+  static func noteIfProvenClean(_ error: any Error, exposure: ProviderAttemptExposure) {
+    guard provesNothingWasSent(error) else {
+      return
+    }
+    exposure.noteProvenClean()
+  }
+
+  /// Whether the failure carries the one transport fact that makes a replay safe: a typed
+  /// `definitelyNotSent` disposition. Any other error — a `mayHaveBeenSent` transport failure or a
+  /// cause with no disposition at all — is treated as possibly-sent, so a retry cannot double-charge.
+  static func provesNothingWasSent(_ error: any Error) -> Bool {
+    guard let failure = error as? HTTPTransportFailure else {
+      return false
+    }
+    return failure.disposition == .definitelyNotSent
+  }
+
+  /// The body of a non-success head. The executor has already capped it, so reading to the end holds
+  /// no more than the diagnostic allowance.
+  func rejection(
+    from exchange: HTTPStreamExchange,
+    redactor: SecretRedactor
+  ) async throws -> ProviderError {
+    var collected = Data()
+    for try await chunk in exchange.body {
+      collected.append(chunk)
+    }
+    let message = redactor.redact(errorMessage(from: collected))
+    logger.notice("chat stream status \(exchange.head.statusCode)")
+
+    if Self.isRetryableStatus(exchange.head.statusCode) {
+      return ProviderError.rejected(status: exchange.head.statusCode, message: message)
+    }
+    return ProviderError.terminal(status: exchange.head.statusCode, message: message)
+  }
+
+  /// The body sequence ending says only that no more bytes are coming; the termination says whether
+  /// the transfer actually finished. A cancelled exchange closes its body cleanly, so trusting the
+  /// sequence alone would read a truncated stream as a complete one.
+  static func check(termination: HTTPStreamTermination) throws {
+    switch termination {
+    case .completed:
+      return
+    case .failed(let failure):
+      throw providerError(from: failure)
+    case .cancelled:
+      throw CancellationError()
+    }
+  }
+
+  /// Maps a transport failure by its typed disposition and never by its text. `definitelyNotSent` is
+  /// precisely what `connectFailed` has always meant to callers: nothing reached the model, so the
+  /// attempt can be replayed.
+  static func providerError(from failure: HTTPTransportFailure) -> ProviderError {
+    switch failure.disposition {
+    case .definitelyNotSent:
+      return .connectFailed(message: failure.safeMessage)
+    case .mayHaveBeenSent:
+      return .retryable(status: nil, message: failure.safeMessage)
+    }
+  }
+
+  /// A transport failure already carries its own diagnostic; interpolating the struct would bury it
+  /// in synthesized field syntax.
+  static func describe(_ error: any Error) -> String {
+    guard let failure = error as? HTTPTransportFailure else { return "\(error)" }
+    return failure.safeMessage
+  }
+}
+
 // MARK: - Request
 
 private extension OpenAICompatibleProvider {
+  /// The headers this adapter puts on the wire itself. Everything about how the exchange is framed
+  /// belongs here rather than to whoever supplies the credential.
+  static let adapterHeaders = ["Content-Type": "application/json"]
+
+  /// The only header a credential source may contribute to this route, keyed by its normalized name
+  /// and mapped to the single spelling that reaches the wire.
+  static let allowedCredentialHeaders = ["authorization": "Authorization"]
+
   func chatCompletionsURL() -> String {
-    let base = config.baseURL.hasSuffix("/") ? String(config.baseURL.dropLast()) : config.baseURL
+    let base = endpoint.hasSuffix("/") ? String(endpoint.dropLast()) : endpoint
     return "\(base)/chat/completions"
   }
 
-  func requestHeaders() -> [String: String] {
-    var headers = ["Content-Type": "application/json"]
-    if !config.apiKey.isEmpty {
-      headers["Authorization"] = "Bearer \(config.apiKey)"
-    }
-    return headers
+  /// Folds the credential source's contribution into this adapter's own headers.
+  ///
+  /// The seam is a plain dictionary, so without an allowlist any source could rewrite `Host`,
+  /// content negotiation, client identity, or session routing on the way to the wire. A name outside
+  /// the allowlist, or one the adapter already owns, is refused rather than merged — and the refusal
+  /// quotes only the name, never the value it came with.
+  ///
+  /// Merging under the allowlist's own spelling rather than the source's keeps the dictionary from
+  /// seating two casings of one header, which the wire would carry as two headers.
+  func headers(for authorization: LLMRequestAuthorization) throws -> [String: String] {
+    try CredentialHeaderMerge.merged(
+      into: Self.adapterHeaders,
+      allowing: Self.allowedCredentialHeaders,
+      from: authorization
+    )
+  }
+
+  /// The blocking request. `execute` rather than the `post` convenience because only the general
+  /// form carries the handoff that linearizes this attempt's exposure; the caps match what `post`
+  /// would have supplied.
+  func bufferedRequest(
+    url: String,
+    headers: [String: String],
+    body: Data,
+    exposure: ProviderAttemptExposure
+  ) -> HTTPRequest {
+    HTTPRequest(
+      method: .post,
+      url: url,
+      headers: headers,
+      body: body,
+      timeoutSeconds: config.requestTimeoutSeconds,
+      responseBodyPolicy: .buffered(
+        successBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes,
+        errorBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes
+      ),
+      beginHandoff: { try exposure.beginHandoff() }
+    )
   }
 }
 
 // MARK: - Response
 
 private extension OpenAICompatibleProvider {
-  static let maxStreamingErrorBodyBytes = 64 * 1024
   static let liteLLMResponseCostHeader = "x-litellm-response-cost"
 
   func errorMessage(from body: Data) -> String {
@@ -262,21 +511,6 @@ private extension OpenAICompatibleProvider {
       return String(data: body, encoding: .utf8) ?? "unknown error"
     }
     return message
-  }
-
-  func collectStreamingErrorBody(
-    _ body: AsyncThrowingStream<Data, Error>
-  ) async throws -> Data {
-    var collected = Data()
-
-    for try await chunk in body {
-      collected.append(chunk)
-      if collected.count > Self.maxStreamingErrorBodyBytes {
-        break
-      }
-    }
-
-    return collected
   }
 
   func providerCost(from head: HTTPStreamHead) -> Double? {
@@ -291,45 +525,14 @@ private extension OpenAICompatibleProvider {
 // MARK: - Retry
 
 private extension OpenAICompatibleProvider {
-  static let baseBackoffSeconds = 0.5
-  static let maxBackoffSeconds = 30.0
-
+  /// The server's `Retry-After` hint as a `Duration`, honoring the millisecond form some routes send
+  /// before falling back to whole/fractional seconds. The wait itself clamps this hint, so the raw
+  /// value is returned here without a ceiling of its own.
   func retryAfterDelay(from result: HTTPResult) -> Duration? {
     if let milliseconds = result.getHeader(for: "retry-after-ms").flatMap(Double.init) {
       return .milliseconds(milliseconds)
     }
     return result.getHeader(for: "retry-after").flatMap(Double.init).map { .seconds($0) }
-  }
-
-  func backoff(attempt: Int, retryAfter: Duration?) async throws {
-    if let retryAfter {
-      try await clock.sleep(for: retryAfter)
-      return
-    }
-    let exponentialSeconds = Self.baseBackoffSeconds * pow(2, Double(attempt - 1))
-    let capped = Duration.seconds(min(exponentialSeconds, Self.maxBackoffSeconds))
-    try await clock.sleep(for: jitter(capped))
-  }
-}
-
-// MARK: - Redaction
-
-private extension OpenAICompatibleProvider {
-  func sanitize(message: String) -> String {
-    SecretRedactor(secretValues: [config.apiKey]).redact(message)
-  }
-
-  func sanitize(providerError: ProviderError) -> ProviderError {
-    switch providerError {
-    case .connectFailed(let message):
-      return .connectFailed(message: sanitize(message: message))
-    case .retryable(let status, let message):
-      return .retryable(status: status, message: sanitize(message: message))
-    case .rejected(let status, let message):
-      return .rejected(status: status, message: sanitize(message: message))
-    case .terminal(let status, let message):
-      return .terminal(status: status, message: sanitize(message: message))
-    }
   }
 }
 

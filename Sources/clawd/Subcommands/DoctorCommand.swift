@@ -49,6 +49,8 @@ struct DoctorCommand: AsyncParsableCommand {
     )
     report.add(key: "secrets", value: secretsRow.value, ok: secretsRow.ok, group: .config)
 
+    addLLMAuthRow(to: &report, config: config)
+
     if checkConfig {
       emit(report)
 
@@ -140,6 +142,25 @@ private extension DoctorCommand {
       value: exemptCIDRs.isEmpty ? "none" : exemptCIDRs.joined(separator: " "),
       group: .connectivity
     )
+  }
+
+  /// The network-free credential-health row. It reads only what is already on disk: the static bearer
+  /// already loaded for the current route, or one decrypted ChatGPT record — never a refresh, model
+  /// fetch, or entitlement check. The managed store is built only for the ChatGPT route, so the
+  /// current API route opens no unused OAuth envelope while the daemon is stopped.
+  func addLLMAuthRow(to report: inout DoctorReport, config: AppConfig) {
+    // The `secrets` row above owns the decrypt-failure diagnosis and fails loudly there, so an
+    // undecryptable store degrades this row quietly to mode=none rather than double-reporting.
+    let staticAPIKey = (try? EnvironmentLoader.loadSecrets(config: config))?.llmApiKey
+    let result = LLMAuthDoctor.inspect(
+      route: config.llm.route,
+      staticAPIKey: staticAPIKey,
+      now: Date(),
+      makeManagedStore: {
+        EncryptedLLMCredentialStore(stateRoot: config.stateRoot)
+      }
+    )
+    report.add(key: "llm.auth", value: result.value, ok: result.ok, group: .llmRuns)
   }
 
   func addDatabaseRows(to report: inout DoctorReport, config: AppConfig) {

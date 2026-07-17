@@ -12,16 +12,22 @@ extension DaemonBuilder {
   /// deterministic validator, and the read/claim stores. Extracted from `build` so the parser's
   /// spend-discipline wiring reads in one place.
   func makeScheduleSurface(
-    provider: OpenAICompatibleProvider,
+    providerStack: ProviderStack,
     costResolver: CostResolver
   ) -> ScheduleSurface {
     ScheduleSurface(
       parser: ScheduleDraftParser(
-        provider: provider,
-        model: config.llm.model,
+        provider: providerStack.provider,
+        // The same identities and policies `makeAgent` stamps, flipped in lockstep: the /schedule
+        // parse's one LLM call bills and reserves exactly as a turn does, so a subscription route is
+        // an included plan here too and never a metered call the turn no longer is.
+        wireModel: providerStack.wireModel,
+        configuredReference: providerStack.configuredReference,
         usageStore: stores.usage,
         budget: config.budget,
         costResolver: costResolver,
+        costPolicy: providerStack.costPolicy,
+        reservationPolicy: providerStack.reservationPolicy,
         structuredOutput: config.llm.structuredOutput,
         clock: ContinuousClock(),
         logger: logger

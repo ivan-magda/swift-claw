@@ -44,6 +44,31 @@ import Testing
     #expect(completed.usage.promptTokens > 0)
   }
 
+  @Test func eachToolLoopRoundRecordsItsSpendUnderItsOwnCallIdentity() async throws {
+    // given — two tool round-trips then a final answer, so one run spends three times
+    let provider = SequenceProvider([
+      toolCallResponse([fetchProposal(id: "c1")]),
+      toolCallResponse([fetchProposal(id: "c2")]),
+      okResponse(content: "done"),
+    ])
+    let usageStore = RecordingUsageStore()
+    let runtime = makeRuntime(
+      provider: provider,
+      toolDispatcher: ScriptedDispatcher(respond: okOutcome()),
+      usageStore: usageStore,
+      providerCallIDGenerator: SequentialCallIDGenerator()
+    )
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then — a fresh identity per round: rows are unique on it, so reusing one would silently
+    // drop a round's spend instead of recording it
+    #expect(usageStore.recorded.map(\.providerCallID.rawValue) == ["call-1", "call-2"])
+    let completed = try requireCompleted(outcome.result)
+    #expect(completed.usage.providerCallID == ProviderCallID(rawValue: "call-3"))
+  }
+
   @Test func usageWriteFailureHaltsProviderCallsAndDegradesAccountingFailed() async throws {
     // given — the first intermediate write fails (non-diskFull)
     let provider = SequenceProvider([

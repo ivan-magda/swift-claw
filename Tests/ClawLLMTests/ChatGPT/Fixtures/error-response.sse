@@ -1,0 +1,9 @@
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"msg_1","type":"message","role":"assistant","status":"in_progress","phase":"final","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":0,"item_id":"msg_1","delta":"Partial visible text"}
+
+event: response.failed
+data: {"type":"response.failed","response":{"id":"resp_error","status":"failed","error":{"code":"server_error","message":"upstream \u001b[31mexploded\u001b[0m\nretry   later"}}}
+

@@ -80,6 +80,22 @@ import Testing
     #expect(tomorrow)
   }
 
+  @Test("an included-plan breaker never DMs on the USD cap but still trips on the token ceiling")
+  func includedPlanBreakerSkipsUSDButNotTheTokenCeiling() async {
+    // given — a subscription daemon whose day already rang up API-billed dollars over the cap
+    let breaker = BudgetBreaker(budget: .default, costPolicy: .includedPlan)
+
+    // when — the USD figure alone would DM under `metered`
+    let usdOnly = await breaker.shouldNotifyTrip(todayTokens: 0, todayUSD: 10.0, now: now)
+    // then — a subscription cap DM must not fire off dollars that are not a gate
+    #expect(!usdOnly)
+
+    // when — the hard token ceiling is met
+    let tokenTrip = await breaker.shouldNotifyTrip(todayTokens: 666_666, todayUSD: 0, now: now)
+    // then — the global token breaker still DMs
+    #expect(tokenTrip)
+  }
+
   @Test("the proactive latch is independent of the global daily latch")
   func proactiveLatchIsIndependentOfTheGlobalOne() async {
     // given

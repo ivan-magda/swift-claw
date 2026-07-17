@@ -364,8 +364,9 @@ import Testing
 
     // when — a plain message lands on the SAME session lane after the restart
     let follower = FollowerFlag()
-    let lane = await env.lanes.actor(for: env.sessionId)
-    await lane.enqueue(runId: runId &+ 1_000) { await follower.markRan() }
+    _ = await env.lanes.enqueue(sessionID: env.sessionId, runID: runId &+ 1_000) {
+      await follower.markRan()
+    }
 
     // then — it cannot run until the parked approval resolves (FIFO queue-behind survives restart):
     // the follower's task chains behind the still-suspended waiter task on the lane

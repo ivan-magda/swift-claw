@@ -263,7 +263,8 @@ func makeSC3Harness(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    model: "test-model",
+    wireModel: "test-model",
+    configuredReference: "test-model",
     toolDispatcher: dispatcherOverride ?? dispatcher,
     usageStore: stores.usage,
     auditLog: stores.audit,

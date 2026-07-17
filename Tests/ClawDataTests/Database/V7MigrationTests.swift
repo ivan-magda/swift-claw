@@ -24,6 +24,7 @@ import Testing
 
   private func runlessUsage(sessionId: Int64) -> ProviderUsage {
     ProviderUsage(
+      providerCallID: ProviderCallID(rawValue: "call-1"),
       runId: nil,
       sessionId: sessionId,
       model: "m",

@@ -185,15 +185,22 @@ private extension ApprovalBootReconciler {
     let runId = approval.runId
     let sessionId = approval.sessionId
     let chatId = approval.ownerUserId
-    let lane = await lanes.actor(for: sessionId)
 
-    await lane.enqueue(runId: runId) {
+    let result = await lanes.enqueue(sessionID: sessionId, runID: runId) {
       await park.park(
         approvalId: approvalId,
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
         revalidatePolicyOnApprove: revalidate
+      )
+    }
+
+    if result == .shuttingDown {
+      // The daemon began draining mid-reconcile: leave the durable approval untouched so the next
+      // boot re-parks it, rather than resolving it against a lane that will never run the waiter.
+      logger.notice(
+        "boot approvals: approval \(approvalId) not re-parked; lane admission is shutting down"
       )
     }
   }

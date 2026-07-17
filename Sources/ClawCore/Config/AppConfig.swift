@@ -3,11 +3,16 @@ import Foundation
 public struct AppConfig: Sendable, Equatable {
   public enum EnvKey {
     static let allowlist = "CLAW_ALLOWLIST"
-    static let stateRoot = "CLAW_STATE_ROOT"
+    /// Public because the auth commands resolve the same state root without loading this config.
+    /// The daemon and `clawd auth` have to read the one variable, or they diverge on where an
+    /// owner's credentials live.
+    public static let stateRoot = "CLAW_STATE_ROOT"
     static let pollTimeout = "CLAW_POLL_TIMEOUT"
 
     static let llmBaseURL = "CLAW_LLM_BASE_URL"
-    static let llmModel = "CLAW_LLM_MODEL"
+    /// Public because login prints the assignment an owner must set. The variable it names and the
+    /// variable configuration reads have to be the same word.
+    public static let llmModel = "CLAW_LLM_MODEL"
     static let llmMaxTokensField = "CLAW_LLM_MAX_TOKENS_FIELD"
     static let llmMaxTokens = "CLAW_LLM_MAX_TOKENS"
     static let llmStreaming = "CLAW_LLM_STREAMING"
@@ -45,7 +50,6 @@ public struct AppConfig: Sendable, Equatable {
 
   enum EnvDefaults {
     static let pollTimeoutSeconds = 30
-    static let stateDirectoryName = ".swift-claw"
     static let maxTokensField = MaxTokensField.maxCompletionTokens
     static let structuredOutput = StructuredOutputMode.off
     static let maxOutputTokens = RunDefaults.maxOutputTokens
@@ -69,8 +73,6 @@ public struct AppConfig: Sendable, Equatable {
     static let execCPUs = 4
     static let execTimeoutSeconds = 30
   }
-
-  private static let stateRootPermissions = 0o700
 
   public let allowlist: Set<Int64>
   public let stateRoot: URL
@@ -138,7 +140,7 @@ public struct AppConfig: Sendable, Equatable {
   /// allowlist is allowed so onboarding can still boot.
   public static func load(environment env: [String: String]) throws -> AppConfig {
     let allowlist = try parseAllowlist(from: env[EnvKey.allowlist])
-    let stateRoot = try createStateRootURL(for: env[EnvKey.stateRoot])
+    let stateRoot = try StateRootResolver.createStateRoot(for: env[EnvKey.stateRoot])
     let pollTimeoutSeconds =
       env[EnvKey.pollTimeout].flatMap(Int.init) ?? EnvDefaults.pollTimeoutSeconds
     let llm = try parseLLMConfig(from: env)
@@ -191,20 +193,75 @@ public struct AppConfig: Sendable, Equatable {
 // MARK: - LLM Config Parsing
 
 private extension AppConfig {
-  /// `apiKey` is optional — local servers need none.
+  /// Resolves the route from the model first, so a managed model that names no base URL is not
+  /// rejected for lacking one it never uses. The base URL is an autoclosure the registry evaluates
+  /// only for the current route, and the wire output-token field is applied only where the route
+  /// honors one — the managed ChatGPT route ignores `CLAW_LLM_MAX_TOKENS_FIELD` because it carries no
+  /// wire cap. The API key is not read here: it is a secret the composition root hands a credential
+  /// source.
   static func parseLLMConfig(from env: [String: String]) throws -> LLMConfig {
+    guard
+      let model = env[EnvKey.llmModel]?.trimmingCharacters(in: .whitespaces),
+      !model.isEmpty
+    else {
+      throw ConfigError.missingLLMModel
+    }
+
+    let resolved = try LLMProviderRegistry.resolve(
+      modelReference: model,
+      configuredBaseURL: try requiredBaseURL(from: env)
+    )
+    let route = try routeApplyingWireOutputField(to: resolved, env: env)
+
+    let rawMaxTokens = env[EnvKey.llmMaxTokens]?.trimmingCharacters(in: .whitespaces) ?? ""
+    let maxOutputTokens: Int
+    if rawMaxTokens.isEmpty {
+      maxOutputTokens = EnvDefaults.maxOutputTokens
+    } else if let parsedMaxTokens = Int(rawMaxTokens), parsedMaxTokens > 0 {
+      maxOutputTokens = parsedMaxTokens
+    } else {
+      throw ConfigError.invalidMaxTokens(rawMaxTokens)
+    }
+
+    let structuredOutput = try parseStructuredOutput(from: env, route: route)
+
+    return LLMConfig(
+      route: route,
+      maxOutputTokens: maxOutputTokens,
+      retryBudget: EnvDefaults.retryBudget,
+      requestTimeoutSeconds: EnvDefaults.requestTimeoutSeconds,
+      streamingEnabled: try boolValue(
+        env[EnvKey.llmStreaming],
+        key: EnvKey.llmStreaming,
+        default: true
+      ),
+      structuredOutput: structuredOutput
+    )
+  }
+
+  /// The current route's required base URL, thrown lazily so the registry evaluates it only when the
+  /// model resolves to that route. A managed model leaves this unevaluated, which is what lets
+  /// `CLAW_LLM_BASE_URL` stay absent for it.
+  static func requiredBaseURL(from env: [String: String]) throws -> String {
     guard
       let baseURL = env[EnvKey.llmBaseURL]?.trimmingCharacters(in: .whitespaces),
       !baseURL.isEmpty
     else {
       throw ConfigError.missingLLMBaseURL
     }
+    return baseURL
+  }
 
-    guard
-      let model = env[EnvKey.llmModel]?.trimmingCharacters(in: .whitespaces),
-      !model.isEmpty
-    else {
-      throw ConfigError.missingLLMModel
+  /// Rebuilds the route's wire output-token field from `CLAW_LLM_MAX_TOKENS_FIELD`, but only when the
+  /// resolved descriptor carries a configured field. A route that omits the wire cap honors no such
+  /// variable, so it is neither read nor validated there — parsing it would resurrect a value the
+  /// route ignores and reject a value it never consults.
+  static func routeApplyingWireOutputField(
+    to route: ResolvedLLMRoute,
+    env: [String: String]
+  ) throws -> ResolvedLLMRoute {
+    guard case .configured = route.descriptor.capabilities.outputTokenField else {
+      return route
     }
 
     let rawField = env[EnvKey.llmMaxTokensField]?.trimmingCharacters(in: .whitespaces) ?? ""
@@ -217,16 +274,31 @@ private extension AppConfig {
       throw ConfigError.invalidMaxTokensField(rawField)
     }
 
-    let rawMaxTokens = env[EnvKey.llmMaxTokens]?.trimmingCharacters(in: .whitespaces) ?? ""
-    let maxOutputTokens: Int
-    if rawMaxTokens.isEmpty {
-      maxOutputTokens = EnvDefaults.maxOutputTokens
-    } else if let parsedMaxTokens = Int(rawMaxTokens), parsedMaxTokens > 0 {
-      maxOutputTokens = parsedMaxTokens
-    } else {
-      throw ConfigError.invalidMaxTokens(rawMaxTokens)
-    }
+    let capabilities = route.descriptor.capabilities
+    let rebuilt = LLMProviderDescriptor(
+      providerID: route.descriptor.providerID,
+      qualifiedPrefix: route.descriptor.qualifiedPrefix,
+      egress: route.descriptor.egress,
+      credentialMode: route.descriptor.credentialMode,
+      capabilities: LLMProviderCapabilities(
+        supportsStructuredOutput: capabilities.supportsStructuredOutput,
+        outputTokenField: .configured(maxTokensField)
+      )
+    )
+    return ResolvedLLMRoute(
+      descriptor: rebuilt,
+      configuredReference: route.configuredReference,
+      wireModel: route.wireModel
+    )
+  }
 
+  /// Parses `CLAW_LLM_STRUCTURED_OUTPUT` and enforces the route's capability: a route with no
+  /// relied-upon structured-output contract accepts only `off`, and any other value fails closed with
+  /// the route named rather than being silently sent to a wire that cannot honor it.
+  static func parseStructuredOutput(
+    from env: [String: String],
+    route: ResolvedLLMRoute
+  ) throws -> StructuredOutputMode {
     let rawStructuredOutput =
       env[EnvKey.llmStructuredOutput]?.trimmingCharacters(in: .whitespaces) ?? ""
     let structuredOutput: StructuredOutputMode
@@ -238,21 +310,13 @@ private extension AppConfig {
       throw ConfigError.invalidStructuredOutput(rawStructuredOutput)
     }
 
-    return LLMConfig(
-      baseURL: baseURL,
-      model: model,
-      apiKey: "",  // injected at the composition root from Secrets (LLMConfig.withAPIKey)
-      maxTokensField: maxTokensField,
-      maxOutputTokens: maxOutputTokens,
-      retryBudget: EnvDefaults.retryBudget,
-      requestTimeoutSeconds: EnvDefaults.requestTimeoutSeconds,
-      streamingEnabled: try boolValue(
-        env[EnvKey.llmStreaming],
-        key: EnvKey.llmStreaming,
-        default: true
-      ),
-      structuredOutput: structuredOutput
-    )
+    if structuredOutput != .off, !route.descriptor.capabilities.supportsStructuredOutput {
+      throw ConfigError.structuredOutputUnsupportedOnRoute(
+        providerID: route.descriptor.providerID,
+        mode: structuredOutput
+      )
+    }
+    return structuredOutput
   }
 }
 
@@ -426,7 +490,7 @@ extension AppConfig {
   }
 }
 
-// MARK: - Allowlist & State Root
+// MARK: - Allowlist
 
 private extension AppConfig {
   static func parseAllowlist(from environmentValue: String?) throws -> Set<Int64> {
@@ -450,31 +514,6 @@ private extension AppConfig {
     }
 
     return allowlist
-  }
-
-  static func createStateRootURL(for rawPath: String?) throws -> URL {
-    let trimmedPath = rawPath?.trimmingCharacters(in: .whitespaces)
-    let stateRootURL =
-      if let path = trimmedPath, !path.isEmpty {
-        URL(fileURLWithPath: path, isDirectory: true)
-      } else {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
-          EnvDefaults.stateDirectoryName,
-          isDirectory: true
-        )
-      }
-
-    do {
-      try FileManager.default.createDirectory(
-        at: stateRootURL,
-        withIntermediateDirectories: true,
-        attributes: [.posixPermissions: stateRootPermissions]
-      )
-    } catch {
-      throw ConfigError.unwritableStateRoot(stateRootURL.path)
-    }
-
-    return stateRootURL
   }
 }
 

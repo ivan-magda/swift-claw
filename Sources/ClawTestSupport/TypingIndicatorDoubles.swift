@@ -20,26 +20,22 @@ public actor RecordingTyping: TypingIndicator {
 
 /// A one-shot release signal: `awaitRelease` suspends until `release` is called once. Pins the
 /// producer-after-typing ordering that a raw activity race would leave to scheduler luck.
+///
+/// A thin latch over the shared `AsyncGate` so the module carries one gate implementation, not two.
+/// `awaitRelease` maps to the cancellation-ignoring wait, preserving this gate's original behavior:
+/// a waiter parked here stays parked until `release`, so an ordering pin is not undone by a stray
+/// cancellation.
 public actor TypingReleaseGate {
-  private var waiters: [CheckedContinuation<Void, Never>] = []
-  private var released = false
+  private let gate = AsyncGate()
 
   public init() {}
 
   public func awaitRelease() async {
-    if released { return }
-    await withCheckedContinuation { continuation in
-      waiters.append(continuation)
-    }
+    await gate.waitIgnoringCancellation()
   }
 
   public func release() {
-    guard !released else { return }
-    released = true
-    for waiter in waiters {
-      waiter.resume()
-    }
-    waiters.removeAll()
+    gate.open()
   }
 }
 

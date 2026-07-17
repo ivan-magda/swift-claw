@@ -46,7 +46,8 @@ import Testing
       streamingEnabled: false,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
       budget: budget,
-      model: "test-model",
+      wireModel: "test-model",
+      configuredReference: "test-model",
       toolDispatcher: dispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,
@@ -197,5 +198,94 @@ import Testing
       limit: 50
     )
     #expect(snapshot.isTainted)
+  }
+
+  @Test func authenticationFailureDeliversTheExactLoginCopyAndDebitsNothing() async throws {
+    // given — the credential is refused before any inference begins (a clean, not-started head)
+    let fixture = try makeFixture(
+      provider: SequenceProvider([], then: ProviderError.authenticationRequired),
+      dispatcher: nil
+    )
+
+    // when
+    try await fixture.runner.run(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      chatId: 7,
+      triggerMessageId: fixture.triggerMessageId
+    )
+
+    // then — the pinned login sentence reaches the owner verbatim, and no usage row was written
+    let payloads = try outboxPayloads(fixture)
+    #expect(payloads.contains(Degradation.authenticationRequired))
+    #expect(payloads.contains { payload in payload.contains("clawd auth login") })
+    #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
+  }
+
+  @Test func quotaFailureSaysRetryNotLoginAndDebitsNothing() async throws {
+    // given
+    let fixture = try makeFixture(
+      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 30)),
+      dispatcher: nil
+    )
+
+    // when
+    try await fixture.runner.run(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      chatId: 7,
+      triggerMessageId: fixture.triggerMessageId
+    )
+
+    // then — the quota reply names the retry, never the login command, and debits nothing
+    let payloads = try outboxPayloads(fixture)
+    #expect(payloads.contains(Degradation.quotaLimited(retryAfterSeconds: 30)))
+    #expect(payloads.allSatisfy { payload in payload.contains("clawd auth login") == false })
+    #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
+  }
+
+  @Test func accessDenialDoesNotTellTheOwnerToLogIn() async throws {
+    // given
+    let fixture = try makeFixture(
+      provider: SequenceProvider([], then: ProviderError.accessDenied),
+      dispatcher: nil
+    )
+
+    // when
+    try await fixture.runner.run(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      chatId: 7,
+      triggerMessageId: fixture.triggerMessageId
+    )
+
+    // then — the access reply never names the login recovery, and debits nothing
+    let payloads = try outboxPayloads(fixture)
+    #expect(payloads.contains(Degradation.accessDenied))
+    #expect(payloads.allSatisfy { payload in payload.contains("clawd auth login") == false })
+    #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
+  }
+
+  @Test func rejectedReplayStateGivesNewGuidanceAndDebitsNothing() async throws {
+    // given
+    let fixture = try makeFixture(
+      provider: SequenceProvider([], then: ProviderError.invalidProviderState),
+      dispatcher: nil
+    )
+
+    // when
+    try await fixture.runner.run(
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      chatId: 7,
+      triggerMessageId: fixture.triggerMessageId
+    )
+
+    // then — safe /new guidance, never a login prompt, and debits nothing
+    let payloads = try outboxPayloads(fixture)
+    #expect(payloads.contains(Degradation.invalidProviderState))
+    #expect(payloads.contains { payload in payload.contains("/new") })
+    #expect(payloads.allSatisfy { payload in payload.contains("clawd auth login") == false })
+    #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
   }
 }

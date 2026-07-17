@@ -37,7 +37,7 @@ extension RunStoreGRDB {
       }
 
       // No usage insert here — the suspending round's `provider_usage` row was already written
-      // mid-loop by `AgentRuntime`; re-inserting would double-debit the budget and resume carry-over.
+      // mid-loop by `AgentRuntime`, so the commit has nothing left to persist.
 
       try Self.enqueuePromptChunks(
         db,
@@ -368,56 +368,22 @@ private extension RunStoreGRDB {
     commit: SuspendedTurnCommit,
     now: Date
   ) throws -> (approvalId: Int64, observationMessageId: Int64) {
-    try db.execute(
-      sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        sessionId,
-        runId,
-        MessageRole.assistant.rawValue,
-        commit.assistantContent,
-        Provenance.trusted.rawValue,
-        now,
-        commit.toolCallsJSON,
-      ]
-    )
-
-    for observation in commit.completedObservations {
-      try db.execute(
-        sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          sessionId,
-          runId,
-          MessageRole.tool.rawValue,
-          observation.content,
-          Provenance.untrusted.rawValue,
-          now,
-          observation.toolCallId,
-        ]
-      )
-    }
-    // The PLACEHOLDER pins rowid adjacency: a real `tool` row satisfying the anchor's expected
-    // tool_call_id so `HistoryHygiene` keeps the exchange while parked. Resolution UPDATEs
-    // it in place (v4 FTS triggers cover the edit).
-    try db.execute(
-      sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        sessionId,
-        runId,
-        MessageRole.tool.rawValue,
-        placeholderObservationContent,
-        Provenance.untrusted.rawValue,
-        now,
-        commit.pending.toolCallId,
-      ]
+    // Anchor + completed observations + the PLACEHOLDER, in the one write sequence the
+    // exchange-commit path shares, so the column lists cannot drift between them. The PLACEHOLDER
+    // goes last: a real `tool` row satisfying the anchor's expected tool_call_id so `HistoryHygiene`
+    // keeps the exchange while parked (resolution UPDATEs it in place; v4 FTS triggers cover the
+    // edit), and being last leaves `lastInsertedRowID` pointing at it.
+    try insertAnchoredObservationRows(
+      db,
+      sessionId: sessionId,
+      runId: runId,
+      assistantContent: commit.assistantContent,
+      toolCallsJSON: commit.toolCallsJSON,
+      providerState: commit.providerState,
+      observations: commit.completedObservations.map { observation in
+        (toolCallId: observation.toolCallId, content: observation.content)
+      } + [(toolCallId: commit.pending.toolCallId, content: placeholderObservationContent)],
+      now: now
     )
     let observationMessageId = db.lastInsertedRowID
 

@@ -16,7 +16,12 @@ actor StreamingProvider: LLMProvider {
     case timed([TimedStreamEvent])
     case gated(TypingReleaseGate, [StreamEvent])
     case gatedBetween([StreamEvent], TypingReleaseGate, [StreamEvent])
-    case fail(ProviderError)
+    /// Carries the provider's own disposition, not just the cause, so a test states whether the
+    /// failed attempt could already owe tokens — the fact the runtime's accounting reads.
+    case fail(ProviderFailure)
+    /// Reports the given cancellation disposition as the stream's terminal without sending anything,
+    /// exercising `error(for:)`'s mapping of a `.cancelled(.notStarted)`/`.mayHaveStarted` terminal.
+    case reportsCancel(ProviderFailureAccounting)
     case neverFinishes
     case ignoresCancellation(NonCooperativeStreamGate)
   }
@@ -47,61 +52,88 @@ actor StreamingProvider: LLMProvider {
     }
   }
 
-  nonisolated func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
-    AsyncThrowingStream { continuation in
-      let task = Task {
-        await self.recordStreamCall()
-        switch await self.streamScriptValue() {
-        case .events(let events):
-          for event in events {
-            continuation.yield(event)
+  nonisolated func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { sink in
+      await self.recordStreamCall()
+      switch await self.streamScriptValue() {
+      case .events(let events):
+        return await Self.play(events, into: sink) ?? .completed(Self.emptyReply)
+      case .timed(let steps):
+        for step in steps {
+          if step.pauseBefore > .zero {
+            try? await Task.sleep(for: step.pauseBefore)
           }
-          continuation.finish()
-        case .timed(let steps):
-          for step in steps {
-            if step.pauseBefore > .zero {
-              try? await Task.sleep(for: step.pauseBefore)
-            }
-            continuation.yield(step.event)
-          }
-          continuation.finish()
-        case .gated(let gate, let events):
-          await gate.awaitRelease()
-          for event in events {
-            continuation.yield(event)
-          }
-          continuation.finish()
-        case .gatedBetween(let prefix, let gate, let suffix):
-          for event in prefix {
-            continuation.yield(event)
-          }
-          await gate.awaitRelease()
-          for event in suffix {
-            continuation.yield(event)
-          }
-          continuation.finish()
-        case .fail(let error):
-          continuation.finish(throwing: error)
-        case .neverFinishes:
-          while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(10))
-          }
-          continuation.finish(throwing: CancellationError())
-        case .ignoresCancellation(let gate):
-          continuation.yield(.delta("partial"))
-          await gate.markStartedAndWaitForRelease()
-          continuation.finish(throwing: CancellationError())
-        }
-      }
-      continuation.onTermination = { _ in
-        Task {
-          if await self.cancelsStreamTaskOnTermination() {
-            task.cancel()
+          if let terminal = await Self.send(step.event, into: sink) {
+            return terminal
           }
         }
+        return .completed(Self.emptyReply)
+      case .gated(let gate, let events):
+        await gate.awaitRelease()
+        return await Self.play(events, into: sink) ?? .completed(Self.emptyReply)
+      case .gatedBetween(let prefix, let gate, let suffix):
+        if let terminal = await Self.play(prefix, into: sink) {
+          return terminal
+        }
+        await gate.awaitRelease()
+        return await Self.play(suffix, into: sink) ?? .completed(Self.emptyReply)
+      case .fail(let failure):
+        return .failed(failure)
+      case .reportsCancel(let accounting):
+        return .cancelled(accounting)
+      case .neverFinishes:
+        while !Task.isCancelled {
+          try? await Task.sleep(for: .milliseconds(10))
+        }
+        return .cancelled(.mayHaveStarted(observing: 0))
+      case .ignoresCancellation(let gate):
+        _ = await Self.send(.delta("partial"), into: sink)
+        // Acknowledges cancellation only once the gate opens, so a test can hold the inference past
+        // the runtime's own cancellation and watch what the runtime does about it.
+        await gate.markStartedAndWaitForRelease()
+        return .cancelled(.mayHaveStarted(observing: 0))
       }
     }
   }
+
+  /// Replays a script, returning the terminal its `.finished` names — or nil when the script runs
+  /// out without one, which is how a caller tells "the script ended" from "the stream ended".
+  private static func play(
+    _ events: [StreamEvent],
+    into sink: LLMEventSink
+  ) async -> LLMStreamTermination? {
+    for event in events {
+      if let terminal = await send(event, into: sink) {
+        return terminal
+      }
+    }
+    return nil
+  }
+
+  /// Returns the terminal once the script reaches one, or once the consumer has stopped listening.
+  private static func send(
+    _ event: StreamEvent,
+    into sink: LLMEventSink
+  ) async -> LLMStreamTermination? {
+    switch event {
+    case .delta(let text):
+      do {
+        try await sink.sendDelta(text)
+        return nil
+      } catch {
+        return .cancelled(.mayHaveStarted(observing: 0))
+      }
+    case .finished(let response):
+      return .completed(response)
+    }
+  }
+
+  private static let emptyReply = ChatResponse(
+    content: "",
+    finishReason: nil,
+    usage: nil,
+    costFromProvider: nil
+  )
 
   private func recordStreamCall() {
     streamCalls += 1
@@ -109,13 +141,6 @@ actor StreamingProvider: LLMProvider {
 
   private func streamScriptValue() -> StreamScript {
     streamScript
-  }
-
-  private func cancelsStreamTaskOnTermination() -> Bool {
-    if case .ignoresCancellation = streamScript {
-      return false
-    }
-    return true
   }
 }
 
@@ -169,15 +194,20 @@ actor RecordingStreamingProvider: LLMProvider {
     return rounds.removeFirst()
   }
 
-  nonisolated func stream(request: ChatRequest) -> AsyncThrowingStream<StreamEvent, Error> {
-    AsyncThrowingStream { continuation in
-      Task {
-        let events = await self.nextRound(recording: request)
-        for event in events {
-          continuation.yield(event)
+  nonisolated func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { sink in
+      let events = await self.nextRound(recording: request)
+      for event in events {
+        switch event {
+        case .delta(let text):
+          try? await sink.sendDelta(text)
+        case .finished(let response):
+          return .completed(response)
         }
-        continuation.finish()
       }
+      return .completed(
+        ChatResponse(content: "", finishReason: nil, usage: nil, costFromProvider: nil)
+      )
     }
   }
 }
@@ -190,20 +220,25 @@ func toolRoundTripStreamRounds() -> [[StreamEvent]] {
       .delta("let me "),
       .delta("check"),
       .finished(
-        finishReason: "tool_calls",
-        usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
-        providerCost: nil,
-        toolCalls: [fetchProposal()]
+        ChatResponse(
+          content: "let me check",
+          finishReason: "tool_calls",
+          usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+          costFromProvider: nil,
+          toolCalls: [fetchProposal()]
+        )
       ),
     ],
     [
       .delta("the page "),
       .delta("says hello"),
       .finished(
-        finishReason: "stop",
-        usage: ChatUsage(promptTokens: 12, completionTokens: 4, totalTokens: 16),
-        providerCost: nil,
-        toolCalls: []
+        ChatResponse(
+          content: "the page says hello",
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 12, completionTokens: 4, totalTokens: 16),
+          costFromProvider: nil
+        )
       ),
     ],
   ]
@@ -277,15 +312,6 @@ actor BlockingFinalDrafts: RichDraftStreaming {
   }
 }
 
-/// Marks when an async operation has finished, so a test can assert it is still in flight.
-actor CompletionFlag {
-  private(set) var done = false
-
-  func markDone() {
-    done = true
-  }
-}
-
 /// Compresses every runtime sleep except the wall-clock deadline (180s default) to ~1ms, so
 /// throttle ticks and send deadlines elapse instantly while the deadline child stays parked.
 let compressedSleep: @Sendable (Duration) async throws -> Void = { duration in
@@ -314,6 +340,7 @@ actor BlockingDrafts: RichDraftStreaming {
   private var blockedWaiters: [CheckedContinuation<Void, Never>] = []
 
   private var released = false
+  private var cancelled = false
   private var firstSendBlocked = false
 
   func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
@@ -326,8 +353,18 @@ actor BlockingDrafts: RichDraftStreaming {
       waiter.resume()
     }
     blockedWaiters.removeAll()
-    await withCheckedContinuation { continuation in
-      waiters.append(continuation)
+    // The bounded-send coordinator now cancels AND drains an abandoned send, so a blocked send must
+    // unwind on cancellation or the drain would wedge — exactly as a production HTTP POST does.
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        if cancelled || released {
+          continuation.resume()
+        } else {
+          waiters.append(continuation)
+        }
+      }
+    } onCancel: {
+      Task { await self.cancelWaiters() }
     }
   }
 
@@ -340,6 +377,15 @@ actor BlockingDrafts: RichDraftStreaming {
 
   func release() {
     released = true
+    resumeWaiters()
+  }
+
+  private func cancelWaiters() {
+    cancelled = true
+    resumeWaiters()
+  }
+
+  private func resumeWaiters() {
     for waiter in waiters {
       waiter.resume()
     }
@@ -465,10 +511,12 @@ func waitForTurnResult(
         .delta("he"),
         .delta("llo"),
         .finished(
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
-          providerCost: 0.001,
-          toolCalls: []
+          ChatResponse(
+            content: "hello",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
+            costFromProvider: 0.001
+          )
         ),
       ])
     )
@@ -488,7 +536,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, usage) = try requireCompleted(outcome.result)
+    let (content, usage, _) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     #expect(usage.promptTokens == 3)
     #expect(usage.completionTokens == 2)
@@ -517,7 +565,9 @@ func waitForTurnResult(
         gate,
         [
           .delta("hi"),
-          .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: []),
+          .finished(
+            ChatResponse(content: "hi", finishReason: "stop", usage: nil, costFromProvider: nil)
+          ),
         ]
       )
     )
@@ -544,7 +594,7 @@ func waitForTurnResult(
     let outcome = await waitForTurnResult(turnResult, milliseconds: 2_000)
 
     // then
-    let (content, _) = try requireCompleted(try #require(outcome).result)
+    let (content, _, _) = try requireCompleted(try #require(outcome).result)
     #expect(content == "hi")
     #expect(await typing.calls >= 3)
   }
@@ -564,7 +614,9 @@ func waitForTurnResult(
         gate,
         [
           .delta("hello"),
-          .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: []),
+          .finished(
+            ChatResponse(content: "hello", finishReason: "stop", usage: nil, costFromProvider: nil)
+          ),
         ]
       )
     )
@@ -591,7 +643,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     let sentDrafts = await drafts.drafts
     #expect(!sentDrafts.isEmpty)
@@ -604,7 +656,9 @@ func waitForTurnResult(
       streamScript: .events([
         .delta("hel"),
         .delta("lo"),
-        .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: []),
+        .finished(
+          ChatResponse(content: "hello", finishReason: "stop", usage: nil, costFromProvider: nil)
+        ),
       ])
     )
     let drafts = BlockingFinalDrafts(finalMarkdown: "hello")
@@ -641,7 +695,7 @@ func waitForTurnResult(
 
     // then
     #expect(doneWhileFinalSendBlocked == false)
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "hello")
     #expect(await drafts.drafts.contains("hello"))
   }
@@ -683,9 +737,11 @@ func waitForTurnResult(
       // on it arms the re-check regression deterministically, without a wall-clock window.
       await drafts.waitUntilFirstSendBlocked()
       turnTask.cancel()
-      let outcome = try await turnTask.value
+      // The turn joins the session it owns, so the inference has to be let go of before the turn
+      // can return — releasing after the join would wait on each other forever.
       await gate.release()
       await drafts.release()
+      let outcome = try await turnTask.value
 
       // then
       let (kind, _) = try requireDegraded(outcome.result)
@@ -756,7 +812,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
     #expect(await provider.completeCalls == 1)
     #expect(await provider.streamCalls == 0)
@@ -790,9 +846,47 @@ func waitForTurnResult(
     #expect(await provider.streamCalls == 0)
   }
 
+  @Test func theStreamToBufferedFallbackKeepsTheRoundOnOneCallIdentity() async throws {
+    // given — the stream connect is refused, so the round is re-issued on the blocking path
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(cause: .connectFailed(message: "refused"), accounting: .notStarted)
+      )
+    )
+    let runtime = makeRuntime(
+      provider: provider,
+      streamingEnabled: true,
+      providerCallIDGenerator: SequentialCallIDGenerator()
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the round reached the provider twice but accounts as one call. Today the identity is
+    // minted outside `roundTrip`, which owns the fallback, so this holds by scope; the assertion
+    // guards the day against a future change that debits the retried attempt separately.
+    #expect(await provider.streamCalls == 1)
+    #expect(await provider.completeCalls == 1)
+    let (_, usage, _) = try requireCompleted(outcome.result)
+    #expect(usage.providerCallID == ProviderCallID(rawValue: "call-1"))
+  }
+
   @Test func connectFailureFallsBackToBlockingCompleteOnce() async throws {
     // given
-    let provider = StreamingProvider(streamScript: .fail(.connectFailed(message: "refused")))
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(cause: .connectFailed(message: "refused"), accounting: .notStarted)
+      )
+    )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
@@ -808,7 +902,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)
@@ -818,7 +912,12 @@ func waitForTurnResult(
     // given — a clean 429 on the response head: nothing was generated, so one blocking
     // re-attempt is double-charge-safe; mid-stream failures keep degrading
     let provider = StreamingProvider(
-      streamScript: .fail(.rejected(status: 429, message: "rate limited"))
+      streamScript: .fail(
+        ProviderFailure(
+          cause: .rejected(status: 429, message: "rate limited"),
+          accounting: .notStarted
+        )
+      )
     )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
@@ -835,7 +934,7 @@ func waitForTurnResult(
     )
 
     // then
-    let (content, _) = try requireCompleted(outcome.result)
+    let (content, _, _) = try requireCompleted(outcome.result)
     #expect(content == "blocking fallback")
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)
@@ -848,10 +947,12 @@ func waitForTurnResult(
         .delta("he"),
         .delta("llo"),
         .finished(
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
-          providerCost: 0.001,
-          toolCalls: []
+          ChatResponse(
+            content: "hello",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
+            costFromProvider: 0.001
+          )
         ),
       ])
     )
@@ -890,8 +991,16 @@ func waitForTurnResult(
   }
 
   @Test func postSendStreamFailureDegradesWithoutBlockingFallback() async throws {
-    // given
-    let provider = StreamingProvider(streamScript: .fail(.retryable(status: nil, message: "drop")))
+    // given — a mid-stream drop that may already have generated tokens, so a conservative row is owed
+    // and the retryable cause is not re-attempted on the buffered path
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(
+          cause: .retryable(status: nil, message: "drop"),
+          accounting: .mayHaveStarted(observing: 0)
+        )
+      )
+    )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
@@ -913,9 +1022,13 @@ func waitForTurnResult(
     #expect(await provider.completeCalls == 0)
   }
 
-  @Test func terminalStreamFailureDegradesAndDebitsTheEstimate() async throws {
-    // given
-    let provider = StreamingProvider(streamScript: .fail(.terminal(status: 400, message: "bad")))
+  @Test func terminalStreamFailureDegradesWithoutDebit() async throws {
+    // given — a recognized terminal head proves inference never started, so no tokens are owed
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(cause: .terminal(status: 400, message: "bad"), accounting: .notStarted)
+      )
+    )
     let runtime = makeRuntime(provider: provider, streamingEnabled: true)
 
     // when
@@ -933,7 +1046,103 @@ func waitForTurnResult(
     // then
     let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
-    #expect(try #require(usage).isEstimated)
+    #expect(usage == nil)
+    #expect(await provider.completeCalls == 0)
+    #expect(await provider.streamCalls == 1)
+  }
+
+  @Test func notStartedStreamFailureWritesNoUsageRow() async throws {
+    // given — the streaming twin of the buffered no-row proof: the engine's budget-exhausted clean
+    // 5xx, a retryable status thrown before the stream opened but tagged notStarted, so the model
+    // was proven never asked and nothing is owed
+    let store = RecordingUsageStore()
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(
+          cause: .retryable(status: 503, message: "budget exhausted"),
+          accounting: .notStarted
+        )
+      )
+    )
+    let runtime = makeRuntime(provider: provider, streamingEnabled: true, usageStore: store)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the disposition, not the cause class, decides: no row is written on either transport
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
+    #expect(await provider.completeCalls == 0)
+    #expect(await provider.streamCalls == 1)
+  }
+
+  @Test func mayHaveStartedStreamFailureKeepsTheObservedCount() async throws {
+    // given — a streamed may-have-started whose observed lower bound overshoots the local output cap
+    let observed = RunBudget.default.maxOutputTokens + 5_000
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(
+          cause: .retryable(status: nil, message: "lost"),
+          accounting: .mayHaveStarted(observing: observed)
+        )
+      )
+    )
+    let runtime = makeRuntime(provider: provider, streamingEnabled: true)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — the observed count survives the envelope: completion is n, not the capped 0
+    let (_, usage) = try requireDegraded(outcome.result)
+    let row = try #require(usage)
+    #expect(row.isEstimated)
+    #expect(row.completionTokens == observed)
+    #expect(await provider.completeCalls == 0)
+  }
+
+  @Test func notStartedStreamCancellationWritesNoUsageRow() async throws {
+    // given — a stream that reports a no-start cancellation as its terminal
+    let store = RecordingUsageStore()
+    let provider = StreamingProvider(streamScript: .reportsCancel(.notStarted))
+    let runtime = makeRuntime(provider: provider, streamingEnabled: true, usageStore: store)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hello world"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — a no-start cancel bills nothing, mirroring the raw-cancellation buffered case
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(store.recorded.isEmpty)
     #expect(await provider.completeCalls == 0)
     #expect(await provider.streamCalls == 1)
   }
@@ -992,8 +1201,8 @@ func waitForTurnResult(
     #expect(try #require(usage).isEstimated)
   }
 
-  @Test func streamingDeadlineTerminatesStreamThatIgnoresCancellation() async throws {
-    // given
+  @Test func streamingDeadlineDegradesAndJoinsAStreamThatIgnoresCancellation() async throws {
+    // given — an inference that acknowledges cancellation only once its gate opens
     let gate = NonCooperativeStreamGate()
     let provider = StreamingProvider(streamScript: .ignoresCancellation(gate))
     let runtime = makeRuntime(
@@ -1001,10 +1210,11 @@ func waitForTurnResult(
       streamingEnabled: true,
       clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
     )
+    let flag = CompletionFlag()
 
-    // when
-    let turnResult = startTurn {
-      try await runtime.runTurn(
+    // when — the deadline wins while the inference is still parked
+    let turnTask = Task {
+      let outcome = try await runtime.runTurn(
         runId: 1,
         sessionId: 2,
         chatId: 3,
@@ -1014,13 +1224,20 @@ func waitForTurnResult(
         todayTokens: 0,
         todayUSD: 0
       )
+      await flag.markDone()
+      return outcome
     }
     await gate.waitUntilStarted()
-    let outcome = await waitForTurnResult(turnResult, milliseconds: 250)
-
-    // then
+    // A yield lets a turn that abandoned its session surface, without a wall-clock window.
+    await Task.yield()
+    let doneWhileInferenceParked = await flag.done
     await gate.release()
-    let (kind, usage) = try requireDegraded(try #require(outcome).result)
+    let outcome = try await turnTask.value
+
+    // then — the turn owns the session, so it cannot report the deadline while the inference it
+    // started is still running; once the inference lets go, the deadline degrades the turn
+    #expect(doneWhileInferenceParked == false)
+    let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
     #expect(try #require(usage).isEstimated)
   }

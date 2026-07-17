@@ -14,3 +14,9 @@ public func makeTemporaryRoot(prefix: String) throws -> URL {
   try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
   return dir
 }
+
+/// The names of a directory's immediate entries, sorted — so a test can assert exactly which
+/// artifacts a step left on disk (and, by their absence, which it did not strand).
+public func entryNames(in directory: URL) throws -> [String] {
+  try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+}

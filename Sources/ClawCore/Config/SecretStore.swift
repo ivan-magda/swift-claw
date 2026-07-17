@@ -43,6 +43,9 @@ public enum SecretStoreError: Error, Sendable, Equatable {
   case malformedEnvelope
   case decryptionFailed
   case unreadable(String)
+  /// An encrypted artifact could not be written, or was written but not proven durable. The owner's
+  /// remedy is the same either way — rerun the seal — so the two are not modelled apart here.
+  case publicationFailed(String)
 
   public var exitCode: Int32 { ClawExitCode.secretLoadFailed.rawValue }
 }

@@ -15,8 +15,8 @@ import Testing
 
   private func finishedToolCalls(_ events: [StreamEvent]) -> [ToolCall] {
     for event in events {
-      if case .finished(_, _, _, let toolCalls) = event {
-        return toolCalls
+      if case .finished(let response) = event {
+        return response.toolCalls
       }
     }
     return []
@@ -109,8 +109,9 @@ import Testing
     let finished = try parser.finish()
 
     // then
-    if case .finished(_, _, _, let toolCalls)? = finished {
-      #expect(toolCalls.isEmpty)
+    if case .finished(let response)? = finished {
+      #expect(response.toolCalls.isEmpty)
+      #expect(response.content == "hi")
     } else {
       Issue.record("expected a finished event")
     }

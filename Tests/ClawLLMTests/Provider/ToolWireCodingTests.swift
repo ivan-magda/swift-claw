@@ -9,14 +9,14 @@ import Testing
   private func makeProvider() -> OpenAICompatibleProvider {
     OpenAICompatibleProvider(
       config: LLMConfig(
-        baseURL: "http://localhost/v1",
-        model: "m",
-        apiKey: "",
-        maxTokensField: .maxTokens,
+        route: makeCurrentRoute(endpoint: "http://localhost/v1", model: "m"),
         maxOutputTokens: 100,
         retryBudget: 1,
         requestTimeoutSeconds: 5
       ),
+      endpoint: "http://localhost/v1",
+      maxTokensField: .maxTokens,
+      credentials: StaticLLMCredentialSource(bearer: nil),
       http: UnusedHTTP(),
       clock: ScriptedClock { _ in
         try? await Task.sleep(for: .milliseconds(1))
@@ -25,32 +25,20 @@ import Testing
     )
   }
 
+  /// These tests only exercise encoding and parsing, so the transport is never reached; answering
+  /// with a 500 makes an accidental dispatch fail loudly rather than look like a pass.
   private struct UnusedHTTP: HTTPExecuting, HTTPStreaming {
-    func post(
-      url: String,
-      headers: [String: String],
-      jsonBody: Data,
-      timeoutSeconds: Int
-    ) async throws -> HTTPResult {
+    func execute(_ request: HTTPRequest) async throws -> HTTPResult {
       HTTPResult(statusCode: 500, headers: [:], body: Data())
     }
 
-    func get(
-      url: String,
-      headers: [String: String],
-      timeoutSeconds: Int,
-      maxBodyBytes: Int
-    ) async throws -> HTTPResult {
-      HTTPResult(statusCode: 500, headers: [:], body: Data())
-    }
-
-    func postStream(
-      url: String,
-      headers: [String: String],
-      jsonBody: Data,
-      timeoutSeconds: Int
-    ) async throws -> (head: HTTPStreamHead, body: AsyncThrowingStream<Data, Error>) {
-      (HTTPStreamHead(statusCode: 500, headers: [:]), AsyncThrowingStream { $0.finish() })
+    func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
+      HTTPStreamExchange.make(
+        head: HTTPStreamHead(statusCode: 500, headers: [:]),
+        maximumUnreadBodyBytes: 1
+      ) { _ in
+        .completed
+      }
     }
   }
 
@@ -171,7 +159,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then
@@ -190,7 +179,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then
@@ -217,7 +207,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then — dropped, not crashed
@@ -244,7 +235,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then
@@ -271,7 +263,8 @@ import Testing
 
     // when
     let response = try makeProvider().parse(
-      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8))
+      result: HTTPResult(statusCode: 200, headers: [:], body: Data(fixture.utf8)),
+      redactor: SecretRedactor(secretValues: [])
     )
 
     // then

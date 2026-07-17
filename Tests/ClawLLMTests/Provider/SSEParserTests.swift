@@ -24,8 +24,13 @@ import Testing
     // then
     #expect(first.isEmpty)
     #expect(second == [.delta("he"), .delta("llo")])
+    // The terminal states the whole reply, so it carries what the deltas spelled out.
     #expect(
-      third == [.finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: [])]
+      third == [
+        .finished(
+          ChatResponse(content: "hello", finishReason: "stop", usage: nil, costFromProvider: nil)
+        )
+      ]
     )
     #expect(try parser.finish() == nil)
   }
@@ -46,7 +51,11 @@ import Testing
     )
 
     // then
-    #expect(events == [.finished(finishReason: nil, usage: nil, providerCost: nil, toolCalls: [])])
+    #expect(
+      events == [
+        .finished(ChatResponse(content: "", finishReason: nil, usage: nil, costFromProvider: nil))
+      ]
+    )
     #expect(later.isEmpty)
     #expect(try parser.finish() == nil)
   }
@@ -89,10 +98,12 @@ import Testing
     #expect(
       finished == [
         .finished(
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
-          providerCost: 0.0042,
-          toolCalls: []
+          ChatResponse(
+            content: "hi",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
+            costFromProvider: 0.0042
+          )
         )
       ]
     )
@@ -115,10 +126,12 @@ import Testing
     #expect(
       finished == [
         .finished(
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
-          providerCost: 0.0034,
-          toolCalls: []
+          ChatResponse(
+            content: "",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
+            costFromProvider: 0.0034
+          )
         )
       ]
     )
@@ -141,10 +154,12 @@ import Testing
     #expect(
       finished == [
         .finished(
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
-          providerCost: 0.0042,
-          toolCalls: []
+          ChatResponse(
+            content: "",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
+            costFromProvider: 0.0042
+          )
         )
       ]
     )
@@ -173,10 +188,12 @@ import Testing
     #expect(
       finished == [
         .finished(
-          finishReason: "stop",
-          usage: ChatUsage(promptTokens: 8, completionTokens: 4, totalTokens: 12),
-          providerCost: 0.0042,
-          toolCalls: []
+          ChatResponse(
+            content: "",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 8, completionTokens: 4, totalTokens: 12),
+            costFromProvider: 0.0042
+          )
         )
       ]
     )
@@ -197,7 +214,10 @@ import Testing
     // then
     #expect(events == [.delta("hi")])
     #expect(
-      finished == .finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: [])
+      finished
+        == .finished(
+          ChatResponse(content: "hi", finishReason: "stop", usage: nil, costFromProvider: nil)
+        )
     )
   }
 
@@ -224,7 +244,11 @@ import Testing
 
     // then
     #expect(
-      finished == [.finished(finishReason: "stop", usage: nil, providerCost: nil, toolCalls: [])]
+      finished == [
+        .finished(
+          ChatResponse(content: "", finishReason: "stop", usage: nil, costFromProvider: nil)
+        )
+      ]
     )
   }
 

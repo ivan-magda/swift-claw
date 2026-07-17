@@ -56,7 +56,13 @@ import Testing
     now: Date
   ) throws {
     try usage.recordUsage(
-      makeProviderUsage(runId: runId, sessionId: sessionId, costSource: source, ts: now)
+      makeProviderUsage(
+        runId: runId,
+        sessionId: sessionId,
+        callID: "call-run-\(runId)",
+        costSource: source,
+        ts: now
+      )
     )
   }
 
@@ -76,6 +82,7 @@ import Testing
     let usage = makeProviderUsage(
       runId: runId,
       sessionId: fixture.sessionId,
+      callID: "call-run-\(runId)",
       costSource: .providerReturned,
       ts: now
     )

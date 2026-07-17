@@ -1,35 +1,58 @@
 import ClawCore
 import Foundation
 
-/// One recorded outbound call, capturing the verb and the request fields tests assert over.
+/// One recorded outbound call, capturing the request fields tests assert over.
 public struct RecordedHTTPRequest: Sendable, Equatable {
-  public enum Method: Sendable, Equatable {
-    case get
-    case post
-  }
-
-  public let method: Method
+  public let method: HTTPMethod
   public let url: String
   public let headers: [String: String]
   public let body: Data?
+  public let timeoutSeconds: Int
+  public let responseBodyPolicy: HTTPResponseBodyPolicy
+  /// The cap the executor applied, picked from the policy by the scripted status. Tests assert on
+  /// this when what matters is which of the two caps was in force, not the pair that was offered.
+  public let selectedBodyCap: Int
+  /// Whether this call carried a linearization handoff, which the double ran before recording. A
+  /// fresh double runs a request's handoff at most once, so it can record only that one was present,
+  /// never observe a second invocation: genuine exactly-once verification belongs to the test that
+  /// authors the handoff and closes over its own counter, as the real executor's tests do.
+  public let carriedHandoff: Bool
 
-  public init(method: Method, url: String, headers: [String: String], body: Data?) {
+  public init(
+    method: HTTPMethod,
+    url: String,
+    headers: [String: String],
+    body: Data?,
+    timeoutSeconds: Int,
+    responseBodyPolicy: HTTPResponseBodyPolicy,
+    selectedBodyCap: Int,
+    carriedHandoff: Bool
+  ) {
     self.method = method
     self.url = url
     self.headers = headers
     self.body = body
+    self.timeoutSeconds = timeoutSeconds
+    self.responseBodyPolicy = responseBodyPolicy
+    self.selectedBodyCap = selectedBodyCap
+    self.carriedHandoff = carriedHandoff
   }
 }
 
 /// A configurable `HTTPExecuting` double for tests: it answers each call from a URL-keyed response
-/// map, falling back to an optional canned result, and records the URL, headers, and body of every
-/// call so tests can assert what was (and was not) dispatched. A call that matches neither the map
-/// nor a canned fallback throws, so an unexpected dispatch surfaces as a test failure.
+/// map, falling back to an optional canned result, and records every call so tests can assert what
+/// was (and was not) dispatched. A call that matches neither the map nor a canned fallback throws,
+/// so an unexpected dispatch surfaces as a test failure.
+///
+/// It honours the seam's contract rather than shortcutting it: the body policy must be `.buffered`,
+/// the handoff runs once before the scripted answer is produced, and a scripted body past the
+/// applicable cap meets the same fate the real executor would give it — a success fails, an error
+/// comes back truncated.
 public actor RecordingHTTPExecutor: HTTPExecuting {
   private let responses: [String: HTTPResult]
   private let cannedResult: HTTPResult?
 
-  /// Every call in dispatch order, newest last.
+  /// Every call this double received, in dispatch order, newest last.
   public private(set) var requests: [RecordedHTTPRequest] = []
 
   public init(responses: [String: HTTPResult] = [:], cannedResult: HTTPResult? = nil) {
@@ -37,28 +60,54 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
     self.cannedResult = cannedResult
   }
 
-  public func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult {
-    try record(method: .post, url: url, headers: headers, body: jsonBody)
-  }
+  public func execute(_ request: HTTPRequest) async throws -> HTTPResult {
+    guard case .buffered(let successBytes, let errorBytes) = request.responseBodyPolicy else {
+      throw HTTPTransportFailure.policyMismatch(
+        HTTPResponseBodyPolicy.bufferedPolicyRequiredMessage
+      )
+    }
 
-  public func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    try record(method: .get, url: url, headers: headers, body: nil)
+    let scripted = responses[request.url] ?? cannedResult
+    let isSuccess = HTTPResponseBodyPolicy.isSuccess(scripted?.statusCode ?? 0)
+    let cap = isSuccess ? successBytes : errorBytes
+
+    // The linearization point runs before the call is recorded, the order the real executor takes: a
+    // refused handoff throws here and leaves no trace of a dispatch that never happened.
+    try request.beginHandoff?()
+    requests.append(
+      RecordedHTTPRequest(
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body: request.body,
+        timeoutSeconds: request.timeoutSeconds,
+        responseBodyPolicy: request.responseBodyPolicy,
+        selectedBodyCap: cap,
+        carriedHandoff: request.beginHandoff != nil
+      )
+    )
+
+    guard let scripted else {
+      throw UnscriptedRequest(url: request.url)
+    }
+    guard !isSuccess || scripted.body.count <= cap else {
+      throw HTTPTransportFailure.oversizedBody(cap: cap)
+    }
+    return HTTPResult(
+      statusCode: scripted.statusCode,
+      headers: scripted.headers,
+      body: scripted.body.prefix(cap)
+    )
   }
 }
 
 // MARK: - Recorded fields
 
 public extension RecordingHTTPExecutor {
+  struct UnscriptedRequest: Error {
+    public let url: String
+  }
+
   /// URLs of every recorded call, in dispatch order.
   var requestedURLs: [String] {
     requests.map(\.url)
@@ -79,31 +128,5 @@ public extension RecordingHTTPExecutor {
 
   var lastBody: Data? {
     requests.last?.body
-  }
-}
-
-// MARK: - Dispatch
-
-private extension RecordingHTTPExecutor {
-  struct UnscriptedRequest: Error {
-    let url: String
-  }
-
-  func record(
-    method: RecordedHTTPRequest.Method,
-    url: String,
-    headers: [String: String],
-    body: Data?
-  ) throws -> HTTPResult {
-    requests.append(
-      RecordedHTTPRequest(method: method, url: url, headers: headers, body: body)
-    )
-    if let scripted = responses[url] {
-      return scripted
-    }
-    guard let cannedResult else {
-      throw UnscriptedRequest(url: url)
-    }
-    return cannedResult
   }
 }

@@ -1,0 +1,18 @@
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_abc","name":"clock","arguments":""}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","call_id":"call_abc","delta":"{\"zo"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","call_id":"call_abc","delta":"ne\":\"UT"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","call_id":"call_abc","arguments":"{\"zone\":\"UTC\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_abc","name":"clock","arguments":"{\"zone\":\"UTC\"}","status":"completed"}}
+
+event: response.done
+data: {"type":"response.done","response":{"id":"resp_tool","status":"completed","usage":{"input_tokens":20,"output_tokens":9,"total_tokens":29}}}
+

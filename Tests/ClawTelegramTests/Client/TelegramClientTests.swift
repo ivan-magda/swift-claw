@@ -7,24 +7,11 @@ import Testing
 struct MockHTTPExecutor: HTTPExecuting {
   let result: HTTPResult
 
-  func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult { result }
-
-  func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    struct GetUnsupported: Error {}
-    throw GetUnsupported()
-  }
+  func execute(_ request: HTTPRequest) async throws -> HTTPResult { result }
 }
 
+/// Local to this suite: it answers with one canned result and records the fields the Telegram wire
+/// tests assert over, which the shared `ClawTestSupport` double keys by URL rather than replaying.
 struct RecordingHTTPExecutor: HTTPExecuting {
   struct Call: Sendable {
     let url: String
@@ -43,24 +30,13 @@ struct RecordingHTTPExecutor: HTTPExecuting {
   let recorder: Recorder
   let result: HTTPResult
 
-  func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult {
-    await recorder.append(url: url, body: jsonBody, timeout: timeoutSeconds)
+  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
+    await recorder.append(
+      url: request.url,
+      body: request.body ?? Data(),
+      timeout: request.timeoutSeconds
+    )
     return result
-  }
-
-  func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    struct GetUnsupported: Error {}
-    throw GetUnsupported()
   }
 }
 
@@ -71,23 +47,8 @@ struct URLEchoingExecutor: HTTPExecuting {
     var description: String { "connection failed for \(url)" }
   }
 
-  func post(
-    url: String,
-    headers: [String: String],
-    jsonBody: Data,
-    timeoutSeconds: Int
-  ) async throws -> HTTPResult {
-    throw URLEchoError(url: url)
-  }
-
-  func get(
-    url: String,
-    headers: [String: String],
-    timeoutSeconds: Int,
-    maxBodyBytes: Int
-  ) async throws -> HTTPResult {
-    struct GetUnsupported: Error {}
-    throw GetUnsupported()
+  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
+    throw URLEchoError(url: request.url)
   }
 }
 

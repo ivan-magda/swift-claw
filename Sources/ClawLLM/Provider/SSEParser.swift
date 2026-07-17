@@ -17,6 +17,10 @@ public struct SSEParser: Sendable {
   private var buffer = Data()
   private var accumulatedContentBytes = 0
 
+  /// The visible reply assembled from the deltas as they are emitted, so the terminal can state the
+  /// whole reply rather than leave a consumer to stitch it back together.
+  private var content = ""
+
   private var sawEvent = false
   private var finished = false
   private var finishReason: String?
@@ -50,7 +54,7 @@ public struct SSEParser: Sendable {
     }
 
     var events: [StreamEvent] = []
-    while let delimiter = delimiterRange(in: buffer) {
+    while let delimiter = SSEFraming.delimiterRange(in: buffer) {
       let eventData = Data(buffer[..<delimiter.lowerBound])
       buffer.removeSubrange(..<delimiter.upperBound)
 
@@ -92,7 +96,7 @@ public struct SSEParser: Sendable {
       throw SSEParserError.malformedJSON("invalid UTF-8")
     }
 
-    let payloadLines = Self.dataPayloadLines(in: text)
+    let payloadLines = SSEFraming.dataPayloadLines(in: text)
     guard !payloadLines.isEmpty else {
       return []
     }
@@ -123,9 +127,10 @@ public struct SSEParser: Sendable {
       sawEvent = true
     }
 
-    if let content = choice.delta?.content {
-      try appendContentBytes(content.utf8.count)
-      events.append(.delta(content))
+    if let fragment = choice.delta?.content {
+      try appendContentBytes(fragment.utf8.count)
+      content += fragment
+      events.append(.delta(fragment))
     }
 
     return events
@@ -180,67 +185,35 @@ public struct SSEParser: Sendable {
       throw SSEParserError.malformedJSON("\(error)")
     }
   }
-
-  private func delimiterRange(in data: Data) -> Range<Data.Index>? {
-    let lineFeed = Data([0x0A, 0x0A])  // \n\n
-    let crlf = Data([0x0D, 0x0A, 0x0D, 0x0A])  // \r\n\r\n
-    let lfRange = data.range(of: lineFeed)
-    let crlfRange = data.range(of: crlf)
-
-    switch (lfRange, crlfRange) {
-    case (nil, nil):
-      return nil
-    case (.some(let range), nil):
-      return range
-    case (nil, .some(let range)):
-      return range
-    case (.some(let left), .some(let right)):
-      return left.lowerBound < right.lowerBound ? left : right
-    }
-  }
 }
 
 // MARK: - Event Assembly
 
-private extension SSEParser {
-  /// The terminal event, built from everything accumulated so far — one construction shared by
-  /// `finish()` and the `[DONE]` sentinel so the two paths can never drift.
-  var finishedEvent: StreamEvent {
-    .finished(
+extension SSEParser {
+  /// The reply built from everything accumulated so far. A server that closes without a `[DONE]`
+  /// still has one, which is what lets the caller state an outcome for a stream that simply ended.
+  var assembledResponse: ChatResponse {
+    ChatResponse(
+      content: content,
       finishReason: finishReason,
       usage: usage,
-      providerCost: providerCost,
+      costFromProvider: providerCost,
       toolCalls: assembledToolCalls
     )
   }
 
-  /// The `data:` field values of one SSE event: comments (`:`) and non-`data` fields are dropped,
-  /// a single leading space after the colon is stripped, per the SSE field-parsing rules.
-  static func dataPayloadLines(in text: String) -> [String] {
-    let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
-    return normalized.split(separator: "\n", omittingEmptySubsequences: false)
-      .compactMap { rawLine -> String? in
-        var line = String(rawLine)
+  /// A lower bound on what the reply has been billed for so far, for a caller accounting for an
+  /// attempt that may not reach its terminal.
+  var observedCompletionTokens: Int {
+    usage?.completionTokens ?? 0
+  }
+}
 
-        if line.last == "\r" {
-          line.removeLast()
-        }
-
-        if line.hasPrefix(":") {
-          return nil
-        }
-
-        guard line.hasPrefix("data:") else {
-          return nil
-        }
-        var value = String(line.dropFirst(5))
-
-        if value.first == " " {
-          value.removeFirst()
-        }
-
-        return value
-      }
+private extension SSEParser {
+  /// The terminal event — one construction shared by `finish()` and the `[DONE]` sentinel so the two
+  /// paths can never drift.
+  var finishedEvent: StreamEvent {
+    .finished(assembledResponse)
   }
 
   mutating func record(_ chunkUsage: WireUsage) {

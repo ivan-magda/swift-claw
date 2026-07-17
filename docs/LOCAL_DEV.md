@@ -259,6 +259,104 @@ exit immediately (lock guard).
 
 ---
 
+## ChatGPT subscription auth
+
+An optional route that runs an eligible OpenAI model against a ChatGPT
+subscription instead of an API key. Selected entirely by `CLAW_LLM_MODEL`:
+set it to `openai-chatgpt/<model>` and `CLAW_LLM_BASE_URL` / `CLAW_LLM_API_KEY`
+are neither required nor used. There is no token environment variable — the
+credential lives encrypted in the state root.
+
+> **Unofficial, vendor-dependent route.** This is behavior observed in two
+> reference implementations (see `docs/research/`), **not a public, supported
+> third-party ChatGPT API.** The endpoints, headers, and flow can change or be
+> withdrawn without notice, and your subscription's terms govern its use. The
+> OpenAI-compatible route stays the supported default — one `CLAW_LLM_MODEL`
+> change away.
+
+### Stop the daemon first
+
+`login` and `logout` mutate the credential and take the same single-instance
+lock the daemon holds, so **stop `clawd` first** (`Ctrl-C`, or `launchctl` stop
+under a service manager). They fail with a clear stop-the-daemon message if the
+lock is held. `status` is read-only and safe to run against a live daemon.
+
+### Log in
+
+```bash
+set -a && source ~/.swift-claw/clawd.env && set +a
+.build/debug/clawd auth login
+```
+
+Login prints a verification URL and a user code; open the URL, enter the code,
+and approve in the browser. On success it seals your environment secrets into
+the encrypted backend (if not already sealed), stores the refreshable
+credential, fetches the eligible model list, and prints the exact assignment:
+
+```text
+CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4
+```
+
+**Model selection.** On a TTY, login lists the discovered models and prompts you
+to pick one by number (the default is your currently configured ChatGPT model,
+else the first listed). With no TTY (piped/non-interactive), it selects that same
+default without prompting and explains the choice. If the catalog fetch fails,
+login still succeeds and prints the manual form
+`CLAW_LLM_MODEL=openai-chatgpt/<model>` for you to complete.
+
+**Copy the printed assignment** into `~/.swift-claw/clawd.env` yourself — login
+never edits `.env`, a plist, or shell files. Then restart the daemon.
+
+### Status
+
+```bash
+.build/debug/clawd auth status
+```
+
+Reports provider, presence, expiry, freshness (`fresh` / `expiring` / `expired`),
+and the configured model — never any token bytes or account ID. It never
+refreshes or contacts the network.
+
+### Log out
+
+```bash
+.build/debug/clawd auth logout
+```
+
+Removes the stored credential (idempotent). **Logout is local deletion, not
+server-side revocation** — an already-issued access token may stay valid at the
+vendor until its own expiry. It does not touch `secret.key` or `secrets.enc`.
+
+### Doctor
+
+`doctor --check-config` adds a network-free `llm.auth` row. On this route a
+usable credential shows
+`provider=openai-chatgpt mode=oauth status=<fresh|expiring|expired-refresh-on-use>`
+(an OK row); no usable credential is a failing row with `run: clawd auth login`
+guidance; a malformed envelope is a failing decrypt row. Doctor never refreshes,
+fetches models, or contacts ChatGPT.
+
+### Expired credentials, access, and quota
+
+The daemon refreshes the access token automatically before each call while a
+valid refresh token exists — an `expiring`/`expired` status is normal and needs
+no action. Only when refresh itself is rejected (a revoked or reused refresh
+token) does a turn fail with **"stop clawd, run `clawd auth login`"** guidance;
+that is the sole case needing a fresh login. **Entitlement and quota failures do
+not tell you to log in:** an access denial means the subscription/account cannot
+use that route or model; a quota/throttle failure tells you to retry after the
+reported delay or plan reset. Logging in again fixes neither.
+
+### Backups
+
+`secret.key` (the AES key) must stay **out of your backup boundary**, exactly as
+for `secrets.enc`. The ChatGPT credential envelope
+(`llm-credentials.enc`) is encrypted with that key, so a backup that excludes the
+key cannot decrypt it. A restore without the key — or a crash during a vendor
+token rotation — can require a fresh `clawd auth login`.
+
+---
+
 ## State root
 
 Default: `~/.swift-claw/`. Contents:
@@ -270,6 +368,7 @@ Default: `~/.swift-claw/`. Contents:
 | `clawd.lock`  | Single-instance lock          |
 | `secrets.enc` | Encrypted secrets envelope    |
 | `secret.key`  | AES key (keep out of backups) |
+| `llm-credentials.enc` | ChatGPT OAuth credential (encrypted; only on that route) |
 
 Override the state root with `CLAW_STATE_ROOT` for isolated test setups.
 

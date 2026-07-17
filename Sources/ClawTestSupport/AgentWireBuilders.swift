@@ -6,13 +6,15 @@ public func okResponse(
   content: String = "Hello there",
   finishReason: String = "stop",
   usage: ChatUsage? = ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
-  costFromProvider: Double? = 0.0021
+  costFromProvider: Double? = 0.0021,
+  providerState: ProviderExchangeState? = nil
 ) -> ChatResponse {
   ChatResponse(
     content: content,
     finishReason: finishReason,
     usage: usage,
-    costFromProvider: costFromProvider
+    costFromProvider: costFromProvider,
+    providerState: providerState
   )
 }
 
@@ -36,13 +38,18 @@ public func okOutcome(
   }
 }
 
-public func toolCallResponse(_ calls: [ToolCall], content: String = "") -> ChatResponse {
+public func toolCallResponse(
+  _ calls: [ToolCall],
+  content: String = "",
+  providerState: ProviderExchangeState? = nil
+) -> ChatResponse {
   ChatResponse(
     content: content,
     finishReason: "tool_calls",
     usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
     costFromProvider: nil,
-    toolCalls: calls
+    toolCalls: calls,
+    providerState: providerState
   )
 }
 
