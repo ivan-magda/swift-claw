@@ -12,18 +12,10 @@ public enum ProviderError: Error, Sendable, Equatable {
   case retryable(status: Int?, message: String)
   case rejected(status: Int, message: String)
   case terminal(status: Int?, message: String)
-  /// The credential is missing, expired beyond refresh, or refused twice. The owner must log in
-  /// again; no further request will succeed until they do.
   case authenticationRequired
-  /// The credential is valid but not entitled to this call. Refreshing it would change nothing, so
-  /// this must never be answered with a re-login prompt.
   case accessDenied
-  /// A clean throttle. The credential stays valid; `retryAfterSeconds` is the server's bounded hint
-  /// when it gave one.
   case quotaLimited(retryAfterSeconds: Int?)
-  /// A non-success response head reached before any inference began, so nothing was generated.
   case cleanRejection(status: Int)
-  /// Replay state the route would not accept. The turn can be re-issued without it.
   case invalidProviderState
 }
 
@@ -37,16 +29,19 @@ extension ProviderError {
   public func redacted(with redactor: SecretRedactor) -> ProviderError {
     switch self {
     case .connectFailed(let message):
-      return .connectFailed(message: redactor.redact(message))
+      .connectFailed(message: redactor.redact(message))
     case .retryable(let status, let message):
-      return .retryable(status: status, message: redactor.redact(message))
+      .retryable(status: status, message: redactor.redact(message))
     case .rejected(let status, let message):
-      return .rejected(status: status, message: redactor.redact(message))
+      .rejected(status: status, message: redactor.redact(message))
     case .terminal(let status, let message):
-      return .terminal(status: status, message: redactor.redact(message))
-    case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
+      .terminal(status: status, message: redactor.redact(message))
+    case .authenticationRequired,
+      .accessDenied,
+      .quotaLimited,
+      .cleanRejection,
       .invalidProviderState:
-      return self
+      self
     }
   }
 }
