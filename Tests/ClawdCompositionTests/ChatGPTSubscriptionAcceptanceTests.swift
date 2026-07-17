@@ -494,7 +494,7 @@ import Testing
     try stores.usage.recordUsage(usage("round-1", prompt: 7, completion: 3))  // idempotent replay
 
     // then — exactly two rows, and the day total is the sum of both, counted once
-    let rows = try #require(await readUsageRowCount(stores.writer))
+    let rows = try readUsageRowCount(stores.writer)
     #expect(rows == 2)
     let totals = try stores.usage.todayTokensAndCost(now: now)
     #expect(totals.tokens == 7 + 3 + 9 + 4)
@@ -601,3 +601,4 @@ private struct StopBuild: Error {}
 private extension Data {
   var utf8String: String { String(bytes: self, encoding: .utf8) ?? "" }
 }
+
