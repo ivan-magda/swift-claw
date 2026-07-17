@@ -2,8 +2,6 @@ import Foundation
 
 // MARK: - Provider identity
 
-/// The durable identity of a provider route. Its raw value keys stored credentials and the
-/// qualified model prefix an owner types, so changing one is a migration, not a rename.
 public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
@@ -16,37 +14,23 @@ public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
 }
 
 /// What makes a provider-keyed dictionary encode as a JSON object rather than the flat, iteration-
-/// ordered `["openai-chatgpt", {…}, "openai-compatible", {…}]` array `Dictionary` emits for every
-/// key type that is not `String`, `Int`, or this protocol. The stored credential map is keyed by
-/// this type, so the conformance is part of that file's on-disk shape: adding it after the format
-/// ships would silently reinterpret a file holding an owner's only refresh token, and dropping it
-/// would make the bytes depend on a per-process hash seed.
+/// ordered `["openai-chatgpt", {…}, "openai-compatible", {…}]`.
 extension LLMProviderID: CodingKeyRepresentable {}
 
 extension LLMProviderID: CustomStringConvertible {
-  /// The bare identity an owner configured, for diagnostics that carry this as a payload: config
-  /// errors reach the operator through reflection, which would otherwise render the wrapper.
   public var description: String { rawValue }
 }
 
-/// How a route authorizes. Authentication and wire protocol are separate choices: this names the
-/// credential seam to compose, never the wire format.
 public enum LLMCredentialMode: Sendable, Equatable {
   case noneOrStaticBearer
   case managedOAuth
 }
 
-/// Which JSON key carries the output cap on the wire, or `omitted` for a route that honors none —
-/// where the configured cap degrades to a local reservation rather than a provider-enforced bound.
 public enum LLMWireOutputTokenField: Sendable, Equatable {
   case configured(MaxTokensField)
   case omitted
 }
 
-/// What a route's wire contract offers, held to the capabilities composition actually validates
-/// configuration against before any network I/O: whether the route honors a structured-output
-/// request, and which wire key — if any — carries the output-token cap. The agent loop never reads
-/// them.
 public struct LLMProviderCapabilities: Sendable, Equatable {
   public let supportsStructuredOutput: Bool
   public let outputTokenField: LLMWireOutputTokenField
@@ -60,16 +44,11 @@ public struct LLMProviderCapabilities: Sendable, Equatable {
   }
 }
 
-/// Where a route's inference traffic leaves for. It is an identity, never a credential: policy
-/// fingerprints fold it so switching sinks invalidates a parked approval even when no base URL is
-/// configured at all.
 public enum LLMEgressIdentity: Sendable, Equatable, Hashable {
   case configuredEndpoint(String)
   case managed(providerID: LLMProviderID, endpoint: String)
 }
 
-/// One registered provider route. `qualifiedPrefix` is nil for the fallback route, which is
-/// selected by no prefix at all.
 public struct LLMProviderDescriptor: Sendable, Equatable {
   public let providerID: LLMProviderID
   public let qualifiedPrefix: String?
@@ -95,19 +74,15 @@ public struct LLMProviderDescriptor: Sendable, Equatable {
 // MARK: - Registered descriptors
 
 extension LLMProviderDescriptor {
-  /// The Codex Responses endpoint is a compile-time constant, never configuration. Bearers are
-  /// built only after this fixed URL is selected, so a user-supplied base URL structurally cannot
-  /// receive a subscription token.
   public static let chatGPTResponsesEndpoint = "https://chatgpt.com/backend-api/codex/responses"
 
-  /// The managed ChatGPT route. The studied backend honors no output-token cap and offers no
-  /// relied-upon structured-output contract, so a structured-output request is refused at
-  /// configuration rather than silently degraded and the cap degrades to a local reservation. A stop
-  /// string — which the Responses wire cannot express at all — is refused per request by the adapter.
   public static let openAIChatGPT = LLMProviderDescriptor(
     providerID: .openAIChatGPT,
     qualifiedPrefix: "openai-chatgpt/",
-    egress: .managed(providerID: .openAIChatGPT, endpoint: chatGPTResponsesEndpoint),
+    egress: .managed(
+      providerID: .openAIChatGPT,
+      endpoint: chatGPTResponsesEndpoint
+    ),
     credentialMode: .managedOAuth,
     capabilities: LLMProviderCapabilities(
       supportsStructuredOutput: false,
@@ -115,8 +90,6 @@ extension LLMProviderDescriptor {
     )
   )
 
-  /// The configured OpenAI-compatible Chat Completions route — the supported default, and the
-  /// fallback every unqualified model resolves to.
   public static func openAICompatible(endpoint: String) -> LLMProviderDescriptor {
     LLMProviderDescriptor(
       providerID: .openAICompatible,
@@ -134,8 +107,6 @@ extension LLMProviderDescriptor {
 // MARK: - Resolved route
 
 /// `CLAW_LLM_MODEL` parsed once. `configuredReference` is the accounting and diagnostic identity;
-/// `wireModel` is what goes on the wire. Collapsing the two would let subscription and API-billed
-/// calls for the same wire model share one usage identity.
 public struct ResolvedLLMRoute: Sendable, Equatable {
   public let descriptor: LLMProviderDescriptor
   public let configuredReference: String
@@ -155,9 +126,6 @@ public struct ResolvedLLMRoute: Sendable, Equatable {
 // MARK: - Registry
 
 public enum LLMProviderRegistry {
-  /// Resolves a configured model reference to its route. The base URL is an autoclosure because a
-  /// managed route must neither read nor require one: the model is validated first, and a
-  /// configured endpoint is only demanded once the fallback route is chosen.
   public static func resolve(
     modelReference: String,
     configuredBaseURL: @autoclosure () throws -> String
@@ -169,7 +137,9 @@ public enum LLMProviderRegistry {
       else {
         continue
       }
+
       try validateQualifiedSuffix(suffix, reference: modelReference)
+
       return ResolvedLLMRoute(
         descriptor: descriptor,
         configuredReference: modelReference,
@@ -178,17 +148,14 @@ public enum LLMProviderRegistry {
     }
 
     return ResolvedLLMRoute(
-      descriptor: .openAICompatible(endpoint: canonicalEndpoint(try configuredBaseURL())),
+      descriptor: .openAICompatible(
+        endpoint: canonicalEndpoint(try configuredBaseURL())
+      ),
       configuredReference: modelReference,
       wireModel: modelReference
     )
   }
 
-  /// Whether `suffix` is a model a qualified reference may name. It answers the same question
-  /// `resolve` asks of an owner's configuration, for callers holding a candidate that has no
-  /// configured reference to be blamed in an error — a model offered by a provider's catalog, say.
-  /// One rule, two entry points: a second copy would let what a provider may offer drift from what
-  /// an owner may configure.
   public static func isValidQualifiedModelSuffix(_ suffix: String) -> Bool {
     qualifiedSuffixRejection(suffix) == nil
   }
@@ -197,51 +164,48 @@ public enum LLMProviderRegistry {
 // MARK: - Route Selection
 
 private extension LLMProviderRegistry {
-  /// Every descriptor a qualified reference can select. The fallback route carries no prefix and is
-  /// matched by nothing, so it is deliberately absent: adding a managed provider registers a
-  /// descriptor here rather than adding a branch downstream.
   static let qualifiedDescriptors: [LLMProviderDescriptor] = [.openAIChatGPT]
 
   static let maximumQualifiedSuffixScalars = 200
 
-  /// Matches raw UTF-8 rather than characters, so recognition is exact bytes: Swift's grapheme and
-  /// canonical-equivalence rules must not decide which provider an owner's model reaches. Strips
-  /// once — `openai-chatgpt/team/model` sends `team/model`.
   static func strippingPrefix(_ prefix: String, from reference: String) -> String? {
-    guard reference.utf8.starts(with: prefix.utf8) else {
-      return nil
+    if reference.utf8.starts(with: prefix.utf8) {
+      return String(
+        decoding: reference.utf8.dropFirst(prefix.utf8.count),
+        as: UTF8.self
+      )
     }
-    // Slicing the reference's own UTF-8 view is lossless, so the failable Data initializer the
-    // rule prefers has no failure to report here — only an optional to unwrap.
-    // swiftlint:disable:next optional_data_string_conversion
-    return String(decoding: reference.utf8.dropFirst(prefix.utf8.count), as: UTF8.self)
+    return nil
   }
 }
 
 // MARK: - Suffix Validation
 
 private extension LLMProviderRegistry {
-  /// Why a suffix was refused, separated from the error it becomes so that the rule itself can also
-  /// be asked as a plain question by a caller with no `reference` to name.
   enum QualifiedSuffixRejection {
     case empty
     case oversized
     case unsafe
   }
 
-  /// Enforces `[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}` by scalar membership: a bounded walk over a
-  /// fixed set, with no regex engine reachable from a configured string.
   static func qualifiedSuffixRejection(_ suffix: String) -> QualifiedSuffixRejection? {
     let scalars = suffix.unicodeScalars
+
     guard let leading = scalars.first else {
       return .empty
     }
+
     guard scalars.count <= maximumQualifiedSuffixScalars else {
       return .oversized
     }
-    guard isAlphanumeric(leading), scalars.dropFirst().allSatisfy(isSafeTrailing) else {
+
+    guard
+      isAlphanumeric(leading),
+      scalars.dropFirst().allSatisfy(isSafeTrailing)
+    else {
       return .unsafe
     }
+
     return nil
   }
 
@@ -272,14 +236,13 @@ private extension LLMProviderRegistry {
 // MARK: - Configured Endpoint
 
 private extension LLMProviderRegistry {
-  /// Folds endpoints that differ only in trailing separators into one egress identity, so an
-  /// approval parked under `.../v1` survives a later `.../v1/` that reaches the same sink. The wire
-  /// adapter appends its own path, so the stored form never keeps a trailing slash.
   static func canonicalEndpoint(_ configured: String) -> String {
     var canonical = configured.trimmingCharacters(in: .whitespaces)
+
     while canonical.count > 1, canonical.hasSuffix("/") {
       canonical.removeLast()
     }
+
     return canonical
   }
 }
