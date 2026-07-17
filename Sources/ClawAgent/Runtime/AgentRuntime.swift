@@ -264,31 +264,15 @@ public struct AgentRuntime: Sendable {
     // `runTurn` entry above; only the round count needs to account for rounds already consumed.
     let priorRounds = carryOver?.rounds ?? 0
     for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
-      // One identity per logical round, minted before anything here can debit. Every row this
-      // iteration can produce — the estimate a deadline forces, the reconciled row a response
-      // yields — accounts for the same provider call, so whichever one lands is recorded under the
-      // same key. It is deliberately not minted per wire attempt: the stream-to-buffered fallback
-      // inside `roundTrip` retries the round, and a fresh identity there would let one round debit
-      // the day twice.
       let callID = providerCallIDGenerator.next()
 
-      // Per-round-trip preflight: day totals at run start + everything this run recorded. The
-      // reservation for replay-state bytes rides on ordinary text estimation so a state-carrying
-      // wire cannot slip past a token gate; the loop reserves against those bytes without decoding
-      // them.
       let preflight = accountant.preflightEstimate(context: wire)
-      // The loop is the one component that grows provider input (proposals + fenced
-      // observations) and nothing re-fits the wire mid-run — without this check the
-      // provider's context window is the de facto enforcement: an HTTP 400 classified terminal,
-      // surfacing as an undiagnosable "provider unavailable". `budget.maxInputTokens` otherwise
-      // binds only at assembly, which cannot see mid-run growth.
       if preflight.inputTokens > budget.maxInputTokens {
         return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
       }
-      // The run-accumulated per-run check lives here, not in BudgetGate — and, like BudgetGate's
-      // USD caps, it is a dollar gate a subscription call does not answer to. The token, input,
-      // turn, and tool bounds above and below it stay live either way.
-      if costPolicy == .metered, recordedRunUSD + preflight.costUSD > budget.perRunUSD {
+
+      if costPolicy == .metered,
+        recordedRunUSD + preflight.costUSD > budget.perRunUSD {
         return outcome(.budgetStopped(cap: "per-run spend"))
       }
       if case .deny(let cap) = gate.preflight(
@@ -308,8 +292,6 @@ public struct AgentRuntime: Sendable {
 
       let remaining = deadline - ContinuousClock.now
       guard remaining > .zero else {
-        // Exhausted before the request could be issued: the model was provably never asked, so — like
-        // every other proven no-start — no usage row is written.
         turnLog.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
         return outcome(.degraded(.providerUnavailable, usage: nil))
       }
@@ -334,10 +316,6 @@ public struct AgentRuntime: Sendable {
           deadlineSeconds: max(1, Int(remaining.components.seconds))
         )
       } catch {
-        // One accounting decision for every natural failure and cancellation, keyed on the
-        // vendor-neutral disposition the provider tagged the failure with — never on whether the
-        // call went out through `stream` or `complete`. A proven no-start writes no row; anything
-        // that may have generated tokens writes a conservative one.
         turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
         return outcome(
           failureOutcome(
@@ -350,7 +328,6 @@ public struct AgentRuntime: Sendable {
         )
       }
 
-      // No proposals → the terminal round-trip; its usage row rides the atomic commit.
       guard response.toolCalls.isEmpty == false else {
         return outcome(
           classify(
@@ -363,8 +340,6 @@ public struct AgentRuntime: Sendable {
         )
       }
 
-      // Intermediate round-trip: record its usage row IMMEDIATELY. Spend that cannot be
-      // recorded must stop being spent.
       let intermediate = accountant.reconciledRow(
         for: response,
         callID: callID,
@@ -383,15 +358,11 @@ public struct AgentRuntime: Sendable {
       recordedRunTokens += intermediate.promptTokens + intermediate.completionTokens
       recordedRunUSD += intermediate.costUSD
 
-      // Tool dispatch. The typing indicator is the progress signal between round-trips.
       await typingIndicator.sendTyping(chatId: chatId)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
         proposedToolCalls += 1
         guard proposedToolCalls <= budget.maxToolCalls else {
-          // Mid-batch cap: the under-cap prefix ran; the first over-cap proposal ends
-          // the run. Executed observations in this batch are lost with the budget-stopped commit;
-          // the taint flag still persists.
           return outcome(.budgetStopped(cap: "per-run tool-call"))
         }
 
@@ -428,13 +399,8 @@ public struct AgentRuntime: Sendable {
           "tool \(call.name) done decision=\(dispatched.observation.status.rawValue) bytes=\(dispatched.observation.content.utf8.count) ms=\(Self.millis(ContinuousClock.now - toolStart))"
         )
 
-        // Durable suspend: the FIRST ask-tier proposal records its action and parks the run.
-        // The tool did NOT execute — its placeholder observation row and the approvalRequested
-        // audit both ride the suspend commit, so skip both the toolCall audit and
-        // the observation append here. Later gated calls in the batch see approvalAlreadyPending
-        // and return a blocked observation instead (requiresApproval nil), which appends
-        // normally below.
-        if pendingSuspension == nil, let recordedAction = dispatched.requiresApproval {
+        if pendingSuspension == nil,
+          let recordedAction = dispatched.requiresApproval {
           pendingSuspension = PendingToolAction(toolCallId: call.id, recorded: recordedAction)
           continue
         }
@@ -443,16 +409,13 @@ public struct AgentRuntime: Sendable {
 
         observations.append(dispatched.observation)
         if dispatched.observation.ingestedUntrusted {
-          ingestedUntrusted = true  // visible to the very next proposed call
+          ingestedUntrusted = true
         }
         if dispatched.observation.readPrivateData {
           runPrivateData = true
         }
       }
 
-      // Grow the wire array with the exchange; observations enter FENCED. The anchor carries the
-      // state this round produced, opaquely: only the route that minted it may read it, and this
-      // loop stays provider-agnostic by never looking.
       wire.append(
         ChatMessage(
           role: .assistant,
@@ -483,10 +446,6 @@ public struct AgentRuntime: Sendable {
         )
       )
 
-      // The batch has drained. If an ask-tier proposal parked, return the suspend result now.
-      // `intermediate` is THIS round-trip's already-recorded usage (recorded above via
-      // `usageStore.recordUsage`); the exchange above carries the assistant anchor + completed
-      // observations, and the parked call's placeholder is reserved at the suspend commit.
       if let pending = pendingSuspension {
         return outcome(.suspended(pending: pending, usage: intermediate))
       }
