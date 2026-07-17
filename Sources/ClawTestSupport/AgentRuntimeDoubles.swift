@@ -186,11 +186,11 @@ public struct EmptyWorkspace: WorkspaceReading {
   public init() {}
 
   public func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
-    LoadedFile(outcome: .missing, text: "", graphemeCount: 0)
+    .missing
   }
 
   public func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    LoadedFile(outcome: .missing, text: "", graphemeCount: 0)
+    .missing
   }
 
   public func scanSkills() -> SkillScanResult {

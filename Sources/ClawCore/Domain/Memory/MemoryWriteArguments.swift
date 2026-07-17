@@ -31,14 +31,11 @@ public enum MemoryWriteArguments {
     switch arguments.objectValue?["importance"]?.stringValue {
     case nil:
       importance = .normal
-    case "low":
-      importance = .low
-    case "normal":
-      importance = .normal
-    case "high":
-      importance = .high
-    default:
-      return .invalid(reason: "importance must be low, normal, or high.")
+    case .some(let raw):
+      guard let parsed = Importance(wireLabel: raw) else {
+        return .invalid(reason: "importance must be low, normal, or high.")
+      }
+      importance = parsed
     }
 
     let sensitivity: Sensitivity
@@ -76,14 +73,5 @@ public enum MemoryWriteArguments {
   public static func canonicalTarget(for request: MemoryWriteRequest) -> String {
     let hash16 = String(SHA256Digest.hex(request.item.text).prefix(16))
     return "memory_item:\(request.item.kind.rawValue):\(hash16)"
-  }
-
-  /// Owner-facing label for the Int-raw `Importance` (the wire vocabulary is the string form).
-  public static func importanceLabel(_ importance: Importance) -> String {
-    switch importance {
-    case .low: "low"
-    case .normal: "normal"
-    case .high: "high"
-    }
   }
 }

@@ -83,7 +83,7 @@ public struct MemoryWriteTool: Tool {
       blastRadius: """
         memory item, kind \(request.item.kind.rawValue), \
         sensitivity \(request.item.sensitivity.rawValue), \
-        importance \(MemoryWriteArguments.importanceLabel(request.item.importance))
+        importance \(request.item.importance.wireLabel)
         """,
       // The preview is the capped normalized text so the owner judges exactly what would be
       // stored — except exact loaded secret values, which are barred from every outbound reply;

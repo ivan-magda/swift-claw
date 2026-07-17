@@ -25,33 +25,6 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidExecCPUs(String)
   case invalidExecTimeout(String)
 
-  public var exitCode: Int32 {
-    switch self {
-    case .invalidAllowlist: ClawExitCode.configInvalid.rawValue
-    case .unwritableStateRoot: ClawExitCode.configInvalid.rawValue
-    case .missingLLMBaseURL: ClawExitCode.configInvalid.rawValue
-    case .missingLLMModel: ClawExitCode.configInvalid.rawValue
-    case .invalidMaxTokensField: ClawExitCode.configInvalid.rawValue
-    case .invalidStructuredOutput: ClawExitCode.configInvalid.rawValue
-    case .emptyQualifiedModelSuffix: ClawExitCode.configInvalid.rawValue
-    case .oversizedQualifiedModelSuffix: ClawExitCode.configInvalid.rawValue
-    case .unsafeQualifiedModelSuffix: ClawExitCode.configInvalid.rawValue
-    case .structuredOutputUnsupportedOnRoute: ClawExitCode.configInvalid.rawValue
-    case .invalidMaxTokens: ClawExitCode.configInvalid.rawValue
-    case .invalidBudget: ClawExitCode.configInvalid.rawValue
-    case .invalidBool: ClawExitCode.configInvalid.rawValue
-    case .invalidTimezone: ClawExitCode.configInvalid.rawValue
-    case .invalidQuietHours: ClawExitCode.configInvalid.rawValue
-    case .invalidScheduling: ClawExitCode.configInvalid.rawValue
-    case .invalidApprovalExpiry: ClawExitCode.configInvalid.rawValue
-    case .invalidWebFetchExemptCIDR: ClawExitCode.configInvalid.rawValue
-    case .heartbeatOwnerUnresolved: ClawExitCode.configInvalid.rawValue
-    case .invalidExecImage: ClawExitCode.configInvalid.rawValue
-    case .invalidExecImageRegistry: ClawExitCode.configInvalid.rawValue
-    case .execImageRegistryNotAllowed: ClawExitCode.configInvalid.rawValue
-    case .invalidExecMemoryMiB: ClawExitCode.configInvalid.rawValue
-    case .invalidExecCPUs: ClawExitCode.configInvalid.rawValue
-    case .invalidExecTimeout: ClawExitCode.configInvalid.rawValue
-    }
-  }
+  /// Every config error is a configuration-invalid failure, so one exit code covers them all.
+  public var exitCode: Int32 { ClawExitCode.configInvalid.rawValue }
 }

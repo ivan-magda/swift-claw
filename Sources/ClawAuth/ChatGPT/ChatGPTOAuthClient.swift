@@ -156,7 +156,6 @@ private enum Wire {
   static let authorizationCodeGrant = "authorization_code"
   static let refreshTokenGrant = "refresh_token"
 
-  static let successStatuses = 200..<300
   /// Both mean the same thing on a device poll: keep waiting.
   static let pendingStatuses: Set<Int> = [403, 404]
   static let throttledStatus = 429
@@ -199,17 +198,14 @@ private extension ChatGPTOAuthClient {
   }
 
   static func jsonBody(_ fields: [String: String]) throws -> Data {
-    let encoder = JSONEncoder()
-    // Sorted keys so the body a test pins is the body every run produces.
-    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-    do {
-      return try encoder.encode(fields)
-    } catch {
+    // Sorted keys (via CanonicalJSON) so the body a test pins is the body every run produces.
+    guard let json = CanonicalJSON.encode(fields) else {
       // A dictionary of strings has nothing in it that can fail to encode, so reaching here is a
       // defect in this file rather than anything the network or the vendor did — not a `transport`,
       // which a caller would answer by spending its retry budget on a request that cannot improve.
       throw ChatGPTOAuthFailure.malformedResponse(detail: "the request body could not be encoded")
     }
+    return Data(json.utf8)
   }
 
   /// Field order is the caller's, and every byte outside the RFC 3986 unreserved set becomes an
@@ -262,7 +258,7 @@ private extension ChatGPTOAuthClient {
     of response: HTTPResult,
     redacting secrets: [String]
   ) throws -> [String: JSONValue] {
-    guard Wire.successStatuses.contains(response.statusCode) else {
+    guard HTTPResponseBodyPolicy.isSuccess(response.statusCode) else {
       throw failure(for: response, redacting: secrets)
     }
     guard
