@@ -1,6 +1,5 @@
 import Synchronization
 
-/// Why a send into a ``BoundedAsyncChannel``, or a read from one, failed.
 public enum BoundedAsyncChannelError: Error, Sendable, Equatable {
   /// The channel was closed before this send was accepted; the element was never queued.
   case channelFinished
@@ -39,10 +38,6 @@ public struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
     capacity: Int,
     weight: @escaping @Sendable (Element) -> Int = { _ in 1 }
   ) {
-    // Traps where a second iterator or a negative weight is signalled: capacity is a programmer
-    // constant, so a bad one is a build-time bug that fails on the first run and should say so
-    // loudly. The other two depend on runtime behaviour in a long-lived daemon, which a trap would
-    // take down.
     precondition(capacity > 0, "BoundedAsyncChannel needs a positive capacity, got \(capacity)")
     storage = Storage(capacity: capacity, weight: weight)
   }
@@ -77,7 +72,9 @@ public struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
     fileprivate let hasClaim: Bool
 
     public mutating func next() async throws -> Element? {
-      guard hasClaim else { throw BoundedAsyncChannelError.multipleIterators }
+      guard hasClaim else {
+        throw BoundedAsyncChannelError.multipleIterators
+      }
       return try await storage.receive()
     }
   }
@@ -106,7 +103,6 @@ extension BoundedAsyncChannel {
   /// Locked rather than an actor: a continuation must be resumed *outside* the lock, and an actor's
   /// isolation does not survive an `await`, so the resume ordering would be unenforceable.
   fileprivate final class Storage: Sendable {
-    /// How the sequence ended. `failed` is delivered after every already-accepted element.
     enum Terminal {
       case finished
       case failed(any Error)
@@ -160,14 +156,18 @@ extension BoundedAsyncChannel {
       /// Moves every parked sender whose element now fits into the buffer, in send order, and
       /// returns their continuations to resume. Stops at the first that does not fit: a stream must
       /// stay in order, so a heavy element holds the line rather than letting a lighter one pass.
-      mutating func admitParkedSenders(capacity: Int) -> [CheckedContinuation<Void, any Error>] {
+      mutating func admitParkedSenders(
+        capacity: Int
+      ) -> [CheckedContinuation<Void, any Error>] {
         var admitted: [CheckedContinuation<Void, any Error>] = []
+
         while let next = senders.first, bufferedWeight + next.weight <= capacity {
           senders.removeFirst()
           buffer.append(Buffered(element: next.element, weight: next.weight))
           bufferedWeight += next.weight
           admitted.append(next.continuation)
         }
+
         return admitted
       }
     }
@@ -195,9 +195,11 @@ extension BoundedAsyncChannel {
 
     func claimIterator() -> Bool {
       state.withLock { current in
-        guard !current.isIteratorClaimed else { return false }
-        current.isIteratorClaimed = true
-        return true
+        if !current.isIteratorClaimed {
+          current.isIteratorClaimed = true
+          return true
+        }
+        return false
       }
     }
   }
@@ -211,10 +213,7 @@ extension BoundedAsyncChannel.Storage {
     guard declaredWeight >= 0 else {
       throw BoundedAsyncChannelError.negativeWeight(declaredWeight)
     }
-    // A weightless element is legal data — an empty body chunk, an empty event — and the channel
-    // never rejects data to hold its bound. It still costs a buffer slot, so charging it one unit
-    // keeps a stream of them from buffering without limit. The floor cannot exceed a capacity that
-    // construction already forced positive, so an empty buffer still admits any accepted element.
+
     let elementWeight = max(1, declaredWeight)
     guard elementWeight <= capacity else {
       throw BoundedAsyncChannelError.elementExceedsCapacity(
@@ -222,8 +221,10 @@ extension BoundedAsyncChannel.Storage {
         capacity: capacity
       )
     }
+
     let ticket = makeTicket()
     defer { discardCancellationMarker(senderTicket: ticket) }
+
     try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
         beginSend(
@@ -250,18 +251,22 @@ extension BoundedAsyncChannel.Storage {
       if current.cancelledSenderTickets.remove(ticket) != nil {
         return .rejected(CancellationError())
       }
+
       if current.terminal != nil {
         return .rejected(BoundedAsyncChannelError.channelFinished)
       }
+
       if current.buffer.isEmpty, let receiver = current.receivers.first {
         current.receivers.removeFirst()
         return .handedOff(receiver.continuation)
       }
+
       if current.bufferedWeight + elementWeight <= capacity {
         current.buffer.append(Buffered(element: element, weight: elementWeight))
         current.bufferedWeight += elementWeight
         return .buffered
       }
+
       current.senders.append(
         ParkedSender(
           ticket: ticket,
@@ -270,6 +275,7 @@ extension BoundedAsyncChannel.Storage {
           continuation: continuation
         )
       )
+
       return .parked
     }
 
@@ -293,10 +299,12 @@ extension BoundedAsyncChannel.Storage {
       let index = current.senders.firstIndex { sender in
         sender.ticket == ticket
       }
+
       guard let index else {
         current.cancelledSenderTickets.insert(ticket)
         return nil
       }
+
       return current.senders.remove(at: index).continuation
     }
     parked?.resume(throwing: CancellationError())
@@ -308,7 +316,10 @@ extension BoundedAsyncChannel.Storage {
 extension BoundedAsyncChannel.Storage {
   func receive() async throws -> Element? {
     let ticket = makeTicket()
-    defer { discardCancellationMarker(receiverTicket: ticket) }
+    defer {
+      discardCancellationMarker(receiverTicket: ticket)
+    }
+
     return try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
         beginReceive(ticket: ticket, continuation: continuation)
@@ -324,12 +335,14 @@ extension BoundedAsyncChannel.Storage {
       if current.cancelledReceiverTickets.remove(ticket) != nil {
         return .failed(CancellationError())
       }
+
       if !current.buffer.isEmpty {
         let head = current.buffer.removeFirst()
         current.bufferedWeight -= head.weight
         admitted = current.admitParkedSenders(capacity: capacity)
         return .element(head.element)
       }
+
       switch current.terminal {
       case .none:
         current.receivers.append(ParkedReceiver(ticket: ticket, continuation: continuation))
@@ -337,7 +350,6 @@ extension BoundedAsyncChannel.Storage {
       case .finished:
         return .element(nil)
       case .failed(let error):
-        // A terminal failure is delivered once; the sequence has ended for every later read.
         current.terminal = .finished
         return .failed(error)
       }
@@ -346,6 +358,7 @@ extension BoundedAsyncChannel.Storage {
     for sender in admitted {
       sender.resume()
     }
+
     switch delivery {
     case .element(let element):
       continuation.resume(returning: element)
@@ -361,10 +374,12 @@ extension BoundedAsyncChannel.Storage {
       let index = current.receivers.firstIndex { receiver in
         receiver.ticket == ticket
       }
+
       guard let index else {
         current.cancelledReceiverTickets.insert(ticket)
         return nil
       }
+
       return current.receivers.remove(at: index).continuation
     }
     parked?.resume(throwing: CancellationError())
@@ -380,20 +395,23 @@ extension BoundedAsyncChannel.Storage {
   func close(with terminal: Terminal) {
     var wokenSenders: [CheckedContinuation<Void, any Error>] = []
     var wokenReceivers: [CheckedContinuation<Element?, any Error>] = []
+
     let didClose = state.withLock { current -> Bool in
-      guard current.terminal == nil else { return false }
+      guard current.terminal == nil else {
+        return false
+      }
       current.terminal = terminal
+
       wokenSenders = current.senders.map { sender in
         sender.continuation
       }
       current.senders.removeAll()
+
       wokenReceivers = current.receivers.map { receiver in
         receiver.continuation
       }
       current.receivers.removeAll()
-      // A consumer only parks on an empty buffer, so a terminal failure reaches it here and there is
-      // nothing left for a later read to fail on. The assertion pins that coupling: were a send ever
-      // to buffer while a receiver waits, downgrading here would swallow the failure instead.
+
       if case .failed = terminal, !wokenReceivers.isEmpty {
         assert(
           current.buffer.isEmpty,
@@ -403,11 +421,14 @@ extension BoundedAsyncChannel.Storage {
       }
       return true
     }
-    guard didClose else { return }
+    guard didClose else {
+      return
+    }
 
     for sender in wokenSenders {
       sender.resume(throwing: BoundedAsyncChannelError.channelFinished)
     }
+
     for receiver in wokenReceivers {
       switch terminal {
       case .finished:
