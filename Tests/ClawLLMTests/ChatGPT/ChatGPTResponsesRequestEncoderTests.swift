@@ -275,6 +275,65 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(body.contains("visible answer"))
   }
 
+  /// An over-cap eviction stamps a turn's replay state empty. Replaying that empty turn would emit no
+  /// assistant text, so the ordinary answer the message still holds must fall back to normal encoding
+  /// rather than being dropped — and its tool call has to survive the fallback too.
+  @Test func anEmptyStampedReplayTurnStillSendsItsAssistantAnswer() throws {
+    // given — a history whose assistant turn carries the empty-stamped payload but still holds its
+    // answer and a tool call, decoded into the selection the provider would replay
+    let profileID = UUID()
+    let wireModel = "gpt-5"
+    let codec = ChatGPTProviderStateCodec()
+    let emptyStamped = try codec.encodeResponseState(
+      items: ChatGPTReplayItems(),
+      identity: ChatGPTReplayIdentity(profileID: profileID, wireModel: wireModel, epoch: UUID())
+    )
+    let messages = [
+      ChatMessage(role: .user, content: "what time is it"),
+      ChatMessage(
+        role: .assistant,
+        content: "It is noon.",
+        toolCalls: [ToolCall(id: "call_1", name: "clock", argumentsJSON: "{}")],
+        providerState: emptyStamped
+      ),
+    ]
+    let selection = codec.decodeCompatibleHistory(
+      messages: messages,
+      profileID: profileID,
+      wireModel: wireModel
+    )
+    // The empty-stamped turn is selected with no replay material — the exact fallback trigger.
+    #expect(selection.turns[1]?.hasReplayMaterial == false)
+    let request = ChatRequest(
+      model: "openai-chatgpt/gpt-5",
+      messages: messages,
+      maxOutputTokens: 4096
+    )
+
+    // when
+    let body = try decodeBody(
+      encoder.encode(request: request, replaying: selection, includePriorState: true)
+    )
+
+    // then — the assistant answer rides the wire as an output_text item, and its call beside it
+    let input = try #require(body["input"] as? [[String: Any]])
+    let assistant = try #require(
+      input.first { entry in
+        entry["role"] as? String == "assistant"
+      }
+    )
+    let content = try #require(assistant["content"] as? [[String: Any]])
+    #expect(content.first?["type"] as? String == "output_text")
+    #expect(content.first?["text"] as? String == "It is noon.")
+    let call = try #require(
+      input.first { entry in
+        entry["type"] as? String == "function_call"
+      }
+    )
+    #expect(call["call_id"] as? String == "call_1")
+    #expect(call["name"] as? String == "clock")
+  }
+
   /// A tool result names the call it answers, so the route can pair it with the `function_call` it
   /// was given rather than guessing from position.
   @Test func toolResultsCarryTheirCallIdentity() throws {

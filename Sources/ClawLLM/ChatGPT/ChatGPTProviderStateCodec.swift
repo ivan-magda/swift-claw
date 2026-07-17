@@ -192,6 +192,14 @@ struct ChatGPTReplayTurn: Sendable, Equatable {
   let reasoning: [ChatGPTReasoningItem]
   let assistantMessages: [ChatGPTAssistantMessageItem]
   let toolCalls: [ToolCall]
+
+  /// Whether this turn carries anything that stands in for the synthesized assistant text. An
+  /// over-cap eviction stamps a turn's state empty, leaving reasoning and messages both blank;
+  /// replaying that turn would emit no assistant text and drop the answer the ordinary message still
+  /// holds, so the encoder falls back to normal encoding when this is false.
+  var hasReplayMaterial: Bool {
+    reasoning.isEmpty == false || assistantMessages.isEmpty == false
+  }
 }
 
 // MARK: - Diagnostics

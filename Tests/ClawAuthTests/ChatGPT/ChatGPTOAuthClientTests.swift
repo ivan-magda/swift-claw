@@ -1061,11 +1061,14 @@ private extension RecordedHTTPRequest {
     #expect(detail.contains("denied"))
   }
 
-  @Test func aPollDiagnosticNeverQuotesTheDeviceAuthIDBack() async throws {
-    // given
+  @Test func aPollDiagnosticNeverQuotesTheSubmittedIdentifiersBack() async throws {
+    // given — a body that echoes both submitted values, either of which a diagnostic must scrub
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.devicePollURL,
-      OAuthFixture.result(400, "unknown device \(OAuthFixture.deviceAuthID) rejected")
+      OAuthFixture.result(
+        400,
+        "unknown device \(OAuthFixture.deviceAuthID) with code \(OAuthFixture.userCode) rejected"
+      )
     )
 
     // when
@@ -1079,6 +1082,7 @@ private extension RecordedHTTPRequest {
     // then
     let detail = try #require(failure?.detail)
     #expect(detail.contains(OAuthFixture.deviceAuthID) == false)
+    #expect(detail.contains(OAuthFixture.userCode) == false)
     #expect(detail.contains("rejected"))
   }
 

@@ -325,12 +325,18 @@ import Testing
   }
 
   @Test func transportErrorRedactsTheApiKey() async throws {
-    // given — a transport error whose text embeds the key; retried then surfaced
+    // given — a proven-clean transport error whose text embeds the key; retried then surfaced. The
+    // disposition is definitely-not-sent so the retry-through-to-exhaustion path this test covers is
+    // the one the new rule still permits.
     let apiKey = "sk-super-secret-123"
+    let failure = HTTPTransportFailure(
+      disposition: .definitelyNotSent,
+      safeMessage: "connection reset with key \(apiKey)"
+    )
     let exec = ScriptedHTTPExecutor([
-      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
-      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
-      .fail(TransportFailure(message: "connection reset with key \(apiKey)")),
+      .transportFailure(failure),
+      .transportFailure(failure),
+      .transportFailure(failure),
     ])
     let provider = makeProvider(config: makeConfig(apiKey: apiKey, retryBudget: 3), http: exec)
 
@@ -350,6 +356,54 @@ import Testing
     #expect(message.contains(SecretRedactor.replacement))
     let attempts = await exec.recorded.count
     #expect(attempts == 3)
+  }
+
+  @Test func definitelyNotSentTransportFailureRetriesUpToBudget() async throws {
+    // given — two proven-clean transport failures then a success; nothing could have reached the
+    // model, so the attempt is safe to replay up to the budget
+    let exec = ScriptedHTTPExecutor([
+      .transportFailure(
+        HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: "refused")
+      ),
+      .transportFailure(
+        HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: "refused")
+      ),
+      okStep(content: "recovered"),
+    ])
+    let provider = makeProvider(config: makeConfig(retryBudget: 3), http: exec)
+
+    // when
+    let response = try await provider.complete(request: sampleRequest)
+
+    // then — the success is returned only after both clean failures were replayed
+    #expect(response.content == "recovered")
+    #expect(await exec.recorded.count == 3)
+  }
+
+  @Test func mayHaveBeenSentTransportFailureIsNotRetried() async throws {
+    // given — an ambiguous send a retry could double-charge; a success step waits behind it that the
+    // provider must never reach
+    let exec = ScriptedHTTPExecutor([
+      .transportFailure(
+        HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "dropped")
+      ),
+      okStep(content: "must-not-be-reached"),
+    ])
+    let provider = makeProvider(config: makeConfig(retryBudget: 3), http: exec)
+
+    // when
+    await #expect {
+      _ = try await provider.complete(request: sampleRequest)
+    } throws: { error in
+      // The attempt reached the transport and cannot be proven clean, so the failure carries
+      // conservative accounting rather than being replayed.
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
+      return status == nil
+        && ProviderFailureAccounting.classify(error) == .mayHaveStarted(observing: 0)
+    }
+
+    // then — exactly one dispatch; the queued success was never asked for
+    #expect(await exec.recorded.count == 1)
   }
 
   @Test func streamRequestEnablesStreamOptionsAndYieldsEvents() async throws {

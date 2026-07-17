@@ -271,8 +271,7 @@ public struct AgentRuntime: Sendable {
         return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
       }
 
-      if costPolicy == .metered,
-        recordedRunUSD + preflight.costUSD > budget.perRunUSD {
+      if costPolicy == .metered, recordedRunUSD + preflight.costUSD > budget.perRunUSD {
         return outcome(.budgetStopped(cap: "per-run spend"))
       }
       if case .deny(let cap) = gate.preflight(
@@ -399,8 +398,7 @@ public struct AgentRuntime: Sendable {
           "tool \(call.name) done decision=\(dispatched.observation.status.rawValue) bytes=\(dispatched.observation.content.utf8.count) ms=\(Self.millis(ContinuousClock.now - toolStart))"
         )
 
-        if pendingSuspension == nil,
-          let recordedAction = dispatched.requiresApproval {
+        if pendingSuspension == nil, let recordedAction = dispatched.requiresApproval {
           pendingSuspension = PendingToolAction(toolCallId: call.id, recorded: recordedAction)
           continue
         }

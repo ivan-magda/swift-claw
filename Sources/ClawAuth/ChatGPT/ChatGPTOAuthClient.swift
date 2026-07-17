@@ -46,7 +46,9 @@ public struct ChatGPTOAuthClient: Sendable, ChatGPTOAuthRefreshing, ChatGPTOAuth
     device: ChatGPTDeviceCode,
     timeout: Duration
   ) async throws -> ChatGPTPollResult {
-    let secrets = [device.deviceAuthID]
+    // Both submitted values are redacted: a 4xx/5xx body may echo either, and either reaching a
+    // diagnostic is a leak.
+    let secrets = [device.deviceAuthID, device.userCode]
     let body = try Self.jsonBody([
       Wire.deviceAuthID: device.deviceAuthID,
       Wire.userCode: device.userCode,

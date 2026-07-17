@@ -91,12 +91,16 @@ public struct OpenAICompatibleProvider: LLMProvider {
         // reducer's to answer, and retrying a call the caller has abandoned would ask it again.
         throw exposure.cancellationError()
       } catch {
-        // Transport failures are retryable; the message may echo the key, so redact it.
+        // Only a failure proven to have sent nothing may be replayed; anything that may already have
+        // reached the model is terminal, so a reply that was generated and billed is never asked for
+        // twice. The message may echo the key, so redact it.
+        let provenClean = Self.provesNothingWasSent(error)
         Self.noteIfProvenClean(error, exposure: exposure)
         let message = redactor.redact(Self.describe(error))
-        guard attempt < config.retryBudget else {
-          // The exposure carries whether this attempt was proven clean, so the accounting rides the
-          // failure rather than being guessed from the cause's case downstream.
+        guard provenClean, attempt < config.retryBudget else {
+          // A proven-clean exhaustion carries `notStarted`; a may-have-been-sent failure keeps
+          // `mayHaveStarted`, so the conservative accounting rides the failure rather than being
+          // guessed from the cause's case downstream.
           throw exposure.failure(.retryable(status: nil, message: message))
         }
         logger.notice(
@@ -368,13 +372,20 @@ private extension OpenAICompatibleProvider {
 
   /// Only a transport fact may return an attempt to `notStarted`; an error's text never can.
   static func noteIfProvenClean(_ error: any Error, exposure: ProviderAttemptExposure) {
-    guard
-      let failure = error as? HTTPTransportFailure,
-      failure.disposition == .definitelyNotSent
-    else {
+    guard provesNothingWasSent(error) else {
       return
     }
     exposure.noteProvenClean()
+  }
+
+  /// Whether the failure carries the one transport fact that makes a replay safe: a typed
+  /// `definitelyNotSent` disposition. Any other error — a `mayHaveBeenSent` transport failure or a
+  /// cause with no disposition at all — is treated as possibly-sent, so a retry cannot double-charge.
+  static func provesNothingWasSent(_ error: any Error) -> Bool {
+    guard let failure = error as? HTTPTransportFailure else {
+      return false
+    }
+    return failure.disposition == .definitelyNotSent
   }
 
   /// The body of a non-success head. The executor has already capped it, so reading to the end holds

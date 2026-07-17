@@ -118,7 +118,11 @@ private extension ChatGPTResponsesRequestEncoder {
     includePriorState: Bool
   ) -> [ChatGPTWireInputItem] {
     messages.enumerated().flatMap { index, message -> [ChatGPTWireInputItem] in
-      guard includePriorState, let turn = selection?.turns[index] else {
+      guard
+        includePriorState,
+        let turn = selection?.turns[index],
+        turn.hasReplayMaterial
+      else {
         return inputItems(for: message)
       }
       return replayItems(for: turn)
