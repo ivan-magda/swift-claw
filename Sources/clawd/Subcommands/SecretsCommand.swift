@@ -82,8 +82,8 @@ extension SecretsCommand.Seal {
     }
   }
 
-  /// Takes the single-instance lock the daemon and the login transition take; a held lock exits with
-  /// the same already-running code they use, so a supervisor treats it as non-retryable.
+  /// Takes the single-instance lock the daemon and the login transition also hold; a held lock exits
+  /// with the daemon's own already-running code, so a supervisor treats it as non-retryable.
   static func acquireInstanceLockOrExit(stateRoot: URL) throws -> InstanceLock {
     let lockPath = SecretStatePaths(stateRoot: stateRoot).instanceLock.path
     do {
