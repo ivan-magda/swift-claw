@@ -10,7 +10,7 @@ public struct UsageStoreGRDB: UsageStore {
   }
 
   public func recordUsage(_ usage: ProviderUsage) throws(StoreError) {
-    try database.writeMapping { db in
+    _ = try database.writeMapping { db in
       try RunStoreGRDB.insertUsage(db, usage)
     }
   }
