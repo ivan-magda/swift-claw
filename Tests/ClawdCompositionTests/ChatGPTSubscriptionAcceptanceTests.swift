@@ -601,4 +601,3 @@ private struct StopBuild: Error {}
 private extension Data {
   var utf8String: String { String(bytes: self, encoding: .utf8) ?? "" }
 }
-
