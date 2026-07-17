@@ -173,8 +173,6 @@ public struct StoredMessage: Sendable, Equatable {
   public let provenance: Provenance
   public let toolCallsJSON: String?
   public let toolCallId: String?
-  /// The assistant anchor's replay state, loaded back for the route that minted it. It never
-  /// becomes prompt content, so a row that lost it stays a usable message.
   public let providerState: ProviderExchangeState?
 
   public init(
