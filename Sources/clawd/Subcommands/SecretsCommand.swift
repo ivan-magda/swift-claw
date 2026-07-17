@@ -44,7 +44,7 @@ struct SecretsCommand: AsyncParsableCommand {
       // the result decrypts, and unwinds anything it created if it cannot.
       do {
         try EncryptedFileSecretStore.seal(secrets, stateRoot: config.stateRoot)
-      } catch let error as SecretStoreError {
+      } catch let error {
         FileHandle.standardError.write(Data("secrets seal failed: \(error)\n".utf8))
         throw ExitCode(error.exitCode)
       }
