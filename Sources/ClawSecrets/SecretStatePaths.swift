@@ -18,7 +18,8 @@ public struct SecretStatePaths: Sendable, Equatable {
   /// moved to the other's name fails authentication instead of opening as the wrong kind of secret.
   public static let credentialEnvelopeName = "llm-credentials.enc"
   /// The daemon instance lock, named here so one type names every state-root entry the secret layer
-  /// touches. Today only `clawd run` acquires it.
+  /// touches. `clawd run`, the `auth login` transition, and `secrets seal` all acquire it, so a
+  /// seal-capable command can never race the daemon or another seal.
   public static let instanceLockName = "clawd.lock"
 
   private let stateRoot: URL

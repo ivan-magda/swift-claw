@@ -106,6 +106,14 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
 // MARK: - Attempt loop
 
 private extension ChatGPTResponsesAttemptEngine {
+  /// The transient cause a first 401 surfaces when its refresh cannot be retried this turn. The
+  /// credential is intact and now marked for refresh, so the next turn heals on its own — this reads
+  /// as "try again", never as "log in again".
+  static let credentialRefreshing = ProviderError.retryable(
+    status: nil,
+    message: "the ChatGPT credential is being refreshed"
+  )
+
   /// What one wire attempt asks the loop to do next.
   enum LoopControl {
     case stop(LLMStreamTermination)
@@ -215,6 +223,13 @@ private extension ChatGPTResponsesAttemptEngine {
       await credentials.reject(generation: authorization.generation, disposition: .refresh)
       state.refreshRequested = true
       return .retryImmediately
+
+    case .refreshWithoutRetry:
+      // The budget is spent, but a first 401 still refreshes: mark the credential for refresh so the
+      // next turn carries the fresh token, and surface a transient failure rather than a login prompt.
+      await credentials.reject(generation: authorization.generation, disposition: .refresh)
+      state.refreshRequested = true
+      return .stop(.failed(exposure.failure(Self.credentialRefreshing)))
 
     case .latchAuthenticationRequired:
       await credentials.reject(
@@ -478,6 +493,11 @@ private extension ChatGPTResponsesAttemptEngine {
   enum HeadDecision {
     case fail(ProviderError)
     case refreshThenRetry
+    /// A first clean 401 whose retry budget is already spent: the credential is still advanced to
+    /// `.refresh` so the fresh token rides the next turn, but this turn ends transiently rather than
+    /// latching authentication — a healthy-after-refresh credential must not be reported as needing a
+    /// fresh login.
+    case refreshWithoutRetry
     case latchAuthenticationRequired
     case recoverStateFree
     case backoffThenRetry(Duration?)
@@ -526,11 +546,13 @@ private extension ChatGPTResponsesAttemptEngine {
   ) -> HeadDecision {
     switch diagnosis.status {
     case 401:
-      // A first clean 401 refreshes and retries once; a second latches, whatever the budget says.
-      guard refreshRequested == false, canRetry else {
-        return refreshRequested ? .latchAuthenticationRequired : .fail(.authenticationRequired)
+      // A first clean 401 always refreshes the credential; a second latches, whatever the budget
+      // says. When the budget is already spent the refresh still happens — advancing the credential
+      // for the next turn — but this turn ends transiently rather than terminally.
+      guard refreshRequested == false else {
+        return .latchAuthenticationRequired
       }
-      return .refreshThenRetry
+      return canRetry ? .refreshThenRetry : .refreshWithoutRetry
 
     case 403:
       // Refreshing a valid-but-unentitled credential would change nothing, so never prompt re-login.

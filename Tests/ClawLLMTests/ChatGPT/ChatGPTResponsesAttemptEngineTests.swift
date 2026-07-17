@@ -78,6 +78,29 @@ import Testing
     #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
+  @Test(.timeLimit(.minutes(1)))
+  func aFirstClean401WithNoBudgetLeftRefreshesWithoutLatching() async throws {
+    // given — a clean 401 arrives on the only attempt the budget allows
+    let harness = Harness(
+      steps: [.stream(Support.head(401), Fixtures.errorBody("expired"))],
+      retryBudget: 1
+    )
+
+    // when
+    let outcome = await harness.run()
+
+    // then — the credential is still advanced to .refresh, and the turn ends transiently rather than
+    // latching authentication or resending the stale token
+    #expect(await harness.attemptCount == 1)
+    let rejections = await harness.credentials.rejections
+    #expect(rejections == [.init(generation: .init(value: 1), disposition: .refresh)])
+    #expect(
+      failureCause(outcome)
+        == .retryable(status: nil, message: "the ChatGPT credential is being refreshed")
+    )
+    #expect(Support.accounting(of: outcome) == .notStarted)
+  }
+
   // MARK: - Access and quota
 
   @Test(.timeLimit(.minutes(1)))

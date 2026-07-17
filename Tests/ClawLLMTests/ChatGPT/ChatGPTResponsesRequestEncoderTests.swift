@@ -302,8 +302,11 @@ private typealias Support = ChatGPTProviderTestSupport
       profileID: profileID,
       wireModel: wireModel
     )
-    // The empty-stamped turn is selected with no replay material — the exact fallback trigger.
-    #expect(selection.turns[1]?.hasReplayMaterial == false)
+    // The empty-stamped turn is selected with neither reasoning nor a message item — so the answer
+    // survives only if the synthesized text stands in for the missing message.
+    let stampedTurn = try #require(selection.turns[1])
+    #expect(stampedTurn.reasoning.isEmpty)
+    #expect(stampedTurn.assistantMessages.isEmpty)
     let request = ChatRequest(
       model: "openai-chatgpt/gpt-5",
       messages: messages,
@@ -332,6 +335,64 @@ private typealias Support = ChatGPTProviderTestSupport
     )
     #expect(call["call_id"] as? String == "call_1")
     #expect(call["name"] as? String == "clock")
+  }
+
+  /// A delta-only answer leaves the turn's replay state holding a reasoning item but no message item.
+  /// Replaying that turn must carry BOTH — the reasoning for continuity and the synthesized answer
+  /// from the message — or the visible reply, which lives only in `message.content`, is dropped.
+  @Test func aReasoningOnlyReplayTurnStillSendsItsSynthesizedAnswer() throws {
+    // given — an assistant turn whose stored state holds reasoning but no message item, with its
+    // visible answer only in the message content
+    let profileID = UUID()
+    let wireModel = "gpt-5"
+    let codec = ChatGPTProviderStateCodec()
+    let reasoningStamped = try codec.encodeResponseState(
+      items: ChatGPTReplayItems(
+        reasoning: [ChatGPTReasoningItem(encryptedContent: "ENCRYPTED-REASONING")]
+      ),
+      identity: ChatGPTReplayIdentity(profileID: profileID, wireModel: wireModel, epoch: UUID())
+    )
+    let messages = [
+      ChatMessage(role: .user, content: "what time is it"),
+      ChatMessage(role: .assistant, content: "It is noon.", providerState: reasoningStamped),
+    ]
+    let selection = codec.decodeCompatibleHistory(
+      messages: messages,
+      profileID: profileID,
+      wireModel: wireModel
+    )
+    // The selected turn carries reasoning but no persisted message item — the exact case that must
+    // still synthesize the answer.
+    let replayedTurn = try #require(selection.turns[1])
+    #expect(replayedTurn.reasoning.isEmpty == false)
+    #expect(replayedTurn.assistantMessages.isEmpty)
+    let request = ChatRequest(
+      model: "openai-chatgpt/gpt-5",
+      messages: messages,
+      maxOutputTokens: 4096
+    )
+
+    // when
+    let body = try decodeBody(
+      encoder.encode(request: request, replaying: selection, includePriorState: true)
+    )
+
+    // then — the replayed reasoning rides the wire, and the synthesized answer rides beside it
+    let input = try #require(body["input"] as? [[String: Any]])
+    let reasoning = try #require(
+      input.first { entry in
+        entry["type"] as? String == "reasoning"
+      }
+    )
+    #expect(reasoning["encrypted_content"] as? String == "ENCRYPTED-REASONING")
+    let assistant = try #require(
+      input.first { entry in
+        entry["role"] as? String == "assistant"
+      }
+    )
+    let content = try #require(assistant["content"] as? [[String: Any]])
+    #expect(content.first?["type"] as? String == "output_text")
+    #expect(content.first?["text"] as? String == "It is noon.")
   }
 
   /// A tool result names the call it answers, so the route can pair it with the `function_call` it

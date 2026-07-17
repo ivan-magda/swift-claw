@@ -120,33 +120,47 @@ private extension ChatGPTResponsesRequestEncoder {
     messages.enumerated().flatMap { index, message -> [ChatGPTWireInputItem] in
       guard
         includePriorState,
-        let turn = selection?.turns[index],
-        turn.hasReplayMaterial
+        let turn = selection?.turns[index]
       else {
         return inputItems(for: message)
       }
-      return replayItems(for: turn)
+      return replayItems(for: turn, message: message)
     }
   }
 
   /// A replayed assistant turn as input items: its reasoning material first, then the assistant
-  /// message the backend stated, then the calls — read from the message rather than from the state,
-  /// so state dropped for damage or budget can never take a tool proposal down with it.
-  static func replayItems(for turn: ChatGPTReplayTurn) -> [ChatGPTWireInputItem] {
+  /// message, then the calls — read from the message rather than from the state, so state dropped for
+  /// damage or budget can never take a tool proposal down with it.
+  ///
+  /// The message stands in for the assistant text whenever the state carried no message item of its
+  /// own — a delta-only answer leaves reasoning present but `assistantMessages` empty, and replaying
+  /// only the reasoning would drop the visible answer that lives in `message.content`. So the
+  /// synthesized text is emitted alongside the reasoning, which also makes the both-empty turn
+  /// (no reasoning, no message) reduce to exactly the normal encoding.
+  static func replayItems(
+    for turn: ChatGPTReplayTurn,
+    message: ChatMessage
+  ) -> [ChatGPTWireInputItem] {
     var items: [ChatGPTWireInputItem] = []
     for reasoning in turn.reasoning {
       items.append(
         .reasoning(encryptedContent: reasoning.encryptedContent, summary: reasoning.summary)
       )
     }
-    for assistant in turn.assistantMessages {
-      items.append(
-        .assistantMessage(
-          role: assistant.role,
-          status: assistant.status,
-          outputText: assistant.outputText
+    if turn.assistantMessages.isEmpty {
+      if message.content.isEmpty == false {
+        items.append(.assistantText(message.content))
+      }
+    } else {
+      for assistant in turn.assistantMessages {
+        items.append(
+          .assistantMessage(
+            role: assistant.role,
+            status: assistant.status,
+            outputText: assistant.outputText
+          )
         )
-      )
+      }
     }
     for call in turn.toolCalls {
       items.append(
