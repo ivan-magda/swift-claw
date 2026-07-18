@@ -455,7 +455,10 @@ func makeStreamingStack(
     configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
-    clock: ContinuousClock()
+    // Parks the 3s per-send draft deadline and the wall deadline while the 250ms probe tick
+    // elapses in ~1ms: these fixtures' transport never hangs, so ordering is gate-driven and
+    // no test here waits out a real probe interval.
+    clock: ScriptedClock.compressed(parkingAt: .seconds(3))
   )
   let turnRunner = TurnRunner(
     sessionMessages: sessionMessages,

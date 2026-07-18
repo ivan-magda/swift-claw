@@ -51,10 +51,16 @@ enum SSEFraming {
   /// The `data:` field values of one SSE event: comments (`:`) and non-`data` fields are dropped,
   /// and a single leading space after the colon is stripped, per the SSE field-parsing rules.
   static func dataPayloadLines(in text: String) -> [String] {
-    let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+    // The CRLF fold is a bridged Foundation pass over the whole event; a stream delivers one event
+    // at a time but many thousands of them, so an LF-only event — the overwhelmingly common form —
+    // skips the fold on a cheap byte scan instead of paying it every single event.
+    let normalized =
+      text.utf8.contains(carriageReturn)
+      ? text.replacingOccurrences(of: "\r\n", with: "\n")
+      : text
     return normalized.split(separator: "\n", omittingEmptySubsequences: false)
       .compactMap { rawLine -> String? in
-        var line = String(rawLine)
+        var line = rawLine
 
         if line.last == "\r" {
           line.removeLast()
@@ -67,13 +73,13 @@ enum SSEFraming {
         guard line.hasPrefix("data:") else {
           return nil
         }
-        var value = String(line.dropFirst(5))
+        var value = line.dropFirst(5)
 
         if value.first == " " {
-          value.removeFirst()
+          value = value.dropFirst()
         }
 
-        return value
+        return String(value)
       }
   }
 }

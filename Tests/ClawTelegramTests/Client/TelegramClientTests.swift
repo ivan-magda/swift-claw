@@ -16,13 +16,13 @@ struct RecordingHTTPExecutor: HTTPExecuting {
   struct Call: Sendable {
     let url: String
     let body: Data
-    let timeout: Int
+    let timeout: Duration
   }
 
   actor Recorder {
     private(set) var calls: [Call] = []
 
-    func append(url: String, body: Data, timeout: Int) {
+    func append(url: String, body: Data, timeout: Duration) {
       calls.append(Call(url: url, body: body, timeout: timeout))
     }
   }
@@ -34,7 +34,7 @@ struct RecordingHTTPExecutor: HTTPExecuting {
     await recorder.append(
       url: request.url,
       body: request.body ?? Data(),
-      timeout: request.timeoutSeconds
+      timeout: request.timeout
     )
     return result
   }
@@ -252,7 +252,7 @@ private func client(status: Int, json: String) -> TelegramClient {
     let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
     let richMessage = try #require(body["rich_message"] as? [String: Any])
     #expect(call.url == "https://example.test/botT/sendRichMessageDraft")
-    #expect(call.timeout == 15)
+    #expect(call.timeout == .seconds(15))
     #expect(body["chat_id"] as? Int == 42)
     #expect(body["draft_id"] as? Int == 99)
     #expect(richMessage["markdown"] as? String == "**hi**")
@@ -310,7 +310,7 @@ private func client(status: Int, json: String) -> TelegramClient {
 
     // then
     let call = try #require(await recorder.calls.first)
-    #expect(call.timeout == 40)
+    #expect(call.timeout == .seconds(40))
     #expect(TelegramClient.defaultHTTPTimeoutSlackSeconds == 10)
   }
 

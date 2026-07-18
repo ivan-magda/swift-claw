@@ -286,7 +286,7 @@ private extension OpenAICompatibleProvider {
       url: chatCompletionsURL(),
       headers: headers,
       body: body,
-      timeoutSeconds: config.requestTimeoutSeconds,
+      timeout: .seconds(config.requestTimeoutSeconds),
       responseBodyPolicy: .streaming(
         maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
         errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
@@ -488,7 +488,7 @@ private extension OpenAICompatibleProvider {
       url: url,
       headers: headers,
       body: body,
-      timeoutSeconds: config.requestTimeoutSeconds,
+      timeout: .seconds(config.requestTimeoutSeconds),
       responseBodyPolicy: .buffered(
         successBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes,
         errorBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes

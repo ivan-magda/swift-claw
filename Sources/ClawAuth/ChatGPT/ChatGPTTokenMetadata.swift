@@ -53,23 +53,24 @@ private extension ChatGPTTokenMetadata {
       return nil
     }
 
-    guard let payload = decodingBase64URL(String(segments[1])) else {
+    guard let payload = decodingBase64URL(segments[1]) else {
       return nil
     }
 
     return try? JSONDecoder().decode(JSONValue.self, from: payload)
   }
 
-  /// Strict base64url: the alphabet is checked before decoding, and the decoded size is computed
-  /// and rejected against the cap *before* any buffer is allocated — so an oversized payload costs
-  /// a length check rather than the memory it asked for. `Data(base64Encoded:)` without
-  /// `.ignoreUnknownCharacters` then rejects what the alphabet check could not.
-  static func decodingBase64URL(_ segment: String) -> Data? {
+  /// Strict base64url: the decoded size is computed from the segment's length and rejected against
+  /// the cap *before anything else* — an oversized payload costs one O(1) length check, never an
+  /// alphabet scan of everything it sent. The alphabet is then checked before decoding, and
+  /// `Data(base64Encoded:)` without `.ignoreUnknownCharacters` rejects what the alphabet check
+  /// could not.
+  static func decodingBase64URL(_ segment: Substring) -> Data? {
     guard
       segment.isEmpty == false,
-      segment.unicodeScalars.allSatisfy(isBase64URLScalar),
       let decodedByteCount = decodedByteCount(ofBase64URL: segment),
-      decodedByteCount <= maximumPayloadBytes
+      decodedByteCount <= maximumPayloadBytes,
+      segment.unicodeScalars.allSatisfy(isBase64URLScalar)
     else {
       return nil
     }
@@ -84,13 +85,16 @@ private extension ChatGPTTokenMetadata {
   }
 
   /// The exact decoded length implied by an unpadded base64url segment, or nil for a length no
-  /// base64 encoding can produce (a remainder of one leaves a byte half-encoded).
-  static func decodedByteCount(ofBase64URL segment: String) -> Int? {
-    let remainder = segment.count % 4
+  /// base64 encoding can produce (a remainder of one leaves a byte half-encoded). Counted over
+  /// UTF-8 units — constant-time on a token substring, and identical to the character count for
+  /// anything the alphabet check will go on to accept.
+  static func decodedByteCount(ofBase64URL segment: Substring) -> Int? {
+    let encodedLength = segment.utf8.count
+    let remainder = encodedLength % 4
     guard remainder != 1 else {
       return nil
     }
-    let wholeGroups = segment.count / 4
+    let wholeGroups = encodedLength / 4
     let trailingBytes = remainder == 0 ? 0 : remainder - 1
     return wholeGroups * 3 + trailingBytes
   }

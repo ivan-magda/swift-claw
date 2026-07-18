@@ -363,7 +363,7 @@ final class HandoffCounter: Sendable {
             url: server.url("/page"),
             headers: ["X-Probe": "probe-value"],
             body: nil,
-            timeoutSeconds: 5,
+            timeout: .seconds(5),
             responseBodyPolicy: buffered()
           )
         )
@@ -421,7 +421,7 @@ final class HandoffCounter: Sendable {
             url: server.url("/token"),
             headers: ["Content-Type": "application/x-www-form-urlencoded"],
             body: form,
-            timeoutSeconds: 5,
+            timeout: .seconds(5),
             responseBodyPolicy: buffered()
           )
         )
@@ -449,7 +449,7 @@ final class HandoffCounter: Sendable {
               url: server.url("/big"),
               headers: [:],
               body: nil,
-              timeoutSeconds: 5,
+              timeout: .seconds(5),
               responseBodyPolicy: buffered(successBytes: 128, errorBytes: 4096)
             )
           )
@@ -477,7 +477,7 @@ final class HandoffCounter: Sendable {
             url: server.url("/exact"),
             headers: [:],
             body: nil,
-            timeoutSeconds: 5,
+            timeout: .seconds(5),
             responseBodyPolicy: buffered(successBytes: 128, errorBytes: 4096)
           )
         )
@@ -506,7 +506,7 @@ final class HandoffCounter: Sendable {
             url: server.url("/boom"),
             headers: [:],
             body: nil,
-            timeoutSeconds: 5,
+            timeout: .seconds(5),
             responseBodyPolicy: buffered(successBytes: 4096, errorBytes: 64)
           )
         )
@@ -538,7 +538,7 @@ final class HandoffCounter: Sendable {
             url: server.url("/hop"),
             headers: [:],
             body: nil,
-            timeoutSeconds: 5,
+            timeout: .seconds(5),
             responseBodyPolicy: buffered(successBytes: 512, errorBytes: 32)
           )
         )
@@ -566,7 +566,7 @@ final class HandoffCounter: Sendable {
               url: server.url("/rpc"),
               headers: [:],
               body: Data("{}".utf8),
-              timeoutSeconds: 5,
+              timeout: .seconds(5),
               responseBodyPolicy: .streaming(maximumUnreadBytes: 1024, errorBytes: 1024)
             )
           )
@@ -593,7 +593,7 @@ final class HandoffCounter: Sendable {
               url: server.url("/rpc"),
               headers: [:],
               body: Data("{}".utf8),
-              timeoutSeconds: 5,
+              timeout: .seconds(5),
               responseBodyPolicy: buffered()
             )
           )
@@ -620,7 +620,7 @@ final class HandoffCounter: Sendable {
             url: server.url("/rpc"),
             headers: [:],
             body: Data("{}".utf8),
-            timeoutSeconds: 5,
+            timeout: .seconds(5),
             responseBodyPolicy: buffered(),
             beginHandoff: counter.callback
           )
@@ -648,7 +648,7 @@ final class HandoffCounter: Sendable {
               url: server.url("/rpc"),
               headers: [:],
               body: Data("{}".utf8),
-              timeoutSeconds: 5,
+              timeout: .seconds(5),
               responseBodyPolicy: buffered(),
               beginHandoff: counter.refusingCallback
             )
@@ -683,7 +683,7 @@ final class HandoffCounter: Sendable {
             url: "http://127.0.0.1:\(port)/rpc",
             headers: [:],
             body: Data("{}".utf8),
-            timeoutSeconds: 1,
+            timeout: .seconds(1),
             responseBodyPolicy: buffered()
           )
         )
@@ -707,7 +707,7 @@ final class HandoffCounter: Sendable {
               url: server.url("/rpc"),
               headers: [:],
               body: Data("{}".utf8),
-              timeoutSeconds: 5,
+              timeout: .seconds(5),
               responseBodyPolicy: buffered()
             )
           )
@@ -733,7 +733,7 @@ final class HandoffCounter: Sendable {
               url: server.url("/rpc"),
               headers: [:],
               body: Data("{}".utf8),
-              timeoutSeconds: 1,
+              timeout: .milliseconds(100),
               responseBodyPolicy: buffered()
             )
           )
@@ -741,8 +741,11 @@ final class HandoffCounter: Sendable {
       }
       let elapsed = ContinuousClock.now - started
 
-      // then — the deadline that fired is the request's own one second, not some larger default a
-      // bare "it failed eventually" would have accepted just as happily
+      // then — the deadline that fired is the request's own, not some larger default a bare "it
+      // failed eventually" would have accepted just as happily. The lower bound makes the
+      // sub-second conversion load-bearing: a regression back to whole-second truncation would
+      // turn this deadline into zero and fire instantly.
+      #expect(elapsed >= .milliseconds(100))
       #expect(elapsed < .seconds(5))
       #expect(failure?.disposition == .mayHaveBeenSent)
     }

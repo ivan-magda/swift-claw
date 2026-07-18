@@ -207,7 +207,7 @@ private extension ChatGPTResponsesProvider {
           url: ChatGPTProviderMetadata.responsesURL,
           headers: headers,
           body: body,
-          timeoutSeconds: timeoutSeconds,
+          timeout: .seconds(timeoutSeconds),
           responseBodyPolicy: .streaming(
             maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
             errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes

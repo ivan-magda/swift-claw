@@ -182,7 +182,7 @@ private extension ChatGPTOAuthClient {
       url: url,
       headers: [Wire.contentTypeHeader: contentType],
       body: body,
-      timeoutSeconds: ChatGPTProviderMetadata.transportSeconds(timeout),
+      timeout: .seconds(ChatGPTProviderMetadata.transportSeconds(timeout)),
       responseBodyPolicy: .buffered(
         successBytes: ChatGPTProviderMetadata.maximumAuthResponseBytes,
         errorBytes: ChatGPTProviderMetadata.maximumDiagnosticBytes

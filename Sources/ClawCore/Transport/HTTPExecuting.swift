@@ -135,7 +135,7 @@ public struct HTTPRequest: Sendable {
   public let url: String
   public let headers: [String: String]
   public let body: Data?
-  public let timeoutSeconds: Int
+  public let timeout: Duration
   public let responseBodyPolicy: HTTPResponseBodyPolicy
 
   /// The attempt's linearization point, invoked exactly once immediately before the request is
@@ -147,7 +147,7 @@ public struct HTTPRequest: Sendable {
     url: String,
     headers: [String: String],
     body: Data?,
-    timeoutSeconds: Int,
+    timeout: Duration,
     responseBodyPolicy: HTTPResponseBodyPolicy,
     beginHandoff: (@Sendable () throws -> Void)? = nil
   ) {
@@ -155,7 +155,7 @@ public struct HTTPRequest: Sendable {
     self.url = url
     self.headers = headers
     self.body = body
-    self.timeoutSeconds = timeoutSeconds
+    self.timeout = timeout
     self.responseBodyPolicy = responseBodyPolicy
     self.beginHandoff = beginHandoff
   }
@@ -185,7 +185,7 @@ public extension HTTPExecuting {
         url: url,
         headers: headers.addingDefault("Content-Type", "application/json"),
         body: jsonBody,
-        timeoutSeconds: timeoutSeconds,
+        timeout: .seconds(timeoutSeconds),
         responseBodyPolicy: .buffered(successBytes: maxBodyBytes, errorBytes: maxBodyBytes)
       )
     )
@@ -203,7 +203,7 @@ public extension HTTPExecuting {
         url: url,
         headers: headers,
         body: nil,
-        timeoutSeconds: timeoutSeconds,
+        timeout: .seconds(timeoutSeconds),
         responseBodyPolicy: .buffered(successBytes: maxBodyBytes, errorBytes: maxBodyBytes)
       )
     )

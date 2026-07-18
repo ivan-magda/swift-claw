@@ -391,9 +391,12 @@ extension ChatGPTResponsesBoundsTests {
 
   /// Well-framed events weighing exactly `totalBytes` in total, delimiters included. The last event
   /// absorbs whatever the whole units could not divide, so the total is exact rather than rounded.
+  /// Units weigh ~1 MiB — half the event cap — so a buffer-cap's worth of filler is a handful of
+  /// large events rather than tens of thousands of tiny ones, each of which would pay its own
+  /// framing and JSON decode.
   fileprivate static func framedFiller(totalBytes: Int) -> String {
-    let unit = event(#"{"type":"response.output_text.delta","output_index":0,"delta":"a"}"#)
-    let unitBytes = unit.utf8.count
+    let unitBytes = 1024 * 1024
+    let unit = paddedEvent(totalBytes: unitBytes - 2) + "\n\n"
     let units = max(0, totalBytes / unitBytes - 2)
     let last = totalBytes - units * unitBytes
     return String(repeating: unit, count: units) + paddedEvent(totalBytes: last - 2) + "\n\n"
@@ -405,12 +408,13 @@ extension ChatGPTResponsesBoundsTests {
     through parser: inout ChatGPTResponsesSSEParser
   ) throws -> Int {
     // Pushed in batches so the raw buffer stays far below its own cap and this test can only ever
-    // fail on the event count it is about.
+    // fail on the event count it is about. The payload is the cheapest thing the counter still
+    // charges: a data event whose type the route does not model — the cap counts data events.
     var emitted = 0
     let batchSize = 4_096
     for start in stride(from: 0, to: count, by: batchSize) {
       let batch = String(
-        repeating: event(#"{"type":"unknown.event"}"#),
+        repeating: event(#"{"type":"u"}"#),
         count: min(batchSize, count - start)
       )
       emitted += try parser.push(Data(batch.utf8)).count

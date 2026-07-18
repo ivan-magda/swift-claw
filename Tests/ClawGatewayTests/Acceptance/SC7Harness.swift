@@ -52,6 +52,9 @@ struct SC7Harness {
   let clock: ManualClock
 
   let databasePath: String
+  /// One reader over the SAME DB file the stores write, opened once: the acceptance probes poll
+  /// these queries, and a pool opened per probe made the polling itself the harness hotspot.
+  let readPool: DatabasePool
   let workspaceRoot: URL
 
   /// Awaits lane-dispatched turns: polls the outbox until `count` payloads exist (bounded).
@@ -74,8 +77,7 @@ struct SC7Harness {
   }
 
   func auditRows() throws -> [AuditRow] {
-    let pool = try ClawDatabase.makePool(path: databasePath)
-    return try pool.read { database in
+    try readPool.read { database in
       try Row.fetchAll(
         database,
         sql: "SELECT actor, action, tool, args_redacted, decision FROM audit_events ORDER BY id"
@@ -104,8 +106,7 @@ struct SC7Harness {
   }
 
   func runCount(jobId: Int64) throws -> Int {
-    let pool = try ClawDatabase.makePool(path: databasePath)
-    return try pool.read { db in
+    try readPool.read { db in
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM runs WHERE job_id = ?",
@@ -115,8 +116,7 @@ struct SC7Harness {
   }
 
   func runCount(origin: String) throws -> Int {
-    let pool = try ClawDatabase.makePool(path: databasePath)
-    return try pool.read { db in
+    try readPool.read { db in
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM runs WHERE origin = ?",
@@ -126,8 +126,7 @@ struct SC7Harness {
   }
 
   func sessionCount(key: String) throws -> Int {
-    let pool = try ClawDatabase.makePool(path: databasePath)
-    return try pool.read { db in
+    try readPool.read { db in
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM sessions WHERE session_key = ?",
@@ -316,6 +315,7 @@ func makeSC7Harness(
     parser: parser,
     clock: clock,
     databasePath: resolvedDatabasePath,
+    readPool: try ClawDatabase.makePool(path: resolvedDatabasePath),
     workspaceRoot: workspaceRoot
   )
 }
