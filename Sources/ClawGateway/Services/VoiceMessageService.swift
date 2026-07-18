@@ -171,7 +171,6 @@ private extension VoiceMessageService {
       logger.error("voice transcription exceeded its \(transcriptionDeadline) deadline")
       return .failure(.timedOut)
     case .callerCancelled:
-      // Shutdown, not an engine fault: the reply send that follows is being cancelled too.
       return .failure(.transcriptionFailed)
     }
   }

@@ -18,14 +18,6 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
   }
 }
 
-/// Parks until the deadline race cancels it — a cancellable wait, not a timing sleep.
-private struct NeverReturningTranscriber: VoiceTranscribing {
-  func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {
-    try? await Task.sleep(for: .seconds(3_600))
-    throw VoiceTranscriptionError.cancelled
-  }
-}
-
 @Suite struct VoiceMessageServiceTests {
   private let attachment = VoiceAttachment(
     fileId: "F1",
@@ -217,7 +209,7 @@ private struct NeverReturningTranscriber: VoiceTranscribing {
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
     let service = makeService(
-      transcriber: NeverReturningTranscriber(),
+      transcriber: ParkUntilCancelledTranscriber(),
       stagingDirectory: staging,
       transcriptionDeadline: .milliseconds(50)
     )

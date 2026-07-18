@@ -45,7 +45,7 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
     allowed: [Int64],
     voiceEnabled: Bool = true,
     fetcher: StubVoiceFetcher = StubVoiceFetcher(),
-    transcriber: StubVoiceTranscriber = StubVoiceTranscriber(),
+    transcriber: any VoiceTranscribing = StubVoiceTranscriber(),
     serviceOverride: (any VoiceMessageTranscribing)? = nil
   ) throws -> Harness {
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -271,6 +271,29 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
     #expect(sent.map(\.text) == [VoiceMessageService.Failure.tooLong.ownerReplyText])
     #expect(await harness.fetcher.recorder.calls.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func shutdownCancellationLeavesTheVoiceUpdateUnclaimedForRedelivery() async throws {
+    // given — an engine parked mid-transcription when graceful shutdown cancels the intake task
+    let harness = try makeHarness(allowed: [42], transcriber: ParkUntilCancelledTranscriber())
+    defer { try? FileManager.default.removeItem(at: harness.staging) }
+    let update = voiceUpdate(id: 1, from: 42)
+
+    // when — the poller task is cancelled while the voice note is still being handled
+    let intake = Task {
+      await harness.router.handle(rawUpdate: update)
+    }
+    intake.cancel()
+    let outcome = await intake.value
+
+    // then — a no-claim retry: nothing sent, no turn, the update left for the re-poll …
+    #expect(outcome == .transientFailure)
+    #expect(await harness.transport.sent.isEmpty)
+    #expect(await harness.dispatcher.calls.isEmpty)
+
+    // … so the post-restart redelivery produces the turn the first delivery never did
+    let redelivered = await harness.router.handle(rawUpdate: update)
+    #expect(redelivered == .processed)
   }
 
   @Test func downloadFailureGetsItsMappedReply() async throws {

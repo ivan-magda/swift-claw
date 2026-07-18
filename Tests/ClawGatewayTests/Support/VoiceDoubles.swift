@@ -47,6 +47,32 @@ struct StubVoiceTranscriber: VoiceTranscribing {
   }
 }
 
+/// Parks its FIRST call until the surrounding task is cancelled — a cancellable wait, not a
+/// timing sleep — then transcribes normally on every later call. Covers both halves of the
+/// cancellation story: a wedged engine the deadline race abandons, and a shutdown-cancelled
+/// intake whose redelivery re-transcribes after restart.
+struct ParkUntilCancelledTranscriber: VoiceTranscribing {
+  actor Calls {
+    private(set) var count = 0
+
+    func next() -> Int {
+      count += 1
+      return count
+    }
+  }
+
+  let calls = Calls()
+  var transcript = "spoken words"
+
+  func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {
+    guard await calls.next() > 1 else {
+      try? await Task.sleep(for: .seconds(3_600))
+      throw VoiceTranscriptionError.cancelled
+    }
+    return transcript
+  }
+}
+
 /// Scripts the ROUTER-facing seam directly, for outcomes the real service only produces under
 /// real filesystem/engine conditions (`.storageFull`, `.timedOut`).
 struct ScriptedVoiceService: VoiceMessageTranscribing {
