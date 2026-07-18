@@ -170,11 +170,6 @@ private extension MessageRouter {
     }
   }
 
-  /// A stranger's voice note gets the same private-bot line as any other content (never a
-  /// download, never a capability reveal). The owner's is transcribed and dispatched **directly**
-  /// as an untrusted-provenance turn: spoken text is machine-derived and possibly forwarded, so it
-  /// must never parse as a command and never resolve a parked confirmation — both are deliberate
-  /// bypasses of the `.text` path, enforced here in code.
   func routeVoice(
     _ attachment: VoiceAttachment,
     rawUpdate: RawUpdate,
@@ -184,6 +179,7 @@ private extension MessageRouter {
     guard isAllowed else {
       return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
     }
+
     guard let voice else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
@@ -201,7 +197,6 @@ private extension MessageRouter {
         provenance: .untrusted
       )
     case .failure(.storageFull):
-      // Same contract as a disk-full store write: notice + poller backoff, cursor NOT advanced.
       return await replies.storageFull(chatId: message.chatId)
     case .failure(let failure):
       return await replies.sendCanned(
