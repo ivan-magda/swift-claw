@@ -2,10 +2,7 @@ import Foundation
 
 public struct VoiceConfig: Sendable, Equatable {
   public let enabled: Bool
-  /// Ordered BCP-47 identifiers the transcriber tries against the installed speech stack at
-  /// runtime, first entry preferred (`en-US` default). Resolution failure is a per-message typed
-  /// error, not a boot failure — which locales exist is a property of the host's speech assets,
-  /// not of the config.
+
   public let localeIdentifiers: [String]
 
   public init(enabled: Bool, localeIdentifiers: [String]) {
@@ -17,7 +14,9 @@ public struct VoiceConfig: Sendable, Equatable {
 // MARK: - Voice Parsing
 
 extension AppConfig {
-  static func parseVoiceConfig(from env: [String: String]) throws -> VoiceConfig {
+  static func parseVoiceConfig(
+    from env: [String: String]
+  ) throws -> VoiceConfig {
     let enabled = try boolValue(
       env[EnvKey.voiceTranscription],
       key: EnvKey.voiceTranscription,
