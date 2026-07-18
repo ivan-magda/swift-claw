@@ -76,17 +76,9 @@ public struct DoctorReport: Sendable {
   }
 
   public func renderText() -> String {
-    let sections = DoctorGroup.allCases.compactMap { group -> String? in
-      let rows = checks.filter { $0.group == group }
-
-      guard !rows.isEmpty else {
-        return nil
-      }
-
-      return renderSection(group: group, rows: rows)
-    }
-
-    return sections.joined(separator: "\n\n")
+    nonEmptyGroups()
+      .map { renderSection(group: $0.group, rows: $0.rows) }
+      .joined(separator: "\n\n")
   }
 
   public func renderTelegramSummary() -> String {
@@ -96,15 +88,7 @@ public struct DoctorReport: Sendable {
       ? "clawd: all systems healthy"
       : "clawd: \(failingCount) \(failingCount == 1 ? "check" : "checks") failing"
 
-    let sections = DoctorGroup.allCases.compactMap { group -> String? in
-      let rows = checks.filter { $0.group == group }
-
-      guard !rows.isEmpty else {
-        return nil
-      }
-
-      return summarySection(group: group, rows: rows)
-    }
+    let sections = nonEmptyGroups().map { summarySection(group: $0.group, rows: $0.rows) }
 
     return ([verdict, ""] + sections).joined(separator: "\n")
   }
@@ -122,6 +106,15 @@ public struct DoctorReport: Sendable {
 
 private extension DoctorReport {
   static let headerStatusColumn = 40
+
+  /// The groups with at least one check, paired with their rows, in `DoctorGroup.allCases`
+  /// order — the shared partition behind both the text table and the Telegram summary.
+  func nonEmptyGroups() -> [(group: DoctorGroup, rows: [Check])] {
+    DoctorGroup.allCases.compactMap { group in
+      let rows = checks.filter { $0.group == group }
+      return rows.isEmpty ? nil : (group: group, rows: rows)
+    }
+  }
 
   func renderSection(group: DoctorGroup, rows: [Check]) -> String {
     let keyWidth = rows.map(\.key.count).max() ?? 0

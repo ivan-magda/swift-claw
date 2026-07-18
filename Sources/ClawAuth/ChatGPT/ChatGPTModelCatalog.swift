@@ -52,7 +52,7 @@ public struct ChatGPTModelCatalog: Sendable, ChatGPTModelCatalogFetching {
   public func fetch(authorization: LLMRequestAuthorization) async throws -> [ChatGPTCatalogModel] {
     let response = try await send(authorization: authorization)
 
-    guard Self.successStatuses.contains(response.statusCode) else {
+    guard HTTPResponseBodyPolicy.isSuccess(response.statusCode) else {
       // Lossy on purpose: a diagnostic body that is not valid UTF-8 is still a diagnostic.
       // swiftlint:disable:next optional_data_string_conversion
       let body = String(decoding: response.body, as: UTF8.self)
@@ -87,8 +87,6 @@ private enum Catalog {
 // MARK: - Requests
 
 private extension ChatGPTModelCatalog {
-  static let successStatuses = 200..<300
-
   /// Caps both bodies at read time — a success body is the payload, a non-success one is a
   /// diagnostic worth only its first few kilobytes, and neither is worth materializing whole before
   /// anything trims it.

@@ -40,7 +40,7 @@ public struct RetrieverGRDB: Retriever {
       }
 
       if excludedMessageIds.isEmpty == false {
-        let placeholders = excludedMessageIds.map { _ in "?" }.joined(separator: ", ")
+        let placeholders = databaseQuestionMarks(count: excludedMessageIds.count)
         sql += "\n  AND m.id NOT IN (\(placeholders))"
         arguments += StatementArguments(excludedMessageIds)
       }

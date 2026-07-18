@@ -140,17 +140,18 @@ public struct SSEParser: Sendable {
   /// accumulator that never received an id/name (malformed stream) and defaults empty
   /// arguments to `"{}"`, mirroring the blocking path's `parse(result:)` (same rule, two seams).
   private var assembledToolCalls: [ToolCall] {
-    toolCallAccumulators.keys.sorted().compactMap { index in
-      let accumulator = toolCallAccumulators[index] ?? ToolCallAccumulator()
-      guard !accumulator.id.isEmpty, !accumulator.name.isEmpty else {
-        return nil
+    toolCallAccumulators
+      .sorted { $0.key < $1.key }
+      .compactMap { _, accumulator in
+        guard !accumulator.id.isEmpty, !accumulator.name.isEmpty else {
+          return nil
+        }
+        return ToolCall(
+          id: accumulator.id,
+          name: accumulator.name,
+          argumentsJSON: accumulator.arguments.isEmpty ? "{}" : accumulator.arguments
+        )
       }
-      return ToolCall(
-        id: accumulator.id,
-        name: accumulator.name,
-        argumentsJSON: accumulator.arguments.isEmpty ? "{}" : accumulator.arguments
-      )
-    }
   }
 
   private mutating func accumulate(_ fragments: [DeltaToolCall]) throws {
