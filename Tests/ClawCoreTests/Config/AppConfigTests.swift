@@ -916,7 +916,7 @@ import Testing
     }
   }
 
-  @Test func voiceTranscriptionDefaultsOffWithTheDefaultLocale() throws {
+  @Test func voiceTranscriptionDefaultsOnWithTheDefaultLocale() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -924,22 +924,21 @@ import Testing
     let config = try AppConfig.load(environment: env)
 
     // then
-    #expect(config.voice == VoiceConfig.disabledDefault)
-    #expect(config.voice.enabled == false)
+    #expect(config.voice.enabled)
     #expect(config.voice.localeIdentifier == AppConfig.EnvDefaults.voiceLocale)
   }
 
-  @Test func voiceTranscriptionParsesFlagAndLocale() throws {
+  @Test func voiceTranscriptionParsesExplicitOptOutAndLocale() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-    env[EnvKey.voiceTranscription] = "true"
+    env[EnvKey.voiceTranscription] = "false"
     env[EnvKey.voiceLocale] = "de-DE"
 
     // when
     let config = try AppConfig.load(environment: env)
 
     // then
-    #expect(config.voice.enabled)
+    #expect(config.voice.enabled == false)
     #expect(config.voice.localeIdentifier == "de-DE")
   }
 

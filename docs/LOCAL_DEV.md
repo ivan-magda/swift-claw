@@ -214,11 +214,11 @@ error row rather than silently degrading.
 
 Telegram voice notes are transcribed **on-device** with Apple's `SpeechAnalyzer` stack and the
 transcript enters the normal turn flow — fenced and session-tainting, since a forwarded voice note
-is indistinguishable from the owner's own (see `ARCHITECTURE.md` §6.1/§12). Off by default; one
-line enables it:
+is indistinguishable from the owner's own (see `ARCHITECTURE.md` §6.1/§12). On by default on hosts
+with the speech stack; one line opts out:
 
 ```bash
-CLAW_VOICE_TRANSCRIPTION=true
+CLAW_VOICE_TRANSCRIPTION=false
 ```
 
 `CLAW_VOICE_LOCALE` picks the transcription language (BCP-47, default `en-US`; there is no

@@ -11,11 +11,6 @@ public struct VoiceConfig: Sendable, Equatable {
     self.enabled = enabled
     self.localeIdentifier = localeIdentifier
   }
-
-  public static let disabledDefault = VoiceConfig(
-    enabled: false,
-    localeIdentifier: AppConfig.EnvDefaults.voiceLocale
-  )
 }
 
 // MARK: - Voice Parsing
@@ -25,7 +20,7 @@ extension AppConfig {
     let enabled = try boolValue(
       env[EnvKey.voiceTranscription],
       key: EnvKey.voiceTranscription,
-      default: false
+      default: true
     )
 
     let rawLocale = env[EnvKey.voiceLocale]?.trimmingCharacters(in: .whitespaces) ?? ""
