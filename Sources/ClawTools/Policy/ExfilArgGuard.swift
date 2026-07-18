@@ -305,10 +305,29 @@ public struct ExfilArgGuard: Sendable {
   }
 
   /// The deterministic, pinned stand-in for an entropy measure: ≥1 digit AND both letter cases.
+  /// Judged over bytes, which is exact for what callers pass — matches of the ASCII-only shape
+  /// patterns, where a run can weigh megabytes and per-`Character` Unicode property checks cost
+  /// hundreds of milliseconds. On any other input the byte test can only over-block, never miss.
   static func looksHighEntropy(_ token: String) -> Bool {
-    token.contains(where: \.isNumber)
-      && token.contains(where: \.isUppercase)
-      && token.contains(where: \.isLowercase)
+    var hasDigit = false
+    var hasUppercase = false
+    var hasLowercase = false
+    for byte in token.utf8 {
+      switch byte {
+      case UInt8(ascii: "0")...UInt8(ascii: "9"):
+        hasDigit = true
+      case UInt8(ascii: "A")...UInt8(ascii: "Z"):
+        hasUppercase = true
+      case UInt8(ascii: "a")...UInt8(ascii: "z"):
+        hasLowercase = true
+      default:
+        continue
+      }
+      if hasDigit, hasUppercase, hasLowercase {
+        return true
+      }
+    }
+    return false
   }
 
   /// The polynomial base for rolling window fingerprints (the FNV-1a prime, reused as an

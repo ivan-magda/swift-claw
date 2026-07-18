@@ -21,7 +21,7 @@ private actor SequencedHTTP: HTTPExecuting {
   private let repeatingLast: Outcome?
 
   /// The relative timeout of every call, in dispatch order — what the deadline cap is asserted on.
-  private(set) var timeouts: [Int] = []
+  private(set) var timeouts: [Duration] = []
   private(set) var urls: [String] = []
 
   init(_ queued: [Outcome], repeatingLast: Outcome? = nil) {
@@ -30,7 +30,7 @@ private actor SequencedHTTP: HTTPExecuting {
   }
 
   func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-    timeouts.append(request.timeoutSeconds)
+    timeouts.append(request.timeout)
     urls.append(request.url)
 
     guard let outcome = queued.isEmpty ? repeatingLast : queued.removeFirst() else {
@@ -259,7 +259,7 @@ private enum Poll {
     // 900 seconds of window: the first two calls are bounded by the per-request ceiling, and the
     // third by the ten seconds the 890-second wait left behind.
     let timeouts = await http.timeouts
-    #expect(timeouts == [30, 30, 10])
+    #expect(timeouts == [.seconds(30), .seconds(30), .seconds(10)])
   }
 
   @Test func authorizeClampsAPollDelayToWhatIsLeftOfTheWindow() async throws {

@@ -25,7 +25,7 @@ private func probe(_ url: String) -> HTTPRequest {
     url: url,
     headers: ["Authorization": sentinelBearer],
     body: nil,
-    timeoutSeconds: 5,
+    timeout: .seconds(5),
     responseBodyPolicy: .buffered(successBytes: 4096, errorBytes: 4096)
   )
 }

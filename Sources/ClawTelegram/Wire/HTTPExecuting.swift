@@ -86,7 +86,7 @@ private extension AsyncHTTPExecutor {
     do {
       return try await client.execute(
         clientRequest,
-        timeout: .seconds(Int64(request.timeoutSeconds))
+        timeout: TimeAmount(request.timeout)
       )
     } catch {
       throw Self.classify(error)

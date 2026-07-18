@@ -575,7 +575,7 @@ private struct Harness: Sendable {
           url: "https://chatgpt.test/responses",
           headers: authorization.headers,
           body: Data("{}".utf8),
-          timeoutSeconds: requestTimeoutSeconds,
+          timeout: .seconds(requestTimeoutSeconds),
           responseBodyPolicy: .streaming(
             maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
             errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes

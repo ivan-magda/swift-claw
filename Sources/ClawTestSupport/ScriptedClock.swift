@@ -51,6 +51,24 @@ public struct ScriptedClock: Clock {
   }
 }
 
+// MARK: - Compressed Time
+
+public extension ScriptedClock {
+  /// A clock that parks any sleep of `parkingThreshold` or longer (for ~an hour of real time —
+  /// the park ends with its task's cancellation) while every shorter tick elapses in ~1ms:
+  /// deadlines stay pending, pacing intervals fire immediately, and a test asserts ordering
+  /// instead of waiting out wall-clock time.
+  static func compressed(parkingAt parkingThreshold: Duration) -> ScriptedClock {
+    ScriptedClock { delay in
+      if delay >= parkingThreshold {
+        try await Task.sleep(for: .seconds(3600))
+      } else {
+        try await Task.sleep(for: .milliseconds(1))
+      }
+    }
+  }
+}
+
 // MARK: - Virtual Time
 
 private extension ScriptedClock {

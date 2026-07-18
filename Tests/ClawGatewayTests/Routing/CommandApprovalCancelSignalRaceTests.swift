@@ -45,9 +45,11 @@ import Testing
   /// commands catch the pre-fix bug on ~99% of cycles at nproc=1 (empirically measured).
   private static let paddingRuns = 96
 
-  /// Cycles per test. With ~99% per-cycle catch a dozen would already be decisive; 20 keeps a wide
-  /// margin against scheduler variance across machines while staying well under the old 40.
-  private static let cycles = 20
+  /// Cycles per test. The padding above — not the cycle count — is the determinism mechanism, so
+  /// cycles are redundant Bernoulli trials: at the measured ~99% per-cycle catch six cycles miss
+  /// with probability ~1e-12, and even a scheduler that degraded the rate to 90% would still miss
+  /// at under 1e-6. More cycles buy nothing but wall-clock.
+  private static let cycles = 6
 
   // MARK: - Doubles
 

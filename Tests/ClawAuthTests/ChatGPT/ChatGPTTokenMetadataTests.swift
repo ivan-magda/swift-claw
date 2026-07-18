@@ -159,9 +159,9 @@ enum TokenBuilder {
     #expect(metadata == ChatGPTTokenMetadata(expiresAt: nil, accountID: nil))
   }
 
-  @Test func extractRejectsAMultiMegabytePayload() {
-    // given
-    let payload = TokenBuilder.payload(paddedTo: 4_000_000, accountID: "huge")
+  @Test func extractRejectsAGrosslyOversizedPayload() {
+    // given — several times the cap; the exact 64 KiB boundary is pinned by its own pair above
+    let payload = TokenBuilder.payload(paddedTo: 256 * 1024, accountID: "huge")
     let token = TokenBuilder.token(payload: payload)
 
     // when

@@ -312,16 +312,6 @@ actor BlockingFinalDrafts: RichDraftStreaming {
   }
 }
 
-/// Compresses every runtime sleep except the wall-clock deadline (180s default) to ~1ms, so
-/// throttle ticks and send deadlines elapse instantly while the deadline child stays parked.
-let compressedSleep: @Sendable (Duration) async throws -> Void = { duration in
-  if duration >= .seconds(10) {
-    try await Task.sleep(for: .seconds(3600))
-  } else {
-    try await Task.sleep(for: .milliseconds(1))
-  }
-}
-
 /// Parks the per-send draft deadline (3s) and the wall-clock deadline while probe ticks run real,
 /// so "the turn awaits the final draft" is asserted time-independently instead of racing the
 /// abandon deadline under CI load.
@@ -627,7 +617,7 @@ func waitForTurnResult(
       typing: typing,
       drafts: drafts,
       streamingEnabled: true,
-      clock: ScriptedClock(compressedSleep)
+      clock: ScriptedClock.compressed(parkingAt: .seconds(10))
     )
 
     // when
@@ -716,7 +706,7 @@ func waitForTurnResult(
         provider: provider,
         drafts: drafts,
         streamingEnabled: true,
-        clock: ScriptedClock(compressedSleep)
+        clock: ScriptedClock.compressed(parkingAt: .seconds(10))
       )
 
       // when
@@ -963,7 +953,7 @@ func waitForTurnResult(
       provider: provider,
       drafts: drafts,
       streamingEnabled: true,
-      clock: ScriptedClock(compressedSleep)
+      clock: ScriptedClock.compressed(parkingAt: .seconds(10))
     )
 
     // when
