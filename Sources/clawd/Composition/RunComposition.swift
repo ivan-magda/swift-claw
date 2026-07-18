@@ -66,10 +66,13 @@ struct RunComposition {
     let clients = makeClients()
     let transport = TelegramClient(
       token: secrets.telegramBotToken,
-      http: clients.telegram.executor
+      http: clients.telegram.executor,
+      downloadHTTP: clients.tool.executor
     )
+
     do {
       let botUsername = await fetchBotUsername(transport, logger)
+
       let builder = DaemonBuilder(
         config: config,
         secrets: secrets,
@@ -82,6 +85,7 @@ struct RunComposition {
       )
       let stack = try builder.makeProviderStack(http: clients.llm.executor)
       let bundle = try await buildDaemon(builder, stack)
+
       return Composed(bundle: bundle, clients: clients)
     } catch {
       await Self.closeAll(clients, logger: logger)

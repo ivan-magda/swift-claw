@@ -17,7 +17,8 @@ struct TurnDispatch: Sendable {
   func dispatch(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    text: String
+    text: String,
+    provenance: Provenance = .trusted
   ) async throws(RoutingHalt) -> HandleOutcome {
     let inbound = InboundMessage(
       updateId: rawUpdate.updateId,
@@ -26,6 +27,7 @@ struct TurnDispatch: Sendable {
       userId: message.userId,
       text: text,
       isEdited: message.isEdited,
+      provenance: provenance,
       ts: now()
     )
 

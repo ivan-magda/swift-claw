@@ -1,3 +1,4 @@
+import ClawAppleSpeech
 import ClawCore
 import ClawGateway
 import ClawTools
@@ -7,8 +8,6 @@ import Foundation
 // MARK: - Intake Services & Tool Catalog
 
 extension DaemonBuilder {
-  /// Wires the inbound/outbound message services: the router that dispatches updates, the poller
-  /// that feeds it, and the outbox dispatcher the turn runner pokes via the shared signal.
   func makeIntakeServices(
     coordination: TurnCoordination,
     turnRunner: TurnRunner,
@@ -30,6 +29,7 @@ extension DaemonBuilder {
       lanes: coordination.lanes,
       schedule: scheduleSurface,
       approvalCallbacks: approvalCallbacks,
+      voice: makeVoiceService(),
       coordinator: coordination.approvalCoordinator,
       doctor: doctor,
       logger: logger
@@ -50,10 +50,40 @@ extension DaemonBuilder {
     return (poller: poller, dispatcher: dispatcher)
   }
 
-  /// Assembles the v1 tool catalog behind its policy gate. Tool fetches use the dedicated
-  /// no-redirect `toolExecutor`; no `searchApiKey` ⇒ `web_search` is never constructed
-  /// (unconfigured ⇒ absent). Tier-3 private texts load from DISK at gate-evaluation time,
-  /// not the assembly snapshot, so the loader closure re-reads the workspace each call.
+  private func makeVoiceService() -> VoiceMessageService? {
+    VoiceMessageService.sweepStaging(under: config.stateRoot)
+
+    guard config.voice.enabled else {
+      return nil
+    }
+
+    guard
+      let transcriber = SystemVoiceTranscriber.make(
+        localeIdentifiers: config.voice.localeIdentifiers,
+        maxAudioDurationSeconds: VoiceMessageService.defaultMaxDurationSeconds
+      )
+    else {
+      logger.warning(
+        """
+        voice transcription is enabled but no on-device speech engine is available; \
+        voice messages will get the canned unsupported reply
+        """
+      )
+      return nil
+    }
+
+    return VoiceMessageService(
+      fetcher: transport,
+      transcriber: transcriber,
+      stagingDirectory: config.stateRoot.appending(
+        path: VoiceMessageService.stagingDirectoryName,
+        directoryHint: .isDirectory
+      ),
+      redactor: SecretRedactor(secretValues: secrets.redactionValues),
+      logger: logger
+    )
+  }
+
   func makeToolDispatcher(
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack
@@ -114,10 +144,6 @@ extension DaemonBuilder {
     )
   }
 
-  /// Static sub-hash (classes 2–3): the same tool surface the gate enforces, plus the pinned
-  /// egress/policy config: base URL, search presence, workspace identity, web_fetch SSRF
-  /// exemptions, and the normalized exec block. Secret values are never hashed. Injected into
-  /// `ContextBuilder`, which folds in class-1 prompt materials and returns `policy_version`.
   func policyStaticSubhash(
     toolDispatcher: GatedToolDispatcher,
     workspace: FileSystemWorkspace

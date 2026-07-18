@@ -71,6 +71,10 @@ struct ReplySender: Sendable {
 
   /// A direct canned reply, deduped via `claimUpdate` so a redelivery doesn't double-send it.
   func sendCanned(updateId: Int64, chatId: Int64, text: String) async -> HandleOutcome {
+    guard !Task.isCancelled else {
+      return .transientFailure
+    }
+
     do {
       try await claimUpdate(updateId: updateId, chatId: chatId)
     } catch {

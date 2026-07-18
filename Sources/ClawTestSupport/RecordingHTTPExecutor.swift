@@ -50,13 +50,19 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
 /// comes back truncated.
 public actor RecordingHTTPExecutor: HTTPExecuting {
   private let responses: [String: HTTPResult]
+  private let errors: [String: any Error & Sendable]
   private let cannedResult: HTTPResult?
 
   /// Every call this double received, in dispatch order, newest last.
   public private(set) var requests: [RecordedHTTPRequest] = []
 
-  public init(responses: [String: HTTPResult] = [:], cannedResult: HTTPResult? = nil) {
+  public init(
+    responses: [String: HTTPResult] = [:],
+    errors: [String: any Error & Sendable] = [:],
+    cannedResult: HTTPResult? = nil
+  ) {
     self.responses = responses
+    self.errors = errors
     self.cannedResult = cannedResult
   }
 
@@ -87,6 +93,9 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
       )
     )
 
+    if let scriptedError = errors[request.url] {
+      throw scriptedError
+    }
     guard let scripted else {
       throw UnscriptedRequest(url: request.url)
     }

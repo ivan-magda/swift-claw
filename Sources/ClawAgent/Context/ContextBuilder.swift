@@ -15,6 +15,8 @@ public struct ContextBuilder: Sendable {
 
   private static let historyTruncatedMarker = "\n\n[…earlier conversation truncated]"
 
+  static let untrustedUserLabel = "untrusted_user_message"
+
   private let systemPrompt: String
   private let proactiveSystemPrompt: String
 
@@ -547,6 +549,16 @@ private extension ContextBuilder {
               content: message.content,
               toolCalls: message.toolCallsJSON.map(ToolCallCoding.decode) ?? [],
               providerState: message.providerState
+            )
+          )
+        case .user where message.provenance == .untrusted:
+          rendered.append(
+            ChatMessage(
+              role: .user,
+              content: LabeledContextFactory.make(
+                label: Self.untrustedUserLabel,
+                content: message.content
+              ).render()
             )
           )
         case .user, .system:
