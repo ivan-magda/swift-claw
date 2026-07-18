@@ -8,8 +8,6 @@ import Foundation
 // MARK: - Intake Services & Tool Catalog
 
 extension DaemonBuilder {
-  /// Wires the inbound/outbound message services: the router that dispatches updates, the poller
-  /// that feeds it, and the outbox dispatcher the turn runner pokes via the shared signal.
   func makeIntakeServices(
     coordination: TurnCoordination,
     turnRunner: TurnRunner,
@@ -52,15 +50,13 @@ extension DaemonBuilder {
     return (poller: poller, dispatcher: dispatcher)
   }
 
-  /// The voice-transcription pipeline, or nil when the flag is off or the host has no on-device
-  /// speech engine (Linux, macOS < 26) — the router then falls back to the canned
-  /// "can't read voice messages yet" reply, exactly as before the feature existed.
   private func makeVoiceService() -> VoiceMessageService? {
     VoiceMessageService.sweepStaging(under: config.stateRoot)
 
     guard config.voice.enabled else {
       return nil
     }
+
     guard
       let transcriber = SystemVoiceTranscriber.make(
         localeIdentifiers: config.voice.localeIdentifiers,
@@ -88,10 +84,6 @@ extension DaemonBuilder {
     )
   }
 
-  /// Assembles the v1 tool catalog behind its policy gate. Tool fetches use the dedicated
-  /// no-redirect `toolExecutor`; no `searchApiKey` ⇒ `web_search` is never constructed
-  /// (unconfigured ⇒ absent). Tier-3 private texts load from DISK at gate-evaluation time,
-  /// not the assembly snapshot, so the loader closure re-reads the workspace each call.
   func makeToolDispatcher(
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack
@@ -152,10 +144,6 @@ extension DaemonBuilder {
     )
   }
 
-  /// Static sub-hash (classes 2–3): the same tool surface the gate enforces, plus the pinned
-  /// egress/policy config: base URL, search presence, workspace identity, web_fetch SSRF
-  /// exemptions, and the normalized exec block. Secret values are never hashed. Injected into
-  /// `ContextBuilder`, which folds in class-1 prompt materials and returns `policy_version`.
   func policyStaticSubhash(
     toolDispatcher: GatedToolDispatcher,
     workspace: FileSystemWorkspace
