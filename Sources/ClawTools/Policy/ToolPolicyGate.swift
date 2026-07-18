@@ -433,45 +433,38 @@ public struct GatedToolDispatcher: ToolDispatching {
     }
   }
 
-  /// First finisher wins and the LOSER IS ABANDONED, never awaited: a task group always awaits
-  /// its children (the pitfall `sendDraftBounded` documents), so a wedged tool — a blocking
-  /// syscall, hung I/O — would otherwise hold the strict-FIFO session lane hostage far past its
-  /// declared timeout, beyond `/stop`'s reach. The abandoned execute task keeps running detached
-  /// until its I/O returns; today's tools are read-only, so a post-timeout side effect is
-  /// harmless — write tools must revisit this contract explicitly.
+  /// Bounded by the shared `DeadlineRace`, whose loser is cancelled and ABANDONED, never
+  /// awaited: a task group always awaits its children (the pitfall `sendDraftBounded`
+  /// documents), so a wedged tool — a blocking syscall, hung I/O — would otherwise hold the
+  /// strict-FIFO session lane hostage far past its declared timeout, beyond `/stop`'s reach.
+  /// The abandoned execute task keeps running detached until its I/O returns; today's tools are
+  /// read-only, so a post-timeout side effect is harmless — write tools must revisit this
+  /// contract explicitly.
   private func executeWithTimeout(
     tool: any Tool,
     arguments: JSONValue,
     canonicalTarget: String?
   ) async -> ToolPayload {
-    let timeoutPayload = ToolPayload(
-      content: "The \(tool.definition.name) call timed out.",
-      status: .error,
-      ingestedUntrusted: false
+    let outcome = await DeadlineRace.race(
+      allowance: tool.timeout,
+      sleep: { [clock] duration in
+        try await clock.sleep(for: duration)
+      },
+      operation: {
+        await tool.execute(arguments: arguments, canonicalTarget: canonicalTarget)
+      }
     )
 
-    let firstResult = AsyncStream<ToolPayload> { continuation in
-      let executeTask = Task {
-        continuation.yield(
-          await tool.execute(arguments: arguments, canonicalTarget: canonicalTarget)
-        )
-        continuation.finish()
-      }
-      let timeoutTask = Task { [clock] in
-        try? await clock.sleep(for: tool.timeout)
-        continuation.yield(timeoutPayload)
-        continuation.finish()
-      }
-      continuation.onTermination = { @Sendable _ in
-        executeTask.cancel()
-        timeoutTask.cancel()
-      }
-    }
-
-    for await payload in firstResult {
+    switch outcome {
+    case .operationReturned(let payload):
       return payload
+    case .deadlineExpired, .callerCancelled:
+      return ToolPayload(
+        content: "The \(tool.definition.name) call timed out.",
+        status: .error,
+        ingestedUntrusted: false
+      )
     }
-    return timeoutPayload
   }
 
   private func errorOutcome(call: ToolCall, reason: String) -> ToolDispatchOutcome {

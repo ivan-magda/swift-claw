@@ -167,7 +167,8 @@ import Foundation
       in supportedLocales: [Locale],
       via equivalent: (Locale) async -> Locale?
     ) async -> Locale? {
-      if let exactMatch = supportedLocales.first(where: { $0.bcp47Tag == requestedLocale.bcp47Tag }) {
+      let requestedTag = requestedLocale.bcp47Tag
+      if let exactMatch = supportedLocales.first(where: { $0.bcp47Tag == requestedTag }) {
         return exactMatch
       }
 
