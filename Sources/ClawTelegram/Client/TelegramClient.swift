@@ -10,11 +10,6 @@ public struct TelegramClient: TelegramTransport {
 
   private let token: String
   private let http: any HTTPExecuting
-  /// File downloads go through a REDIRECT-DISALLOWING executor: `file_path` is server-controlled
-  /// text and a followed redirect would hand a hostile response an SSRF primitive whose fetched
-  /// bytes then enter the model context. A legitimate Telegram file download never redirects, so
-  /// a 3xx surfaces as a non-200 `HTTPResult` and is refused. Falls back to `http` when nil —
-  /// acceptable only for test doubles, which never follow redirects anyway.
   private let downloadHTTP: (any HTTPExecuting)?
   private let baseURL: String
   /// HTTP read timeout must exceed the long-poll timeout so the socket doesn't fire first.
