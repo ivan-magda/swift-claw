@@ -33,10 +33,7 @@ struct ChatGPTResponsesRequestEncoder: Sendable {
     // Dropping stop strings quietly would run the model against a contract the caller did not ask
     // for; the studied Codex route provides none to honor, so the request is refused whole.
     guard request.stop == nil else {
-      throw ProviderError.terminal(
-        status: nil,
-        message: "the ChatGPT route has no stop-string contract to honor"
-      )
+      throw Self.unsupportedStopString
     }
 
     let instructions = Self.instructions(from: request.messages)
@@ -76,6 +73,13 @@ extension ChatGPTResponsesRequestEncoder {
   static func wireModel(for model: String) -> String {
     unqualifiedModel(model)
   }
+
+  /// The refusal both the plan validation and the encoder raise when a caller supplies a stop
+  /// string: this route has no stop-string contract, so the request fails whole before network I/O.
+  static let unsupportedStopString = ProviderError.terminal(
+    status: nil,
+    message: "the ChatGPT route has no stop-string contract to honor"
+  )
 }
 
 // MARK: - Request Mapping

@@ -20,6 +20,24 @@ public enum Importance: Int, Sendable, Equatable, Comparable, CaseIterable {
   public static func < (lhs: Importance, rhs: Importance) -> Bool {
     lhs.rawValue < rhs.rawValue
   }
+
+  /// The wire/owner-facing vocabulary; the `Int` rawValue is the storage form.
+  public var wireLabel: String {
+    switch self {
+    case .low: "low"
+    case .normal: "normal"
+    case .high: "high"
+    }
+  }
+
+  public init?(wireLabel: String) {
+    switch wireLabel {
+    case "low": self = .low
+    case "normal": self = .normal
+    case "high": self = .high
+    default: return nil
+    }
+  }
 }
 
 public enum MemorySource: String, Sendable, Equatable {

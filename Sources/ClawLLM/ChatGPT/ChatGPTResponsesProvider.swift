@@ -163,9 +163,7 @@ private extension ChatGPTResponsesProvider {
     // A stop string this route cannot honor, or a structured-output shape it does not accept, fails
     // before any network I/O rather than changing what the model was asked for.
     guard request.stop == nil else {
-      return .failure(
-        .terminal(status: nil, message: "the ChatGPT route has no stop-string contract to honor")
-      )
+      return .failure(ChatGPTResponsesRequestEncoder.unsupportedStopString)
     }
     guard request.responseFormat == nil else {
       return .failure(
@@ -207,7 +205,7 @@ private extension ChatGPTResponsesProvider {
           url: ChatGPTProviderMetadata.responsesURL,
           headers: headers,
           body: body,
-          timeoutSeconds: timeoutSeconds,
+          timeout: .seconds(timeoutSeconds),
           responseBodyPolicy: .streaming(
             maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
             errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes

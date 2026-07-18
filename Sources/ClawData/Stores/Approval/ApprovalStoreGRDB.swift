@@ -326,7 +326,7 @@ extension ApprovalStoreGRDB {
       return []
     }
 
-    let placeholders = runIds.map { _ in "?" }.joined(separator: ", ")
+    let placeholders = databaseQuestionMarks(count: runIds.count)
     var arguments: [any DatabaseValueConvertible] = [ApprovalState.pending.rawValue]
     arguments.append(contentsOf: runIds)
     let pending = try fetchApprovals(

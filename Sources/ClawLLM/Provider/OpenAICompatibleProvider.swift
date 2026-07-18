@@ -154,12 +154,6 @@ public struct OpenAICompatibleProvider: LLMProvider {
     URLComponents(string: baseURL)?.host?.lowercased() == "openrouter.ai"
   }
 
-  /// Reasoning models reject sampling params; detection is forward-looking (none are sent yet).
-  static func isReasoningModel(_ model: String) -> Bool {
-    model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4") || model.hasPrefix("o-")
-      || model.contains("reasoning")
-  }
-
   func encode(request: ChatRequest, streaming: Bool = false) throws -> Data {
     let wireMessages = request.messages.map { message -> WireMessage in
       let wireCalls = message.toolCalls.map { call in
@@ -286,7 +280,7 @@ private extension OpenAICompatibleProvider {
       url: chatCompletionsURL(),
       headers: headers,
       body: body,
-      timeoutSeconds: config.requestTimeoutSeconds,
+      timeout: .seconds(config.requestTimeoutSeconds),
       responseBodyPolicy: .streaming(
         maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
         errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
@@ -488,7 +482,7 @@ private extension OpenAICompatibleProvider {
       url: url,
       headers: headers,
       body: body,
-      timeoutSeconds: config.requestTimeoutSeconds,
+      timeout: .seconds(config.requestTimeoutSeconds),
       responseBodyPolicy: .buffered(
         successBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes,
         errorBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes

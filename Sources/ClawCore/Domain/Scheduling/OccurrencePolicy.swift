@@ -45,11 +45,10 @@ public struct OccurrencePolicy: Sendable {
   /// when nothing valid remains to arm: a one-shot whose instant has passed, or (pathological)
   /// a rule with no upcoming occurrence.
   public func armOccurrence(for validated: ValidatedSchedule, at nowDate: Date) -> Date? {
-    guard let envelope = validated.recurrence else {
-      return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
-    }
-
-    guard let timezone = TimeZone(identifier: validated.timezone) else {
+    guard
+      let envelope = validated.recurrence,
+      let timezone = TimeZone(identifier: validated.timezone)
+    else {
       return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
     }
 

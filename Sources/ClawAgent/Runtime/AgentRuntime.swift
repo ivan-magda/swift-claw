@@ -272,7 +272,7 @@ public struct AgentRuntime: Sendable {
       }
 
       if costPolicy == .metered, recordedRunUSD + preflight.costUSD > budget.perRunUSD {
-        return outcome(.budgetStopped(cap: "per-run spend"))
+        return outcome(.budgetStopped(cap: BudgetGate.perRunSpendCap))
       }
       if case .deny(let cap) = gate.preflight(
         todayTokens: todayTokens + recordedRunTokens,

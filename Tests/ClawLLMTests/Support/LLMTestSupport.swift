@@ -36,7 +36,7 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
     let url: String
     let headers: [String: String]
     let body: Data
-    let timeoutSeconds: Int
+    let timeout: Duration
     let responseBodyPolicy: HTTPResponseBodyPolicy
     let carriedHandoff: Bool
   }
@@ -130,7 +130,7 @@ actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
         url: request.url,
         headers: request.headers,
         body: request.body ?? Data(),
-        timeoutSeconds: request.timeoutSeconds,
+        timeout: request.timeout,
         responseBodyPolicy: request.responseBodyPolicy,
         carriedHandoff: request.beginHandoff != nil
       )

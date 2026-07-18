@@ -788,11 +788,4 @@ import Testing
     #expect(messages[0].keys.sorted() == ["content", "role"])
     #expect(response.providerState == nil)
   }
-
-  @Test func isReasoningModelDetectsKnownPrefixes() {
-    // then
-    #expect(OpenAICompatibleProvider.isReasoningModel("o3-mini"))
-    #expect(OpenAICompatibleProvider.isReasoningModel("gpt-5-reasoning"))
-    #expect(OpenAICompatibleProvider.isReasoningModel("gpt-4o") == false)
-  }
 }

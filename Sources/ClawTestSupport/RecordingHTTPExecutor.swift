@@ -7,7 +7,7 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
   public let url: String
   public let headers: [String: String]
   public let body: Data?
-  public let timeoutSeconds: Int
+  public let timeout: Duration
   public let responseBodyPolicy: HTTPResponseBodyPolicy
   /// The cap the executor applied, picked from the policy by the scripted status. Tests assert on
   /// this when what matters is which of the two caps was in force, not the pair that was offered.
@@ -23,7 +23,7 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
     url: String,
     headers: [String: String],
     body: Data?,
-    timeoutSeconds: Int,
+    timeout: Duration,
     responseBodyPolicy: HTTPResponseBodyPolicy,
     selectedBodyCap: Int,
     carriedHandoff: Bool
@@ -32,7 +32,7 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
     self.url = url
     self.headers = headers
     self.body = body
-    self.timeoutSeconds = timeoutSeconds
+    self.timeout = timeout
     self.responseBodyPolicy = responseBodyPolicy
     self.selectedBodyCap = selectedBodyCap
     self.carriedHandoff = carriedHandoff
@@ -86,7 +86,7 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
         url: request.url,
         headers: request.headers,
         body: request.body,
-        timeoutSeconds: request.timeoutSeconds,
+        timeout: request.timeout,
         responseBodyPolicy: request.responseBodyPolicy,
         selectedBodyCap: cap,
         carriedHandoff: request.beginHandoff != nil
