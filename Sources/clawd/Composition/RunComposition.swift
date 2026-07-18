@@ -64,15 +64,15 @@ struct RunComposition {
   /// and the cleanup below closes them before the error propagates to its exit-code mapping.
   func compose() async throws -> Composed {
     let clients = makeClients()
-    // Voice-file downloads ride the redirect-refusing tool client: file_path is server-controlled
-    // and a followed redirect would be an SSRF primitive (see TelegramClient.downloadVoiceFile).
     let transport = TelegramClient(
       token: secrets.telegramBotToken,
       http: clients.telegram.executor,
       downloadHTTP: clients.tool.executor
     )
+
     do {
       let botUsername = await fetchBotUsername(transport, logger)
+
       let builder = DaemonBuilder(
         config: config,
         secrets: secrets,
@@ -85,6 +85,7 @@ struct RunComposition {
       )
       let stack = try builder.makeProviderStack(http: clients.llm.executor)
       let bundle = try await buildDaemon(builder, stack)
+
       return Composed(bundle: bundle, clients: clients)
     } catch {
       await Self.closeAll(clients, logger: logger)
