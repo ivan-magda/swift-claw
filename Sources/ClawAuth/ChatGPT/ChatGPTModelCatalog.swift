@@ -96,8 +96,8 @@ private extension ChatGPTModelCatalog {
       url: ChatGPTProviderMetadata.modelsURL,
       headers: authorization.headers,
       body: nil,
-      timeoutSeconds: ChatGPTProviderMetadata.transportSeconds(
-        ChatGPTProviderMetadata.requestTimeout
+      timeout: .seconds(
+        ChatGPTProviderMetadata.transportSeconds(ChatGPTProviderMetadata.requestTimeout)
       ),
       responseBodyPolicy: .buffered(
         successBytes: ChatGPTProviderMetadata.maximumCatalogResponseBytes,

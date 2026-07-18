@@ -264,10 +264,12 @@ import Testing
   }
 
   @Test func maximumStagedPayloadUsesTheBoundedTextPath() {
-    // given — functional max-bound case; no stopwatch assertion
+    // given — functional max-bound case; no stopwatch assertion. Guard texts arrive one staged
+    // file at a time, so the largest single text the bounded path can receive is the per-file
+    // staging cap — the multi-file total cap is a sum, never one string.
     let guardrail = ExfilArgGuard(secretValues: [])
     let index = ExfilArgGuard.PrivateTextIndex(texts: ["private marker only in source"])
-    let text = String(repeating: "a", count: 4 * 1024 * 1024)
+    let text = String(repeating: "a", count: ExecuteCodeTool.maxStagedFileBytes)
 
     // when
     let unconditional = guardrail.evaluate(text: text)

@@ -43,6 +43,9 @@ struct SC3Harness {
   let provider: TurnScriptedProvider
 
   let databasePath: String
+  /// One reader over the SAME DB file the stores write — a connection of its own, opened once;
+  /// the probes below poll it, and a pool opened per probe made the polling the harness hotspot.
+  let readPool: DatabasePool
   let workspaceRoot: URL
   let sessionKey: String
 
@@ -89,11 +92,10 @@ struct SC3Harness {
     )
   }
 
-  /// Reads the durable audit trail over a fresh reader on the SAME DB file (the harness never
-  /// exposes a raw audit read, so the acceptance clauses inspect `audit_events` directly).
+  /// Reads the durable audit trail over the harness's own reader on the SAME DB file (the harness
+  /// never exposes a raw audit read, so the acceptance clauses inspect `audit_events` directly).
   func auditRows() throws -> [AuditRow] {
-    let pool = try ClawDatabase.makePool(path: databasePath)
-    return try pool.read { database in
+    try readPool.read { database in
       try Row.fetchAll(
         database,
         sql: "SELECT actor, action, tool, args_redacted, decision FROM audit_events ORDER BY id"
@@ -363,6 +365,7 @@ func makeSC3Harness(
     http: http,
     provider: provider,
     databasePath: resolvedDatabasePath,
+    readPool: try ClawDatabase.makePool(path: resolvedDatabasePath),
     workspaceRoot: workspaceRoot,
     sessionKey: SessionKey.telegramDM(chatId: 7),
     waiter: waiter,

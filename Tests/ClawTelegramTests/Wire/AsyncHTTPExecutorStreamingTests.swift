@@ -144,7 +144,7 @@ private func withBurstingServer<Result>(
       url: url,
       headers: [:],
       body: Data("{}".utf8),
-      timeoutSeconds: timeoutSeconds,
+      timeout: .seconds(timeoutSeconds),
       responseBodyPolicy: policy,
       beginHandoff: beginHandoff
     )

@@ -56,6 +56,7 @@ public struct ExfilArgGuard: Sendable {
         guard let windows = windowsByFingerprint[fingerprint] else {
           continue
         }
+
         let candidate = characters[start..<(start + width)]
         // The fingerprint only narrows the set; confirm grapheme-for-grapheme so a hash
         // collision can never false-block.
@@ -63,6 +64,7 @@ public struct ExfilArgGuard: Sendable {
           let source = sources[window.source]
           return candidate.elementsEqual(source[window.start..<(window.start + width)])
         }
+
         if matched {
           return String(candidate)
         }
@@ -132,9 +134,11 @@ public struct ExfilArgGuard: Sendable {
         if let anchor = shape.anchor, Self.containsAnchor(candidateBytes, anchor) == false {
           continue
         }
+
         let matches = Self.regexMatches(shape.pattern, in: candidate).filter { match in
           shape.rule != "high-entropy" || Self.looksHighEntropy(match)
         }
+
         if matches.isEmpty == false {
           return blockedVerdict(rule: shape.rule, raw: text, spans: matches)
         }
@@ -187,6 +191,7 @@ public struct ExfilArgGuard: Sendable {
       if let anchor = shape.anchor, Self.containsAnchor(Data(rendered.utf8), anchor) == false {
         continue
       }
+
       for match in Self.regexMatches(shape.pattern, in: rendered)
       where shape.rule != "high-entropy" || Self.looksHighEntropy(match) {
         rendered = rendered.replacingOccurrences(of: match, with: "[REDACTED:\(shape.rule)]")
@@ -305,10 +310,32 @@ public struct ExfilArgGuard: Sendable {
   }
 
   /// The deterministic, pinned stand-in for an entropy measure: ≥1 digit AND both letter cases.
+  /// Judged over bytes, which is exact for what callers pass — matches of the ASCII-only shape
+  /// patterns, where a run can weigh megabytes and per-`Character` Unicode property checks cost
+  /// hundreds of milliseconds. On any other input the byte test can only over-block, never miss.
   static func looksHighEntropy(_ token: String) -> Bool {
-    token.contains(where: \.isNumber)
-      && token.contains(where: \.isUppercase)
-      && token.contains(where: \.isLowercase)
+    var hasDigit = false
+    var hasUppercase = false
+    var hasLowercase = false
+
+    for byte in token.utf8 {
+      switch byte {
+      case UInt8(ascii: "0")...UInt8(ascii: "9"):
+        hasDigit = true
+      case UInt8(ascii: "A")...UInt8(ascii: "Z"):
+        hasUppercase = true
+      case UInt8(ascii: "a")...UInt8(ascii: "z"):
+        hasLowercase = true
+      default:
+        continue
+      }
+
+      if hasDigit, hasUppercase, hasLowercase {
+        return true
+      }
+    }
+
+    return false
   }
 
   /// The polynomial base for rolling window fingerprints (the FNV-1a prime, reused as an
@@ -378,6 +405,7 @@ public struct ExfilArgGuard: Sendable {
     if spans.contains(where: { span in raw.contains(span) == false }) {
       return Verdict(blockedRule: rule, redactedArgs: "[REDACTED:\(rule)]")
     }
+
     return Verdict(blockedRule: rule, redactedArgs: rendered)
   }
 }

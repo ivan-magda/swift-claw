@@ -177,7 +177,7 @@ private extension RecordedHTTPRequest {
 
     // then
     let sent = try #require(await http.requests.first)
-    #expect(sent.timeoutSeconds == expected)
+    #expect(sent.timeout == .seconds(expected))
   }
 
   // MARK: - Device Code: Response Reading
