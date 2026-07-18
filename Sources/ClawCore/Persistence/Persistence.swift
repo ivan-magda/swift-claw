@@ -122,11 +122,7 @@ public struct InboundMessage: Sendable, Equatable {
   public let chatId: Int64
   public let userId: Int64
   public let text: String
-  /// Carried through from the Telegram update; the gateway consumes it in a later increment.
   public let isEdited: Bool
-  /// Trust tier of `text`. Owner-typed text is `.trusted`; machine-derived text (a voice
-  /// transcript — attacker-influenceable and indistinguishable from forwarded audio) persists
-  /// `.untrusted`, which also marks the session tainted in the same fused write.
   public let provenance: Provenance
   public let ts: Date
 
