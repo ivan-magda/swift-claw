@@ -221,15 +221,23 @@ with the speech stack; one line opts out:
 CLAW_VOICE_TRANSCRIPTION=false
 ```
 
-`CLAW_VOICE_LOCALE` picks the transcription language (BCP-47, default `en-US`; there is no
-audio-language auto-detection). The **first** voice message in a locale downloads its speech model
-(one-time, needs network, no UI); transcription itself runs offline. File-based transcription
-needs no TCC grant, entitlement, or app bundle.
+`CLAW_VOICE_LOCALES` picks the transcription languages — a comma-separated BCP-47 list in
+priority order (default `en-US`). There is no audio-language auto-detection anywhere in Apple's
+stack, so every configured locale transcribes the note and the most confident transcript wins; a
+locale without a `SpeechTranscriber` model (e.g. `ru-RU`) runs on the older system-dictation
+`DictationTranscriber` model instead. A bilingual host sets one line:
 
-On Linux, macOS 15, or hardware the speech stack rejects, the flag is inert and voice messages get
-the canned "I can't read voice messages yet." reply — same behavior as before the feature. (The
-research roadmap's `DictationTranscriber` fallback tier for `SpeechTranscriber`-ineligible hardware
-is deliberately not implemented yet; such hosts get the canned reply.)
+```bash
+CLAW_VOICE_LOCALES=ru-RU,en-US
+```
+
+Audio matching none of the configured languages gets a canned "couldn't make out that voice
+message" reply instead of a garbage transcript. The **first** voice message in a locale downloads
+its speech model (one-time, needs network, no UI); transcription itself runs offline. File-based
+transcription needs no TCC grant, entitlement, or app bundle.
+
+On Linux or macOS 15 the flag is inert and voice messages get the canned "I can't read voice
+messages yet." reply — same behavior as before the feature.
 
 The suite's engine test is opt-in (first model download needs network):
 

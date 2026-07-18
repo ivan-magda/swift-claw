@@ -2,14 +2,15 @@ import Foundation
 
 public struct VoiceConfig: Sendable, Equatable {
   public let enabled: Bool
-  /// BCP-47 identifier the transcriber resolves against the installed speech stack at runtime
-  /// (`en-US` default). Resolution failure is a per-message typed error, not a boot failure —
-  /// which locales exist is a property of the host's speech assets, not of the config.
-  public let localeIdentifier: String
+  /// Ordered BCP-47 identifiers the transcriber tries against the installed speech stack at
+  /// runtime, first entry preferred (`en-US` default). Resolution failure is a per-message typed
+  /// error, not a boot failure — which locales exist is a property of the host's speech assets,
+  /// not of the config.
+  public let localeIdentifiers: [String]
 
-  public init(enabled: Bool, localeIdentifier: String) {
+  public init(enabled: Bool, localeIdentifiers: [String]) {
     self.enabled = enabled
-    self.localeIdentifier = localeIdentifier
+    self.localeIdentifiers = localeIdentifiers
   }
 }
 
@@ -23,9 +24,15 @@ extension AppConfig {
       default: true
     )
 
-    let rawLocale = env[EnvKey.voiceLocale]?.trimmingCharacters(in: .whitespaces) ?? ""
-    let localeIdentifier = rawLocale.isEmpty ? EnvDefaults.voiceLocale : rawLocale
+    var seen = Set<String>()
+    let localeIdentifiers = (env[EnvKey.voiceLocales] ?? "")
+      .split(separator: ",")
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty && seen.insert($0).inserted }
 
-    return VoiceConfig(enabled: enabled, localeIdentifier: localeIdentifier)
+    return VoiceConfig(
+      enabled: enabled,
+      localeIdentifiers: localeIdentifiers.isEmpty ? [EnvDefaults.voiceLocale] : localeIdentifiers
+    )
   }
 }

@@ -78,13 +78,44 @@ import Testing
       let fixture = try #require(
         Bundle.module.url(forResource: "voice-note", withExtension: "oga", subdirectory: "Fixtures")
       )
-      let transcriber = AppleSpeechTranscriber(localeIdentifier: "en-US")
+      let transcriber = AppleSpeechTranscriber(localeIdentifiers: ["en-US"])
 
       // when
       let transcript = try await transcriber.transcribe(audioFileAt: fixture)
 
       // then — the fixture's known ground truth, tolerant of inverse-text-normalization drift
       #expect(transcript.lowercased().contains("quick brown fox"))
+    }
+
+    /// Both fixtures run with the WRONG language configured first, so passing requires the full
+    /// race: the mismatched lane must score below early-accept and the matching lane must win.
+    /// The Russian lane also exercises the `DictationTranscriber` fallback — `ru-RU` has no
+    /// `SpeechTranscriber` model.
+    @available(macOS 26.0, *)
+    @Test(arguments: [
+      (fixture: "voice-note", expected: "quick brown fox", locales: ["ru-RU", "en-US"]),
+      (fixture: "voice-note-ru", expected: "французских", locales: ["en-US", "ru-RU"]),
+      // Language-only tags are valid BCP-47 and must resolve to each engine's regional model.
+      (fixture: "voice-note-ru", expected: "французских", locales: ["en", "ru"]),
+    ])
+    func multiLocaleRacePicksTheLaneMatchingTheAudio(
+      _ testCase: (fixture: String, expected: String, locales: [String])
+    ) async throws {
+      // given
+      let fixture = try #require(
+        Bundle.module.url(
+          forResource: testCase.fixture,
+          withExtension: "oga",
+          subdirectory: "Fixtures"
+        )
+      )
+      let transcriber = AppleSpeechTranscriber(localeIdentifiers: testCase.locales)
+
+      // when
+      let transcript = try await transcriber.transcribe(audioFileAt: fixture)
+
+      // then
+      #expect(transcript.lowercased().contains(testCase.expected))
     }
   }
 #endif

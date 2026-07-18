@@ -179,6 +179,22 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(result == .failure(.emptyTranscript))
   }
 
+  @Test func lowConfidenceFromTheEngineBecomesItsOwnFailure() async throws {
+    // given — every configured locale scored below the arbiter floor
+    let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
+    defer { try? FileManager.default.removeItem(at: staging) }
+    let service = makeService(
+      transcriber: StubVoiceTranscriber(result: .failure(.lowConfidence)),
+      stagingDirectory: staging
+    )
+
+    // when
+    let result = await service.transcribe(attachment)
+
+    // then — distinct from .transcriptionFailed: the owner should adjust languages, not retry
+    #expect(result == .failure(.lowConfidence))
+  }
+
   @Test func declaredFileSizeOverTheCapIsRefusedWithoutFetching() async throws {
     // given — Telegram declares a size beyond what we would download
     let oversized = VoiceAttachment(

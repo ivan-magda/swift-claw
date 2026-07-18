@@ -925,21 +925,45 @@ import Testing
 
     // then
     #expect(config.voice.enabled)
-    #expect(config.voice.localeIdentifier == AppConfig.EnvDefaults.voiceLocale)
+    #expect(config.voice.localeIdentifiers == [AppConfig.EnvDefaults.voiceLocale])
   }
 
   @Test func voiceTranscriptionParsesExplicitOptOutAndLocale() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.voiceTranscription] = "false"
-    env[EnvKey.voiceLocale] = "de-DE"
+    env[EnvKey.voiceLocales] = "de-DE"
 
     // when
     let config = try AppConfig.load(environment: env)
 
     // then
     #expect(config.voice.enabled == false)
-    #expect(config.voice.localeIdentifier == "de-DE")
+    #expect(config.voice.localeIdentifiers == ["de-DE"])
+  }
+
+  @Test func voiceLocalesParseAsAnOrderedDedupedList() throws {
+    // given — messy but salvageable input: padding, empty segments, a repeated entry
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.voiceLocales] = " ru-RU , en-US,ru-RU ,, "
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — order is priority order; duplicates collapse to their first position
+    #expect(config.voice.localeIdentifiers == ["ru-RU", "en-US"])
+  }
+
+  @Test func voiceLocalesWithOnlySeparatorsFallBackToTheDefault() throws {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.voiceLocales] = " , "
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.voice.localeIdentifiers == [AppConfig.EnvDefaults.voiceLocale])
   }
 
   @Test func malformedVoiceBooleanFailsClosed() {

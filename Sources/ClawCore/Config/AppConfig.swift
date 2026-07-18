@@ -40,7 +40,7 @@ public struct AppConfig: Sendable, Equatable {
     public static let webFetchExemptCIDRs = "CLAW_WEBFETCH_EXEMPT_CIDRS"
 
     static let voiceTranscription = "CLAW_VOICE_TRANSCRIPTION"
-    static let voiceLocale = "CLAW_VOICE_LOCALE"
+    static let voiceLocales = "CLAW_VOICE_LOCALES"
 
     static let execEnabled = "CLAW_EXEC_ENABLED"
     static let execImage = "CLAW_EXEC_IMAGE"

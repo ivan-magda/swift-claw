@@ -63,7 +63,7 @@ extension DaemonBuilder {
     }
     guard
       let transcriber = SystemVoiceTranscriber.make(
-        localeIdentifier: config.voice.localeIdentifier,
+        localeIdentifiers: config.voice.localeIdentifiers,
         maxAudioDurationSeconds: VoiceMessageService.defaultMaxDurationSeconds
       )
     else {

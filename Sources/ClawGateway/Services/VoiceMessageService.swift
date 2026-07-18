@@ -24,6 +24,7 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
     case transcriptionFailed
     case timedOut
     case emptyTranscript
+    case lowConfidence
     /// Disk full while staging — routed to the router's storage-full contract (poller backs off,
     /// cursor does NOT advance), never to a generic "try again".
     case storageFull
@@ -44,6 +45,8 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
         return "Transcribing that voice message took too long, so I gave up."
       case .emptyTranscript:
         return "I couldn't hear any speech in that voice message."
+      case .lowConfidence:
+        return "I couldn't make out that voice message in any of my configured languages."
       case .storageFull:
         return Degradation.storageFull
       }
@@ -225,6 +228,8 @@ private extension VoiceMessageService {
       return .tooLong
     case .transcriptionFailed, .cancelled:
       return .transcriptionFailed
+    case .lowConfidence:
+      return .lowConfidence
     }
   }
 }

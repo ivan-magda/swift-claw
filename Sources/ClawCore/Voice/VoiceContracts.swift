@@ -17,6 +17,9 @@ public enum VoiceTranscriptionError: Error, Sendable, Equatable {
   case audioTooLong(seconds: Int)
   /// The engine accepted the audio but failed while producing the transcript.
   case transcriptionFailed(String)
+  /// Every configured locale produced only low-confidence output — the audio most likely is not
+  /// in any configured language, so no transcript is trustworthy enough to forward.
+  case lowConfidence
   /// The surrounding task was cancelled (deadline expiry or shutdown), not an engine fault.
   case cancelled
 }
