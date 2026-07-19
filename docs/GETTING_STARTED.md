@@ -28,14 +28,17 @@ the identity of your bot, so treat it like a password.
 
 ## 2. Configure
 
+Your shell executes this file with `source`, so use the copy that ships with the release
+you verified rather than fetching one over the network:
+
 ```bash
 mkdir -p -m 700 ~/.swift-claw
-curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/.env.example \
-  -o ~/.swift-claw/clawd.env
-chmod 600 ~/.swift-claw/clawd.env
+install -m 600 clawd.env.example ~/.swift-claw/clawd.env    # from your download directory
 ```
 
-(Working from a source checkout? `cp .env.example ~/.swift-claw/clawd.env` does the same.)
+`clawd.env.example` is a release asset covered by `SHA256SUMS`, so the checksum step from
+[Install](../README.md#install) already verified it. From a source checkout, use
+`install -m 600 .env.example ~/.swift-claw/clawd.env` instead.
 
 Edit `~/.swift-claw/clawd.env` and set four values:
 
@@ -152,15 +155,18 @@ locales, and the code sandbox.
 
 To restart `clawd` after a crash and start it on login, install it under launchd (macOS)
 or systemd (Linux). [deploy/README.md](../deploy/README.md) has the unit files and the
-three commands per platform. Those files live in the repository, not in the release, so
-fetch them if you installed a release binary:
+three commands per platform.
+
+If you installed a release binary, download the unit files from that same release:
+`run-clawd.sh`, plus `swift-claw.service` (Linux) or `com.ivanmagda.swift-claw.plist`
+(macOS). They are covered by `SHA256SUMS`, so verify them before use. `run-clawd.sh` gets
+installed as root and executed at every login, which is reason enough not to take it from
+an unverified source:
 
 ```bash
-mkdir -p deploy
-base=https://raw.githubusercontent.com/ivan-magda/swift-claw/main/deploy
-curl -fsSL "$base/run-clawd.sh" -o deploy/run-clawd.sh
-curl -fsSL "$base/swift-claw.service" -o deploy/swift-claw.service                            # Linux
-curl -fsSL "$base/com.ivanmagda.swift-claw.plist" -o deploy/com.ivanmagda.swift-claw.plist    # macOS
+cd ~/Downloads
+shasum -a 256 --ignore-missing -c SHA256SUMS    # Linux: sha256sum --ignore-missing -c SHA256SUMS
+mkdir -p deploy && mv run-clawd.sh swift-claw.service com.ivanmagda.swift-claw.plist deploy/ 2>/dev/null
 ```
 
 The deployment guide's commands read from `deploy/`, so run them from the directory that
@@ -180,10 +186,13 @@ you log out. For a machine you administer and want always-on:
 
 ## 8. ChatGPT subscription instead of an API key
 
-This route replaces `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY`. **Stop `clawd` first**
-(Ctrl-C, or `launchctl unload` / `systemctl --user stop`): logging in takes the same
-state-root lock the daemon holds, and while the daemon runs, `clawd auth login` exits with
-"clawd is running for this state root."
+This route replaces `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY`. **Stop `clawd` first**:
+logging in takes the same state-root lock the daemon holds, and while the daemon runs,
+`clawd auth login` exits with "clawd is running for this state root."
+
+- Foreground: Ctrl-C.
+- macOS: `launchctl unload ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist`
+- Linux: `systemctl --user stop swift-claw.service`
 
 ```bash
 clawd auth login
@@ -192,7 +201,17 @@ clawd auth login
 This completes a device-code login, discovers eligible models, and prints the exact
 `CLAW_LLM_MODEL=openai-chatgpt/<model>` value to paste into `clawd.env`. On that route
 `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY` are unused; the credential lives encrypted in
-the state root. Start the daemon again once the value is in place.
+the state root.
+
+If the model list cannot be read, login still succeeds and stores the credential, but it
+prints the assignment as a form with `<model>` left as a literal placeholder. Paste that
+verbatim and config validation rejects it. Substitute a real model slug, for example
+`CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4`, or run `clawd auth login` again once the network
+settles.
+
+Start the daemon again once the value is in place: `clawd run`, or
+`launchctl load ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist` /
+`systemctl --user start swift-claw.service`.
 
 This route is unofficial and vendor-dependent; details and caveats in
 [LOCAL_DEV.md](LOCAL_DEV.md#chatgpt-subscription-auth).
@@ -204,6 +223,9 @@ This route is unofficial and vendor-dependent; details and caveats in
 - **The bot ignores you:** confirm your numeric ID is in `CLAW_ALLOWLIST` and that you
   restarted after changing it; the daemon seeds the allowlist at boot.
 - **You cannot find your Telegram ID:** send `/start`, not an ordinary message.
+- **Someone you removed can still talk to the bot:** `CLAW_ALLOWLIST` seeds the database
+  and never deletes from it. Revoking takes a row deletion; see
+  [CUSTOMIZATION.md](CUSTOMIZATION.md#everything-else).
 - **A second daemon won't start:** by design. One `clawd` per state root, enforced with
   a file lock. `clawd auth login` and `clawd secrets seal` take the same lock.
 - **Telegram reports a 409 conflict:** another process is long-polling the same bot

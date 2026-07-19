@@ -35,9 +35,9 @@ encrypted secret envelopes, and Markdown files you can edit by hand.
 Releases carry two binaries: `clawd-macos-arm64` (Apple Silicon) and `clawd-linux-x86_64`.
 On any other architecture, build from source below.
 
-Download **the binary for your platform and `SHA256SUMS`** from the
-[latest release](../../releases/latest), then verify and install from your download
-directory:
+From the [latest release](../../releases/latest), download **the binary for your platform,
+`SHA256SUMS`, and `clawd.env.example`** (the config template, used in the quick start).
+Then verify and install from your download directory:
 
 ```bash
 cd ~/Downloads
@@ -47,8 +47,8 @@ shasum -a 256 --ignore-missing -c SHA256SUMS            # Linux: sha256sum --ign
 sudo install -m755 "$ASSET" /usr/local/bin/clawd
 ```
 
-`--ignore-missing` checks only the files you actually downloaded. Expect one `OK` line and
-exit status 0; anything else means stop.
+`--ignore-missing` checks only the files you actually downloaded. Every one of them must
+print `OK` and the command must exit 0; anything else means stop.
 
 Every binary also carries a build provenance attestation. If you have the
 [GitHub CLI](https://cli.github.com) installed and logged in (`gh auth login`), verify it:
@@ -72,17 +72,24 @@ swift build -c release
 sudo install -m755 .build/release/clawd /usr/local/bin/clawd
 ```
 
+From a source checkout the config template is `.env.example` in the repository root, and
+the service files are under `deploy/`.
+
 ## Quick start
 
 Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and copy its token. Then:
 
+Download `clawd.env.example` from the same release as your binary, verify it against
+`SHA256SUMS` alongside the binary, and use it as your config:
+
 ```bash
-# 1. Fetch the config template.
+# 1. Install the verified template.
 mkdir -p -m 700 ~/.swift-claw
-curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/.env.example \
-  -o ~/.swift-claw/clawd.env
-chmod 600 ~/.swift-claw/clawd.env
+install -m 600 clawd.env.example ~/.swift-claw/clawd.env
 ```
+
+Your shell runs this file with `source`, so take it from the checksummed release rather
+than an unverified copy.
 
 **Now edit `~/.swift-claw/clawd.env`** and set the BotFather token plus your provider's
 `CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, and `CLAW_LLM_API_KEY`. The template ships with
@@ -123,6 +130,8 @@ swift-claw assumes the person who runs it is the only person it serves.
 
 - **Default-deny.** Only allowlisted Telegram IDs get a conversation. Everyone else is
   refused, and `/start` returns the sender's own numeric ID so you can allowlist them.
+  `CLAW_ALLOWLIST` only ever adds: revoking an ID means deleting its row from the database
+  ([details](docs/CUSTOMIZATION.md#everything-else)).
 - **Secrets encrypted at rest.** `clawd secrets seal` wraps the bot token and API keys in
   an AES-GCM envelope. Plaintext env secrets remain available as a dev fallback that
   warns on every boot.

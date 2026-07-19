@@ -88,9 +88,16 @@ All optional; unset means the built-in defaults.
 | Variable | Controls |
 |---|---|
 | `CLAW_PER_RUN_USD` | Cap per single run |
-| `CLAW_PER_DAY_USD` | Daily kill-switch across everything |
+| `CLAW_PER_DAY_USD` | Daily spend kill-switch |
 | `CLAW_PROACTIVE_PER_DAY_USD` | Nested daily cap for scheduled + heartbeat runs (default 2.00) |
 | `CLAW_MAX_TURNS` / `CLAW_MAX_TOOL_CALLS` | Bounds on the agentic loop per run |
+
+**On the ChatGPT subscription route these dollar caps do not gate.** A plan-included call
+has no metered cost to compare against, so `CLAW_PER_RUN_USD` and
+`CLAW_PROACTIVE_PER_DAY_USD` are inert there and usage records at zero USD.
+`CLAW_PER_DAY_USD` still binds indirectly, because the daily token ceiling derives from it;
+set `CLAW_DAY_TOKEN_CEILING` to control that directly. Token, turn, tool-call, and
+wall-clock bounds apply the same on both routes.
 
 ## Proactive behavior
 
@@ -120,7 +127,11 @@ workload image, and the network opt-in (`CLAW_EXEC_ALLOW_EGRESS`) are documented
 
 ## Everything else
 
-- `CLAW_ALLOWLIST`: who may talk to the bot (comma-separated numeric Telegram IDs).
+- `CLAW_ALLOWLIST`: numeric Telegram IDs, comma-separated, seeded into the allowlist at
+  every daemon start. **Seeding only adds.** The `allowlist` table in `claw.sqlite` is what
+  the daemon actually enforces, so removing an ID here does not revoke it. To revoke
+  access, stop the daemon, drop the ID from `CLAW_ALLOWLIST`, and delete the row:
+  `sqlite3 ~/.swift-claw/claw.sqlite "DELETE FROM allowlist WHERE user_id = <id>;"`
 - `CLAW_APPROVAL_EXPIRY`: seconds before a pending approval auto-denies (default 3600).
 - `CLAW_SEARCH_API_KEY`: Exa key; unset means the `web_search` tool is absent.
 - `CLAW_WEBFETCH_EXEMPT_CIDRS`: SSRF-blocklist exemptions for fake-IP VPN pools.

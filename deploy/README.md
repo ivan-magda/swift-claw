@@ -2,7 +2,7 @@
 
 ## Install
 
-**Option A — release binary (recommended):** download `clawd-<platform>` + `SHA256SUMS` from the [latest release](../../../releases/latest), verify with `sha256sum -c SHA256SUMS` (Linux) or `shasum -a 256 -c SHA256SUMS` (macOS) and `gh attestation verify <binary> -R ivan-magda/swift-claw`, then `sudo install -m755 clawd-<platform> /usr/local/bin/clawd`. `-c` checks every entry in `SHA256SUMS`; a `FAILED open or read` line for the platform binary you didn't download is expected. On macOS clear quarantine: `sudo xattr -d com.apple.quarantine /usr/local/bin/clawd`. On Linux ensure `libsqlite3-0` is installed.
+**Option A — release binary (recommended):** download `clawd-<platform>` + `SHA256SUMS` from the [latest release](../../../releases/latest), verify with `sha256sum --ignore-missing -c SHA256SUMS` (Linux) or `shasum -a 256 --ignore-missing -c SHA256SUMS` (macOS), then `sudo install -m755 clawd-<platform> /usr/local/bin/clawd`. `--ignore-missing` checks only what you downloaded: every listed file must print `OK` and the command must exit 0. The release also carries `clawd.env.example` and the unit files below, all covered by the same manifest. Optionally check build provenance with `gh attestation verify <binary> -R ivan-magda/swift-claw` (needs the GitHub CLI, logged in). On macOS clear quarantine: `sudo xattr -d com.apple.quarantine /usr/local/bin/clawd`. On Linux ensure `libsqlite3-0` is installed.
 
 **Option B — build from source:**
 

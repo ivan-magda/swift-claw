@@ -94,10 +94,17 @@ jobs:
           path: dist
       - name: Assemble SHA256SUMS
         run: |
-          cp .env.example dist/.env.example
+          # Setup files ship with the release so users verify them against SHA256SUMS
+          # instead of fetching mutable copies from main. The leading dot is dropped
+          # because a release asset name must survive GitHub's sanitization unchanged,
+          # or the download stops matching its manifest entry.
+          cp .env.example dist/clawd.env.example
+          cp deploy/run-clawd.sh deploy/swift-claw.service \
+             deploy/com.ivanmagda.swift-claw.plist dist/
           cd dist
           cat linux/clawd-linux-x86_64.sha256 macos/clawd-macos-arm64.sha256 > SHA256SUMS
-          sha256sum .env.example >> SHA256SUMS
+          sha256sum clawd.env.example run-clawd.sh swift-claw.service \
+                    com.ivanmagda.swift-claw.plist >> SHA256SUMS
           cat SHA256SUMS
       - name: Publish GitHub Release
         env:
@@ -109,4 +116,7 @@ jobs:
             dist/linux/clawd-linux-x86_64 \
             dist/macos/clawd-macos-arm64 \
             dist/SHA256SUMS \
-            dist/.env.example
+            dist/clawd.env.example \
+            dist/run-clawd.sh \
+            dist/swift-claw.service \
+            dist/com.ivanmagda.swift-claw.plist
