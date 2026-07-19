@@ -165,8 +165,10 @@ an unverified source:
 
 ```bash
 cd ~/Downloads
-shasum -a 256 --ignore-missing -c SHA256SUMS    # Linux: sha256sum --ignore-missing -c SHA256SUMS
-mkdir -p deploy && mv run-clawd.sh swift-claw.service com.ivanmagda.swift-claw.plist deploy/ 2>/dev/null
+UNIT=com.ivanmagda.swift-claw.plist    # Linux: swift-claw.service
+
+shasum -a 256 --ignore-missing -c SHA256SUMS &&    # Linux: sha256sum --ignore-missing -c SHA256SUMS
+  mkdir -p deploy && mv run-clawd.sh "$UNIT" deploy/
 ```
 
 The deployment guide's commands read from `deploy/`, so run them from the directory that
@@ -209,9 +211,14 @@ verbatim and config validation rejects it. Substitute a real model slug, for exa
 `CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4`, or run `clawd auth login` again once the network
 settles.
 
-Start the daemon again once the value is in place: `clawd run`, or
-`launchctl load ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist` /
-`systemctl --user start swift-claw.service`.
+Paste the value into `clawd.env`, then:
+
+- **Setting up for the first time?** Go back to [step 3](#3-seal-your-secrets) and continue
+  through the guide. Do not start the daemon yet; the remaining steps need the state root
+  to themselves.
+- **Already had clawd running?** Start it again: `clawd run`, or
+  `launchctl load ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist` /
+  `systemctl --user start swift-claw.service`.
 
 This route is unofficial and vendor-dependent; details and caveats in
 [LOCAL_DEV.md](LOCAL_DEV.md#chatgpt-subscription-auth).

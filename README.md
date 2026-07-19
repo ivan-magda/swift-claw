@@ -43,12 +43,12 @@ Then verify and install from your download directory:
 cd ~/Downloads
 ASSET=clawd-macos-arm64                                 # Linux: clawd-linux-x86_64
 
-shasum -a 256 --ignore-missing -c SHA256SUMS            # Linux: sha256sum --ignore-missing -c SHA256SUMS
-sudo install -m755 "$ASSET" /usr/local/bin/clawd
+shasum -a 256 --ignore-missing -c SHA256SUMS &&        # Linux: sha256sum --ignore-missing -c SHA256SUMS
+  sudo install -m755 "$ASSET" /usr/local/bin/clawd
 ```
 
-`--ignore-missing` checks only the files you actually downloaded. Every one of them must
-print `OK` and the command must exit 0; anything else means stop.
+`--ignore-missing` checks only the files you actually downloaded. The `&&` matters: it
+stops the install if verification fails. Every downloaded file must print `OK`.
 
 Every binary also carries a build provenance attestation. If you have the
 [GitHub CLI](https://cli.github.com) installed and logged in (`gh auth login`), verify it:

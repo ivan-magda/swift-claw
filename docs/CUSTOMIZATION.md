@@ -130,8 +130,9 @@ workload image, and the network opt-in (`CLAW_EXEC_ALLOW_EGRESS`) are documented
 - `CLAW_ALLOWLIST`: numeric Telegram IDs, comma-separated, seeded into the allowlist at
   every daemon start. **Seeding only adds.** The `allowlist` table in `claw.sqlite` is what
   the daemon actually enforces, so removing an ID here does not revoke it. To revoke
-  access, stop the daemon, drop the ID from `CLAW_ALLOWLIST`, and delete the row:
-  `sqlite3 ~/.swift-claw/claw.sqlite "DELETE FROM allowlist WHERE user_id = <id>;"`
+  access, stop the daemon, drop the ID from `CLAW_ALLOWLIST`, and delete the row from the
+  database in your state root:
+  `sqlite3 "${CLAW_STATE_ROOT:-$HOME/.swift-claw}/claw.sqlite" "DELETE FROM allowlist WHERE user_id = <id>;"`
 - `CLAW_APPROVAL_EXPIRY`: seconds before a pending approval auto-denies (default 3600).
 - `CLAW_SEARCH_API_KEY`: Exa key; unset means the `web_search` tool is absent.
 - `CLAW_WEBFETCH_EXEMPT_CIDRS`: SSRF-blocklist exemptions for fake-IP VPN pools.

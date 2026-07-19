@@ -16,7 +16,14 @@ For vulnerabilities, never open a public issue. Follow [SECURITY.md](SECURITY.md
 
 ## Development setup
 
-You need a Swift 6.3 toolchain.
+You need a Swift 6.3 toolchain and SwiftLint (the lint gate exits 1 without it):
+
+```bash
+brew install swiftlint                          # macOS
+sudo apt-get install -y libsqlite3-dev          # Linux, for the SQLite headers GRDB links
+```
+
+Then:
 
 ```bash
 swift build            # build
