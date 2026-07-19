@@ -6,22 +6,22 @@
 
 **Option B — build from source:**
 
-1. `swift build -c release` → copy `.build/release/clawd` to `/usr/local/bin/clawd`.
+1. `swift build -c release` → `sudo install -m755 .build/release/clawd /usr/local/bin/clawd`.
 2. `cp .env.example ~/.swift-claw/clawd.env`, fill in the token + allowlist, `chmod 600 ~/.swift-claw/clawd.env`.
 3. Verify: `clawd doctor` (config first, then DB/allowlist/connectivity).
 
 ## macOS (launchd)
 
-- `cp deploy/run-clawd.sh /usr/local/bin/ && chmod +x /usr/local/bin/run-clawd.sh`
-- `cp deploy/com.ivanmagda.swift-claw.plist ~/Library/LaunchAgents/`
+- `sudo install -m755 deploy/run-clawd.sh /usr/local/bin/run-clawd.sh`
+- `mkdir -p ~/Library/LaunchAgents && cp deploy/com.ivanmagda.swift-claw.plist ~/Library/LaunchAgents/`
 - `launchctl load ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist`
 
 ## Linux (systemd, user service)
 
-- `cp deploy/swift-claw.service ~/.config/systemd/user/`
+- `mkdir -p ~/.config/systemd/user && cp deploy/swift-claw.service ~/.config/systemd/user/`
 - `systemctl --user enable --now swift-claw.service`
 - `journalctl --user -u swift-claw -f`
 
-Both units are per-user: they start at login, not at boot, and stop at logout. To survive a reboot without a login, enable automatic login (or convert the macOS plist into a `/Library/LaunchDaemons` system service), and on Linux run `sudo loginctl enable-linger $USER`.
+Both units are per-user: they start at login, not at boot, and stop at logout. On Linux, `sudo loginctl enable-linger $USER` keeps the service alive across logout and starts it at boot. On macOS, enable automatic login for the account. A `/Library/LaunchDaemons` service instead runs as root, where `$HOME` is `/var/root` and `run-clawd.sh` cannot find `~/.swift-claw/clawd.env`, so `clawd` exits 10 — set `UserName`, `CLAW_ENV_FILE`, and `CLAW_STATE_ROOT` in the plist if you take that path.
 
 A second `clawd` against the same state root refuses to boot (flock); a Telegram 409 is logged as critical. Distinct exit codes: 10 config, 11 secret, 12 already-running, 13 store.

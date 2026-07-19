@@ -204,8 +204,9 @@ call through the trifecta approval.
 
 **If the tool never appears** (calls are refused as unknown), `clawd doctor` explains why. It is
 absent — by design, fail-closed — on Linux, macOS 15, Intel macOS, with `CLAW_EXEC_ENABLED=false`,
-with an unpinned `CLAW_EXEC_IMAGE` override, when the `container` CLI is missing or below `1.0.0`, or
-when any hardening canary assertion failed. An owner-enabled sandbox that fails a gate prints a loud
+when the `container` CLI is missing or below `1.0.0`, or when any hardening canary assertion failed.
+An unpinned `CLAW_EXEC_IMAGE` override is stricter still: config validation rejects it and the
+process exits 10, so no daemon runs at all. An owner-enabled sandbox that fails a gate prints a loud
 error row rather than silently degrading.
 
 ---

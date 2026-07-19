@@ -94,8 +94,10 @@ jobs:
           path: dist
       - name: Assemble SHA256SUMS
         run: |
+          cp .env.example dist/.env.example
           cd dist
           cat linux/clawd-linux-x86_64.sha256 macos/clawd-macos-arm64.sha256 > SHA256SUMS
+          sha256sum .env.example >> SHA256SUMS
           cat SHA256SUMS
       - name: Publish GitHub Release
         env:
@@ -107,4 +109,4 @@ jobs:
             dist/linux/clawd-linux-x86_64 \
             dist/macos/clawd-macos-arm64 \
             dist/SHA256SUMS \
-            .env.example
+            dist/.env.example

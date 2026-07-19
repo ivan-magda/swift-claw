@@ -21,17 +21,19 @@ skipped.
 
 The trust tier decides how much authority the text carries:
 
-- **`SOUL.md`, `AGENTS.md`, and `TOOLS.md` join the system prompt.** They are yours to
-  write and the model treats them as trusted instruction. Editing one changes the policy
-  fingerprint, which is why a `file_write` to any of them is flagged as privileged and why
-  pending approvals do not survive the change. Nothing you put in them can loosen the
-  security policy, which lives in code rather than in the prompt.
+- **`SOUL.md`, `AGENTS.md`, and `TOOLS.md` join the system prompt.** You write them, and
+  the model treats them as trusted instruction. They also feed the policy fingerprint, so
+  editing one invalidates any approval still waiting on the old prompt. Nothing you put in
+  them can loosen the security policy, which lives in code rather than in the prompt.
 - **`USER.md` and `MEMORY.md` enter inside an untrusted, labeled wrapper**, below the
-  system prompt, so text that arrived there through poisoned memory cannot claim system
-  authority. Both count as private data for the exfiltration gate described below.
+  system prompt, so text that reached them through poisoned memory cannot claim system
+  authority. Both count as private data for the exfiltration gate below.
 
-Dated daily logs (`memory/YYYY-MM-DD.md`) are written and read on request; the context
-builder does not inject them automatically the way it does the files above.
+When the agent writes to `SOUL.md`, `AGENTS.md`, `USER.md`, or `MEMORY.md`, the approval
+card carries a privileged-file banner. `TOOLS.md` does not get one.
+
+The agent writes and reads dated daily logs (`memory/YYYY-MM-DD.md`) when a turn calls for
+one; the context builder never injects them the way it injects the files above.
 
 Durable facts also live in the database: confirm something in chat ("remember that ...")
 and it persists in SQLite with full-text recall across restarts. `/memory` shows what is
@@ -39,18 +41,30 @@ stored.
 
 ## When the agent asks permission
 
-Two separate mechanisms decide this, and it is worth knowing which one is speaking.
+Two mechanisms produce an approval card. They answer different questions.
 
-**By tool.** File writes and code execution always suspend the run and wait for you,
-whatever else happened in the session.
+**The tool's own risk tier.** File writes, memory writes, and code execution park the run
+every time, whatever else the session did.
 
-**By exfiltration risk.** Fetching an arbitrary URL waits for you once the session has
-done *both* of these: ingested untrusted content (a web page, tool output, stored memory)
-and read a private-data file (`USER.md`, `MEMORY.md`). One leg alone does not trigger it,
-so the first `web_fetch` of a clean session runs unprompted. Traffic to pinned endpoints,
-your LLM provider and the search backend, never parks for approval; those are protected
-by endpoint pinning plus an argument scan that blocks private-file content and
-secret-shaped tokens.
+**Exfiltration risk.** clawd holds a fetch to an arbitrary URL for your approval once the
+session has done *both* of these:
+
+- **Ingested untrusted content.** A web page, a file read, tool output, or a voice
+  transcript. Durable memory does not count: it is labeled untrusted but does not taint
+  the session on its own.
+- **Touched private data.** Assembling `USER.md`, `MEMORY.md`, or stored memory items into
+  the context is enough; no tool has to read them. Once you have filled in `USER.md`, this
+  leg is armed on essentially every turn, and it sticks for the session.
+
+One leg alone does not trigger the gate, so the first `web_fetch` of a clean session runs
+unprompted. `/new` clears both legs.
+
+Your LLM provider and the search backend are pinned endpoints and never park for approval.
+clawd defends them by pinning the destination rather than by asking: it cannot be aimed at
+an attacker's URL. It also scans outbound *tool* arguments for secret-shaped values, and,
+under the trifecta, for substrings of your private files. The prompt sent to your LLM
+carries `USER.md` and `MEMORY.md` verbatim by design, so treat your model provider as a
+party you trust with that content.
 
 ## Model routing
 

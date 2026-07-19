@@ -21,9 +21,9 @@ encrypted secret envelopes, and Markdown files you can edit by hand.
   workspace Markdown files that hold your profile, notes, and daily logs.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
-- **Tools behind a policy engine.** Web search and fetch sit behind an SSRF gate; writes
-  and code execution wait for an explicit tap-to-approve in Telegram. Policy lives in
-  code, and inbound content is treated as data, never as instructions.
+- **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
+  execution wait for an explicit tap-to-approve in Telegram. Policy lives in code, and
+  inbound content is treated as data, never as instructions.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
@@ -32,22 +32,35 @@ encrypted secret envelopes, and Markdown files you can edit by hand.
 
 ## Install
 
+Releases carry two binaries: `clawd-macos-arm64` (Apple Silicon) and `clawd-linux-x86_64`.
+On any other architecture, build from source below.
+
 Download **the binary for your platform and `SHA256SUMS`** from the
-[latest release](../../releases/latest), then verify and install:
+[latest release](../../releases/latest), then verify and install from your download
+directory:
 
 ```bash
-ASSET=clawd-macos-arm64                # Linux: clawd-linux-x86_64
+cd ~/Downloads
+ASSET=clawd-macos-arm64                                 # Linux: clawd-linux-x86_64
 
-shasum -a 256 -c SHA256SUMS            # Linux: sha256sum -c SHA256SUMS
-gh attestation verify "$ASSET" -R ivan-magda/swift-claw
+shasum -a 256 --ignore-missing -c SHA256SUMS            # Linux: sha256sum --ignore-missing -c SHA256SUMS
 sudo install -m755 "$ASSET" /usr/local/bin/clawd
 ```
 
-`-c` checks every entry in `SHA256SUMS`; a `FAILED open or read` line for the binary you
-didn't download is expected.
+`--ignore-missing` checks only the files you actually downloaded. Expect one `OK` line and
+exit status 0; anything else means stop.
+
+Every binary also carries a build provenance attestation. If you have the
+[GitHub CLI](https://cli.github.com) installed and logged in (`gh auth login`), verify it:
+
+```bash
+gh attestation verify "$ASSET" -R ivan-magda/swift-claw
+```
 
 - **macOS:** Gatekeeper blocks the unsigned binary on first run. Clear it:
   `sudo xattr -d com.apple.quarantine /usr/local/bin/clawd`.
+  On a Mac without Homebrew, create the install directory first:
+  `sudo mkdir -p /usr/local/bin`.
 - **Linux:** the binary links the system SQLite: `sudo apt-get install -y libsqlite3-0`.
 
 Or build from source with a Swift 6.3 toolchain:
@@ -63,22 +76,27 @@ sudo install -m755 .build/release/clawd /usr/local/bin/clawd
 Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and copy its token. Then:
 
 ```bash
-# 1. Fetch the config template, then fill in the BotFather token,
-#    CLAW_LLM_BASE_URL, CLAW_LLM_MODEL, and CLAW_LLM_API_KEY.
-mkdir -p ~/.swift-claw
+# 1. Fetch the config template.
+mkdir -p -m 700 ~/.swift-claw
 curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/.env.example \
   -o ~/.swift-claw/clawd.env
 chmod 600 ~/.swift-claw/clawd.env
+```
 
-# 2. Load the config and encrypt your secrets at rest:
+**Now edit `~/.swift-claw/clawd.env`** and set the BotFather token plus your provider's
+`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, and `CLAW_LLM_API_KEY`. The template ships with
+placeholder values that will not work. Then:
+
+```bash
+# 2. Load the config and encrypt your secrets at rest.
 set -a && source ~/.swift-claw/clawd.env && set +a
 clawd secrets seal
 
-# 3. Sealing copies the secrets; it does not remove them. Delete the
-#    CLAW_TELEGRAM_BOT_TOKEN, CLAW_LLM_API_KEY, and CLAW_SEARCH_API_KEY
-#    lines from ~/.swift-claw/clawd.env now, then re-source it.
+# 3. Sealing copies the secrets out; it does not edit the file. Delete the
+#    CLAW_TELEGRAM_BOT_TOKEN, CLAW_LLM_API_KEY, and CLAW_SEARCH_API_KEY lines
+#    from ~/.swift-claw/clawd.env yourself, then open a fresh shell.
 
-# 4. Health check, then run:
+# 4. Health check, then run.
 clawd doctor
 clawd run
 ```
@@ -102,14 +120,14 @@ swift-claw assumes the person who runs it is the only person it serves.
 - **Secrets encrypted at rest.** `clawd secrets seal` wraps the bot token and API keys in
   an AES-GCM envelope. Plaintext env secrets remain available as a dev fallback that
   warns on every boot.
-- **Approvals you can trust.** File writes and code execution always suspend into a
-  durable state machine until you tap Approve in Telegram. A forged or third-party
-  callback cannot approve, and pending approvals expire to deny.
+- **Approvals you can trust.** File writes, memory writes, and code execution always
+  suspend into a durable state machine until you tap Approve in Telegram. A forged or
+  third-party callback cannot approve, and pending approvals expire to deny.
 - **Prompt injection contained.** Messages, web content, tool output, and stored memory
   enter the context as untrusted data. Once a session has both ingested untrusted content
-  and read your private files, fetching an arbitrary URL also needs your approval; traffic
-  to pinned endpoints such as your LLM and search providers is instead scanned for private
-  content and secret-shaped values.
+  and pulled your private files into context, fetching an arbitrary URL also needs your
+  approval. Your LLM and search providers are pinned destinations that clawd cannot be
+  redirected away from.
 
 The full model is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (§12). To report a
 vulnerability, see [SECURITY.md](SECURITY.md).
