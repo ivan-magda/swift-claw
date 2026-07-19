@@ -27,12 +27,22 @@ sudo apt-get install -y libsqlite3-dev          # SQLite headers GRDB links agai
 docker pull ghcr.io/realm/swiftlint:0.65.0      # the image CI lints with
 ```
 
-On Linux, run SwiftLint through that image (CI does the same), or put a `swiftlint`
-wrapper on your `PATH` so `scripts/lint.sh` finds it:
+On Linux, put a wrapper on your `PATH` so `scripts/lint.sh` finds SwiftLint and runs the
+same checks as everywhere else:
 
 ```bash
-docker run --rm -v "$PWD:/work" -w /work ghcr.io/realm/swiftlint:0.65.0 swiftlint lint --strict
+sudo tee /usr/local/bin/swiftlint >/dev/null <<'EOF'
+#!/bin/sh
+exec docker run --rm -v "$PWD:$PWD" -w "$PWD" \
+  --entrypoint swiftlint ghcr.io/realm/swiftlint:0.65.0 "$@"
+EOF
+sudo chmod +x /usr/local/bin/swiftlint
 ```
+
+Mounting the working directory at its own path keeps reported file paths usable. Run the
+gate with `scripts/lint.sh` rather than calling `swiftlint` yourself: warnings are not
+failures by default, so a bare `--strict` run reports the accepted force-unwrap warnings
+and exits nonzero on a clean checkout.
 
 Then:
 
