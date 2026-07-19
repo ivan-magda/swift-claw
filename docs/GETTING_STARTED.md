@@ -1,0 +1,241 @@
+# Getting Started
+
+From nothing to a running assistant that answers you in Telegram.
+
+## What you need
+
+- **A machine that stays on.** A Mac on macOS 15 or newer, or a Linux box with
+  `libsqlite3-0`. Voice transcription needs macOS 26, and the code sandbox needs macOS 26
+  on Apple Silicon; everything else runs anywhere.
+- **A Telegram account.**
+- **LLM access.** Either an OpenAI-compatible endpoint with an API key (Anthropic,
+  OpenAI, OpenRouter, or a local server), or a ChatGPT subscription.
+
+Install `clawd` first: release binary or source build, both covered in the
+[README](../README.md#install). The steps below assume `clawd` is on your `PATH`.
+
+**On a ChatGPT subscription?** Do [step 8](#8-chatgpt-subscription-instead-of-an-api-key)
+right after step 2, before you start the daemon. Step 8 gives you the `CLAW_LLM_MODEL`
+value that every later step needs, and `clawd auth login` will not start while the daemon
+holds the state-root lock.
+
+## 1. Create your bot
+
+Open [@BotFather](https://t.me/BotFather) in Telegram, send `/newbot`, pick a name and a
+username. BotFather replies with a token like `123456789:AAF...`. Copy it; that token is
+the identity of your bot, so treat it like a password.
+
+## 2. Configure
+
+Your shell executes this file with `source`, so use the copy that ships with the release
+you verified rather than fetching one over the network:
+
+```bash
+mkdir -p -m 700 ~/.swift-claw
+install -m 600 clawd.env.example ~/.swift-claw/clawd.env    # from your download directory
+```
+
+`clawd.env.example` is a release asset covered by `SHA256SUMS`, so the checksum step from
+[Install](../README.md#install) already verified it. From a source checkout, use
+`install -m 600 .env.example ~/.swift-claw/clawd.env` instead.
+
+Edit `~/.swift-claw/clawd.env` and set four values:
+
+- `CLAW_TELEGRAM_BOT_TOKEN`: the BotFather token.
+- `CLAW_LLM_BASE_URL`: your provider's OpenAI-compatible endpoint,
+  e.g. `https://api.anthropic.com/v1`.
+- `CLAW_LLM_MODEL`: the model id, e.g. `claude-sonnet-4-6`.
+- `CLAW_LLM_API_KEY`: the provider key (leave blank for local servers without auth).
+
+On a ChatGPT subscription, clear the prefilled `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY`,
+then get your `CLAW_LLM_MODEL` value from
+[step 8](#8-chatgpt-subscription-instead-of-an-api-key) now. Every later step needs it: a
+plain model id with an empty base URL fails config validation.
+
+Everything else has a working default. `clawd` never loads this file on its own; you
+source it into the shell before each command:
+
+```bash
+set -a && source ~/.swift-claw/clawd.env && set +a
+```
+
+## 3. Seal your secrets
+
+```bash
+clawd secrets seal
+```
+
+This encrypts the bot token and API keys into `~/.swift-claw/secrets.enc` with a key in
+`~/.swift-claw/secret.key` (mode 0600).
+
+Sealing copies the secrets out of your environment; it does not edit `clawd.env`. Delete
+or blank the `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, and `CLAW_SEARCH_API_KEY`
+lines yourself. Until you do, the plaintext values stay on disk and in any backup of that
+directory. The daemon now reads them from the encrypted store, and refuses to fall back to
+plaintext if the store is present but broken.
+
+Sourcing the file again does not undo the export: your current shell still holds the
+values it read before you edited them. Open a fresh shell and source the sanitized file
+there:
+
+```bash
+set -a && source ~/.swift-claw/clawd.env && set +a
+```
+
+Skipping this step works for a first try. The daemon then uses the plaintext env values
+and warns on every boot. (If you did step 8 first, `clawd auth login` already sealed the
+state root, so the encrypted backend is in force and there is no plaintext fallback.)
+
+## 4. Health check
+
+```bash
+clawd doctor --check-config
+```
+
+Healthy output shows `OK` on the `config` row and `backend=encrypted` on the `secrets`
+row (`backend=env (WARN: plaintext)` if you skipped sealing).
+
+Use `--check-config` until you have allowlisted yourself in step 5. The full `clawd
+doctor` also checks the database, and with an empty allowlist the `allowlist.owners` row
+fails and the command exits 1. Once your ID is in `CLAW_ALLOWLIST`, run the full check:
+
+```bash
+clawd doctor          # adds database, Telegram getMe, and tool-backend probes
+clawd doctor --json   # same checks, machine-readable
+```
+
+## 5. Run and say hello
+
+```bash
+clawd run
+```
+
+Send `/start` to your bot in Telegram. Because the allowlist is still empty, it answers:
+
+> This is a private bot. Your Telegram user ID is 12345678. Ask the owner to add it to the allowlist.
+
+Only `/start` gets that reply. Any other message from a non-allowlisted sender gets a
+bare "Sorry, this is a private bot." with no ID, so `/start` is how you learn the number.
+
+That number is you. Stop the daemon (Ctrl-C), set it in `clawd.env`:
+
+```bash
+CLAW_ALLOWLIST=12345678
+```
+
+Re-source the env file, start `clawd run` again, and send another message. This time
+the model answers, and clawd streams the reply in as a growing draft.
+
+Two commands to know from day one: `/stop` cancels the current turn, `/new` starts a
+fresh session.
+
+## 6. Make it yours
+
+Persona, behavior rules, and your profile live in Markdown files under
+`~/.swift-claw/workspace/`. The daemon creates that directory empty and ships no
+templates, so create the files yourself:
+
+```bash
+cat > ~/.swift-claw/workspace/SOUL.md <<'EOF'
+Answer briefly. Skip pleasantries. Say when you are unsure.
+EOF
+
+cat > ~/.swift-claw/workspace/USER.md <<'EOF'
+I live in Berlin and work as an iOS developer.
+EOF
+```
+
+The agent picks them up on the next turn. [CUSTOMIZATION.md](CUSTOMIZATION.md) covers
+every file and its trust tier, plus the environment knobs for budgets, schedules, voice
+locales, and the code sandbox.
+
+## 7. Keep it running
+
+To restart `clawd` after a crash and start it on login, install it under launchd (macOS)
+or systemd (Linux). [deploy/README.md](../deploy/README.md) has the unit files and the
+three commands per platform.
+
+If you installed a release binary, download the unit files from that same release:
+`run-clawd.sh`, plus `swift-claw.service` (Linux) or `com.ivanmagda.swift-claw.plist`
+(macOS). `SHA256SUMS` covers them, so verify before use. You install `run-clawd.sh` as
+root and your machine runs it at every login, which is reason enough not to take it from
+an unverified source:
+
+```bash
+cd ~/Downloads
+UNIT=com.ivanmagda.swift-claw.plist    # Linux: swift-claw.service
+
+shasum -a 256 --ignore-missing -c SHA256SUMS &&    # Linux: sha256sum --ignore-missing -c SHA256SUMS
+  mkdir -p deploy && mv run-clawd.sh "$UNIT" deploy/
+```
+
+The deployment guide's commands read from `deploy/`, so run them from the directory that
+now holds it.
+
+Both units are **per-user**: they start when you log in, not at boot, and they stop when
+you log out. For a machine you administer and want always-on:
+
+- **Linux:** let the user manager run without a session with
+  `sudo loginctl enable-linger $USER`. Without it, a service you installed over SSH stops
+  when you disconnect and does not come back after a reboot.
+- **macOS:** enable automatic login for the account. That keeps the LaunchAgent, which is
+  the simple path. A system LaunchDaemon in `/Library/LaunchDaemons` runs as root, where
+  `$HOME` is `/var/root`, so the wrapper looks for its config in the wrong place and
+  `clawd` exits 10. If you go that route, pin the account and paths explicitly with
+  `UserName`, `CLAW_ENV_FILE`, and `CLAW_STATE_ROOT` in the plist.
+
+## 8. ChatGPT subscription instead of an API key
+
+This route replaces `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY`. **Stop `clawd` first**:
+logging in takes the same state-root lock the daemon holds, and while the daemon runs,
+`clawd auth login` exits with "clawd is running for this state root."
+
+- Foreground: Ctrl-C.
+- macOS: `launchctl unload ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist`
+- Linux: `systemctl --user stop swift-claw.service`
+
+```bash
+clawd auth login
+```
+
+This completes a device-code login, discovers eligible models, and prints the exact
+`CLAW_LLM_MODEL=openai-chatgpt/<model>` value to paste into `clawd.env`. On that route
+`CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY` are unused; the credential lives encrypted in
+the state root.
+
+If clawd cannot read the model list, `clawd auth login` still succeeds and stores the
+credential, but prints the assignment with `<model>` left as a literal placeholder. Paste that
+verbatim and config validation rejects it. Substitute a real model slug, for example
+`CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4`, or run `clawd auth login` again once the network
+settles.
+
+Paste the value into `clawd.env`. If you are switching an existing installation, also
+clear `CLAW_LLM_STRUCTURED_OUTPUT`: this route accepts only `off`, and any other value
+fails config validation with exit 10. Then:
+
+- **Setting up for the first time?** Go back to [step 3](#3-seal-your-secrets) and continue
+  through the guide. Do not start the daemon yet; the remaining steps need the state root
+  to themselves.
+- **Already had clawd running?** Start it again: `clawd run`, or
+  `launchctl load ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist` /
+  `systemctl --user start swift-claw.service`.
+
+This route is unofficial and vendor-dependent; details and caveats in
+[LOCAL_DEV.md](LOCAL_DEV.md#chatgpt-subscription-auth).
+
+## Troubleshooting
+
+- **Exit codes are diagnostic:** 10 invalid config, 11 secret loading failed, 12 another
+  instance holds the lock, 13 storage error. `clawd doctor` explains the specifics.
+- **The bot ignores you:** confirm your numeric ID is in `CLAW_ALLOWLIST` and that you
+  restarted after changing it; the daemon seeds the allowlist at boot.
+- **You cannot find your Telegram ID:** send `/start`, not an ordinary message.
+- **Someone you removed can still talk to the bot:** `CLAW_ALLOWLIST` seeds the database
+  and never deletes from it. Revoking takes a row deletion; see
+  [CUSTOMIZATION.md](CUSTOMIZATION.md#everything-else).
+- **A second daemon won't start:** by design. One `clawd` per state root, enforced with
+  a file lock. `clawd auth login` and `clawd secrets seal` take the same lock.
+- **Telegram reports a 409 conflict:** another process is long-polling the same bot
+  token, usually a forgotten instance on another machine.
+- **Voice notes get a canned refusal:** voice transcription needs macOS 26; on Linux and
+  older macOS the feature is off.

@@ -204,8 +204,9 @@ call through the trifecta approval.
 
 **If the tool never appears** (calls are refused as unknown), `clawd doctor` explains why. It is
 absent — by design, fail-closed — on Linux, macOS 15, Intel macOS, with `CLAW_EXEC_ENABLED=false`,
-with an unpinned `CLAW_EXEC_IMAGE` override, when the `container` CLI is missing or below `1.0.0`, or
-when any hardening canary assertion failed. An owner-enabled sandbox that fails a gate prints a loud
+when the `container` CLI is missing or below `1.0.0`, or when any hardening canary assertion failed.
+An unpinned `CLAW_EXEC_IMAGE` override is stricter still: config validation rejects it and the
+process exits 10, so no daemon runs at all. An owner-enabled sandbox that fails a gate prints a loud
 error row rather than silently degrading.
 
 ---
@@ -255,8 +256,8 @@ LaunchDaemon-vs-LaunchAgent open question):
 
 ### Seal (first-time setup)
 
-Reads `CLAW_TELEGRAM_BOT_TOKEN` and `CLAW_LLM_API_KEY` from the environment
-and writes two files under `~/.swift-claw/`:
+Reads `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, and `CLAW_SEARCH_API_KEY`
+from the environment and writes two files under `~/.swift-claw/`:
 
 - `secrets.enc` — encrypted envelope
 - `secret.key` — AES key (mode 0600)
@@ -266,12 +267,13 @@ set -a && source ~/.swift-claw/clawd.env && set +a
 .build/debug/clawd secrets seal
 ```
 
-After sealing, remove the two secret lines from `clawd.env`:
+Sealing does not edit `clawd.env`. Remove the secret lines yourself:
 
 ```
 # delete or blank these after sealing:
 CLAW_TELEGRAM_BOT_TOKEN=...
 CLAW_LLM_API_KEY=...
+CLAW_SEARCH_API_KEY=...
 ```
 
 Keep the non-secret config (`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, etc.).
