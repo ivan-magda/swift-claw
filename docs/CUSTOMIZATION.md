@@ -131,10 +131,32 @@ workload image, and the network opt-in (`CLAW_EXEC_ALLOW_EGRESS`) are documented
   every daemon start. **Seeding only adds.** The `allowlist` table in `claw.sqlite` is what
   the daemon actually enforces, so removing an ID here does not revoke it. To revoke
   access, stop the daemon, drop the ID from `CLAW_ALLOWLIST`, and delete the row from the
-  database in your state root:
+  database in your state root (the `sqlite3` CLI is its own package on Linux:
+  `sudo apt-get install -y sqlite3`):
   `sqlite3 "${CLAW_STATE_ROOT:-$HOME/.swift-claw}/claw.sqlite" "DELETE FROM allowlist WHERE user_id = <id>;"`
 - `CLAW_APPROVAL_EXPIRY`: seconds before a pending approval auto-denies (default 3600).
-- `CLAW_SEARCH_API_KEY`: Exa key; unset means the `web_search` tool is absent.
+- `CLAW_SEARCH_API_KEY`: Exa key; unset means the `web_search` tool is absent. Adding it
+  after you have sealed does nothing on its own: once `secrets.enc` exists the daemon reads
+  secrets only from there. See [Adding a secret later](#adding-a-secret-later).
 - `CLAW_WEBFETCH_EXEMPT_CIDRS`: SSRF-blocklist exemptions for fake-IP VPN pools.
 - `CLAW_LOG_LEVEL`: `trace`, `debug`, `info` (default), `notice`, `warning`, `error`, `critical`.
 - `CLAW_STATE_ROOT`: where all of it lives (default `~/.swift-claw`).
+
+## Adding a secret later
+
+Sealing writes one envelope holding every runtime secret, and from then on the daemon
+ignores secrets in the environment. Turning on `web_search` months later, or rotating a
+key, therefore means resealing the whole set rather than adding a line to `clawd.env`.
+
+Stop the daemon first; sealing takes the same state-root lock. Put **all** the secrets you
+want back in the environment, not just the new one, since the reseal replaces the envelope:
+
+```bash
+export CLAW_TELEGRAM_BOT_TOKEN=...   # the values you deleted after the first seal
+export CLAW_LLM_API_KEY=...
+export CLAW_SEARCH_API_KEY=...       # the one you are adding
+clawd secrets seal
+```
+
+Then clear them from your shell (or close it), and start the daemon again. `clawd doctor`
+confirms the result: the `web_search` row turns from absent to configured.

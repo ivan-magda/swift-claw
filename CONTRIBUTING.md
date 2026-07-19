@@ -19,8 +19,19 @@ For vulnerabilities, never open a public issue. Follow [SECURITY.md](SECURITY.md
 You need a Swift 6.3 toolchain and SwiftLint (the lint gate exits 1 without it):
 
 ```bash
-brew install swiftlint                          # macOS
-sudo apt-get install -y libsqlite3-dev          # Linux, for the SQLite headers GRDB links
+# macOS
+brew install swiftlint
+
+# Linux
+sudo apt-get install -y libsqlite3-dev          # SQLite headers GRDB links against
+docker pull ghcr.io/realm/swiftlint:0.65.0      # the image CI lints with
+```
+
+On Linux, run SwiftLint through that image (CI does the same), or put a `swiftlint`
+wrapper on your `PATH` so `scripts/lint.sh` finds it:
+
+```bash
+docker run --rm -v "$PWD:/work" -w /work ghcr.io/realm/swiftlint:0.65.0 swiftlint lint --strict
 ```
 
 Then:

@@ -211,7 +211,9 @@ verbatim and config validation rejects it. Substitute a real model slug, for exa
 `CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4`, or run `clawd auth login` again once the network
 settles.
 
-Paste the value into `clawd.env`, then:
+Paste the value into `clawd.env`. If you are switching an existing installation, also
+clear `CLAW_LLM_STRUCTURED_OUTPUT`: this route accepts only `off`, and any other value
+fails config validation with exit 10. Then:
 
 - **Setting up for the first time?** Go back to [step 3](#3-seal-your-secrets) and continue
   through the guide. Do not start the daemon yet; the remaining steps need the state root
