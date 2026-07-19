@@ -7,31 +7,50 @@ both. [`.env.example`](../.env.example) stays the complete variable reference.
 ## Workspace files
 
 The workspace lives at `<state root>/workspace/` (default `~/.swift-claw/workspace/`).
-Create any of these files and the daemon injects them into the model's context on the
-next turn; a missing file is skipped.
+Create any of these files and the daemon loads them on the next turn; a missing file is
+skipped.
 
-| File | What it shapes |
-|---|---|
-| `SOUL.md` | Personality and tone. The place to say "answer tersely", "be playful", "reply in Russian". |
-| `AGENTS.md` | Behavior rules: how to act, what to prioritize, standing instructions. |
-| `TOOLS.md` | Guidance on when and how to use tools. |
-| `USER.md` | Your profile: who you are, context the agent should know. **Private data.** |
-| `MEMORY.md` | Long-lived memory the agent maintains. **Private data.** |
-| `HEARTBEAT.md` | A checklist read only by the proactive heartbeat, never by ordinary turns. |
-| `memory/YYYY-MM-DD.md` | Dated daily logs. |
+| File | What it shapes | Trust tier |
+|---|---|---|
+| `SOUL.md` | Personality and tone. The place to say "answer tersely", "be playful", "reply in Russian". | System prompt |
+| `AGENTS.md` | Behavior rules: how to act, what to prioritize, standing instructions. | System prompt |
+| `TOOLS.md` | Guidance on when and how to use tools. | System prompt |
+| `USER.md` | Your profile: who you are, context the agent should know. | Untrusted, labeled |
+| `MEMORY.md` | Long-lived memory the agent maintains. | Untrusted, labeled |
+| `HEARTBEAT.md` | A checklist the proactive heartbeat reads, never ordinary turns. | Heartbeat runs only |
 
-Two properties worth knowing:
+The trust tier decides how much authority the text carries:
 
-- **Workspace content is data, not instructions.** The files enter the context at the
-  untrusted tier, below the system prompt. They steer style and knowledge; they cannot
-  override the security policy, which is enforced in code.
-- **`USER.md` and `MEMORY.md` are private-data files.** A turn that reads one is marked
-  as having touched private data, and any exfiltration-capable action in such a turn
-  requires your explicit approval.
+- **`SOUL.md`, `AGENTS.md`, and `TOOLS.md` join the system prompt.** They are yours to
+  write and the model treats them as trusted instruction. Editing one changes the policy
+  fingerprint, which is why a `file_write` to any of them is flagged as privileged and why
+  pending approvals do not survive the change. Nothing you put in them can loosen the
+  security policy, which lives in code rather than in the prompt.
+- **`USER.md` and `MEMORY.md` enter inside an untrusted, labeled wrapper**, below the
+  system prompt, so text that arrived there through poisoned memory cannot claim system
+  authority. Both count as private data for the exfiltration gate described below.
+
+Dated daily logs (`memory/YYYY-MM-DD.md`) are written and read on request; the context
+builder does not inject them automatically the way it does the files above.
 
 Durable facts also live in the database: confirm something in chat ("remember that ...")
 and it persists in SQLite with full-text recall across restarts. `/memory` shows what is
 stored.
+
+## When the agent asks permission
+
+Two separate mechanisms decide this, and it is worth knowing which one is speaking.
+
+**By tool.** File writes and code execution always suspend the run and wait for you,
+whatever else happened in the session.
+
+**By exfiltration risk.** Fetching an arbitrary URL waits for you once the session has
+done *both* of these: ingested untrusted content (a web page, tool output, stored memory)
+and read a private-data file (`USER.md`, `MEMORY.md`). One leg alone does not trigger it,
+so the first `web_fetch` of a clean session runs unprompted. Traffic to pinned endpoints,
+your LLM provider and the search backend, never parks for approval; those are protected
+by endpoint pinning plus an argument scan that blocks private-file content and
+secret-shaped tokens.
 
 ## Model routing
 
@@ -61,8 +80,8 @@ All optional; unset means the built-in defaults.
 
 ## Proactive behavior
 
-Schedules are created in chat and confirmed before they arm. The environment sets the
-frame: `CLAW_TIMEZONE` (IANA zone for schedule defaults and day boundaries),
+You create schedules in chat, and you confirm each one before it arms. The environment
+sets the frame: `CLAW_TIMEZONE` (IANA zone for schedule defaults and day boundaries),
 `CLAW_SCHED_MIN_INTERVAL_MINUTES`, `CLAW_SCHED_CATCHUP_MAX_AGE_MINUTES`.
 
 The heartbeat is off by default. `CLAW_HEARTBEAT_ENABLED=true` turns it on (requires

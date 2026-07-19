@@ -255,8 +255,8 @@ LaunchDaemon-vs-LaunchAgent open question):
 
 ### Seal (first-time setup)
 
-Reads `CLAW_TELEGRAM_BOT_TOKEN` and `CLAW_LLM_API_KEY` from the environment
-and writes two files under `~/.swift-claw/`:
+Reads `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, and `CLAW_SEARCH_API_KEY`
+from the environment and writes two files under `~/.swift-claw/`:
 
 - `secrets.enc` — encrypted envelope
 - `secret.key` — AES key (mode 0600)
@@ -266,12 +266,13 @@ set -a && source ~/.swift-claw/clawd.env && set +a
 .build/debug/clawd secrets seal
 ```
 
-After sealing, remove the two secret lines from `clawd.env`:
+Sealing does not edit `clawd.env`. Remove the secret lines yourself:
 
 ```
 # delete or blank these after sealing:
 CLAW_TELEGRAM_BOT_TOKEN=...
 CLAW_LLM_API_KEY=...
+CLAW_SEARCH_API_KEY=...
 ```
 
 Keep the non-secret config (`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, etc.).
