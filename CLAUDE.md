@@ -12,6 +12,7 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 - Product scope, phasing, success criteria → `docs/PRD.md`.
 - Cited background research → `docs/research/`.
 - Building, running, or operating `clawd` locally → `docs/LOCAL_DEV.md`.
+- Changing any user-visible surface (a command, flag, env var, default, secret, or install/release step) → update the public set in lockstep: `README.md`, `docs/GETTING_STARTED.md`, `docs/CUSTOMIZATION.md`, `deploy/README.md`. They document each other's state, so a change in one usually invalidates a sibling.
 
 ## Non-negotiable conventions
 
