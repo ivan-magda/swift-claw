@@ -29,7 +29,7 @@ the identity of your bot, so treat it like a password.
 ## 2. Configure
 
 ```bash
-mkdir -p ~/.swift-claw
+mkdir -p -m 700 ~/.swift-claw
 curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/.env.example \
   -o ~/.swift-claw/clawd.env
 chmod 600 ~/.swift-claw/clawd.env
@@ -68,9 +68,17 @@ This encrypts the bot token and API keys into `~/.swift-claw/secrets.enc` with a
 
 Sealing copies the secrets out of your environment; it does not edit `clawd.env`. Delete
 or blank the `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, and `CLAW_SEARCH_API_KEY`
-lines yourself, then re-source the file. Until you do, the plaintext values stay on disk
-and in any backup of that directory. The daemon now reads them from the encrypted store,
-and refuses to fall back to plaintext if the store is present but broken.
+lines yourself. Until you do, the plaintext values stay on disk and in any backup of that
+directory. The daemon now reads them from the encrypted store, and refuses to fall back to
+plaintext if the store is present but broken.
+
+Sourcing the file again does not undo the export: your current shell still holds the
+values it read before you edited them. Open a fresh shell and source the sanitized file
+there:
+
+```bash
+set -a && source ~/.swift-claw/clawd.env && set +a
+```
 
 Skipping this step works for a first try. The daemon then uses the plaintext env values
 and warns on every boot. (If you did step 8 first, `clawd auth login` already sealed the
@@ -79,14 +87,21 @@ state root, so the encrypted backend is in force and there is no plaintext fallb
 ## 4. Health check
 
 ```bash
-clawd doctor
+clawd doctor --check-config
 ```
 
 Healthy output shows `OK` on the `config` row and `backend=encrypted` on the `secrets`
-row (`backend=env (WARN: plaintext)` if you skipped sealing). Doctor also probes the
-database, Telegram connectivity (`getMe`), and the optional tool backends.
-`clawd doctor --check-config` validates config and secrets without touching the network;
-`--json` prints a machine-readable report.
+row (`backend=env (WARN: plaintext)` if you skipped sealing).
+
+Use `--check-config` until you have allowlisted yourself in step 5. The full `clawd
+doctor` also checks the database, and with an empty allowlist the `allowlist.owners` row
+fails and the command exits 1, which at this stage tells you nothing you did not already
+know. Once your ID is in `CLAW_ALLOWLIST`, run the full check:
+
+```bash
+clawd doctor          # adds database, Telegram getMe, and tool-backend probes
+clawd doctor --json   # same checks, machine-readable
+```
 
 ## 5. Run and say hello
 
@@ -141,10 +156,15 @@ three commands per platform. Those files live in the repository, not in the rele
 fetch them if you installed a release binary:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/ivan-magda/swift-claw/main/deploy/run-clawd.sh
-curl -fsSLO https://raw.githubusercontent.com/ivan-magda/swift-claw/main/deploy/swift-claw.service            # Linux
-curl -fsSLO https://raw.githubusercontent.com/ivan-magda/swift-claw/main/deploy/com.ivanmagda.swift-claw.plist  # macOS
+mkdir -p deploy
+base=https://raw.githubusercontent.com/ivan-magda/swift-claw/main/deploy
+curl -fsSL "$base/run-clawd.sh" -o deploy/run-clawd.sh
+curl -fsSL "$base/swift-claw.service" -o deploy/swift-claw.service                            # Linux
+curl -fsSL "$base/com.ivanmagda.swift-claw.plist" -o deploy/com.ivanmagda.swift-claw.plist    # macOS
 ```
+
+The deployment guide's commands read from `deploy/`, so run them from the directory that
+now holds it.
 
 Both units are **per-user**: they start when you log in, not at boot, and they stop when
 you log out. For a machine you administer and want always-on:

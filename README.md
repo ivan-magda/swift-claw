@@ -63,7 +63,8 @@ gh attestation verify "$ASSET" -R ivan-magda/swift-claw
   `sudo mkdir -p /usr/local/bin`.
 - **Linux:** the binary links the system SQLite: `sudo apt-get install -y libsqlite3-0`.
 
-Or build from source with a Swift 6.3 toolchain:
+Or build from source with a Swift 6.3 toolchain. On Linux, install the SQLite headers
+first (`sudo apt-get install -y libsqlite3-dev`); the runtime package alone will not link:
 
 ```bash
 git clone https://github.com/ivan-magda/swift-claw.git && cd swift-claw
@@ -94,10 +95,15 @@ clawd secrets seal
 
 # 3. Sealing copies the secrets out; it does not edit the file. Delete the
 #    CLAW_TELEGRAM_BOT_TOKEN, CLAW_LLM_API_KEY, and CLAW_SEARCH_API_KEY lines
-#    from ~/.swift-claw/clawd.env yourself, then open a fresh shell.
+#    from ~/.swift-claw/clawd.env yourself.
+```
 
-# 4. Health check, then run.
-clawd doctor
+Open a fresh shell so the deleted secrets leave your environment, then load the remaining
+config and start the daemon:
+
+```bash
+set -a && source ~/.swift-claw/clawd.env && set +a
+clawd doctor --check-config
 clawd run
 ```
 
