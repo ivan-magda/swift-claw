@@ -1,7 +1,6 @@
 # Getting Started
 
-From nothing to a running assistant that answers you in Telegram. Every step shows the
-command and what success looks like.
+From nothing to a running assistant that answers you in Telegram.
 
 ## What you need
 
@@ -98,8 +97,7 @@ row (`backend=env (WARN: plaintext)` if you skipped sealing).
 
 Use `--check-config` until you have allowlisted yourself in step 5. The full `clawd
 doctor` also checks the database, and with an empty allowlist the `allowlist.owners` row
-fails and the command exits 1, which at this stage tells you nothing you did not already
-know. Once your ID is in `CLAW_ALLOWLIST`, run the full check:
+fails and the command exits 1. Once your ID is in `CLAW_ALLOWLIST`, run the full check:
 
 ```bash
 clawd doctor          # adds database, Telegram getMe, and tool-backend probes
@@ -126,7 +124,7 @@ CLAW_ALLOWLIST=12345678
 ```
 
 Re-source the env file, start `clawd run` again, and send another message. This time
-the model answers, streamed into the chat as a growing draft.
+the model answers, and clawd streams the reply in as a growing draft.
 
 Two commands to know from day one: `/stop` cancels the current turn, `/new` starts a
 fresh session.
@@ -159,8 +157,8 @@ three commands per platform.
 
 If you installed a release binary, download the unit files from that same release:
 `run-clawd.sh`, plus `swift-claw.service` (Linux) or `com.ivanmagda.swift-claw.plist`
-(macOS). They are covered by `SHA256SUMS`, so verify them before use. `run-clawd.sh` gets
-installed as root and executed at every login, which is reason enough not to take it from
+(macOS). `SHA256SUMS` covers them, so verify before use. You install `run-clawd.sh` as
+root and your machine runs it at every login, which is reason enough not to take it from
 an unverified source:
 
 ```bash
@@ -205,8 +203,8 @@ This completes a device-code login, discovers eligible models, and prints the ex
 `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY` are unused; the credential lives encrypted in
 the state root.
 
-If the model list cannot be read, login still succeeds and stores the credential, but it
-prints the assignment as a form with `<model>` left as a literal placeholder. Paste that
+If clawd cannot read the model list, `clawd auth login` still succeeds and stores the
+credential, but prints the assignment with `<model>` left as a literal placeholder. Paste that
 verbatim and config validation rejects it. Substitute a real model slug, for example
 `CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4`, or run `clawd auth login` again once the network
 settles.

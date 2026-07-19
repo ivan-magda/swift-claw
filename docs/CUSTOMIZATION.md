@@ -1,14 +1,14 @@
 # Customizing Your Agent
 
-Two surfaces shape how your agent behaves: Markdown files in the workspace (persona,
-rules, profile) and environment variables (wiring, budgets, features). This guide covers
-both. [`.env.example`](../.env.example) stays the complete variable reference.
+You shape your agent in two places: Markdown files in the workspace (persona, rules,
+profile) and environment variables (wiring, budgets, features).
+[`.env.example`](../.env.example) stays the complete variable reference.
 
 ## Workspace files
 
 The workspace lives at `<state root>/workspace/` (default `~/.swift-claw/workspace/`).
-Create any of these files and the daemon loads them on the next turn; a missing file is
-skipped.
+Create any of these files and the daemon loads them on the next turn; it skips the ones
+you leave out.
 
 | File | What it shapes | Trust tier |
 |---|---|---|
@@ -41,7 +41,7 @@ stored.
 
 ## When the agent asks permission
 
-Two mechanisms produce an approval card. They answer different questions.
+clawd shows an approval card for two reasons.
 
 **The tool's own risk tier.** File writes, memory writes, and code execution park the run
 every time, whatever else the session did.
@@ -59,10 +59,10 @@ session has done *both* of these:
 One leg alone does not trigger the gate, so the first `web_fetch` of a clean session runs
 unprompted. `/new` clears both legs.
 
-Your LLM provider and the search backend are pinned endpoints and never park for approval.
-clawd defends them by pinning the destination rather than by asking: it cannot be aimed at
-an attacker's URL. It also scans outbound *tool* arguments for secret-shaped values, and,
-under the trifecta, for substrings of your private files. The prompt sent to your LLM
+Your LLM provider and the search backend are pinned destinations, so they never park for
+approval: no injected instruction can aim clawd at an attacker's URL instead. clawd also
+scans outbound *tool* arguments for secret-shaped values, and, under the trifecta, for
+substrings of your private files. The prompt sent to your LLM
 carries `USER.md` and `MEMORY.md` verbatim by design, so treat your model provider as a
 party you trust with that content.
 
@@ -94,7 +94,7 @@ All optional; unset means the built-in defaults.
 
 **On the ChatGPT subscription route these dollar caps do not gate.** A plan-included call
 has no metered cost to compare against, so `CLAW_PER_RUN_USD` and
-`CLAW_PROACTIVE_PER_DAY_USD` are inert there and usage records at zero USD.
+`CLAW_PROACTIVE_PER_DAY_USD` are inert there, and clawd records the usage at zero USD.
 `CLAW_PER_DAY_USD` still binds indirectly, because the daily token ceiling derives from it;
 set `CLAW_DAY_TOKEN_CEILING` to control that directly. Token, turn, tool-call, and
 wall-clock bounds apply the same on both routes.
@@ -129,7 +129,7 @@ workload image, and the network opt-in (`CLAW_EXEC_ALLOW_EGRESS`) are documented
 
 - `CLAW_ALLOWLIST`: numeric Telegram IDs, comma-separated, seeded into the allowlist at
   every daemon start. **Seeding only adds.** The `allowlist` table in `claw.sqlite` is what
-  the daemon actually enforces, so removing an ID here does not revoke it. To revoke
+  the daemon enforces, so removing an ID here does not revoke it. To revoke
   access, stop the daemon, drop the ID from `CLAW_ALLOWLIST`, and delete the row from the
   database in your state root (the `sqlite3` CLI is its own package on Linux:
   `sudo apt-get install -y sqlite3`):

@@ -21,7 +21,7 @@ Reports in these areas matter most:
 - Escaping the code-execution sandbox through clawd's integration (host paths, network, or secrets reachable from guest code without the documented opt-ins).
 - Defeating the exfiltration gate or the SSRF blocklist.
 - Secret exposure: plaintext at rest where encryption is promised, or secrets surviving log redaction.
-- Prompt injection that crosses a policy enforced in code. Model output that is merely odd or unhelpful is not a vulnerability.
+- Prompt injection that crosses a policy enforced in code. Odd or unhelpful model output is not a vulnerability.
 
 Vulnerabilities in upstream dependencies belong upstream; open a regular issue here
 asking for the version bump.

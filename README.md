@@ -9,21 +9,22 @@
 **Your always-on personal AI assistant in Telegram. One pure-Swift daemon on hardware you own.**
 
 `clawd` pairs a private Telegram bot with the LLM of your choice. It remembers what you
-tell it, runs scheduled and proactive tasks, and executes tools behind an approval gate.
-Everything it keeps lives in one directory on your own machine: a SQLite database,
-encrypted secret envelopes, and Markdown files you can edit by hand.
+tell it and runs scheduled and proactive tasks. Consequential tool calls wait for your
+approval. Everything it keeps stays in one directory on your own machine: a SQLite
+database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 ## Features
 
 - **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
-  turn, `/new` starts a fresh session, and voice notes transcribe on-device (macOS 26).
+  turn, `/new` starts a fresh session, and clawd transcribes voice notes on-device
+  (macOS 26).
 - **Durable memory.** Facts you confirm persist in SQLite with full-text recall, next to
   workspace Markdown files that hold your profile, notes, and daily logs.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
 - **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
   execution wait for an explicit tap-to-approve in Telegram. Policy lives in code, and
-  inbound content is treated as data, never as instructions.
+  clawd treats inbound content as data, never as instructions.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
@@ -47,8 +48,8 @@ shasum -a 256 --ignore-missing -c SHA256SUMS &&        # Linux: sha256sum --igno
   sudo install -m755 "$ASSET" /usr/local/bin/clawd
 ```
 
-`--ignore-missing` checks only the files you actually downloaded. The `&&` matters: it
-stops the install if verification fails. Every downloaded file must print `OK`.
+`--ignore-missing` checks only the files you downloaded. The `&&` stops the install if
+verification fails. Every downloaded file must print `OK`.
 
 Every binary also carries a build provenance attestation. If you have the
 [GitHub CLI](https://cli.github.com) installed and logged in (`gh auth login`), verify it:
@@ -126,18 +127,18 @@ troubleshooting, is in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
 ## Security model
 
-swift-claw assumes the person who runs it is the only person it serves.
+swift-claw assumes you are the only person it serves.
 
-- **Default-deny.** Only allowlisted Telegram IDs get a conversation. Everyone else is
-  refused, and `/start` returns the sender's own numeric ID so you can allowlist them.
-  `CLAW_ALLOWLIST` only ever adds: revoking an ID means deleting its row from the database
-  ([details](docs/CUSTOMIZATION.md#everything-else)).
+- **Default-deny.** Only allowlisted Telegram IDs get a conversation. clawd refuses
+  everyone else, and answers `/start` with the sender's own numeric ID so you can
+  allowlist them. `CLAW_ALLOWLIST` only ever adds, so revoking an ID means deleting its
+  row from the database ([details](docs/CUSTOMIZATION.md#everything-else)).
 - **Secrets encrypted at rest.** `clawd secrets seal` wraps the bot token and API keys in
   an AES-GCM envelope. Plaintext env secrets remain available as a dev fallback that
   warns on every boot.
-- **Approvals you can trust.** File writes, memory writes, and code execution always
-  suspend into a durable state machine until you tap Approve in Telegram. A forged or
-  third-party callback cannot approve, and pending approvals expire to deny.
+- **Approvals are durable and unforgeable.** File writes, memory writes, and code
+  execution suspend into a durable state machine until you tap Approve in Telegram. A
+  forged or third-party callback cannot approve, and pending approvals expire to deny.
 - **Prompt injection contained.** Messages, web content, tool output, and stored memory
   enter the context as untrusted data. Once a session has both ingested untrusted content
   and pulled your private files into context, fetching an arbitrary URL also needs your
