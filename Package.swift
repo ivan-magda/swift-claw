@@ -106,9 +106,6 @@ let package = Package(
       ]
     ),
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore", "ClawTestSupport"]),
-    // `ClawSecrets` and `ClawGateway` are test-only: the auth workflow is proven against the real
-    // secret preparer, credential store, and instance lock it will be composed with, while
-    // production `ClawAuth` still depends on `ClawCore` alone.
     .testTarget(
       name: "ClawAuthTests",
       dependencies: ["ClawAuth", "ClawCore", "ClawSecrets", "ClawGateway", "ClawTestSupport"]
@@ -140,8 +137,6 @@ let package = Package(
         "ClawLLM", "ClawCore", "ClawTestSupport",
         .product(name: "Logging", package: "swift-log"),
       ],
-      // Read by absolute #filePath in ChatGPTResponsesSSEParserTests, never via Bundle.module,
-      // so they stay on disk as plain sources rather than bundled resources.
       exclude: ["ChatGPT/Fixtures"]
     ),
     .testTarget(
@@ -170,8 +165,6 @@ let package = Package(
         .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
       ]
     ),
-    // Composition-root tests: they reach into `clawd` to prove the wiring the executable owns — the
-    // service-graph ordering and the fatal-exit boundary — against the real `ClawGateway` types.
     .testTarget(
       name: "ClawdCompositionTests",
       dependencies: [
