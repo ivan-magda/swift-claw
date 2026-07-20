@@ -358,7 +358,8 @@ import Testing
       isRegularFile: isRegular,
       permissionBits: perms,
       ownerUID: getuid() &+ owner,
-      byteCount: size
+      byteCount: size,
+      modificationNanoseconds: 0
     )
 
     // when / then
@@ -391,7 +392,8 @@ import Testing
       isRegularFile: true,
       permissionBits: 0o644,
       ownerUID: getuid() &+ 1,
-      byteCount: 8
+      byteCount: 8,
+      modificationNanoseconds: 0
     )
 
     // when / then — relaxing the mode rule must not relax ownership.

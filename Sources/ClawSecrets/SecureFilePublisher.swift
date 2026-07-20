@@ -29,25 +29,32 @@ struct SecureFileFacts: Sendable, Equatable {
   let permissionBits: UInt32
   let ownerUID: uid_t
   let byteCount: Int
+  let modificationNanoseconds: Int64
 
   var identity: SecureFileIdentity {
     SecureFileIdentity(
       device: device,
       inode: inode,
       ownerUID: ownerUID,
-      permissionBits: permissionBits
+      permissionBits: permissionBits,
+      byteCount: byteCount,
+      modificationNanoseconds: modificationNanoseconds
     )
   }
 }
 
 /// The subset of an entry's facts that pins it to one specific file. Rollback records this at
 /// creation time and demands an exact match before unlinking, so a path whose contents were
-/// swapped underneath the operation is left alone.
+/// swapped underneath the operation is left alone. A (device, inode) pair alone is not that pin:
+/// Linux filesystems reuse a freed inode number for the next file created, so size and mtime —
+/// captured after the last write, and unchanged by the commit's fsync/rename — complete it.
 struct SecureFileIdentity: Sendable, Equatable {
   let device: dev_t
   let inode: ino_t
   let ownerUID: uid_t
   let permissionBits: UInt32
+  let byteCount: Int
+  let modificationNanoseconds: Int64
 }
 
 /// Crash-safe publication and bounded, no-follow reads for the files `SecretStatePaths` names.
@@ -260,8 +267,8 @@ struct SecureFilePublisher: Sendable {
 
   /// Unlinks `url` only if a fresh no-follow look still shows the exact entry the caller recorded
   /// creating. A file that predates the operation was never recorded, and one whose inode, owner,
-  /// mode or file type changed underneath fails the match — so this can only ever remove its own
-  /// work. Returns whether the entry was removed.
+  /// mode, file type, size or mtime changed underneath fails the match — so this can only ever
+  /// remove its own work. Returns whether the entry was removed.
   @discardableResult
   static func removeCreatedEntry(_ identity: SecureFileIdentity, at url: URL) -> Bool {
     guard
@@ -377,13 +384,19 @@ extension SecureFilePublisher {
   /// `st_mode` is `UInt16` on Darwin and `UInt32` on Linux; normalize to `UInt32` for both.
   private static func facts(from status: stat) -> SecureFileFacts {
     let mode = UInt32(status.st_mode)
+    #if canImport(Glibc)
+      let modified = status.st_mtim
+    #else
+      let modified = status.st_mtimespec
+    #endif
     return SecureFileFacts(
       device: status.st_dev,
       inode: status.st_ino,
       isRegularFile: (mode & UInt32(S_IFMT)) == UInt32(S_IFREG),
       permissionBits: mode & permissionBitsMask,
       ownerUID: status.st_uid,
-      byteCount: Int(status.st_size)
+      byteCount: Int(status.st_size),
+      modificationNanoseconds: Int64(modified.tv_sec) * 1_000_000_000 + Int64(modified.tv_nsec)
     )
   }
 }

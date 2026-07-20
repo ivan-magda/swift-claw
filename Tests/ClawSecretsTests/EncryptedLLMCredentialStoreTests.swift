@@ -633,7 +633,8 @@ import Testing
       isRegularFile: true,
       permissionBits: 0o600,
       ownerUID: getuid(),
-      byteCount: EncryptedLLMCredentialStore.maximumEnvelopeByteCount
+      byteCount: EncryptedLLMCredentialStore.maximumEnvelopeByteCount,
+      modificationNanoseconds: 0
     )
 
     // when / then
