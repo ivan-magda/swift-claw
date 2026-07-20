@@ -66,7 +66,7 @@ struct ScriptedAskTool: Tool {
     // when — the proposal suspends the run to a persisted checkpoint
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
     let approval = try #require(
-      try await pollUntil(timeout: .seconds(10)) {
+      try await pollUntil {
         try approvals(harness.databasePath).first
       }
     )
@@ -100,7 +100,7 @@ struct ScriptedAskTool: Tool {
     // the durable OUTBOX — this harness wires no `OutboxDispatcher`, so nothing is sent over the
     // `RecordingTransport`; existing SC3 assertions read `stores.outbox.pendingOutbound()` too.
     await coordinator.signal(approvalId: approvalId, .denied(.cancelled))
-    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue {
       let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
       return payloads.contains { payload in payload.contains("second turn done") }
     }

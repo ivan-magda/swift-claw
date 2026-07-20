@@ -59,7 +59,7 @@ struct SC7Harness {
 
   /// Awaits lane-dispatched turns: polls the outbox until `count` payloads exist (bounded).
   func waitForOutbox(atLeast count: Int) async throws -> [String] {
-    let matched = try await pollUntil(timeout: .seconds(5)) {
+    let matched = try await pollUntil {
       let payloads = try stores.outbox.pendingOutbound().map(\.payload)
       return payloads.count >= count ? payloads : nil
     }
@@ -69,7 +69,7 @@ struct SC7Harness {
   /// Awaits a lane-dispatched turn that leaves NO outbox row (a suppressed heartbeat): polls the
   /// durable audit trail instead.
   func waitForAudit(action: String, atLeast count: Int) async throws -> Int {
-    let matched = try await pollUntil(timeout: .seconds(5)) {
+    let matched = try await pollUntil {
       let matches = try auditRows().filter { row in row.action == action }.count
       return matches >= count ? matches : nil
     }

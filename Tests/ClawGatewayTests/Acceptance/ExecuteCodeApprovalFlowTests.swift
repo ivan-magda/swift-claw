@@ -76,7 +76,7 @@ import Testing
       rawUpdate: textUpdate(id: 1, from: 7, text: "inspect the external page, then run it")
     )
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first { row in
           row.tool == "execute_code"
         }
@@ -111,7 +111,7 @@ import Testing
     #expect(String(bytes: requests[0].inputs[0].bytes, encoding: .utf8) == privateText)
 
     let followUp = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first { row in
           row.tool == "web_fetch"
         }
@@ -152,7 +152,7 @@ import Testing
     )
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "run it"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -199,7 +199,7 @@ import Testing
     )
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "read and act"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first { row in
           row.tool == "execute_code"
         }
@@ -219,7 +219,7 @@ import Testing
 
     // then
     _ = try #require(
-      await pollUntilTrue(timeout: .seconds(10)) {
+      await pollUntilTrue {
         try fetchApprovals(databasePath: harness.databasePath).first?.state
           == ApprovalState.expired.rawValue
       }
@@ -228,7 +228,7 @@ import Testing
     // The re-parked waiter consumes the buffered denial and drives run AWAITING_APPROVAL→FAILED
     // asynchronously after the boot sweep's synchronous expiry CAS, so poll rather than assert.
     _ = try #require(
-      await pollUntilTrue(timeout: .seconds(10)) {
+      await pollUntilTrue {
         try runState(databasePath: harness.databasePath, runId: approval.runId)
           == RunState.failed.rawValue
       }

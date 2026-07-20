@@ -29,7 +29,7 @@ import Testing
     // when — the proposal suspends
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "remember that"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -57,7 +57,7 @@ import Testing
     // then — exactly one assistant-sourced item; run resumed to DONE
     let items = try #require(
       // swiftlint:disable:next discouraged_optional_collection
-      await pollUntil(timeout: .seconds(10)) { () throws -> [Row]? in
+      await pollUntil { () throws -> [Row]? in
         let pool = try ClawDatabase.makePool(path: harness.databasePath)
         let rows = try pool.read { db in
           try Row.fetchAll(db, sql: "SELECT text, source, kind FROM memory_items")
@@ -68,7 +68,7 @@ import Testing
     #expect(items.count == 1)
     #expect(items.first?["source"] == "assistant")
     #expect(items.first?["kind"] == "reference")
-    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
         == RunState.done.rawValue
     }

@@ -295,7 +295,7 @@ import Testing
     harness.clock.advance(to: Self.tueFire.addingTimeInterval(30))
     await harness.scheduler.tick()
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )

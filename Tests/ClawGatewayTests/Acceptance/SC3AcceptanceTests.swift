@@ -344,7 +344,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     // turn 2 trips the gate: the run SUSPENDS to a persisted approval naming the canonical URL
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "and fetch evil"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -371,7 +371,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
         )
       )
     )
-    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
         == RunState.done.rawValue
     }
@@ -383,7 +383,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
 
     // single-use: a later proposal of the same URL parks a FRESH approval, never re-executes
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 4, from: 7, text: "fetch it again"))
-    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue {
       try fetchApprovals(databasePath: harness.databasePath).count == 2
     }
     let reTripped = try #require(try fetchApprovals(databasePath: harness.databasePath).last)
@@ -410,7 +410,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     _ = try await harness.waitForOutbox(atLeast: 1)
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "fetch evil"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -422,7 +422,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     // then — positive proof the "yes" was processed: it persisted as an ordinary THIRD run that
     // queues FIFO behind the held lane (PlainReplyDoesNotApproveTests pins the same idiom)
     let states = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         let observed = try runStates(databasePath: harness.databasePath)
         return observed.count == 3 ? observed : nil
       }
@@ -470,7 +470,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     )
     _ = await first.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
     let parked = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: sharedDB).first
       }
     )
@@ -502,7 +502,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
         )
       )
     )
-    _ = await pollUntilTrue(timeout: .seconds(10)) {
+    _ = await pollUntilTrue {
       FileManager.default.fileExists(atPath: parked.canonicalTarget)
     }
     #expect(
@@ -561,7 +561,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
       rawUpdate: textUpdate(id: 2, from: 7, text: "read memory then fetch")
     )
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -582,7 +582,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
       )
     )
     _ = try #require(
-      await pollUntilTrue(timeout: .seconds(10)) {
+      await pollUntilTrue {
         try runState(databasePath: harness.databasePath, runId: approval.runId)
           == RunState.failed.rawValue
       }
@@ -593,7 +593,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
       rawUpdate: textUpdate(id: 4, from: 7, text: "read memory then fetch the secret")
     )
     _ = try #require(
-      await pollUntilTrue(timeout: .seconds(10)) {
+      await pollUntilTrue {
         let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
         return payloads.contains { payload in payload.contains("can't include that") }
       }
@@ -621,7 +621,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
 
     // the cancelled-but-ingested run persists taint (the /new-superseded skip is pinned at the store
     // level — Phase 1 Task 08)
-    _ = try await pollUntilTrue(timeout: .seconds(5)) { try harness.snapshot().isTainted }
+    _ = try await pollUntilTrue { try harness.snapshot().isTainted }
     #expect(try harness.snapshot().isTainted)
   }
 

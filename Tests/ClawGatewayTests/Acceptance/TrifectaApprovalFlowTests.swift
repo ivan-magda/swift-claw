@@ -56,7 +56,7 @@ import Testing
     // then — the fetch proposal SUSPENDS to a durable approval, no ephemeral grant
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "fetch it"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -82,7 +82,7 @@ import Testing
     )
 
     // then — the recorded fetch runs and the run resumes to DONE; audit trail complete
-    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
         == RunState.done.rawValue
     }

@@ -32,7 +32,7 @@ import Testing
     )
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -48,7 +48,7 @@ import Testing
     // queued turn never starts)
     #expect(yesOutcome == .processed)
     let states = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         let observed = try runStates(databasePath: harness.databasePath)
         return observed.count == 2 ? observed : nil
       }

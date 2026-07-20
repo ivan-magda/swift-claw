@@ -32,7 +32,7 @@ import Testing
     // when — the proposal suspends the run
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -64,13 +64,13 @@ import Testing
     )
 
     // then — the RECORDED args executed; run resumed and completed; audit trail complete
-    _ = await pollUntilTrue(timeout: .seconds(10)) {
+    _ = await pollUntilTrue {
       FileManager.default.fileExists(atPath: approval.canonicalTarget)
     }
     #expect(
       try String(contentsOfFile: approval.canonicalTarget, encoding: .utf8) == "hello fabric"
     )
-    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
         == RunState.done.rawValue
     }
@@ -101,7 +101,7 @@ import Testing
     )
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write it"))
     let approval = try #require(
-      await pollUntil(timeout: .seconds(10)) {
+      await pollUntil {
         try fetchApprovals(databasePath: harness.databasePath).first
       }
     )
@@ -119,11 +119,11 @@ import Testing
     )
 
     // then — REJECTED row, FAILED run, no file, owner notice, audit decision "rejected"
-    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue {
       try fetchApprovals(databasePath: harness.databasePath).first?.state
         == ApprovalState.rejected.rawValue
     }
-    _ = try await pollUntilTrue(timeout: .seconds(10)) {
+    _ = try await pollUntilTrue {
       try runState(databasePath: harness.databasePath, runId: approval.runId)
         == RunState.failed.rawValue
     }

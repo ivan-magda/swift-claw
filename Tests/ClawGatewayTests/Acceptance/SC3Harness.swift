@@ -69,7 +69,7 @@ struct SC3Harness {
 
   /// Awaits the lane-dispatched turn: polls the outbox until `count` payloads exist (bounded).
   func waitForOutbox(atLeast count: Int) async throws -> [String] {
-    let matched = try await pollUntil(timeout: .seconds(5)) {
+    let matched = try await pollUntil {
       let payloads = try stores.outbox.pendingOutbound().map(\.payload)
       return payloads.count >= count ? payloads : nil
     }

@@ -34,7 +34,7 @@ func suspendFileWrite() async throws -> (SC3Harness, ApprovalRowSnapshot) {
   )
   _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
   let approval = try #require(
-    await pollUntil(timeout: .seconds(10)) {
+    await pollUntil {
       try fetchApprovals(databasePath: harness.databasePath).first
     }
   )
