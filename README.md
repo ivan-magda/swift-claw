@@ -2,7 +2,7 @@
   <img
     src="docs/assets/branding/swift-claw-hero-dark-1400x700.png"
     alt="swift-claw — Your AI. Your machine. Always on."
-    width="760"
+    width="100%"
   />
 </p>
 
