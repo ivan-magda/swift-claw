@@ -17,6 +17,7 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
     .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.11.0"),
     .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "0.5.0"),
+    .package(url: "https://github.com/apple/swift-system.git", from: "1.7.4"),
   ],
   targets: [
     .target(
@@ -80,6 +81,11 @@ let package = Package(
       dependencies: [
         "ClawCore",
         .product(name: "Subprocess", package: "swift-subprocess"),
+        .product(
+          name: "SystemPackage",
+          package: "swift-system",
+          condition: .when(platforms: [.linux])
+        ),
       ]
     ),
     .target(name: "ClawAuth", dependencies: ["ClawCore"]),

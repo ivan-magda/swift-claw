@@ -1,6 +1,11 @@
 import Foundation
 import Subprocess
-import System
+
+#if canImport(System)
+  import System
+#else
+  import SystemPackage
+#endif
 
 public struct ContainerCommand: Sendable, Equatable {
   public let arguments: [String]
