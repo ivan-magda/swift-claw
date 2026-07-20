@@ -1,10 +1,18 @@
-# swift-claw
+<p align="center">
+  <img
+    src="docs/assets/branding/swift-claw-hero-dark-1400x700.png"
+    alt="swift-claw — Your AI. Your machine. Always on."
+    width="760"
+  />
+</p>
 
-[![CI](https://github.com/ivan-magda/swift-claw/actions/workflows/ci.yml/badge.svg)](https://github.com/ivan-magda/swift-claw/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/ivan-magda/swift-claw)](../../releases/latest)
-[![Swift 6.3](https://img.shields.io/badge/Swift-6.3-F05138?logo=swift&logoColor=white)](https://swift.org)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-blue)](#install)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+<p align="center">
+  <a href="https://github.com/ivan-magda/swift-claw/actions/workflows/ci.yml"><img src="https://github.com/ivan-magda/swift-claw/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/ivan-magda/swift-claw" alt="Release"></a>
+  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6.3-F05138?logo=swift&logoColor=white" alt="Swift 6.3"></a>
+  <a href="#install"><img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-blue" alt="Platforms: macOS | Linux"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+</p>
 
 **Your always-on personal AI assistant in Telegram. One pure-Swift daemon on hardware you own.**
 
