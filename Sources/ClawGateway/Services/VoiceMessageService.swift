@@ -89,8 +89,7 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
       return .failure(.tooLong)
     }
 
-    if let declaredSize = attachment.fileSizeBytes,
-      declaredSize > Int64(maxDownloadBytes) {
+    if let declaredSize = attachment.fileSizeBytes, declaredSize > Int64(maxDownloadBytes) {
       return .failure(.tooLong)
     }
 
