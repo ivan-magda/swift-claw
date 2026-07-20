@@ -6,7 +6,7 @@
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-blue)](#install)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Your always-on personal AI assistant in Telegram. One pure-Swift daemon on hardware you own.**
+**Your always-on personal AI assistant. One pure-Swift daemon on hardware you own.**
 
 `clawd` pairs a private Telegram bot with the LLM of your choice. It remembers what you
 tell it and runs scheduled and proactive tasks. Consequential tool calls wait for your
