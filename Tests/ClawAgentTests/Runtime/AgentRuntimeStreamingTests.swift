@@ -464,12 +464,14 @@ func startTurn(
   return box
 }
 
+/// The ceiling is a liveness backstop, never a synchronization point: it is cancelled the moment
+/// the turn resolves, so it must be generous enough to survive a CPU-starved CI runner.
 func waitForTurnResult(
   _ result: TurnResultBox,
-  milliseconds: Int
+  ceiling: Duration = .seconds(30)
 ) async -> TurnOutcome? {
   let timeout = Task {
-    try? await Task.sleep(for: .milliseconds(milliseconds))
+    try? await Task.sleep(for: ceiling)
     await result.resolve(.timeout)
   }
 
@@ -581,7 +583,7 @@ func waitForTurnResult(
         todayUSD: 0
       )
     }
-    let outcome = await waitForTurnResult(turnResult, milliseconds: 2_000)
+    let outcome = await waitForTurnResult(turnResult)
 
     // then
     let (content, _, _) = try requireCompleted(try #require(outcome).result)
@@ -970,7 +972,7 @@ func waitForTurnResult(
       )
     }
     await drafts.waitUntilFirstSendBlocked()
-    let outcome = await waitForTurnResult(turnResult, milliseconds: 1_000)
+    let outcome = await waitForTurnResult(turnResult)
 
     // then
     await drafts.release()
