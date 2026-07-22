@@ -113,8 +113,15 @@ download_and_verify() {
       || die "GitHub attestation verification FAILED for $ASSET — aborting"
     if gh attestation verify "$workdir/SHA256SUMS" -R "$REPO" >/dev/null 2>&1; then
       ATTESTED="binary + manifest attestation OK"
+    elif [ -n "${CLAWD_VERSION:-}" ] && [ "$(printf '%s\n' "v0.2.0" "$CLAWD_VERSION" \
+      | sort -V | head -n1)" = "v0.2.0" ]; then
+      # Every release from v0.2.0 attests its manifest, so a pinned modern release
+      # with an unverifiable SHA256SUMS is not trustworthy.
+      die "manifest attestation verification FAILED for SHA256SUMS ($CLAWD_VERSION) — aborting"
     else
-      ATTESTED="binary attestation OK (manifest unattested — release before v0.2.0?)"
+      ATTESTED="binary attestation OK, manifest unattested — if the installed release is
+    v0.2.0 or newer, do NOT trust it; verify manually:
+    gh attestation verify SHA256SUMS -R $REPO"
     fi
   fi
 }
