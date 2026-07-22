@@ -19,6 +19,16 @@ struct SecretsCommand: AsyncParsableCommand {
       abstract: "Encrypt the env secrets into <stateRoot>/secrets.enc."
     )
 
+    @Option(
+      name: .customLong("env-file"),
+      help:
+        "Env file to scrub sealed secrets from (default: $CLAW_ENV_FILE or ~/.swift-claw/clawd.env)."
+    )
+    var envFile: String?
+
+    @Flag(name: .customLong("no-scrub"), help: "Leave plaintext secret lines in the env file.")
+    var noScrub = false
+
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
       let config: AppConfig
@@ -46,15 +56,20 @@ struct SecretsCommand: AsyncParsableCommand {
       let paths = SecretStatePaths(stateRoot: config.stateRoot)
       let envelopePath = paths.runtimeEnvelope.path
       let keyPath = paths.key.path
+      let scrubOutcome: SealScrubOutcome? =
+        noScrub
+        ? nil
+        : Self.scrubEnvFile(
+          at: resolvedEnvFilePath(environment: environment),
+          keys: [
+            EnvSecretStore.EnvKey.botToken,
+            EnvSecretStore.EnvKey.llmApiKey,
+            EnvSecretStore.EnvKey.searchApiKey,
+          ]
+        )
       // swiftlint:disable:next no_print_in_production
       print(
-        """
-        Sealed secrets → \(envelopePath)
-        Key → \(keyPath) (mode 0600 — keep this OUTSIDE your state-root backup boundary)
-        You may now remove the plaintext \(EnvSecretStore.EnvKey.botToken) / \
-        \(EnvSecretStore.EnvKey.llmApiKey) /
-        \(EnvSecretStore.EnvKey.searchApiKey) from the env.
-        """
+        Self.sealSummary(envelopePath: envelopePath, keyPath: keyPath, scrubOutcome: scrubOutcome)
       )
     }
   }
@@ -97,5 +112,84 @@ extension SecretsCommand.Seal {
       )
       throw ExitCode(ClawExitCode.alreadyRunning.rawValue)
     }
+  }
+}
+
+// MARK: - Env-File Scrub
+
+enum SealScrubOutcome: Equatable {
+  case scrubbed(keys: [String], path: String)
+  case alreadyClean(path: String)
+  case fileAbsent(path: String)
+  case failed(path: String, reason: String)
+}
+
+extension SecretsCommand.Seal {
+  func resolvedEnvFilePath(environment: [String: String]) -> String {
+    if let explicit = envFile { return explicit }
+    if let fromEnv = environment["CLAW_ENV_FILE"] { return fromEnv }
+    return NSHomeDirectory() + "/.swift-claw/clawd.env"
+  }
+
+  /// Blanks sealed secret values in the env file, writing atomically and preserving 0600.
+  static func scrubEnvFile(at path: String, keys: [String]) -> SealScrubOutcome {
+    guard FileManager.default.fileExists(atPath: path) else {
+      return .fileAbsent(path: path)
+    }
+    guard let data = FileManager.default.contents(atPath: path),
+      let contents = String(data: data, encoding: .utf8)
+    else {
+      return .failed(path: path, reason: "unreadable or not UTF-8")
+    }
+    let result = EnvFileSecretScrubber.scrub(contents: contents, keys: keys)
+    guard !result.scrubbedKeys.isEmpty else { return .alreadyClean(path: path) }
+    let tempPath = path + ".seal-scrub.tmp"
+    do {
+      try result.contents.write(toFile: tempPath, atomically: false, encoding: .utf8)
+      try FileManager.default.setAttributes(
+        [.posixPermissions: 0o600],
+        ofItemAtPath: tempPath
+      )
+      _ = try FileManager.default.replaceItemAt(
+        URL(fileURLWithPath: path),
+        withItemAt: URL(fileURLWithPath: tempPath)
+      )
+    } catch {
+      try? FileManager.default.removeItem(atPath: tempPath)
+      return .failed(path: path, reason: "\(error)")
+    }
+    return .scrubbed(keys: result.scrubbedKeys, path: path)
+  }
+
+  static func sealSummary(
+    envelopePath: String,
+    keyPath: String,
+    scrubOutcome: SealScrubOutcome?
+  ) -> String {
+    var summary = """
+      Sealed secrets → \(envelopePath)
+      Key → \(keyPath) (mode 0600 — keep this OUTSIDE your state-root backup boundary)
+      """
+    let manualNote = """
+      Remove the plaintext \(EnvSecretStore.EnvKey.botToken) / \
+      \(EnvSecretStore.EnvKey.llmApiKey) / \(EnvSecretStore.EnvKey.searchApiKey) \
+      values from your env file yourself.
+      """
+    switch scrubOutcome {
+    case .scrubbed(let keys, let path):
+      summary += "\nBlanked \(keys.joined(separator: ", ")) in \(path)."
+      summary += "\nYour current shell still holds the old values; open a fresh shell "
+      summary += "before running the daemon."
+    case .alreadyClean(let path):
+      summary += "\nNo plaintext secret values found in \(path)."
+    case .fileAbsent(let path):
+      summary += "\nNo env file at \(path) — nothing to scrub. " + manualNote
+    case .failed(let path, let reason):
+      summary += "\nWARNING: could not scrub \(path) (\(reason))."
+      summary += "\nThe plaintext secret values are still in \(path) — " + manualNote
+    case nil:
+      summary += "\n" + manualNote
+    }
+    return summary
   }
 }
