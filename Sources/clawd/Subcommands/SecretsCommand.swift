@@ -133,34 +133,37 @@ extension SecretsCommand.Seal {
 
   /// Blanks sealed secret values in the env file via crash-safe publication (0600 temp, fsync,
   /// POSIX rename): on any failure the original file is left intact, and the result is mode 0600.
+  /// A symlinked env file is resolved first, so the target is rewritten and the link preserved.
   static func scrubEnvFile(at path: String, keys: [String]) -> SealScrubOutcome {
     guard FileManager.default.fileExists(atPath: path) else {
       return .fileAbsent(path: path)
     }
 
+    let resolvedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+
     guard
-      let data = FileManager.default.contents(atPath: path),
+      let data = FileManager.default.contents(atPath: resolvedPath),
       let contents = String(data: data, encoding: .utf8)
     else {
-      return .failed(path: path, reason: "unreadable or not UTF-8")
+      return .failed(path: resolvedPath, reason: "unreadable or not UTF-8")
     }
 
     let result = EnvFileSecretScrubber.scrub(contents: contents, keys: keys)
     guard !result.scrubbedKeys.isEmpty else {
-      return .alreadyClean(path: path)
+      return .alreadyClean(path: resolvedPath)
     }
 
     do {
       _ = try SecureFilePublisher().publish(
         Data(result.contents.utf8),
-        to: URL(fileURLWithPath: path),
+        to: URL(fileURLWithPath: resolvedPath),
         mode: .replace
       )
     } catch {
-      return .failed(path: path, reason: "\(error)")
+      return .failed(path: resolvedPath, reason: "\(error)")
     }
 
-    return .scrubbed(keys: result.scrubbedKeys, path: path)
+    return .scrubbed(keys: result.scrubbedKeys, path: resolvedPath)
   }
 
   static func sealSummary(

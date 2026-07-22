@@ -83,6 +83,35 @@ import Testing
     #expect((mode as? NSNumber)?.intValue == 0o600)
   }
 
+  @Test func scrubbingViaSymlinkRewritesTheTargetAndPreservesTheLink() throws {
+    // given — a real env file plus a symlink pointing at it
+    let dir = try makeTemporaryRoot(prefix: "claw-scrub-link")
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let targetPath = dir.appendingPathComponent("clawd.env").path
+    let linkPath = dir.appendingPathComponent("clawd.env.link").path
+    try "CLAW_TELEGRAM_BOT_TOKEN=123:abc\nCLAW_LLM_MODEL=m\n"
+      .write(toFile: targetPath, atomically: true, encoding: .utf8)
+    try FileManager.default.createSymbolicLink(
+      atPath: linkPath,
+      withDestinationPath: targetPath
+    )
+
+    // when — scrubbing through the symlink path
+    let outcome = SecretsCommand.Seal.scrubEnvFile(
+      at: linkPath,
+      keys: ["CLAW_TELEGRAM_BOT_TOKEN"]
+    )
+
+    // then — the outcome names the resolved path, the target is blanked, the link survives
+    let resolvedPath = URL(fileURLWithPath: linkPath).resolvingSymlinksInPath().path
+    #expect(outcome == .scrubbed(keys: ["CLAW_TELEGRAM_BOT_TOKEN"], path: resolvedPath))
+    let rewritten = try String(contentsOfFile: targetPath, encoding: .utf8)
+    #expect(rewritten == "CLAW_TELEGRAM_BOT_TOKEN=\nCLAW_LLM_MODEL=m\n")
+    // attributesOfItem uses lstat semantics, so it sees the link itself, not the target.
+    let linkType = try FileManager.default.attributesOfItem(atPath: linkPath)[.type]
+    #expect(linkType as? FileAttributeType == .typeSymbolicLink)
+  }
+
   @Test func absentFileYieldsFileAbsentNotAnError() {
     // given / when
     let outcome = SecretsCommand.Seal.scrubEnvFile(
