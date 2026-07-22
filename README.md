@@ -69,8 +69,9 @@ sudo install -m755 .build/release/clawd /usr/local/bin/clawd
 4. Say hello once in the foreground: `clawd run`, then send `/start` to your bot. The
    refusal shows your numeric ID; set it as `CLAW_ALLOWLIST=<id>` in `clawd.env`, then
    Ctrl-C.
-5. Re-source the env file, check health with `clawd doctor`, and start the service with
-   the command doctor prints.
+5. Check health and start the service:
+   `set -a && . ~/.swift-claw/clawd.env && set +a && clawd doctor`, then run the start
+   command doctor prints.
 
 The full walkthrough, including the ChatGPT-subscription route and troubleshooting, is
 in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).

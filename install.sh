@@ -140,13 +140,17 @@ install_files() {
   umask 077
   mkdir -p "$BIN_DIR"
   chmod 700 "$CLAW_HOME"
-  # Two-phase move: never leave a half-written binary at the final path.
+  # Two-phase move: smoke-test the candidate first, so a binary that cannot run
+  # here never replaces a working install and no half-written file lands at the
+  # final path.
   install -m 755 "$workdir/$ASSET" "$BIN_DIR/.clawd.new"
-  mv -f "$BIN_DIR/.clawd.new" "$BIN_DIR/clawd"
-  INSTALLED_VERSION="$("$BIN_DIR/clawd" --version 2>/dev/null)" \
-    || die "the installed binary failed to run on this machine.
+  if ! INSTALLED_VERSION="$("$BIN_DIR/.clawd.new" --version 2>/dev/null)"; then
+    rm -f "$BIN_DIR/.clawd.new"
+    die "the installed binary failed to run on this machine.
   On Linux this usually means glibc is older than $GLIBC_FLOOR. Build from source:
   https://github.com/${REPO}#install"
+  fi
+  mv -f "$BIN_DIR/.clawd.new" "$BIN_DIR/clawd"
   # run-clawd.sh defaults to /usr/local/bin/clawd; point the default here instead.
   sed 's|/usr/local/bin/clawd|'"$BIN_DIR"'/clawd|' "$workdir/run-clawd.sh" \
     > "$BIN_DIR/run-clawd.sh"
@@ -172,7 +176,8 @@ EOF
   # The opt-out skips only the rc-file edits; the env helper above always exists.
   [ "${CLAWD_NO_MODIFY_PATH:-0}" = "1" ] && return 0
   sourced_somewhere=0
-  for rcfile in "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.bashrc" "$HOME/.profile"; do
+  for rcfile in "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.bashrc" "$HOME/.bash_profile" \
+    "$HOME/.profile"; do
     [ -f "$rcfile" ] || continue
     # shellcheck disable=SC2016  # literal $HOME: the rc line must expand at shell startup
     grep -qs '\.swift-claw/env' "$rcfile" \
@@ -264,8 +269,8 @@ print_next_steps() {
     say "  4. Say hello once in the foreground: clawd run"
     say "     (send /start to your bot — the refusal shows your numeric ID; set it as"
     say "      CLAW_ALLOWLIST=<id> in clawd.env, then Ctrl-C)"
-    say "  5. Re-source the env file, check health, and start the service:"
-    say "       clawd doctor && $START_CMD"
+    say "  5. Check health and start the service:"
+    say "       set -a && . ~/.swift-claw/clawd.env && set +a && clawd doctor && $START_CMD"
     say ""
     say "Full guide: https://github.com/${REPO}/blob/main/docs/GETTING_STARTED.md"
   else
