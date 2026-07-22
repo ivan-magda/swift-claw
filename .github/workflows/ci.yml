@@ -32,6 +32,10 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
       - name: Build and run tests
         run: swift test
+        # A silent test-process death once left no diagnostics at all; the backtracer
+        # turns the next one into a stack trace.
+        env:
+          SWIFT_BACKTRACE: enable=yes
       - name: Re-run the concurrency-sensitive suites on one cooperative thread
         env:
           LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
