@@ -7,9 +7,11 @@ enum EnvFileSecretScrubber {
   ) -> (contents: String, scrubbedKeys: [String]) {
     var scrubbedKeys: [String] = []
     let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
+
     let rewritten = lines.map { line in
       scrubLine(String(line), keys: keys, scrubbedKeys: &scrubbedKeys)
     }
+
     return (rewritten.joined(separator: "\n"), scrubbedKeys)
   }
 }
@@ -23,11 +25,18 @@ private extension EnvFileSecretScrubber {
     scrubbedKeys: inout [String]
   ) -> String {
     for key in keys {
-      guard let prefix = assignmentPrefix(of: line, key: key) else { continue }
-      guard line.count > prefix.count else { continue }
+      guard let prefix = assignmentPrefix(of: line, key: key) else {
+        continue
+      }
+
+      guard line.count > prefix.count else {
+        continue
+      }
+
       scrubbedKeys.append(key)
       return prefix
     }
+
     return line
   }
 
@@ -36,13 +45,19 @@ private extension EnvFileSecretScrubber {
   static func assignmentPrefix(of line: String, key: String) -> String? {
     var head = Substring(line)
     let indent = head.prefix(while: { $0 == " " || $0 == "\t" })
+
     head = head.dropFirst(indent.count)
     var exportPrefix = ""
+
     if head.hasPrefix("export ") {
       exportPrefix = "export "
       head = head.dropFirst(exportPrefix.count)
     }
-    guard head.hasPrefix("\(key)=") else { return nil }
+
+    guard head.hasPrefix("\(key)=") else {
+      return nil
+    }
+
     return String(indent) + exportPrefix + key + "="
   }
 }
