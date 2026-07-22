@@ -7,8 +7,14 @@ enum StartReadiness {
   case notReady
 
   static func from(reportOK: Bool, failingKeys: [String]) -> StartReadiness {
-    if reportOK { return .ready }
-    if failingKeys == ["allowlist.owners"] { return .readyAwaitingOwner }
+    if reportOK {
+      return .ready
+    }
+
+    if failingKeys == ["allowlist.owners"] {
+      return .readyAwaitingOwner
+    }
+
     return .notReady
   }
 }
@@ -24,23 +30,34 @@ enum ServiceStartHint {
     isLinux: Bool,
     uid: UInt32
   ) -> String? {
-    guard readiness != .notReady, !daemonRunning else { return nil }
+    guard readiness != .notReady, !daemonRunning else {
+      return nil
+    }
+
     let opener =
       readiness == .readyAwaitingOwner
-      ? "Checks passed (no owner allowlisted yet — start the daemon, then send /start "
-        + "to your bot to get your ID)."
+      ? "Checks passed (no owner allowlisted yet — start the daemon, then send /start to your bot to get your ID)."
       : "All checks passed."
+
     guard unitInstalled else {
-      return opener + " To keep clawd running as a service, see "
-        + "https://github.com/ivan-magda/swift-claw/blob/main/docs/INSTALL.md"
+      return """
+        \(opener)
+        To keep clawd running as a service, see https://github.com/ivan-magda/swift-claw/blob/main/docs/INSTALL.md
+        """
     }
+
     guard serviceManagerAvailable else {
       return opener + " Start the daemon with: clawd run"
     }
+
     let startCommand =
       isLinux
       ? "systemctl --user enable --now swift-claw.service"
       : "launchctl bootstrap gui/\(uid) ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
-    return opener + " Start the service:\n  " + startCommand
+
+    return """
+      \(opener)
+      Start the service:\n  \(startCommand)
+      """
   }
 }
