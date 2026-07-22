@@ -300,18 +300,24 @@ private extension DoctorCommand {
 // MARK: - Service Hint
 
 private extension DoctorCommand {
-  func serviceStartHint(report: DoctorReport, config: AppConfig) -> String? {
+  func serviceStartHint(
+    report: DoctorReport,
+    config: AppConfig
+  ) -> String? {
     let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
     let daemonRunning: Bool
+
     if let lock = try? InstanceLock(path: lockPath) {
       lock.release()
       daemonRunning = false
     } else {
       daemonRunning = true
     }
+
     let failingKeys = report.checks.filter { check in
       !check.ok
     }.map(\.key)
+
     #if os(Linux)
       let unitPath = NSHomeDirectory() + "/.config/systemd/user/swift-claw.service"
       let isLinux = true
@@ -324,6 +330,7 @@ private extension DoctorCommand {
       let isLinux = false
       let serviceManagerAvailable = true
     #endif
+
     return ServiceStartHint.text(
       readiness: .from(reportOK: report.ok, failingKeys: failingKeys),
       daemonRunning: daemonRunning,
