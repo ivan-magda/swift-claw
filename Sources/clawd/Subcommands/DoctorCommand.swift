@@ -324,22 +324,44 @@ private extension DoctorCommand {
       let serviceManagerAvailable = FileManager.default.fileExists(
         atPath: "/run/systemd/system"
       )
+      let unitLoaded = false
     #else
       let unitPath =
         NSHomeDirectory() + "/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
       let isLinux = false
       let serviceManagerAvailable = true
+      let unitLoaded = launchAgentLoaded(uid: getuid())
     #endif
 
     return ServiceStartHint.text(
       readiness: .from(reportOK: report.ok, failingKeys: failingKeys),
       daemonRunning: daemonRunning,
       unitInstalled: FileManager.default.fileExists(atPath: unitPath),
+      unitLoaded: unitLoaded,
       serviceManagerAvailable: serviceManagerAvailable,
       isLinux: isLinux,
       uid: getuid()
     )
   }
+
+  #if !os(Linux)
+    /// `launchctl print` exits 0 only when launchd holds the label in the user's GUI
+    /// domain; any probe failure degrades to "not loaded" so the hint stays printable.
+    func launchAgentLoaded(uid: uid_t) -> Bool {
+      let probe = Process()
+      probe.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+      probe.arguments = ["print", "gui/\(uid)/com.ivanmagda.swift-claw"]
+      probe.standardOutput = FileHandle.nullDevice
+      probe.standardError = FileHandle.nullDevice
+      do {
+        try probe.run()
+      } catch {
+        return false
+      }
+      probe.waitUntilExit()
+      return probe.terminationStatus == 0
+    }
+  #endif
 }
 
 // MARK: - Output

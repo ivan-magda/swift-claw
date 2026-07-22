@@ -9,6 +9,7 @@ import Testing
       readiness: .ready,
       daemonRunning: false,
       unitInstalled: true,
+      unitLoaded: false,
       serviceManagerAvailable: true,
       isLinux: false,
       uid: 501
@@ -17,6 +18,7 @@ import Testing
       readiness: .ready,
       daemonRunning: false,
       unitInstalled: true,
+      unitLoaded: false,
       serviceManagerAvailable: true,
       isLinux: true,
       uid: 1000
@@ -27,12 +29,47 @@ import Testing
     #expect(linuxHint?.contains("systemctl --user enable --now swift-claw.service") == true)
   }
 
+  @Test func loadedButStoppedLaunchAgentGetsKickstartBecauseBootstrapWouldBeRejected() {
+    // given / when
+    let hint = ServiceStartHint.text(
+      readiness: .ready,
+      daemonRunning: false,
+      unitInstalled: true,
+      unitLoaded: true,
+      serviceManagerAvailable: true,
+      isLinux: false,
+      uid: 501
+    )
+
+    // then
+    #expect(hint?.contains("launchctl kickstart -k gui/501/com.ivanmagda.swift-claw") == true)
+    #expect(hint?.contains("bootstrap") == false)
+  }
+
+  @Test func unloadedLaunchAgentStillGetsTheBootstrapCommand() {
+    // given / when
+    let hint = ServiceStartHint.text(
+      readiness: .ready,
+      daemonRunning: false,
+      unitInstalled: true,
+      unitLoaded: false,
+      serviceManagerAvailable: true,
+      isLinux: false,
+      uid: 501
+    )
+
+    // then
+    #expect(hint?.contains("launchctl bootstrap gui/501") == true)
+    #expect(hint?.contains("kickstart") == false)
+  }
+
   @Test func emptyAllowlistOnboardingStateStillGetsAStartCommandWithStartGuidance() {
     // given / when — the daemon must run for /start to reveal the owner's ID
     let hint = ServiceStartHint.text(
       readiness: .readyAwaitingOwner,
       daemonRunning: false,
       unitInstalled: true,
+      unitLoaded: false,
       serviceManagerAvailable: true,
       isLinux: false,
       uid: 501
@@ -50,6 +87,7 @@ import Testing
         readiness: .notReady,
         daemonRunning: false,
         unitInstalled: true,
+        unitLoaded: false,
         serviceManagerAvailable: true,
         isLinux: false,
         uid: 501
@@ -60,6 +98,7 @@ import Testing
         readiness: .ready,
         daemonRunning: true,
         unitInstalled: true,
+        unitLoaded: true,
         serviceManagerAvailable: true,
         isLinux: false,
         uid: 501
@@ -73,6 +112,7 @@ import Testing
       readiness: .ready,
       daemonRunning: false,
       unitInstalled: false,
+      unitLoaded: false,
       serviceManagerAvailable: true,
       isLinux: false,
       uid: 501
@@ -81,6 +121,7 @@ import Testing
       readiness: .ready,
       daemonRunning: false,
       unitInstalled: true,
+      unitLoaded: false,
       serviceManagerAvailable: false,
       isLinux: true,
       uid: 1000

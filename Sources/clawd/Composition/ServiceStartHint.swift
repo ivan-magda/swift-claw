@@ -26,6 +26,7 @@ enum ServiceStartHint {
     readiness: StartReadiness,
     daemonRunning: Bool,
     unitInstalled: Bool,
+    unitLoaded: Bool,
     serviceManagerAvailable: Bool,
     isLinux: Bool,
     uid: UInt32
@@ -50,10 +51,17 @@ enum ServiceStartHint {
       return opener + " Start the daemon with: clawd run"
     }
 
-    let startCommand =
-      isLinux
-      ? "systemctl --user enable --now swift-claw.service"
-      : "launchctl bootstrap gui/\(uid) ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
+    let startCommand: String
+    if isLinux {
+      startCommand = "systemctl --user enable --now swift-claw.service"
+    } else if unitLoaded {
+      // launchd rejects bootstrap for a label it already holds; kickstart is the
+      // command that starts a loaded-but-stopped agent.
+      startCommand = "launchctl kickstart -k gui/\(uid)/com.ivanmagda.swift-claw"
+    } else {
+      startCommand =
+        "launchctl bootstrap gui/\(uid) ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
+    }
 
     return """
       \(opener)
