@@ -65,7 +65,7 @@ let package = Package(
         "ClawAuth",
         .product(name: "Logging", package: "swift-log"),
       ],
-      resources: [.copy("Pricing/Prices.json")]
+      resources: [.embedInCode("Pricing/Prices.json")]
     ),
     .target(
       name: "ClawAgent",
