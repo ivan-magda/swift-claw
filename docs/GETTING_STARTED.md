@@ -11,8 +11,8 @@ From nothing to a running assistant that answers you in Telegram.
 - **LLM access.** Either an OpenAI-compatible endpoint with an API key (Anthropic,
   OpenAI, OpenRouter, or a local server), or a ChatGPT subscription.
 
-Install `clawd` first: release binary or source build, both covered in the
-[README](../README.md#install). The steps below assume `clawd` is on your `PATH`.
+Install `clawd` first: the install script, a manual release download, or a source build,
+all covered in [INSTALL.md](INSTALL.md). The steps below assume `clawd` is on your `PATH`.
 
 **On a ChatGPT subscription?** Do [step 8](#8-chatgpt-subscription-instead-of-an-api-key)
 right after step 2, before you start the daemon. Step 8 gives you the `CLAW_LLM_MODEL`
@@ -27,8 +27,11 @@ the identity of your bot, so treat it like a password.
 
 ## 2. Configure
 
-Your shell executes this file with `source`, so use the copy that ships with the release
-you verified rather than fetching one over the network:
+**Installed with the script?** `~/.swift-claw/clawd.env` is already in place — the
+script installed the verified template on first run. Skip to editing it below.
+
+**Manual install:** your shell executes this file with `source`, so use the copy that
+ships with the release you verified rather than fetching one over the network:
 
 ```bash
 mkdir -p -m 700 ~/.swift-claw
@@ -36,7 +39,7 @@ install -m 600 clawd.env.example ~/.swift-claw/clawd.env    # from your download
 ```
 
 `clawd.env.example` is a release asset covered by `SHA256SUMS`, so the checksum step from
-[Install](../README.md#install) already verified it. From a source checkout, use
+[INSTALL.md](INSTALL.md#2-manual-install) already verified it. From a source checkout, use
 `install -m 600 .env.example ~/.swift-claw/clawd.env` instead.
 
 Edit `~/.swift-claw/clawd.env` and set four values:
@@ -68,15 +71,15 @@ clawd secrets seal
 This encrypts the bot token and API keys into `~/.swift-claw/secrets.enc` with a key in
 `~/.swift-claw/secret.key` (mode 0600).
 
-Sealing copies the secrets out of your environment; it does not edit `clawd.env`. Delete
-or blank the `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, and `CLAW_SEARCH_API_KEY`
-lines yourself. Until you do, the plaintext values stay on disk and in any backup of that
-directory. The daemon now reads them from the encrypted store, and refuses to fall back to
-plaintext if the store is present but broken.
+Sealing also blanks the plaintext `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, and
+`CLAW_SEARCH_API_KEY` lines in `clawd.env` itself, and tells you what it changed
+(`--no-scrub` keeps them; before v0.2.0, blank them yourself). The daemon now reads the
+secrets from the encrypted store, and refuses to fall back to plaintext if the store is
+present but broken.
 
 Sourcing the file again does not undo the export: your current shell still holds the
-values it read before you edited them. Open a fresh shell and source the sanitized file
-there:
+values it read before sealing blanked them. Open a fresh shell and source the sanitized
+file there:
 
 ```bash
 set -a && source ~/.swift-claw/clawd.env && set +a
@@ -112,12 +115,17 @@ clawd run
 
 Send `/start` to your bot in Telegram. Because the allowlist is still empty, it answers:
 
-> This is a private bot. Your Telegram user ID is 12345678. Ask the owner to add it to the allowlist.
+> This is a private bot. Your Telegram user ID is 12345678. To authorize it, the owner
+> adds this line to clawd.env and restarts clawd:
+>
+> CLAW_ALLOWLIST=12345678
+
+(v0.2.0+; older releases print the ID in prose without the pasteable line.)
 
 Only `/start` gets that reply. Any other message from a non-allowlisted sender gets a
 bare "Sorry, this is a private bot." with no ID, so `/start` is how you learn the number.
 
-That number is you. Stop the daemon (Ctrl-C), set it in `clawd.env`:
+That number is you. Stop the daemon (Ctrl-C) and paste the shown line into `clawd.env`:
 
 ```bash
 CLAW_ALLOWLIST=12345678
@@ -151,38 +159,13 @@ locales, and the code sandbox.
 
 ## 7. Keep it running
 
-To restart `clawd` after a crash and start it on login, install it under launchd (macOS)
-or systemd (Linux). [deploy/README.md](../deploy/README.md) has the unit files and the
-three commands per platform.
+To restart `clawd` after a crash and start it on login, run it under launchd (macOS) or
+systemd (Linux). A healthy `clawd doctor` ends by printing the exact start command for
+your machine — run that.
 
-If you installed a release binary, download the unit files from that same release:
-`run-clawd.sh`, plus `swift-claw.service` (Linux) or `com.ivanmagda.swift-claw.plist`
-(macOS). `SHA256SUMS` covers them, so verify before use. You install `run-clawd.sh` as
-root and your machine runs it at every login, which is reason enough not to take it from
-an unverified source:
-
-```bash
-cd ~/Downloads
-UNIT=com.ivanmagda.swift-claw.plist    # Linux: swift-claw.service
-
-shasum -a 256 --ignore-missing -c SHA256SUMS &&    # Linux: sha256sum --ignore-missing -c SHA256SUMS
-  mkdir -p deploy && mv run-clawd.sh "$UNIT" deploy/
-```
-
-The deployment guide's commands read from `deploy/`, so run them from the directory that
-now holds it.
-
-Both units are **per-user**: they start when you log in, not at boot, and they stop when
-you log out. For a machine you administer and want always-on:
-
-- **Linux:** let the user manager run without a session with
-  `sudo loginctl enable-linger $USER`. Without it, a service you installed over SSH stops
-  when you disconnect and does not come back after a reboot.
-- **macOS:** enable automatic login for the account. That keeps the LaunchAgent, which is
-  the simple path. A system LaunchDaemon in `/Library/LaunchDaemons` runs as root, where
-  `$HOME` is `/var/root`, so the wrapper looks for its config in the wrong place and
-  `clawd` exits 10. If you go that route, pin the account and paths explicitly with
-  `UserName`, `CLAW_ENV_FILE`, and `CLAW_STATE_ROOT` in the plist.
+[INSTALL.md section 4](INSTALL.md#4-running-as-a-service) covers both layouts (script
+install and manual `/usr/local/bin`), plus the linger/auto-login notes for a machine
+that should stay on after you log out, log locations, and the exit codes.
 
 ## 8. ChatGPT subscription instead of an API key
 

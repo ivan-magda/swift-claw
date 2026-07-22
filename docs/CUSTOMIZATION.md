@@ -152,7 +152,7 @@ Stop the daemon first; sealing takes the same state-root lock. Put **all** the s
 want back in the environment, not just the new one, since the reseal replaces the envelope:
 
 ```bash
-export CLAW_TELEGRAM_BOT_TOKEN=...   # the values you deleted after the first seal
+export CLAW_TELEGRAM_BOT_TOKEN=...   # the values the first seal blanked from clawd.env
 export CLAW_LLM_API_KEY=...
 export CLAW_SEARCH_API_KEY=...       # the one you are adding
 clawd secrets seal
