@@ -131,7 +131,8 @@ extension SecretsCommand.Seal {
     return NSHomeDirectory() + "/.swift-claw/clawd.env"
   }
 
-  /// Blanks sealed secret values in the env file, writing atomically and preserving 0600.
+  /// Blanks sealed secret values in the env file via crash-safe publication (0600 temp, fsync,
+  /// POSIX rename): on any failure the original file is left intact, and the result is mode 0600.
   static func scrubEnvFile(at path: String, keys: [String]) -> SealScrubOutcome {
     guard FileManager.default.fileExists(atPath: path) else {
       return .fileAbsent(path: path)
@@ -149,21 +150,13 @@ extension SecretsCommand.Seal {
       return .alreadyClean(path: path)
     }
 
-    let tempPath = "\(path).seal-scrub.tmp"
     do {
-      try result.contents.write(toFile: tempPath, atomically: false, encoding: .utf8)
-
-      try FileManager.default.setAttributes(
-        [.posixPermissions: 0o600],
-        ofItemAtPath: tempPath
-      )
-
-      _ = try FileManager.default.replaceItemAt(
-        URL(fileURLWithPath: path),
-        withItemAt: URL(fileURLWithPath: tempPath)
+      _ = try SecureFilePublisher().publish(
+        Data(result.contents.utf8),
+        to: URL(fileURLWithPath: path),
+        mode: .replace
       )
     } catch {
-      try? FileManager.default.removeItem(atPath: tempPath)
       return .failed(path: path, reason: "\(error)")
     }
 

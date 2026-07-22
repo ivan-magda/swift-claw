@@ -7,9 +7,9 @@ import Foundation
 #endif
 
 /// The publication protocol's own error vocabulary. Callers translate it into their seam type
-/// (`SecretStoreError`, `LLMCredentialStoreError`) — it never leaves `ClawSecrets`, and it carries
-/// only state-root filenames, never an absolute path and never bytes read from a file.
-enum SecureFileError: Error, Sendable, Equatable {
+/// (`SecretStoreError`, `LLMCredentialStoreError`) or render it into a user-facing reason — it
+/// carries only entry filenames, never an absolute path and never bytes read from a file.
+package enum SecureFileError: Error, Sendable, Equatable {
   /// Metadata policy refused the entry: not a regular file, wrong owner, or wrong mode.
   case insecure(String)
   case unreadable(String)
@@ -48,7 +48,7 @@ struct SecureFileFacts: Sendable, Equatable {
 /// swapped underneath the operation is left alone. A (device, inode) pair alone is not that pin:
 /// Linux filesystems reuse a freed inode number for the next file created, so size and mtime —
 /// captured after the last write, and unchanged by the commit's fsync/rename — complete it.
-struct SecureFileIdentity: Sendable, Equatable {
+package struct SecureFileIdentity: Sendable, Equatable {
   let device: dev_t
   let inode: ino_t
   let ownerUID: uid_t
@@ -57,13 +57,15 @@ struct SecureFileIdentity: Sendable, Equatable {
   let modificationNanoseconds: Int64
 }
 
-/// Crash-safe publication and bounded, no-follow reads for the files `SecretStatePaths` names.
+/// Crash-safe publication and bounded, no-follow reads for owner-only files — the entries
+/// `SecretStatePaths` names, and any other 0600 file whose previous contents must survive a
+/// failed rewrite (the seal-time env-file scrub).
 ///
 /// The type encodes the distinction the callers depend on: **throwing means nothing was linked into
 /// place**, so the previous value is intact and a retry is free. **Returning means the commit
 /// landed** — either durably or, when the parent directory could not be proven synced, uncertainly.
 /// A caller holding an uncertain outcome must reload the path rather than assume the write was lost.
-struct SecureFilePublisher: Sendable {
+package struct SecureFilePublisher: Sendable {
   static let ownerOnlyPermissions: UInt32 = 0o600
   /// Strips the file-type bits from `st_mode`.
   static let permissionBitsMask: UInt32 = 0o777
@@ -75,7 +77,7 @@ struct SecureFilePublisher: Sendable {
   /// key and the envelope. A failpoint that could only say "fail the commit" would always fire on
   /// the key — the first publication — and a test meaning to exercise the envelope's rollback would
   /// quietly stop reaching the envelope at all.
-  struct Failpoint: Sendable, Equatable {
+  package struct Failpoint: Sendable, Equatable {
     enum Step: Sendable, Equatable {
       case tempWrite
       case fileSync
@@ -99,7 +101,7 @@ struct SecureFilePublisher: Sendable {
   }
 
   /// How a publication claims the target name.
-  enum PublicationMode: Sendable, Equatable {
+  package enum PublicationMode: Sendable, Equatable {
     /// `rename`: the target is meant to be replaced, and whatever holds the name is clobbered
     /// atomically.
     case replace
@@ -121,7 +123,7 @@ struct SecureFilePublisher: Sendable {
 
   /// The two ways a commit can have landed. There is no third: a publication that did not claim the
   /// target name throws instead.
-  enum PublicationOutcome: Sendable, Equatable {
+  package enum PublicationOutcome: Sendable, Equatable {
     case published(SecureFileIdentity)
     /// The name was claimed but the parent directory was not proven durable, so a crash now could
     /// still lose it. The bytes are readable at the path either way.
@@ -144,7 +146,7 @@ struct SecureFilePublisher: Sendable {
 
   private let failpoint: Failpoint?
 
-  init(failpoint: Failpoint? = nil) {
+  package init(failpoint: Failpoint? = nil) {
     self.failpoint = failpoint
   }
 
@@ -154,7 +156,7 @@ struct SecureFilePublisher: Sendable {
   /// ever points at them, so no crash can expose a half-written entry under the target name.
   ///
   /// `mode` decides only how the name is claimed; everything above it is identical.
-  func publish(
+  package func publish(
     _ bytes: Data,
     to url: URL,
     mode: PublicationMode = .replace
