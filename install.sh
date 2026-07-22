@@ -105,19 +105,29 @@ download_and_verify() {
   (cd "$workdir" && sha256_check) \
     || die "checksum verification FAILED — aborting; nothing was installed"
   ATTESTED="attestation not checked (optional; install+login the GitHub CLI and run:
-    gh attestation verify $ASSET -R $REPO)"
+    gh attestation verify \"$BIN_DIR/clawd\" -R $REPO)"
   if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    # An unpinned install still resolves to one concrete tag: the first redirect of
+    # the latest-release URL carries it, so the >= v0.2.0 fail-closed rule below can
+    # apply to "latest" exactly as it does to a pin. Empty on failure = unresolvable.
+    effective_tag="${CLAWD_VERSION:-}"
+    if [ -z "$effective_tag" ]; then
+      effective_tag="$(curl --proto '=https' --tlsv1.2 -fsSI -o /dev/null \
+        -w '%{redirect_url}' \
+        "https://github.com/${REPO}/releases/latest/download/SHA256SUMS" 2>/dev/null \
+        | sed -n 's|.*/download/\(v[^/]*\)/.*|\1|p')" || effective_tag=""
+    fi
     # The manifest attestation covers every asset transitively; releases before
     # v0.2.0 attest only the binaries.
     gh attestation verify "$workdir/$ASSET" -R "$REPO" >/dev/null 2>&1 \
       || die "GitHub attestation verification FAILED for $ASSET — aborting"
     if gh attestation verify "$workdir/SHA256SUMS" -R "$REPO" >/dev/null 2>&1; then
       ATTESTED="binary + manifest attestation OK"
-    elif [ -n "${CLAWD_VERSION:-}" ] && [ "$(printf '%s\n' "v0.2.0" "$CLAWD_VERSION" \
+    elif [ -n "$effective_tag" ] && [ "$(printf '%s\n' "v0.2.0" "$effective_tag" \
       | sort -V | head -n1)" = "v0.2.0" ]; then
-      # Every release from v0.2.0 attests its manifest, so a pinned modern release
-      # with an unverifiable SHA256SUMS is not trustworthy.
-      die "manifest attestation verification FAILED for SHA256SUMS ($CLAWD_VERSION) — aborting"
+      # Every release from v0.2.0 attests its manifest, so a modern release with an
+      # unverifiable SHA256SUMS is not trustworthy.
+      die "manifest attestation verification FAILED for SHA256SUMS ($effective_tag) — aborting"
     else
       ATTESTED="binary attestation OK, manifest unattested — if the installed release is
     v0.2.0 or newer, do NOT trust it; verify manually:
@@ -151,7 +161,6 @@ install_files() {
 }
 
 setup_path() {
-  [ "${CLAWD_NO_MODIFY_PATH:-0}" = "1" ] && return 0
   cat > "$CLAW_HOME/env" <<'EOF'
 #!/bin/sh
 # Adds ~/.swift-claw/bin to PATH. Written by install.sh; safe to source repeatedly.
@@ -160,6 +169,8 @@ case ":${PATH}:" in
   *) export PATH="$HOME/.swift-claw/bin:$PATH" ;;
 esac
 EOF
+  # The opt-out skips only the rc-file edits; the env helper above always exists.
+  [ "${CLAWD_NO_MODIFY_PATH:-0}" = "1" ] && return 0
   sourced_somewhere=0
   for rcfile in "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.bashrc" "$HOME/.profile"; do
     [ -f "$rcfile" ] || continue
@@ -216,7 +227,9 @@ stage_service() {
       # %h is systemd's home specifier, valid in ExecStart.
       sed 's|/usr/local/bin/clawd|%h/.swift-claw/bin/clawd|' \
         "$workdir/$UNIT_ASSET" > "$UNIT_DEST"
-      if command -v systemctl >/dev/null 2>&1; then
+      # A systemctl binary alone proves nothing (WSL ships one without a running
+      # systemd); a live user manager leaves this directory, the same probe doctor uses.
+      if [ -d /run/systemd/system ]; then
         START_CMD="systemctl --user enable --now swift-claw.service"
         systemctl --user daemon-reload 2>/dev/null || true
         if systemctl --user is-active --quiet swift-claw.service 2>/dev/null; then
