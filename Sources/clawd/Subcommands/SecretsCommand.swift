@@ -136,20 +136,28 @@ extension SecretsCommand.Seal {
     guard FileManager.default.fileExists(atPath: path) else {
       return .fileAbsent(path: path)
     }
-    guard let data = FileManager.default.contents(atPath: path),
+
+    guard
+      let data = FileManager.default.contents(atPath: path),
       let contents = String(data: data, encoding: .utf8)
     else {
       return .failed(path: path, reason: "unreadable or not UTF-8")
     }
+
     let result = EnvFileSecretScrubber.scrub(contents: contents, keys: keys)
-    guard !result.scrubbedKeys.isEmpty else { return .alreadyClean(path: path) }
-    let tempPath = path + ".seal-scrub.tmp"
+    guard !result.scrubbedKeys.isEmpty else {
+      return .alreadyClean(path: path)
+    }
+
+    let tempPath = "\(path).seal-scrub.tmp"
     do {
       try result.contents.write(toFile: tempPath, atomically: false, encoding: .utf8)
+
       try FileManager.default.setAttributes(
         [.posixPermissions: 0o600],
         ofItemAtPath: tempPath
       )
+
       _ = try FileManager.default.replaceItemAt(
         URL(fileURLWithPath: path),
         withItemAt: URL(fileURLWithPath: tempPath)
@@ -158,6 +166,7 @@ extension SecretsCommand.Seal {
       try? FileManager.default.removeItem(atPath: tempPath)
       return .failed(path: path, reason: "\(error)")
     }
+
     return .scrubbed(keys: result.scrubbedKeys, path: path)
   }
 
@@ -170,11 +179,13 @@ extension SecretsCommand.Seal {
       Sealed secrets → \(envelopePath)
       Key → \(keyPath) (mode 0600 — keep this OUTSIDE your state-root backup boundary)
       """
+
     let manualNote = """
       Remove the plaintext \(EnvSecretStore.EnvKey.botToken) / \
       \(EnvSecretStore.EnvKey.llmApiKey) / \(EnvSecretStore.EnvKey.searchApiKey) \
       values from your env file yourself.
       """
+
     switch scrubOutcome {
     case .scrubbed(let keys, let path):
       summary += "\nBlanked \(keys.joined(separator: ", ")) in \(path)."
@@ -190,6 +201,7 @@ extension SecretsCommand.Seal {
     case nil:
       summary += "\n" + manualNote
     }
+
     return summary
   }
 }
