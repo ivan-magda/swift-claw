@@ -34,3 +34,13 @@ jobs:
           persist-credentials: false
       - name: Run swiftlint
         uses: docker://ghcr.io/realm/swiftlint:0.65.0
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run shellcheck
+        run: shellcheck -s sh install.sh deploy/run-clawd.sh
