@@ -70,6 +70,11 @@ struct DoctorCommand: AsyncParsableCommand {
 
     emit(report)
 
+    if !json, let hint = serviceStartHint(report: report, config: config) {
+      // swiftlint:disable:next no_print_in_production
+      print(hint)
+    }
+
     if !secretsRow.ok {
       throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
     }
@@ -289,6 +294,44 @@ private extension DoctorCommand {
     )
     report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))
     report.add(contentsOf: DoctorHealth.approvalChecks(stores: stores, config: config, now: now))
+  }
+}
+
+// MARK: - Service Hint
+
+private extension DoctorCommand {
+  func serviceStartHint(report: DoctorReport, config: AppConfig) -> String? {
+    let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
+    let daemonRunning: Bool
+    if let lock = try? InstanceLock(path: lockPath) {
+      lock.release()
+      daemonRunning = false
+    } else {
+      daemonRunning = true
+    }
+    let failingKeys = report.checks.filter { check in
+      !check.ok
+    }.map(\.key)
+    #if os(Linux)
+      let unitPath = NSHomeDirectory() + "/.config/systemd/user/swift-claw.service"
+      let isLinux = true
+      let serviceManagerAvailable = FileManager.default.fileExists(
+        atPath: "/run/systemd/system"
+      )
+    #else
+      let unitPath =
+        NSHomeDirectory() + "/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
+      let isLinux = false
+      let serviceManagerAvailable = true
+    #endif
+    return ServiceStartHint.text(
+      readiness: .from(reportOK: report.ok, failingKeys: failingKeys),
+      daemonRunning: daemonRunning,
+      unitInstalled: FileManager.default.fileExists(atPath: unitPath),
+      serviceManagerAvailable: serviceManagerAvailable,
+      isLinux: isLinux,
+      uid: getuid()
+    )
   }
 }
 
