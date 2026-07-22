@@ -77,7 +77,8 @@ jobs:
           sh install.sh --uninstall
           test ! -e "$HOME/.swift-claw/bin/clawd"
           test -f "$HOME/.swift-claw/clawd.env"
-          sh install.sh --uninstall --purge || true
+          sh install.sh --uninstall --purge
+          test ! -e "$HOME/.swift-claw"
 
   workflow-lint:
     runs-on: ubuntu-latest

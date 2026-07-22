@@ -117,7 +117,6 @@ Send `/start` to your bot in Telegram. Because the allowlist is still empty, it 
 
 > This is a private bot. Your Telegram user ID is 12345678. To authorize it, the owner
 > adds this line to clawd.env and restarts clawd:
->
 > CLAW_ALLOWLIST=12345678
 
 (v0.2.0+; older releases print the ID in prose without the pasteable line.)
@@ -174,7 +173,7 @@ logging in takes the same state-root lock the daemon holds, and while the daemon
 `clawd auth login` exits with "clawd is running for this state root."
 
 - Foreground: Ctrl-C.
-- macOS: `launchctl unload ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist`
+- macOS: `launchctl bootout gui/$(id -u)/com.ivanmagda.swift-claw`
 - Linux: `systemctl --user stop swift-claw.service`
 
 ```bash
@@ -200,7 +199,7 @@ fails config validation with exit 10. Then:
   through the guide. Do not start the daemon yet; the remaining steps need the state root
   to themselves.
 - **Already had clawd running?** Start it again: `clawd run`, or
-  `launchctl load ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist` /
+  `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist` /
   `systemctl --user start swift-claw.service`.
 
 This route is unofficial and vendor-dependent; details and caveats in
