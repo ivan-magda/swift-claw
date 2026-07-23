@@ -70,6 +70,11 @@ struct DoctorCommand: AsyncParsableCommand {
 
     emit(report)
 
+    if !json, let hint = serviceStartHint(report: report, config: config) {
+      // swiftlint:disable:next no_print_in_production
+      print(hint)
+    }
+
     if !secretsRow.ok {
       throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
     }
@@ -290,6 +295,73 @@ private extension DoctorCommand {
     report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))
     report.add(contentsOf: DoctorHealth.approvalChecks(stores: stores, config: config, now: now))
   }
+}
+
+// MARK: - Service Hint
+
+private extension DoctorCommand {
+  func serviceStartHint(
+    report: DoctorReport,
+    config: AppConfig
+  ) -> String? {
+    let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
+    let daemonRunning: Bool
+
+    if let lock = try? InstanceLock(path: lockPath) {
+      lock.release()
+      daemonRunning = false
+    } else {
+      daemonRunning = true
+    }
+
+    let failingKeys = report.checks.filter { check in
+      !check.ok
+    }.map(\.key)
+
+    #if os(Linux)
+      let unitPath = NSHomeDirectory() + "/.config/systemd/user/swift-claw.service"
+      let isLinux = true
+      let serviceManagerAvailable = FileManager.default.fileExists(
+        atPath: "/run/systemd/system"
+      )
+      let unitLoaded = false
+    #else
+      let unitPath =
+        NSHomeDirectory() + "/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
+      let isLinux = false
+      let serviceManagerAvailable = true
+      let unitLoaded = launchAgentLoaded(uid: getuid())
+    #endif
+
+    return ServiceStartHint.text(
+      readiness: .from(reportOK: report.ok, failingKeys: failingKeys),
+      daemonRunning: daemonRunning,
+      unitInstalled: FileManager.default.fileExists(atPath: unitPath),
+      unitLoaded: unitLoaded,
+      serviceManagerAvailable: serviceManagerAvailable,
+      isLinux: isLinux,
+      uid: getuid()
+    )
+  }
+
+  #if !os(Linux)
+    /// `launchctl print` exits 0 only when launchd holds the label in the user's GUI
+    /// domain; any probe failure degrades to "not loaded" so the hint stays printable.
+    func launchAgentLoaded(uid: uid_t) -> Bool {
+      let probe = Process()
+      probe.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+      probe.arguments = ["print", "gui/\(uid)/com.ivanmagda.swift-claw"]
+      probe.standardOutput = FileHandle.nullDevice
+      probe.standardError = FileHandle.nullDevice
+      do {
+        try probe.run()
+      } catch {
+        return false
+      }
+      probe.waitUntilExit()
+      return probe.terminationStatus == 0
+    }
+  #endif
 }
 
 // MARK: - Output

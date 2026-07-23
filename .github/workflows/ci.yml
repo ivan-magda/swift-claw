@@ -32,6 +32,8 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
       - name: Build and run tests
         run: swift test
+        env:
+          SWIFT_BACKTRACE: enable=yes
       - name: Re-run the concurrency-sensitive suites on one cooperative thread
         env:
           LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
@@ -58,6 +60,27 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
       - name: Build and run tests
         run: swift test
+
+  install-script:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install, re-run, uninstall against the latest release
+        run: |
+          sh install.sh
+          "$HOME/.swift-claw/bin/clawd" --version
+          sh install.sh                      # idempotent upgrade path
+          sh install.sh --uninstall
+          test ! -e "$HOME/.swift-claw/bin/clawd"
+          test -f "$HOME/.swift-claw/clawd.env"
+          sh install.sh --uninstall --purge
+          test ! -e "$HOME/.swift-claw"
 
   workflow-lint:
     runs-on: ubuntu-latest

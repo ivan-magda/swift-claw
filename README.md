@@ -41,39 +41,17 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 ## Install
 
-Releases carry two binaries: `clawd-macos-arm64` (Apple Silicon) and `clawd-linux-x86_64`.
-On any other architecture, build from source below.
-
-From the [latest release](../../releases/latest), download **the binary for your platform,
-`SHA256SUMS`, and `clawd.env.example`** (the config template, used in the quick start).
-Then verify and install from your download directory:
-
 ```bash
-cd ~/Downloads
-ASSET=clawd-macos-arm64                                 # Linux: clawd-linux-x86_64
-
-shasum -a 256 --ignore-missing -c SHA256SUMS &&        # Linux: sha256sum --ignore-missing -c SHA256SUMS
-  sudo install -m755 "$ASSET" /usr/local/bin/clawd
+curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/install.sh | sh
 ```
 
-`--ignore-missing` checks only the files you downloaded. The `&&` stops the install if
-verification fails. Every downloaded file must print `OK`.
+Everything lands in `~/.swift-claw` — no sudo. The script verifies every download
+against the release checksums, stages the service files, and prints the next steps.
+Pin a release with `curl … | CLAWD_VERSION=v0.2.0 sh`, read the
+[script source](install.sh) first, or follow the manual route in
+[docs/INSTALL.md](docs/INSTALL.md) (macOS 15+ arm64; Linux x86_64 with glibc 2.38+).
 
-Every binary also carries a build provenance attestation. If you have the
-[GitHub CLI](https://cli.github.com) installed and logged in (`gh auth login`), verify it:
-
-```bash
-gh attestation verify "$ASSET" -R ivan-magda/swift-claw
-```
-
-- **macOS:** Gatekeeper blocks the unsigned binary on first run. Clear it:
-  `sudo xattr -d com.apple.quarantine /usr/local/bin/clawd`.
-  On a Mac without Homebrew, create the install directory first:
-  `sudo mkdir -p /usr/local/bin`.
-- **Linux:** the binary links the system SQLite: `sudo apt-get install -y libsqlite3-0`.
-
-Or build from source with a Swift 6.3 toolchain. On Linux, install the SQLite headers
-first (`sudo apt-get install -y libsqlite3-dev`); the runtime package alone will not link:
+Or build from source with a Swift 6.3 toolchain (Linux needs `libsqlite3-dev`):
 
 ```bash
 git clone https://github.com/ivan-magda/swift-claw.git && cd swift-claw
@@ -81,57 +59,22 @@ swift build -c release
 sudo install -m755 .build/release/clawd /usr/local/bin/clawd
 ```
 
-From a source checkout the config template is `.env.example` in the repository root, and
-the service files are under `deploy/`.
-
 ## Quick start
 
-Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and copy its token. Then:
+1. Get a bot token from [@BotFather](https://t.me/BotFather) (send `/newbot`).
+2. Edit `~/.swift-claw/clawd.env` — set the token and your LLM provider
+   (`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, `CLAW_LLM_API_KEY`).
+3. Load the config and encrypt your secrets at rest:
+   `set -a && . ~/.swift-claw/clawd.env && set +a && clawd secrets seal`
+4. Say hello once in the foreground: `clawd run`, then send `/start` to your bot. The
+   refusal shows your numeric ID; set it as `CLAW_ALLOWLIST=<id>` in `clawd.env`, then
+   Ctrl-C.
+5. Check health and start the service:
+   `set -a && . ~/.swift-claw/clawd.env && set +a && clawd doctor`, then run the start
+   command doctor prints.
 
-Download `clawd.env.example` from the same release as your binary, verify it against
-`SHA256SUMS` alongside the binary, and use it as your config:
-
-```bash
-# 1. Install the verified template.
-mkdir -p -m 700 ~/.swift-claw
-install -m 600 clawd.env.example ~/.swift-claw/clawd.env
-```
-
-Your shell runs this file with `source`, so take it from the checksummed release rather
-than an unverified copy.
-
-**Now edit `~/.swift-claw/clawd.env`** and set the BotFather token plus your provider's
-`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, and `CLAW_LLM_API_KEY`. The template ships with
-placeholder values that will not work. Then:
-
-```bash
-# 2. Load the config and encrypt your secrets at rest.
-set -a && source ~/.swift-claw/clawd.env && set +a
-clawd secrets seal
-
-# 3. Sealing copies the secrets out; it does not edit the file. Delete the
-#    CLAW_TELEGRAM_BOT_TOKEN, CLAW_LLM_API_KEY, and CLAW_SEARCH_API_KEY lines
-#    from ~/.swift-claw/clawd.env yourself.
-```
-
-Open a fresh shell so the deleted secrets leave your environment, then load the remaining
-config and start the daemon:
-
-```bash
-set -a && source ~/.swift-claw/clawd.env && set +a
-clawd doctor --check-config
-clawd run
-```
-
-Now send `/start` to your bot. It replies with your numeric Telegram ID; put that in
-`CLAW_ALLOWLIST` in `clawd.env`, re-source, and restart. Your next message gets a real
-answer. (Only `/start` reveals the ID: any other message from a stranger gets a bare
-refusal.)
-
-Running on a ChatGPT subscription instead of an API key? Do
-[step 8](docs/GETTING_STARTED.md#8-chatgpt-subscription-instead-of-an-api-key)
-of the walkthrough before you start the daemon. The full guide, including
-troubleshooting, is in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
+The full walkthrough, including the ChatGPT-subscription route and troubleshooting, is
+in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
 ## Security model
 
@@ -178,8 +121,9 @@ budgets, schedules and quiet hours, voice locales, sandbox limits.
 | You want to | Read |
 |---|---|
 | Set it up end to end | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) |
+| Install, update, or uninstall | [docs/INSTALL.md](docs/INSTALL.md) |
 | Make it yours | [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) |
-| Run it as a service | [deploy/README.md](deploy/README.md) |
+| Run it as a service | [docs/INSTALL.md](docs/INSTALL.md#4-running-as-a-service) |
 | Develop and test locally | [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) |
 | Understand the design | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Report a vulnerability | [SECURITY.md](SECURITY.md) |

@@ -321,10 +321,17 @@ private extension MessageRouter {
     }
     return try await turnDispatch.dispatch(rawUpdate: rawUpdate, message: message, text: text)
   }
+}
 
+// MARK: - Unauthorized Reply
+
+extension MessageRouter {
+  /// The `/start` refusal doubles as onboarding: its last line is pasteable into clawd.env.
   static func unauthorizedStartText(userId: Int64) -> String {
     """
-    This is a private bot. Your Telegram user ID is \(userId). Ask the owner to add it to the allowlist.
+    This is a private bot. Your Telegram user ID is \(userId). To authorize it, the owner \
+    adds this line to clawd.env and restarts clawd:
+    CLAW_ALLOWLIST=\(userId)
     """
   }
 }

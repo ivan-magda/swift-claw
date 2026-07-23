@@ -267,16 +267,11 @@ set -a && source ~/.swift-claw/clawd.env && set +a
 .build/debug/clawd secrets seal
 ```
 
-Sealing does not edit `clawd.env`. Remove the secret lines yourself:
-
-```
-# delete or blank these after sealing:
-CLAW_TELEGRAM_BOT_TOKEN=...
-CLAW_LLM_API_KEY=...
-CLAW_SEARCH_API_KEY=...
-```
-
-Keep the non-secret config (`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, etc.).
+Sealing also blanks the three secret lines (`CLAW_TELEGRAM_BOT_TOKEN`,
+`CLAW_LLM_API_KEY`, `CLAW_SEARCH_API_KEY`) in the env file and prints what it changed.
+`--no-scrub` leaves them in place; `--env-file <path>` targets a file other than
+`$CLAW_ENV_FILE` / `~/.swift-claw/clawd.env`. The non-secret config
+(`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, etc.) is untouched.
 
 ### How the daemon picks up secrets
 
