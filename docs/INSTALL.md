@@ -27,8 +27,9 @@ What the script does:
 - Installs under `~/.swift-claw` — no sudo. Re-running upgrades in place and never
   touches `clawd.env`, sealed secrets, or the database.
 - Puts `~/.swift-claw/bin` on your `PATH` by writing `~/.swift-claw/env` and sourcing it
-  from your shell rc files. `CLAWD_NO_MODIFY_PATH=1` skips the shell-profile edits;
-  `~/.swift-claw/env` is still written.
+  from your shell rc files. Shells already open keep their old `PATH` — open a new one or
+  run `. ~/.swift-claw/env` there. `CLAWD_NO_MODIFY_PATH=1` skips the shell-profile
+  edits; `~/.swift-claw/env` is still written.
 - Stages the launchd/systemd service unit without starting it — you configure first,
   then start it yourself (section 4).
 

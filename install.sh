@@ -259,9 +259,18 @@ print_next_steps() {
     say "Note: an older /usr/local/bin/clawd exists; this install supersedes it."
     say "      Remove it with: sudo rm /usr/local/bin/clawd /usr/local/bin/run-clawd.sh"
   fi
+  # The invoking shell inherited its PATH before setup_path edited the rc files, so
+  # `clawd` stays unfound in that shell even after a successful (re-)install.
+  case ":${PATH}:" in
+    *:"$BIN_DIR":*) ;;
+    *)
+      say "This shell's PATH does not include $BIN_DIR yet —"
+      say "open a new shell, or run: . \"\$HOME/.swift-claw/env\""
+      ;;
+  esac
   if [ "$ENV_CREATED" = "1" ]; then
     say ""
-    say "Next steps (new shell first, or run: . \"\$HOME/.swift-claw/env\"):"
+    say "Next steps:"
     say "  1. Get a bot token from @BotFather (https://t.me/BotFather, send /newbot)"
     say "  2. Edit ~/.swift-claw/clawd.env — set the token and your LLM provider"
     say "  3. Load it and seal the secrets:"
