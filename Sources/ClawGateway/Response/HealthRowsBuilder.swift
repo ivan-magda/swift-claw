@@ -25,6 +25,7 @@ public enum HealthRowsBuilder {
     public let perRunUSD: Double
     public let walBytes: Int
     public let freeBytes: Int
+    public let latestContext: LatestPromptUsage?
 
     public init(
       allowlist: AllowlistHealth,
@@ -38,7 +39,8 @@ public enum HealthRowsBuilder {
       perDayUSD: Double,
       perRunUSD: Double,
       walBytes: Int,
-      freeBytes: Int
+      freeBytes: Int,
+      latestContext: LatestPromptUsage?
     ) {
       self.allowlist = allowlist
       self.lastOffset = lastOffset
@@ -52,11 +54,16 @@ public enum HealthRowsBuilder {
       self.perRunUSD = perRunUSD
       self.walBytes = walBytes
       self.freeBytes = freeBytes
+      self.latestContext = latestContext
     }
   }
 
   public static func checks(_ inputs: Inputs) -> [DoctorReport.Check] {
-    databaseChecks(inputs) + runChecks(inputs) + spendChecks(inputs) + storageChecks(inputs)
+    databaseChecks(inputs)
+      + runChecks(inputs)
+      + contextChecks(inputs)
+      + spendChecks(inputs)
+      + storageChecks(inputs)
   }
 }
 
@@ -119,6 +126,24 @@ private extension HealthRowsBuilder {
         health.lastFailedAt.map(String.init(describing:)) ?? "none",
         .llmRuns
       ),
+    ]
+  }
+
+  static func contextChecks(_ inputs: Inputs) -> [DoctorReport.Check] {
+    let value =
+      inputs.latestContext.map { context in
+        let tokens = "\(context.isEstimated ? "~" : "")\(context.promptTokens)"
+        return context.runId.map { runId in
+          "\(tokens) (run \(runId))"
+        } ?? tokens
+      } ?? "none"
+    return [
+      check(
+        "context.last_prompt_tokens",
+        value,
+        .context,
+        headline: true
+      )
     ]
   }
 

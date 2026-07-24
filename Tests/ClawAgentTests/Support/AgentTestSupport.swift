@@ -110,6 +110,18 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
   func costSourceMix(now: Date) throws(StoreError) -> [CostSource: Int] {
     [:]
   }
+
+  func latestPromptUsage() throws(StoreError) -> LatestPromptUsage? {
+    lock.lock()
+    defer { lock.unlock() }
+    return _recorded.last.map { last in
+      LatestPromptUsage(
+        promptTokens: last.promptTokens,
+        runId: last.runId,
+        isEstimated: last.isEstimated
+      )
+    }
+  }
 }
 
 // MARK: - Builders

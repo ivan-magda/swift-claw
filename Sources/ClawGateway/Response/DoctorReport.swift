@@ -4,6 +4,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
   case config
   case database
   case llmRuns = "llm_runs"
+  case context
   case spend
   case storage
   case scheduler
@@ -16,6 +17,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
     case .config: "Config"
     case .database: "Database"
     case .llmRuns: "LLM & Runs"
+    case .context: "Context"
     case .spend: "Spend"
     case .storage: "Storage"
     case .scheduler: "Scheduler"

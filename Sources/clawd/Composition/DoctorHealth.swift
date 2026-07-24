@@ -21,6 +21,7 @@ enum DoctorHealth {
 
     let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
     let costMix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
+    let latestContext = try? stores.usage.latestPromptUsage()
 
     let dbPath = EnvironmentLoader.databasePath(config: config)
     let walBytes =
@@ -43,7 +44,8 @@ enum DoctorHealth {
       perDayUSD: config.budget.perDayUSD,
       perRunUSD: config.budget.perRunUSD,
       walBytes: walBytes,
-      freeBytes: freeBytes
+      freeBytes: freeBytes,
+      latestContext: latestContext
     )
   }
 

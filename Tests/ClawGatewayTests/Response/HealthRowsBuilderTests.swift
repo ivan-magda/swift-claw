@@ -8,7 +8,12 @@ import Testing
     allowlist: AllowlistHealth = AllowlistHealth(seeded: 1, configured: 1),
     freeBytes: Int = 1000,
     todayUSD: Double = 0.5,
-    perDayUSD: Double = 10
+    perDayUSD: Double = 10,
+    latestContext: LatestPromptUsage? = LatestPromptUsage(
+      promptTokens: 13155,
+      runId: 136,
+      isEstimated: false
+    )
   ) -> HealthRowsBuilder.Inputs {
     HealthRowsBuilder.Inputs(
       allowlist: allowlist,
@@ -28,7 +33,8 @@ import Testing
       perDayUSD: perDayUSD,
       perRunUSD: 0.5,
       walBytes: 12,
-      freeBytes: freeBytes
+      freeBytes: freeBytes,
+      latestContext: latestContext
     )
   }
 
@@ -130,6 +136,56 @@ import Testing
     #expect(byKey["llm.retry_budget"]?.isHeadline == false)
     #expect(byKey["llm.streaming"]?.isHeadline == false)
     #expect(byKey["spend.per_run_cap_usd"]?.isHeadline == false)
+  }
+
+  private func contextRow(latestContext: LatestPromptUsage?) -> DoctorReport.Check? {
+    HealthRowsBuilder
+      .checks(inputs(latestContext: latestContext))
+      .first { $0.key == "context.last_prompt_tokens" }
+  }
+
+  @Test func contextRowReportsTheLastPromptSizeAnchoredToItsRun() {
+    // when
+    let row = contextRow(
+      latestContext: LatestPromptUsage(promptTokens: 13155, runId: 136, isEstimated: false)
+    )
+
+    // then — an informational headline in its own group, never a failing check
+    #expect(row?.value == "13155 (run 136)")
+    #expect(row?.group == .context)
+    #expect(row?.isHeadline == true)
+    #expect(row?.ok == true)
+  }
+
+  @Test func contextRowOmitsTheRunAnchorForRunlessSpend() {
+    // given — schedule parses record usage without a run
+    // when
+    let row = contextRow(
+      latestContext: LatestPromptUsage(promptTokens: 210, runId: nil, isEstimated: false)
+    )
+
+    // then
+    #expect(row?.value == "210")
+  }
+
+  @Test func contextRowMarksAnEstimatedRowAsApproximate() {
+    // given — the newest row came from a degraded call, so its prompt count is a guess
+    // when
+    let row = contextRow(
+      latestContext: LatestPromptUsage(promptTokens: 52012, runId: 140, isEstimated: true)
+    )
+
+    // then
+    #expect(row?.value == "~52012 (run 140)")
+  }
+
+  @Test func contextRowRendersNoneBeforeAnyProviderCall() {
+    // when
+    let row = contextRow(latestContext: nil)
+
+    // then
+    #expect(row?.value == "none")
+    #expect(row?.ok == true)
   }
 
   @Test func emptyCostMixRendersAsNone() {

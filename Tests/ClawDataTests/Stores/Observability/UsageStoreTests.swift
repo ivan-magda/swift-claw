@@ -208,6 +208,56 @@ import Testing
     #expect(try usage.costSourceMix(now: now) == [.providerReturned: 2])
   }
 
+  // MARK: - Latest Prompt Usage
+
+  @Test func latestPromptUsageReturnsTheNewestRow() throws {
+    // given — two calls of one run; the later call carries the run's full context
+    let env = try Self.fixture()
+    try env.usage.recordUsage(
+      Self.usage(callID: "call-1", runId: env.runId, sessionId: env.sessionId)
+    )
+    try env.usage.recordUsage(
+      Self.usage(callID: "call-2", runId: env.runId, sessionId: env.sessionId, promptTokens: 44853)
+    )
+
+    // when
+    let latest = try env.usage.latestPromptUsage()
+
+    // then — the most recently recorded call, not the largest or the first
+    #expect(latest?.promptTokens == 44853)
+    #expect(latest?.runId == env.runId)
+    #expect(latest?.isEstimated == false)
+  }
+
+  @Test func latestPromptUsageCarriesTheEstimateFlagOfAConservativeRow() throws {
+    // given — a deadline/failure books an estimated row; its guess must not read as provider truth
+    let env = try Self.fixture()
+    try env.usage.recordUsage(
+      Self.usage(
+        callID: "call-degraded",
+        runId: env.runId,
+        sessionId: env.sessionId,
+        promptTokens: 52012,
+        isEstimated: true
+      )
+    )
+
+    // when
+    let latest = try env.usage.latestPromptUsage()
+
+    // then
+    #expect(latest?.promptTokens == 52012)
+    #expect(latest?.isEstimated == true)
+  }
+
+  @Test func latestPromptUsageIsNilBeforeAnyCallWasRecorded() throws {
+    // given
+    let env = try Self.fixture()
+
+    // when / then
+    #expect(try env.usage.latestPromptUsage() == nil)
+  }
+
   // MARK: - Call Idempotency
 
   @Test func recordingTheSameCallTwiceStoresOneRowAndDebitsTheDayOnce() throws {
@@ -334,17 +384,23 @@ private extension UsageStoreTests {
     )
   }
 
-  static func usage(callID: String, runId: Int64?, sessionId: Int64) -> ProviderUsage {
+  static func usage(
+    callID: String,
+    runId: Int64?,
+    sessionId: Int64,
+    promptTokens: Int = 10,
+    isEstimated: Bool = false
+  ) -> ProviderUsage {
     ProviderUsage(
       providerCallID: ProviderCallID(rawValue: callID),
       runId: runId,
       sessionId: sessionId,
       model: "m",
-      promptTokens: 10,
+      promptTokens: promptTokens,
       completionTokens: 5,
       costUSD: 0.002,
       costSource: .providerReturned,
-      isEstimated: false,
+      isEstimated: isEstimated,
       ts: fixedNow
     )
   }

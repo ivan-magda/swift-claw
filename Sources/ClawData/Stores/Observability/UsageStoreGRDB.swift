@@ -73,6 +73,28 @@ public struct UsageStoreGRDB: UsageStore {
     }
   }
 
+  public func latestPromptUsage() throws(StoreError) -> LatestPromptUsage? {
+    try database.readMapping { db in
+      let row = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT prompt_tokens, run_id, is_estimated FROM provider_usage
+          ORDER BY id DESC LIMIT 1
+          """
+      )
+
+      guard let row else {
+        return nil
+      }
+
+      return LatestPromptUsage(
+        promptTokens: row["prompt_tokens"],
+        runId: row["run_id"],
+        isEstimated: row["is_estimated"]
+      )
+    }
+  }
+
   public func costSourceMix(now: Date) throws(StoreError) -> [CostSource: Int] {
     let dayStart = now.startOfUTCDay
     return try database.readMapping { db in
