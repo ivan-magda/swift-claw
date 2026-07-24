@@ -196,6 +196,7 @@ EOF
 }
 
 stage_service() {
+  SERVICE_RUNNING=0
   case "$(uname -s)" in
     Darwin)
       UNIT_DEST="$HOME/Library/LaunchAgents/${SERVICE_LABEL}.plist"
@@ -219,6 +220,7 @@ stage_service() {
         done
         if launchctl bootstrap "gui/$(id -u)" "$UNIT_DEST"; then
           SERVICE_STATE="reloaded and restarted"
+          SERVICE_RUNNING=1
         else
           SERVICE_STATE="updated on disk; reload failed — start it manually: $START_CMD"
         fi
@@ -240,6 +242,7 @@ stage_service() {
         if systemctl --user is-active --quiet swift-claw.service 2>/dev/null; then
           systemctl --user restart swift-claw.service
           SERVICE_STATE="restarted"
+          SERVICE_RUNNING=1
         else
           SERVICE_STATE="staged (not started — configure first)"
         fi
@@ -284,6 +287,7 @@ print_next_steps() {
     say "Full guide: https://github.com/${REPO}/blob/main/docs/GETTING_STARTED.md"
   else
     say "Existing config kept: $CLAW_HOME/clawd.env"
+    [ "$SERVICE_RUNNING" = "1" ] || say "Start the service when ready: $START_CMD"
   fi
 }
 
