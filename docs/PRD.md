@@ -21,7 +21,7 @@ swift-claw is a **persistent, always-on, single-owner personal AI assistant**, c
 
 The author has already built a Claude Code–style coding agent (`swift-claude-code`): a single ReAct loop with tools, sub-agents, compaction, a task DAG, and a skill loader. swift-claw studies and builds a *different* class of system — the **persistent, multi-channel personal assistant** — keeping the proven "one reused agent loop behind thin surfaces" idea but adding the parts a coding agent lacks: a long-running gateway, durable cross-session memory, a messaging channel with an access boundary, a scheduler, and a sandboxed tool/approval layer.
 
-Why Swift: a single static binary, strong concurrency model (Swift 6 strict concurrency / actors), good performance, and first-class macOS integration, while staying Linux-portable.
+Why Swift: one self-contained binary per platform with no runtime to install underneath — no Node, Python, or Docker — plus a strong concurrency model (Swift 6 strict concurrency / actors), good performance, and first-class macOS integration, while staying Linux-portable. Not a *static* binary: it links the platform C++/Objective-C runtimes, the Swift runtime, system frameworks, and the system `libsqlite3` like any Swift binary.
 
 ## 3. Goals & non-goals
 
