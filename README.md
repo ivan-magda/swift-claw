@@ -46,7 +46,7 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   <img
     src="docs/assets/demo/card-deny.gif"
     alt="A request to write a file pauses in Telegram: the approval card shows the fully-resolved target path, the size, and a preview, with Approve and Deny buttons. The user taps Deny and clawd writes nothing."
-    width="100%"
+    width="50%"
   />
 </p>
 
