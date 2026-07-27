@@ -21,13 +21,27 @@ tell it and runs scheduled and proactive tasks. Consequential tool calls wait fo
 approval. Everything it keeps stays in one directory on your own machine: a SQLite
 database, encrypted secret envelopes, and Markdown files you edit by hand.
 
+<p align="center">
+  <img
+    src="docs/assets/demo/card-deny.gif"
+    alt="A request to write a file pauses in Telegram: the approval card shows the fully-resolved target path, the size, and a preview, with Approve and Deny buttons. Deny is tapped and nothing is written."
+    width="720"
+  />
+</p>
+
+<p align="center">
+  <sub>Every write stops here first. The card shows the fully-resolved target, and clawd
+  writes nothing until you tap.</sub>
+</p>
+
 ## Features
 
 - **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
   turn, `/new` starts a fresh session, and clawd transcribes voice notes on-device
   (macOS 26).
-- **Durable memory.** Facts you confirm persist in SQLite with full-text recall, next to
-  workspace Markdown files that hold your profile, notes, and daily logs.
+- **Durable memory.** Facts you confirm persist in SQLite, recalled by importance and
+  recency, next to workspace Markdown files that hold your profile, notes, and daily
+  logs. Conversation history is full-text searchable.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
 - **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
