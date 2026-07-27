@@ -21,19 +21,6 @@ tell it and runs scheduled and proactive tasks. Consequential tool calls wait fo
 approval. Everything it keeps stays in one directory on your own machine: a SQLite
 database, encrypted secret envelopes, and Markdown files you edit by hand.
 
-<p align="center">
-  <img
-    src="docs/assets/demo/card-deny.gif"
-    alt="A request to write a file pauses in Telegram: the approval card shows the fully-resolved target path, the size, and a preview, with Approve and Deny buttons. Deny is tapped and nothing is written."
-    width="720"
-  />
-</p>
-
-<p align="center">
-  <sub>Every write stops here first. The card shows the fully-resolved target, and clawd
-  writes nothing until you tap.</sub>
-</p>
-
 ## Features
 
 - **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
@@ -52,6 +39,20 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
   can run an eligible model on a ChatGPT subscription.
 - **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
+
+## What an approval looks like
+
+<p align="center">
+  <img
+    src="docs/assets/demo/card-deny.gif"
+    alt="A request to write a file pauses in Telegram: the approval card shows the fully-resolved target path, the size, and a preview, with Approve and Deny buttons. Deny is tapped and nothing is written."
+    width="640"
+  />
+</p>
+
+Asking for a file write suspends the run. The card is written by the daemon, never by the model, and
+it carries the target path after symlink and `..` resolution, the size, and a preview of the content.
+Tap Deny and nothing reaches the disk.
 
 ## Install
 
