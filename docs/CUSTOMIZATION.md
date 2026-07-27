@@ -36,8 +36,8 @@ The agent writes and reads dated daily logs (`memory/YYYY-MM-DD.md`) when a turn
 one; the context builder never injects them the way it injects the files above.
 
 Durable facts also live in the database: confirm something in chat ("remember that ...")
-and it persists in SQLite with full-text recall across restarts. `/memory` shows what is
-stored.
+and it persists in SQLite across restarts, recalled by importance and recency. Full-text
+search covers conversation history, not these facts. `/memory` shows what is stored.
 
 ## When the agent asks permission
 
