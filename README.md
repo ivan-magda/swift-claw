@@ -26,33 +26,33 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 - **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
   turn, `/new` starts a fresh session, and clawd transcribes voice notes on-device
   (macOS 26).
-- **Durable memory.** Facts you confirm persist in SQLite, recalled by importance and
-  recency, next to workspace Markdown files that hold your profile, notes, and daily
-  logs. Conversation history is full-text searchable.
+- **Durable memory.** Facts you confirm persist in SQLite, and clawd recalls them by
+  importance and recency. Workspace Markdown files hold your profile, notes, and daily
+  logs, and conversation history is full-text searchable.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
 - **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
-  execution wait for an explicit tap-to-approve in Telegram. Policy lives in code, and
-  clawd treats inbound content as data, never as instructions.
+  execution wait for an explicit tap-to-approve in Telegram. clawd enforces policy in
+  code and treats inbound content as data, never as instructions.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
   can run an eligible model on a ChatGPT subscription.
 - **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
 
-## What an approval looks like
+## The approval card
 
 <p align="center">
   <img
     src="docs/assets/demo/card-deny.gif"
-    alt="A request to write a file pauses in Telegram: the approval card shows the fully-resolved target path, the size, and a preview, with Approve and Deny buttons. Deny is tapped and nothing is written."
+    alt="A request to write a file pauses in Telegram: the approval card shows the fully-resolved target path, the size, and a preview, with Approve and Deny buttons. The user taps Deny and clawd writes nothing."
     width="640"
   />
 </p>
 
-Asking for a file write suspends the run. The card is written by the daemon, never by the model, and
-it carries the target path after symlink and `..` resolution, the size, and a preview of the content.
-Tap Deny and nothing reaches the disk.
+A file write suspends the run until you answer. Every field on the card comes from the daemon's own
+record of the action: the target path after symlink and `..` resolution, the size, and a preview of
+the content. Tap Deny and clawd writes nothing.
 
 ## Install
 
@@ -60,7 +60,7 @@ Tap Deny and nothing reaches the disk.
 curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/install.sh | sh
 ```
 
-Everything lands in `~/.swift-claw` — no sudo. The script verifies every download
+Everything lands in `~/.swift-claw`, with no sudo. The script verifies every download
 against the release checksums, stages the service files, and prints the next steps.
 Pin a release with `curl … | CLAWD_VERSION=v0.2.0 sh`, read the
 [script source](install.sh) first, or follow the manual route in
@@ -77,7 +77,7 @@ sudo install -m755 .build/release/clawd /usr/local/bin/clawd
 ## Quick start
 
 1. Get a bot token from [@BotFather](https://t.me/BotFather) (send `/newbot`).
-2. Edit `~/.swift-claw/clawd.env` — set the token and your LLM provider
+2. Edit `~/.swift-claw/clawd.env`: set the token and your LLM provider
    (`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, `CLAW_LLM_API_KEY`).
 3. Load the config and encrypt your secrets at rest:
    `set -a && . ~/.swift-claw/clawd.env && set +a && clawd secrets seal`
@@ -108,8 +108,8 @@ swift-claw assumes you are the only person it serves.
 - **Prompt injection contained.** Messages, web content, tool output, and stored memory
   enter the context as untrusted data. Once a session has both ingested untrusted content
   and pulled your private files into context, fetching an arbitrary URL also needs your
-  approval. Your LLM and search providers are pinned destinations that clawd cannot be
-  redirected away from.
+  approval. clawd pins your LLM and search providers in config, and the model cannot
+  redirect them.
 
 The full model is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (§12). To report a
 vulnerability, see [SECURITY.md](SECURITY.md).
