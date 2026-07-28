@@ -552,15 +552,15 @@ private extension ContextBuilder {
             )
           )
         case .user where message.provenance == .untrusted:
-          rendered.append(
-            ChatMessage(
-              role: .user,
-              content: LabeledContextFactory.make(
-                label: Self.untrustedUserLabel,
-                content: message.content
-              ).render()
-            )
-          )
+          let fenced = LabeledContextFactory.make(
+            label: Self.untrustedUserLabel,
+            content: message.content
+          ).render()
+          let parts: [MessageContent.Part] =
+            message.image.map { image in
+              [.image(image), .text(fenced)]
+            } ?? [.text(fenced)]
+          rendered.append(ChatMessage(role: .user, content: MessageContent(parts: parts)))
         case .user, .system:
           rendered.append(ChatMessage(role: message.role, content: message.content))
         }
