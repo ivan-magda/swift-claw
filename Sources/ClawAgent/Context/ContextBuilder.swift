@@ -589,10 +589,10 @@ private extension ContextBuilder {
 
   /// True when a row records a photo whose bytes did not survive to assembly — evicted under cache
   /// pressure, dropped by the replay budget, or lost to a restart. Image bytes are never persisted,
-  /// so the stored marker is the only evidence left; the untrusted tier is what photos arrive on,
-  /// and requiring it keeps an owner who types the marker verbatim from drawing a false notice.
+  /// so the stored marker is the only evidence left. Provenance is deliberately not consulted, for
+  /// the same reason the image itself rides on every tier.
   func photoBytesAreMissing(_ message: StoredMessage) -> Bool {
-    guard message.image == nil, message.provenance == .untrusted else {
+    guard message.image == nil else {
       return false
     }
     return ImageMarkers.marksPhoto(message.content)

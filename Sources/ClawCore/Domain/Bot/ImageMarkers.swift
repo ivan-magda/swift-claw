@@ -16,7 +16,12 @@ public enum ImageMarkers {
 
   /// Whether stored content came from `photoContent`. Kept beside it so the two halves of the
   /// round-trip cannot drift apart.
+  ///
+  /// Content is a flag here, not proof: a message that genuinely begins with the marker is
+  /// indistinguishable from a photo row. Only a persisted per-row flag could separate them, and that
+  /// needs a migration this design rules out. Requiring the exact marker, or the marker plus its
+  /// separator, narrows the overlap to text already shaped like the marker itself.
   public static func marksPhoto(_ content: String) -> Bool {
-    content.hasPrefix(barePhoto)
+    content == barePhoto || content.hasPrefix("\(barePhoto) ")
   }
 }

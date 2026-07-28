@@ -130,13 +130,31 @@ import Testing
     #expect(message.content.text.contains(ImageMarkers.unavailable) == false)
   }
 
-  @Test func aTrustedMessageThatMerelyReadsLikeTheMarkerTakesNoNotice() throws {
-    // given — the owner typing the marker verbatim; their own messages are trusted, and only the
-    // untrusted tier carries photos
+  @Test func aTrustedPhotoRowWithNoCachedBytesStillSaysSo() throws {
+    // given — `TurnDispatch.dispatch` defaults provenance to trusted, so a photo row can reach this
+    // tier by an argument being dropped in a signature cleanup, with nothing failing to compile
     let stored = StoredMessage(
       role: .user,
       content: ImageMarkers.barePhoto,
       provenance: .trusted,
+      image: nil
+    )
+
+    // when
+    let rendered = try renderHistory([stored])
+
+    // then — the notice must not depend on the tier, exactly as the image itself does not
+    let message = try #require(rendered.last)
+    #expect(message.content.text.contains(ImageMarkers.unavailable))
+  }
+
+  @Test func textThatOnlyRunsIntoTheMarkerIsNotAPhotoRow() throws {
+    // given — the marker's separator is part of the format, so content butting straight up against
+    // it never came from a photo
+    let stored = StoredMessage(
+      role: .user,
+      content: "\(ImageMarkers.barePhoto)graph of the results",
+      provenance: .untrusted,
       image: nil
     )
 
