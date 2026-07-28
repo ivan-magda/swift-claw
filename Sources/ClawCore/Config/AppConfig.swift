@@ -42,6 +42,8 @@ public struct AppConfig: Sendable, Equatable {
     static let voiceTranscription = "CLAW_VOICE_TRANSCRIPTION"
     static let voiceLocales = "CLAW_VOICE_LOCALES"
 
+    static let imageInput = "CLAW_IMAGE_INPUT"
+
     static let execEnabled = "CLAW_EXEC_ENABLED"
     static let execImage = "CLAW_EXEC_IMAGE"
     static let execImageRegistries = "CLAW_EXEC_IMAGE_REGISTRIES"
@@ -100,6 +102,7 @@ public struct AppConfig: Sendable, Equatable {
   public let webFetchExemptCIDRs: [CIDR]
   public let exec: ExecConfig
   public let voice: VoiceConfig
+  public let image: ImageConfig
 
   public init(
     allowlist: Set<Int64>,
@@ -118,7 +121,8 @@ public struct AppConfig: Sendable, Equatable {
     approvalExpirySeconds: Int,
     webFetchExemptCIDRs: [CIDR],
     exec: ExecConfig,
-    voice: VoiceConfig
+    voice: VoiceConfig,
+    image: ImageConfig
   ) {
     self.allowlist = allowlist
     self.stateRoot = stateRoot
@@ -141,6 +145,7 @@ public struct AppConfig: Sendable, Equatable {
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
     self.exec = exec
     self.voice = voice
+    self.image = image
   }
 
   /// Loads and validates non-secret config from the environment. Secrets (the bot token / LLM key)
@@ -177,6 +182,7 @@ public struct AppConfig: Sendable, Equatable {
     let webFetchExemptCIDRs = try parseWebFetchExemptCIDRs(from: env[EnvKey.webFetchExemptCIDRs])
     let exec = try parseExecConfig(from: env)
     let voice = try parseVoiceConfig(from: env)
+    let image = try parseImageConfig(from: env)
 
     return AppConfig(
       allowlist: allowlist,
@@ -195,7 +201,8 @@ public struct AppConfig: Sendable, Equatable {
       approvalExpirySeconds: approvalExpirySeconds,
       webFetchExemptCIDRs: webFetchExemptCIDRs,
       exec: exec,
-      voice: voice
+      voice: voice,
+      image: image
     )
   }
 }

@@ -8,32 +8,49 @@ import Foundation
 // MARK: - Intake Services & Tool Catalog
 
 extension DaemonBuilder {
+  /// The intake services and the image-wired `TurnRunner` the router dispatches through. The runner
+  /// is handed back because `MessageRouter` copies it: only the copy the router was built from
+  /// carries the cache an inbound photo's bytes land in, so every other consumer that copies a
+  /// runner must take THIS one or replay nothing.
+  struct IntakeStack {
+    let poller: TelegramPollerService
+    let outbox: OutboxDispatcher
+    let turnRunner: TurnRunner
+  }
+
   func makeIntakeServices(
     coordination: TurnCoordination,
     turnRunner: TurnRunner,
     scheduleSurface: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler,
     doctor: any DoctorReporting
-  ) -> (poller: TelegramPollerService, dispatcher: OutboxDispatcher) {
-    let router = MessageRouter(
-      processed: stores.processed,
-      sessionMessages: stores.sessionMessages,
-      commands: stores.commands,
-      memory: stores.memory,
-      memoryCommands: stores.memoryCommands,
-      pendingConfirmations: coordination.pendingConfirmations,
-      botUsername: botUsername,
-      accessControl: AccessControl(allowlist: stores.allowlist),
-      delivery: transport,
-      turnRunner: turnRunner,
-      lanes: coordination.lanes,
-      schedule: scheduleSurface,
-      approvalCallbacks: approvalCallbacks,
-      voice: makeVoiceService(),
-      coordinator: coordination.approvalCoordinator,
-      doctor: doctor,
-      logger: logger
-    )
+  ) -> IntakeStack {
+    let voiceService = makeVoiceService()
+    let imageService = makeImageService()
+
+    let (router, wiredRunner) = ImageWiring.wire(runner: turnRunner) { runner in
+      MessageRouter(
+        processed: stores.processed,
+        sessionMessages: stores.sessionMessages,
+        commands: stores.commands,
+        memory: stores.memory,
+        memoryCommands: stores.memoryCommands,
+        pendingConfirmations: coordination.pendingConfirmations,
+        botUsername: botUsername,
+        accessControl: AccessControl(allowlist: stores.allowlist),
+        delivery: transport,
+        turnRunner: runner,
+        lanes: coordination.lanes,
+        schedule: scheduleSurface,
+        approvalCallbacks: approvalCallbacks,
+        voice: voiceService,
+        images: imageService,
+        coordinator: coordination.approvalCoordinator,
+        doctor: doctor,
+        logger: logger
+      )
+    }
+
     let poller = TelegramPollerService(
       intake: transport,
       router: router,
@@ -47,7 +64,16 @@ extension DaemonBuilder {
       signal: coordination.outboxSignal,
       logger: logger
     )
-    return (poller: poller, dispatcher: dispatcher)
+    return IntakeStack(poller: poller, outbox: dispatcher, turnRunner: wiredRunner)
+  }
+
+  /// Nil when the owner opted out, which is what makes the photo path fail closed: the router's only
+  /// other branch is the canned "can't read photos yet" reply.
+  private func makeImageService() -> ImageMessageService? {
+    guard config.image.enabled else {
+      return nil
+    }
+    return ImageMessageService(media: transport, logger: logger)
   }
 
   private func makeVoiceService() -> VoiceMessageService? {

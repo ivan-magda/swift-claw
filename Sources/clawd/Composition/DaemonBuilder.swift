@@ -72,41 +72,21 @@ struct DaemonBuilder: Sendable {
       sandbox: sandbox
     )
 
-    let turnRunner = makeTurnRunner(
+    let consumers = makeRunnerConsumers(
       coordination: coordination,
       agentStack: agentStack,
-      costPolicy: providerStack.costPolicy
-    )
-    let approvalFabric = makeApprovalFabric(
-      coordination: coordination,
-      agentStack: agentStack,
-      turnRunner: turnRunner
-    )
-
-    let scheduleSurface = makeScheduleSurface(
       providerStack: providerStack,
-      costResolver: costResolver
-    )
-    let (poller, dispatcher) = makeIntakeServices(
-      coordination: coordination,
-      turnRunner: turnRunner,
-      scheduleSurface: scheduleSurface,
-      approvalCallbacks: approvalFabric.handler,
-      doctor: DaemonDoctorReporter(
-        stores: stores,
-        config: config,
-        sandbox: sandbox,
-        staticAPIKey: secrets.llmApiKey,
-        makeManagedStore: makeManagedStore
-      )
-    )
-    let (scheduler, heartbeatOwner) = makeScheduler(
-      coordination: coordination,
-      turnRunner: turnRunner,
-      workspace: workspace
+      costResolver: costResolver,
+      workspace: workspace,
+      sandbox: sandbox
     )
 
-    var services: [any Service] = [poller, dispatcher, scheduler, approvalFabric.expiry]
+    var services: [any Service] = [
+      consumers.poller,
+      consumers.outbox,
+      consumers.scheduler,
+      consumers.approvals.expiry,
+    ]
     if let maintenance = sandbox.maintenance {
       services.append(SandboxLifecycleService(maintenance: maintenance))
     }
@@ -119,9 +99,74 @@ struct DaemonBuilder: Sendable {
       credentialSource: providerStack.credentialSource,
       boot: bootSequence(
         coordination: coordination,
-        waiter: approvalFabric.waiter,
-        heartbeatOwner: heartbeatOwner
+        waiter: consumers.approvals.waiter,
+        heartbeatOwner: consumers.heartbeatOwner
       )
+    )
+  }
+
+  /// Every service that copies the `TurnRunner` value — the router inside the poller, the approval
+  /// waiter, and the scheduler.
+  struct RunnerConsumers {
+    let poller: TelegramPollerService
+    let outbox: OutboxDispatcher
+    let approvals: ApprovalFabric
+    let scheduler: SchedulerService
+    let heartbeatOwner: Int64?
+  }
+
+  /// Assembles those consumers in the one order that works, which is why they are built together
+  /// rather than at four call sites: the runner goes in unnamed and comes back image-wired from the
+  /// intake wiring, so nothing here can reach a copy that predates the cache an inbound photo lands
+  /// in. A consumer holding such a copy replays no images and fails no test.
+  func makeRunnerConsumers(  // swiftlint:disable:this function_parameter_count
+    coordination: TurnCoordination,
+    agentStack: AgentStack,
+    providerStack: ProviderStack,
+    costResolver: CostResolver,
+    workspace: FileSystemWorkspace,
+    sandbox: SandboxStack
+  ) -> RunnerConsumers {
+    let intake = makeIntakeServices(
+      coordination: coordination,
+      turnRunner: makeTurnRunner(
+        coordination: coordination,
+        agentStack: agentStack,
+        costPolicy: providerStack.costPolicy
+      ),
+      scheduleSurface: makeScheduleSurface(
+        providerStack: providerStack,
+        costResolver: costResolver
+      ),
+      approvalCallbacks: makeApprovalCallbackHandler(
+        coordination: coordination,
+        agentStack: agentStack
+      ),
+      doctor: DaemonDoctorReporter(
+        stores: stores,
+        config: config,
+        sandbox: sandbox,
+        staticAPIKey: secrets.llmApiKey,
+        makeManagedStore: makeManagedStore
+      )
+    )
+    let approvals = makeApprovalFabric(
+      coordination: coordination,
+      agentStack: agentStack,
+      turnRunner: intake.turnRunner
+    )
+    let (scheduler, heartbeatOwner) = makeScheduler(
+      coordination: coordination,
+      turnRunner: intake.turnRunner,
+      workspace: workspace
+    )
+
+    return RunnerConsumers(
+      poller: intake.poller,
+      outbox: intake.outbox,
+      approvals: approvals,
+      scheduler: scheduler,
+      heartbeatOwner: heartbeatOwner
     )
   }
 

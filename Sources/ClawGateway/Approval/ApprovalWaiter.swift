@@ -16,7 +16,7 @@ public struct ApprovalWaiter: ApprovalParking {
 
   private let coordinator: ApprovalCoordinator
   private let executor: any ApprovedActionExecuting
-  private let turns: any TurnDispatching
+  let turns: any TurnDispatching
 
   private let delivery: any MessageDelivery
   private let callbacks: any CallbackResponding

@@ -21,10 +21,10 @@ extension DaemonBuilder {
     let deferredParker = DeferredApprovalParker()
   }
 
-  /// The approve-resume fabric: the callback handler that answers an owner's tap, the waiter
-  /// (the single execution locus), and the expiry sweeper.
+  /// The approve-resume fabric: the waiter (the single execution locus) and the expiry sweeper.
+  /// The callback handler is built separately because it needs no `TurnRunner` and the router does
+  /// need it — so it can be, and has to be, built before the runner is image-wired.
   struct ApprovalFabric {
-    let handler: ApprovalCallbackHandler
     let waiter: ApprovalWaiter
     let expiry: ApprovalExpiryService
   }
@@ -54,9 +54,29 @@ extension DaemonBuilder {
     )
   }
 
+  /// The handler that answers an owner's approve/deny tap. It reaches the router, so it is built
+  /// ahead of the runner the router dispatches through.
+  func makeApprovalCallbackHandler(
+    coordination: TurnCoordination,
+    agentStack: AgentStack
+  ) -> ApprovalCallbackHandler {
+    let contextBuilder = agentStack.contextBuilder
+    return ApprovalCallbackHandler.make(
+      processed: stores.processed,
+      delivery: transport,
+      accessControl: AccessControl(allowlist: stores.allowlist),
+      approvals: stores.approvals,
+      audit: stores.audit,
+      coordinator: coordination.approvalCoordinator,
+      callbacks: transport,
+      currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
+      now: { Date() },
+      logger: logger
+    )
+  }
+
   /// Builds the executor (recorded-args execution) and the waiter, adopted into the deferred
-  /// parker to close the `turnRunner` ⇄ `approvalWaiter` construction cycle, and the callback
-  /// handler that answers an owner's tap into it.
+  /// parker to close the `turnRunner` ⇄ `approvalWaiter` construction cycle.
   func makeApprovalFabric(
     coordination: TurnCoordination,
     agentStack: AgentStack,
@@ -89,18 +109,6 @@ extension DaemonBuilder {
     )
     coordination.deferredParker.adopt(approvalWaiter)
 
-    let handler = ApprovalCallbackHandler.make(
-      processed: stores.processed,
-      delivery: transport,
-      accessControl: AccessControl(allowlist: stores.allowlist),
-      approvals: stores.approvals,
-      audit: stores.audit,
-      coordinator: coordination.approvalCoordinator,
-      callbacks: transport,
-      currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
-      now: { Date() },
-      logger: logger
-    )
     let expiry = ApprovalExpiryService(
       approvals: stores.approvals,
       coordinator: coordination.approvalCoordinator,
@@ -110,6 +118,6 @@ extension DaemonBuilder {
     )
     // The real waiter is returned so boot re-park parks the SAME instance the callback
     // path resumes — one execution locus across suspend, callback, and restart.
-    return ApprovalFabric(handler: handler, waiter: approvalWaiter, expiry: expiry)
+    return ApprovalFabric(waiter: approvalWaiter, expiry: expiry)
   }
 }

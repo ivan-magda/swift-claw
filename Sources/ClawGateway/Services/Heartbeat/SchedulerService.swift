@@ -17,7 +17,7 @@ public struct SchedulerService: Service {
 
   private let jobs: any ScheduledJobStore
 
-  private let enqueuer: TurnEnqueuer
+  let enqueuer: TurnEnqueuer
   private let policy: OccurrencePolicy
 
   private let catchUpMaxAge: Duration
