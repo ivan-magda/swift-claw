@@ -154,6 +154,16 @@ private extension MessageRouter {
         chatId: message.chatId,
         text: reply
       )
+    case .photo:
+      let reply =
+        isAllowed
+        ? Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
+        : Self.privateBotText
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: reply
+      )
     case .voice(let attachment):
       return try await routeVoice(
         attachment,

@@ -98,6 +98,7 @@ public struct IncomingMessage: Sendable, Equatable {
   public enum Content: Sendable, Equatable {
     case text(String)
     case voice(VoiceAttachment)
+    case photo(PhotoAttachment, caption: String?)
     case unsupported(kind: String)
   }
 
@@ -126,9 +127,10 @@ public struct IncomingMessage: Sendable, Equatable {
 
   /// Pure normalization (no I/O). Returns nil when there's nothing actionable:
   /// no message/edited_message, no numeric sender, or empty content.
-  /// A media caption counts as text; a bare voice note maps to `.voice` (written text always
-  /// outranks the attachment — a captioned voice stays a text message); other bare media maps
-  /// to `.unsupported`.
+  /// A photo and its caption are one message and travel together as `.photo`; written text outranks
+  /// a *voice* attachment, because a transcript and a caption are two texts with no natural merge,
+  /// so a captioned voice stays a text message. A caption on media with no usable attachment counts
+  /// as text; other bare media maps to `.unsupported`.
   public static func normalize(from raw: RawUpdate) -> IncomingMessage? {
     guard
       let message = raw.message ?? raw.editedMessage,
@@ -138,7 +140,9 @@ public struct IncomingMessage: Sendable, Equatable {
     }
 
     let content: IncomingMessage.Content
-    if let text = message.text {
+    if let photo = message.photo {
+      content = .photo(photo, caption: message.text ?? message.caption)
+    } else if let text = message.text {
       content = .text(text)
     } else if let caption = message.caption {
       content = .text(caption)
