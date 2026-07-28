@@ -112,11 +112,12 @@ form `ARCHITECTURE.md §N` is used, sparingly.
 | §5.3 Run budget | `RunBudget` (ClawCore); `BudgetBreaker` (ClawGateway) |
 | §6.1 Inbound lifecycle | `MessageRouter`, `AccessControl`, `TurnRunner` (ClawGateway); `SessionMessageStore.claimAndPersistInbound` (ClawCore/ClawData) |
 | §6.1 Voice intake | `VoiceAttachment`, `VoiceTranscribing`, `MediaFetching`, `VoiceConfig`, `VoiceTranscriptArbiter` (ClawCore); `TVoice`, `TelegramClient.downloadFile` (ClawTelegram); `VoiceMessageService`, `MessageRouter.routeVoice` (ClawGateway); `AppleSpeechTranscriber`, `SystemVoiceTranscriber` (ClawAppleSpeech); `ContextBuilder.untrustedUserLabel` fencing (ClawAgent) |
+| §6.1 Image intake | `PhotoAttachment`, `PhotoSize`, `ImagePart`, `ImageMediaType`, `ImageBounds`, `ImageMarkers`, `ImageReplaySelection`, `ImageConfig` (ClawCore); `TPhotoSize`, `TMessage.photoAttachment` (ClawTelegram); `ImageMessageService`, `ImageCache`, `ImageWiring`, `MessageRouter.routeImage`, `TurnDispatch.imageCache`, `TurnRunner.attach` (ClawGateway); `ContextBuilder.userMessage` (ClawAgent) |
 | §6.2/§6.5 Tool & approval flow | `ToolPolicyGate`, `GatedToolDispatcher` (ClawTools); `ApprovalWaiter`, `ApprovedActionExecutor`, `ApprovalCallbackHandler`, `ApprovalCoordinator`, `DeferredApprovalParker`, `ApprovalBootReconciler`, `ApprovalExpiryService` (ClawGateway) |
 | §6.3/§14 Scheduler | `SchedulerService`, `HeartbeatSettings`, `ScheduleSurface`, `ScheduleDraftParser` (ClawGateway); `OccurrenceCalculator`, `OccurrencePolicy`, `ScheduleDraft` (ClawCore) |
 | §6.4 Transactional outbox | `OutboxDispatcher`, `OutboxSignal`, `ReplySender` (ClawGateway); `OutboxStore` (ClawCore); `OutboxStoreGRDB`, `OutboxDedupKey` (ClawData); `ReplySplitter`, `ContentHash` (ClawCore) |
 | §7 Persistence | store protocols under `ClawCore/Persistence/`; `ClawDatabase` (migrator + `classifyError`), `MappedDatabase`, `…GRDB` stores (ClawData) |
-| §8 LLM provider | `LLMProvider`, `ChatRequest`/`ChatResponse`, `CostResolver`, `UsageResolver` (ClawCore) |
+| §8 LLM provider | `LLMProvider`, `ChatRequest`/`ChatResponse`, `MessageContent`, `CostResolver`, `UsageResolver` (ClawCore); `ProviderErrorClassifier` (ClawLLM) |
 | §8.1 Route selection | `LLMProviderID`, `LLMProviderDescriptor`, `LLMProviderCapabilities`, `LLMProviderRegistry`, `ResolvedLLMRoute`, `LLMEgressIdentity`, `SessionTraceID` (ClawCore); `ProviderStackFactory`, `ProviderStack` (ClawLLM) |
 | §8.2 Credential seam | `LLMCredentialSource`, `LLMRequestAuthorization`, `LLMCredentialGeneration`, `LLMCredentialRejection`, `LLMCredentialStore`, `StoredOAuthCredential` (ClawCore); `StaticLLMCredentialSource` (ClawLLM); `ChatGPTCredentialSource`, `ChatGPTProviderMetadata`, `ChatGPTTokenMetadata`, `ChatGPTCredentialFreshness` (ClawAuth); `EncryptedLLMCredentialStore` (ClawSecrets) |
 | §8.3 ChatGPT Responses route | `ChatGPTWireValues`, `ChatGPTDeviceAuthorization`, `ChatGPTOAuthClient`, `ChatGPTModelCatalog`, `AuthWorkflow`, `ModelSelection` (ClawAuth); `ChatGPTResponsesProvider`, `ChatGPTResponsesRequestEncoder`, `ChatGPTResponsesSSEParser`, `ChatGPTResponsesAccumulator`, `ChatGPTPromptCacheKey` (ClawLLM) |
@@ -224,9 +225,26 @@ TelegramPollerService loop:
     (3a) RateLimiter (per-user + global token bucket; honor retry_after;
          fail CLOSED on store/lock error).
     (3b) Non-text intake: unsupported type → friendly "I can't read X yet";
-         media caption text IS processed; edited message → flagged isEdited
-         and processed as a NEW turn (Inc 1); true /retry answer-replacement
-         is deferred to Inc 2 (FR-G6).
+         a caption on media we cannot ingest is still processed as its text;
+         edited message → flagged isEdited and processed as a NEW turn
+         (Inc 1); true /retry answer-replacement is deferred to Inc 2 (FR-G6).
+         Photo (flag-gated): allowed sender only → one typing pulse →
+         choose the rung of Telegram's server-rendered size ladder that fits
+         the byte cap (a rung IS the resize; nothing is decoded, scaled, or
+         re-encoded here) → download via getFile (bounded, token-redacted) →
+         identify the format from the leading bytes, never from the
+         sender-declared mime → the photo AND its caption dispatch DIRECTLY
+         as ONE untrusted-provenance turn. The caption is NEVER
+         command-parsed and NEVER offered to a parked confirmation (a photo
+         carries no forward metadata, so the owner's own image and a
+         forwarded one are indistinguishable; neither may steer a control
+         path); persist marks the message row .untrusted, taints the session
+         in the same fused write, and stores a "[photo]" marker as the row's
+         only durable evidence that an image was there; assembly renders it
+         fenced. No usable rung / undecodable / over cap / download failed →
+         a canned reply and no turn; flag off → the same canned "can't read
+         photos" reply as before the feature. One photo per message: an album
+         arrives as one update per photo, hence one turn per photo.
          Voice note (flag-gated, macOS 26): allowed sender only → download via
          getFile (bounded, token-redacted) → on-device transcription →
          the transcript dispatches DIRECTLY as an untrusted-provenance turn —
@@ -261,6 +279,10 @@ TelegramPollerService loop:
 > **Why the order matters.** If the offset were persisted *first* (the old diagram), a crash before step 4 commits would resume from the advanced cursor and Telegram would never redeliver — silently dropping messages. Advancing last makes "no missed/dup updates" actually true: a crash before step 4 simply re-fetches and the synchronous `claimUpdate` dedups any duplicate.
 >
 > **Poison-update policy.** If normalization of one update throws, advance the offset *past* it (never wedge the poller on one bad update), log it, and increment a `dropped_updates` counter surfaced in doctor.
+>
+> **Inbound image bytes are memory-only.** A photo's bytes never reach the database — no blob column, no migration, nothing on disk. They live in a bounded in-process cache keyed by session and message id, and they outlive the run that stored them so a follow-up question about the same photo still reaches the model as pixels. Entries age out oldest-first once the entry count or the byte ceiling is crossed. A single request replays only what its aggregate byte budget affords, newest first, so an image one turn could not carry is still there for the next. **When a row's marker says photo and no bytes survive** (evicted, dropped by the replay budget, or lost to a restart), assembly appends an explicit "no longer available" notice. That notice sits *outside* the untrusted fence: it is our own statement about system state, not sender-supplied input. The model must never be left answering about pixels it cannot see.
+>
+> **Step (3a) is aspirational, not implemented.** No rate limiter exists yet: nothing enforces a per-user or global token bucket on intake, and the only bounds on inbound media are structural — one photo per message, one bounded download, and a hard byte cap that refuses rather than truncates. Treat the step as the contract a limiter must satisfy when it lands, not as a description of today's daemon.
 
 ### 6.2 Tool & approval flow (Inc 5a/5b)
 
@@ -429,7 +451,8 @@ All write methods execute inside a single `db.write { }` closure so the dedup ke
 ## 8. LLM provider abstraction
 
 - **Contract: one domain seam, two wire adapters, and a separate credential seam.** `LLMProvider` — `complete(request:)` + `stream(request:)` — is the **only** model-execution seam `AgentRuntime` consumes. Behind it sit two wire routes: the configured **OpenAI-compatible Chat Completions** route (the supported default) and the **ChatGPT Codex Responses** route (§8.3). **Authentication and wire protocol are separate choices:** credentials resolve through their own `LLMCredentialSource` seam (§8.2), so OAuth never becomes a property of the agent loop and the Responses wire format is never folded into the Chat Completions adapter. Concrete adapters stop at the composition root — `AgentRuntime`, `ScheduleDraftParser`, the scheduler, and the gateway receive `any LLMProvider` and **never branch on a provider ID or a capability**.
-- **Internal model is OpenAI-shaped** (`role`/`content`/`tool_calls`), doubling as the Chat Completions wire format — minimal translation; the Responses adapter owns its own translation and never leaks it upward. Image input (`image_url` content parts; cheap on OpenAI-compatible providers) is on the **near-term roadmap**, not v1.
+- **Internal model is OpenAI-shaped** (`role`/`content`/`tool_calls`), doubling as the Chat Completions wire format — minimal translation; the Responses adapter owns its own translation and never leaks it upward. **Content is ordered parts** (text and image), modeled for every role rather than just `.user`, so the type does not need re-cutting the first time a tool hands back an image.
+- **Image input ships on both wire routes.** Chat Completions emits an `image_url` content part; the Responses route emits an `input_image` part. Both carry a `data:` URL and **never a remote one**: the Telegram file URL carries the bot token, and a provider will fetch whatever it is handed. **`detail` is never sent** on either route, because each route infers the fidelity it reads an image at and pinning that would substitute our guess for the provider's own. A message carrying no image still emits the bare `content` string both routes have always been sent, so no text-only turn changes shape. A high visual-token estimate budgets the image instead of a grapheme count, so a run is refused rather than overspent. A route that rejects the request **because the configured model cannot see** narrows to a distinct `visionUnsupported` error, matched only on an invalid-request rejection naming an image content part: telling the owner to change models over an unrelated outage is worse than showing them the generic failure. **This detection is route-dependent by nature.** A gateway that ignores an unsupported field (an Anthropic-compatible one does) never rejects, so there the miss cannot be detected and the owner gets an answer that ignored the image.
 - **`LLMProvider` also keeps the seam** for a native adapter later (e.g. Anthropic Messages for prompt caching / extended thinking). The Responses adapter is that seam's first non-Chat-Completions wire format — evidence it holds.
 - **Client:** thin, over AsyncHTTPClient. Composition builds a **dedicated, redirect-disabled LLM client**, distinct from the Telegram and tool clients, so **no bearer — static or subscription — can follow a redirect off its intended host**; default TLS verification stays on. **SSE streaming is v1**: a small SSE parser → throttled `editMessageText` (coalesce, min-interval ~1–2s, first chunk ASAP). If streaming is unavailable, fall back to blocking + re-issue `sendChatAction` every ~4s for the turn duration. The metric is **perceived latency (time-to-first-token)**, not just first-reply latency. (URLSession can't stream SSE on Linux → AsyncHTTPClient is the portable choice.) On the Chat Completions route, a stream whose response head carries a retryable-class status before any SSE bytes is a clean rejection (`ProviderError.rejected`) and falls back to the blocking path once; mid-stream failures still degrade with no re-issue.
 
@@ -817,7 +840,7 @@ The numbered increments are the v1→Linux **build order**. **P-auth** is an ind
 | **6** | Linux sandbox + portability & deployment | Resolve and implement the Linux `ExecutionBackend` after a pinned host spike and FR-X1 conformance/amendment; keep the existing macOS + Linux GRDB/FTS5 gate; complete the remaining supervised Linux packaging work. |
 | **P-auth** | ChatGPT subscription authentication | `clawd auth login` completes a device-code login, stores a refreshable credential under the state root, discovers eligible models, and prints an exact `CLAW_LLM_MODEL=openai-chatgpt/<model>` assignment; that value composes the Responses provider **without requiring or using a base URL or API key**, while **every other model value composes the existing Chat Completions provider with unchanged URL and key behavior**; access-token refresh is race-safe under concurrent turns and **a stale request cannot invalidate a newer token generation**; Responses SSE text, usage, tool calls, and replay state map onto the existing agent contracts and survive durable history; subscription calls record token usage with **zero USD and `included_plan`** as the cost source while token preflight/accounting, tool, turn, and wall-clock limits still apply (subject to the documented one-in-flight-call token overshoot); **authentication failures say to run `clawd auth login`, entitlement and quota failures do not**; tests use deterministic HTTP, clock, sleeper, credential-store, and concurrency doubles, and **no test contacts OpenAI**. |
 
-*(Later/optional: image input to a vision model; native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; voice transcription; multi-provider fallback; per-call USD dashboards.)*
+*(Later/optional: native Anthropic adapter w/ prompt caching; Hummingbird `/v1/chat/completions` REST; MCP via official SDK + Linux SSE transport; multi-provider fallback; per-call USD dashboards.)*
 
 ## 21. Open architectural questions
 

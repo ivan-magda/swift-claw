@@ -49,8 +49,8 @@ every time, whatever else the session did.
 **Exfiltration risk.** clawd holds a fetch to an arbitrary URL for your approval once the
 session has done *both* of these:
 
-- **Ingested untrusted content.** A web page, a file read, tool output, or a voice
-  transcript. Durable memory does not count: it is labeled untrusted but does not taint
+- **Ingested untrusted content.** A web page, a file read, tool output, a voice transcript,
+  or a photo. Durable memory does not count: it is labeled untrusted but does not taint
   the session on its own.
 - **Touched private data.** Assembling `USER.md`, `MEMORY.md`, or stored memory items into
   the context is enough; no tool has to read them. Once you have filled in `USER.md`, this
@@ -116,6 +116,13 @@ On by default, on-device, off on other platforms. `CLAW_VOICE_LOCALES` takes a
 comma-separated priority list (`ru-RU,en-US`); there is no audio language detection, so
 every configured locale transcribes the note and the most confident transcript wins.
 The first use of a locale downloads its speech model.
+
+## Inbound images
+
+On by default, every platform. A photo you send is downloaded and shown to the model with
+its caption; `CLAW_IMAGE_INPUT=false` turns it off and photos get a canned refusal instead.
+This needs a vision-capable `CLAW_LLM_MODEL`. Nothing checks that at startup, so a text-only
+model fails the turn instead. Bytes stay in memory, never on disk, and a restart loses them.
 
 ## Code execution sandbox (macOS 26 arm64)
 
