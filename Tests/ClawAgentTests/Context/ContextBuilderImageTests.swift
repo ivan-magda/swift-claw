@@ -73,6 +73,25 @@ import Testing
     #expect(last.content.isPlainText)
   }
 
+  @Test func aPhotoRowWithNoCachedBytesSaysSoExplicitly() throws {
+    // given — evicted by LRU pressure, dropped by the replay budget, or lost to a restart
+    let stored = StoredMessage(
+      role: .user,
+      content: ImageMarkers.barePhoto,
+      provenance: .untrusted,
+      image: nil
+    )
+
+    // when
+    let rendered = try renderHistory([stored])
+
+    // then — silence here would recreate the original bug: the model answering about pixels it
+    // cannot see while believing it can
+    let message = try #require(rendered.last)
+    #expect(message.content.images.isEmpty)
+    #expect(message.content.text.contains(ImageMarkers.unavailable))
+  }
+
   private func renderHistory(_ history: [StoredMessage]) throws -> [ChatMessage] {
     let builder = ContextBuilder(
       systemPrompt: SystemPrompt.minimal,

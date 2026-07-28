@@ -574,6 +574,12 @@ private extension ContextBuilder {
       ).render()
     }
 
+    // Image bytes live only in memory, so a row can outlive them (eviction, the replay budget, a
+    // restart). The notice lands outside the fence because we are asserting it, not the sender.
+    if message.image == nil, message.content == ImageMarkers.barePhoto {
+      body += "\n\(ImageMarkers.unavailable)"
+    }
+
     let parts: [MessageContent.Part] =
       message.image.map { image in
         [.image(image), .text(body)]

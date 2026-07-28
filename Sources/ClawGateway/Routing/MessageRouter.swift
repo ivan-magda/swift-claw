@@ -112,7 +112,7 @@ public struct MessageRouter: Sendable {
   static let welcomeText = "Hi! I'm online. Send me a message and I'll do my best to help."
   static let privateBotText = "Sorry, this is a private bot."
   /// What a caption-less photo persists as, so its row is never empty and stays FTS-clean.
-  static let barePhotoPlaceholder = "[photo]"
+  static let barePhotoPlaceholder = ImageMarkers.barePhoto
 
   static func unsupportedMediaText(kind: String) -> String {
     "I can't read \(kind) yet."
