@@ -39,6 +39,23 @@ import Testing
     #expect(Set(images.keys) == [100])
   }
 
+  @Test func aStoreOnlyReplacesTheEntryBelongingToItsOwnSession() async {
+    // given — today's ids are messages-table row ids and so are globally unique, which is what keeps
+    // this scenario off the product path; the key stays session-scoped so that a later move to a
+    // per-chat identifier cannot turn a store into a delete of another session's photo
+    let cache = ImageCache(maximumImages: 8, maximumBytes: 1_000_000)
+    await cache.store(photo(bytes: 1_000), sessionId: 1, messageId: 100)
+
+    // when
+    await cache.store(photo(bytes: 1_000), sessionId: 2, messageId: 100)
+
+    // then
+    let first = await cache.images(sessionId: 1)
+    let second = await cache.images(sessionId: 2)
+    #expect(Set(first.keys) == [100])
+    #expect(Set(second.keys) == [100])
+  }
+
   @Test func evictsTheOldestEntryOnceTheEntryCapIsReached() async {
     // given
     let cache = ImageCache(maximumImages: 2, maximumBytes: 1_000_000)
