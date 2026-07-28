@@ -125,7 +125,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
       exposure.noteProvenClean()
       let message = redactor.redact(errorMessage(from: result.body))
       guard Self.isRetryableStatus(result.statusCode) else {
-        throw exposure.failure(.terminal(status: result.statusCode, message: message))
+        throw exposure.failure(Self.headRejection(result, message: message))
       }
       guard attempt < config.retryBudget else {
         // Proven clean above, so the failure carries `notStarted` and no phantom usage is debited for
@@ -148,6 +148,20 @@ public struct OpenAICompatibleProvider: LLMProvider {
 
   static func isRetryableStatus(_ status: Int) -> Bool {
     status == 408 || status == 429 || (500..<600).contains(status)
+  }
+
+  /// The cause a non-retryable head maps to. Only one rejection is named: a model that cannot look at
+  /// images, which earns owner copy saying so. Everything else — including a body the classifier
+  /// cannot read — stays the terminal rejection carrying the redacted diagnostic.
+  static func headRejection(status: Int, body: Data, message: String) -> ProviderError {
+    guard ProviderErrorClassifier.isVisionRefusal(status: status, body: body) else {
+      return .terminal(status: status, message: message)
+    }
+    return .visionUnsupported
+  }
+
+  static func headRejection(_ result: HTTPResult, message: String) -> ProviderError {
+    headRejection(status: result.statusCode, body: result.body, message: message)
   }
 
   static func baseURLIsOpenRouter(_ baseURL: String) -> Bool {
@@ -401,7 +415,11 @@ private extension OpenAICompatibleProvider {
     if Self.isRetryableStatus(exchange.head.statusCode) {
       return ProviderError.rejected(status: exchange.head.statusCode, message: message)
     }
-    return ProviderError.terminal(status: exchange.head.statusCode, message: message)
+    return Self.headRejection(
+      status: exchange.head.statusCode,
+      body: collected,
+      message: message
+    )
   }
 
   /// The body sequence ending says only that no more bytes are coming; the termination says whether

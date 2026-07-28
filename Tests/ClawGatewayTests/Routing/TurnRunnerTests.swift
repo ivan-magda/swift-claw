@@ -834,6 +834,27 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(firstPending.payload == Degradation.providerUnavailable)
   }
 
+  @Test func visionRefusalEnqueuesCopyNamingTheModelRatherThanAnOutage() async throws {
+    // given — the route refused because the configured model cannot look at images
+    let env = try makeEnv(agentOutcome: .fail(.visionUnsupported))
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then — the owner is told what to change, not to try again in a moment
+    let pending = try env.outbox.pendingOutbound()
+    let firstPending = try #require(pending.first)
+    #expect(firstPending.payload == Degradation.visionUnsupported)
+    #expect(firstPending.payload != Degradation.providerUnavailable)
+    #expect(firstPending.payload.contains("CLAW_LLM_MODEL"))
+    #expect(firstPending.payload.contains("CLAW_IMAGE_INPUT"))
+  }
+
   @Test func diskFullDuringCommitIsRethrownForTheStorageFullPath() async throws {
     // given — the run's first write reports a full disk
     let env = try makeEnv(

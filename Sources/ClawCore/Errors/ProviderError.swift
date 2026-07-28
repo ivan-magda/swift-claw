@@ -17,6 +17,10 @@ public enum ProviderError: Error, Sendable, Equatable {
   case quotaLimited(retryAfterSeconds: Int?)
   case cleanRejection(status: Int)
   case invalidProviderState
+  /// The route rejected the request because the configured model cannot look at images. Recognised
+  /// from the rejection body, then reduced to this text-free case so the owner reply names the cause
+  /// without quoting a remote diagnostic.
+  case visionUnsupported
 }
 
 // MARK: - Redaction
@@ -40,7 +44,8 @@ extension ProviderError {
       .accessDenied,
       .quotaLimited,
       .cleanRejection,
-      .invalidProviderState:
+      .invalidProviderState,
+      .visionUnsupported:
       self
     }
   }
@@ -78,7 +83,7 @@ extension ProviderFailureAccounting {
     }
     switch providerError {
     case .terminal, .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .invalidProviderState:
+      .invalidProviderState, .visionUnsupported:
       return .notStarted
     case .connectFailed, .retryable, .rejected:
       return .mayHaveStarted(observing: 0)

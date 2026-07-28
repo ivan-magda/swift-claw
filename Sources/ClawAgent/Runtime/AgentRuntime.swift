@@ -24,6 +24,9 @@ public enum DegradationKind: Sendable, Equatable {
   /// Replay state the route would not accept; the reply gives safe `/new` guidance and the attempt
   /// is never re-issued.
   case invalidProviderState
+  /// The route refused the request because the configured model cannot look at images; the reply
+  /// names that cause instead of reading as an outage, because retrying will never help.
+  case visionUnsupported
 
   /// The stable string the audit log records for this kind. Held apart from the case names so a
   /// rename cannot silently rewrite history, and categorical for `quotaLimited` so the retry hint
@@ -38,6 +41,7 @@ public enum DegradationKind: Sendable, Equatable {
     case .accessDenied: "accessDenied"
     case .quotaLimited: "quotaLimited"
     case .invalidProviderState: "invalidProviderState"
+    case .visionUnsupported: "visionUnsupported"
     }
   }
 }
@@ -638,7 +642,7 @@ private extension ProviderError {
     case .connectFailed, .rejected:
       return true
     case .retryable, .terminal, .authenticationRequired, .accessDenied, .quotaLimited,
-      .cleanRejection, .invalidProviderState:
+      .cleanRejection, .invalidProviderState, .visionUnsupported:
       return false
     }
   }

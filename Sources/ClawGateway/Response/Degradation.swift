@@ -37,6 +37,12 @@ public enum Degradation {
   public static let invalidProviderState =
     "I lost the thread of this conversation. Send /new to start fresh, then try again."
 
+  /// The route refused the image because the model cannot see. Resending changes nothing, so the
+  /// sentence names the cause and both knobs that fix it rather than inviting a retry.
+  public static let visionUnsupported =
+    "The model you've configured can't look at images. Set `CLAW_LLM_MODEL` to a vision-capable "
+    + "model, or set `CLAW_IMAGE_INPUT=false` to stop sending photos."
+
   /// A clean throttle. Says to retry after the provider's bounded hint when it gave one, else after
   /// the plan resets — never to log in. The hint is a structured number the provider returned, not
   /// remote free text, so echoing the count interpolates no untrusted string.
@@ -82,6 +88,8 @@ public enum Degradation {
       return quotaLimited(retryAfterSeconds: retryAfterSeconds)
     case .invalidProviderState:
       return invalidProviderState
+    case .visionUnsupported:
+      return visionUnsupported
     }
   }
 }
