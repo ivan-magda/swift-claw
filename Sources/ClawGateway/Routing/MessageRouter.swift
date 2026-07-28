@@ -226,6 +226,10 @@ private extension MessageRouter {
   /// dispatches directly and is never command-parsed nor offered to a parked confirmation: a photo
   /// carries no forward metadata, so an owner's own image and a forwarded one are indistinguishable
   /// and neither may steer a control path.
+  ///
+  /// A caption survives every arm that reaches a turn, including the opted-out one — see
+  /// `routeImageWithoutService`. Only a failed download discards it, because there the reply names a
+  /// fault the owner can act on rather than silently answering half the message.
   func routeImage(
     _ attachment: PhotoAttachment,
     caption: String?,
@@ -238,10 +242,10 @@ private extension MessageRouter {
     }
 
     guard let images else {
-      return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        chatId: message.chatId,
-        text: Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
+      return try await routeImageWithoutService(
+        caption: caption,
+        rawUpdate: rawUpdate,
+        message: message
       )
     }
 
@@ -266,6 +270,37 @@ private extension MessageRouter {
         text: failure.ownerReplyText
       )
     }
+  }
+
+  /// The opted-out path, which still owes the owner an answer. A bare photo is only the photo, so
+  /// the canned reply is the whole of it. A caption is the owner's own question and must not be
+  /// discarded — the product tells them to set this very flag when their model cannot see, so this
+  /// is a configuration they are steered into, not an edge case.
+  ///
+  /// The caption dispatches on the same direct, untrusted path the enabled branch uses. It is
+  /// deliberately NOT routed back through command parsing or a parked confirmation: a photo carries
+  /// no proof of who composed it, so one captioned `/stop` or `yes` must never steer a control path.
+  /// The marker leads the content with no bytes behind it, so assembly renders the "no longer
+  /// available" notice and the model is told a photo it cannot see was attached.
+  func routeImageWithoutService(
+    caption: String?,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    guard let caption, caption.isEmpty == false else {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
+      )
+    }
+
+    return try await turnDispatch.dispatch(
+      rawUpdate: rawUpdate,
+      message: message,
+      text: ImageMarkers.photoContent(caption: caption),
+      provenance: .untrusted
+    )
   }
 
   /// Default-deny, applied ONCE for every command: a stranger's /start gets THEIR own id to

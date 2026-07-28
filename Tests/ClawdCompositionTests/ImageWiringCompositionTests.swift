@@ -69,14 +69,14 @@ import Testing
     #expect(await Array(resumed.cachedImages(sessionId: sessionId).values) == [expectedImage])
   }
 
-  @Test func optingOutLeavesThePhotoPathClosedWithTheCannedReply() async throws {
-    // given — the same fan-out with CLAW_IMAGE_INPUT=false
+  @Test func optingOutLeavesABarePhotoClosedWithTheCannedReply() async throws {
+    // given — the same fan-out with CLAW_IMAGE_INPUT=false, and nothing but the photo
     let root = try makeRoot(imageInput: "false")
     let consumers = try await makeConsumers(root: root)
     root.coordination.lanes.closeAdmission()
 
     // when
-    let outcome = await consumers.poller.router.handle(rawUpdate: photoUpdate())
+    let outcome = await consumers.poller.router.handle(rawUpdate: photoUpdate(caption: nil))
 
     // then — no service means no download and no turn, just the pre-feature reply
     #expect(outcome == .processed)
@@ -88,6 +88,50 @@ import Testing
         MessageRouter.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
       )
     )
+  }
+
+  @Test func optingOutStillAnswersACaptionedPhotoThroughTheRealCompositionRoot() async throws {
+    // given — the configuration an owner on a text-only model is told to set. Proven here and not
+    // only at the router, because the flag is resolved at composition: this is the wiring that
+    // decides whether their question survives.
+    let root = try makeRoot(imageInput: "false")
+    let consumers = try await makeConsumers(root: root)
+    root.coordination.lanes.closeAdmission()
+
+    // when
+    let outcome = await consumers.poller.router.handle(
+      rawUpdate: photoUpdate(caption: "what does this say")
+    )
+
+    // then — the caption became a real turn, so the canned refusal never stood in for it
+    #expect(outcome == .processed)
+    let body = String(bytes: await root.telegram.lastBody ?? Data(), encoding: .utf8) ?? ""
+    #expect(
+      body.contains(
+        MessageRouter.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
+      ) == false
+    )
+
+    // … carrying the marker and the caption, with no bytes behind it — the download never ran, so
+    // assembly renders the unavailable notice rather than the model answering about pixels
+    let sessionId = try root.stores.sessionMessages.loadOrCreateSession(
+      sessionKey: SessionKey.telegramDM(chatId: Self.ownerChatId),
+      now: Date()
+    )
+    let snapshot = try root.stores.sessionMessages.loadContextSnapshot(
+      sessionId: sessionId,
+      throughMessageId: .max,
+      limit: 10
+    )
+    let stored: [String] = snapshot.history.map { message in
+      message.content
+    }
+    #expect(stored == ["\(ImageMarkers.barePhoto) what does this say"])
+    #expect(snapshot.isTainted)
+    let dispatched = try #require(
+      consumers.poller.router.turnDispatch.enqueuer.turns as? TurnRunner
+    )
+    #expect(await dispatched.cachedImages(sessionId: sessionId).isEmpty)
   }
 }
 
@@ -198,7 +242,7 @@ private extension ImageWiringCompositionTests {
     )
   }
 
-  func photoUpdate() -> RawUpdate {
+  func photoUpdate(caption: String? = "Что это?") -> RawUpdate {
     RawUpdate(
       updateId: 1,
       message: RawMessage(
@@ -206,7 +250,7 @@ private extension ImageWiringCompositionTests {
         fromUserId: Self.ownerChatId,
         chatId: Self.ownerChatId,
         text: nil,
-        caption: "Что это?",
+        caption: caption,
         mediaKind: PhotoAttachment.mediaKindDescription,
         photo: PhotoAttachment(sizes: [
           PhotoSize(

@@ -225,9 +225,12 @@ TelegramPollerService loop:
     (3a) RateLimiter (per-user + global token bucket; honor retry_after;
          fail CLOSED on store/lock error).
     (3b) Non-text intake: unsupported type → friendly "I can't read X yet";
-         a caption on media we cannot ingest is still processed as its text;
-         edited message → flagged isEdited and processed as a NEW turn
-         (Inc 1); true /retry answer-replacement is deferred to Inc 2 (FR-G6).
+         a caption outranks the attachment it rides on for EVERY media type
+         except a photo — a captioned voice note normalizes to a text turn
+         and is never transcribed, and a caption on media we cannot read is
+         processed as its text; edited message → flagged isEdited and
+         processed as a NEW turn (Inc 1); true /retry answer-replacement is
+         deferred to Inc 2 (FR-G6).
          Photo (flag-gated): allowed sender only → one typing pulse →
          choose the rung of Telegram's server-rendered size ladder that fits
          the byte cap (a rung IS the resize; nothing is decoded, scaled, or
@@ -242,9 +245,14 @@ TelegramPollerService loop:
          in the same fused write, and stores a "[photo]" marker as the row's
          only durable evidence that an image was there; assembly renders it
          fenced. No usable rung / undecodable / over cap / download failed →
-         a canned reply and no turn; flag off → the same canned "can't read
-         photos" reply as before the feature. One photo per message: an album
-         arrives as one update per photo, hence one turn per photo.
+         a canned reply and no turn. Flag off → a BARE photo gets the same
+         canned "can't read photos" reply as before the feature, but a
+         CAPTIONED one still dispatches its caption on this same direct
+         untrusted path, marker leading and no bytes behind it: the owner's
+         question is theirs and is never swallowed by the refusal, and the
+         product itself steers them into this flag when their model cannot
+         see. One photo per message: an album arrives as one update per
+         photo, hence one turn per photo.
          Voice note (flag-gated, macOS 26): allowed sender only → download via
          getFile (bounded, token-redacted) → on-device transcription →
          the transcript dispatches DIRECTLY as an untrusted-provenance turn —
@@ -452,7 +460,7 @@ All write methods execute inside a single `db.write { }` closure so the dedup ke
 
 - **Contract: one domain seam, two wire adapters, and a separate credential seam.** `LLMProvider` — `complete(request:)` + `stream(request:)` — is the **only** model-execution seam `AgentRuntime` consumes. Behind it sit two wire routes: the configured **OpenAI-compatible Chat Completions** route (the supported default) and the **ChatGPT Codex Responses** route (§8.3). **Authentication and wire protocol are separate choices:** credentials resolve through their own `LLMCredentialSource` seam (§8.2), so OAuth never becomes a property of the agent loop and the Responses wire format is never folded into the Chat Completions adapter. Concrete adapters stop at the composition root — `AgentRuntime`, `ScheduleDraftParser`, the scheduler, and the gateway receive `any LLMProvider` and **never branch on a provider ID or a capability**.
 - **Internal model is OpenAI-shaped** (`role`/`content`/`tool_calls`), doubling as the Chat Completions wire format — minimal translation; the Responses adapter owns its own translation and never leaks it upward. **Content is ordered parts** (text and image), modeled for every role rather than just `.user`, so the type does not need re-cutting the first time a tool hands back an image.
-- **Image input ships on both wire routes.** Chat Completions emits an `image_url` content part; the Responses route emits an `input_image` part. Both carry a `data:` URL and **never a remote one**: the Telegram file URL carries the bot token, and a provider will fetch whatever it is handed. **`detail` is never sent** on either route, because each route infers the fidelity it reads an image at and pinning that would substitute our guess for the provider's own. A message carrying no image still emits the bare `content` string both routes have always been sent, so no text-only turn changes shape. A high visual-token estimate budgets the image instead of a grapheme count, so a run is refused rather than overspent. A route that rejects the request **because the configured model cannot see** narrows to a distinct `visionUnsupported` error, matched only on an invalid-request rejection naming an image content part: telling the owner to change models over an unrelated outage is worse than showing them the generic failure. **This detection is route-dependent by nature.** A gateway that ignores an unsupported field (an Anthropic-compatible one does) never rejects, so there the miss cannot be detected and the owner gets an answer that ignored the image.
+- **Image input ships on both wire routes.** Chat Completions emits an `image_url` content part; the Responses route emits an `input_image` part. Both carry a `data:` URL and **never a remote one**: the Telegram file URL carries the bot token, and a provider will fetch whatever it is handed. **`detail` is never sent** on either route, because each route infers the fidelity it reads an image at and pinning that would substitute our guess for the provider's own. A message carrying no image still emits exactly the shape its route has always emitted — a bare `content` string on Chat Completions, a one-element `input_text` array on Responses — so no text-only turn changes shape on either. A high visual-token estimate budgets the image instead of a grapheme count, so a run is refused rather than overspent. A route that rejects the request **because the configured model cannot see** narrows to a distinct `visionUnsupported` error, matched only on an invalid-request rejection naming an image content part: telling the owner to change models over an unrelated outage is worse than showing them the generic failure. **This detection is route-dependent by nature.** A gateway that ignores an unsupported field (an Anthropic-compatible one does) never rejects, so there the miss cannot be detected and the owner gets an answer that ignored the image.
 - **`LLMProvider` also keeps the seam** for a native adapter later (e.g. Anthropic Messages for prompt caching / extended thinking). The Responses adapter is that seam's first non-Chat-Completions wire format — evidence it holds.
 - **Client:** thin, over AsyncHTTPClient. Composition builds a **dedicated, redirect-disabled LLM client**, distinct from the Telegram and tool clients, so **no bearer — static or subscription — can follow a redirect off its intended host**; default TLS verification stays on. **SSE streaming is v1**: a small SSE parser → throttled `editMessageText` (coalesce, min-interval ~1–2s, first chunk ASAP). If streaming is unavailable, fall back to blocking + re-issue `sendChatAction` every ~4s for the turn duration. The metric is **perceived latency (time-to-first-token)**, not just first-reply latency. (URLSession can't stream SSE on Linux → AsyncHTTPClient is the portable choice.) On the Chat Completions route, a stream whose response head carries a retryable-class status before any SSE bytes is a clean rejection (`ProviderError.rejected`) and falls back to the blocking path once; mid-stream failures still degrade with no re-issue.
 

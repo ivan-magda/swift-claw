@@ -268,8 +268,8 @@ CLAW_IMAGE_INPUT=false
 
 This needs a **vision-capable `CLAW_LLM_MODEL`** — a text-only model rejects the request outright,
 and nothing in the daemon can detect that ahead of time, so the knob is the only control. With the
-feature off, photos get the canned "I can't read photos yet." reply — same behavior as before the
-feature.
+feature off, a bare photo gets the canned "I can't read photos yet." reply, but a **captioned** one
+still runs as a turn carrying the caption: opting out of pixels does not throw away your question.
 
 ---
 
