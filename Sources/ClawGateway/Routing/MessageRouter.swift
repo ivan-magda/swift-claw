@@ -27,7 +27,7 @@ public struct MessageRouter: Sendable {
   private let commandHandlers: CommandHandlers
   private let scheduleHandlers: ScheduleHandlers
   private let confirmations: ConfirmationResolver
-  private var turnDispatch: TurnDispatch
+  var turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
   private let voice: (any VoiceMessageTranscribing)?
   private let images: (any ImageMessageHandling)?

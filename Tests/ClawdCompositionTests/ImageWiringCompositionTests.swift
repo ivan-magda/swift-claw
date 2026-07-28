@@ -41,7 +41,7 @@ import Testing
     )
   }
 
-  @Test func theSchedulerAndTheApprovalWaiterSeeWhatIntakeDeposited() async throws {
+  @Test func everyRunnerConsumerSeesWhatIntakeDeposited() async throws {
     // given — the production fan-out over real stores and a scripted Telegram transport
     let root = try makeRoot()
     let consumers = try await makeConsumers(root: root)
@@ -51,17 +51,20 @@ import Testing
     root.coordination.lanes.closeAdmission()
 
     // when — one photo lands through the intake path the poller drives
-    let outcome = await consumers.poller.router.handle(rawUpdate: photoUpdate())
+    let router = consumers.poller.router
+    let outcome = await router.handle(rawUpdate: photoUpdate())
 
-    // then — the runner the SCHEDULER holds and the runner the APPROVAL WAITER holds both replay
-    // the bytes the router deposited: three consumers, one cache
+    // then — every consumer that copies the runner value replays the bytes the router deposited:
+    // the router's own boxed copy (every interactive photo), the scheduler's, and the waiter's
     #expect(outcome == .processed)
     let sessionId = try root.stores.sessionMessages.loadOrCreateSession(
       sessionKey: SessionKey.telegramDM(chatId: Self.ownerChatId),
       now: Date()
     )
+    let dispatched = try #require(router.turnDispatch.enqueuer.turns as? TurnRunner)
     let scheduled = try #require(consumers.scheduler.enqueuer.turns as? TurnRunner)
     let resumed = try #require(consumers.approvals.waiter.turns as? TurnRunner)
+    #expect(await Array(dispatched.cachedImages(sessionId: sessionId).values) == [expectedImage])
     #expect(await Array(scheduled.cachedImages(sessionId: sessionId).values) == [expectedImage])
     #expect(await Array(resumed.cachedImages(sessionId: sessionId).values) == [expectedImage])
   }

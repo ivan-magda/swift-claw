@@ -28,7 +28,9 @@ extension DaemonBuilder {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
 
-    let (router, wiredRunner) = ImageWiring.wire(runner: turnRunner) { runner in
+    // The closure parameter deliberately shadows `turnRunner`: inside this body no name resolves to
+    // the unwired runner, so the router cannot be built from a copy that predates the image cache.
+    let (router, wiredRunner) = ImageWiring.wire(runner: turnRunner) { turnRunner in
       MessageRouter(
         processed: stores.processed,
         sessionMessages: stores.sessionMessages,
@@ -39,7 +41,7 @@ extension DaemonBuilder {
         botUsername: botUsername,
         accessControl: AccessControl(allowlist: stores.allowlist),
         delivery: transport,
-        turnRunner: runner,
+        turnRunner: turnRunner,
         lanes: coordination.lanes,
         schedule: scheduleSurface,
         approvalCallbacks: approvalCallbacks,

@@ -246,6 +246,27 @@ The suite's engine test is opt-in (first model download needs network):
 CLAW_SPEECH_LIVE_TESTS=1 swift test --filter AppleSpeechTranscriberLiveTests
 ```
 
+---
+
+## Inbound images
+
+A photo you send is downloaded and passed to the model with its caption, and — like a voice note —
+enters the turn flow fenced and session-tainting, since a forwarded photo is indistinguishable from
+one the owner shot. The bytes are held in memory only, never written to disk, and they outlive the
+run that stored them so a photo sent in one message and questioned in the next still reaches the
+model as pixels. A restart loses them.
+
+On by default; one line opts out:
+
+```bash
+CLAW_IMAGE_INPUT=false
+```
+
+This needs a **vision-capable `CLAW_LLM_MODEL`** — a text-only model rejects the request outright,
+and nothing in the daemon can detect that ahead of time, so the knob is the only control. With the
+feature off, photos get the canned "I can't read photos yet." reply — same behavior as before the
+feature.
+
 Background research (verified capability matrix, the Ogg/Opus decode findings, the
 LaunchDaemon-vs-LaunchAgent open question):
 `docs/research/telegram-voice-transcription-2026-07-16.md`.
