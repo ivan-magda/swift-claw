@@ -36,6 +36,11 @@ struct StubMediaFetcher: MediaFetching {
     self.result = result
   }
 
+  /// A fetcher whose every download fails, for tests that care only that no bytes came back.
+  static var failing: StubMediaFetcher {
+    StubMediaFetcher(result: .failure(FetchFailed()))
+  }
+
   /// Audio-shaped convenience: canned bytes, or `nil` for a plain download failure.
   init(audio: Data? = StubMediaFetcher.oggHeader) {
     guard let audio else {
@@ -51,12 +56,19 @@ struct StubMediaFetcher: MediaFetching {
   }
 }
 
-/// Parks until the surrounding task is cancelled — a cancellable wait, not a timing sleep — and then
-/// reports a plain download failure, the shape a transport that spells cancellation in its own error
-/// type produces.
+/// Parks its FIRST call until the surrounding task is cancelled — a cancellable wait, not a timing
+/// sleep — and then reports a plain download failure, the shape a transport that spells cancellation
+/// in its own error type produces. Every later call downloads normally, so a redelivery after a
+/// shutdown-cancelled intake fetches what the first delivery never did.
 struct ParkUntilCancelledFetcher: MediaFetching {
+  let calls = CallCounter()
+  var bytes = ImageFixtures.jpeg
+
   func downloadFile(fileId: String, maxBytes: Int) async throws -> Data {
-    try? await Task.sleep(for: .seconds(3_600))
-    throw StubMediaFetcher.FetchFailed()
+    guard await calls.next() > 1 else {
+      try? await Task.sleep(for: .seconds(3_600))
+      throw StubMediaFetcher.FetchFailed()
+    }
+    return bytes
   }
 }

@@ -21,16 +21,7 @@ struct StubVoiceTranscriber: VoiceTranscribing {
 /// cancellation story: a wedged engine the deadline race abandons, and a shutdown-cancelled
 /// intake whose redelivery re-transcribes after restart.
 struct ParkUntilCancelledTranscriber: VoiceTranscribing {
-  actor Calls {
-    private(set) var count = 0
-
-    func next() -> Int {
-      count += 1
-      return count
-    }
-  }
-
-  let calls = Calls()
+  let calls = CallCounter()
   var transcript = "spoken words"
 
   func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {

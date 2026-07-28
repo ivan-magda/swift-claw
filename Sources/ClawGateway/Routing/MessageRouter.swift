@@ -27,9 +27,10 @@ public struct MessageRouter: Sendable {
   private let commandHandlers: CommandHandlers
   private let scheduleHandlers: ScheduleHandlers
   private let confirmations: ConfirmationResolver
-  private let turnDispatch: TurnDispatch
+  private var turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
   private let voice: (any VoiceMessageTranscribing)?
+  private let images: (any ImageMessageHandling)?
 
   private let doctor: any DoctorReporting
   private let logger: Logger
@@ -49,6 +50,7 @@ public struct MessageRouter: Sendable {
     schedule: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     voice: (any VoiceMessageTranscribing)? = nil,
+    images: (any ImageMessageHandling)? = nil,
     coordinator: ApprovalCoordinator,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = { Date() },
@@ -59,6 +61,7 @@ public struct MessageRouter: Sendable {
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
     self.voice = voice
+    self.images = images
 
     self.doctor = doctor
     self.logger = logger
@@ -108,6 +111,8 @@ public struct MessageRouter: Sendable {
 
   static let welcomeText = "Hi! I'm online. Send me a message and I'll do my best to help."
   static let privateBotText = "Sorry, this is a private bot."
+  /// What a caption-less photo persists as, so its row is never empty and stays FTS-clean.
+  static let barePhotoPlaceholder = "[photo]"
 
   static func unsupportedMediaText(kind: String) -> String {
     "I can't read \(kind) yet."
@@ -154,15 +159,13 @@ private extension MessageRouter {
         chatId: message.chatId,
         text: reply
       )
-    case .photo:
-      let reply =
-        isAllowed
-        ? Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
-        : Self.privateBotText
-      return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        chatId: message.chatId,
-        text: reply
+    case .photo(let attachment, let caption):
+      return try await routeImage(
+        attachment,
+        caption: caption,
+        rawUpdate: rawUpdate,
+        message: message,
+        isAllowed: isAllowed
       )
     case .voice(let attachment):
       return try await routeVoice(
@@ -208,6 +211,48 @@ private extension MessageRouter {
       )
     case .failure(.storageFull):
       return await replies.storageFull(chatId: message.chatId)
+    case .failure(let failure):
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: failure.ownerReplyText
+      )
+    }
+  }
+
+  /// Mirrors `routeVoice`: access first, then availability, then the download — all before any
+  /// update claim, so a cancellation mid-download leaves the update redeliverable. The caption
+  /// dispatches directly and is never command-parsed nor offered to a parked confirmation: a photo
+  /// carries no forward metadata, so an owner's own image and a forwarded one are indistinguishable
+  /// and neither may steer a control path.
+  func routeImage(
+    _ attachment: PhotoAttachment,
+    caption: String?,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    isAllowed: Bool
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    guard isAllowed else {
+      return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
+    }
+
+    guard let images else {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
+      )
+    }
+
+    switch await images.materialize(attachment) {
+    case .success(let image):
+      return try await turnDispatch.dispatch(
+        rawUpdate: rawUpdate,
+        message: message,
+        text: caption ?? Self.barePhotoPlaceholder,
+        provenance: .untrusted,
+        image: image
+      )
     case .failure(let failure):
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
@@ -330,6 +375,20 @@ private extension MessageRouter {
       return resolved
     }
     return try await turnDispatch.dispatch(rawUpdate: rawUpdate, message: message, text: text)
+  }
+}
+
+// MARK: - Image Cache
+
+extension MessageRouter {
+  /// Hands the router the cache an inbound photo's bytes land in, as a copy rather than an `init`
+  /// parameter: the cache is module-internal and `MessageRouter.init` is public, so it cannot cross
+  /// that signature. The runner replaying those bytes must be handed the SAME instance
+  /// (`TurnRunner.withImageCache`), or every stored image is written and never read.
+  func withImageCache(_ cache: ImageCache) -> MessageRouter {
+    var copy = self
+    copy.turnDispatch.imageCache = cache
+    return copy
   }
 }
 
