@@ -2,10 +2,10 @@ import ClawCore
 import ClawGateway
 import Foundation
 
-/// The one fetcher double for the `VoiceMediaFetching` seam: returns canned bytes or throws, and
+/// The one fetcher double for the `MediaFetching` seam: returns canned bytes or throws, and
 /// records every call's fileId AND maxBytes so tests can assert both what was fetched and that
 /// the bounded-download cap survives the middle of the chain.
-struct StubVoiceFetcher: VoiceMediaFetching {
+struct StubVoiceFetcher: MediaFetching {
   struct FetchCall: Sendable, Equatable {
     let fileId: String
     let maxBytes: Int
@@ -24,7 +24,7 @@ struct StubVoiceFetcher: VoiceMediaFetching {
   let recorder = Recorder()
   var audio: Data? = Data([0x4F, 0x67, 0x67, 0x53])  // "OggS"
 
-  func downloadVoiceFile(fileId: String, maxBytes: Int) async throws -> Data {
+  func downloadFile(fileId: String, maxBytes: Int) async throws -> Data {
     await recorder.append(FetchCall(fileId: fileId, maxBytes: maxBytes))
     guard let audio else {
       throw FetchFailed()

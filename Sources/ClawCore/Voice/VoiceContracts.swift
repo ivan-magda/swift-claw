@@ -24,7 +24,3 @@ public enum VoiceTranscriptionError: Error, Sendable, Equatable {
 public protocol VoiceTranscribing: Sendable {
   func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String
 }
-
-public protocol VoiceMediaFetching: Sendable {
-  func downloadVoiceFile(fileId: String, maxBytes: Int) async throws -> Data
-}

@@ -157,12 +157,12 @@ public struct TelegramClient: TelegramTransport {
   }
 }
 
-// MARK: - Voice file download
+// MARK: - Media file download
 
-extension TelegramClient: VoiceMediaFetching {
+extension TelegramClient: MediaFetching {
   /// `getFile` then a bounded GET of `/file/bot<token>/<file_path>`. The URL carries the bot
   /// token, so every failure message passes through `sanitize` before it can be thrown or logged.
-  public func downloadVoiceFile(fileId: String, maxBytes: Int) async throws -> Data {
+  public func downloadFile(fileId: String, maxBytes: Int) async throws -> Data {
     let request = GetFileRequest(fileId: fileId)
     let file: TFile = try await callMethod(
       "getFile",
@@ -183,11 +183,11 @@ extension TelegramClient: VoiceMediaFetching {
         maxBodyBytes: maxBytes
       )
     } catch {
-      throw TelegramError.transport(sanitize("voice download: \(error)"))
+      throw TelegramError.transport(sanitize("media download: \(error)"))
     }
 
     guard result.statusCode == 200 else {
-      throw TelegramError.apiError(code: result.statusCode, description: "voice download failed")
+      throw TelegramError.apiError(code: result.statusCode, description: "media download failed")
     }
 
     return result.body

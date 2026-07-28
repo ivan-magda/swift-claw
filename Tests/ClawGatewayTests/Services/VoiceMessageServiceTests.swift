@@ -27,7 +27,7 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
   )
 
   private func makeService(
-    fetcher: any VoiceMediaFetching = StubVoiceFetcher(),
+    fetcher: any MediaFetching = StubVoiceFetcher(),
     transcriber: any VoiceTranscribing,
     stagingDirectory: URL,
     secretValues: [String] = [],
