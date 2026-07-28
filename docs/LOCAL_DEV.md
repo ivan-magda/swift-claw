@@ -246,6 +246,10 @@ The suite's engine test is opt-in (first model download needs network):
 CLAW_SPEECH_LIVE_TESTS=1 swift test --filter AppleSpeechTranscriberLiveTests
 ```
 
+Background research (verified capability matrix, the Ogg/Opus decode findings, the
+LaunchDaemon-vs-LaunchAgent open question):
+`docs/research/telegram-voice-transcription-2026-07-16.md`.
+
 ---
 
 ## Inbound images
@@ -266,10 +270,6 @@ This needs a **vision-capable `CLAW_LLM_MODEL`** — a text-only model rejects t
 and nothing in the daemon can detect that ahead of time, so the knob is the only control. With the
 feature off, photos get the canned "I can't read photos yet." reply — same behavior as before the
 feature.
-
-Background research (verified capability matrix, the Ogg/Opus decode findings, the
-LaunchDaemon-vs-LaunchAgent open question):
-`docs/research/telegram-voice-transcription-2026-07-16.md`.
 
 ---
 
