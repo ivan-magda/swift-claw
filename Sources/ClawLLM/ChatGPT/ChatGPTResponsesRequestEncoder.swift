@@ -181,7 +181,7 @@ private extension ChatGPTResponsesRequestEncoder {
       // Already folded into `instructions`; sending it again would say it twice.
       return []
     case .user:
-      return [.userText(message.content.text)]
+      return [.userMessage(message.content)]
     case .assistant:
       return assistantItems(for: message)
     case .tool:
@@ -303,7 +303,7 @@ struct ChatGPTWireTool: Encodable {
 /// One item of the conversation as the route reads it. A turn is not always one item: an assistant
 /// message that proposed calls becomes a message item and a call item apiece.
 enum ChatGPTWireInputItem: Encodable {
-  case userText(String)
+  case userMessage(MessageContent)
   case assistantText(String)
   case functionCall(callID: String, name: String, arguments: String)
   case functionCallOutput(callID: String, output: String)
@@ -330,18 +330,18 @@ enum ChatGPTWireInputItem: Encodable {
   func encode(to encoder: any Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     switch self {
-    case .userText(let text):
+    case .userMessage(let content):
       // The route infers this type when it is absent, but the Codex client shape this request
       // impersonates states it, and it is that shape the backend is expecting to read.
       try container.encode("message", forKey: .type)
       try container.encode("user", forKey: .role)
-      try container.encode([ChatGPTWireContent(type: "input_text", text: text)], forKey: .content)
+      try container.encode(ChatGPTWireContent.inputParts(of: content), forKey: .content)
     case .assistantText(let text):
       try container.encode("message", forKey: .type)
       try container.encode("assistant", forKey: .role)
       // Replayed history, never a turn in flight: the route is being told what was already said.
       try container.encode("completed", forKey: .status)
-      try container.encode([ChatGPTWireContent(type: "output_text", text: text)], forKey: .content)
+      try container.encode([ChatGPTWireContent.outputText(text)], forKey: .content)
     case .functionCall(let callID, let name, let arguments):
       try container.encode("function_call", forKey: .type)
       try container.encode(callID, forKey: .callID)
@@ -361,7 +361,7 @@ enum ChatGPTWireInputItem: Encodable {
       try container.encode(status, forKey: .status)
       try container.encode(
         outputText.map { text in
-          ChatGPTWireContent(type: "output_text", text: text)
+          ChatGPTWireContent.outputText(text)
         },
         forKey: .content
       )
@@ -369,7 +369,56 @@ enum ChatGPTWireInputItem: Encodable {
   }
 }
 
+/// One content part of an input item. `text` and `imageURL` are mutually exclusive — the part's type
+/// says which one carries it — and the absent one is left out of the body rather than written as
+/// null, which is what the route was probed accepting.
 struct ChatGPTWireContent: Encodable {
   let type: String
-  let text: String
+  let text: String?
+  let imageURL: String?
+
+  private enum CodingKeys: String, CodingKey {
+    case type
+    case text
+    case imageURL = "image_url"
+  }
+
+  /// Private so the factories below are the only way to build a part, and no caller can pair a type
+  /// with the payload field that type does not name.
+  private init(type: String, text: String?, imageURL: String?) {
+    self.type = type
+    self.text = text
+    self.imageURL = imageURL
+  }
+
+  static func inputText(_ value: String) -> ChatGPTWireContent {
+    ChatGPTWireContent(type: "input_text", text: value, imageURL: nil)
+  }
+
+  static func outputText(_ value: String) -> ChatGPTWireContent {
+    ChatGPTWireContent(type: "output_text", text: value, imageURL: nil)
+  }
+
+  /// This route takes the image as a bare data-URL string, not the nested object Chat Completions
+  /// wants, and infers the fidelity it reads the image at when no `detail` is stated.
+  static func inputImage(_ image: ImagePart) -> ChatGPTWireContent {
+    ChatGPTWireContent(type: "input_image", text: nil, imageURL: image.dataURL)
+  }
+
+  /// A user turn's parts in the order they were written, so a caption keeps its position relative to
+  /// the image it describes. Content carrying no image stays the single joined `input_text` part it
+  /// has always been — several text parts are still one part on the wire.
+  static func inputParts(of content: MessageContent) -> [ChatGPTWireContent] {
+    guard content.images.isEmpty == false else {
+      return [.inputText(content.text)]
+    }
+    return content.parts.map { part -> ChatGPTWireContent in
+      switch part {
+      case .text(let value):
+        return .inputText(value)
+      case .image(let image):
+        return .inputImage(image)
+      }
+    }
+  }
 }
