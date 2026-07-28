@@ -37,14 +37,14 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
     let dispatcher: FakeTurnRunner
     let sessionMessages: SessionMessageStoreGRDB
     let pendingConfirmations: PendingConfirmationRegistry
-    let fetcher: StubVoiceFetcher
+    let fetcher: StubMediaFetcher
     let staging: URL
   }
 
   private func makeHarness(
     allowed: [Int64],
     voiceEnabled: Bool = true,
-    fetcher: StubVoiceFetcher = StubVoiceFetcher(),
+    fetcher: StubMediaFetcher = StubMediaFetcher(),
     transcriber: any VoiceTranscribing = StubVoiceTranscriber(),
     serviceOverride: (any VoiceMessageTranscribing)? = nil
   ) throws -> Harness {
@@ -222,7 +222,7 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
     // then — fail-closed: the private-bot line, no fetch, no turn
     let sent = await harness.transport.sent
     #expect(sent.map(\.text) == [MessageRouter.privateBotText])
-    #expect(await harness.fetcher.recorder.calls.isEmpty)
+    #expect(await harness.fetcher.calls.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -269,7 +269,7 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
     // then — refused on declared duration; not a single byte fetched
     let sent = await harness.transport.sent
     #expect(sent.map(\.text) == [VoiceMessageService.Failure.tooLong.ownerReplyText])
-    #expect(await harness.fetcher.recorder.calls.isEmpty)
+    #expect(await harness.fetcher.calls.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -298,7 +298,7 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
 
   @Test func downloadFailureGetsItsMappedReply() async throws {
     // given
-    let harness = try makeHarness(allowed: [42], fetcher: StubVoiceFetcher(audio: nil))
+    let harness = try makeHarness(allowed: [42], fetcher: StubMediaFetcher(audio: nil))
 
     // when
     await harness.router.handle(rawUpdate: voiceUpdate(id: 1, from: 42))

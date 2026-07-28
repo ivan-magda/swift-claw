@@ -27,7 +27,7 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
   )
 
   private func makeService(
-    fetcher: any MediaFetching = StubVoiceFetcher(),
+    fetcher: any MediaFetching = StubMediaFetcher(),
     transcriber: any VoiceTranscribing,
     stagingDirectory: URL,
     secretValues: [String] = [],
@@ -52,7 +52,7 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
     let service = makeService(
-      fetcher: StubVoiceFetcher(audio: Data("staged-bytes".utf8)),
+      fetcher: StubMediaFetcher(audio: Data("staged-bytes".utf8)),
       transcriber: StagedBytesEchoTranscriber(),
       stagingDirectory: staging
     )
@@ -108,7 +108,7 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     // given — a distinctive cap so a hardcoded constant cannot pass by luck
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
-    let fetcher = StubVoiceFetcher()
+    let fetcher = StubMediaFetcher()
     let service = makeService(
       fetcher: fetcher,
       transcriber: StubVoiceTranscriber(),
@@ -120,8 +120,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     _ = await service.transcribe(attachment)
 
     // then — the bounded-download cap survives the middle of the chain
-    let call = try #require(await fetcher.recorder.calls.first)
-    #expect(call == StubVoiceFetcher.FetchCall(fileId: "F1", maxBytes: 12_345))
+    let call = try #require(await fetcher.calls.first)
+    #expect(call == StubMediaFetcher.Call(fileId: "F1", maxBytes: 12_345))
   }
 
   @Test func redactsSecretsFromTheTranscript() async throws {
@@ -205,7 +205,7 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     )
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
-    let fetcher = StubVoiceFetcher()
+    let fetcher = StubMediaFetcher()
     let service = makeService(
       fetcher: fetcher,
       transcriber: StubVoiceTranscriber(),
@@ -217,7 +217,7 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
 
     // then — refused before a single byte moves
     #expect(result == .failure(.tooLong))
-    #expect(await fetcher.recorder.calls.isEmpty)
+    #expect(await fetcher.calls.isEmpty)
   }
 
   @Test func wedgedTranscriptionHitsTheDeadlineInsteadOfStallingForever() async throws {

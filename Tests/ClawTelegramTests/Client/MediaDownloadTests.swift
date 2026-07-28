@@ -82,6 +82,24 @@ import Testing
     }
   }
 
+  @Test func overCapBodyIsRefusedAsATypedFailureRatherThanTruncated() async throws {
+    // given — a body one byte past the requested ceiling
+    let executor = ClawTestSupport.RecordingHTTPExecutor(responses: [
+      Self.getFileURL: envelope(filePath: "voice/file_3.oga"),
+      Self.downloadURL: HTTPResult(
+        statusCode: 200,
+        headers: [:],
+        body: Data(repeating: 0xFF, count: 1_025)
+      ),
+    ])
+    let client = TelegramClient(token: Self.token, http: executor)
+
+    // when / then — callers distinguish "too large" from "download broke", and get no short body
+    await #expect(throws: HTTPTransportFailure.oversizedBody(cap: 1_024)) {
+      _ = try await client.downloadFile(fileId: "F1", maxBytes: 1_024)
+    }
+  }
+
   @Test func transportErrorIsRedactedBeforeThrowing() async throws {
     // given — a transport failure whose description echoes the token-bearing URL
     struct URLEchoError: Error, Sendable, CustomStringConvertible {
