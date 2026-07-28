@@ -38,15 +38,22 @@ public enum LLMInputReservationPolicy: Sendable, Equatable {
   case replayState(tokensPerByte: Int, framingTokensPerState: Int, aggregateByteCap: Int)
 
   public func additionalTokens(for messages: [ChatMessage]) -> Int {
+    // Charged outside the switch: a route that keeps no replay state still sends pixels, and images
+    // cost no graphemes, so text estimation alone would let them pass the input ceiling for free.
+    let imageTokens = Self.visualTokens(for: messages)
+
     switch self {
     case .textOnly:
-      0
+      return imageTokens
     case .replayState(let tokensPerByte, let framingTokensPerState, let aggregateByteCap):
-      Self.replayStateTokens(
-        for: messages,
-        tokensPerByte: tokensPerByte,
-        framingTokensPerState: framingTokensPerState,
-        aggregateByteCap: aggregateByteCap
+      return SaturatingArithmetic.sum(
+        imageTokens,
+        Self.replayStateTokens(
+          for: messages,
+          tokensPerByte: tokensPerByte,
+          framingTokensPerState: framingTokensPerState,
+          aggregateByteCap: aggregateByteCap
+        )
       )
     }
   }
@@ -68,6 +75,16 @@ extension LLMInputReservationPolicy {
 // MARK: - Checked Reservation Arithmetic
 
 private extension LLMInputReservationPolicy {
+  /// Every image in the request, not only the newest message: replayed history is re-sent on each
+  /// turn and is charged again each time.
+  static func visualTokens(for messages: [ChatMessage]) -> Int {
+    messages.reduce(0) { total, message in
+      message.content.images.reduce(total) { running, image in
+        SaturatingArithmetic.sum(running, image.visualTokenEstimate)
+      }
+    }
+  }
+
   static func replayStateTokens(
     for messages: [ChatMessage],
     tokensPerByte: Int,
