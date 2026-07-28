@@ -71,6 +71,7 @@ public struct RawMessage: Sendable, Equatable {
   /// Pluralized noun for unsupported media ("photos", "voice messages"), else nil.
   public let mediaKind: String?
   public let voice: VoiceAttachment?
+  public let photo: PhotoAttachment?
 
   public init(
     messageId: Int64,
@@ -79,7 +80,8 @@ public struct RawMessage: Sendable, Equatable {
     text: String?,
     caption: String?,
     mediaKind: String?,
-    voice: VoiceAttachment? = nil
+    voice: VoiceAttachment? = nil,
+    photo: PhotoAttachment? = nil
   ) {
     self.messageId = messageId
     self.fromUserId = fromUserId
@@ -88,6 +90,7 @@ public struct RawMessage: Sendable, Equatable {
     self.caption = caption
     self.mediaKind = mediaKind
     self.voice = voice
+    self.photo = photo
   }
 }
 
