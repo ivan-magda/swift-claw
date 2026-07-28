@@ -551,23 +551,34 @@ private extension ContextBuilder {
               providerState: message.providerState
             )
           )
-        case .user where message.provenance == .untrusted:
-          let fenced = LabeledContextFactory.make(
-            label: Self.untrustedUserLabel,
-            content: message.content
-          ).render()
-          let parts: [MessageContent.Part] =
-            message.image.map { image in
-              [.image(image), .text(fenced)]
-            } ?? [.text(fenced)]
-          rendered.append(ChatMessage(role: .user, content: MessageContent(parts: parts)))
-        case .user, .system:
-          rendered.append(ChatMessage(role: message.role, content: message.content))
+        case .user:
+          rendered.append(userMessage(from: message))
+        case .system:
+          rendered.append(ChatMessage(role: .system, content: message.content))
         }
       }
     }
 
     return rendered
+  }
+
+  /// Provenance decides the fence and nothing else. The image rides on every user row, trusted or
+  /// not: gating it on provenance would let a single change of tier drop an image with no error and
+  /// no failing test.
+  func userMessage(from message: StoredMessage) -> ChatMessage {
+    var body = message.content
+    if message.provenance == .untrusted {
+      body = LabeledContextFactory.make(
+        label: Self.untrustedUserLabel,
+        content: message.content
+      ).render()
+    }
+
+    let parts: [MessageContent.Part] =
+      message.image.map { image in
+        [.image(image), .text(body)]
+      } ?? [.text(body)]
+    return ChatMessage(role: .user, content: MessageContent(parts: parts))
   }
 
   func hasPrivateDataAccess(_ fitted: [FittedSection]) -> Bool {

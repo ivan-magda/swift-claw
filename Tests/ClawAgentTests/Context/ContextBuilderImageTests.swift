@@ -42,6 +42,25 @@ import Testing
     #expect(text.contains("Что это?"))
   }
 
+  @Test func aTrustedUserMessageWithAnImageKeepsTheImageAndTakesNoFence() throws {
+    // given — only the fence is gated on provenance; the image must survive either tier, or a photo
+    // dispatched as trusted would vanish with no error
+    let stored = StoredMessage(
+      role: .user,
+      content: "look at this",
+      provenance: .trusted,
+      image: pixel
+    )
+
+    // when
+    let rendered = try renderHistory([stored])
+
+    // then
+    let last = try #require(rendered.last)
+    #expect(last.content.images == [pixel])
+    #expect(last.content.text == "look at this")
+  }
+
   @Test func anUntrustedUserMessageWithoutAnImageIsUnchanged() throws {
     // given — every existing untrusted message must render exactly as before
     let stored = StoredMessage(role: .user, content: "hi", provenance: .untrusted)

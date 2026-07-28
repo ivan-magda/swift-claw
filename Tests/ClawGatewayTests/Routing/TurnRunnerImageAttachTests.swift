@@ -59,6 +59,39 @@ import Testing
     #expect(second.content.images == [beta])
   }
 
+  @Test func aCachedImageReachesTheProviderOnTheMessageItArrivedOn() async throws {
+    // given — a real run whose trigger message has an image waiting in the cache it was handed
+    let env = try makeEnv(
+      agentOutcome: .respond(
+        ChatResponse(
+          content: "a photo",
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+          costFromProvider: 0.0021
+        )
+      )
+    )
+    let cache = ImageCache()
+    await cache.store(alpha, sessionId: env.sessionId, messageId: env.triggerMessageId)
+
+    // when
+    try await env.runner.withImageCache(cache).run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then — the image crossed every stage between the cache and the wire, on exactly one message
+    let requests = await env.provider.requests
+    let request = try #require(requests.first)
+    let carrying = request.messages.filter { message in
+      message.content.images.isEmpty == false
+    }
+    #expect(carrying.count == 1)
+    #expect(carrying.first?.content.images == [alpha])
+  }
+
   @Test func theReplayBudgetIsSpentOnlyOnImagesInsideTheHistoryWindow() throws {
     // given — a cached image the window rolled past, big enough to exhaust the aggregate cap alone,
     // and newer than the one still in the window so budgeting would reach it first

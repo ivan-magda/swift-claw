@@ -36,9 +36,9 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  /// Recent inbound images, replayed onto the history rows they arrived on. `nil` while no cache has
-  /// been handed over, which makes the lookup a no-op and every turn text-only.
-  let imageCache: ImageCache? = nil
+  /// Recent inbound images, replayed onto the history rows they arrived on. `nil` until
+  /// `withImageCache` hands one over, which keeps the lookup a no-op and every turn text-only.
+  var imageCache: ImageCache?
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that
@@ -89,6 +89,7 @@ public struct TurnRunner: TurnDispatching {
     self.agent = agent
     self.budget = budget
     self.contextBuilder = contextBuilder
+    self.imageCache = nil
 
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
