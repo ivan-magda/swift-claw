@@ -41,8 +41,9 @@ public struct MessageContent: Sendable, Equatable {
     }
   }
 
-  /// True when this is exactly one text part. The Chat Completions encoder keys on this to keep
-  /// emitting a bare JSON string, so no existing text-only turn changes shape on the wire.
+  /// True when this is exactly one text part. Callers that can only handle a lone string ask this;
+  /// a wire encoder choosing between a string and a parts array should ask `images.isEmpty` instead,
+  /// because a multi-part text-only content still fits the string form.
   public var isPlainText: Bool {
     guard parts.count == 1, case .text = parts[0] else {
       return false
