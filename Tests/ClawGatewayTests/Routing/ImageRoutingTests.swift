@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -50,7 +51,8 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
   private func makeHarness(
     allowed: [Int64],
     imagesEnabled: Bool = true,
-    fetcher: any MediaFetching = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
+    fetcher: any MediaFetching = StubMediaFetcher(result: .success(ImageFixtures.jpeg)),
+    typing: any TypingIndicator = NoopTyping()
   ) throws -> Harness {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -80,6 +82,7 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       images: images,
+      typing: typing,
       coordinator: ApprovalCoordinator(),
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
@@ -190,6 +193,44 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
     #expect(await harness.transport.sent.isEmpty)
     await harness.dispatcher.waitForCalls(atLeast: 1)
     #expect(await harness.dispatcher.calls.count == 1)
+  }
+
+  @Test func theOwnerSeesTypingWhileThePhotoDownloads() async throws {
+    // given
+    let typing = RecordingTyping()
+    let harness = try makeHarness(allowed: [42], typing: typing)
+
+    // when
+    let outcome = await harness.router.handle(rawUpdate: photoUpdate(id: 1, from: 42))
+
+    // then — the download is the only thing between the photo and the turn, so it is what the
+    // pulse covers
+    #expect(outcome == .processed)
+    #expect(await typing.calls == 1)
+  }
+
+  @Test func aStrangerNeverSeesTyping() async throws {
+    // given — a pulse would confirm the bot is live to someone who must learn nothing
+    let typing = RecordingTyping()
+    let harness = try makeHarness(allowed: [42], typing: typing)
+
+    // when
+    await harness.router.handle(rawUpdate: photoUpdate(id: 1, from: 7))
+
+    // then
+    #expect(await typing.calls == 0)
+  }
+
+  @Test func aDisabledImageServiceNeverPulsesTyping() async throws {
+    // given — the canned "can't read photos yet" reply is instant, not work in progress
+    let typing = RecordingTyping()
+    let harness = try makeHarness(allowed: [42], imagesEnabled: false, typing: typing)
+
+    // when
+    await harness.router.handle(rawUpdate: photoUpdate(id: 1, from: 42))
+
+    // then
+    #expect(await typing.calls == 0)
   }
 
   @Test func strangerPhotoGetsPrivateBotReplyAndNeverDownloads() async throws {

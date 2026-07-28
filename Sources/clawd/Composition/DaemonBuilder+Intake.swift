@@ -1,6 +1,7 @@
 import ClawAppleSpeech
 import ClawCore
 import ClawGateway
+import ClawTelegram
 import ClawTools
 import ClawWorkspace
 import Foundation
@@ -47,6 +48,7 @@ extension DaemonBuilder {
         approvalCallbacks: approvalCallbacks,
         voice: voiceService,
         images: imageService,
+        typing: TelegramTypingIndicator(transport: transport),
         coordinator: coordination.approvalCoordinator,
         doctor: doctor,
         logger: logger

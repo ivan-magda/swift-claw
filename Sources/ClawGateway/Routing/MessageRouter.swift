@@ -31,6 +31,7 @@ public struct MessageRouter: Sendable {
   private let approvalCallbacks: ApprovalCallbackHandler?
   private let voice: (any VoiceMessageTranscribing)?
   private let images: (any ImageMessageHandling)?
+  private let typing: (any TypingIndicator)?
 
   private let doctor: any DoctorReporting
   private let logger: Logger
@@ -51,6 +52,7 @@ public struct MessageRouter: Sendable {
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     voice: (any VoiceMessageTranscribing)? = nil,
     images: (any ImageMessageHandling)? = nil,
+    typing: (any TypingIndicator)? = nil,
     coordinator: ApprovalCoordinator,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = { Date() },
@@ -62,6 +64,7 @@ public struct MessageRouter: Sendable {
     self.approvalCallbacks = approvalCallbacks
     self.voice = voice
     self.images = images
+    self.typing = typing
 
     self.doctor = doctor
     self.logger = logger
@@ -241,6 +244,11 @@ private extension MessageRouter {
         text: Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
       )
     }
+
+    // After both guards, so neither a stranger nor a disabled service is ever told the bot is
+    // awake. Whether the pulse lands is not checked and cannot be: the action auto-expires
+    // server-side, so one that never arrives is no reason to fail a photo the owner is waiting on.
+    await typing?.sendTyping(chatId: message.chatId)
 
     switch await images.materialize(attachment) {
     case .success(let image):
