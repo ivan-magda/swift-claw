@@ -108,7 +108,7 @@ private extension ChatGPTResponsesRequestEncoder {
         message.role == .system
       }
       .map { message in
-        message.content
+        message.content.text
       }
       .joined(separator: "\n\n")
   }
@@ -152,8 +152,9 @@ private extension ChatGPTResponsesRequestEncoder {
       )
     }
     if turn.assistantMessages.isEmpty {
-      if message.content.isEmpty == false {
-        items.append(.assistantText(message.content))
+      let text = message.content.text
+      if text.isEmpty == false {
+        items.append(.assistantText(text))
       }
     } else {
       for assistant in turn.assistantMessages {
@@ -180,7 +181,7 @@ private extension ChatGPTResponsesRequestEncoder {
       // Already folded into `instructions`; sending it again would say it twice.
       return []
     case .user:
-      return [.userText(message.content)]
+      return [.userText(message.content.text)]
     case .assistant:
       return assistantItems(for: message)
     case .tool:
@@ -189,7 +190,7 @@ private extension ChatGPTResponsesRequestEncoder {
       guard let callID = message.toolCallId else {
         return []
       }
-      return [.functionCallOutput(callID: callID, output: message.content)]
+      return [.functionCallOutput(callID: callID, output: message.content.text)]
     }
   }
 
@@ -199,8 +200,9 @@ private extension ChatGPTResponsesRequestEncoder {
   /// only proposed calls contributes no message item — there is no text to state.
   static func assistantItems(for message: ChatMessage) -> [ChatGPTWireInputItem] {
     var items: [ChatGPTWireInputItem] = []
-    if message.content.isEmpty == false {
-      items.append(.assistantText(message.content))
+    let text = message.content.text
+    if text.isEmpty == false {
+      items.append(.assistantText(text))
     }
     let calls = message.toolCalls.map { call in
       ChatGPTWireInputItem.functionCall(

@@ -781,8 +781,8 @@ func waitForTurnResult(
     let observationMessage = secondRequest.messages[secondRequest.messages.count - 1]
     #expect(observationMessage.role == .tool)
     #expect(observationMessage.toolCallId == "c1")
-    #expect(observationMessage.content.contains("<claw-untrusted"))
-    #expect(observationMessage.content.contains("page text"))
+    #expect(observationMessage.content.text.contains("<claw-untrusted"))
+    #expect(observationMessage.content.text.contains("page text"))
     #expect(await provider.requests.count == 2)
   }
 

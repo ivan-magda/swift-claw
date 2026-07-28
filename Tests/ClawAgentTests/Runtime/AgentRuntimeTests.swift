@@ -572,7 +572,7 @@ extension AgentRuntimeTests {
       #expect(message.providerState == nil)
     }
     let toolRow = try #require(secondRequest.messages.last { message in message.role == .tool })
-    #expect(toolRow.content.contains("round-one") == false)
+    #expect(toolRow.content.text.contains("round-one") == false)
   }
 }
 

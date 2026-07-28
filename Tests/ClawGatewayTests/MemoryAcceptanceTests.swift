@@ -87,14 +87,14 @@ import Testing
     let turnRequest = try #require(await stack.provider.requests.first)
     let systemMessage = try #require(turnRequest.first)
     #expect(systemMessage.role == .system)
-    #expect(systemMessage.content.contains("ship 3a") == false)
+    #expect(systemMessage.content.text.contains("ship 3a") == false)
     let labeledMessage = try #require(
       turnRequest.first { message in
-        message.role == .user && message.content.contains("label=\"memory_items\"")
+        message.role == .user && message.content.text.contains("label=\"memory_items\"")
       }
     )
-    #expect(labeledMessage.content.contains("<claw-untrusted nonce="))
-    #expect(labeledMessage.content.contains("ship 3a"))
+    #expect(labeledMessage.content.text.contains("<claw-untrusted nonce="))
+    #expect(labeledMessage.content.text.contains("ship 3a"))
 
     // when — phase 3: /memory review
     _ = await stack.router.handle(rawUpdate: textUpdate(id: 5, from: stack.chatId, text: "/memory"))
@@ -123,7 +123,7 @@ import Testing
     #expect(try auditActions(pool).contains("memory_delete"))
     let finalRequest = try #require(await stack.provider.requests.last)
     #expect(
-      finalRequest.allSatisfy { message in message.content.contains("ship 3a") == false }
+      finalRequest.allSatisfy { message in message.content.text.contains("ship 3a") == false }
     )
   }
 
@@ -159,11 +159,13 @@ import Testing
     let turnRequest = try #require(await stack.provider.requests.first)
     let labeledMessage = try #require(
       turnRequest.first { message in
-        message.role == .user && message.content.contains("label=\"recall\"")
+        message.role == .user && message.content.text.contains("label=\"recall\"")
       }
     )
-    #expect(labeledMessage.content.contains("the wifi password is hunter2"))
-    let messagesWithFact = turnRequest.filter { message in message.content.contains("hunter2") }
+    #expect(labeledMessage.content.text.contains("the wifi password is hunter2"))
+    let messagesWithFact = turnRequest.filter { message in
+      message.content.text.contains("hunter2")
+    }
     #expect(messagesWithFact == [labeledMessage])
   }
 
@@ -199,7 +201,9 @@ import Testing
     // then — the file never reached the model, and the owner received notice + reply together
     let turnRequest = try #require(await stack.provider.requests.first)
     #expect(
-      turnRequest.allSatisfy { message in message.content.contains("OVERFLOW-CANARY") == false }
+      turnRequest.allSatisfy { message in
+        message.content.text.contains("OVERFLOW-CANARY") == false
+      }
     )
     let delivered = try #require(await stack.transport.richSends.first?.markdown)
     #expect(delivered.contains("`MEMORY.md` is 2208/2200"))
@@ -237,10 +241,10 @@ import Testing
     // then — the guard is dormant: both items inject while the session is untainted
     let untaintedRequest = try #require(await stack.provider.requests.first)
     let untaintedLabeled = try #require(
-      untaintedRequest.first { message in message.content.contains("label=\"memory_items\"") }
+      untaintedRequest.first { message in message.content.text.contains("label=\"memory_items\"") }
     )
-    #expect(untaintedLabeled.content.contains("normal fact"))
-    #expect(untaintedLabeled.content.contains("secret omega"))
+    #expect(untaintedLabeled.content.text.contains("normal fact"))
+    #expect(untaintedLabeled.content.text.contains("secret omega"))
 
     // when — the session is marked tainted (3a only READS this flag; 3b sets it)
     let sessionId = try stack.sessionMessages.loadOrCreateSession(
@@ -256,10 +260,10 @@ import Testing
     // then — the tainted read excludes the high-sensitivity item and keeps the normal one
     let taintedRequest = try #require(await stack.provider.requests.last)
     let taintedLabeled = try #require(
-      taintedRequest.first { message in message.content.contains("label=\"memory_items\"") }
+      taintedRequest.first { message in message.content.text.contains("label=\"memory_items\"") }
     )
-    #expect(taintedLabeled.content.contains("normal fact"))
-    #expect(taintedLabeled.content.contains("secret omega") == false)
+    #expect(taintedLabeled.content.text.contains("normal fact"))
+    #expect(taintedLabeled.content.text.contains("secret omega") == false)
   }
 
   /// ② (spec §7.5): `hasPrivateDataAccess` over the REAL GRDB store — false with nothing durable,
@@ -298,7 +302,7 @@ import Testing
     // then
     #expect(injectedResult.hasPrivateDataAccess)
     #expect(
-      injectedResult.messages.contains { message in message.content.contains("durable fact") }
+      injectedResult.messages.contains { message in message.content.text.contains("durable fact") }
     )
 
     // when — the fact is deleted again

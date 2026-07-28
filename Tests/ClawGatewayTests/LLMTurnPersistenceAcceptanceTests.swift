@@ -771,7 +771,7 @@ func makeStopNewStack(
     // then — the second call threads the prior user message and the committed assistant reply
     // back alongside the new one, rather than pinning the exact assembled count
     let requests = await stack.provider.requests
-    let secondContents = requests[1].map(\.content)
+    let secondContents = requests[1].map(\.content.text)
     #expect(secondContents.contains("first"))
     #expect(secondContents.contains("stub answer"))
     #expect(secondContents.contains("second"))
@@ -934,8 +934,8 @@ func makeStopNewStack(
 
     // then
     let requests = await stack.provider.requests
-    let firstContents = requests[0].map(\.content)
-    let secondContents = requests[1].map(\.content)
+    let firstContents = requests[0].map(\.content.text)
+    let secondContents = requests[1].map(\.content.text)
     #expect(firstContents.contains("first"))
     #expect(firstContents.contains("second") == false)
     #expect(secondContents.contains("second"))
@@ -1026,7 +1026,7 @@ func makeStopNewStack(
 
     let requests = await stack.provider.requests
     #expect(requests.count == 2)
-    let secondRequestContent = requests[1].map(\.content)
+    let secondRequestContent = requests[1].map(\.content.text)
     #expect(secondRequestContent.contains("after new"))
     #expect(secondRequestContent.contains("before one") == false)
     #expect(secondRequestContent.contains("before two") == false)

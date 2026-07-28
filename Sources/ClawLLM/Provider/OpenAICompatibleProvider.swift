@@ -163,11 +163,12 @@ public struct OpenAICompatibleProvider: LLMProvider {
           function: WireToolCallFunction(name: call.name, arguments: call.argumentsJSON)
         )
       }
+      let text = message.content.text
       // An empty-content assistant proposal omits `content` (some providers reject "" + tool_calls).
-      let omitContent = message.role == .assistant && message.content.isEmpty && !wireCalls.isEmpty
+      let omitContent = message.role == .assistant && text.isEmpty && !wireCalls.isEmpty
       return WireMessage(
         role: message.role.rawValue,
-        content: omitContent ? nil : message.content,
+        content: omitContent ? nil : text,
         toolCalls: wireCalls.isEmpty ? nil : wireCalls,
         toolCallId: message.toolCallId
       )

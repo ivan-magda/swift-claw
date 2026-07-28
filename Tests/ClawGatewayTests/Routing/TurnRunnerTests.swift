@@ -1261,7 +1261,7 @@ private func okResponse(content: String) -> ChatResponse {
     // run's partial exchange (a .tool-role message), and skipped recall
     #expect(try latestRunState(env.queue) == RunState.done.rawValue)
     let resumeRequest = try #require(await env.provider.requests.last)
-    let resumeSystem = try #require(resumeRequest.messages.first?.content)
+    let resumeSystem = try #require(resumeRequest.messages.first?.content.text)
     #expect(resumeRequest.messages.first?.role == .system)
     #expect(resumeSystem.contains("started by your own scheduler"))
     #expect(resumeSystem.contains("/schedule") == false)
@@ -1272,7 +1272,7 @@ private func okResponse(content: String) -> ChatResponse {
     )
     #expect(
       resumeRequest.messages.contains { message in
-        message.content.contains("label=\"recall\"")
+        message.content.text.contains("label=\"recall\"")
       } == false
     )
   }

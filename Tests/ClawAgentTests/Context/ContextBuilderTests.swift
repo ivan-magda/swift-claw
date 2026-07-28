@@ -36,7 +36,7 @@ struct ContextBuilderTests {
 
     // then
     #expect(result.messages.map(\.role) == [.system, .user, .user, .assistant])
-    let system = result.messages[0].content
+    let system = result.messages[0].content.text
     #expect(system.contains("system policy"))
     #expect(system.contains("soul text"))
     #expect(system.contains("agent rules"))
@@ -45,12 +45,12 @@ struct ContextBuilderTests {
     #expect(system.contains("owner profile") == false)
     #expect(system.contains("truncated") == false)
 
-    let untrusted = result.messages[1].content
+    let untrusted = result.messages[1].content.text
     #expect(untrusted.contains("label=\"USER.md\""))
     #expect(untrusted.contains("owner profile"))
     #expect(untrusted.contains("label=\"MEMORY.md\""))
     #expect(untrusted.contains("curated memory"))
-    #expect(result.messages.dropFirst(2).map(\.content) == ["hello", "hi"])
+    #expect(result.messages.dropFirst(2).map(\.content.text) == ["hello", "hi"])
     #expect(result.hasPrivateDataAccess)
     #expect(result.ownerNotices.isEmpty)
   }
@@ -165,7 +165,7 @@ struct ContextBuilderTests {
     // then
     #expect(result.messages.count == 1)
     #expect(result.messages[0].role == .system)
-    #expect(result.messages[0].content.contains("MEMORY.md") == false)
+    #expect(result.messages[0].content.text.contains("MEMORY.md") == false)
     #expect(result.ownerNotices.count == 1)
     let notice = try #require(result.ownerNotices.first)
     #expect(notice.contains("MEMORY.md"))  // which file to trim
@@ -195,7 +195,7 @@ struct ContextBuilderTests {
     // then
     #expect(memoryStore.fetchRankedCalls == [true])
     let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content
+      .content.text
     #expect(untrusted.contains("normal fact"))
     #expect(untrusted.contains("secret") == false)
     #expect(result.hasPrivateDataAccess)
@@ -241,7 +241,7 @@ struct ContextBuilderTests {
     // the recall candidate limit from its source of truth, not the literal 20
     #expect(call.limit == ContextBuilder.recallCandidateLimit)
     let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content
+      .content.text
     #expect(untrusted.contains("label=\"recall\""))
     #expect(untrusted.contains(BudgetFitter.truncationMarker))
   }
@@ -272,7 +272,7 @@ struct ContextBuilderTests {
 
     // then
     let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content
+      .content.text
     #expect(untrusted.contains("label=\"skills\""))
     #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
     #expect(result.hasPrivateDataAccess == false)
@@ -307,7 +307,7 @@ struct ContextBuilderTests {
     let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
-    #expect(result.messages.suffix(2).map(\.content) == ["middle", "new"])
+    #expect(result.messages.suffix(2).map(\.content.text) == ["middle", "new"])
   }
 
   @Test func fittedHistoryDoesNotReAdmitOlderMessagesAfterOversizedMiddleMessage() throws {
@@ -339,9 +339,9 @@ struct ContextBuilderTests {
     let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
 
     // then
-    #expect(result.messages.suffix(1).map(\.content) == ["newest"])
-    #expect(result.messages.contains(where: { message in message.content == "o" }) == false)
-    #expect(result.messages[0].content.contains("[…earlier conversation truncated]"))
+    #expect(result.messages.suffix(1).map(\.content.text) == ["newest"])
+    #expect(result.messages.contains(where: { message in message.content.text == "o" }) == false)
+    #expect(result.messages[0].content.text.contains("[…earlier conversation truncated]"))
   }
 
   @Test func triggerMessageSurvivesWhenBudgetCannotFitIt() throws {
@@ -372,7 +372,7 @@ struct ContextBuilderTests {
 
     // then
     #expect(result.messages.last?.role == .user)
-    #expect(result.messages.last?.content == "what is the meaning of this")
+    #expect(result.messages.last?.content.text == "what is the meaning of this")
   }
 
   @Test(arguments: [RunOrigin.scheduled, RunOrigin.heartbeat])
@@ -405,15 +405,15 @@ struct ContextBuilderTests {
     let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: origin)
 
     // then — the proactive policy rides the system tier; the retriever is never consulted
-    #expect(result.messages[0].content.contains("proactive policy"))
-    #expect(result.messages[0].content.contains("system policy") == false)
+    #expect(result.messages[0].content.text.contains("proactive policy"))
+    #expect(result.messages[0].content.text.contains("system policy") == false)
     #expect(retriever.calls.isEmpty)
     #expect(
       result.messages.contains { message in
-        message.content.contains("label=\"recall\"")
+        message.content.text.contains("label=\"recall\"")
       } == false
     )
-    #expect(result.messages.last?.content == "follow the tournament daily")
+    #expect(result.messages.last?.content.text == "follow the tournament daily")
   }
 }
 
@@ -520,10 +520,10 @@ extension ContextBuilderTests {
 
     // then — the bytes are carried, never rendered, whatever tier the message belongs to
     for message in result.messages {
-      #expect(message.content.contains("zzzsecretissuer") == false)
-      #expect(message.content.contains(Self.replayPayloadAsLossyText) == false)
+      #expect(message.content.text.contains("zzzsecretissuer") == false)
+      #expect(message.content.text.contains(Self.replayPayloadAsLossyText) == false)
     }
-    #expect(result.messages.contains { message in message.content.contains("raw page text") })
+    #expect(result.messages.contains { message in message.content.text.contains("raw page text") })
     #expect(
       result.ownerNotices.allSatisfy { notice in notice.contains("zzzsecretissuer") == false }
     )

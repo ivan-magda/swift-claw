@@ -668,7 +668,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
     )
     _ = try await harness.waitForOutbox(atLeast: 2)
     let lastRequest = try #require(await harness.provider.requests.last)
-    let assembled = lastRequest.messages.map(\.content).joined(separator: "\n")
+    let assembled = lastRequest.messages.map(\.content.text).joined(separator: "\n")
     #expect(assembled.contains("the user prefers metric units"))
     #expect(assembled.contains("the vault code is 8842-alpha") == false)
   }
