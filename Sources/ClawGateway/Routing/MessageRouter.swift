@@ -383,8 +383,8 @@ private extension MessageRouter {
 extension MessageRouter {
   /// Hands the router the cache an inbound photo's bytes land in, as a copy rather than an `init`
   /// parameter: the cache is module-internal and `MessageRouter.init` is public, so it cannot cross
-  /// that signature. The runner replaying those bytes must be handed the SAME instance
-  /// (`TurnRunner.withImageCache`), or every stored image is written and never read.
+  /// that signature. Half of a pair — call `ImageWiring.wire`, which is what guarantees the runner
+  /// replaying those bytes got the same cache.
   func withImageCache(_ cache: ImageCache) -> MessageRouter {
     var copy = self
     copy.turnDispatch.imageCache = cache

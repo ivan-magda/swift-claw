@@ -262,6 +262,36 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
+  @Test func theWiredPairSharesOneCacheFromDepositToReplay() async throws {
+    // given — the production seam: one cache, the router built from the runner it wired
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let stack = try makeStack(
+      writer: queue,
+      outcome: .respond("a cat"),
+      images: ImageMessageService(
+        media: StubMediaFetcher(result: .success(ImageFixtures.jpeg)),
+        logger: TestLog.silent
+      )
+    )
+
+    // when — one photo goes in the front door and the lane runs the turn it dispatched
+    let outcome = await stack.router.handle(
+      rawUpdate: photoUpdate(id: 1, from: stack.chatId, caption: "Что это?")
+    )
+    await stack.provider.waitForRequestCount(1)
+
+    // then — the bytes the router deposited came back out of the runner's replay, on exactly one
+    // message: two ends, one cache
+    #expect(outcome == .processed)
+    let request = try #require(await stack.provider.requests.first)
+    let carrying = request.filter { message in
+      message.content.images.isEmpty == false
+    }
+    #expect(carrying.count == 1)
+    #expect(carrying.first?.content.images == [fetched])
+  }
+
   @Test func shutdownCancellationLeavesThePhotoUpdateUnclaimedForRedelivery() async throws {
     // given — a download parked mid-flight when graceful shutdown cancels the intake task
     let harness = try makeHarness(allowed: [42], fetcher: ParkUntilCancelledFetcher())

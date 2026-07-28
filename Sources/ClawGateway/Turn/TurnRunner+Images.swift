@@ -5,6 +5,8 @@ import ClawCore
 extension TurnRunner {
   /// Hands the runner the cache to replay from, as a copy rather than an `init` parameter: the
   /// cache is module-internal and `TurnRunner.init` is public, so it cannot cross that signature.
+  /// Half of a pair — call `ImageWiring.wire`, which is what guarantees the router depositing those
+  /// bytes got the same cache.
   func withImageCache(_ cache: ImageCache) -> TurnRunner {
     var copy = self
     copy.imageCache = cache

@@ -322,7 +322,8 @@ func makeStack(
   outcome: RecordingProvider.Outcome,
   blocksFirstProviderCall: Bool = false,
   providerState: ProviderExchangeState? = nil,
-  workspace: any WorkspaceReading = AcceptanceWorkspace()
+  workspace: any WorkspaceReading = AcceptanceWorkspace(),
+  images: (any ImageMessageHandling)? = nil
 ) throws -> Stack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
   try allowlist.seedAllowlist(userIds: [chatId])
@@ -380,23 +381,28 @@ func makeStack(
     logger: logger
   )
 
-  let router = MessageRouter(
-    processed: processed,
-    sessionMessages: sessionMessages,
-    commands: commands,
-    memory: MemoryStoreGRDB(writer: writer),
-    memoryCommands: MemoryCommandStoreGRDB(writer: writer),
-    pendingConfirmations: PendingConfirmationRegistry(),
-    botUsername: "claw_bot",
-    accessControl: AccessControl(allowlist: allowlist),
-    delivery: transport,
-    turnRunner: turnRunner,
-    lanes: lanes,
-    schedule: makeIdleScheduleSurface(writer: writer),
-    coordinator: ApprovalCoordinator(),
-    doctor: StubDoctorReporter(),
-    logger: logger
-  )
+  // Through the production seam, so the stack the acceptance tests drive is wired exactly the way
+  // the composition root has to wire it.
+  let (router, _) = ImageWiring.wire(runner: turnRunner) { wiredRunner in
+    MessageRouter(
+      processed: processed,
+      sessionMessages: sessionMessages,
+      commands: commands,
+      memory: MemoryStoreGRDB(writer: writer),
+      memoryCommands: MemoryCommandStoreGRDB(writer: writer),
+      pendingConfirmations: PendingConfirmationRegistry(),
+      botUsername: "claw_bot",
+      accessControl: AccessControl(allowlist: allowlist),
+      delivery: transport,
+      turnRunner: wiredRunner,
+      lanes: lanes,
+      schedule: makeIdleScheduleSurface(writer: writer),
+      images: images,
+      coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
+      logger: logger
+    )
+  }
 
   let dispatcher = OutboxDispatcher(
     outbox: outbox,
