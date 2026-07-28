@@ -5,13 +5,6 @@ import Testing
 @testable import ClawLLM
 
 @Suite struct OpenAICompatibleImageEncodingTests {
-  private let pixel = ImagePart(
-    data: Data([0xFF, 0xD8, 0xFF, 0xE0]),
-    mediaType: .jpeg,
-    width: 1280,
-    height: 960
-  )
-
   /// Calls the wire encoder directly. The empty script is not a stub the encoder reaches — it makes
   /// an accidental dispatch throw rather than quietly pass.
   private func encodedBody(for request: ChatRequest) throws -> [String: Any] {
@@ -37,7 +30,7 @@ import Testing
 
   @Test func imagePartsEncodeAsAnImageUrlContentArray() throws {
     // given
-    let content = MessageContent(parts: [.image(pixel), .text("what is this?")])
+    let content = MessageContent(parts: [.image(samplePixel), .text("what is this?")])
     let request = ChatRequest(
       model: "gpt-5.4",
       messages: [ChatMessage(role: .user, content: content)],
@@ -55,6 +48,9 @@ import Testing
     let imageURL = try #require(parts[0]["image_url"] as? [String: Any])
     let url = try #require(imageURL["url"] as? String)
     #expect(url.hasPrefix("data:image/jpeg;base64,"))
+    // … and the pixels themselves survive the trip, not just the envelope around them
+    let carried = try decodedImageBytes(after: "data:image/jpeg;base64,", of: url)
+    #expect(carried == samplePixel.data)
     #expect(imageURL["detail"] == nil)
     #expect(parts[1]["type"] as? String == "text")
     #expect(parts[1]["text"] as? String == "what is this?")

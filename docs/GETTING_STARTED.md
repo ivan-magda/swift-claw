@@ -221,5 +221,7 @@ This route is unofficial and vendor-dependent; details and caveats in
   token, usually a forgotten instance on another machine.
 - **Voice notes get a canned refusal:** voice transcription needs macOS 26; on Linux and
   older macOS the feature is off.
-- **clawd says your model can't look at images:** photos need a vision-capable
-  `CLAW_LLM_MODEL`. Switch models, or set `CLAW_IMAGE_INPUT=false` to stop sending them.
+- **clawd says your model can't look at images:** send `/new` first — the photo stays in
+  the conversation otherwise, and every question after it gets the same refusal. Photos
+  need a vision-capable `CLAW_LLM_MODEL`; switch models, or set `CLAW_IMAGE_INPUT=false`
+  to stop sending them.

@@ -8,7 +8,7 @@ import Testing
 
 @Suite struct TurnRunnerImageAttachTests {
   private let alpha = ImagePart(
-    data: Data([0xFF, 0xD8, 0xFF, 0xE0]),
+    data: ImageFixtures.jpeg,
     mediaType: .jpeg,
     width: 640,
     height: 480
@@ -92,29 +92,69 @@ import Testing
     #expect(carrying.first?.content.images == [alpha])
   }
 
-  @Test func theReplayBudgetIsSpentOnlyOnImagesInsideTheHistoryWindow() throws {
-    // given — a cached image the window rolled past, big enough to exhaust the aggregate cap alone,
-    // and newer than the one still in the window so budgeting would reach it first
-    let rolledPast = ImagePart(
-      data: Data(repeating: 0xFF, count: ImageBounds.maximumAggregateReplayBytes),
-      mediaType: .jpeg,
-      width: 4_000,
-      height: 3_000
+  /// The approval detour is exactly the path a photo takes when its caption asks for something
+  /// gated: the second half of that turn runs through `resume`, not `run`, and would answer about
+  /// pixels it never received if replay were wired to only one of the two.
+  @Test func aCachedImageStillReachesTheProviderOnAResumedRun() async throws {
+    // given — a turn suspended on a gated tool, with the trigger message's photo in the cache
+    let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
+    let env = try makeEnv(
+      agentOutcome: .respond(
+        ChatResponse(
+          content: "a photo",
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+          costFromProvider: 0.0021
+        )
+      ),
+      now: { fixedNow }
     )
+    let cache = ImageCache()
+    await cache.store(alpha, sessionId: env.sessionId, messageId: env.triggerMessageId)
+    let observationMessageId = try await suspendOnAGatedFetchThenApprove(env: env, now: fixedNow)
+
+    // when
+    await env.runner.withImageCache(cache).resume(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      contextBoundMessageId: observationMessageId
+    )
+
+    // then — the continuation carries the image on the message it arrived on, exactly as `run` does
+    let requests = await env.provider.requests
+    let request = try #require(requests.last)
+    let carrying = request.messages.filter { message in
+      message.content.images.isEmpty == false
+    }
+    #expect(carrying.count == 1)
+    #expect(carrying.first?.content.images == [alpha])
+  }
+
+  @Test func theReplayBudgetIsSpentOnlyOnImagesInsideTheHistoryWindow() throws {
+    // given — two images each big enough to exhaust the aggregate cap alone: one on an older row
+    // still inside the window, one on a row the window rolled past. Budgeting walks newest-first, so
+    // the small in-window image is reached first and both giants are then unaffordable.
+    let hugeBytes = Data(repeating: 0xFF, count: ImageBounds.maximumAggregateReplayBytes)
+    let overBudget = ImagePart(data: hugeBytes, mediaType: .jpeg, width: 4_000, height: 3_000)
+    let rolledPast = ImagePart(data: hugeBytes, mediaType: .png, width: 4_000, height: 3_000)
     let snapshot = SessionContextSnapshot(
-      history: [StoredMessage(role: .user, content: "caption", provenance: .untrusted)],
-      historyMessageIds: [20],
+      history: [
+        StoredMessage(role: .user, content: "older caption", provenance: .untrusted),
+        StoredMessage(role: .user, content: "newer caption", provenance: .untrusted),
+      ],
+      historyMessageIds: [20, 21],
       windowStartMessageId: nil,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let enriched = TurnRunner.attach([20: alpha, 21: rolledPast], to: snapshot)
+    let enriched = TurnRunner.attach([20: overBudget, 21: alpha, 22: rolledPast], to: snapshot)
 
-    // then
-    let attached = try #require(enriched.history.first)
-    #expect(attached.image == alpha)
+    // then — the affordable image rides, the in-window giant is dropped for want of budget, and the
+    // out-of-window giant never billed against that budget in the first place
+    #expect(enriched.history.map(\.image) == [nil, alpha])
   }
 
   private func makeBuilder() -> ContextBuilder {

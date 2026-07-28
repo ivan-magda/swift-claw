@@ -121,7 +121,8 @@ The first use of a locale downloads its speech model.
 
 On by default, every platform. A photo you send is downloaded and shown to the model with
 its caption. This needs a vision-capable `CLAW_LLM_MODEL`; nothing checks that at startup,
-so a text-only model fails the turn instead. `CLAW_IMAGE_INPUT=false` turns the feature off:
+so a text-only model fails the turn instead — and keeps failing every turn after it, until
+`/new` clears the photo out of the conversation. `CLAW_IMAGE_INPUT=false` turns the feature off:
 a bare photo then gets a canned refusal, while a captioned one still runs as a turn carrying
 your caption. Bytes stay in memory, never on disk, and a restart loses them.
 

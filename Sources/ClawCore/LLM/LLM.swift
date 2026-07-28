@@ -17,8 +17,8 @@ public struct ProviderExchangeState: Sendable, Equatable, Codable {
 // MARK: - Chat contract
 
 /// One message in an OpenAI-compatible chat exchange. `toolCalls` carries assistant proposals
-/// ([] otherwise); `toolCallId` is set iff `role == .tool`. Both default so every pre-3b call
-/// site compiles unchanged.
+/// ([] otherwise); `toolCallId` is set iff `role == .tool`. The `String` overload wraps its text in
+/// a `MessageContent`, so a caller with nothing to say about images never names that type.
 public struct ChatMessage: Sendable, Equatable {
   public let role: MessageRole
   public let content: MessageContent

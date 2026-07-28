@@ -102,6 +102,6 @@ private extension ImageMessageService {
     guard let transport = error as? HTTPTransportFailure else {
       return .fetchFailed
     }
-    return transport == .oversizedBody(cap: maxBytes) ? .tooLarge : .fetchFailed
+    return transport.isOversizedBody(cap: maxBytes) ? .tooLarge : .fetchFailed
   }
 }

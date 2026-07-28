@@ -5,13 +5,6 @@ import Testing
 @testable import ClawLLM
 
 @Suite struct ChatGPTImageEncodingTests {
-  private let pixel = ImagePart(
-    data: Data([0xFF, 0xD8, 0xFF, 0xE0]),
-    mediaType: .jpeg,
-    width: 1280,
-    height: 960
-  )
-
   @Test func textOnlyUserMessagesStillEncodeAsInputText() throws {
     // given
     let request = ChatRequest(
@@ -34,7 +27,7 @@ import Testing
 
   @Test func imagePartsEncodeAsInputImageWithAStringUrl() throws {
     // given
-    let content = MessageContent(parts: [.image(pixel), .text("what is this?")])
+    let content = MessageContent(parts: [.image(samplePixel), .text("what is this?")])
     let request = ChatRequest(
       model: "gpt-5.6-sol",
       messages: [ChatMessage(role: .user, content: content)],
@@ -51,6 +44,9 @@ import Testing
     #expect(parts[0]["type"] as? String == "input_image")
     let url = try #require(parts[0]["image_url"] as? String)
     #expect(url.hasPrefix("data:image/jpeg;base64,"))
+    // … and the pixels themselves survive the trip, not just the envelope around them
+    let carried = try decodedImageBytes(after: "data:image/jpeg;base64,", of: url)
+    #expect(carried == samplePixel.data)
     #expect(parts[0]["detail"] == nil)
     // The unused payload field is absent rather than null: the probed route reads a part by the
     // field its type names, and a null there is not what the Codex client sends.

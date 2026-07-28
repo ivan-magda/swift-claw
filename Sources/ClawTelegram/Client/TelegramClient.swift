@@ -182,7 +182,7 @@ extension TelegramClient: MediaFetching {
         timeoutSeconds: Timeout.fileDownloadSeconds,
         maxBodyBytes: maxBytes
       )
-    } catch let overCap as HTTPTransportFailure where overCap == .oversizedBody(cap: maxBytes) {
+    } catch let overCap as HTTPTransportFailure where overCap.isOversizedBody(cap: maxBytes) {
       // Surfaced typed rather than flattened into a generic transport failure: a caller must be able
       // to tell "this file is past your ceiling" from "the download broke", and it is the only
       // signal available, since an over-cap body is refused outright instead of handed back short.

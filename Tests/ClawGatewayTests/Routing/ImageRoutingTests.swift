@@ -263,13 +263,12 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
 
   @Test func aBarePhotoWithoutAServiceGetsTheCannedUnsupportedReply() async throws {
     // given — no image service, and nothing but the photo: the bare arm of the opted-out fork
-    let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
-    let harness = try makeHarness(allowed: [42], imagesEnabled: false, fetcher: fetcher)
+    let harness = try makeHarness(allowed: [42], imagesEnabled: false)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: photoUpdate(id: 1, from: 42))
 
-    // then — exactly the pre-feature behavior: the canned line, no fetch, no turn
+    // then — exactly the pre-feature behavior: the canned line, no turn
     #expect(outcome == .processed)
     let sent = await harness.transport.sent
     #expect(
@@ -277,15 +276,13 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
         MessageRouter.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
       ]
     )
-    #expect(await fetcher.calls.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
   @Test func aCaptionedPhotoWithoutAServiceStillAnswersTheOwnersQuestion() async throws {
     // given — the configuration the product itself recommends to an owner on a text-only model.
     // Their caption is a real question and must not be swallowed by the canned reply.
-    let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
-    let harness = try makeHarness(allowed: [42], imagesEnabled: false, fetcher: fetcher)
+    let harness = try makeHarness(allowed: [42], imagesEnabled: false)
 
     // when
     let outcome = await harness.router.handle(
@@ -317,9 +314,8 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
     )
     #expect(snapshot.isTainted)
 
-    // … and no bytes were fetched or cached, so assembly renders the unavailable notice rather than
-    // letting the model answer about pixels that were never downloaded
-    #expect(await fetcher.calls.isEmpty)
+    // … and no bytes were cached, so assembly renders the unavailable notice rather than letting the
+    // model answer about pixels that were never downloaded
     #expect(await harness.cache.images(sessionId: call.sessionId).isEmpty)
   }
 
@@ -423,10 +419,12 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
     #expect(await harness.transport.sent.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
 
-    // … so the post-restart redelivery produces the turn the first delivery never did
+    // … so the post-restart redelivery produces the turn the first delivery never did. Required
+    // before the dispatch wait, which is unbounded by design: a regression that drops the redelivery
+    // must fail here rather than hang waiting for a turn that will never come.
     let redelivered = await harness.router.handle(rawUpdate: update)
-    await harness.dispatcher.waitForCalls(atLeast: 1)
     #expect(redelivered == .processed)
+    await harness.dispatcher.waitForCalls(atLeast: 1)
     let call = try #require(await harness.dispatcher.calls.first)
     #expect(await harness.cache.images(sessionId: call.sessionId).isEmpty == false)
   }

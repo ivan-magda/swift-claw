@@ -5,6 +5,8 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct ImageMessageServiceTests {
+  /// Tops out past `ImageBounds.maximumImageBytes`, the way a phone's own photo does: without a rung
+  /// the ceiling actually excludes, nothing here would notice the ceiling being ignored.
   private let ladder = PhotoAttachment(sizes: [
     PhotoSize(fileId: "s-id", fileUniqueId: "s-u", width: 90, height: 67, fileSizeBytes: 1_466),
     PhotoSize(
@@ -14,8 +16,14 @@ import Testing
       height: 960,
       fileSizeBytes: 186_422
     ),
+    PhotoSize(
+      fileId: "w-id",
+      fileUniqueId: "w-u",
+      width: 2560,
+      height: 1920,
+      fileSizeBytes: 900_000
+    ),
   ])
-  private let jpeg = Data([0xFF, 0xD8, 0xFF, 0xE0])
 
   private func makeService(
     fetcher: any MediaFetching,
@@ -26,18 +34,19 @@ import Testing
 
   @Test func downloadsTheLargestAffordableRungAndSniffsIt() async throws {
     // given
-    let fetcher = StubMediaFetcher(result: .success(jpeg))
+    let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
     let service = makeService(fetcher: fetcher)
 
     // when
     let outcome = await service.materialize(ladder)
 
-    // then — the 1280 rung wins, and the cap reaches the transport as ground truth
+    // then — the ceiling puts the 2560 rung out of reach, so the 1280 one wins, and that same
+    // ceiling reaches the transport as the ground truth a forged file_size cannot talk past
     let image = try outcome.get()
     #expect(image.mediaType == .jpeg)
     #expect(image.width == 1280)
     #expect(image.height == 960)
-    #expect(image.data == jpeg)
+    #expect(image.data == ImageFixtures.jpeg)
     let expected = StubMediaFetcher.Call(fileId: "y-id", maxBytes: ImageBounds.maximumImageBytes)
     #expect(await fetcher.calls == [expected])
   }
@@ -56,7 +65,7 @@ import Testing
 
   @Test func refusesWhenTheLadderHasNoUsableRung() async {
     // given
-    let fetcher = StubMediaFetcher(result: .success(jpeg))
+    let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
     let service = makeService(fetcher: fetcher)
 
     // when

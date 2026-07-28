@@ -319,3 +319,19 @@ let sampleRequest = ChatRequest(
   messages: [ChatMessage(role: .user, content: "hello")],
   maxOutputTokens: 256
 )
+
+/// The shortest body `ImageMediaType.sniff` accepts as a JPEG, so both wire adapters' image tests
+/// assert the same bytes reach the model.
+let samplePixel = ImagePart(
+  data: Data([0xFF, 0xD8, 0xFF, 0xE0]),
+  mediaType: .jpeg,
+  width: 1280,
+  height: 960
+)
+
+/// The bytes a `data:` URL carries behind `prefix`. A test that stops at the prefix passes just as
+/// happily on an empty payload, which is the one failure the encoders must never ship.
+func decodedImageBytes(after prefix: String, of dataURL: String) throws -> Data {
+  try #require(dataURL.hasPrefix(prefix))
+  return try #require(Data(base64Encoded: String(dataURL.dropFirst(prefix.count))))
+}

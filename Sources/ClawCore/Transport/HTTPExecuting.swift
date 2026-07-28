@@ -86,6 +86,13 @@ public extension HTTPTransportFailure {
       safeMessage: "response body exceeds the \(cap)-byte limit"
     )
   }
+
+  /// Whether this is the transport's refusal of a body past `cap`. The type carries no case tag, so
+  /// recognizing that refusal means comparing against the value the factory builds — done here, once,
+  /// rather than by each caller re-deriving the message the factory happens to format.
+  func isOversizedBody(cap: Int) -> Bool {
+    self == .oversizedBody(cap: cap)
+  }
 }
 
 /// How much of a response body an executor may hold, and whether the caller reads it as one value or
