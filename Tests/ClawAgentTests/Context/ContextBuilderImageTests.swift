@@ -92,6 +92,62 @@ import Testing
     #expect(message.content.text.contains(ImageMarkers.unavailable))
   }
 
+  @Test func aCaptionedPhotoRowWithNoCachedBytesSaysSoAndKeepsTheCaption() throws {
+    // given — the commonest shape: the owner asked a question ABOUT the photo, and only the bytes
+    // are gone. The marker leads the stored content, so the row is still recognizable as a photo.
+    let stored = StoredMessage(
+      role: .user,
+      content: ImageMarkers.photoContent(caption: "Что это?"),
+      provenance: .untrusted,
+      image: nil
+    )
+
+    // when
+    let rendered = try renderHistory([stored])
+
+    // then — the notice is appended, never substituted: the caption is still the user's question
+    let message = try #require(rendered.last)
+    #expect(message.content.images.isEmpty)
+    #expect(message.content.text.contains(ImageMarkers.unavailable))
+    #expect(message.content.text.contains("Что это?"))
+  }
+
+  @Test func aCaptionedPhotoRowKeepsItsBytesAndTakesNoNotice() throws {
+    // given — the same persisted shape, bytes intact
+    let stored = StoredMessage(
+      role: .user,
+      content: ImageMarkers.photoContent(caption: "Что это?"),
+      provenance: .untrusted,
+      image: pixel
+    )
+
+    // when
+    let rendered = try renderHistory([stored])
+
+    // then — a notice here would tell the model to ignore an image it can actually see
+    let message = try #require(rendered.last)
+    #expect(message.content.images == [pixel])
+    #expect(message.content.text.contains(ImageMarkers.unavailable) == false)
+  }
+
+  @Test func aTrustedMessageThatMerelyReadsLikeTheMarkerTakesNoNotice() throws {
+    // given — the owner typing the marker verbatim; their own messages are trusted, and only the
+    // untrusted tier carries photos
+    let stored = StoredMessage(
+      role: .user,
+      content: ImageMarkers.barePhoto,
+      provenance: .trusted,
+      image: nil
+    )
+
+    // when
+    let rendered = try renderHistory([stored])
+
+    // then
+    let message = try #require(rendered.last)
+    #expect(message.content.text.contains(ImageMarkers.unavailable) == false)
+  }
+
   private func renderHistory(_ history: [StoredMessage]) throws -> [ChatMessage] {
     let builder = ContextBuilder(
       systemPrompt: SystemPrompt.minimal,

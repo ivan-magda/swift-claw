@@ -105,7 +105,8 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
     )
     await harness.dispatcher.waitForCalls(atLeast: 1)
 
-    // then — the caption became the turn's text, persisted untrusted, the session tainted …
+    // then — the caption became the turn's text behind the marker, persisted untrusted, the session
+    // tainted …
     #expect(outcome == .processed)
     #expect(await harness.transport.sent.isEmpty)
     let call = try #require(await harness.dispatcher.calls.first)
@@ -114,9 +115,16 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
       throughMessageId: call.triggerMessageId,
       limit: 10
     )
+    // The marker leads even when captioned — the row's only surviving evidence that it carried a
+    // photo, since the bytes are never persisted. Spelled out rather than built by `photoContent`,
+    // so a change to that shape fails here instead of agreeing with itself.
     #expect(
       snapshot.history == [
-        StoredMessage(role: .user, content: "Что это?", provenance: .untrusted)
+        StoredMessage(
+          role: .user,
+          content: "\(ImageMarkers.barePhoto) Что это?",
+          provenance: .untrusted
+        )
       ]
     )
     #expect(snapshot.isTainted)
@@ -142,7 +150,7 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
       throughMessageId: call.triggerMessageId,
       limit: 10
     )
-    #expect(snapshot.history.map(\.content) == [MessageRouter.barePhotoPlaceholder])
+    #expect(snapshot.history.map(\.content) == [ImageMarkers.barePhoto])
   }
 
   @Test func aCaptionIsNeverParsedAsACommand() async throws {

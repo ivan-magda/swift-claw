@@ -574,9 +574,9 @@ private extension ContextBuilder {
       ).render()
     }
 
-    // Image bytes live only in memory, so a row can outlive them (eviction, the replay budget, a
-    // restart). The notice lands outside the fence because we are asserting it, not the sender.
-    if message.image == nil, message.content == ImageMarkers.barePhoto {
+    // Outside the fence, deliberately: this is our own assertion about system state, and fencing it
+    // would label our words as sender-supplied input.
+    if photoBytesAreMissing(message) {
       body += "\n\(ImageMarkers.unavailable)"
     }
 
@@ -585,6 +585,17 @@ private extension ContextBuilder {
         [.image(image), .text(body)]
       } ?? [.text(body)]
     return ChatMessage(role: .user, content: MessageContent(parts: parts))
+  }
+
+  /// True when a row records a photo whose bytes did not survive to assembly — evicted under cache
+  /// pressure, dropped by the replay budget, or lost to a restart. Image bytes are never persisted,
+  /// so the stored marker is the only evidence left; the untrusted tier is what photos arrive on,
+  /// and requiring it keeps an owner who types the marker verbatim from drawing a false notice.
+  func photoBytesAreMissing(_ message: StoredMessage) -> Bool {
+    guard message.image == nil, message.provenance == .untrusted else {
+      return false
+    }
+    return ImageMarkers.marksPhoto(message.content)
   }
 
   func hasPrivateDataAccess(_ fitted: [FittedSection]) -> Bool {
