@@ -27,9 +27,11 @@ public struct MessageRouter: Sendable {
   private let commandHandlers: CommandHandlers
   private let scheduleHandlers: ScheduleHandlers
   private let confirmations: ConfirmationResolver
-  private let turnDispatch: TurnDispatch
+  private var turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
   private let voice: (any VoiceMessageTranscribing)?
+  private let images: (any ImageMessageHandling)?
+  private let typing: (any TypingIndicator)?
 
   private let doctor: any DoctorReporting
   private let logger: Logger
@@ -49,6 +51,8 @@ public struct MessageRouter: Sendable {
     schedule: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     voice: (any VoiceMessageTranscribing)? = nil,
+    images: (any ImageMessageHandling)? = nil,
+    typing: (any TypingIndicator)? = nil,
     coordinator: ApprovalCoordinator,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = { Date() },
@@ -59,6 +63,8 @@ public struct MessageRouter: Sendable {
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
     self.voice = voice
+    self.images = images
+    self.typing = typing
 
     self.doctor = doctor
     self.logger = logger
@@ -154,6 +160,14 @@ private extension MessageRouter {
         chatId: message.chatId,
         text: reply
       )
+    case .photo(let attachment, let caption):
+      return try await routeImage(
+        attachment,
+        caption: caption,
+        rawUpdate: rawUpdate,
+        message: message,
+        isAllowed: isAllowed
+      )
     case .voice(let attachment):
       return try await routeVoice(
         attachment,
@@ -205,6 +219,88 @@ private extension MessageRouter {
         text: failure.ownerReplyText
       )
     }
+  }
+
+  /// Mirrors `routeVoice`: access first, then availability, then the download — all before any
+  /// update claim, so a cancellation mid-download leaves the update redeliverable. The caption
+  /// dispatches directly and is never command-parsed nor offered to a parked confirmation: a photo
+  /// carries no forward metadata, so an owner's own image and a forwarded one are indistinguishable
+  /// and neither may steer a control path.
+  ///
+  /// A caption survives every arm that reaches a turn, including the opted-out one — see
+  /// `routeImageWithoutService`. Only a failed download discards it, because there the reply names a
+  /// fault the owner can act on rather than silently answering half the message.
+  func routeImage(
+    _ attachment: PhotoAttachment,
+    caption: String?,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    isAllowed: Bool
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    guard isAllowed else {
+      return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
+    }
+
+    guard let images else {
+      return try await routeImageWithoutService(
+        caption: caption,
+        rawUpdate: rawUpdate,
+        message: message
+      )
+    }
+
+    // After both guards, so neither a stranger nor a disabled service is ever told the bot is
+    // awake. Whether the pulse lands is not checked and cannot be: the action auto-expires
+    // server-side, so one that never arrives is no reason to fail a photo the owner is waiting on.
+    await typing?.sendTyping(chatId: message.chatId)
+
+    switch await images.materialize(attachment) {
+    case .success(let image):
+      return try await turnDispatch.dispatch(
+        rawUpdate: rawUpdate,
+        message: message,
+        text: ImageMarkers.photoContent(caption: caption),
+        provenance: .untrusted,
+        image: image
+      )
+    case .failure(let failure):
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: failure.ownerReplyText
+      )
+    }
+  }
+
+  /// The opted-out path, which still owes the owner an answer. A bare photo is only the photo, so
+  /// the canned reply is the whole of it. A caption is the owner's own question and must not be
+  /// discarded — the product tells them to set this very flag when their model cannot see, so this
+  /// is a configuration they are steered into, not an edge case.
+  ///
+  /// The caption dispatches on the same direct, untrusted path the enabled branch uses. It is
+  /// deliberately NOT routed back through command parsing or a parked confirmation: a photo carries
+  /// no proof of who composed it, so one captioned `/stop` or `yes` must never steer a control path.
+  /// The marker leads the content with no bytes behind it, so assembly renders the "no longer
+  /// available" notice and the model is told a photo it cannot see was attached.
+  func routeImageWithoutService(
+    caption: String?,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    guard let caption, caption.isEmpty == false else {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
+      )
+    }
+
+    return try await turnDispatch.dispatch(
+      rawUpdate: rawUpdate,
+      message: message,
+      text: ImageMarkers.photoContent(caption: caption),
+      provenance: .untrusted
+    )
   }
 
   /// Default-deny, applied ONCE for every command: a stranger's /start gets THEIR own id to
@@ -320,6 +416,20 @@ private extension MessageRouter {
       return resolved
     }
     return try await turnDispatch.dispatch(rawUpdate: rawUpdate, message: message, text: text)
+  }
+}
+
+// MARK: - Image Cache
+
+extension MessageRouter {
+  /// Hands the router the cache an inbound photo's bytes land in, as a copy rather than an `init`
+  /// parameter: the cache is module-internal and `MessageRouter.init` is public, so it cannot cross
+  /// that signature. Half of a pair — call `ImageWiring.wire`, which is what guarantees the runner
+  /// replaying those bytes got the same cache.
+  func withImageCache(_ cache: ImageCache) -> MessageRouter {
+    var copy = self
+    copy.turnDispatch.imageCache = cache
+    return copy
   }
 }
 

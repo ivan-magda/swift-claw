@@ -157,12 +157,12 @@ public struct TelegramClient: TelegramTransport {
   }
 }
 
-// MARK: - Voice file download
+// MARK: - Media file download
 
-extension TelegramClient: VoiceMediaFetching {
+extension TelegramClient: MediaFetching {
   /// `getFile` then a bounded GET of `/file/bot<token>/<file_path>`. The URL carries the bot
   /// token, so every failure message passes through `sanitize` before it can be thrown or logged.
-  public func downloadVoiceFile(fileId: String, maxBytes: Int) async throws -> Data {
+  public func downloadFile(fileId: String, maxBytes: Int) async throws -> Data {
     let request = GetFileRequest(fileId: fileId)
     let file: TFile = try await callMethod(
       "getFile",
@@ -182,12 +182,18 @@ extension TelegramClient: VoiceMediaFetching {
         timeoutSeconds: Timeout.fileDownloadSeconds,
         maxBodyBytes: maxBytes
       )
+    } catch let overCap as HTTPTransportFailure where overCap.isOversizedBody(cap: maxBytes) {
+      // Surfaced typed rather than flattened into a generic transport failure: a caller must be able
+      // to tell "this file is past your ceiling" from "the download broke", and it is the only
+      // signal available, since an over-cap body is refused outright instead of handed back short.
+      // Its message is built from the cap alone, so it cannot echo the token-bearing URL.
+      throw overCap
     } catch {
-      throw TelegramError.transport(sanitize("voice download: \(error)"))
+      throw TelegramError.transport(sanitize("media download: \(error)"))
     }
 
     guard result.statusCode == 200 else {
-      throw TelegramError.apiError(code: result.statusCode, description: "voice download failed")
+      throw TelegramError.apiError(code: result.statusCode, description: "media download failed")
     }
 
     return result.body

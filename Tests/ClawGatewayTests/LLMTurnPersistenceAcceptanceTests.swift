@@ -322,7 +322,8 @@ func makeStack(
   outcome: RecordingProvider.Outcome,
   blocksFirstProviderCall: Bool = false,
   providerState: ProviderExchangeState? = nil,
-  workspace: any WorkspaceReading = AcceptanceWorkspace()
+  workspace: any WorkspaceReading = AcceptanceWorkspace(),
+  images: (any ImageMessageHandling)? = nil
 ) throws -> Stack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
   try allowlist.seedAllowlist(userIds: [chatId])
@@ -380,23 +381,28 @@ func makeStack(
     logger: logger
   )
 
-  let router = MessageRouter(
-    processed: processed,
-    sessionMessages: sessionMessages,
-    commands: commands,
-    memory: MemoryStoreGRDB(writer: writer),
-    memoryCommands: MemoryCommandStoreGRDB(writer: writer),
-    pendingConfirmations: PendingConfirmationRegistry(),
-    botUsername: "claw_bot",
-    accessControl: AccessControl(allowlist: allowlist),
-    delivery: transport,
-    turnRunner: turnRunner,
-    lanes: lanes,
-    schedule: makeIdleScheduleSurface(writer: writer),
-    coordinator: ApprovalCoordinator(),
-    doctor: StubDoctorReporter(),
-    logger: logger
-  )
+  // Through the production seam, so the stack the acceptance tests drive is wired exactly the way
+  // the composition root has to wire it.
+  let (router, _) = ImageWiring.wire(runner: turnRunner) { wiredRunner in
+    MessageRouter(
+      processed: processed,
+      sessionMessages: sessionMessages,
+      commands: commands,
+      memory: MemoryStoreGRDB(writer: writer),
+      memoryCommands: MemoryCommandStoreGRDB(writer: writer),
+      pendingConfirmations: PendingConfirmationRegistry(),
+      botUsername: "claw_bot",
+      accessControl: AccessControl(allowlist: allowlist),
+      delivery: transport,
+      turnRunner: wiredRunner,
+      lanes: lanes,
+      schedule: makeIdleScheduleSurface(writer: writer),
+      images: images,
+      coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
+      logger: logger
+    )
+  }
 
   let dispatcher = OutboxDispatcher(
     outbox: outbox,
@@ -771,7 +777,7 @@ func makeStopNewStack(
     // then — the second call threads the prior user message and the committed assistant reply
     // back alongside the new one, rather than pinning the exact assembled count
     let requests = await stack.provider.requests
-    let secondContents = requests[1].map(\.content)
+    let secondContents = requests[1].map(\.content.text)
     #expect(secondContents.contains("first"))
     #expect(secondContents.contains("stub answer"))
     #expect(secondContents.contains("second"))
@@ -934,8 +940,8 @@ func makeStopNewStack(
 
     // then
     let requests = await stack.provider.requests
-    let firstContents = requests[0].map(\.content)
-    let secondContents = requests[1].map(\.content)
+    let firstContents = requests[0].map(\.content.text)
+    let secondContents = requests[1].map(\.content.text)
     #expect(firstContents.contains("first"))
     #expect(firstContents.contains("second") == false)
     #expect(secondContents.contains("second"))
@@ -1026,7 +1032,7 @@ func makeStopNewStack(
 
     let requests = await stack.provider.requests
     #expect(requests.count == 2)
-    let secondRequestContent = requests[1].map(\.content)
+    let secondRequestContent = requests[1].map(\.content.text)
     #expect(secondRequestContent.contains("after new"))
     #expect(secondRequestContent.contains("before one") == false)
     #expect(secondRequestContent.contains("before two") == false)

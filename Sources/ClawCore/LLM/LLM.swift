@@ -17,18 +17,18 @@ public struct ProviderExchangeState: Sendable, Equatable, Codable {
 // MARK: - Chat contract
 
 /// One message in an OpenAI-compatible chat exchange. `toolCalls` carries assistant proposals
-/// ([] otherwise); `toolCallId` is set iff `role == .tool`. Both default so every pre-3b call
-/// site compiles unchanged.
+/// ([] otherwise); `toolCallId` is set iff `role == .tool`. The `String` overload wraps its text in
+/// a `MessageContent`, so a caller with nothing to say about images never names that type.
 public struct ChatMessage: Sendable, Equatable {
   public let role: MessageRole
-  public let content: String
+  public let content: MessageContent
   public let toolCalls: [ToolCall]
   public let toolCallId: String?
   public let providerState: ProviderExchangeState?
 
   public init(
     role: MessageRole,
-    content: String,
+    content: MessageContent,
     toolCalls: [ToolCall] = [],
     toolCallId: String? = nil,
     providerState: ProviderExchangeState? = nil
@@ -38,6 +38,22 @@ public struct ChatMessage: Sendable, Equatable {
     self.toolCalls = toolCalls
     self.toolCallId = toolCallId
     self.providerState = providerState
+  }
+
+  public init(
+    role: MessageRole,
+    content: String,
+    toolCalls: [ToolCall] = [],
+    toolCallId: String? = nil,
+    providerState: ProviderExchangeState? = nil
+  ) {
+    self.init(
+      role: role,
+      content: MessageContent(content),
+      toolCalls: toolCalls,
+      toolCallId: toolCallId,
+      providerState: providerState
+    )
   }
 }
 
@@ -253,7 +269,7 @@ public enum TokenEstimator {
   /// Re-sent assistant `tool_calls` (name + arguments JSON) are counted too.
   public static func estimateInputTokens(_ messages: [ChatMessage]) -> Int {
     messages.reduce(0) { running, message in
-      running + estimateTokens(forText: message.content) + toolCallTokens(for: message)
+      running + estimateTokens(forText: message.content.text) + toolCallTokens(for: message)
     }
   }
 

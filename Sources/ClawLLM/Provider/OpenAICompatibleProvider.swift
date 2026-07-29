@@ -125,7 +125,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
       exposure.noteProvenClean()
       let message = redactor.redact(errorMessage(from: result.body))
       guard Self.isRetryableStatus(result.statusCode) else {
-        throw exposure.failure(.terminal(status: result.statusCode, message: message))
+        throw exposure.failure(Self.headRejection(result, message: message))
       }
       guard attempt < config.retryBudget else {
         // Proven clean above, so the failure carries `notStarted` and no phantom usage is debited for
@@ -150,6 +150,20 @@ public struct OpenAICompatibleProvider: LLMProvider {
     status == 408 || status == 429 || (500..<600).contains(status)
   }
 
+  /// The cause a non-retryable head maps to. Only one rejection is named: a model that cannot look at
+  /// images, which earns owner copy saying so. Everything else — including a body the classifier
+  /// cannot read — stays the terminal rejection carrying the redacted diagnostic.
+  static func headRejection(status: Int, body: Data, message: String) -> ProviderError {
+    guard ProviderErrorClassifier.isVisionRefusal(status: status, body: body) else {
+      return .terminal(status: status, message: message)
+    }
+    return .visionUnsupported
+  }
+
+  static func headRejection(_ result: HTTPResult, message: String) -> ProviderError {
+    headRejection(status: result.statusCode, body: result.body, message: message)
+  }
+
   static func baseURLIsOpenRouter(_ baseURL: String) -> Bool {
     URLComponents(string: baseURL)?.host?.lowercased() == "openrouter.ai"
   }
@@ -163,11 +177,14 @@ public struct OpenAICompatibleProvider: LLMProvider {
           function: WireToolCallFunction(name: call.name, arguments: call.argumentsJSON)
         )
       }
+      let text = message.content.text
       // An empty-content assistant proposal omits `content` (some providers reject "" + tool_calls).
-      let omitContent = message.role == .assistant && message.content.isEmpty && !wireCalls.isEmpty
+      let omitContent = message.role == .assistant && text.isEmpty && !wireCalls.isEmpty
+      let content: WireContent? =
+        omitContent ? nil : Self.wireContent(for: message.content, joinedText: text)
       return WireMessage(
         role: message.role.rawValue,
-        content: omitContent ? nil : message.content,
+        content: content,
         toolCalls: wireCalls.isEmpty ? nil : wireCalls,
         toolCallId: message.toolCallId
       )
@@ -398,7 +415,11 @@ private extension OpenAICompatibleProvider {
     if Self.isRetryableStatus(exchange.head.statusCode) {
       return ProviderError.rejected(status: exchange.head.statusCode, message: message)
     }
-    return ProviderError.terminal(status: exchange.head.statusCode, message: message)
+    return Self.headRejection(
+      status: exchange.head.statusCode,
+      body: collected,
+      message: message
+    )
   }
 
   /// The body sequence ending says only that no more bytes are coming; the termination says whether
@@ -445,6 +466,30 @@ private extension OpenAICompatibleProvider {
   /// The only header a credential source may contribute to this route, keyed by its normalized name
   /// and mapped to the single spelling that reaches the wire.
   static let allowedCredentialHeaders = ["authorization": "Authorization"]
+
+  /// The wire shape for one message's content, keyed on whether an image is present rather than on
+  /// how many parts there are: the array form exists only to carry what a bare string cannot express,
+  /// and every text-only turn must keep emitting the string these servers have always been sent.
+  /// `joinedText` is the caller's already-joined `content.text`, which each read rebuilds.
+  static func wireContent(for content: MessageContent, joinedText: String) -> WireContent {
+    guard !content.images.isEmpty else {
+      return .text(joinedText)
+    }
+    return .parts(
+      content.parts.map { part in
+        switch part {
+        case .text(let value):
+          return WireContentPart(type: "text", text: value, imageURL: nil)
+        case .image(let image):
+          return WireContentPart(
+            type: "image_url",
+            text: nil,
+            imageURL: WireImageURL(url: image.dataURL)
+          )
+        }
+      }
+    )
+  }
 
   func chatCompletionsURL() -> String {
     let base = endpoint.hasSuffix("/") ? String(endpoint.dropLast()) : endpoint
@@ -571,9 +616,46 @@ private struct WireToolDefinition: Encodable {
   let function: Function
 }
 
+/// Chat Completions accepts `content` as a bare string or as an array of typed parts. Text-only
+/// messages keep emitting the string form: OpenAI-compatible servers vary in what they accept, and
+/// adding images must not silently rewrite the shape of every turn that carries none.
+private enum WireContent: Encodable {
+  case text(String)
+  case parts([WireContentPart])
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    switch self {
+    case .text(let value):
+      try container.encode(value)
+    case .parts(let parts):
+      try container.encode(parts)
+    }
+  }
+}
+
+private struct WireContentPart: Encodable {
+  let type: String
+  let text: String?
+  let imageURL: WireImageURL?
+
+  enum CodingKeys: String, CodingKey {
+    case type
+    case text
+    case imageURL = "image_url"
+  }
+}
+
+/// `detail` is deliberately absent. Anthropic's compatibility layer documents it as ignored, the
+/// Codex backend disagrees with other clients over what "low" means, and omitting it is what every
+/// route was verified against.
+private struct WireImageURL: Encodable {
+  let url: String
+}
+
 private struct WireMessage: Encodable {
   let role: String
-  let content: String?
+  let content: WireContent?
   // swiftlint:disable:next discouraged_optional_collection
   let toolCalls: [WireToolCall]?
   let toolCallId: String?

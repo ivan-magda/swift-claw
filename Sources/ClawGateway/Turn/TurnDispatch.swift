@@ -11,6 +11,11 @@ struct TurnDispatch: Sendable {
   let enqueuer: TurnEnqueuer
   let replies: ReplySender
 
+  /// Where an inbound photo's bytes wait for the turn that replays them. Defaulted so text-only
+  /// construction sites pass nothing; `MessageRouter.withImageCache` swaps in the instance the
+  /// runner reads from, which is the only way a stored image is ever seen again.
+  var imageCache = ImageCache()
+
   let now: @Sendable () -> Date
   let logger: Logger
 
@@ -18,7 +23,8 @@ struct TurnDispatch: Sendable {
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     text: String,
-    provenance: Provenance = .trusted
+    provenance: Provenance = .trusted,
+    image: ImagePart? = nil
   ) async throws(RoutingHalt) -> HandleOutcome {
     let inbound = InboundMessage(
       updateId: rawUpdate.updateId,
@@ -48,6 +54,12 @@ struct TurnDispatch: Sendable {
       return replies.skipDuplicate(updateId: rawUpdate.updateId)
     }
 
+    // The claim is what mints the row id the bytes are keyed by, so the deposit can only happen
+    // here — and it must land before the run is enqueued, or the turn it belongs to looks text-only.
+    if let image {
+      await imageCache.store(image, sessionId: sessionId, messageId: triggerMessageId)
+    }
+
     // The inbound → run bridge: the one INFO line that shows a real message was accepted and
     // which run it became. run/session/update ride as metadata so the whole lifecycle greps by
     // `run=<id>`; only the message SIZE is logged, never its text.
@@ -56,7 +68,10 @@ struct TurnDispatch: Sendable {
     runLog[metadataKey: "session"] = "\(sessionId)"
     runLog[metadataKey: "update"] = "\(rawUpdate.updateId)"
     runLog.info(
-      "message accepted; dispatching run (chars=\(text.count) edited=\(message.isEdited))"
+      """
+      message accepted; dispatching run \
+      (chars=\(text.count) edited=\(message.isEdited) image=\(image != nil))
+      """
     )
 
     await enqueuer.enqueue(

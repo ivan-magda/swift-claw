@@ -50,6 +50,29 @@ struct TVoice: Decodable {
   }
 }
 
+/// Bot API `PhotoSize`. Every field is optional on purpose — a rung missing `file_id` (malformed or
+/// a future API shape) must drop out of the ladder, never fail the whole `getUpdates` batch.
+struct TPhotoSize: Decodable {
+  let file_id: String?
+  let file_unique_id: String?
+  let width: Int?
+  let height: Int?
+  let file_size: Int64?
+
+  var size: PhotoSize? {
+    guard let file_id, let width, let height else {
+      return nil
+    }
+    return PhotoSize(
+      fileId: file_id,
+      fileUniqueId: file_unique_id,
+      width: width,
+      height: height,
+      fileSizeBytes: file_size
+    )
+  }
+}
+
 /// Bot API `File` (the `getFile` result); `file_path` feeds the file-download URL and can be
 /// absent while Telegram is still preparing the file.
 struct TFile: Decodable {
@@ -63,7 +86,7 @@ struct TMessage: Decodable {
   let chat: TChat
   let text: String?
   let caption: String?
-  let photo: [TPresence]?
+  let photo: [TPhotoSize]?
   let voice: TVoice?
   let document: TPresence?
   let sticker: TPresence?
@@ -71,13 +94,21 @@ struct TMessage: Decodable {
   let audio: TPresence?
 
   var mediaKind: String? {
-    if photo != nil { return "photos" }
+    if photo != nil { return PhotoAttachment.mediaKindDescription }
     if voice != nil { return VoiceAttachment.mediaKindDescription }
     if document != nil { return "documents" }
     if sticker != nil { return "stickers" }
     if video != nil { return "videos" }
     if audio != nil { return "audio" }
     return nil
+  }
+
+  var photoAttachment: PhotoAttachment? {
+    guard let photo else {
+      return nil
+    }
+    let sizes = photo.compactMap(\.size)
+    return sizes.isEmpty ? nil : PhotoAttachment(sizes: sizes)
   }
 
   func toRawMessage() -> RawMessage {
@@ -88,7 +119,8 @@ struct TMessage: Decodable {
       text: text,
       caption: caption,
       mediaKind: mediaKind,
-      voice: voice?.attachment
+      voice: voice?.attachment,
+      photo: photoAttachment
     )
   }
 }

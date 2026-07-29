@@ -10,7 +10,8 @@ import Testing
     text: String? = nil,
     caption: String? = nil,
     media: String? = nil,
-    voice: VoiceAttachment? = nil
+    voice: VoiceAttachment? = nil,
+    photo: PhotoAttachment? = nil
   ) -> RawMessage {
     RawMessage(
       messageId: messageId,
@@ -19,7 +20,8 @@ import Testing
       text: text,
       caption: caption,
       mediaKind: media,
-      voice: voice
+      voice: voice,
+      photo: photo
     )
   }
 
@@ -29,6 +31,16 @@ import Testing
     mimeType: "audio/ogg",
     fileSizeBytes: 31_942
   )
+
+  private let rainbow = PhotoAttachment(sizes: [
+    PhotoSize(
+      fileId: "y-id",
+      fileUniqueId: "y-u",
+      width: 1280,
+      height: 960,
+      fileSizeBytes: 186_422
+    )
+  ])
 
   @Test func plainTextMessageNormalizes() throws {
     // given
@@ -45,11 +57,11 @@ import Testing
     #expect(incoming.isEdited == false)
   }
 
-  @Test func captionIsTreatedAsText() throws {
-    // given
+  @Test func captionOnMediaWithoutAnAttachmentIsTreatedAsText() throws {
+    // given — media presence with nothing fetchable behind it
     let raw = RawUpdate(
       updateId: 2,
-      message: msg(caption: "look", media: "photos"),
+      message: msg(caption: "look", media: "photos", photo: nil),
       editedMessage: nil
     )
 
@@ -103,6 +115,51 @@ import Testing
 
     // then
     #expect(incoming.content == .text("listen to this"))
+  }
+
+  @Test func captionedPhotoKeepsTheImage() throws {
+    // given — the flow that used to answer "I don't see an attached image"
+    let raw = RawUpdate(
+      updateId: 20,
+      message: msg(caption: "Что это?", media: "photos", photo: rainbow),
+      editedMessage: nil
+    )
+
+    // when
+    let incoming = try #require(IncomingMessage.normalize(from: raw))
+
+    // then — the caption travels WITH the image rather than replacing it
+    #expect(incoming.content == .photo(rainbow, caption: "Что это?"))
+  }
+
+  @Test func barePhotoNormalizesToPhotoContent() throws {
+    // given
+    let raw = RawUpdate(
+      updateId: 21,
+      message: msg(media: "photos", photo: rainbow),
+      editedMessage: nil
+    )
+
+    // when
+    let incoming = try #require(IncomingMessage.normalize(from: raw))
+
+    // then
+    #expect(incoming.content == .photo(rainbow, caption: nil))
+  }
+
+  @Test func photoWithNoUsableRungFallsBackToUnsupported() throws {
+    // given — the wire dropped every malformed rung, leaving presence only
+    let raw = RawUpdate(
+      updateId: 22,
+      message: msg(media: "photos", photo: nil),
+      editedMessage: nil
+    )
+
+    // when
+    let incoming = try #require(IncomingMessage.normalize(from: raw))
+
+    // then
+    #expect(incoming.content == .unsupported(kind: "photos"))
   }
 
   @Test func editedMessageIsFlagged() throws {

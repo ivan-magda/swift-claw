@@ -38,12 +38,12 @@ Why Swift: one self-contained binary per platform with no runtime to install und
 ### 3.2 Non-goals (v1)
 - **NG1.** Multi-user / multi-tenant operation, groups, or supergroups. *(Single-owner only; the access model leaves room to add it later.)*
 - **NG2.** Channels other than Telegram (no Slack/Discord/iMessage/WhatsApp). The channel layer stays abstractable, but only Telegram is implemented.
-- **NG3.** Voice (STT/TTS) and an A2UI canvas or companion device "nodes." Inbound voice notes are **acknowledged but not transcribed** in v1 (see FR-G6).
+- **NG3.** Speech *synthesis* (TTS) and an A2UI canvas or companion device "nodes." Inbound voice notes **are** transcribed, on-device, on macOS 26 (see FR-G6); on Linux and older macOS the feature is inert and they get the canned refusal.
 - **NG4.** A web UI / REST API surface (OpenAI-compatible `/v1` server, ACP server) — possible later, not v1. (Note: `status`/`doctor` and Telegram `/status` are **not** this; they are a CLI subcommand and a chat command, see FR-O2.)
 - **NG5.** Autonomous skill creation / a Curator / RL trajectory export.
 - **NG6.** Webhook mode for Telegram (long-polling only in v1; webhook is a later option).
 - **NG7.** Cloud/SaaS hosting, account systems, billing.
-- **NG8.** Image/vision input. On the **near-term roadmap** (cheap on OpenAI-compatible providers via `image_url` content parts) but not in v1.
+- **NG8.** Image *output* — generating, editing, or sending images — and every inbound image surface other than a photo message. **Photo messages are supported** (see FR-G6); an image sent as a **document** ("send as file"), a **sticker**, and an **animation** are not. Replying to a photo does not re-attach it: clawd never reads `reply_to_message`, so that photo reaches the model only if it is still inside the session's history window. An **album** is not one multi-image turn either: Telegram delivers one update per photo, so it becomes one turn per photo, and only the captioned one carries the caption.
 - **NG9.** Multi-provider / credential fallback and per-call USD attribution dashboards. v1 has one configured provider (with retry) and a USD spend **breaker**, not a dashboard.
 - **NG10.** *(bounds FR-P5)* **Sharing or importing another tool's credentials** — notably Codex CLI's `~/.codex/auth.json` — shelling out to or supervising a Codex subprocess, multiple accounts, credential pools, live credential mutation while the daemon runs, and subscription providers other than ChatGPT. Also out: **a per-provider environment-variable namespace** (`CLAW_CHATGPT_*` and the like) and a configurable subscription endpoint or client identity. Subscription auth adds exactly **one** configuration selector — a provider-qualified model value — and structured configuration (`config.toml`) stays deferred; it is the mechanism a future provider's own settings will use.
 
@@ -109,11 +109,13 @@ Requirements tagged *(v1)* are part of the daily-driver milestone (§9); others 
 - **FR-G4.** *(v1)* Graceful shutdown on SIGTERM/SIGINT: stop intake → drain in-flight turn → flush → checkpoint + close DB → exit. Crash → supervised restart with throttling.
 - **FR-G5.** *(v1)* **Single-instance guard.** At startup the daemon acquires a cross-process advisory lock on the state root; a second `clawd` refuses to boot rather than fighting over `getUpdates`. A Telegram **409 Conflict** (another poller active) is a distinct, loud error surfaced in `doctor`, not a generic retryable 5xx.
 - **FR-G6.** *(v1)* **Non-text intake.** Every inbound update type is enumerated and handled deterministically — never a silent drop, never a crash:
-  - Unsupported media (photo / voice / document / sticker) gets a friendly "I can't read X yet" reply.
-  - **Caption text on media is captured and processed.**
-  - Inbound **voice notes are acknowledged but not transcribed** in v1 (consistent with NG3).
+  - **Photos are read.** A photo, captioned or not, is downloaded within a byte cap and shown to the model. It needs a vision-capable model, and a model that cannot see produces an owner-facing message naming that cause.
+  - **Turning photos off never costs the owner their question.** With `CLAW_IMAGE_INPUT=false` a bare photo gets the canned reply, but a **captioned** one still runs as a turn carrying that caption — the product tells owners on a text-only model to set this flag, so their "what does this say" must still be answered rather than discarded.
+  - **Voice notes are transcribed** on-device on macOS 26; elsewhere the feature is inert and they get the canned reply (consistent with NG3). A voice note sent **with a caption** is a text turn and is never transcribed: written text outranks the attachment.
+  - Media that clawd still cannot read (document / sticker / video / audio) gets a friendly "I can't read X yet" reply.
+  - **Caption text on media clawd cannot read is captured and processed as text.** A photo's caption instead travels *with* the photo, as one turn.
+  - A photo caption and a voice transcript are **never** parsed as a command and never answer a pending confirmation. Neither carries proof it originated with the owner, so neither may steer a control path.
   - An **edited user message** is treated as a `/retry` of that turn.
-  - Image/vision input is on the near-term roadmap (NG8), not v1.
 
 ### 6.2 Access control & rate limiting
 - **FR-A1.** *(v1)* **Default-deny.** No one can use the bot until their **numeric Telegram user ID** is allowlisted. Usernames are never used as a security boundary or resolved anywhere.
@@ -234,7 +236,7 @@ Distilled from the verified best-practices research:
 
 **In v1:** conversational core; durable memory (remember-on-confirm + FTS5 recall); read-only tools (`web_search`, `web_fetch`, workspace file READ — all `safe` tier, no sandbox/approval); streaming replies; the USD spend breaker; onboarding/first-run; non-text intake handling; user-visible degradation; data export/delete; single-instance guard + 409 handling; `status`/`doctor`.
 
-**Deferred to later phases:** write/shell/code tools + sandbox + approvals + the enforced lethal-trifecta gate; scheduling/proactive (its own phase); ChatGPT subscription authentication (its own phase); image/vision input (near-term roadmap); multi-provider/credential fallback; per-call USD attribution dashboards.
+**Deferred to later phases:** write/shell/code tools + sandbox + approvals + the enforced lethal-trifecta gate; scheduling/proactive (its own phase); ChatGPT subscription authentication (its own phase); multi-provider/credential fallback; per-call USD attribution dashboards.
 
 | Phase | Capability | Headline outcome |
 |---|---|---|
@@ -243,7 +245,7 @@ Distilled from the verified best-practices research:
 | **P-schedule** | §5.5 | NL reminders; restart-safe DST-correct scheduler; confirm-before-arm; reduced-privilege proactive runs; opt-in heartbeat with quiet hours; delivery to DM. |
 | **P-auth** | §5.6 | ChatGPT subscription login (`clawd auth login` / `status` / `logout`) + the ChatGPT Responses route behind the existing `LLMProvider` seam; one qualified model value selects it; no API key, no API billing, no new environment variables; the configured OpenAI-compatible route unchanged and still the default. *Independent of the v1→Linux build order — see [`ARCHITECTURE.md` §20].* |
 | **P-portability** | — | Linux portability + deployment (static SDK, distroless/systemd, CI Linux gate). |
-| **Roadmap (later)** | — | Image/vision input; native Anthropic adapter (prompt caching); pairing flow; sqlite-vec recall (behind a protocol). |
+| **Roadmap (later)** | — | Native Anthropic adapter (prompt caching); pairing flow; sqlite-vec recall (behind a protocol). |
 
 A detailed technical increment roadmap (Increment 0…6, each with a "done-when" threshold; v1 = Inc 0–3) lives in [`ARCHITECTURE.md` §Roadmap](./ARCHITECTURE.md).
 

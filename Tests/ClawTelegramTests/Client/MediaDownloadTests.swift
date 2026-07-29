@@ -5,7 +5,7 @@ import Testing
 
 @testable import ClawTelegram
 
-@Suite struct VoiceDownloadTests {
+@Suite struct MediaDownloadTests {
   private static let token = "123:SECRET-TOKEN"
   private static let getFileURL = "https://api.telegram.org/bot\(token)/getFile"
   private static let downloadURL = "https://api.telegram.org/file/bot\(token)/voice/file_3.oga"
@@ -28,7 +28,7 @@ import Testing
     let client = TelegramClient(token: Self.token, http: executor)
 
     // when
-    let bytes = try await client.downloadVoiceFile(fileId: "F1", maxBytes: 1024)
+    let bytes = try await client.downloadFile(fileId: "F1", maxBytes: 1024)
 
     // then — the bytes come back and the GET hit /file/bot<token>/<file_path> under the cap
     #expect(bytes == audio)
@@ -48,7 +48,7 @@ import Testing
 
     // when / then
     await #expect(throws: TelegramError.self) {
-      _ = try await client.downloadVoiceFile(fileId: "F1", maxBytes: 1024)
+      _ = try await client.downloadFile(fileId: "F1", maxBytes: 1024)
     }
     #expect(await executor.requests.allSatisfy { request in request.method == .post })
   }
@@ -63,7 +63,7 @@ import Testing
 
     // when / then
     await #expect(throws: TelegramError.self) {
-      _ = try await client.downloadVoiceFile(fileId: "F1", maxBytes: 1024)
+      _ = try await client.downloadFile(fileId: "F1", maxBytes: 1024)
     }
     #expect(await executor.requests.allSatisfy { request in request.method == .post })
   }
@@ -77,8 +77,26 @@ import Testing
     let client = TelegramClient(token: Self.token, http: executor)
 
     // when / then
-    await #expect(throws: TelegramError.apiError(code: 404, description: "voice download failed")) {
-      _ = try await client.downloadVoiceFile(fileId: "F1", maxBytes: 1024)
+    await #expect(throws: TelegramError.apiError(code: 404, description: "media download failed")) {
+      _ = try await client.downloadFile(fileId: "F1", maxBytes: 1024)
+    }
+  }
+
+  @Test func overCapBodyIsRefusedAsATypedFailureRatherThanTruncated() async throws {
+    // given — a body one byte past the requested ceiling
+    let executor = ClawTestSupport.RecordingHTTPExecutor(responses: [
+      Self.getFileURL: envelope(filePath: "voice/file_3.oga"),
+      Self.downloadURL: HTTPResult(
+        statusCode: 200,
+        headers: [:],
+        body: Data(repeating: 0xFF, count: 1_025)
+      ),
+    ])
+    let client = TelegramClient(token: Self.token, http: executor)
+
+    // when / then — callers distinguish "too large" from "download broke", and get no short body
+    await #expect(throws: HTTPTransportFailure.oversizedBody(cap: 1_024)) {
+      _ = try await client.downloadFile(fileId: "F1", maxBytes: 1_024)
     }
   }
 
@@ -96,7 +114,7 @@ import Testing
 
     // when
     do {
-      _ = try await client.downloadVoiceFile(fileId: "F1", maxBytes: 1024)
+      _ = try await client.downloadFile(fileId: "F1", maxBytes: 1024)
       Issue.record("expected a transport error")
     } catch {
       // then — the thrown message never carries the bot token

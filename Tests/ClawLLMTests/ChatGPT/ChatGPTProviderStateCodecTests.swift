@@ -838,7 +838,7 @@ import Testing
     #expect(selection.drops.budgetEvicted == 1)
     // The evicted turn keeps its text and its call; only the reasoning it carried is unavailable.
     #expect(selection.turns[0] == nil)
-    #expect(history[0].content == "turn 0")
+    #expect(history[0].content.text == "turn 0")
     #expect(history[0].toolCalls == calls)
   }
 

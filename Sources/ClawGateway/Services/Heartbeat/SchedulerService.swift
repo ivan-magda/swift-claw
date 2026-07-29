@@ -10,9 +10,6 @@ import ServiceLifecycle
 /// onto their job session's lane. Tick-level mutual exclusion is structural: one instance, one
 /// sequential loop; cross-process exclusion is the startup flock.
 public struct SchedulerService: Service {
-  /// The tick grain (ARCHITECTURE.md §6.3, pinned — not config): coarse enough to be negligible
-  /// load, fine enough that an on-time fire lands within a minute of its occurrence. The misfire
-  /// table's "lateness ≤ grain ⇒ on time" row is defined against this constant.
   public static let tickInterval: Duration = .seconds(60)
 
   private let jobs: any ScheduledJobStore

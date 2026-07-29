@@ -24,8 +24,8 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 ## Features
 
 - **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
-  turn, `/new` starts a fresh session, and clawd transcribes voice notes on-device
-  (macOS 26).
+  turn, `/new` starts a fresh session, clawd transcribes voice notes on-device
+  (macOS 26), and it looks at photos you send if your model can see them.
 - **Durable memory.** Facts you confirm persist in SQLite, and clawd recalls them by
   importance and recency. Workspace Markdown files hold your profile, notes, and daily
   logs, and conversation history is full-text searchable.

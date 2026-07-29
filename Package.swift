@@ -176,6 +176,7 @@ let package = Package(
       dependencies: [
         "clawd", "ClawGateway", "ClawAgent", "ClawTestSupport",
         "ClawCore", "ClawAuth", "ClawSecrets", "ClawLLM", "ClawData", "ClawTelegram",
+        "ClawWorkspace",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "GRDB", package: "GRDB.swift"),

@@ -822,16 +822,16 @@ import Testing
     // then — the request is framed as autonomous execution: proactive prompt in the system
     // slot, no /schedule pointer anywhere in it, no recall block, the frozen task text last
     let firstRequest = try #require(await harness.provider.requests.first)
-    let firstSystem = try #require(firstRequest.messages.first?.content)
+    let firstSystem = try #require(firstRequest.messages.first?.content.text)
     #expect(firstRequest.messages.first?.role == .system)
     #expect(firstSystem.contains("started by your own scheduler"))
     #expect(firstSystem.contains("/schedule") == false)
     #expect(
       firstRequest.messages.contains { message in
-        message.content.contains("label=\"recall\"")
+        message.content.text.contains("label=\"recall\"")
       } == false
     )
-    #expect(firstRequest.messages.last?.content == "Summarize my unread items")
+    #expect(firstRequest.messages.last?.content.text == "Summarize my unread items")
 
     // when — Wednesday's fire on the same persistent job session
     harness.clock.advance(to: Self.wedFire.addingTimeInterval(30))
@@ -844,9 +844,9 @@ import Testing
     let secondRequest = try #require(requests.last)
     #expect(
       secondRequest.messages.contains { message in
-        message.content.contains("Digest one.")
+        message.content.text.contains("Digest one.")
       } == false
     )
-    #expect(secondRequest.messages.last?.content == "Summarize my unread items")
+    #expect(secondRequest.messages.last?.content.text == "Summarize my unread items")
   }
 }

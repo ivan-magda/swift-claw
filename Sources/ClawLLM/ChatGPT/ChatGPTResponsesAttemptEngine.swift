@@ -487,6 +487,9 @@ private extension ChatGPTResponsesAttemptEngine {
     let retryAfterSeconds: Int?
     let code: String?
     let message: String
+    /// Read from the raw body before sanitization, because truncation and redaction can drop the
+    /// very tokens the refusal is recognised by.
+    var visionRefusal = false
   }
 
   /// What the classifier resolves a non-success head to.
@@ -533,7 +536,11 @@ private extension ChatGPTResponsesAttemptEngine {
       status: exchange.head.statusCode,
       retryAfterSeconds: Self.retryAfterSeconds(exchange.head),
       code: decoded?.error?.code,
-      message: message
+      message: message,
+      visionRefusal: ProviderErrorClassifier.isVisionRefusal(
+        status: exchange.head.statusCode,
+        body: body
+      )
     )
   }
 
@@ -583,6 +590,9 @@ private extension ChatGPTResponsesAttemptEngine {
     canRetry: Bool,
     recoveryUsed: Bool
   ) -> HeadDecision {
+    guard diagnosis.visionRefusal == false else {
+      return .fail(.visionUnsupported)
+    }
     guard diagnosis.code == ChatGPTRemoteFailure.invalidEncryptedContentCode else {
       return .fail(.terminal(status: diagnosis.status, message: diagnosis.message))
     }

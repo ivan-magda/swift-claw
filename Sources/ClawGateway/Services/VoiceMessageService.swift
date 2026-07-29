@@ -52,7 +52,7 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
     try? FileManager.default.removeItem(at: staging)
   }
 
-  private let fetcher: any VoiceMediaFetching
+  private let fetcher: any MediaFetching
   private let transcriber: any VoiceTranscribing
   private let stagingDirectory: URL
   private let redactor: SecretRedactor
@@ -63,7 +63,7 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
   private let logger: Logger
 
   public init(
-    fetcher: any VoiceMediaFetching,
+    fetcher: any MediaFetching,
     transcriber: any VoiceTranscribing,
     stagingDirectory: URL,
     redactor: SecretRedactor,
@@ -95,7 +95,7 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
 
     let audioData: Data
     do {
-      audioData = try await fetcher.downloadVoiceFile(
+      audioData = try await fetcher.downloadFile(
         fileId: attachment.fileId,
         maxBytes: maxDownloadBytes
       )

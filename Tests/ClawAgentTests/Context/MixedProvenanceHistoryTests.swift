@@ -123,9 +123,9 @@ import Testing
     #expect(anchorMessage.toolCalls == calls)
     let toolMessage = try #require(result.messages.first { message in message.role == .tool })
     #expect(toolMessage.toolCallId == "c1")
-    #expect(toolMessage.content.contains("<claw-untrusted"))
-    #expect(toolMessage.content.contains("label=\"web_fetch\""))
-    #expect(toolMessage.content.contains("raw page text"))
+    #expect(toolMessage.content.text.contains("<claw-untrusted"))
+    #expect(toolMessage.content.text.contains("label=\"web_fetch\""))
+    #expect(toolMessage.content.text.contains("raw page text"))
   }
 
   @Test func untrustedUserRowsRenderFencedTrustedOnesVerbatim() throws {
@@ -146,17 +146,17 @@ import Testing
     // then — the transcript is fenced as data with the untrusted-user label; typed text is not
     let fenced = try #require(
       result.messages.first { message in
-        message.role == .user && message.content.contains("spoken transcript")
+        message.role == .user && message.content.text.contains("spoken transcript")
       }
     )
-    #expect(fenced.content.contains("<claw-untrusted"))
-    #expect(fenced.content.contains("label=\"\(ContextBuilder.untrustedUserLabel)\""))
+    #expect(fenced.content.text.contains("<claw-untrusted"))
+    #expect(fenced.content.text.contains("label=\"\(ContextBuilder.untrustedUserLabel)\""))
     let typed = try #require(
       result.messages.first { message in
-        message.role == .user && message.content.contains("typed question")
+        message.role == .user && message.content.text.contains("typed question")
       }
     )
-    #expect(typed.content == "typed question")
+    #expect(typed.content.text == "typed question")
   }
 
   @Test func duplicateToolCallIdsInAnchorDoNotTrapRendering() throws {
@@ -193,8 +193,8 @@ import Testing
     // names (the first one wins) rather than crashing
     let toolMessage = try #require(result.messages.first { message in message.role == .tool })
     #expect(toolMessage.toolCallId == "c1")
-    #expect(toolMessage.content.contains("<claw-untrusted"))
-    #expect(toolMessage.content.contains("label=\"web_fetch\""))
+    #expect(toolMessage.content.text.contains("<claw-untrusted"))
+    #expect(toolMessage.content.text.contains("label=\"web_fetch\""))
   }
 
   @Test func exchangeIsOneAtomicDroppableUnit() throws {
@@ -245,7 +245,7 @@ import Testing
     let anchors = result.messages.filter { message in !message.toolCalls.isEmpty }
     #expect(toolMessages.isEmpty)
     #expect(anchors.isEmpty)
-    #expect(result.messages.contains { message in message.content == "the current question" })
+    #expect(result.messages.contains { message in message.content.text == "the current question" })
   }
 
   @Test func systemPromptCarriesTheToolPolicyClauses() {
@@ -277,6 +277,6 @@ import Testing
     let systemMessage = try #require(
       result.messages.first { message in message.role == .system }
     )
-    #expect(systemMessage.content.contains("/schedule"))
+    #expect(systemMessage.content.text.contains("/schedule"))
   }
 }

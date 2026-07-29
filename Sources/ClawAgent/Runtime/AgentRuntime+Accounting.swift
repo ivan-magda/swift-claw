@@ -95,6 +95,8 @@ extension AgentRuntime {
       return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
     case .invalidProviderState:
       return .invalidProviderState
+    case .visionUnsupported:
+      return .visionUnsupported
     case .terminal, .cleanRejection, .retryable, .connectFailed, .rejected, .none:
       return .providerUnavailable
     }

@@ -551,23 +551,51 @@ private extension ContextBuilder {
               providerState: message.providerState
             )
           )
-        case .user where message.provenance == .untrusted:
-          rendered.append(
-            ChatMessage(
-              role: .user,
-              content: LabeledContextFactory.make(
-                label: Self.untrustedUserLabel,
-                content: message.content
-              ).render()
-            )
-          )
-        case .user, .system:
-          rendered.append(ChatMessage(role: message.role, content: message.content))
+        case .user:
+          rendered.append(userMessage(from: message))
+        case .system:
+          rendered.append(ChatMessage(role: .system, content: message.content))
         }
       }
     }
 
     return rendered
+  }
+
+  /// Provenance decides the fence and nothing else. The image rides on every user row, trusted or
+  /// not: gating it on provenance would let a single change of tier drop an image with no error and
+  /// no failing test.
+  func userMessage(from message: StoredMessage) -> ChatMessage {
+    var body = message.content
+    if message.provenance == .untrusted {
+      body = LabeledContextFactory.make(
+        label: Self.untrustedUserLabel,
+        content: message.content
+      ).render()
+    }
+
+    // Outside the fence, deliberately: this is our own assertion about system state, and fencing it
+    // would label our words as sender-supplied input.
+    if photoBytesAreMissing(message) {
+      body += "\n\(ImageMarkers.unavailable)"
+    }
+
+    let parts: [MessageContent.Part] =
+      message.image.map { image in
+        [.image(image), .text(body)]
+      } ?? [.text(body)]
+    return ChatMessage(role: .user, content: MessageContent(parts: parts))
+  }
+
+  /// True when a row records a photo whose bytes did not survive to assembly — evicted under cache
+  /// pressure, dropped by the replay budget, or lost to a restart. Image bytes are never persisted,
+  /// so the stored marker is the only evidence left. Provenance is deliberately not consulted, for
+  /// the same reason the image itself rides on every tier.
+  func photoBytesAreMissing(_ message: StoredMessage) -> Bool {
+    guard message.image == nil else {
+      return false
+    }
+    return ImageMarkers.marksPhoto(message.content)
   }
 
   func hasPrivateDataAccess(_ fitted: [FittedSection]) -> Bool {

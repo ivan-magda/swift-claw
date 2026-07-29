@@ -17,6 +17,7 @@ public enum ProviderError: Error, Sendable, Equatable {
   case quotaLimited(retryAfterSeconds: Int?)
   case cleanRejection(status: Int)
   case invalidProviderState
+  case visionUnsupported
 }
 
 // MARK: - Redaction
@@ -40,7 +41,8 @@ extension ProviderError {
       .accessDenied,
       .quotaLimited,
       .cleanRejection,
-      .invalidProviderState:
+      .invalidProviderState,
+      .visionUnsupported:
       self
     }
   }
@@ -78,7 +80,7 @@ extension ProviderFailureAccounting {
     }
     switch providerError {
     case .terminal, .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .invalidProviderState:
+      .invalidProviderState, .visionUnsupported:
       return .notStarted
     case .connectFailed, .retryable, .rejected:
       return .mayHaveStarted(observing: 0)

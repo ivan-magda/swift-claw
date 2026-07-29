@@ -101,9 +101,9 @@ import Testing
     #expect(request.model == "test-model")
     #expect(request.messages.count == 2)
     #expect(request.messages[0].role == .system)
-    #expect(request.messages[0].content == ScheduleDraftParser.systemPrompt)
+    #expect(request.messages[0].content.text == ScheduleDraftParser.systemPrompt)
     #expect(request.messages[1].role == .user)
-    #expect(request.messages[1].content == "every weekday at 7am")
+    #expect(request.messages[1].content.text == "every weekday at 7am")
     #expect(request.tools.isEmpty)
     #expect(request.maxOutputTokens == ScheduleDraftParser.maxParseOutputTokens)
   }

@@ -978,4 +978,38 @@ import Testing
       try AppConfig.load(environment: env)
     }
   }
+
+  @Test func imageInputDefaultsOn() throws {
+    // given — nothing set, mirroring voice transcription: the owner gets it without opting in
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.image.enabled)
+  }
+
+  @Test func imageInputParsesExplicitOptOut() throws {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.imageInput] = "false"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.image.enabled == false)
+  }
+
+  @Test func malformedImageBooleanFailsClosed() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.imageInput] = "sometimes"
+
+    // when / then
+    #expect(throws: ConfigError.invalidBool(key: EnvKey.imageInput, value: "sometimes")) {
+      try AppConfig.load(environment: env)
+    }
+  }
 }

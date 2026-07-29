@@ -176,6 +176,7 @@ public struct StoredMessage: Sendable, Equatable {
   public let toolCallsJSON: String?
   public let toolCallId: String?
   public let providerState: ProviderExchangeState?
+  public let image: ImagePart?
 
   public init(
     role: MessageRole,
@@ -183,7 +184,8 @@ public struct StoredMessage: Sendable, Equatable {
     provenance: Provenance,
     toolCallsJSON: String? = nil,
     toolCallId: String? = nil,
-    providerState: ProviderExchangeState? = nil
+    providerState: ProviderExchangeState? = nil,
+    image: ImagePart? = nil
   ) {
     self.role = role
     self.content = content
@@ -191,6 +193,7 @@ public struct StoredMessage: Sendable, Equatable {
     self.toolCallsJSON = toolCallsJSON
     self.toolCallId = toolCallId
     self.providerState = providerState
+    self.image = image
   }
 }
 

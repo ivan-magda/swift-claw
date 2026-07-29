@@ -37,6 +37,17 @@ public enum Degradation {
   public static let invalidProviderState =
     "I lost the thread of this conversation. Send /new to start fresh, then try again."
 
+  /// The route refused the image because the model cannot see. Resending changes nothing, so the
+  /// sentence names the cause rather than inviting a retry. `/new` leads because it is the only
+  /// remedy that works right now: the photo stays in the history window until the conversation is
+  /// reset, so every following question — image or not — comes back with this same refusal, while
+  /// both config knobs need an edit and a daemon restart before they change anything.
+  public static let visionUnsupported =
+    "The model you've configured can't look at images. Send /new — otherwise that photo stays in "
+    + "this conversation and every question after it gets this same reply. To fix it for good, set "
+    + "`CLAW_LLM_MODEL` to a vision-capable model, or set `CLAW_IMAGE_INPUT=false` to stop sending "
+    + "photos."
+
   /// A clean throttle. Says to retry after the provider's bounded hint when it gave one, else after
   /// the plan resets — never to log in. The hint is a structured number the provider returned, not
   /// remote free text, so echoing the count interpolates no untrusted string.
@@ -82,6 +93,8 @@ public enum Degradation {
       return quotaLimited(retryAfterSeconds: retryAfterSeconds)
     case .invalidProviderState:
       return invalidProviderState
+    case .visionUnsupported:
+      return visionUnsupported
     }
   }
 }

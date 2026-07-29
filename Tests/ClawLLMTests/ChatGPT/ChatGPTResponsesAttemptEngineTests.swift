@@ -301,6 +301,55 @@ import Testing
     #expect(failureCause(outcome) == .retryable(status: 500, message: "boom"))
   }
 
+  // MARK: - Vision refusal
+
+  /// A refusal that names the rejected content part in `param` and the error class in `type`, while
+  /// its `message` mentions neither. Only the raw body carries the markers, so a classification that
+  /// read the sanitized diagnostic instead would miss this — which is the regression this fixture
+  /// exists to catch.
+  private static let visionRefusalBody = Data(
+    """
+    {"error":{"type":"invalid_request_error","param":"input[1].content[0].input_image",\
+    "code":null,"message":"This model does not support image inputs."}}
+    """.utf8
+  )
+
+  @Test(.timeLimit(.minutes(1)))
+  func aVisionRefusalIsNamedRatherThanLeftAsAGenericRejection() async throws {
+    // given — a clean 400 refusing the request because the model cannot see
+    let harness = Harness(steps: [.stream(Support.head(400), [Self.visionRefusalBody])])
+
+    // when
+    let outcome = await harness.run()
+
+    // then — the refusal is recognised from the raw body, ahead of the poisoned-state check, and
+    // reduced to the text-free cause the owner reply names. It is never retried: it would refuse
+    // identically, and the server generated nothing.
+    #expect(failureCause(outcome) == .visionUnsupported)
+    #expect(await harness.attemptCount == 1)
+    #expect(Support.accounting(of: outcome) == .notStarted)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func aBadRequestWithoutAnImagePartStaysTheGenericRejection() async throws {
+    // given — the same status and error class, with no image content part named anywhere
+    let body = Data(
+      """
+      {"error":{"type":"invalid_request_error","param":"temperature","code":null,\
+      "message":"Unsupported value for temperature."}}
+      """.utf8
+    )
+    let harness = Harness(steps: [.stream(Support.head(400), [body])])
+
+    // when
+    let outcome = await harness.run()
+
+    // then — the discriminator is additive; an unrelated rejection keeps its diagnostic
+    #expect(
+      failureCause(outcome) == .terminal(status: 400, message: "Unsupported value for temperature.")
+    )
+  }
+
   // MARK: - The retry boundary
 
   @Test(.timeLimit(.minutes(1)))

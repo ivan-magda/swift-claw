@@ -6,6 +6,17 @@ import Testing
 
 @testable import ClawGateway
 
+/// Counts calls into a `Sendable` value-type double, so a stub can behave differently on its first
+/// call than on the redelivery that follows.
+actor CallCounter {
+  private(set) var count = 0
+
+  func next() -> Int {
+    count += 1
+    return count
+  }
+}
+
 /// Records the turns the router dispatches (and optionally throws a scripted error) so router/poller
 /// tests stay decoupled from the real provider/persistence.
 actor FakeTurnRunner: TurnDispatching {

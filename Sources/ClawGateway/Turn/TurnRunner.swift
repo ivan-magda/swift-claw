@@ -36,6 +36,7 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
+  var imageCache: ImageCache?
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that
@@ -86,6 +87,7 @@ public struct TurnRunner: TurnDispatching {
     self.agent = agent
     self.budget = budget
     self.contextBuilder = contextBuilder
+    self.imageCache = nil
 
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
@@ -127,7 +129,8 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         boundMessageId: triggerMessageId,
         origin: origin,
-        at: now
+        at: now,
+        images: await cachedImages(sessionId: sessionId)
       )
     } catch StoreError.diskFull {
       throw StoreError.diskFull
@@ -205,7 +208,8 @@ public struct TurnRunner: TurnDispatching {
         sessionId: sessionId,
         boundMessageId: contextBoundMessageId,
         origin: origin,
-        at: now()
+        at: now(),
+        images: await cachedImages(sessionId: sessionId)
       )
     } catch {
       failResume(runId: runId, stage: "context build", error: error)
@@ -256,13 +260,15 @@ private extension TurnRunner {
     sessionId: Int64,
     boundMessageId: Int64,
     origin: RunOrigin,
-    at clock: Date
+    at clock: Date,
+    images: [Int64: ImagePart]
   ) throws -> TurnInputs {
-    let snapshot = try sessionMessages.loadContextSnapshot(
+    let loaded = try sessionMessages.loadContextSnapshot(
       sessionId: sessionId,
       throughMessageId: boundMessageId,
       limit: Self.historyLimit
     )
+    let snapshot = Self.attach(images, to: loaded)
     let totals = try usageStore.todayTokensAndCost(now: clock)
     // The proactive pool is one aggregate over scheduled + heartbeat; interactive runs never
     // pay for the extra query.
