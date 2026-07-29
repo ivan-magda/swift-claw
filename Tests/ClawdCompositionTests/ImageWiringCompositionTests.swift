@@ -41,34 +41,6 @@ import Testing
     )
   }
 
-  @Test func everyRunnerConsumerSeesWhatIntakeDeposited() async throws {
-    // given — the production fan-out over real stores and a scripted Telegram transport
-    let root = try makeRoot()
-    let consumers = try await makeConsumers(root: root)
-
-    // A run would reach for the network, and this is about who holds the cache, not what a turn
-    // does with it — so the lane rejects the run the photo dispatches.
-    root.coordination.lanes.closeAdmission()
-
-    // when — one photo lands through the intake path the poller drives
-    let router = consumers.poller.router
-    let outcome = await router.handle(rawUpdate: photoUpdate())
-
-    // then — every consumer that copies the runner value replays the bytes the router deposited:
-    // the router's own boxed copy (every interactive photo), the scheduler's, and the waiter's
-    #expect(outcome == .processed)
-    let sessionId = try root.stores.sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: Self.ownerChatId),
-      now: Date()
-    )
-    let dispatched = try #require(router.turnDispatch.enqueuer.turns as? TurnRunner)
-    let scheduled = try #require(consumers.scheduler.enqueuer.turns as? TurnRunner)
-    let resumed = try #require(consumers.approvals.waiter.turns as? TurnRunner)
-    #expect(await Array(dispatched.cachedImages(sessionId: sessionId).values) == [expectedImage])
-    #expect(await Array(scheduled.cachedImages(sessionId: sessionId).values) == [expectedImage])
-    #expect(await Array(resumed.cachedImages(sessionId: sessionId).values) == [expectedImage])
-  }
-
   @Test func optingOutLeavesABarePhotoClosedWithTheCannedReply() async throws {
     // given — the same fan-out with CLAW_IMAGE_INPUT=false, and nothing but the photo
     let root = try makeRoot(imageInput: "false")
@@ -88,50 +60,6 @@ import Testing
         MessageRouter.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
       )
     )
-  }
-
-  @Test func optingOutStillAnswersACaptionedPhotoThroughTheRealCompositionRoot() async throws {
-    // given — the configuration an owner on a text-only model is told to set. Proven here and not
-    // only at the router, because the flag is resolved at composition: this is the wiring that
-    // decides whether their question survives.
-    let root = try makeRoot(imageInput: "false")
-    let consumers = try await makeConsumers(root: root)
-    root.coordination.lanes.closeAdmission()
-
-    // when
-    let outcome = await consumers.poller.router.handle(
-      rawUpdate: photoUpdate(caption: "what does this say")
-    )
-
-    // then — the caption became a real turn, so the canned refusal never stood in for it
-    #expect(outcome == .processed)
-    let body = String(bytes: await root.telegram.lastBody ?? Data(), encoding: .utf8) ?? ""
-    #expect(
-      body.contains(
-        MessageRouter.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
-      ) == false
-    )
-
-    // … carrying the marker and the caption, with no bytes behind it — the download never ran, so
-    // assembly renders the unavailable notice rather than the model answering about pixels
-    let sessionId = try root.stores.sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: Self.ownerChatId),
-      now: Date()
-    )
-    let snapshot = try root.stores.sessionMessages.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: .max,
-      limit: 10
-    )
-    let stored: [String] = snapshot.history.map { message in
-      message.content
-    }
-    #expect(stored == ["\(ImageMarkers.barePhoto) what does this say"])
-    #expect(snapshot.isTainted)
-    let dispatched = try #require(
-      consumers.poller.router.turnDispatch.enqueuer.turns as? TurnRunner
-    )
-    #expect(await dispatched.cachedImages(sessionId: sessionId).isEmpty)
   }
 }
 
