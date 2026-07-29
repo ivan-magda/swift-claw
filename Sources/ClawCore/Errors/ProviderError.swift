@@ -17,9 +17,6 @@ public enum ProviderError: Error, Sendable, Equatable {
   case quotaLimited(retryAfterSeconds: Int?)
   case cleanRejection(status: Int)
   case invalidProviderState
-  /// The route rejected the request because the configured model cannot look at images. Recognised
-  /// from the rejection body, then reduced to this text-free case so the owner reply names the cause
-  /// without quoting a remote diagnostic.
   case visionUnsupported
 }
 
