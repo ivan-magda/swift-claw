@@ -7,7 +7,7 @@ import ServiceLifecycle
 /// Graceful shutdown cancels the task → the in-flight long poll unwinds and the loop exits.
 public struct TelegramPollerService: Service {
   private let intake: any ChannelIntake
-  let router: MessageRouter
+  private let router: MessageRouter
 
   private let cursor: any UpdateCursorStore
 
