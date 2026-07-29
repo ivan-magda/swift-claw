@@ -53,9 +53,11 @@ actor ImageCache {
 
   func images(sessionId: Int64) -> [Int64: ImagePart] {
     var found: [Int64: ImagePart] = [:]
+
     for entry in entries where entry.sessionId == sessionId {
       found[entry.messageId] = entry.image
     }
+
     return found
   }
 }
