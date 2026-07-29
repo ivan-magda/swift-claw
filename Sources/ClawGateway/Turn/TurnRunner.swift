@@ -36,8 +36,6 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  /// Recent inbound images, replayed onto the history rows they arrived on. `nil` until
-  /// `withImageCache` hands one over, which keeps the lookup a no-op and every turn text-only.
   var imageCache: ImageCache?
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
   private let notifyOutbox: @Sendable () -> Void
