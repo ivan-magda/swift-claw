@@ -18,10 +18,12 @@ enum ProviderErrorClassifier {
     guard status == refusalStatus else {
       return false
     }
+
     let lowered = body.lowercased()
     guard lowered.contains(invalidRequestMarker) else {
       return false
     }
+
     return imagePartMarkers.contains { marker in
       lowered.contains(marker)
     }
