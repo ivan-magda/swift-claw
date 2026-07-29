@@ -176,9 +176,6 @@ public struct StoredMessage: Sendable, Equatable {
   public let toolCallsJSON: String?
   public let toolCallId: String?
   public let providerState: ProviderExchangeState?
-  /// Attached inbound image, carried in memory only — never read from or written to the database.
-  /// It rides on the message so sanitizing, grouping, and fitting all move it without knowing it
-  /// exists, which index-based matching could not survive.
   public let image: ImagePart?
 
   public init(
