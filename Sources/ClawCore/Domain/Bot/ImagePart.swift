@@ -17,19 +17,24 @@ public enum ImageMediaType: String, Sendable, Equatable, CaseIterable {
   /// payload that is not an image must never reach a model.
   public static func sniff(_ bytes: Data) -> ImageMediaType? {
     let prefix = [UInt8](bytes.prefix(16))
+
     if prefix.starts(with: [0xFF, 0xD8, 0xFF]) {
       return .jpeg
     }
+
     if prefix.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
       return .png
     }
+
     if prefix.starts(with: [0x47, 0x49, 0x46, 0x38]) {
       return .gif
     }
+
     let isRIFF = prefix.starts(with: [0x52, 0x49, 0x46, 0x46])
     guard isRIFF, prefix.count >= 12 else {
       return nil
     }
+
     return Array(prefix[8..<12]) == [0x57, 0x45, 0x42, 0x50] ? .webp : nil
   }
 }
