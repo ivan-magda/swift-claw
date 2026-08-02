@@ -5,13 +5,6 @@ import Foundation
 /// `SKILL.md` body back. The name is resolved against a fresh scan — a frontmatter string never
 /// becomes a path component, and the model never types a path at all.
 public struct SkillLoadTool: Tool {
-  /// The index row and the loaded body must render under the same fence label, because the
-  /// system prompt's follow-this-as-guidance carve-out is written against that one label.
-  public static let fenceLabel = "skills"
-
-  private static let skillsDirectoryName = "skills"
-  private static let manifestName = "SKILL.md"
-
   private let workspaceRoot: URL
   private let scanSkills: @Sendable () -> SkillScanResult
   private let redactor: SecretRedactor
@@ -51,7 +44,7 @@ public struct SkillLoadTool: Tool {
       ]),
       egressClass: .none,
       riskLevel: .safe,
-      fenceLabel: Self.fenceLabel
+      fenceLabel: WorkspaceSkills.fenceLabel
     )
   }
 
@@ -94,10 +87,11 @@ private extension SkillLoadTool {
   /// `skills/`, but a symlinked skill directory must not serve a file from outside the workspace.
   func body(of descriptor: SkillDescriptor) -> ToolPayload {
     let skillsRoot = workspaceRoot.appendingPathComponent(
-      Self.skillsDirectoryName,
+      WorkspaceSkills.directoryName,
       isDirectory: true
     )
-    let relativePath = "\(descriptor.directory.lastPathComponent)/\(Self.manifestName)"
+    let relativePath =
+      "\(descriptor.directory.lastPathComponent)/\(WorkspaceSkills.manifestName)"
 
     let manifestPath: String
     switch WorkspacePathContainment.resolveExisting(path: relativePath, root: skillsRoot.path) {

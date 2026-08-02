@@ -18,6 +18,11 @@ public struct ContextBuilder: Sendable {
 
   static let untrustedUserLabel = "untrusted_user_message"
 
+  /// The fence for a replayed tool row whose anchor no longer attributes it to one tool. It names
+  /// no tool on purpose: every declared label is a trust statement, and an unattributable row has
+  /// earned none of them.
+  static let unattributedToolLabel = "tool"
+
   private let systemPrompt: String
   private let proactiveSystemPrompt: String
 
@@ -592,17 +597,26 @@ private extension ContextBuilder {
 
     for group in groups where keptIDs.contains(group.id) {
       // The anchor's id→name map labels each tool row's fence. A provider-authored response could
-      // duplicate a tool_call id; keep the first name rather than trapping on malformed history.
+      // duplicate a tool_call id, and the name a row resolves to now decides how much the prompt
+      // trusts its content — so a duplicated id names nobody and its rows fall back to the
+      // unattributed label, rather than the first declaration lending them its fence.
       let anchorCalls = group.messages.first?.toolCallsJSON.map(ToolCallCoding.decode) ?? []
+      let callsPerId = anchorCalls.reduce(into: [String: Int]()) { counts, call in
+        counts[call.id, default: 0] += 1
+      }
       let namesByCallId = Dictionary(
-        anchorCalls.map { call in (call.id, call.name) },
-        uniquingKeysWith: { first, _ in first }
+        uniqueKeysWithValues:
+          anchorCalls
+          .filter { call in callsPerId[call.id] == 1 }
+          .map { call in (call.id, call.name) }
       )
 
       for message in group.messages {
         switch message.role {
         case .tool:
-          let toolName = message.toolCallId.flatMap { callId in namesByCallId[callId] } ?? "tool"
+          let toolName =
+            message.toolCallId.flatMap { callId in namesByCallId[callId] }
+            ?? Self.unattributedToolLabel
           let label = fenceLabels.label(forToolNamed: toolName)
           rendered.append(
             ChatMessage(
@@ -684,7 +698,7 @@ private extension ContextBuilder {
     case .recall:
       "recall"
     case .skills:
-      "skills"
+      WorkspaceSkills.fenceLabel
     case .policy, .systemWorkspace, .tools, .metadata, .history:
       id.rawValue
     }

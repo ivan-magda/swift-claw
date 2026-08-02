@@ -3,8 +3,6 @@ import Foundation
 import Yams
 
 public struct FileSystemWorkspace: WorkspaceReading {
-  private static let skillsDirectoryName = "skills"
-  private static let skillManifestName = "SKILL.md"
   private static let maxNameGraphemes = 64
   /// The spec allows 1024; the index has to scale with skill count, not with one author's prose.
   private static let maxDescriptionGraphemes = 300
@@ -42,7 +40,10 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   public func scanSkills() -> SkillScanResult {
     let fileManager = FileManager.default
-    let skillsRoot = root.appendingPathComponent(Self.skillsDirectoryName, isDirectory: true)
+    let skillsRoot = root.appendingPathComponent(
+      WorkspaceSkills.directoryName,
+      isDirectory: true
+    )
 
     var skillsIsDirectory: ObjCBool = false
     guard fileManager.fileExists(atPath: skillsRoot.path, isDirectory: &skillsIsDirectory) else {
@@ -67,7 +68,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
     var warnings: [WorkspaceWarning] = []
 
     for subdir in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-      let manifestURL = subdir.appendingPathComponent(Self.skillManifestName)
+      let manifestURL = subdir.appendingPathComponent(WorkspaceSkills.manifestName)
 
       guard fileManager.fileExists(atPath: manifestURL.path) else {
         continue  // not a skill directory: normal, no warning
