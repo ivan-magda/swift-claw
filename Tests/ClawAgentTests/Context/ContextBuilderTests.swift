@@ -275,6 +275,8 @@ struct ContextBuilderTests {
       .content.text
     #expect(untrusted.contains("label=\"skills\""))
     #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
+    // The model names a skill, never a path — printing one would invite it to type one back.
+    #expect(untrusted.contains("/tmp/skills") == false)
     #expect(untrusted.contains("showing") == false)
     #expect(result.hasPrivateDataAccess == false)
     #expect(result.ownerNotices.isEmpty)

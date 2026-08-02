@@ -107,11 +107,13 @@ Decisions already locked with the owner (do not relitigate):
 
 ### Task 5: Verify acceptance criteria
 
-- [ ] add the §20-style acceptance test: a workspace with one skill → assembled context contains the index row inside the `skills`-labeled fence → scripted model turn calls `skill_load` → body comes back inside a `skills`-labeled `<claw-untrusted>` fence → session is **not** tainted (high-sensitivity recall still included afterwards)
-- [ ] verify every issue-#67 constraint has a test naming it (loaded body under the `skills`-labeled untrusted fence, no taint, name-not-path, miss lists names, budget drops surface, malformed manifests surface to the owner, identity at scan)
-- [ ] run the full test suite
-- [ ] run `scripts/lint.sh --fix` then `scripts/lint.sh` — all issues fixed
-- [ ] confirm git tracks every new file (`git status` — unanchored `.gitignore` patterns have swallowed new directories before)
+- [x] add the §20-style acceptance test: a workspace with one skill → assembled context contains the index row inside the `skills`-labeled fence → scripted model turn calls `skill_load` → body comes back inside a `skills`-labeled `<claw-untrusted>` fence → session is **not** tainted (high-sensitivity recall still included afterwards)
+- [x] verify every issue-#67 constraint has a test naming it (loaded body under the `skills`-labeled untrusted fence, no taint, name-not-path, miss lists names, budget drops surface, malformed manifests surface to the owner, identity at scan)
+- [x] run the full test suite
+- [x] run `scripts/lint.sh --fix` then `scripts/lint.sh` — all issues fixed
+- [x] confirm git tracks every new file (`git status` — unanchored `.gitignore` patterns have swallowed new directories before)
+
+➕ The acceptance test lives in `Tests/ClawGatewayTests/Acceptance/SkillLoadingAcceptanceTests.swift` over `makeSC3Harness`, which now mirrors composition: `SkillLoadTool` joins the standard tool list and the `ContextBuilder` takes `ToolFenceLabels(definitions: dispatcher.definitions)` (built after the dispatcher), so the replay seam is exercised too, not just the live one. Constraint audit — body under the `skills` fence: `SkillLoadToolTests.declaresTheSkillsFenceLabelAndASafeNoEgressPosture`, `MixedProvenanceHistoryTests.replayedToolRowsHonorTheToolsDeclaredFenceLabel` (replay), `AgentLoopTests` (live), acceptance; no taint: `SkillLoadToolTests.loadsTheStrippedBodyWithoutTaintingTheSession` + acceptance; name-not-path: new `aPathShapedNameNeverEscapesTheSkillsDirectory` + `aSymlinkedSkillDirectoryPointingOutsideIsRefused` + a new no-path assertion in `ContextBuilderTests.skillsRenderAsUntrustedIndexWithoutSettingPrivateAccess`; miss lists names: `unknownNameSucceedsAndListsTheInstalledNames`; budget drops: `BudgetFitterTests` + `ContextBuilderTests.skillsDroppedByTheBudgetAreNamedInAnOwnerNotice`; malformed manifests: `ContextBuilderTests.rejectedSkillManifestsSurfaceToTheOwnerAsNotices`; identity at scan: `WorkspaceSkillsScannerTests`.
 
 ### Task 6: Update documentation
 
