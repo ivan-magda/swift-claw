@@ -109,7 +109,7 @@ public struct ContextBudget: Sendable, Equatable {
     itemsCap: 1_500,
     historyCap: 6_000,
     recallCap: 2_000,
-    skillsCap: 800,
+    skillsCap: 4_000,
     recallHitCap: 400
   )
 }

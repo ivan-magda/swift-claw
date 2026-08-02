@@ -31,7 +31,7 @@ import Testing
     #expect(budget.itemsCap == 1_500)
     #expect(budget.historyCap == 6_000)
     #expect(budget.recallCap == 2_000)
-    #expect(budget.skillsCap == 800)
+    #expect(budget.skillsCap == 4_000)
     #expect(budget.recallHitCap == 400)
   }
 

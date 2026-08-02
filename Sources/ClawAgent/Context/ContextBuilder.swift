@@ -14,6 +14,7 @@ public struct ContextBuilder: Sendable {
   public static let recallInjectionLimit = 5
 
   private static let historyTruncatedMarker = "\n\n[…earlier conversation truncated]"
+  private static let skillUnitIDPrefix = "skill-"
 
   static let untrustedUserLabel = "untrusted_user_message"
 
@@ -71,13 +72,17 @@ public struct ContextBuilder: Sendable {
       snapshot: snapshot,
       sessionId: sessionId,
       origin: origin,
-      residual: residual
+      residual: residual,
+      ownerNotices: &ownerNotices
     )
 
     let fitted = try BudgetFitter.fitWithUnits(
       fixedSections + truncatableSections,
       budget: budget
     )
+    if let notice = droppedSkillsNotice(fitted) {
+      ownerNotices.append(notice)
+    }
     let messages = renderMessages(fitted: fitted, snapshot: snapshot)
 
     return BuildResult(
@@ -143,7 +148,8 @@ private extension ContextBuilder {
     snapshot: SessionContextSnapshot,
     sessionId: Int64,
     origin: RunOrigin,
-    residual: Int
+    residual: Int,
+    ownerNotices: inout [String]
   ) -> [FittableSection] {
     [
       memoryItemsSection(snapshot: snapshot, residual: residual),
@@ -154,7 +160,7 @@ private extension ContextBuilder {
       origin.isProactive
         ? nil
         : recallSection(snapshot: snapshot, sessionId: sessionId, residual: residual),
-      skillsSection(residual: residual),
+      skillsSection(residual: residual, ownerNotices: &ownerNotices),
     ].compactMap { $0 }
   }
 
@@ -354,7 +360,7 @@ private extension ContextBuilder {
     return String(content.prefix(prefixCount)) + marker
   }
 
-  func skillsSection(residual: Int) -> FittableSection? {
+  func skillsSection(residual: Int, ownerNotices: inout [String]) -> FittableSection? {
     let cap = cap(for: .skills, residual: residual)
     guard cap > 0 else {
       return nil
@@ -363,11 +369,14 @@ private extension ContextBuilder {
     let scan = workspace.scanSkills()
     for warning in scan.warnings {
       warn("skills scan warning: \(warning)")
+      if let notice = Self.notice(for: warning) {
+        ownerNotices.append(notice)
+      }
     }
 
     let units = scan.descriptors.map { descriptor in
       SectionUnit(
-        id: "skill-\(descriptor.name)",
+        id: Self.skillUnitID(for: descriptor.name),
         content: "- \(descriptor.name): \(descriptor.description)",
         canTruncate: false
       )
@@ -376,7 +385,57 @@ private extension ContextBuilder {
       return nil
     }
 
-    return section(id: .skills, cap: cap, units: units)
+    return section(
+      id: .skills,
+      cap: cap,
+      dropMarker: .showingCount(noun: "skills"),
+      units: units
+    )
+  }
+
+  /// A rejected manifest is an authoring fault the owner can fix, so it reaches them instead of
+  /// dying in the log. An unlistable `skills/` is an I/O fault with nothing to fix, and stays logged.
+  static func notice(for warning: WorkspaceWarning) -> String? {
+    switch warning {
+    case .invalidSkillManifest(let skill):
+      "⚠ Skill `\(skill)`: `SKILL.md` needs `---` frontmatter with `name` and `description`; skipped."
+    case .invalidSkillName(let directory, let name):
+      """
+      ⚠ Skill `\(directory)`: name `\(name)` must be lowercase letters, digits and single \
+      hyphens (1–64 characters); skipped.
+      """
+    case .skillNameDirectoryMismatch(let directory, let name):
+      "⚠ Skill `\(directory)`: manifest name `\(name)` must match the directory name; skipped."
+    case .duplicateSkillName(let name, let directories):
+      """
+      ⚠ Skill name `\(name)` is claimed by \(directories.map { "`\($0)`" }.joined(separator: ", ")); \
+      all of them skipped, rename one.
+      """
+    case .unreadableSkillsDirectory:
+      nil
+    }
+  }
+
+  func droppedSkillsNotice(_ fitted: [FittedSection]) -> String? {
+    let dropped =
+      fitted
+      .first { section in section.id == .skills }?
+      .droppedUnitIDs
+      .map(Self.skillName(fromUnitID:)) ?? []
+    guard dropped.isEmpty == false else {
+      return nil
+    }
+
+    let names = dropped.map { name in "`\(name)`" }.joined(separator: ", ")
+    return "⚠ Skills index over budget; left out this turn: \(names). Trim their descriptions."
+  }
+
+  static func skillUnitID(for name: String) -> String {
+    "\(skillUnitIDPrefix)\(name)"
+  }
+
+  static func skillName(fromUnitID unitID: String) -> String {
+    String(unitID.dropFirst(skillUnitIDPrefix.count))
   }
 
   static func iso8601(_ date: Date) -> String {
@@ -432,6 +491,7 @@ private extension ContextBuilder {
   func section(
     id: ContextRowID,
     cap: Int? = nil,
+    dropMarker: DropMarker = .none,
     units: [SectionUnit]
   ) -> FittableSection {
     let spec = spec(for: id)
@@ -441,6 +501,7 @@ private extension ContextBuilder {
       priority: spec.priority,
       truncatable: spec.truncatable,
       cap: cap ?? spec.cap.resolve(in: budget, residualGraphemes: nil),
+      dropMarker: dropMarker,
       units: units
     )
   }
