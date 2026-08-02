@@ -125,6 +125,7 @@ Persona and behavior live in Markdown files under `~/.swift-claw/workspace/`:
 | `TOOLS.md` | When and how to use tools | System prompt |
 | `USER.md` | Who you are | Untrusted, labeled |
 | `HEARTBEAT.md` | The proactive heartbeat checklist | Heartbeat runs only |
+| `skills/<name>/SKILL.md` | A procedure the agent loads when a task calls for it | Untrusted, labeled |
 
 Runtime knobs are environment variables: the model route (`CLAW_LLM_MODEL`), USD
 budgets, schedules and quiet hours, voice locales, sandbox limits.

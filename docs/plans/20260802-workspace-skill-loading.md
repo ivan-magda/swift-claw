@@ -117,11 +117,13 @@ Decisions already locked with the owner (do not relitigate):
 
 ### Task 6: Update documentation
 
-- [ ] `docs/ARCHITECTURE.md`: §10.1 tier prose and the §10.2 risk-tier table gain `skill_load` (egress/risk/taint posture — §8 is the LLM provider seam, not tools); §9.1–§9.2 describe the skills row's prefix-drop + marker semantics (making the promised marker true); §12 records the `skills`-label carve-out AND amends the taint-definition sentence with `skill_load`'s no-taint exception (precedent: the durable-memory does-not-taint exception already in §12); §20 gains the increment's "Done when"
-- [ ] `docs/CUSTOMIZATION.md`: authoring guide — directory layout, frontmatter contract (name rules, description cap), how validation failures and budget drops surface to the owner
-- [ ] sweep the public-surface siblings (`README.md`, `docs/GETTING_STARTED.md`, `docs/INSTALL.md`, `deploy/README.md`) — they document each other's state; update wherever skills now appear as a user-visible surface
-- [ ] run the stop-slop pass over all new public prose
-- [ ] run `scripts/lint.sh` and the full test suite one final time
+- [x] `docs/ARCHITECTURE.md`: §10.1 tier prose and the §10.2 risk-tier table gain `skill_load` (egress/risk/taint posture — §8 is the LLM provider seam, not tools); §9.1–§9.2 describe the skills row's prefix-drop + marker semantics (making the promised marker true); §12 records the `skills`-label carve-out AND amends the taint-definition sentence with `skill_load`'s no-taint exception (precedent: the durable-memory does-not-taint exception already in §12); §20 gains the increment's "Done when"
+- [x] `docs/CUSTOMIZATION.md`: authoring guide — directory layout, frontmatter contract (name rules, description cap), how validation failures and budget drops surface to the owner
+- [x] sweep the public-surface siblings (`README.md`, `docs/GETTING_STARTED.md`, `docs/INSTALL.md`, `deploy/README.md`) — they document each other's state; update wherever skills now appear as a user-visible surface
+- [x] run the stop-slop pass over all new public prose
+- [x] run `scripts/lint.sh` and the full test suite one final time
+
+➕ `docs/ARCHITECTURE.md` also gained the declared-fence-label mechanism in §10.1 (the `ToolDefinition` label honored at both the live and replay seams), a `P-skills` row in §20 alongside `P-auth`, and `SkillLoadTool`/`ToolFenceLabels`/`FrontmatterFence`/`DropMarker` in the §3.1 code map. `docs/INSTALL.md` and `deploy/README.md` needed no edit: both cover install/service/uninstall mechanics and name no workspace file, so skills add no user-visible surface there.
 
 ## Technical Details
 

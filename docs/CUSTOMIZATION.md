@@ -18,6 +18,7 @@ you leave out.
 | `USER.md` | Your profile: who you are, context the agent should know. | Untrusted, labeled |
 | `MEMORY.md` | Long-lived memory the agent maintains. | Untrusted, labeled |
 | `HEARTBEAT.md` | A checklist the proactive heartbeat reads, never ordinary turns. | Heartbeat runs only |
+| `skills/<name>/SKILL.md` | A procedure the agent loads when the task calls for it. See [Skills](#skills). | Untrusted, labeled |
 
 The trust tier decides how much authority the text carries:
 
@@ -38,6 +39,63 @@ one; the context builder never injects them the way it injects the files above.
 Durable facts also live in the database: confirm something in chat ("remember that ...")
 and it persists in SQLite across restarts, recalled by importance and recency. Full-text
 search covers conversation history, not these facts. `/memory` shows what is stored.
+
+## Skills
+
+A skill is a procedure you write once and the agent pulls up when a task calls for it —
+the steps of your Friday review, or how you want a commit message worded. Each one gets
+its own directory:
+
+```
+~/.swift-claw/workspace/skills/
+└── weekly-review/
+    └── SKILL.md
+```
+
+`SKILL.md` opens with a `---` fenced block carrying two required keys, then the procedure
+itself:
+
+```markdown
+---
+name: weekly-review
+description: How to run the Friday review — which projects to check, in what order, and what to report.
+---
+
+Go through the open projects newest first. For each one, ...
+```
+
+Only the name and description stay in context, one line per skill. The body arrives on
+demand: when a description covers what the agent is about to do, it asks for that skill by
+name and follows what comes back. It loads at most one per task, and it never types a path
+— names resolve against the directories the daemon scanned.
+
+What the scan requires:
+
+- **`name`**: lowercase letters and digits, single hyphens between them, 1–64 characters
+  (`weekly-review`), and it has to match the directory name exactly.
+- **`description`**: the one line the agent matches against the task in front of it, so
+  spend it on when to reach for the skill. Past 300 characters the index shows it
+  truncated.
+- **One name per directory.** If two directories claim the same name, both are skipped:
+  nothing can tell which one you meant.
+
+You wrote the body, so the agent follows it as procedure. That is the whole licence: a
+skill cannot hand out a tool, waive an approval, or loosen the security policy, all of
+which live in code and in the system prompt rather than in the file. Loading one also
+does not count as reading untrusted content, so your private memory stays available for
+the rest of the session. Reading the same file with `file_read` would cost you that.
+
+clawd touches nothing else in the directory for now: no `scripts/` runs, no `assets/` or
+`references/` load.
+
+When a skill does not make it into context, the next reply says so above the answer:
+
+- `⚠ Skill weekly-review: manifest name weekly-summary must match the directory name; skipped.`
+  — and sibling notices for a missing frontmatter block, a name that breaks the shape
+  rules, or a duplicated name.
+- `⚠ Skills index over budget; left out this turn: research, weekly-review.` The index has
+  its own slice of the context budget. Skills are indexed in alphabetical order and the
+  overflow is cut from the end, so shortening descriptions is what brings the tail back.
 
 ## When the agent asks permission
 
