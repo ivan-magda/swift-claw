@@ -77,13 +77,14 @@ import Testing
     )
   }
 
-  private func makeBuilder() -> ContextBuilder {
+  private func makeBuilder(fenceLabels: ToolFenceLabels = .toolNames) -> ContextBuilder {
     ContextBuilder(
       systemPrompt: SystemPrompt.minimal,
       workspace: EmptyWorkspace(),
       memoryStore: EmptyMemoryStore(),
       retriever: EmptyRetriever(),
-      budget: .default
+      budget: .default,
+      fenceLabels: fenceLabels
     )
   }
 
@@ -126,6 +127,48 @@ import Testing
     #expect(toolMessage.content.text.contains("<claw-untrusted"))
     #expect(toolMessage.content.text.contains("label=\"web_fetch\""))
     #expect(toolMessage.content.text.contains("raw page text"))
+  }
+
+  @Test func replayedToolRowsHonorTheToolsDeclaredFenceLabel() throws {
+    // given — a persisted skill_load exchange; the tool declares the "skills" label the system
+    // prompt's follow-as-guidance carve-out is written against
+    let calls = [ToolCall(id: "c1", name: "skill_load", argumentsJSON: #"{"name":"summarize"}"#)]
+    let history = [
+      StoredMessage(role: .user, content: "summarize this", provenance: .trusted),
+      StoredMessage(
+        role: .assistant,
+        content: "",
+        provenance: .trusted,
+        toolCallsJSON: ToolCallCoding.encode(calls)
+      ),
+      StoredMessage(
+        role: .tool,
+        content: "Keep it to three bullets.",
+        provenance: .untrusted,
+        toolCallId: "c1"
+      ),
+    ]
+    let definition = ToolDefinition(
+      name: "skill_load",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      egressClass: .none,
+      riskLevel: .safe,
+      fenceLabel: "skills"
+    )
+
+    // when
+    let result = try makeBuilder(fenceLabels: ToolFenceLabels(definitions: [definition])).assemble(
+      snapshot: makeSnapshot(history),
+      sessionId: 1,
+      origin: .interactive
+    )
+
+    // then — the body replays under "skills", never under the tool's own name
+    let toolMessage = try #require(result.messages.first { message in message.role == .tool })
+    #expect(toolMessage.content.text.contains("label=\"skills\""))
+    #expect(toolMessage.content.text.contains("label=\"skill_load\"") == false)
+    #expect(toolMessage.content.text.contains("Keep it to three bullets."))
   }
 
   @Test func untrustedUserRowsRenderFencedTrustedOnesVerbatim() throws {

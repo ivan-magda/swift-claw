@@ -146,27 +146,11 @@ public struct FileSystemWorkspace: WorkspaceReading {
   /// Extracts the leading `---`-fenced YAML block, keeping only string-valued keys. Empty when
   /// there is no opening/closing fence or the block is not a parseable string map.
   private static func frontmatter(in text: String) -> [String: String] {
-    let lines = text.components(separatedBy: "\n")
-    guard lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) == "---" else {
+    guard let document = FrontmatterFence.split(text) else {
       return [:]
     }
 
-    var yamlLines: [String] = []
-    var didCloseFence = false
-    for line in lines.dropFirst() {
-      if line.trimmingCharacters(in: .whitespacesAndNewlines) == "---" {
-        didCloseFence = true
-        break
-      }
-      yamlLines.append(line)
-    }
-
-    guard didCloseFence else {
-      return [:]
-    }
-
-    let yaml = yamlLines.joined(separator: "\n")
-    guard let parsed = (try? Yams.load(yaml: yaml)) as? [String: Any] else {
+    guard let parsed = (try? Yams.load(yaml: document.frontmatter)) as? [String: Any] else {
       return [:]
     }
 

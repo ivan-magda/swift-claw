@@ -26,6 +26,7 @@ public struct ContextBuilder: Sendable {
   private let retriever: any Retriever
   private let recallCutoff: any RecallCutoff
   private let budget: ContextBudget
+  private let fenceLabels: ToolFenceLabels
 
   private let policyStaticSubhash: String
 
@@ -40,6 +41,7 @@ public struct ContextBuilder: Sendable {
     retriever: any Retriever,
     recallCutoff: any RecallCutoff = CandidateCapRecallCutoff(),
     budget: ContextBudget,
+    fenceLabels: ToolFenceLabels = .toolNames,
     policyStaticSubhash: String = "",
     now: @escaping @Sendable () -> Date = Date.init,
     warn: @escaping @Sendable (String) -> Void = { _ in }
@@ -52,6 +54,7 @@ public struct ContextBuilder: Sendable {
     self.retriever = retriever
     self.recallCutoff = recallCutoff
     self.budget = budget
+    self.fenceLabels = fenceLabels
 
     self.policyStaticSubhash = policyStaticSubhash
 
@@ -569,8 +572,9 @@ private extension ContextBuilder {
   }
 
   /// The one render seam for both native assistant anchors (with decoded `toolCalls`) and fenced
-  /// tool rows (labeled by the owning anchor's tool name). Kept groups come from the fitter
-  /// verbatim — one `SectionUnit` per group — so this only re-expands each surviving group's rows.
+  /// tool rows (labeled by the owning anchor's declared fence label). Kept groups come from the
+  /// fitter verbatim — one `SectionUnit` per group — so this only re-expands each surviving
+  /// group's rows.
   func fittedHistoryMessages(
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
@@ -595,7 +599,8 @@ private extension ContextBuilder {
       for message in group.messages {
         switch message.role {
         case .tool:
-          let label = message.toolCallId.flatMap { callId in namesByCallId[callId] } ?? "tool"
+          let toolName = message.toolCallId.flatMap { callId in namesByCallId[callId] } ?? "tool"
+          let label = fenceLabels.label(forToolNamed: toolName)
           rendered.append(
             ChatMessage(
               role: .tool,

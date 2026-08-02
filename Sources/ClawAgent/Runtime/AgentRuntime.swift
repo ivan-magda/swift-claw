@@ -205,6 +205,7 @@ public struct AgentRuntime: Sendable {
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDispatcher?.definitions ?? []
+    let fenceLabels = ToolFenceLabels(definitions: definitions)
     let gate = BudgetGate(budget: budget, costPolicy: costPolicy)
 
     // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
@@ -431,7 +432,7 @@ public struct AgentRuntime: Sendable {
           ChatMessage(
             role: .tool,
             content: LabeledContextFactory.make(
-              label: observation.toolName,
+              label: fenceLabels.label(forToolNamed: observation.toolName),
               content: observation.content
             ).render(),
             toolCallId: observation.callId
