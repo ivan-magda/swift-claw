@@ -67,5 +67,6 @@ logs/
 
 # ───────────────── Project-private (not for the repo) ─────────────────
 docs/superpowers/
+docs/plans/
 docs/alt-solutions/
 docs/teleclaw-prompt.md
