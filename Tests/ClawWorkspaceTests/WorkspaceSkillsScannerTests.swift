@@ -166,6 +166,120 @@ import Testing
     #expect(descriptor.description == "Rich skill.")
   }
 
+  @Test(arguments: ["a", "data-export-helper", String(repeating: "s", count: 64)])
+  func acceptsNameAtTheEdgesOfTheIdentifierShape(name: String) throws {
+    // given
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = "---\nname: \(name)\ndescription: Edge name.\n---\nbody"
+    try writeSkill(named: name, manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then
+    #expect(result.warnings.isEmpty)
+    #expect(result.descriptors.map(\.name) == [name])
+  }
+
+  @Test func longDescriptionIsCappedAtScanTime() throws {
+    // given
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = "---\nname: verbose\ndescription: \(String(repeating: "x", count: 400))\n---\n"
+    try writeSkill(named: "verbose", manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then - the index must scale with skill count, not with one author's verbosity.
+    #expect(result.warnings.isEmpty)
+    let descriptor = try #require(result.descriptors.first)
+    #expect(descriptor.description.count == 300)
+    #expect(descriptor.description.hasSuffix(TextTruncation.marker))
+  }
+
+  @Test func descriptionAtTheCapIsKeptWhole() throws {
+    // given
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let description = String(repeating: "x", count: 300)
+    let manifest = "---\nname: exact\ndescription: \(description)\n---\n"
+    try writeSkill(named: "exact", manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then
+    #expect(result.descriptors.first?.description == description)
+  }
+
+  @Test(
+    arguments: [
+      "Summarize",
+      "sum--marize",
+      "-summarize",
+      "summarize-",
+      String(repeating: "s", count: 65),
+    ]
+  )
+  func manifestWithNameOutsideTheIdentifierShapeIsSkippedWithWarning(name: String) throws {
+    // given - directory and name agree, so only the shape can reject the skill.
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = "---\nname: \(name)\ndescription: Bad identifier.\n---\n"
+    try writeSkill(named: name, manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then
+    #expect(result.descriptors.isEmpty)
+    #expect(result.warnings == [.invalidSkillName(directory: name, name: name)])
+  }
+
+  @Test func manifestNameDisagreeingWithDirectoryIsSkippedWithWarning() throws {
+    // given
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = "---\nname: beta\ndescription: Mismatched identity.\n---\n"
+    try writeSkill(named: "alpha", manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then - the loader resolves a name to a directory, so the two identities must agree.
+    #expect(result.descriptors.isEmpty)
+    #expect(result.warnings == [.skillNameDirectoryMismatch(directory: "alpha", name: "beta")])
+  }
+
+  @Test func collidingNamesDropEveryClaimantAndWarn() {
+    // given - unreachable through one scan root once name == directory holds; guarded anyway.
+    let skillsRoot = URL(fileURLWithPath: "/tmp/skills", isDirectory: true)
+    let directory = { (name: String) in
+      skillsRoot.appendingPathComponent(name, isDirectory: true)
+    }
+    let descriptors = [
+      SkillDescriptor(name: "alpha", description: "One.", directory: directory("one")),
+      SkillDescriptor(name: "beta", description: "Kept.", directory: directory("beta")),
+      SkillDescriptor(name: "alpha", description: "Two.", directory: directory("two")),
+    ]
+
+    // when
+    let reconciled = FileSystemWorkspace.withoutCollidingNames(descriptors)
+
+    // then - silent shadowing is the bug class, so no claimant wins.
+    #expect(reconciled.descriptors.map(\.name) == ["beta"])
+    #expect(
+      reconciled.warnings == [.duplicateSkillName(name: "alpha", directories: ["one", "two"])]
+    )
+  }
+
   @Test func multipleSkillsAreReturnedInDirectoryNameOrder() throws {
     // given
     let root = try makeTemporaryRoot()

@@ -5,6 +5,9 @@ import Yams
 public struct FileSystemWorkspace: WorkspaceReading {
   private static let skillsDirectoryName = "skills"
   private static let skillManifestName = "SKILL.md"
+  private static let maxNameGraphemes = 64
+  /// The spec allows 1024; the index has to scale with skill count, not with one author's prose.
+  private static let maxDescriptionGraphemes = 300
 
   public let root: URL
 
@@ -73,18 +76,71 @@ public struct FileSystemWorkspace: WorkspaceReading {
       // An unreadable manifest folds to "" → empty frontmatter → the same invalid-manifest warning.
       let manifestText = (try? String(contentsOf: manifestURL, encoding: .utf8)) ?? ""
       let frontmatter = Self.frontmatter(in: manifestText)
+      let directoryName = subdir.lastPathComponent
       guard
         let name = frontmatter["name"], name.isEmpty == false,
         let description = frontmatter["description"], description.isEmpty == false
       else {
-        warnings.append(.invalidSkillManifest(skill: subdir.lastPathComponent))
+        warnings.append(.invalidSkillManifest(skill: directoryName))
+        continue
+      }
+      guard Self.isSkillIdentifier(name) else {
+        warnings.append(.invalidSkillName(directory: directoryName, name: name))
+        continue
+      }
+      guard name == directoryName else {
+        warnings.append(.skillNameDirectoryMismatch(directory: directoryName, name: name))
         continue
       }
 
-      descriptors.append(SkillDescriptor(name: name, description: description, directory: subdir))
+      descriptors.append(
+        SkillDescriptor(
+          name: name,
+          description: TextTruncation.cap(description, maxGraphemes: Self.maxDescriptionGraphemes),
+          directory: subdir
+        )
+      )
     }
 
-    return SkillScanResult(descriptors: descriptors, warnings: warnings)
+    let reconciled = Self.withoutCollidingNames(descriptors)
+    return SkillScanResult(
+      descriptors: reconciled.descriptors,
+      warnings: warnings + reconciled.warnings
+    )
+  }
+
+  /// Drops every claimant of a duplicated name: two directories asserting one identity leave no
+  /// principled winner, and shadowing one silently is exactly what the loader must never do.
+  static func withoutCollidingNames(
+    _ descriptors: [SkillDescriptor]
+  ) -> (descriptors: [SkillDescriptor], warnings: [WorkspaceWarning]) {
+    var directoriesByName: [String: [String]] = [:]
+    for descriptor in descriptors {
+      directoriesByName[descriptor.name, default: []].append(descriptor.directory.lastPathComponent)
+    }
+
+    let collidingNames = Set(directoriesByName.filter { $0.value.count > 1 }.keys)
+    guard collidingNames.isEmpty == false else {
+      return (descriptors, [])
+    }
+
+    let warnings = collidingNames.sorted().map { name in
+      WorkspaceWarning.duplicateSkillName(name: name, directories: directoriesByName[name] ?? [])
+    }
+    return (descriptors.filter { collidingNames.contains($0.name) == false }, warnings)
+  }
+
+  /// The agentskills.io identifier shape: `^[a-z0-9]+(-[a-z0-9]+)*$`, 1–64 characters.
+  private static func isSkillIdentifier(_ name: String) -> Bool {
+    guard (1...maxNameGraphemes).contains(name.count) else {
+      return false
+    }
+
+    let segments = name.split(separator: "-", omittingEmptySubsequences: false)
+    return segments.allSatisfy { segment in
+      segment.isEmpty == false
+        && segment.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) }
+    }
   }
 
   /// Extracts the leading `---`-fenced YAML block, keeping only string-valued keys. Empty when
