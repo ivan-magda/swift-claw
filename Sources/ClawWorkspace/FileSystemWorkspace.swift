@@ -77,9 +77,10 @@ public struct FileSystemWorkspace: WorkspaceReading {
       let manifestText = (try? String(contentsOf: manifestURL, encoding: .utf8)) ?? ""
       let frontmatter = Self.frontmatter(in: manifestText)
       let directoryName = subdir.lastPathComponent
+      let description = Self.singleLine(frontmatter["description"] ?? "")
       guard
         let name = frontmatter["name"], name.isEmpty == false,
-        let description = frontmatter["description"], description.isEmpty == false
+        description.isEmpty == false
       else {
         warnings.append(.invalidSkillManifest(skill: directoryName))
         continue
@@ -128,6 +129,12 @@ public struct FileSystemWorkspace: WorkspaceReading {
       WorkspaceWarning.duplicateSkillName(name: name, directories: directoriesByName[name] ?? [])
     }
     return (descriptors.filter { collidingNames.contains($0.name) == false }, warnings)
+  }
+
+  /// The index prints one line per skill and counts those lines in its drop marker, so a YAML
+  /// block scalar or a quoted newline must not let one description occupy several of them.
+  private static func singleLine(_ text: String) -> String {
+    text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
 
   /// The agentskills.io identifier shape: `^[a-z0-9]+(-[a-z0-9]+)*$`, 1–64 characters.

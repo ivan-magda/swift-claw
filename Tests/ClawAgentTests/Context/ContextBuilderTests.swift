@@ -369,6 +369,107 @@ struct ContextBuilderTests {
     #expect(notice.contains("`alpha`") == false)
   }
 
+  @Test func aSkillsIndexTheBudgetCannotAffordAtAllStillReachesTheOwner() throws {
+    // given — a cap that admits no index line at all, so the whole row leaves the prompt
+    let budget = ContextBudget(
+      inputCapGraphemes: 4_000,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 1,
+      recallCap: 1,
+      skillsCap: 0,
+      recallHitCap: 1
+    )
+    let builder = makeBuilder(
+      workspace: FakeWorkspace(
+        skills: [
+          SkillDescriptor(
+            name: "alpha",
+            description: "one",
+            directory: URL(fileURLWithPath: "/tmp/skills/alpha")
+          ),
+          SkillDescriptor(
+            name: "bravo",
+            description: "two",
+            directory: URL(fileURLWithPath: "/tmp/skills/bravo")
+          ),
+        ]
+      ),
+      budget: budget
+    )
+
+    // when
+    let result = try builder.assemble(
+      snapshot: emptySnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then — a missing index reads as "every skill dropped", never as "no skills installed"
+    let untrusted = result.messages.first { message in message.role == .user }?.content.text ?? ""
+    #expect(untrusted.contains("label=\"skills\"") == false)
+    let notice = try #require(result.ownerNotices.first)
+    #expect(notice.contains("`alpha`"))
+    #expect(notice.contains("`bravo`"))
+  }
+
+  @Test func rejectedSkillManifestsSurfaceEvenWhenTheIndexHasNoBudget() throws {
+    // given — an authoring fault is the owner's to fix whether or not the index fit this turn
+    let budget = ContextBudget(
+      inputCapGraphemes: 4_000,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 1,
+      recallCap: 1,
+      skillsCap: 0,
+      recallHitCap: 1
+    )
+    let builder = makeBuilder(
+      workspace: FakeWorkspace(
+        skillWarnings: [.invalidSkillManifest(skill: "no-frontmatter")]
+      ),
+      budget: budget
+    )
+
+    // when
+    let result = try builder.assemble(
+      snapshot: emptySnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then
+    #expect(result.ownerNotices.count == 1)
+    #expect(try #require(result.ownerNotices.first).contains("`no-frontmatter`"))
+  }
+
+  @Test(arguments: [RunOrigin.scheduled, RunOrigin.heartbeat])
+  func proactiveRunsStillSeeTheSkillsIndex(origin: RunOrigin) throws {
+    // given — the activation protocol has to hold on a fire with nobody watching
+    let builder = makeBuilder(
+      workspace: FakeWorkspace(
+        skills: [
+          SkillDescriptor(
+            name: "summarize",
+            description: "Summarize owner-provided text.",
+            directory: URL(fileURLWithPath: "/tmp/skills/summarize")
+          )
+        ]
+      )
+    )
+
+    // when
+    let result = try builder.assemble(snapshot: emptySnapshot(), sessionId: 42, origin: origin)
+
+    // then
+    let untrusted = try #require(result.messages.first { message in message.role == .user })
+      .content.text
+    #expect(untrusted.contains("label=\"skills\""))
+    #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
+  }
+
   @Test func fittedHistoryKeepsNewestMessagesButRestoresChronology() throws {
     // given
     let budget = ContextBudget(

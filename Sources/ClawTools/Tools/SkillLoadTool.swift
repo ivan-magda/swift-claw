@@ -76,10 +76,11 @@ public struct SkillLoadTool: Tool {
       return errorPayload(Self.duplicateRefusal(name: name, directories: directories))
     }
     guard let descriptor = claimants.first else {
-      if let directories = Self.duplicateDirectories(for: name, in: scan.warnings) {
-        return errorPayload(Self.duplicateRefusal(name: name, directories: directories))
+      let collided = Self.duplicateDirectories(for: name, in: scan.warnings)
+      guard collided.isEmpty else {
+        return errorPayload(Self.duplicateRefusal(name: name, directories: collided))
       }
-      return unknownNamePayload(name: name, scan: scan)
+      return unknownNamePayload(scan: scan)
     }
 
     return body(of: descriptor)
@@ -131,13 +132,15 @@ private extension SkillLoadTool {
   }
 
   /// A miss is a SUCCESS: the model mistyped or hallucinated a name, and the installed names are
-  /// exactly what lets it correct itself in the same turn.
-  func unknownNamePayload(name: String, scan: SkillScanResult) -> ToolPayload {
+  /// exactly what lets it correct itself in the same turn. The requested name is never echoed —
+  /// it is model-supplied text, and every payload here renders under the one fence label the
+  /// prompt licenses as owner-authored guidance.
+  func unknownNamePayload(scan: SkillScanResult) -> ToolPayload {
     let names = scan.descriptors.map(\.name).sorted()
     let content =
       names.isEmpty
-      ? "No skill named \(name) is installed, and the workspace has no skills at all."
-      : "No skill named \(name) is installed. Installed skills: \(names.joined(separator: ", "))."
+      ? "That skill is not installed, and the workspace has no skills at all."
+      : "That skill is not installed. Installed skills: \(names.joined(separator: ", "))."
     return ToolPayload(content: content, status: .ok, ingestedUntrusted: false)
   }
 
@@ -153,18 +156,14 @@ private extension SkillLoadTool {
       """
   }
 
-  // nil distinguishes "no collision" from a collision with an empty directory list.
-  // swiftlint:disable discouraged_optional_collection
-  static func duplicateDirectories(
-    for name: String,
-    in warnings: [WorkspaceWarning]
-  ) -> [String]? {
-    // swiftlint:enable discouraged_optional_collection
+  /// The directories that collided over `name`, empty when the scan reported no collision — a
+  /// warning always names at least the two claimants that produced it.
+  static func duplicateDirectories(for name: String, in warnings: [WorkspaceWarning]) -> [String] {
     for warning in warnings {
       if case .duplicateSkillName(let warnedName, let directories) = warning, warnedName == name {
         return directories
       }
     }
-    return nil
+    return []
   }
 }

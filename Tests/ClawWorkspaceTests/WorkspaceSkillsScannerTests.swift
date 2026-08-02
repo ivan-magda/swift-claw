@@ -217,6 +217,45 @@ import Testing
     #expect(result.descriptors.first?.description == description)
   }
 
+  @Test func multiLineDescriptionCollapsesToOneIndexLine() throws {
+    // given - a YAML block scalar the index would otherwise print across several lines
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = """
+      ---
+      name: verbose
+      description: |
+        First line.
+        Second line.
+      ---
+      """
+    try writeSkill(named: "verbose", manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then - one skill occupies exactly one line, so the drop marker's count stays true
+    #expect(result.warnings.isEmpty)
+    #expect(result.descriptors.first?.description == "First line. Second line.")
+  }
+
+  @Test func whitespaceOnlyDescriptionIsSkippedWithWarning() throws {
+    // given
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = "---\nname: blank\ndescription: \"   \"\n---\n"
+    try writeSkill(named: "blank", manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then - a description of nothing indexes as nothing, so it is an authoring fault
+    #expect(result.descriptors.isEmpty)
+    #expect(result.warnings == [.invalidSkillManifest(skill: "blank")])
+  }
+
   @Test(
     arguments: [
       "Summarize",

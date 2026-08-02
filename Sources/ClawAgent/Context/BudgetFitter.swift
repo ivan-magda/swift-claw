@@ -223,37 +223,32 @@ public enum BudgetFitter {
     id == .history || id == .skills
   }
 
-  /// Appends the row's drop marker when the budget left units out, buying its room by giving back
-  /// kept units — the marker has to fit inside the same cap as the content it describes.
+  /// Appends the row's drop marker when the budget left units out. The marker shares the cap with
+  /// the content it describes, so a cap too tight for both ships the kept units unmarked — giving
+  /// content back to make room would let an annotation about missing skills empty the whole row.
   private static func markedRow(
     for section: FittableSection,
     kept: [SectionUnit],
     maxCount: Int
   ) -> FittedRow? {
-    var kept = kept
-
-    while kept.isEmpty == false {
-      let droppedIDs = droppedUnitIDs(in: section, kept: kept)
-      guard
-        droppedIDs.isEmpty == false,
-        let marker = section.dropMarker.line(kept: kept.count, total: section.units.count)
-      else {
-        return FittedRow(source: section, units: kept, droppedUnitIDs: droppedIDs)
-      }
-
-      if renderUnits(kept).count + 1 + marker.count <= maxCount {
-        return FittedRow(
-          source: section,
-          units: kept
-            + [SectionUnit(id: dropMarkerUnitID, content: marker, canTruncate: false)],
-          droppedUnitIDs: droppedIDs
-        )
-      }
-
-      kept.removeLast()
+    guard kept.isEmpty == false else {
+      return nil
     }
 
-    return nil
+    let droppedIDs = droppedUnitIDs(in: section, kept: kept)
+    guard
+      droppedIDs.isEmpty == false,
+      let marker = section.dropMarker.line(kept: kept.count, total: section.units.count),
+      renderUnits(kept).count + 1 + marker.count <= maxCount
+    else {
+      return FittedRow(source: section, units: kept, droppedUnitIDs: droppedIDs)
+    }
+
+    return FittedRow(
+      source: section,
+      units: kept + [SectionUnit(id: dropMarkerUnitID, content: marker, canTruncate: false)],
+      droppedUnitIDs: droppedIDs
+    )
   }
 
   private static func droppedUnitIDs(in section: FittableSection, kept: [SectionUnit]) -> [String] {

@@ -75,7 +75,7 @@ What the scan requires:
   (`weekly-review`), and it has to match the directory name exactly.
 - **`description`**: the one line the agent matches against the task in front of it, so
   spend it on when to reach for the skill. Past 300 characters the index shows it
-  truncated.
+  truncated, and a description written across several lines is folded back into one.
 - **One name per directory.** If two directories claim the same name, both are skipped:
   nothing can tell which one you meant.
 
@@ -108,8 +108,8 @@ every time, whatever else the session did.
 session has done *both* of these:
 
 - **Ingested untrusted content.** A web page, a file read, tool output, a voice transcript,
-  or a photo. Durable memory does not count: it is labeled untrusted but does not taint
-  the session on its own.
+  or a photo. Durable memory and a skill you loaded do not count: both are labeled
+  untrusted, and neither taints the session on its own.
 - **Touched private data.** Assembling `USER.md`, `MEMORY.md`, or stored memory items into
   the context is enough; no tool has to read them. Once you have filled in `USER.md`, this
   leg is armed on essentially every turn, and it sticks for the session.

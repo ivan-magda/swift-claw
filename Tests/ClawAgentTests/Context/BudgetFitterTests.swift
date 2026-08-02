@@ -276,6 +276,43 @@ import Testing
     #expect(skills.content.contains("showing") == false)
   }
 
+  @Test func skillsRowShipsUnmarkedWhenTheMarkerCannotFitBesideTheKeptSkill() throws {
+    // given — a cap that admits the first index line but not that line plus the marker
+    let section = skillsSection(cap: 30, units: [("skill-alpha", 20), ("skill-bravo", 40)])
+    let budget = testBudget(inputCap: 2_000)
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
+
+    // then — the skill the owner can still use outranks the annotation about the one they cannot
+    let skills = try #require(fitted.first { row in row.id == .skills })
+    #expect(skills.units.map(\.id) == ["skill-alpha"])
+    #expect(skills.content.contains("showing") == false)
+    #expect(skills.droppedUnitIDs == ["skill-bravo"])
+  }
+
+  @Test func squeezedSkillsRowRemarksTheSkillsItStillShows() throws {
+    // given — capped rows overshoot the residual, so the lowest-priority row is re-fit smaller
+    let sections = [
+      nonTruncatable(id: .policy, priority: 0, content: filler("p", 100)),
+      truncatable(id: .history, priority: 70, cap: 200, units: [filler("h", 200)]),
+      skillsSection(
+        cap: 200,
+        units: [("skill-alpha", 40), ("skill-bravo", 40), ("skill-charlie", 40)]
+      ),
+    ]
+    let budget = testBudget(inputCap: 380)
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
+
+    // then — the marker counts what survived the re-fit, not what the first pass kept
+    let skills = try #require(fitted.first { row in row.id == .skills })
+    #expect(skills.units.map(\.id) == ["skill-alpha", BudgetFitter.dropMarkerUnitID])
+    #expect(skills.units.last?.content == "(showing 1 of 3 skills)")
+    #expect(skills.content.count <= 80)
+  }
+
   @Test func memoryItemsRowKeepsTheGreedySubsetAcrossANonFittingUnit() throws {
     // given — rank-ordered memory selection is not the skills index: a big item is skipped, not a
     // stop signal

@@ -83,7 +83,7 @@ public struct ContextBuilder: Sendable {
       fixedSections + truncatableSections,
       budget: budget
     )
-    if let notice = droppedSkillsNotice(fitted) {
+    if let notice = droppedSkillsNotice(fitted: fitted, requested: truncatableSections) {
       ownerNotices.append(notice)
     }
     let messages = renderMessages(fitted: fitted, snapshot: snapshot)
@@ -363,12 +363,9 @@ private extension ContextBuilder {
     return String(content.prefix(prefixCount)) + marker
   }
 
+  /// Scans before consulting the cap: an authoring fault is the owner's to fix whether or not this
+  /// turn had room for the index, and a zero cap is left to the fitter so the drop is announced.
   func skillsSection(residual: Int, ownerNotices: inout [String]) -> FittableSection? {
-    let cap = cap(for: .skills, residual: residual)
-    guard cap > 0 else {
-      return nil
-    }
-
     let scan = workspace.scanSkills()
     for warning in scan.warnings {
       warn("skills scan warning: \(warning)")
@@ -390,7 +387,7 @@ private extension ContextBuilder {
 
     return section(
       id: .skills,
-      cap: cap,
+      cap: cap(for: .skills, residual: residual),
       dropMarker: .showingCount(noun: "skills"),
       units: units
     )
@@ -419,12 +416,18 @@ private extension ContextBuilder {
     }
   }
 
-  func droppedSkillsNotice(_ fitted: [FittedSection]) -> String? {
+  /// A skills row too big for its cap comes back shrunk, but one whose cap admits nothing at all is
+  /// gone from `fitted` entirely — the case the owner most needs told, so it reads as every skill
+  /// dropped rather than as no skills installed.
+  func droppedSkillsNotice(fitted: [FittedSection], requested: [FittableSection]) -> String? {
+    guard let source = requested.first(where: { section in section.id == .skills }) else {
+      return nil
+    }
+
+    let fittedSkills = fitted.first { section in section.id == .skills }
     let dropped =
-      fitted
-      .first { section in section.id == .skills }?
-      .droppedUnitIDs
-      .map(Self.skillName(fromUnitID:)) ?? []
+      (fittedSkills?.droppedUnitIDs ?? source.units.map(\.id))
+      .map(Self.skillName(fromUnitID:))
     guard dropped.isEmpty == false else {
       return nil
     }
