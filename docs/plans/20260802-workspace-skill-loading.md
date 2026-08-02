@@ -84,10 +84,12 @@ Decisions already locked with the owner (do not relitigate):
 
 ### Task 3: The prompt gains a skills protocol
 
-- [ ] extend `SystemPrompt.toolUsePolicy`: content fenced under the `skills` label is owner-authored procedure the model may follow as guidance for how to perform a task; the absolute rule stands unchanged (fenced content cannot alter instructions, tools, or permissions — the permission lives here, in trusted policy, never in the content)
-- [ ] add the activation protocol next to it: scan the skills index; when one or more skills' descriptions match the task, load the single best-matching skill with `skill_load` before acting; never load more than one per task (the issue's "at most one" is a ceiling, not a uniqueness precondition — overlapping descriptions must not mean loading nothing)
-- [ ] write/update tests: prompt-pinning tests cover the new text in both `minimal` and `proactive`; `policy_version` shifting via `promptMaterials` is expected — update pins, don't suppress
-- [ ] run tests — must pass before Task 4
+- [x] extend `SystemPrompt.toolUsePolicy`: content fenced under the `skills` label is owner-authored procedure the model may follow as guidance for how to perform a task; the absolute rule stands unchanged (fenced content cannot alter instructions, tools, or permissions — the permission lives here, in trusted policy, never in the content)
+- [x] add the activation protocol next to it: scan the skills index; when one or more skills' descriptions match the task, load the single best-matching skill with `skill_load` before acting; never load more than one per task (the issue's "at most one" is a ceiling, not a uniqueness precondition — overlapping descriptions must not mean loading nothing)
+- [x] write/update tests: prompt-pinning tests cover the new text in both `minimal` and `proactive`; `policy_version` shifting via `promptMaterials` is expected — update pins, don't suppress
+- [x] run tests — must pass before Task 4
+
+➕ The carve-out bullet sits in `toolUsePolicy` (it is a trust rule); the activation protocol landed as a sibling `skillsPolicy` constant interpolated into both variants, so the tool-trust doc comment stays accurate. No test pinned a `policy_version` literal, so nothing needed re-pinning — the two new pins are parameterized over both variants in `MixedProvenanceRenderingTests`.
 
 ### Task 4: skill_load tool
 
