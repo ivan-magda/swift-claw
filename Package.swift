@@ -89,6 +89,7 @@ let package = Package(
       name: "ClawMCP",
       dependencies: [
         "ClawCore",
+        .product(name: "Logging", package: "swift-log"),
         .product(name: "MCP", package: "swift-sdk"),
       ]
     ),

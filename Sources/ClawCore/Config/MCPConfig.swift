@@ -159,6 +159,16 @@ public struct MCPServerConfig: Sendable, Equatable {
   public var worstCaseCallSeconds: Int {
     connectTimeoutSeconds + requestTimeoutSeconds
   }
+
+  /// What `authHeader` carries for `token`. `Bearer` is the `Authorization` header's scheme, not a
+  /// property of the token, so a server configured onto a header of its own (an API-key header, say)
+  /// receives the token exactly as the owner set it.
+  public func authorizationValue(for token: String) -> String {
+    guard authHeader.caseInsensitiveCompare(MCPLimits.defaultAuthHeader) == .orderedSame else {
+      return token
+    }
+    return "Bearer \(token)"
+  }
 }
 
 /// The owner's whole MCP catalog. Empty means the feature is off.
