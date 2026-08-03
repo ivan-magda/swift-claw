@@ -1,6 +1,7 @@
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawMCP
 import ClawSecrets
 import Foundation
 
@@ -17,6 +18,11 @@ struct DaemonDoctorReporter: DoctorReporting {
   /// credential state the running daemon actually authenticates with — including a store a composition
   /// test scripts — rather than re-reading the real state root behind the daemon's back.
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
+  /// The catalog and tokens this daemon booted with — the same inputs the offline `doctor` reads, so
+  /// both surfaces answer from one builder.
+  let mcp: MCPBootInputs
+  /// What each server contributed while the catalog was pinned. Only the running daemon knows it.
+  let mcpOutcomes: [MCPServerOutcome]
 
   func report() async -> DoctorReport {
     var report = DoctorReport()
@@ -47,6 +53,9 @@ struct DaemonDoctorReporter: DoctorReporting {
         unavailableReason: sandbox.unavailableReason
       )
     )
+
+    report.add(contentsOf: MCPDoctorRows.rows(config: mcp.config, credentials: mcp.credentials))
+    report.add(contentsOf: MCPDoctorRows.bootRows(outcomes: mcpOutcomes))
 
     if let maintenance = sandbox.maintenance {
       report.add(contentsOf: [SandboxHealthRows.admittingRow(await maintenance.isAdmitting())])

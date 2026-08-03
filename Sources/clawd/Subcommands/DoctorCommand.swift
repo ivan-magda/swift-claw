@@ -50,6 +50,7 @@ struct DoctorCommand: AsyncParsableCommand {
     report.add(key: "secrets", value: secretsRow.value, ok: secretsRow.ok, group: .config)
 
     addLLMAuthRow(to: &report, config: config)
+    addMCPRows(to: &report, config: config)
 
     if checkConfig {
       emit(report)
@@ -168,6 +169,29 @@ private extension DoctorCommand {
     report.add(key: "llm.auth", value: result.value, ok: result.ok, group: .llmRuns)
   }
 
+  /// The offline half of the MCP health table: what the catalog declares and what the token store
+  /// holds for it. No server is contacted — a running daemon's own reporter adds what each one
+  /// actually contributed, which this process cannot see.
+  func addMCPRows(to report: inout DoctorReport, config: AppConfig) {
+    let catalog: MCPConfig
+    do {
+      catalog = try EnvironmentLoader.loadMCPConfig(config: config)
+    } catch {
+      report.add(contentsOf: [MCPDoctorRows.failureRow("config error: \(error)")])
+      return
+    }
+
+    do {
+      let credentials = try EnvironmentLoader.loadMCPCredentials(
+        config: config,
+        servers: catalog.servers
+      )
+      report.add(contentsOf: MCPDoctorRows.rows(config: catalog, credentials: credentials))
+    } catch {
+      report.add(contentsOf: [MCPDoctorRows.failureRow("token store error: \(error)")])
+    }
+  }
+
   func addDatabaseRows(to report: inout DoctorReport, config: AppConfig) {
     do {
       let stores = try EnvironmentLoader.openStores(config: config)
@@ -241,7 +265,7 @@ private extension DoctorCommand {
     #if os(Linux)
       return SandboxHealthRows.rows(for: .linuxDeferred)
     #else
-      guard let backend = SandboxBackendFactory.make(config: config, secrets: nil) else {
+      guard let backend = SandboxBackendFactory.make(config: config, redactionValues: []) else {
         return SandboxHealthRows.rows(
           for: .unavailable(reason: "sandbox backend is not configured")
         )

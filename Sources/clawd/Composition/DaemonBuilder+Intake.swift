@@ -109,16 +109,20 @@ extension DaemonBuilder {
         path: VoiceMessageService.stagingDirectoryName,
         directoryHint: .isDirectory
       ),
-      redactor: SecretRedactor(secretValues: secrets.redactionValues),
+      redactor: SecretRedactor(secretValues: redactionValues),
       logger: logger
     )
   }
 
+  /// The tool catalog the registry advertises: the built-ins, then whatever the pinned MCP catalog
+  /// resolved. Remote tools go last so adding a server cannot reorder the built-ins, and the
+  /// `mcp__` prefix is what makes a name collision between the two structurally impossible.
   func makeToolDispatcher(
     workspace: FileSystemWorkspace,
-    sandbox: SandboxStack
+    sandbox: SandboxStack,
+    mcpTools: [any Tool]
   ) -> GatedToolDispatcher {
-    let secretValues = secrets.redactionValues
+    let secretValues = redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)
 
     var tools: [any Tool] = [
@@ -154,6 +158,8 @@ extension DaemonBuilder {
         )
       )
     }
+
+    tools.append(contentsOf: mcpTools)
 
     let privateFileLoader: @Sendable () -> [String] = {
       [WorkspaceFile.memory, WorkspaceFile.user].compactMap { file in

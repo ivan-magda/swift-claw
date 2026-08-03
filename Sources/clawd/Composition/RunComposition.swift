@@ -22,6 +22,10 @@ struct RunComposition {
   let stores: ClawStores
   let logger: Logger
 
+  /// The MCP catalog and tokens `run` resolved before the logger. Empty means the feature is off,
+  /// which is also what a composition test that says nothing about MCP means.
+  var mcp: MCPBootInputs = .empty
+
   /// Builds the three runtime clients. Injectable so a test records which client reaches which
   /// consumer, and counts closes, without opening real sockets.
   var makeClients: @Sendable () -> RuntimeHTTPClients<RuntimeHTTPClient> = {
@@ -80,6 +84,10 @@ struct RunComposition {
         toolExecutor: clients.tool.executor,
         transport: transport,
         botUsername: botUsername,
+        mcp: mcp,
+        // The same union `run` handed the log backend, rebuilt from the same two inputs rather than
+        // passed along a second channel that could drift from it.
+        redactionValues: mcp.redactionValues(with: secrets),
         logger: logger,
         makeManagedStore: { makeManagedStore(config.stateRoot) }
       )

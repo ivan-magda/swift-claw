@@ -10,6 +10,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
   case scheduler
   case approvals
   case connectivity
+  case mcp
   case sandbox
 
   public var title: String {
@@ -23,6 +24,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
     case .scheduler: "Scheduler"
     case .approvals: "Approvals"
     case .connectivity: "Connectivity"
+    case .mcp: "MCP"
     case .sandbox: "Sandbox"
     }
   }

@@ -16,7 +16,11 @@ struct RunCommand: AsyncParsableCommand {
   func run() async throws {
     let config = try Self.loadConfigOrExit()
     let secrets = try Self.loadSecretsOrExit(config: config)
-    let logger = Self.bootstrapLogger(secrets: secrets)
+    // Before the logger on purpose: the MCP tokens are part of the redaction set the log backend is
+    // installed with, so they have to be in hand before anything can write a line.
+    let mcp = try Self.loadMCPOrExit(config: config)
+    let redactionValues = mcp.redactionValues(with: secrets)
+    let logger = Self.bootstrapLogger(redactionValues: redactionValues)
 
     // Single-instance guard — held until the process exits (defer covers the graceful path).
     let lock = try Self.acquireInstanceLockOrExit(config: config)
@@ -35,7 +39,8 @@ struct RunCommand: AsyncParsableCommand {
         config: config,
         secrets: secrets,
         stores: stores,
-        logger: logger
+        logger: logger,
+        mcp: mcp
       ).compose()
     } catch let error as LLMCredentialStoreError {
       FileHandle.standardError.write(Data("credential store error: \(error)\n".utf8))
@@ -45,7 +50,7 @@ struct RunCommand: AsyncParsableCommand {
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
     try await Self.serveThenShutDown(
       composed: composed,
-      redactionValues: secrets.redactionValues,
+      redactionValues: redactionValues,
       logger: logger
     )
   }
@@ -119,12 +124,12 @@ private extension RunCommand {
 
 private extension RunCommand {
   /// Installs the redacting swift-log backend (level from `CLAW_LOG_LEVEL`, default `.info`) over
-  /// stdout, then returns the root logger. Bootstrapping here — after secrets load, before the first
-  /// `Logger` — hands the redactor the real secret values so no downstream log line can leak them.
+  /// stdout, then returns the root logger. Bootstrapping here — after every secret is loaded, before
+  /// the first `Logger` — hands the redactor the whole union so no downstream log line can leak one.
   /// The earlier config/secret-load failures stay on stderr and cannot contain these secrets.
-  static func bootstrapLogger(secrets: Secrets) -> Logger {
+  static func bootstrapLogger(redactionValues: [String]) -> Logger {
     let environment = ProcessInfo.processInfo.environment
-    let redactor = SecretRedactor(secretValues: secrets.redactionValues)
+    let redactor = SecretRedactor(secretValues: redactionValues)
 
     DeveloperLogging.bootstrap(
       level: DeveloperLogging.level(from: environment[DeveloperLogging.levelEnvKey]),
@@ -152,6 +157,35 @@ private extension RunCommand {
     } catch let error as SecretStoreError {
       FileHandle.standardError.write(Data("secret error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
+    }
+  }
+
+  /// Loads the MCP catalog and the tokens bound to it. Both failures are the owner's and both are
+  /// loud: a malformed catalog exits `configInvalid` like any other bad config, and an unopenable
+  /// credential envelope joins `secrets.enc`'s family rather than booting with silent no-auth.
+  static func loadMCPOrExit(config: AppConfig) throws -> MCPBootInputs {
+    let catalog: MCPConfig
+    do {
+      catalog = try EnvironmentLoader.loadMCPConfig(config: config)
+    } catch let error as MCPConfigError {
+      FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
+      throw ExitCode(error.exitCode)
+    } catch {
+      FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.configInvalid.rawValue)
+    }
+
+    do {
+      return MCPBootInputs(
+        config: catalog,
+        credentials: try EnvironmentLoader.loadMCPCredentials(
+          config: config,
+          servers: catalog.servers
+        )
+      )
+    } catch {
+      FileHandle.standardError.write(Data("mcp credential error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
     }
   }
 

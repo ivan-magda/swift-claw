@@ -83,7 +83,7 @@ extension DaemonBuilder {
     turnRunner: TurnRunner
   ) -> ApprovalFabric {
     let contextBuilder = agentStack.contextBuilder
-    let argumentGuard = ExfilArgGuard(secretValues: secrets.redactionValues)
+    let argumentGuard = ExfilArgGuard(secretValues: redactionValues)
     let approvedExecutor = ApprovedActionExecutor(
       tools: agentStack.toolDispatcher.toolsByName,
       runs: stores.runs,

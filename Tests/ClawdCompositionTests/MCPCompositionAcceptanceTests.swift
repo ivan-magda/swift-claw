@@ -1,0 +1,407 @@
+import ClawCore
+import ClawData
+import ClawGateway
+import ClawLLM
+import ClawMCP
+import ClawSecrets
+import ClawTelegram
+import ClawTestSupport
+import ClawTools
+import ClawWorkspace
+import Foundation
+import GRDB
+import Logging
+import Testing
+
+@testable import clawd
+
+/// The MCP acceptance layer: the composition functions the daemon boots through, driven directly.
+///
+/// It stops short of a full daemon boot on purpose — `DaemonRuntimeBundle` exposes no registry,
+/// gate, or fingerprint, so a booted daemon could not be asked any of the questions below. What runs
+/// here is otherwise production: the real Streamable HTTP transport, the real SDK client, the real
+/// resolver and adapter, the real gate, and real in-memory GRDB stores.
+@Suite struct MCPCompositionAcceptanceTests {
+  // MARK: Catalog → registry
+
+  @Test("resolved MCP tools follow the built-ins into the registry, at the ask tier")
+  func mcpToolsFollowTheBuiltIns() async throws {
+    // given
+    let server = ScriptedMCPHTTPServer(
+      tools: [RemoteTool(name: "list_issues"), RemoteTool(name: "create_issue")]
+    )
+    let builder = try makeBuilder(http: server, servers: [try serverConfig()])
+
+    // when
+    let stack = await builder.resolveMCPStack()
+    let dispatcher = try makeDispatcher(builder, mcpTools: stack.tools)
+
+    // then
+    let names = dispatcher.definitions.map(\.name)
+    #expect(names.prefix(4) == ["file_read", "file_write", "memory_write", "web_fetch"])
+    #expect(names.suffix(2) == ["mcp__linear__list_issues", "mcp__linear__create_issue"])
+
+    let remote = try #require(dispatcher.definitions.first { $0.name.hasPrefix("mcp__") })
+    #expect(remote.riskLevel == .ask)
+    #expect(remote.egressClass == .arbitraryDestination)
+  }
+
+  @Test("an owner risk downgrade reaches the registered definition")
+  func riskOverrideReachesTheDefinition() async throws {
+    // given
+    let server = ScriptedMCPHTTPServer(tools: [RemoteTool(name: "list_issues")])
+    let builder = try makeBuilder(
+      http: server,
+      servers: [try serverConfig(tools: MCPToolFilter(risk: ["list_issues": .safe]))]
+    )
+
+    // when
+    let stack = await builder.resolveMCPStack()
+    let dispatcher = try makeDispatcher(builder, mcpTools: stack.tools)
+
+    // then
+    let remote = try #require(
+      dispatcher.definitions.first { $0.name == "mcp__linear__list_issues" }
+    )
+    #expect(remote.riskLevel == .safe)
+    #expect(remote.egressClass == .arbitraryDestination)
+  }
+
+  // MARK: Policy fingerprint
+
+  @Test("the policy sub-hash is stable across resolutions and moves when the catalog does")
+  func policySubhashPinsTheCatalog() async throws {
+    // given
+    let tools = [RemoteTool(name: "list_issues")]
+    let servers = [try serverConfig()]
+    // One state root across all three, so the catalog is the only input that can move the hash.
+    let config = try CompositionAcceptance.chatGPTConfig()
+
+    // when
+    let first = try await subhash(ScriptedMCPHTTPServer(tools: tools), config, servers)
+    let repeated = try await subhash(ScriptedMCPHTTPServer(tools: tools), config, servers)
+    let widened = try await subhash(
+      ScriptedMCPHTTPServer(tools: tools + [RemoteTool(name: "create_issue")]),
+      config,
+      servers
+    )
+
+    // then
+    #expect(first == repeated)
+    #expect(first != widened)
+  }
+
+  // MARK: Ask-tier round trip
+
+  @Test("an ask-tier MCP call parks, then executes as untrusted through the approved path")
+  func askTierCallParksThenExecutesUntrusted() async throws {
+    // given
+    let server = ScriptedMCPHTTPServer(
+      tools: [RemoteTool(name: "list_issues")],
+      outcome: .text("ISSUE-1: the roof leaks")
+    )
+    let builder = try makeBuilder(http: server, servers: [try serverConfig()])
+    let dispatcher = try makeDispatcher(
+      builder,
+      mcpTools: await builder.resolveMCPStack().tools
+    )
+    let call = ToolCall(
+      id: "c1",
+      name: "mcp__linear__list_issues",
+      argumentsJSON: #"{"query":"open"}"#
+    )
+
+    // when
+    let parked = await dispatcher.dispatch(call: call, context: Self.untaintedContext)
+
+    // then
+    let recorded = try #require(parked.requiresApproval)
+    #expect(parked.observation.status == .blockedPendingApproval)
+    #expect(recorded.canonicalTarget == "linear (mcp.test.invalid)")
+    #expect(recorded.presentation.blastRadius == "MCP: linear · list_issues")
+    #expect(await server.calledTools.isEmpty)
+
+    // when
+    let run = try makeSuspendedRun()
+    let outcome = await ApprovedActionExecutor(
+      tools: dispatcher.toolsByName,
+      runs: run.runs,
+      redactArguments: { $0 },
+      now: { Date() },
+      logger: Self.silentLogger
+    ).executeApproved(approval(run, recorded: recorded))
+
+    // then
+    #expect(outcome.commit == .committed)
+    #expect(outcome.observationContent == "ISSUE-1: the roof leaks")
+    #expect(await server.calledTools == ["list_issues"])
+    #expect(try run.sessionIsTainted())
+  }
+
+  @Test("an MCP token quoted back by the server is redacted out of the tool's result")
+  func remoteTextIsRedactedWithTheBootUnion() async throws {
+    // given: the token reaches the builder's redactor only through the boot union
+    let server = ScriptedMCPHTTPServer(
+      tools: [RemoteTool(name: "list_issues")],
+      outcome: .text("your bearer is linear-token")
+    )
+    let builder = try makeBuilder(
+      http: server,
+      servers: [try serverConfig()],
+      credentials: ["linear": .token("linear-token")]
+    )
+    let dispatcher = try makeDispatcher(
+      builder,
+      mcpTools: await builder.resolveMCPStack().tools
+    )
+    let tool = try #require(dispatcher.toolsByName["mcp__linear__list_issues"])
+
+    // when
+    let payload = await tool.execute(
+      arguments: .object(["query": .string("open")]),
+      canonicalTarget: "linear (mcp.test.invalid)"
+    )
+
+    // then
+    #expect(payload.content.contains("linear-token") == false)
+    #expect(payload.ingestedUntrusted)
+  }
+
+  // MARK: Boot path
+
+  @Test("an unreachable server is skipped; the built-ins and the doctor row both survive it")
+  func unreachableServerIsSkipped() async throws {
+    // given: an executor with nothing scripted refuses every attempt, as an unreachable host would
+    let builder = try makeBuilder(http: ScriptedHTTPExecutor([]), servers: [try serverConfig()])
+
+    // when
+    let stack = await builder.resolveMCPStack()
+    let dispatcher = try makeDispatcher(builder, mcpTools: stack.tools)
+
+    // then
+    #expect(stack.tools.isEmpty)
+    #expect(
+      dispatcher.definitions.map(\.name) == [
+        "file_read", "file_write", "memory_write", "web_fetch",
+      ]
+    )
+
+    let outcome = try #require(stack.catalog.outcomes.first)
+    #expect(outcome.server == "linear")
+    guard case .skipped = outcome.status else {
+      Issue.record("expected the unreachable server to be skipped, got \(outcome.status)")
+      return
+    }
+
+    let row = try #require(
+      MCPDoctorRows.bootRows(outcomes: stack.catalog.outcomes).first
+    )
+    #expect(row.key == "mcp.linear.tools")
+    #expect(row.ok == false)
+    #expect(row.value.hasPrefix("skipped: "))
+  }
+
+  @Test("a boot with no MCP config leaves the tool surface exactly as it was")
+  func noConfigLeavesTheSurfaceUnchanged() async throws {
+    // given
+    let builder = try makeBuilder(http: ScriptedHTTPExecutor([]), servers: [])
+
+    // when
+    let stack = await builder.resolveMCPStack()
+    let dispatcher = try makeDispatcher(builder, mcpTools: stack.tools)
+
+    // then
+    #expect(stack.catalog == .empty)
+    #expect(
+      dispatcher.definitions.map(\.name) == [
+        "file_read", "file_write", "memory_write", "web_fetch",
+      ]
+    )
+    #expect(MCPDoctorRows.rows(config: .empty, credentials: [:]).map(\.key) == ["mcp"])
+  }
+}
+
+// MARK: - Fixtures
+
+private typealias RemoteTool = ScriptedMCPHTTPServer.RemoteTool
+
+private extension MCPCompositionAcceptanceTests {
+  static let silentLogger = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+
+  /// A taint-free, no-private-data context: the ask tier is then the only thing that can park a
+  /// call, which is what makes the approval below an assertion about the MCP tier and nothing else.
+  static let untaintedContext = ToolDispatchContext(
+    sessionTainted: false,
+    runIngestedUntrusted: false,
+    assemblyPrivateData: false,
+    runPrivateData: false,
+    sessionHasPrivateData: false,
+    approvalAlreadyPending: false
+  )
+
+  func serverConfig(
+    name: String = "linear",
+    url: String = "https://mcp.test.invalid/mcp",
+    tools: MCPToolFilter = .allowAll
+  ) throws -> MCPServerConfig {
+    try MCPServerConfig(name: name, url: url, tools: tools)
+  }
+
+  func makeBuilder(
+    http: any HTTPExecuting & HTTPStreaming,
+    servers: [MCPServerConfig],
+    config: AppConfig? = nil,
+    credentials: [String: MCPCredentialLoad] = [:]
+  ) throws -> DaemonBuilder {
+    let config = try config ?? CompositionAcceptance.chatGPTConfig()
+    let inputs = MCPBootInputs(
+      config: try MCPConfig(servers: servers),
+      credentials: credentials
+    )
+    let secrets = Secrets(telegramBotToken: "tg-token", llmApiKey: nil, searchApiKey: nil)
+
+    return DaemonBuilder(
+      config: config,
+      secrets: secrets,
+      stores: try EnvironmentLoader.openStores(config: config),
+      toolExecutor: http,
+      transport: TelegramClient(token: "tg-token", http: http),
+      botUsername: nil,
+      mcp: inputs,
+      // Built exactly as `run` builds it, so what the builder's redactors see here is what the log
+      // backend would have been installed with.
+      redactionValues: inputs.redactionValues(with: secrets),
+      logger: Self.silentLogger,
+      makeManagedStore: { FreshCredentialStore(present: false) }
+    )
+  }
+
+  func makeDispatcher(
+    _ builder: DaemonBuilder,
+    mcpTools: [any Tool]
+  ) throws -> GatedToolDispatcher {
+    builder.makeToolDispatcher(
+      workspace: FileSystemWorkspace(
+        root: EnvironmentLoader.workspaceRoot(config: builder.config)
+      ),
+      sandbox: SandboxBootstrapResult(
+        backend: nil,
+        maintenance: nil,
+        health: nil,
+        unavailableReason: nil
+      ),
+      mcpTools: mcpTools
+    )
+  }
+
+  func subhash(
+    _ server: ScriptedMCPHTTPServer,
+    _ config: AppConfig,
+    _ servers: [MCPServerConfig]
+  ) async throws -> String {
+    let builder = try makeBuilder(http: server, servers: servers, config: config)
+    let dispatcher = try makeDispatcher(builder, mcpTools: await builder.resolveMCPStack().tools)
+    return builder.policyStaticSubhash(
+      toolDispatcher: dispatcher,
+      workspace: FileSystemWorkspace(
+        root: EnvironmentLoader.workspaceRoot(config: builder.config)
+      )
+    )
+  }
+}
+
+// MARK: - Approved-execution fixture
+
+/// A run parked at AWAITING_APPROVAL with the placeholder observation the suspend commit leaves —
+/// the state the approved executor is only ever entered from.
+private struct SuspendedRun {
+  let queue: DatabaseQueue
+  let runs: RunStoreGRDB
+  let sessionId: Int64
+  let runId: Int64
+  let observationMessageId: Int64
+
+  /// Whether the executed result tainted the session — the durable half of `ingestedUntrusted`,
+  /// which is what keeps the trifecta gate armed for the rest of the session.
+  func sessionIsTainted() throws -> Bool {
+    try queue.read { database in
+      try Bool.fetchOne(
+        database,
+        sql: "SELECT tainted FROM sessions WHERE id = ?",
+        arguments: [sessionId]
+      ) ?? false
+    }
+  }
+}
+
+private extension MCPCompositionAcceptanceTests {
+  func makeSuspendedRun() throws -> SuspendedRun {
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+
+    let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
+      InboundMessage(
+        updateId: 1,
+        sessionKey: SessionKey.telegramDM(chatId: 7),
+        chatId: 7,
+        userId: 7,
+        text: "list the open issues",
+        isEdited: false,
+        ts: Date()
+      )
+    )
+    let sessionId = try #require(claim.sessionId)
+    let runId = try #require(claim.runId)
+    let runs = RunStoreGRDB(writer: queue)
+    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
+
+    let observationMessageId = try queue.write { database -> Int64 in
+      try database.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', 'awaiting owner approval', 'trusted', ?, 'c1')
+          """,
+        arguments: [sessionId, runId, Date()]
+      )
+      let messageId = database.lastInsertedRowID
+      _ = try RunStoreGRDB.transitionRun(
+        database,
+        runId: runId,
+        event: .suspendForApproval,
+        now: Date()
+      )
+      return messageId
+    }
+
+    return SuspendedRun(
+      queue: queue,
+      runs: runs,
+      sessionId: sessionId,
+      runId: runId,
+      observationMessageId: observationMessageId
+    )
+  }
+
+  func approval(_ run: SuspendedRun, recorded: RecordedToolAction) -> Approval {
+    Approval(
+      id: 1,
+      runId: run.runId,
+      sessionId: run.sessionId,
+      state: .approved,
+      tool: recorded.tool,
+      canonicalArgsJSON: recorded.canonicalArgsJSON,
+      canonicalTarget: recorded.canonicalTarget,
+      argsHash: recorded.argsHash,
+      policyVersion: "pv",
+      ownerUserId: 7,
+      nonce: "nonce-a",
+      observationMessageId: run.observationMessageId,
+      toolCallId: "c1",
+      reason: recorded.reason,
+      promptMessageId: 900,
+      createdTs: Date(),
+      expiresTs: Date(),
+      resolvedTs: Date()
+    )
+  }
+}
