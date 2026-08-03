@@ -424,7 +424,8 @@ private extension MCPServerSession {
       return true
     case .requestFailed(let transport):
       return transport.disposition == .definitelyNotSent
-    case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow:
+    case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow,
+      .receiveStreamTerminated:
       return false
     }
   }

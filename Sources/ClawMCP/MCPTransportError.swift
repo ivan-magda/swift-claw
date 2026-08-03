@@ -16,6 +16,8 @@ public enum MCPTransportError: Error, Sendable, Equatable {
   case unsupportedContentType(String)
   case oversizedMessage(limitBytes: Int)
   case receiveBufferOverflow(limitMessages: Int)
+  /// The HTTP exchange completed, but its reply could not enter the already-closed receive stream.
+  case receiveStreamTerminated
   /// The HTTP seam's own failure — a timeout, a refused connection, a broken stream — kept whole so
   /// callers can read the disposition it already decided.
   case requestFailed(HTTPTransportFailure)
@@ -27,7 +29,7 @@ public enum MCPTransportError: Error, Sendable, Equatable {
     case .notConnected:
       return .definitelyNotSent
     case .sessionExpired, .httpStatus, .unsupportedContentType, .oversizedMessage,
-      .receiveBufferOverflow:
+      .receiveBufferOverflow, .receiveStreamTerminated:
       return .mayHaveBeenSent
     case .requestFailed(let failure):
       return failure.disposition
@@ -50,6 +52,8 @@ extension MCPTransportError: CustomStringConvertible {
       return "MCP message exceeds the \(limitBytes)-byte limit"
     case .receiveBufferOverflow(let limitMessages):
       return "MCP receive buffer exceeds the \(limitMessages)-message limit"
+    case .receiveStreamTerminated:
+      return "MCP receive stream ended before the response could be delivered"
     case .requestFailed(let failure):
       return "MCP request failed: \(failure.safeMessage)"
     }

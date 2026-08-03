@@ -168,7 +168,7 @@ struct MCPStreamableHTTPTransportTests {
     try await streamTransport.send(Fixture.request)
   }
 
-  @Test("a server cannot outgrow the complete-message receive buffer")
+  @Test("a receive-buffer overflow spends the transport before another request reaches HTTP")
   func receiveBufferOverflow() async throws {
     // given a stream that emits more complete messages than the SDK-facing queue can retain
     let events = (0...MCPTransportLimits.maxBufferedMessages).map { index in
@@ -188,6 +188,10 @@ struct MCPStreamableHTTPTransportTests {
     ) {
       try await transport.send(Fixture.request)
     }
+    await #expect(throws: MCPTransportError.notConnected) {
+      try await transport.send(Fixture.request)
+    }
+    #expect(await executor.recorded.count == 1)
   }
 
   @Test("the handshake is bounded by the connect timeout and later calls by the request timeout")

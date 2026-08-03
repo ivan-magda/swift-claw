@@ -162,6 +162,60 @@ import Testing
     #expect(first != moved)
   }
 
+  @Test("the policy sub-hash pins MCP static headers by HTTP semantics")
+  func policySubhashPinsRequestContext() async throws {
+    // given
+    let tools = [RemoteTool(name: "list_issues")]
+    let config = try CompositionAcceptance.chatGPTConfig()
+
+    // when
+    let first = try await subhash(
+      ScriptedMCPHTTPServer(tools: tools),
+      config,
+      [
+        try serverConfig(
+          headers: ["X-Workspace": "alpha"],
+          authHeader: "X-API-Key"
+        )
+      ]
+    )
+    let caseOnlyChange = try await subhash(
+      ScriptedMCPHTTPServer(tools: tools),
+      config,
+      [
+        try serverConfig(
+          headers: ["x-workspace": "alpha"],
+          authHeader: "x-api-key"
+        )
+      ]
+    )
+    let movedWorkspace = try await subhash(
+      ScriptedMCPHTTPServer(tools: tools),
+      config,
+      [
+        try serverConfig(
+          headers: ["X-Workspace": "beta"],
+          authHeader: "X-API-Key"
+        )
+      ]
+    )
+    let movedAuthentication = try await subhash(
+      ScriptedMCPHTTPServer(tools: tools),
+      config,
+      [
+        try serverConfig(
+          headers: ["X-Workspace": "alpha"],
+          authHeader: "X-Auth-Token"
+        )
+      ]
+    )
+
+    // then
+    #expect(first == caseOnlyChange)
+    #expect(first != movedWorkspace)
+    #expect(first != movedAuthentication)
+  }
+
   // MARK: Ask-tier round trip
 
   @Test("an ask-tier MCP call parks, then executes as untrusted through the approved path")
@@ -313,9 +367,17 @@ private extension MCPCompositionAcceptanceTests {
   func serverConfig(
     name: String = "linear",
     url: String = "https://mcp.test.invalid/mcp",
+    headers: [String: String] = [:],
+    authHeader: String = MCPLimits.defaultAuthHeader,
     tools: MCPToolFilter = .allowAll
   ) throws -> MCPServerConfig {
-    try MCPServerConfig(name: name, url: url, tools: tools)
+    try MCPServerConfig(
+      name: name,
+      url: url,
+      headers: headers,
+      authHeader: authHeader,
+      tools: tools
+    )
   }
 
   func makeBuilder(

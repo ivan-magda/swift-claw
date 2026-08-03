@@ -80,7 +80,7 @@ public actor MCPStreamableHTTPTransport: MCPNegotiatingTransport {
     switch lifecycle {
     case .connected:
       return
-    case .disconnected:
+    case .broken, .disconnected:
       throw MCPTransportError.notConnected
     case .idle:
       lifecycle = .connected
@@ -91,11 +91,15 @@ public actor MCPStreamableHTTPTransport: MCPNegotiatingTransport {
   /// SDK's message loop is parked on our stream and is awaited by `Client.disconnect`, so finishing
   /// first means a slow teardown request cannot hold up a shutdown.
   public func disconnect() async {
-    guard lifecycle == .connected else {
+    switch lifecycle {
+    case .idle, .disconnected:
       return
+    case .connected:
+      lifecycle = .disconnected
+      messageContinuation.finish()
+    case .broken:
+      lifecycle = .disconnected
     }
-    lifecycle = .disconnected
-    messageContinuation.finish()
 
     guard let session = sessionID else {
       return
@@ -143,6 +147,8 @@ private extension MCPStreamableHTTPTransport {
   enum Lifecycle {
     case idle
     case connected
+    /// The receive stream is spent, so no further request may reach HTTP through this instance.
+    case broken
     case disconnected
   }
 
@@ -353,12 +359,15 @@ private extension MCPStreamableHTTPTransport {
       let error = MCPTransportError.receiveBufferOverflow(
         limitMessages: MCPTransportLimits.maxBufferedMessages
       )
+      lifecycle = .broken
       messageContinuation.finish(throwing: error)
       throw error
     case .terminated:
-      throw MCPTransportError.notConnected
+      lifecycle = .broken
+      throw MCPTransportError.receiveStreamTerminated
     @unknown default:
-      throw MCPTransportError.notConnected
+      lifecycle = .broken
+      throw MCPTransportError.receiveStreamTerminated
     }
   }
 

@@ -207,8 +207,9 @@ The catalog is fixed at startup. A server that is down, slow, or misbehaving is 
 reason `clawd doctor` and `/mcp` will show, and clawd starts anyway with the rest. A mistake in
 `mcp.yaml` is yours to fix rather than a server's, so it stops startup with exit 10 — a misspelled
 key included. When the set of tools changes across a restart, clawd voids any approval still
-waiting from before. Changing a server endpoint or the remote operation behind a normalized name
-also voids the approval. Approval cards show the complete configured endpoint.
+waiting from before. Changing a server endpoint, its static request headers or auth-header name, or
+the remote operation behind a normalized name also voids the approval. Approval cards show the
+complete configured endpoint.
 
 A skipped server is not a boot failure, but it *is* a doctor failure: `clawd doctor` reports the
 skip, exits 1, and withholds the start command it normally ends with. The daemon itself comes up

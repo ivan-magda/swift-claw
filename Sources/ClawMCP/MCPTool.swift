@@ -116,12 +116,32 @@ private extension MCPTool {
   }
 
   var invocationIdentity: String {
+    var headers = config.headers.map { header in
+      (name: header.key.lowercased(), value: header.value)
+    }
+    headers.sort { left, right in
+      left.name == right.name ? left.value < right.value : left.name < right.name
+    }
+    let headerIdentity: [JSONValue] = headers.map { header in
+      JSONValue.object([
+        "name": .string(header.name),
+        "value": .string(header.value),
+      ])
+    }
     let identity = JSONValue.object([
+      "authHeader": .string(config.authHeader.lowercased()),
       "endpoint": .string(config.url.absoluteString),
+      "headers": .array(headerIdentity),
       "remoteTool": .string(resolved.coordinate.remoteName),
     ])
     return CanonicalJSON.encode(identity)
-      ?? "\(config.url.absoluteString)\n\(resolved.coordinate.remoteName)"
+      ?? PolicyFingerprint.hash(
+        parts: [
+          config.url.absoluteString,
+          resolved.coordinate.remoteName,
+          config.authHeader.lowercased(),
+        ] + headers.flatMap { [$0.name, $0.value] }
+      )
   }
 
   func preview(of arguments: JSONValue) -> String? {
