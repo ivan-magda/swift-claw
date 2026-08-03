@@ -416,6 +416,11 @@ private extension ContextBuilder {
       ⚠ Skill `\(directory)`: its `SKILL.md` resolves outside the workspace, which I can't load \
       from; skipped. Copy the skill in instead of linking to it.
       """
+    case .skillsDirectoryOutsideWorkspace:
+      """
+      ⚠ The `skills` directory resolves outside the workspace, which I can't load from; all \
+      skills skipped. Move it into the workspace instead of linking to it.
+      """
     case .unreadableSkillsDirectory:
       nil
     }

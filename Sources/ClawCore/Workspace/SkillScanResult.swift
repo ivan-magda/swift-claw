@@ -26,6 +26,10 @@ public enum WorkspaceWarning: Sendable, Equatable {
   /// `skills/` exists but could not be listed (a context-read failure, distinct from a missing
   /// `skills/` directory, which is normal and silent).
   case unreadableSkillsDirectory
+
+  /// `skills/` itself resolves outside the workspace (a symlinked directory). It anchors every
+  /// per-skill containment check, so nothing under it can be trusted to be inside the workspace.
+  case skillsDirectoryOutsideWorkspace
 }
 
 /// The result of scanning `skills/`: the valid descriptors plus any skip warnings.

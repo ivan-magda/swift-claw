@@ -85,16 +85,17 @@ public struct SkillLoadTool: Tool {
 private extension SkillLoadTool {
   /// Containment is defence in depth: the scan already only yields directories it listed under
   /// `skills/`, but a symlinked skill directory must not serve a file from outside the workspace.
+  /// The boundary is the workspace root rather than `skills/`, so the `skills` component is vetted
+  /// too — anchoring on `skills/` would let a symlinked `skills/` redefine the boundary itself.
   func body(of descriptor: SkillDescriptor) -> ToolPayload {
-    let skillsRoot = workspaceRoot.appendingPathComponent(
+    let relativePath = [
       WorkspaceSkills.directoryName,
-      isDirectory: true
-    )
-    let relativePath =
-      "\(descriptor.directory.lastPathComponent)/\(WorkspaceSkills.manifestName)"
+      descriptor.directory.lastPathComponent,
+      WorkspaceSkills.manifestName,
+    ].joined(separator: "/")
 
     let manifestPath: String
-    switch WorkspacePathContainment.resolveExisting(path: relativePath, root: skillsRoot.path) {
+    switch WorkspacePathContainment.resolveExisting(path: relativePath, root: workspaceRoot.path) {
     case .refused(let reason):
       return errorPayload(reason)
     case .resolved(let resolved):

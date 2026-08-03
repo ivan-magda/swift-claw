@@ -24,7 +24,8 @@ public protocol WorkspaceReading: Sendable {
   /// yields `.escapingSkillDirectory` and is dropped, since the loader refuses to serve a body from
   /// there. A missing `skills/` directory or a subdirectory with no `SKILL.md` is skipped without a
   /// warning; a `skills/` directory that exists but cannot be listed yields
-  /// `.unreadableSkillsDirectory`. Never a half-entry, never a crash. Descriptors are sorted by
-  /// directory name.
+  /// `.unreadableSkillsDirectory`, and one that itself resolves outside the workspace scans nothing
+  /// at all under `.skillsDirectoryOutsideWorkspace`. Never a half-entry, never a crash. Descriptors
+  /// are sorted by directory name.
   func scanSkills() -> SkillScanResult
 }

@@ -52,10 +52,15 @@ public struct FileSystemWorkspace: WorkspaceReading {
     guard skillsIsDirectory.boolValue else {
       return SkillScanResult(descriptors: [], warnings: [.unreadableSkillsDirectory])
     }
+    // Each skill is contained against `skills/`, so a symlinked `skills/` would move the boundary
+    // it is checked against and index manifests from anywhere on disk.
+    guard let containmentRoot = Self.containedSkillsRoot(skillsRoot, under: root) else {
+      return SkillScanResult(descriptors: [], warnings: [.skillsDirectoryOutsideWorkspace])
+    }
 
     guard
       let entries = try? fileManager.contentsOfDirectory(
-        at: skillsRoot,
+        at: containmentRoot,
         includingPropertiesForKeys: nil,
         options: [.skipsHiddenFiles]
       )
@@ -68,7 +73,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
     var warnings: [WorkspaceWarning] = []
 
     for subdir in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-      switch Self.entry(at: subdir, under: skillsRoot) {
+      switch Self.entry(at: subdir, under: containmentRoot) {
       case .notASkill:
         continue
       case .rejected(let warning):
@@ -91,6 +96,19 @@ public struct FileSystemWorkspace: WorkspaceReading {
     case notASkill
     case rejected(WorkspaceWarning)
     case usable(SkillDescriptor)
+  }
+
+  /// The canonical `skills/` directory, or nil when it resolves outside the canonical workspace
+  /// root — which is what makes it a sound containment anchor for the skills beneath it.
+  static func containedSkillsRoot(_ skillsRoot: URL, under root: URL) -> URL? {
+    guard
+      let canonicalRoot = WorkspacePathContainment.canonicalPath(root.path),
+      let canonicalSkillsRoot = WorkspacePathContainment.canonicalPath(skillsRoot.path),
+      WorkspacePathContainment.isContained(target: canonicalSkillsRoot, root: canonicalRoot)
+    else {
+      return nil
+    }
+    return URL(fileURLWithPath: canonicalSkillsRoot, isDirectory: true)
   }
 
   /// Settles one subdirectory's identity: containment first, then the manifest's own claims.

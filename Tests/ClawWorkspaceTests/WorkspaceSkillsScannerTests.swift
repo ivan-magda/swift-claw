@@ -382,6 +382,56 @@ import Testing
     #expect(result.warnings == [.escapingSkillDirectory(directory: "summarize")])
   }
 
+  @Test func aSkillsDirectorySymlinkedOutsideTheWorkspaceScansNothing() throws {
+    // given - the whole skills/ directory is a link out, holding an otherwise valid skill.
+    let root = try makeTemporaryRoot()
+    let outside = try makeTemporaryRoot()
+    defer {
+      try? FileManager.default.removeItem(at: root)
+      try? FileManager.default.removeItem(at: outside)
+    }
+    try writeFile(
+      atRelativePath: "elsewhere/summarize/SKILL.md",
+      content: Self.validManifest,
+      under: outside
+    )
+    try FileManager.default.createSymbolicLink(
+      at: root.appendingPathComponent("skills"),
+      withDestinationURL: outside.appendingPathComponent("elsewhere")
+    )
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then - skills/ anchors every per-skill check, so a linked-out one indexes nothing.
+    #expect(result.descriptors.isEmpty)
+    #expect(result.warnings == [.skillsDirectoryOutsideWorkspace])
+  }
+
+  @Test func aSkillsDirectorySymlinkedWithinTheWorkspaceStillScans() throws {
+    // given - linking skills/ at a sibling inside the workspace keeps every manifest contained.
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    try writeFile(
+      atRelativePath: "store/summarize/SKILL.md",
+      content: Self.validManifest,
+      under: root
+    )
+    try FileManager.default.createSymbolicLink(
+      at: root.appendingPathComponent("skills"),
+      withDestinationURL: root.appendingPathComponent("store")
+    )
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then
+    #expect(result.descriptors.map(\.name) == ["summarize"])
+    #expect(result.warnings.isEmpty)
+  }
+
   @Test func aSkillDirectorySymlinkedWithinTheSkillsTreeStillScans() throws {
     // given - "store" holds no SKILL.md of its own, so it scans as an ordinary skipped subdirectory.
     let root = try makeTemporaryRoot()

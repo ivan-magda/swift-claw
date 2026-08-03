@@ -371,6 +371,31 @@ import Testing
     #expect(payload.content.contains("outside the workspace"))
   }
 
+  @Test func aSymlinkedSkillsDirectoryPointingOutsideIsRefused() async throws {
+    // given — the skills directory itself links out, so it cannot be its own containment boundary
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
+    let escapee = fixture.outside.appendingPathComponent("elsewhere/summarize", isDirectory: true)
+    try FileManager.default.createDirectory(at: escapee, withIntermediateDirectories: true)
+    try Data(Self.manifest.utf8).write(to: escapee.appendingPathComponent("SKILL.md"))
+    try FileManager.default.createSymbolicLink(
+      at: fixture.root.appendingPathComponent("skills"),
+      withDestinationURL: fixture.outside.appendingPathComponent("elsewhere")
+    )
+    let descriptor = SkillDescriptor(name: "summarize", description: "d", directory: escapee)
+    let tool = makeTool(
+      root: fixture.root,
+      scan: SkillScanResult(descriptors: [descriptor], warnings: [])
+    )
+
+    // when
+    let payload = await execute(tool, name: "summarize")
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("outside the workspace"))
+  }
+
   @Test func aMissingOrUnreadableManifestSurfacesAnError() async throws {
     // given — the file vanished between the scan and the load
     let fixture = try makeFixture()

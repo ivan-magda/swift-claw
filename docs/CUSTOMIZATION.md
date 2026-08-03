@@ -98,6 +98,9 @@ saying it until you fix the file, since the scan runs fresh on every turn:
 - `⚠ Skill research: its SKILL.md resolves outside the workspace, which I can't load from;
   skipped.` A skill directory has to live under `skills/`, not be symlinked in from
   elsewhere — clawd reads nothing outside the workspace. Copy the folder in instead.
+- `⚠ The skills directory resolves outside the workspace, which I can't load from; all
+  skills skipped.` The same rule applied to `skills/` itself: linking the whole directory
+  to a folder elsewhere on disk turns every skill under it off. Move it in.
 - `⚠ Skills index over budget; left out this turn: research, weekly-review.` The index has
   its own slice of the context budget. Skills are indexed in alphabetical order and the
   overflow is cut from the end, so shortening descriptions is what brings the tail back.
