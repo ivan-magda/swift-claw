@@ -1,9 +1,13 @@
 import ArgumentParser
+import AsyncHTTPClient
 import ClawAuth
 import ClawCore
+import ClawGateway
 import ClawSecrets
+import ClawTelegram
 import ClawWorkspace
 import Foundation
+import Logging
 
 #if canImport(Glibc)
   import Glibc
@@ -17,8 +21,58 @@ struct MCPCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "mcp",
     abstract: "Manage the assistant's MCP servers.",
-    subcommands: [SetToken.self, ClearToken.self]
+    subcommands: [List.self, Probe.self, SetToken.self, ClearToken.self]
   )
+
+  struct List: ParsableCommand {
+    static let configuration = CommandConfiguration(
+      commandName: "list",
+      abstract: "Show the configured MCP servers and their token state.",
+      discussion: """
+        A static check: it reads the catalog and the token store and contacts nothing, so it answers \
+        the same way whether the daemon is up, down, or the servers are unreachable. Use probe for \
+        live proof.
+        """
+    )
+
+    func run() throws {
+      let environment = ProcessInfo.processInfo.environment
+      let context = try MCPCommand.resolveContext(environment: environment)
+      MCPCommand.emit(try MCPCommand.listReport(context: context))
+    }
+  }
+
+  struct Probe: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      commandName: "probe",
+      abstract: "Contact each MCP server and report what it answers.",
+      discussion: """
+        Connects, runs the initialize handshake, and counts the tools the server would contribute — \
+        the same path the daemon takes at boot, so a server that probes clean is a server that will \
+        load. Exits non-zero when any probed server fails.
+        """
+    )
+
+    @Argument(help: "Probe only this server. Omitted, every enabled server is probed.")
+    var server: String?
+
+    func run() async throws {
+      let environment = ProcessInfo.processInfo.environment
+      let context = try MCPCommand.resolveContext(environment: environment)
+      let targets = try MCPCommand.probeTargets(named: server, config: context.config)
+
+      guard targets.isEmpty == false else {
+        MCPCommand.emit(MCPCommand.nothingToProbeReport(config: context.config))
+        return
+      }
+
+      let report = try await MCPCommand.probeReport(targets: targets, context: context)
+      MCPCommand.emit(report)
+      guard report.ok else {
+        throw ExitCode.failure
+      }
+    }
+  }
 
   struct SetToken: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -123,10 +177,81 @@ extension MCPCommand {
     }
   }
 
+  /// The offline view: what the catalog declares, what the token store holds for it, and any token
+  /// left behind by a server the catalog no longer names. Contacts nothing.
+  static func listReport(context: MCPCommandContext) throws -> DoctorReport {
+    let store = EncryptedMCPCredentialStore(stateRoot: context.stateRoot)
+    let credentials = try openingTokenStore {
+      try store.loadAll(servers: context.config.servers)
+    }
+    let stored = try openingTokenStore {
+      try store.storedServerNames()
+    }
+
+    var checks = MCPDoctorRows.rows(config: context.config, credentials: credentials)
+    if let orphans = MCPDoctorRows.orphanTokenRow(storedServers: stored, config: context.config) {
+      checks.append(orphans)
+    }
+    return DoctorReport(checks: checks)
+  }
+
+  /// The servers a probe contacts: the one named, or every enabled server. A server named outright
+  /// is probed even when it is disabled — the owner asked about that one.
+  static func probeTargets(named name: String?, config: MCPConfig) throws -> [MCPServerConfig] {
+    guard let name else {
+      return config.enabledServers
+    }
+    guard let server = config.servers.first(where: { $0.name == name }) else {
+      throw fail(MCPConfigError.unknownServer(name: name, known: config.servers.map(\.name)))
+    }
+    return [server]
+  }
+
+  /// Live proof: every target contacted over the real transport, reported in the same vocabulary the
+  /// daemon records at boot.
+  static func probeReport(
+    targets: [MCPServerConfig],
+    context: MCPCommandContext
+  ) async throws -> DoctorReport {
+    let credentials = try openingTokenStore {
+      try EncryptedMCPCredentialStore(stateRoot: context.stateRoot).loadAll(servers: targets)
+    }
+
+    let client = HTTPClient(eventLoopGroupProvider: .singleton)
+    let outcomes = await MCPProbe.run(
+      servers: targets,
+      credentials: credentials,
+      http: AsyncHTTPExecutor(client: client),
+      logger: MCPProbe.quietLogger()
+    )
+    try? await client.shutdown()
+
+    return DoctorReport(checks: MCPDoctorRows.bootRows(outcomes: outcomes))
+  }
+
+  static func nothingToProbeReport(config: MCPConfig) -> DoctorReport {
+    DoctorReport(checks: [MCPDoctorRows.nothingProbedRow(config: config)])
+  }
+
   static func clearToken(server name: String, stateRoot: URL) throws -> MCPTokenOutcome {
     try underInstanceLock(stateRoot: stateRoot) {
       let removed = try EncryptedMCPCredentialStore(stateRoot: stateRoot).delete(server: name)
       return removed ? .cleared(server: name) : .nothingToClear(server: name)
+    }
+  }
+}
+
+// MARK: - Token Store
+
+private extension MCPCommand {
+  /// Runs a read against the token store, mapping its closed taxonomy to the exit code the owner
+  /// gets for any unopenable envelope. The read-only verbs take no lock: the daemon writes nothing
+  /// there, so the worst a concurrent mutation can do is answer from the previous envelope.
+  static func openingTokenStore<Value>(_ body: () throws -> Value) throws -> Value {
+    do {
+      return try body()
+    } catch let error as CredentialStoreError {
+      throw fail("token store: \(error)", code: .secretLoadFailed)
     }
   }
 }
@@ -215,6 +340,13 @@ private extension MCPCommand {
   static func report(_ outcome: MCPTokenOutcome) {
     // swiftlint:disable:next no_print_in_production
     print(outcome.summary)
+  }
+
+  /// The read-only verbs print the same grouped table `clawd doctor` does, because they are built
+  /// from the same rows.
+  static func emit(_ report: DoctorReport) {
+    // swiftlint:disable:next no_print_in_production
+    print(report.renderText())
   }
 
   /// Writes the complaint to stderr and returns the code to throw, so every refusal reads the same

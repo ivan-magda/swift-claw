@@ -8,6 +8,7 @@ import ClawSecrets
 import ClawTelegram
 import ClawTools
 import Foundation
+import Logging
 
 struct DoctorCommand: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
@@ -50,7 +51,7 @@ struct DoctorCommand: AsyncParsableCommand {
     report.add(key: "secrets", value: secretsRow.value, ok: secretsRow.ok, group: .config)
 
     addLLMAuthRow(to: &report, config: config)
-    addMCPRows(to: &report, config: config)
+    let mcp = addMCPRows(to: &report, config: config)
 
     if checkConfig {
       emit(report)
@@ -67,6 +68,7 @@ struct DoctorCommand: AsyncParsableCommand {
 
     addDatabaseRows(to: &report, config: config)
     await addConnectivityRows(to: &report, config: config)
+    await addMCPProbeRows(to: &report, mcp: mcp)
     report.add(contentsOf: await sandboxRows(config: config, live: true))
 
     emit(report)
@@ -172,13 +174,16 @@ private extension DoctorCommand {
   /// The offline half of the MCP health table: what the catalog declares and what the token store
   /// holds for it. No server is contacted — a running daemon's own reporter adds what each one
   /// actually contributed, which this process cannot see.
-  func addMCPRows(to report: inout DoctorReport, config: AppConfig) {
+  ///
+  /// Returns what it read so the live probe below contacts exactly the servers these rows describe,
+  /// rather than re-reading the catalog and possibly answering about a different one.
+  func addMCPRows(to report: inout DoctorReport, config: AppConfig) -> MCPBootInputs? {
     let catalog: MCPConfig
     do {
       catalog = try EnvironmentLoader.loadMCPConfig(config: config)
     } catch {
       report.add(contentsOf: [MCPDoctorRows.failureRow("config error: \(error)")])
-      return
+      return nil
     }
 
     do {
@@ -187,9 +192,31 @@ private extension DoctorCommand {
         servers: catalog.servers
       )
       report.add(contentsOf: MCPDoctorRows.rows(config: catalog, credentials: credentials))
+      return MCPBootInputs(config: catalog, credentials: credentials)
     } catch {
       report.add(contentsOf: [MCPDoctorRows.failureRow("token store error: \(error)")])
+      return nil
     }
+  }
+
+  /// The live half, on a full run only: each enabled server is contacted over the same transport the
+  /// daemon uses, so the report says what would actually load rather than what is declared. Read-only
+  /// (initialize + tools/list), so it is safe to run beside a daemon that is already up.
+  func addMCPProbeRows(to report: inout DoctorReport, mcp: MCPBootInputs?) async {
+    guard let mcp, mcp.config.enabledServers.isEmpty == false else {
+      return
+    }
+
+    let client = HTTPClient(eventLoopGroupProvider: .singleton)
+    let outcomes = await MCPProbe.run(
+      servers: mcp.config.enabledServers,
+      credentials: mcp.credentials,
+      http: AsyncHTTPExecutor(client: client),
+      logger: MCPProbe.quietLogger()
+    )
+    try? await client.shutdown()
+
+    report.add(contentsOf: MCPDoctorRows.bootRows(outcomes: outcomes))
   }
 
   func addDatabaseRows(to report: inout DoctorReport, config: AppConfig) {

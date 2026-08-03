@@ -340,11 +340,9 @@ private extension MessageRouter {
         text: CommandReplies.help
       )
     case .doctor:
-      return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        chatId: message.chatId,
-        text: await doctor.report().renderTelegramSummary()
-      )
+      return await sendHealth(rawUpdate: rawUpdate, message: message, section: nil)
+    case .mcp:
+      return await sendHealth(rawUpdate: rawUpdate, message: message, section: .mcp)
     case .stop:
       return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message)
     case .new:
@@ -386,6 +384,22 @@ private extension MessageRouter {
     case .plain(let plainText):
       return try await routePlain(plainText, rawUpdate: rawUpdate, message: message)
     }
+  }
+
+  /// The health reply — the whole report, or one section of it. `/mcp` is status-only, and routing
+  /// it through this same report is what keeps it that way: the router has no MCP surface beyond
+  /// rendering what the daemon already holds.
+  func sendHealth(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    section: DoctorGroup?
+  ) async -> HandleOutcome {
+    let report = await doctor.report()
+    return await replies.sendCanned(
+      updateId: rawUpdate.updateId,
+      chatId: message.chatId,
+      text: section.map(report.renderTelegramGroup) ?? report.renderTelegramSummary()
+    )
   }
 
   func routeSchedule(

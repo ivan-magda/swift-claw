@@ -41,6 +41,9 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
   private let tools: [RemoteTool]
   private let outcome: CallOutcome
   private(set) var calledTools: [String] = []
+  /// What each request authenticated with — the seam a token-binding assertion reads, since the
+  /// token itself must never reach a report or a log line.
+  private(set) var authorizationHeaders: [String] = []
 
   init(tools: [RemoteTool], outcome: CallOutcome = .text("the remote tool answered")) {
     self.tools = tools
@@ -57,6 +60,10 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
       throw HTTPTransportFailure.policyMismatch(
         HTTPResponseBodyPolicy.streamingPolicyRequiredMessage
       )
+    }
+
+    if let authorization = request.headers["Authorization"] {
+      authorizationHeaders.append(authorization)
     }
 
     let reply = try answer(to: request.body ?? Data())

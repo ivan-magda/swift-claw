@@ -48,15 +48,10 @@ extension DaemonBuilder {
   }
 
   private func makeSession(for server: MCPServerConfig) -> MCPServerSession {
-    MCPServerSession(
-      config: server,
-      transportFactory: MCPStreamableHTTPTransportFactory(
-        server: server,
-        token: mcp.token(for: server.name),
-        http: toolExecutor,
-        logger: logger
-      ),
-      clientVersion: ClawdVersion.current,
+    MCPSessionFactory.make(
+      server: server,
+      token: mcp.token(for: server.name),
+      http: toolExecutor,
       logger: logger
     )
   }

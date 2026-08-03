@@ -137,4 +137,18 @@ import Testing
     #expect(Command.parse("/STATUS@CLAW_BOT", botUsername: "claw_bot") == .doctor)
     #expect(Command.parse("see /status", botUsername: "claw_bot") == .plain("see /status"))
   }
+
+  @Test func mcpParses() {
+    // given / when / then
+    #expect(Command.parse("/mcp", botUsername: "claw_bot") == .mcp)
+    #expect(Command.parse("/MCP@CLAW_BOT", botUsername: "claw_bot") == .mcp)
+    #expect(Command.parse("check /mcp", botUsername: "claw_bot") == .plain("check /mcp"))
+  }
+
+  @Test func mcpTakesNoArgumentsSoNoArgumentCanBecomeAManagementVerb() {
+    // given — an argument tail that reads like a management command.
+    // when / then — it parses to the same argument-free status request.
+    #expect(Command.parse("/mcp add https://evil.test/mcp", botUsername: "claw_bot") == .mcp)
+    #expect(Command.parse("/mcp set-token linear hunter2", botUsername: "claw_bot") == .mcp)
+  }
 }

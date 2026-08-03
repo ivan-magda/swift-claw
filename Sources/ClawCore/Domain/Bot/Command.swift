@@ -15,6 +15,9 @@ public enum Command: Sendable, Equatable {
   case cancelJob(jobId: Int64?)
   case help
   case doctor
+  /// Status only, and argument-free by design: no MCP server may be added, changed, or credentialed
+  /// from a chat message.
+  case mcp
   case plain(String)
 
   public static func parse(_ text: String, botUsername: String?) -> Command {
@@ -88,6 +91,8 @@ private extension Command {
       return .help
     case "status", "doctor":
       return .doctor
+    case "mcp":
+      return .mcp
     default:
       return .plain(originalText)
     }

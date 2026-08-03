@@ -43,6 +43,33 @@ enum MCPDoctorRows {
   static func failureRow(_ message: String) -> DoctorReport.Check {
     row(key: "mcp", value: message, ok: false)
   }
+
+  /// Nothing was contacted, and why. A catalog whose servers are all disabled is a state an owner
+  /// chose, so it reads as a fact rather than a failure.
+  static func nothingProbedRow(config: MCPConfig) -> DoctorReport.Check {
+    row(
+      key: "mcp",
+      value: config.servers.isEmpty ? "no servers configured" : "no enabled servers to probe",
+      ok: true
+    )
+  }
+
+  /// Names tokens left behind by servers the catalog no longer declares. Nothing can send them —
+  /// the binding comes from the config — so this is a cleanup hint, not a failure, and the owner
+  /// needs the names because `clear-token` is the only thing that removes them.
+  static func orphanTokenRow(storedServers: [String], config: MCPConfig) -> DoctorReport.Check? {
+    let configured = Set(config.servers.map(\.name))
+    let orphans = storedServers.filter { configured.contains($0) == false }.sorted()
+    guard orphans.isEmpty == false else {
+      return nil
+    }
+    return row(
+      key: "mcp.unbound_tokens",
+      value:
+        "\(orphans.joined(separator: ", ")) — not in the config; clawd mcp clear-token removes",
+      ok: true
+    )
+  }
 }
 
 // MARK: - Server Rows
