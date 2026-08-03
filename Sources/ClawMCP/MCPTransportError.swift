@@ -1,8 +1,10 @@
 import ClawCore
+import Foundation
 
 /// A Streamable HTTP exchange that did not deliver a JSON-RPC message.
 ///
-/// Every case is safe to render: nothing here quotes the server's body, so a failure can be logged
+/// Every case is safe to render. Nothing quotes the server's body, and the one case that carries a
+/// server-supplied string renders it only through `mediaTypeDescription`, so a failure can be logged
 /// or shown to the owner without carrying remote text into a place that reads as our own words.
 public enum MCPTransportError: Error, Sendable, Equatable {
   /// A send arrived before `connect()`, or after `disconnect()` spent the instance.
@@ -41,11 +43,32 @@ extension MCPTransportError: CustomStringConvertible {
     case .httpStatus(let code):
       return "MCP server returned HTTP \(code)"
     case .unsupportedContentType(let value):
-      return "MCP server returned an unsupported content type: \(value)"
+      return "MCP server returned an unsupported content type: \(Self.mediaTypeDescription(value))"
     case .oversizedMessage(let limitBytes):
       return "MCP message exceeds the \(limitBytes)-byte limit"
     case .requestFailed(let failure):
       return "MCP request failed: \(failure.safeMessage)"
     }
+  }
+
+  /// A `Content-Type` header is written by the server, and this failure is rendered as our own
+  /// words — into a payload the trifecta gate treats as trusted. So the header is echoed back only
+  /// when it is shaped like a media type; anything else is named rather than quoted, and a server
+  /// gets no channel for arbitrary text through a diagnostic.
+  private static func mediaTypeDescription(_ raw: String) -> String {
+    let mediaType = raw.prefix { $0 != ";" }.trimmingCharacters(in: .whitespaces)
+    let parts = mediaType.split(separator: "/", omittingEmptySubsequences: false)
+    let wellFormed =
+      parts.count == 2 && mediaType.count <= 64
+      && parts.allSatisfy { $0.isEmpty == false && $0.allSatisfy(isMediaTypeCharacter) }
+
+    return wellFormed ? mediaType : "unrecognized"
+  }
+
+  /// RFC 9110 token characters, minus the ones no registered media type uses. Narrow on purpose:
+  /// the point is a shape we can vouch for, not fidelity to every legal header.
+  private static func isMediaTypeCharacter(_ character: Character) -> Bool {
+    character.isLetter && character.isASCII || character.isNumber && character.isASCII
+      || "+-._".contains(character)
   }
 }

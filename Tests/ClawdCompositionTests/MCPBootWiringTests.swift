@@ -44,6 +44,28 @@ import Testing
     #expect(inputs.token(for: "linear") == nil)
   }
 
+  @Test("a token quoted by a log line is scrubbed by the redactor the union builds")
+  func tokenIsUnprintableThroughTheBootRedactor() throws {
+    // given — the union exactly as `RunCommand.bootstrapLogger` consumes it.
+    let inputs = MCPBootInputs(
+      config: try MCPConfig(servers: [try server(named: "linear")]),
+      credentials: ["linear": .token("mcp-linear-secret-token")]
+    )
+    let values = inputs.redactionValues(
+      with: Secrets(telegramBotToken: "tg-token", llmApiKey: nil, searchApiKey: nil)
+    )
+    let redactor = SecretRedactor(secretValues: values)
+
+    // when — the shape a transport failure takes when a server echoes the header back.
+    let line = redactor.redact(
+      "mcp send failed: 401 {\"error\":\"bad Bearer mcp-linear-secret-token\"}"
+    )
+
+    // then
+    #expect(line.contains("mcp-linear-secret-token") == false)
+    #expect(line.contains(SecretRedactor.replacement))
+  }
+
   private func server(named name: String) throws -> MCPServerConfig {
     try MCPServerConfig(name: name, url: "https://\(name).test.invalid/mcp")
   }
