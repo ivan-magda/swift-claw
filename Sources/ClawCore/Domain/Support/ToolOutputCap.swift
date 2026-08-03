@@ -1,4 +1,3 @@
-import ClawCore
 import Foundation
 
 /// The shared per-tool output cap (ARCHITECTURE.md §5.3): 25 000 tokens enforced in the grapheme

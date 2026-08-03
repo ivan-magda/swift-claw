@@ -6,7 +6,7 @@ import Foundation
 /// which of its lines carry payload. What those payloads *mean* is a route's own business, which is
 /// why only those two questions live here — the Chat Completions chunk schema and the Responses
 /// event schema agree on nothing past this line.
-enum SSEFraming {
+public enum SSEFraming {
   private static let lineFeed: UInt8 = 0x0A
   private static let carriageReturn: UInt8 = 0x0D
 
@@ -16,7 +16,7 @@ enum SSEFraming {
   /// reads more directly, but a stream only ever uses one of them, so the other's search runs to the
   /// end of the buffer every single call — which is quadratic over a delivery of many small events,
   /// and is the difference between framing 4 MiB in milliseconds and in minutes.
-  static func delimiterRange(in data: Data) -> Range<Data.Index>? {
+  public static func delimiterRange(in data: Data) -> Range<Data.Index>? {
     var index = data.startIndex
     let end = data.endIndex
 
@@ -50,7 +50,7 @@ enum SSEFraming {
 
   /// The `data:` field values of one SSE event: comments (`:`) and non-`data` fields are dropped,
   /// and a single leading space after the colon is stripped, per the SSE field-parsing rules.
-  static func dataPayloadLines(in text: String) -> [String] {
+  public static func dataPayloadLines(in text: String) -> [String] {
     // The CRLF fold is a bridged Foundation pass over the whole event; a stream delivers one event
     // at a time but many thousands of them, so an LF-only event — the overwhelmingly common form —
     // skips the fold on a cheap byte scan instead of paying it every single event.

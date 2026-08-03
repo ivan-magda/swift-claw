@@ -55,6 +55,7 @@ private extension Dictionary where Key == String, Value == String {
 public enum HTTPMethod: String, Sendable, Equatable {
   case get = "GET"
   case post = "POST"
+  case delete = "DELETE"
 }
 
 /// Whether an attempt could have reached the server.

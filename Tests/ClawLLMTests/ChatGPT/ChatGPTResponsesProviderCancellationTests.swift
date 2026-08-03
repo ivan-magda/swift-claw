@@ -37,7 +37,7 @@ import Testing
     // `stream` returns
     let gate = AsyncGate()
     let harness = ProviderHarness(
-      steps: [.blockedStream(okHead, Fixtures.basicSuccess(), gate)]
+      steps: [.blockedStream(okHead, Fixtures.basicSuccess(), ScriptedStreamHold(release: gate))]
     )
 
     // when

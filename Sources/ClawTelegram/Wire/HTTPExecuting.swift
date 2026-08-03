@@ -100,6 +100,8 @@ private extension AsyncHTTPExecutor {
       clientRequest.method = .GET
     case .post:
       clientRequest.method = .POST
+    case .delete:
+      clientRequest.method = .DELETE
     }
 
     for (name, value) in request.headers {

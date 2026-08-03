@@ -360,7 +360,7 @@ import Testing
         .streamFailure(
           okHead,
           Fixtures.slowSuccess(),
-          TransportFailure(message: "dropped mid-stream")
+          ScriptedTransportFailure(message: "dropped mid-stream")
         ),
         .stream(okHead, Fixtures.basicSuccess()),
       ]

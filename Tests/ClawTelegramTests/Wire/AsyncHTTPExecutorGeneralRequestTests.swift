@@ -435,6 +435,36 @@ final class HandoffCounter: Sendable {
   }
 
   @Test(.timeLimit(.minutes(1)))
+  func deleteReachesTheWireAsDeleteAndCarriesNoBody() async throws {
+    // given — the shape a session teardown needs: a bodyless DELETE the peer answers with 204
+    try await withScriptedServer(routes: [
+      "/session": ScriptedResponse(status: .noContent)
+    ]) { server in
+      // when
+      let result = try await withExecutor { executor in
+        try await executor.execute(
+          HTTPRequest(
+            method: .delete,
+            url: server.url("/session"),
+            headers: ["X-Session-Id": "sess-1"],
+            body: nil,
+            timeout: .seconds(5),
+            responseBodyPolicy: buffered()
+          )
+        )
+      }
+
+      // then — the method survives the mapping into the client request, not silently becoming a GET
+      let received = try #require(server.recorder.received.first)
+      #expect(received.method == "DELETE")
+      #expect(received.uri == "/session")
+      #expect(received.values(for: "X-Session-Id") == ["sess-1"])
+      #expect(received.body.isEmpty)
+      #expect(result.statusCode == 204)
+    }
+  }
+
+  @Test(.timeLimit(.minutes(1)))
   func successBodyBeyondTheSuccessCapFailsRatherThanArrivingShort() async throws {
     // given
     try await withScriptedServer(routes: [

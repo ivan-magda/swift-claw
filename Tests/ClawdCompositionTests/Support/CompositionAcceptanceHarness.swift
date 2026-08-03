@@ -7,94 +7,6 @@ import ClawTestSupport
 import Foundation
 import GRDB
 
-/// A scripted `HTTPExecuting & HTTPStreaming` double for the composition acceptance suites. It records
-/// every request (so the fixed endpoint, headers, and wire body are assertable) and answers each
-/// `openStream` from a queue of SSE scripts. A `gate` variant parks the producer inside the body
-/// transfer so a lane can be held live across a shutdown.
-actor AcceptanceStreamingHTTP: HTTPExecuting, HTTPStreaming {
-  /// Parks the body producer live inside the exchange: it opens `started` on entry (so a test knows
-  /// the lane is running inside provider SSE and nested HTTP), then waits on `release` before it may
-  /// finish. Ignoring cancellation is deliberate — the join must outlive a cancel, which is the exact
-  /// grace-timeout condition under test.
-  struct StreamHold: Sendable {
-    let started: AsyncGate
-    let release: AsyncGate
-
-    init(started: AsyncGate = AsyncGate(), release: AsyncGate = AsyncGate()) {
-      self.started = started
-      self.release = release
-    }
-  }
-
-  struct StreamScript: Sendable {
-    let head: HTTPStreamHead
-    let chunks: [Data]
-    let hold: StreamHold?
-
-    init(head: HTTPStreamHead, chunks: [Data], hold: StreamHold? = nil) {
-      self.head = head
-      self.chunks = chunks
-      self.hold = hold
-    }
-  }
-
-  struct Recorded: Sendable {
-    let url: String
-    let headers: [String: String]
-    let body: Data?
-  }
-
-  private var streamScripts: [StreamScript]
-  private let bufferedResponses: [String: HTTPResult]
-  private(set) var recorded: [Recorded] = []
-
-  init(streamScripts: [StreamScript], bufferedResponses: [String: HTTPResult] = [:]) {
-    self.streamScripts = streamScripts
-    self.bufferedResponses = bufferedResponses
-  }
-
-  var requestedURLs: [String] { recorded.map(\.url) }
-  var lastBody: Data? { recorded.last?.body }
-  var lastHeaders: [String: String] { recorded.last?.headers ?? [:] }
-
-  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-    try request.beginHandoff?()
-    recorded.append(Recorded(url: request.url, headers: request.headers, body: request.body))
-    guard let scripted = bufferedResponses[request.url] else {
-      throw UnscriptedAcceptanceRequest(url: request.url)
-    }
-    return scripted
-  }
-
-  func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
-    try request.beginHandoff?()
-    recorded.append(Recorded(url: request.url, headers: request.headers, body: request.body))
-    guard !streamScripts.isEmpty else {
-      throw UnscriptedAcceptanceRequest(url: request.url)
-    }
-    let script = streamScripts.removeFirst()
-    return HTTPStreamExchange.make(
-      head: script.head,
-      maximumUnreadBodyBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
-      operation: { sink in
-        if let hold = script.hold {
-          hold.started.open()
-          await hold.release.waitIgnoringCancellation()
-        }
-        for chunk in script.chunks {
-          try? await sink.send(chunk)
-        }
-        return .completed
-      }
-    )
-  }
-}
-
-/// An unmatched URL is a test defect, so the scripted transport refuses it loudly.
-struct UnscriptedAcceptanceRequest: Error {
-  let url: String
-}
-
 // MARK: - Fixed fresh credential
 
 /// A managed store that hands back one fresh credential (far-future expiry, so the source never
@@ -168,7 +80,7 @@ enum CompositionAcceptance {
   /// Builds the real provider stack through the **production `ProviderStackFactory`** over a scripted
   /// transport and a fresh managed credential — no hand-built provider.
   static func makeStack(
-    http: AcceptanceStreamingHTTP,
+    http: ScriptedHTTPExecutor,
     store: any LLMCredentialStore
   ) throws -> ProviderStack {
     let config = try chatGPTConfig()

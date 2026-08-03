@@ -553,7 +553,7 @@ import Testing
       .streamFailure(
         HTTPStreamHead(statusCode: 200, headers: [:]),
         [],
-        TransportFailure(message: "dropped after request")
+        ScriptedTransportFailure(message: "dropped after request")
       )
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
@@ -584,7 +584,7 @@ import Testing
       .blockedStream(
         HTTPStreamHead(statusCode: 200, headers: [:]),
         [Data("data: [DONE]\n\n".utf8)],
-        gate
+        ScriptedStreamHold(release: gate)
       )
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
@@ -650,7 +650,7 @@ import Testing
     // source, and the same value is what a diagnostic gets scrubbed of
     let apiKey = "sk-static-999"
     let exec = ScriptedHTTPExecutor([
-      .fail(TransportFailure(message: "reset with key \(apiKey)"))
+      .fail(ScriptedTransportFailure(message: "reset with key \(apiKey)"))
     ])
     let provider = makeProvider(
       config: makeConfig(apiKey: "ignored-by-the-source", retryBudget: 1),
