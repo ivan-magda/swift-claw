@@ -8,9 +8,6 @@ import Foundation
 /// the shared `MemoryWriteArguments` (ClawCore), the same derivation the waiter rebuilds from
 /// the recorded canonical args.
 public struct MemoryWriteTool: Tool {
-  /// Pinned cap: the preview stays owner-readable, never a wall of text.
-  static let previewCapGraphemes = 400
-
   private let redactor: SecretRedactor
 
   public init(redactor: SecretRedactor) {
@@ -90,7 +87,7 @@ public struct MemoryWriteTool: Tool {
       // the scan warnings still flag secret/instruction SHAPES rather than hiding them.
       contentPreview: ToolOutputCap.cap(
         redactor.redact(request.item.text),
-        maxGraphemes: Self.previewCapGraphemes
+        maxGraphemes: ToolOutputCap.approvalPreviewGraphemes
       ),
       warnings: request.warnings.map(\.confirmationSummary)
     )

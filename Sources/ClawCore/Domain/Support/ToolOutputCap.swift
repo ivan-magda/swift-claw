@@ -5,6 +5,9 @@ import Foundation
 /// with the canonical truncation marker (not copied).
 public enum ToolOutputCap {
   public static let maxGraphemes = 80_000
+  /// What an approval prompt shows of a tool's payload: enough to judge the action, short enough
+  /// that the prompt still reads as one message.
+  public static let approvalPreviewGraphemes = 400
   public static let truncationMarker = TextTruncation.marker
 
   public static func cap(_ text: String, maxGraphemes: Int = ToolOutputCap.maxGraphemes) -> String {
