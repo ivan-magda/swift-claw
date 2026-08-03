@@ -125,6 +125,15 @@ import Testing
       "Mcp-Session-Id",
       "content-type",
       "MCP-PROTOCOL-VERSION",
+      "Host",
+      "content-length",
+      "Transfer-Encoding",
+      "Connection",
+      "Keep-Alive",
+      "Proxy-Connection",
+      "TE",
+      "Trailer",
+      "Upgrade",
     ]
   ) func invalidOrReservedStaticHeadersAreRejected(_ header: String) {
     // given / when / then
@@ -137,7 +146,11 @@ import Testing
     }
   }
 
-  @Test(arguments: ["Bad Header", "Ünicode", "accept", "Mcp-Session-Id"])
+  @Test(arguments: [
+    "Bad Header", "Ünicode", "accept", "Mcp-Session-Id", "Host", "Content-Length",
+    "Transfer-Encoding", "Connection", "Keep-Alive", "Proxy-Connection", "TE", "Trailer",
+    "Upgrade",
+  ])
   func invalidOrReservedAuthHeadersAreRejected(_ header: String) {
     // given / when / then
     #expect(throws: MCPConfigError.self) {
@@ -145,6 +158,17 @@ import Testing
         name: "docs",
         url: "https://example.com/mcp",
         authHeader: header
+      )
+    }
+  }
+
+  @Test func caseInsensitiveDuplicateStaticHeadersAreRejected() {
+    // given / when / then
+    #expect(throws: MCPConfigError.self) {
+      try MCPServerConfig(
+        name: "docs",
+        url: "https://example.com/mcp",
+        headers: ["X-Workspace": "first", "x-workspace": "second"]
       )
     }
   }

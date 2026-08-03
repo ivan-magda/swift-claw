@@ -14,8 +14,8 @@ public enum MCPLimits {
   public static let configFileName = "mcp.yaml"
 }
 
-/// Header names owned by the MCP Streamable HTTP protocol, plus the RFC field-shape checks shared
-/// by config validation and the transport.
+/// Header names owned by MCP or the HTTP transport, plus the RFC field-shape checks shared by config
+/// validation and the transport.
 public enum MCPHTTPHeader {
   public static let accept = "Accept"
   public static let contentType = "Content-Type"
@@ -23,7 +23,21 @@ public enum MCPHTTPHeader {
   public static let session = "Mcp-Session-Id"
 
   private static let reserved = Set(
-    [accept, contentType, protocolVersion, session].map { name in name.lowercased() }
+    [
+      accept,
+      contentType,
+      protocolVersion,
+      session,
+      "Connection",
+      "Content-Length",
+      "Host",
+      "Keep-Alive",
+      "Proxy-Connection",
+      "TE",
+      "Trailer",
+      "Transfer-Encoding",
+      "Upgrade",
+    ].map { name in name.lowercased() }
   )
 
   public static func isReserved(_ name: String) -> Bool {
@@ -220,14 +234,18 @@ private extension MCPServerConfig {
       throw MCPConfigError.invalidValue(key: "authHeader", value: "invalid HTTP field name")
     }
     guard MCPHTTPHeader.isReserved(trimmedAuthHeader) == false else {
-      throw MCPConfigError.invalidValue(key: "authHeader", value: "reserved MCP header")
+      throw MCPConfigError.invalidValue(key: "authHeader", value: "reserved transport header")
     }
+    var seenHeaderNames: Set<String> = []
     for (header, value) in headers {
       guard MCPHTTPHeader.isValidName(header) else {
         throw MCPConfigError.invalidValue(key: "headers", value: "invalid HTTP field name")
       }
       guard MCPHTTPHeader.isReserved(header) == false else {
-        throw MCPConfigError.invalidValue(key: "headers", value: "reserved MCP header")
+        throw MCPConfigError.invalidValue(key: "headers", value: "reserved transport header")
+      }
+      guard seenHeaderNames.insert(header.lowercased()).inserted else {
+        throw MCPConfigError.invalidValue(key: "headers", value: "duplicate HTTP field name")
       }
       guard MCPHTTPHeader.isValidValue(value) else {
         throw MCPConfigError.invalidValue(key: "headers", value: "invalid HTTP field value")

@@ -163,9 +163,10 @@ servers:
       exclude: [delete_note]                 # used only when include is absent
 ```
 
-A `headers` entry named the same as `authHeader` is refused. clawd also rejects malformed header
-names and values and protocol-owned fields such as `Content-Type` and `Mcp-Session-Id`. Set
-`tools.include: []` when you want a configured server to contribute no tools.
+clawd refuses a `headers` entry named the same as `authHeader`. It also rejects malformed names and
+values, case-insensitive duplicates, and fields that control MCP, request authority, or HTTP framing,
+such as `Content-Type`, `Host`, `Content-Length`, and `Mcp-Session-Id`. Set `tools.include: []` when
+you want a configured server to contribute no tools.
 
 **No tokens in this file.** Store each one encrypted instead, with the daemon stopped — clawd reads
 tokens once at startup:
