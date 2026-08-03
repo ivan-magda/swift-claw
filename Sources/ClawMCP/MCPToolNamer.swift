@@ -12,17 +12,6 @@ public struct MCPToolCoordinate: Sendable, Equatable, Hashable {
   }
 }
 
-/// A remote tool paired with the local name the registry advertises for it.
-public struct MCPToolNaming: Sendable, Equatable {
-  public let coordinate: MCPToolCoordinate
-  public let localName: String
-
-  public init(coordinate: MCPToolCoordinate, localName: String) {
-    self.coordinate = coordinate
-    self.localName = localName
-  }
-}
-
 /// Composes registry names for remote tools.
 ///
 /// `ToolRegistry` traps on a duplicate name, so naming has to be total before construction: every
@@ -39,16 +28,16 @@ public enum MCPToolNamer {
   public static let serverFragmentLimit = 30
   public static let nameLimit = 64
 
-  public static func assign(_ coordinates: [MCPToolCoordinate]) -> [MCPToolNaming] {
+  /// The local name for each coordinate, positionally: the caller pairs by index, which is the same
+  /// order-preservation the one-pass assignment already rests on.
+  public static func assign(_ coordinates: [MCPToolCoordinate]) -> [String] {
     var taken: Set<String> = []
-    var assigned: [MCPToolNaming] = []
+    var assigned: [String] = []
     assigned.reserveCapacity(coordinates.count)
 
     for coordinate in coordinates {
       let base = composed(server: coordinate.server, tool: coordinate.remoteName)
-      assigned.append(
-        MCPToolNaming(coordinate: coordinate, localName: unique(base, taken: &taken))
-      )
+      assigned.append(unique(base, taken: &taken))
     }
 
     return assigned

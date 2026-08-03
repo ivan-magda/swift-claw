@@ -150,6 +150,8 @@ servers:
     # authHeader: Authorization      # default; the token goes out as "Bearer <token>"
     # connectTimeoutSeconds: 10      # default
     # requestTimeoutSeconds: 30      # default
+    headers:                         # non-secret extras sent on every request; never a token
+      X-Workspace: acme
     tools:
       include: [list_issues, create_issue]   # server's own names; with include set, exclude is ignored
       risk:
@@ -157,7 +159,12 @@ servers:
   - name: notes
     url: http://127.0.0.1:8080/mcp
     enabled: false
+    tools:
+      exclude: [delete_note]                 # used only when include is absent
 ```
+
+A `headers` entry named the same as `authHeader` is refused: that is where the stored token goes,
+and a config that could overwrite it would be a config that could leak one.
 
 **No tokens in this file.** Store each one encrypted instead, with the daemon stopped — clawd reads
 tokens once at startup:
@@ -165,6 +172,10 @@ tokens once at startup:
 ```bash
 clawd mcp set-token linear      # reads the token from stdin, never from the command line
 ```
+
+Add the server to `mcp.yaml` first. The token is bound to that server's configured URL, so
+`set-token` refuses a name the file does not declare (exit 10). `clear-token` takes a bare name, so
+a token left behind by a server you have since deleted can still be removed.
 
 The token is bound to that server's URL. Re-point the server at a different URL and clawd treats the
 token as missing rather than handing your credential to a new host; run `set-token` again.
@@ -195,6 +206,12 @@ reason `clawd doctor` and `/mcp` will show, and clawd starts anyway with the res
 `mcp.yaml` is yours to fix rather than a server's, so it stops startup with exit 10 — a misspelled
 key included. When the set of tools changes across a restart, clawd voids any approval still
 waiting from before, since you granted it against a tool surface that no longer exists.
+
+A skipped server is not a boot failure, but it *is* a doctor failure: `clawd doctor` reports the
+skip, exits 1, and withholds the start command it normally ends with. The daemon itself comes up
+fine — start it directly if you know that server is down. A token bound to a URL the config no
+longer uses fails `clawd doctor --check-config` the same way, with exit 10; `clawd mcp set-token
+<name>` repairs it.
 
 ## Everything else
 

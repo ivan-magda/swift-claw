@@ -85,9 +85,6 @@ struct RunComposition {
         transport: transport,
         botUsername: botUsername,
         mcp: mcp,
-        // The same union `run` handed the log backend, rebuilt from the same two inputs rather than
-        // passed along a second channel that could drift from it.
-        redactionValues: mcp.redactionValues(with: secrets),
         logger: logger,
         makeManagedStore: { makeManagedStore(config.stateRoot) }
       )

@@ -107,6 +107,119 @@ struct StubTransportFactory: MCPTransportFactory {
   }
 }
 
+/// A transport that accepts everything and answers nothing: `connect` and `send` succeed, and the
+/// receive stream stays open and empty.
+///
+/// This is the server that no HTTP timeout catches — the exchange completed, so nothing is in
+/// flight, but no reply carrying our request's id ever arrives, and the SDK resolves a request only
+/// on that. Disconnect finishes the stream so the client's message loop can still be torn down.
+actor SilentTransport: Transport {
+  nonisolated let logger = Logger(label: "test.mcp.silent")
+
+  private let messages: AsyncThrowingStream<Data, any Error>
+  private let continuation: AsyncThrowingStream<Data, any Error>.Continuation
+
+  init() {
+    let (stream, continuation) = AsyncThrowingStream.makeStream(
+      of: Data.self,
+      throwing: (any Error).self
+    )
+    self.messages = stream
+    self.continuation = continuation
+  }
+
+  func connect() async throws {}
+
+  func disconnect() async {
+    continuation.finish()
+  }
+
+  func send(_ data: Data) async throws {}
+
+  func receive() -> AsyncThrowingStream<Data, any Error> {
+    messages
+  }
+}
+
+/// Wraps a live transport and stops forwarding from `mutingSend` onward, so the handshake lands but
+/// a later request is swallowed — the same never-answered exchange `SilentTransport` models, reached
+/// after a session is already up.
+actor MuteAfterHandshakeTransport: Transport {
+  nonisolated let logger = Logger(label: "test.mcp.mute")
+
+  private let inner: InMemoryTransport
+  private let mutingSend: Int
+  private var stream: AsyncThrowingStream<Data, any Error>?
+  private var sends = 0
+
+  init(wrapping inner: InMemoryTransport, mutingSend: Int) {
+    self.inner = inner
+    self.mutingSend = mutingSend
+  }
+
+  func connect() async throws {
+    try await inner.connect()
+    stream = await inner.receive()
+  }
+
+  func disconnect() async {
+    await inner.disconnect()
+  }
+
+  func send(_ data: Data) async throws {
+    sends += 1
+    guard sends < mutingSend else {
+      return
+    }
+    try await inner.send(data)
+  }
+
+  func receive() -> AsyncThrowingStream<Data, any Error> {
+    stream
+      ?? AsyncThrowingStream { continuation in
+        continuation.finish()
+      }
+  }
+}
+
+/// Records the protocol revision the session adopted after the handshake, which a transport that
+/// carries no headers would otherwise have nowhere to show.
+actor NegotiationRecordingTransport: MCPNegotiatingTransport {
+  nonisolated let logger = Logger(label: "test.mcp.negotiating")
+
+  private let inner: InMemoryTransport
+  private var stream: AsyncThrowingStream<Data, any Error>?
+  private(set) var adopted: String?
+
+  init(wrapping inner: InMemoryTransport) {
+    self.inner = inner
+  }
+
+  func adopt(protocolVersion: String) {
+    adopted = protocolVersion
+  }
+
+  func connect() async throws {
+    try await inner.connect()
+    stream = await inner.receive()
+  }
+
+  func disconnect() async {
+    await inner.disconnect()
+  }
+
+  func send(_ data: Data) async throws {
+    try await inner.send(data)
+  }
+
+  func receive() -> AsyncThrowingStream<Data, any Error> {
+    stream
+      ?? AsyncThrowingStream { continuation in
+        continuation.finish()
+      }
+  }
+}
+
 /// Wraps a live transport and fails one `send`, which is how a server that dropped our session (or
 /// answered with a status we cannot use) looks from inside the SDK client.
 ///

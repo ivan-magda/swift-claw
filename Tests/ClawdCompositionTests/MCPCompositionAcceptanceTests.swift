@@ -67,6 +67,23 @@ import Testing
     #expect(remote.egressClass == .arbitraryDestination)
   }
 
+  @Test("a server that contributes no tool still leaves a session for shutdown to hang up")
+  func zeroToolServerStillYieldsASession() async throws {
+    // given a server whose whole catalog is filtered away, so no adapter holds its session
+    let server = ScriptedMCPHTTPServer(tools: [RemoteTool(name: "create_issue")])
+    let builder = try makeBuilder(
+      http: server,
+      servers: [try serverConfig(tools: MCPToolFilter(include: ["nothing_matches"]))]
+    )
+
+    // when
+    let stack = await builder.resolveMCPStack()
+
+    // then
+    #expect(stack.tools.isEmpty)
+    #expect(stack.sessions.count == 1)
+  }
+
   // MARK: Policy fingerprint
 
   @Test("the policy sub-hash is stable across resolutions and moves when the catalog does")
@@ -268,9 +285,6 @@ private extension MCPCompositionAcceptanceTests {
       transport: TelegramClient(token: "tg-token", http: http),
       botUsername: nil,
       mcp: inputs,
-      // Built exactly as `run` builds it, so what the builder's redactors see here is what the log
-      // backend would have been installed with.
-      redactionValues: inputs.redactionValues(with: secrets),
       logger: Self.silentLogger,
       makeManagedStore: { FreshCredentialStore(present: false) }
     )

@@ -13,7 +13,7 @@ struct MCPToolNamerTests {
     let assigned = MCPToolNamer.assign(coordinates)
 
     // then
-    #expect(assigned.map(\.localName) == ["mcp__my_server__list_issues_"])
+    #expect(assigned == ["mcp__my_server__list_issues_"])
   }
 
   @Test("a verbose server name is capped before it can crowd out the tool")
@@ -23,7 +23,7 @@ struct MCPToolNamerTests {
     let coordinates = [MCPToolCoordinate(server: server, remoteName: "list")]
 
     // when
-    let name = try #require(MCPToolNamer.assign(coordinates).first?.localName)
+    let name = try #require(MCPToolNamer.assign(coordinates).first)
 
     // then
     #expect(name == "mcp__" + String(repeating: "s", count: 30) + "__list")
@@ -40,7 +40,7 @@ struct MCPToolNamerTests {
     ]
 
     // when
-    let name = try #require(MCPToolNamer.assign(coordinates).first?.localName)
+    let name = try #require(MCPToolNamer.assign(coordinates).first)
 
     // then
     #expect(name.count == MCPToolNamer.nameLimit)
@@ -57,7 +57,7 @@ struct MCPToolNamerTests {
     ]
 
     // when
-    let names = MCPToolNamer.assign(coordinates).map(\.localName)
+    let names = MCPToolNamer.assign(coordinates)
 
     // then
     #expect(
@@ -65,7 +65,7 @@ struct MCPToolNamerTests {
         "mcp__linear__list_issues", "mcp__linear__list_issues_2", "mcp__linear__list_issues_3",
       ]
     )
-    #expect(MCPToolNamer.assign(coordinates).map(\.localName) == names)
+    #expect(MCPToolNamer.assign(coordinates) == names)
   }
 
   @Test("a suffixed name still fits the total cap")
@@ -78,7 +78,7 @@ struct MCPToolNamerTests {
     ]
 
     // when
-    let names = MCPToolNamer.assign(coordinates).map(\.localName)
+    let names = MCPToolNamer.assign(coordinates)
 
     // then
     #expect(names.allSatisfy { $0.count <= MCPToolNamer.nameLimit })
@@ -96,8 +96,8 @@ struct MCPToolNamerTests {
     let extended = existing + [MCPToolCoordinate(server: "github", remoteName: "list")]
 
     // when
-    let before = MCPToolNamer.assign(existing).map(\.localName)
-    let after = MCPToolNamer.assign(extended).map(\.localName)
+    let before = MCPToolNamer.assign(existing)
+    let after = MCPToolNamer.assign(extended)
 
     // then
     #expect(Array(after.prefix(before.count)) == before)
@@ -110,7 +110,7 @@ struct MCPToolNamerTests {
     let coordinates = [MCPToolCoordinate(server: "linear", remoteName: "")]
 
     // when
-    let names = MCPToolNamer.assign(coordinates).map(\.localName)
+    let names = MCPToolNamer.assign(coordinates)
 
     // then
     #expect(names == ["mcp__linear__tool"])
@@ -127,7 +127,7 @@ struct MCPToolNamerTests {
     }
 
     // when
-    let names = MCPToolNamer.assign(coordinates).map(\.localName)
+    let names = MCPToolNamer.assign(coordinates)
 
     // then
     #expect(names.allSatisfy { $0.hasPrefix(MCPToolNamer.prefix) })

@@ -438,6 +438,10 @@ and `--check-config` stays offline.
 reports what each server answered, and the tool count it prints is what **your**
 include/exclude filter admits, not the server's full catalog.
 
+A server that is simply down makes `clawd doctor` exit 1 and withhold the start
+command, even though the daemon itself would boot fine without it. `clawd run`
+directly is the way past that while you work on something else.
+
 ---
 
 ## State root

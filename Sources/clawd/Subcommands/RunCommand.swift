@@ -160,35 +160,6 @@ private extension RunCommand {
     }
   }
 
-  /// Loads the MCP catalog and the tokens bound to it. Both failures are the owner's and both are
-  /// loud: a malformed catalog exits `configInvalid` like any other bad config, and an unopenable
-  /// credential envelope joins `secrets.enc`'s family rather than booting with silent no-auth.
-  static func loadMCPOrExit(config: AppConfig) throws -> MCPBootInputs {
-    let catalog: MCPConfig
-    do {
-      catalog = try EnvironmentLoader.loadMCPConfig(config: config)
-    } catch let error as MCPConfigError {
-      FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
-      throw ExitCode(error.exitCode)
-    } catch {
-      FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
-      throw ExitCode(ClawExitCode.configInvalid.rawValue)
-    }
-
-    do {
-      return MCPBootInputs(
-        config: catalog,
-        credentials: try EnvironmentLoader.loadMCPCredentials(
-          config: config,
-          servers: catalog.servers
-        )
-      )
-    } catch {
-      FileHandle.standardError.write(Data("mcp credential error: \(error)\n".utf8))
-      throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
-    }
-  }
-
   /// Takes the single-instance lock; a second daemon on the same state root exits with the
   /// distinct already-running code instead of corrupting shared state.
   static func acquireInstanceLockOrExit(config: AppConfig) throws -> InstanceLock {
@@ -234,5 +205,40 @@ private extension RunCommand {
     }
 
     return stores
+  }
+}
+
+// MARK: - MCP Bootstrap
+
+/// Internal rather than file-private so the two refusals below — which decide whether a daemon comes
+/// up at all — can be driven by a test with no process to exit.
+extension RunCommand {
+  /// Loads the MCP catalog and the tokens bound to it. Both failures are the owner's and both are
+  /// loud: a malformed catalog exits `configInvalid` like any other bad config, and an unopenable
+  /// credential envelope joins `secrets.enc`'s family rather than booting with silent no-auth.
+  static func loadMCPOrExit(config: AppConfig) throws -> MCPBootInputs {
+    let catalog: MCPConfig
+    do {
+      catalog = try EnvironmentLoader.loadMCPConfig(config: config)
+    } catch let error as MCPConfigError {
+      FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
+      throw ExitCode(error.exitCode)
+    } catch {
+      FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.configInvalid.rawValue)
+    }
+
+    do {
+      return MCPBootInputs(
+        config: catalog,
+        credentials: try EnvironmentLoader.loadMCPCredentials(
+          config: config,
+          servers: catalog.servers
+        )
+      )
+    } catch {
+      FileHandle.standardError.write(Data("mcp credential error: \(error)\n".utf8))
+      throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
+    }
   }
 }

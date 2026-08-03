@@ -28,11 +28,11 @@ public enum MCPTransportLimits {
 ///
 /// The instance is single-use: `disconnect()` finishes the receive stream, and an `AsyncThrowingStream`
 /// that has finished cannot be reopened. Reconnecting means building a new transport.
-public actor MCPStreamableHTTPTransport: Transport {
+public actor MCPStreamableHTTPTransport: MCPNegotiatingTransport {
   nonisolated public let logger: Logger
 
   private let endpoint: String
-  private let baseHeaders: [String: String]
+  private var baseHeaders: [String: String]
   private let connectTimeout: Duration
   private let requestTimeout: Duration
   private let http: any HTTPExecuting & HTTPStreaming
@@ -118,6 +118,12 @@ public actor MCPStreamableHTTPTransport: Transport {
 
   public func receive() -> AsyncThrowingStream<Data, any Error> {
     messages
+  }
+
+  /// Switches every request after the handshake to the revision the server agreed to speak. Until
+  /// one has been agreed the header carries our offer, which is the only thing there is to send.
+  public func adopt(protocolVersion: String) {
+    baseHeaders.setValue(protocolVersion, forHeader: Header.protocolVersion)
   }
 }
 

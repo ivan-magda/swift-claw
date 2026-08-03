@@ -54,6 +54,106 @@ struct MCPStreamableHTTPTransportTests {
     #expect(await executor.lastHeaders["Authorization"] == nil)
   }
 
+  @Test("an owner header may add to an exchange but never redefine what it is")
+  func ownerHeadersCannotRedefineFraming() async throws {
+    // given a config that spells the framing headers itself, one of them in a different case
+    let executor = ScriptedHTTPExecutor([.stream(TransportFixture.jsonHead(), [Fixture.reply])])
+    let server = try TransportFixture.server(
+      headers: [
+        "accept": "text/plain",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "MCP-Protocol-Version": "1999-01-01",
+      ]
+    )
+    let transport = MCPStreamableHTTPTransport(server: server, http: executor)
+    try await transport.connect()
+
+    // when
+    try await transport.send(Fixture.request)
+
+    // then the framing wins, and no second spelling of a header rides along with it
+    let recorded = try #require(await executor.recorded.first)
+    #expect(recorded.headers["Accept"] == "application/json, text/event-stream")
+    #expect(recorded.headers["accept"] == nil)
+    #expect(recorded.headers["Content-Type"] == "application/json")
+    #expect(recorded.headers["MCP-Protocol-Version"] == MCPProtocol.version)
+  }
+
+  @Test("every request after the handshake names the revision the server agreed to")
+  func adoptsNegotiatedProtocolVersion() async throws {
+    // given
+    let executor = ScriptedHTTPExecutor([
+      .stream(TransportFixture.jsonHead(), [Fixture.reply]),
+      .stream(TransportFixture.jsonHead(), [Fixture.reply]),
+    ])
+    let transport = try TransportFixture.transport(http: executor)
+    try await transport.connect()
+    try await transport.send(Fixture.request)
+
+    // when the handshake settles on an older revision than the one we offered
+    await transport.adopt(protocolVersion: "2025-06-18")
+    try await transport.send(Fixture.request)
+
+    // then only the offer preceded the answer; a server pinned to that revision 400s anything else
+    let versions = await executor.recorded.map { request in
+      request.headers["MCP-Protocol-Version"]
+    }
+    #expect(versions == [MCPProtocol.version, "2025-06-18"])
+  }
+
+  @Test("a JSON reply past the message cap is refused")
+  func oversizedDocument() async throws {
+    // given a body whose chunks sum past the cap
+    let chunk = Data(repeating: UInt8(ascii: "x"), count: 512 * 1024)
+    let chunks = Array(
+      repeating: chunk,
+      count: MCPTransportLimits.maxMessageBytes / chunk.count + 1
+    )
+    let executor = ScriptedHTTPExecutor([.stream(TransportFixture.jsonHead(), chunks)])
+    let transport = try TransportFixture.transport(http: executor)
+    try await transport.connect()
+
+    // when / then
+    await #expect(
+      throws: MCPTransportError.oversizedMessage(limitBytes: MCPTransportLimits.maxMessageBytes)
+    ) {
+      try await transport.send(Fixture.request)
+    }
+  }
+
+  @Test("a long stream of complete events is bounded per message, not per transfer")
+  func oversizedEventVersusLongStream() async throws {
+    // given one unterminated event past the cap, and separately many small complete events past it
+    let filler = String(repeating: "x", count: 512 * 1024)
+    let runaway = Array(
+      repeating: Data("data: \(filler)".utf8),
+      count: MCPTransportLimits.maxMessageBytes / (512 * 1024) + 1
+    )
+    let complete = (0..<12).map { index in
+      Data("data: {\"id\":\(index),\"pad\":\"\(filler)\"}\n\n".utf8)
+    }
+
+    let runawayTransport = try TransportFixture.transport(
+      http: ScriptedHTTPExecutor([.stream(TransportFixture.eventStreamHead(), runaway)])
+    )
+    try await runawayTransport.connect()
+
+    let streamTransport = try TransportFixture.transport(
+      http: ScriptedHTTPExecutor([.stream(TransportFixture.eventStreamHead(), complete)])
+    )
+    try await streamTransport.connect()
+
+    // when / then one event that never ends is refused
+    await #expect(
+      throws: MCPTransportError.oversizedMessage(limitBytes: MCPTransportLimits.maxMessageBytes)
+    ) {
+      try await runawayTransport.send(Fixture.request)
+    }
+
+    // and a transfer that weighs more than the cap in whole events is not
+    try await streamTransport.send(Fixture.request)
+  }
+
   @Test("the handshake is bounded by the connect timeout and later calls by the request timeout")
   func timeoutsPerPhase() async throws {
     // given
@@ -280,7 +380,7 @@ struct MCPStreamableHTTPTransportTests {
     }
   }
 
-  @Test("disconnect tells the server the session is over, then ends the receive stream")
+  @Test("disconnect ends the receive stream first, then tells the server the session is over")
   func disconnectDeletesSession() async throws {
     // given
     let executor = ScriptedHTTPExecutor([

@@ -44,6 +44,9 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
   /// What each request authenticated with — the seam a token-binding assertion reads, since the
   /// token itself must never reach a report or a log line.
   private(set) var authorizationHeaders: [String] = []
+  /// How many sessions were handed back with the spec's `DELETE`. A session left open is a resource
+  /// stranded on someone else's server, which only teardown can show.
+  private(set) var teardowns = 0
 
   init(tools: [RemoteTool], outcome: CallOutcome = .text("the remote tool answered")) {
     self.tools = tools
@@ -52,7 +55,10 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
 
   /// The session-teardown DELETE is the only buffered request this server ever receives.
   func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-    HTTPResult(statusCode: 200, headers: [:], body: Data())
+    if request.method == .delete {
+      teardowns += 1
+    }
+    return HTTPResult(statusCode: 200, headers: [:], body: Data())
   }
 
   func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {

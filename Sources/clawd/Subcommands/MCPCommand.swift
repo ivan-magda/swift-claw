@@ -217,7 +217,13 @@ extension MCPCommand {
       try EncryptedMCPCredentialStore(stateRoot: context.stateRoot).loadAll(servers: targets)
     }
 
-    let client = HTTPClient(eventLoopGroupProvider: .singleton)
+    // The daemon's own tool client posture, not the library default: a probe run over a
+    // redirect-following client with decompression off would be proving something about a road the
+    // daemon never takes.
+    let client = HTTPClient(
+      eventLoopGroupProvider: .singleton,
+      configuration: HTTPClientProfile.protectedEgress.configuration
+    )
     let outcomes = await MCPProbe.run(
       servers: targets,
       credentials: credentials,

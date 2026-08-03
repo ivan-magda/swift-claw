@@ -33,17 +33,18 @@ struct DaemonBuilder: Sendable {
   /// tokens could join `redactionValues`.
   let mcp: MCPBootInputs
 
-  /// The one redaction set for this process — secret-store values plus MCP tokens. Every redactor
-  /// and arg guard the builder makes reads this instead of `secrets.redactionValues`, so none of
-  /// them can be built from a narrower list than the log backend was.
-  let redactionValues: [String]
-
   let logger: Logger
 
   /// Builds the encrypted credential store the managed route loads its record from. A field rather
   /// than a literal so a composition test scripts a missing or malformed envelope in place of the
   /// real one; the current route never invokes it.
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
+
+  /// The one redaction set for this process — secret-store values plus MCP tokens. Every redactor
+  /// and arg guard the builder makes reads this instead of `secrets.redactionValues`, so none of
+  /// them can be built from a narrower list than the log backend was. Derived rather than passed in:
+  /// a caller that could supply the list is a caller that could supply a shorter one.
+  var redactionValues: [String] { mcp.redactionValues(with: secrets) }
 
   /// The single production bound on both the ServiceGroup's graceful window and the lane drain, so
   /// admission-close, cancel, and the bounded drain all share one deadline.
@@ -109,6 +110,9 @@ struct DaemonBuilder: Sendable {
     ]
     if let maintenance = sandbox.maintenance {
       services.append(SandboxLifecycleService(maintenance: maintenance))
+    }
+    if mcpStack.sessions.isEmpty == false {
+      services.append(MCPSessionLifecycleService(sessions: mcpStack.sessions))
     }
 
     return runtimeBundle(

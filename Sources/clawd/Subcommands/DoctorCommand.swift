@@ -207,7 +207,12 @@ private extension DoctorCommand {
       return
     }
 
-    let client = HTTPClient(eventLoopGroupProvider: .singleton)
+    // Same posture the daemon's tool client runs under, so what probes clean here is what will
+    // load there.
+    let client = HTTPClient(
+      eventLoopGroupProvider: .singleton,
+      configuration: HTTPClientProfile.protectedEgress.configuration
+    )
     let outcomes = await MCPProbe.run(
       servers: mcp.config.enabledServers,
       credentials: mcp.credentials,

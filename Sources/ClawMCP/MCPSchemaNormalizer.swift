@@ -12,8 +12,22 @@ import ClawCore
 /// literally named `definitions` keeps its name — rewriting a user-facing property into a meta
 /// keyword is worse than the malformed schema it was meant to fix.
 public enum MCPSchemaNormalizer {
+  /// The parameter schema a tool gets when the server's is not one. Object with no properties is
+  /// what "this tool takes no arguments" looks like, which is the only reading left.
+  static let emptyObjectSchema = JSONValue.object([
+    Keyword.type: .string(Keyword.object),
+    Keyword.properties: .object([:]),
+  ])
+
   public static func normalize(_ schema: JSONValue) -> JSONValue {
-    normalizeSchema(schema)
+    let normalized = normalizeSchema(schema)
+    // Only at the root. A non-object *node* inside a schema is ordinary — `items: true`, an enum
+    // member — but the root is what reaches `function.parameters`, where a provider expects an
+    // object and rejects the whole request, every built-in tool with it, when it does not find one.
+    guard case .object = normalized else {
+      return emptyObjectSchema
+    }
+    return normalized
   }
 }
 

@@ -94,9 +94,9 @@ public enum MCPCatalogResolver {
       }
     }
 
-    let namings = MCPToolNamer.assign(candidates.map(\.coordinate))
-    let tools = zip(candidates, namings).map { candidate, naming in
-      candidate.resolved(as: naming.localName)
+    let localNames = MCPToolNamer.assign(candidates.map(\.coordinate))
+    let tools = zip(candidates, localNames).map { candidate, localName in
+      candidate.resolved(as: localName)
     }
 
     return ResolvedMCPCatalog(tools: tools, outcomes: outcomes)

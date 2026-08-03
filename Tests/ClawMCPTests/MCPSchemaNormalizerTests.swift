@@ -226,10 +226,38 @@ struct MCPSchemaNormalizerTests {
     #expect(normalized == schema)
   }
 
-  @Test("a schema that is not an object is returned untouched")
-  func passesNonObjectThrough() {
-    // given
-    let schema = JSONValue.string("not a schema")
+  @Test(
+    "a root that is not an object becomes an empty object schema",
+    arguments: [
+      JSONValue.string("not a schema"),
+      JSONValue.null,
+      JSONValue.array([]),
+      JSONValue.bool(true),
+    ]
+  )
+  func repairsNonObjectRoot(schema: JSONValue) {
+    // given the server answered with something that is not a schema at all
+
+    // when
+    let normalized = MCPSchemaNormalizer.normalize(schema)
+
+    // then the tool advertises no arguments rather than sending a body every provider rejects,
+    // which would fail the whole request the built-in tools travel in too
+    #expect(
+      normalized == .object(["type": .string("object"), "properties": .object([:])])
+    )
+  }
+
+  @Test("a non-object node inside a schema is left alone")
+  func passesNonObjectChildThrough() {
+    // given `additionalProperties: false` and an enum of scalars are both legal and not objects
+    let schema = JSONValue.object([
+      "type": .string("object"),
+      "additionalProperties": .bool(false),
+      "properties": .object([
+        "mode": .object(["enum": .array([.string("fast"), .string("slow")])])
+      ]),
+    ])
 
     // when
     let normalized = MCPSchemaNormalizer.normalize(schema)
