@@ -298,6 +298,7 @@ struct ContextBuilderTests {
           .invalidSkillName(directory: "Shouting", name: "Shouting"),
           .skillNameDirectoryMismatch(directory: "triage", name: "triage-mail"),
           .duplicateSkillName(name: "deploy", directories: ["deploy", "deploy-copy"]),
+          .escapingSkillDirectory(directory: "linked-out"),
           .unreadableSkillsDirectory,
         ]
       )
@@ -311,11 +312,12 @@ struct ContextBuilderTests {
     )
 
     // then — one notice per authoring fault; the I/O fault stays in the log
-    #expect(result.ownerNotices.count == 4)
+    #expect(result.ownerNotices.count == 5)
     #expect(result.ownerNotices[0].contains("`no-frontmatter`"))
     #expect(result.ownerNotices[1].contains("`Shouting`"))
     #expect(result.ownerNotices[2].contains("`triage-mail`"))
     #expect(result.ownerNotices[3].contains("`deploy-copy`"))
+    #expect(result.ownerNotices[4].contains("`linked-out`"))
     let untrusted = try #require(result.messages.first { message in message.role == .user })
       .content.text
     #expect(untrusted.contains("- summarize: Summarize owner-provided text."))

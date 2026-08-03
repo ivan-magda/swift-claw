@@ -411,6 +411,11 @@ private extension ContextBuilder {
       ⚠ Skill name `\(name)` is claimed by \(directories.map { "`\($0)`" }.joined(separator: ", ")); \
       all of them skipped, rename one.
       """
+    case .escapingSkillDirectory(let directory):
+      """
+      ⚠ Skill `\(directory)`: its `SKILL.md` resolves outside the workspace, which I can't load \
+      from; skipped. Copy the skill in instead of linking to it.
+      """
     case .unreadableSkillsDirectory:
       nil
     }

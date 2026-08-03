@@ -19,6 +19,10 @@ public enum WorkspaceWarning: Sendable, Equatable {
   /// silently shadow the other.
   case duplicateSkillName(name: String, directories: [String])
 
+  /// A skill directory resolves outside the workspace (a symlink). The loader refuses to serve a
+  /// body from there, so indexing it would advertise a skill that can never load.
+  case escapingSkillDirectory(directory: String)
+
   /// `skills/` exists but could not be listed (a context-read failure, distinct from a missing
   /// `skills/` directory, which is normal and silent).
   case unreadableSkillsDirectory

@@ -355,6 +355,56 @@ import Testing
     )
   }
 
+  @Test func aSkillDirectorySymlinkedOutsideTheWorkspaceIsDroppedWithAWarning() throws {
+    // given - the outside directory holds a perfectly valid manifest; only its location disqualifies it.
+    let root = try makeTemporaryRoot()
+    let outside = try makeTemporaryRoot()
+    defer {
+      try? FileManager.default.removeItem(at: root)
+      try? FileManager.default.removeItem(at: outside)
+    }
+    try writeFile(atRelativePath: "elsewhere/SKILL.md", content: Self.validManifest, under: outside)
+    try FileManager.default.createDirectory(
+      at: root.appendingPathComponent("skills", isDirectory: true),
+      withIntermediateDirectories: true
+    )
+    try FileManager.default.createSymbolicLink(
+      at: root.appendingPathComponent("skills/summarize"),
+      withDestinationURL: outside.appendingPathComponent("elsewhere")
+    )
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then - the loader refuses this body, so the index must not advertise it.
+    #expect(result.descriptors.isEmpty)
+    #expect(result.warnings == [.escapingSkillDirectory(directory: "summarize")])
+  }
+
+  @Test func aSkillDirectorySymlinkedWithinTheSkillsTreeStillScans() throws {
+    // given - "store" holds no SKILL.md of its own, so it scans as an ordinary skipped subdirectory.
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    try writeFile(
+      atRelativePath: "skills/store/summarize/SKILL.md",
+      content: Self.validManifest,
+      under: root
+    )
+    try FileManager.default.createSymbolicLink(
+      at: root.appendingPathComponent("skills/summarize"),
+      withDestinationURL: root.appendingPathComponent("skills/store/summarize")
+    )
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then - containment is what disqualifies a link, not the link itself.
+    #expect(result.descriptors.map(\.name) == ["summarize"])
+    #expect(result.warnings.isEmpty)
+  }
+
   @Test func multipleSkillsAreReturnedInDirectoryNameOrder() throws {
     // given
     let root = try makeTemporaryRoot()

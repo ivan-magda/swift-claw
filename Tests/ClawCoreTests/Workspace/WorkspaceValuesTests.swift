@@ -22,6 +22,16 @@ import Testing
     #expect(paths == ["SOUL.md", "AGENTS.md", "TOOLS.md", "USER.md", "MEMORY.md", "HEARTBEAT.md"])
   }
 
+  @Test func everyPromptSteeringFileIsPrivilegedIncludingSkillManifests() {
+    // given / when / then — a write to any of these feeds a later turn, so all earn the banner.
+    for file in WorkspaceFile.allCases {
+      #expect(WorkspaceFile.isPromptPrivileged(basename: file.relativePath))
+    }
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "SKILL.md"))
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "notes.md") == false)
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "skill.md") == false)
+  }
+
   @Test func missingLoadedFileIsEmptyZeroLengthWithMissingOutcome() {
     // given / when
     let missing = LoadedFile.missing

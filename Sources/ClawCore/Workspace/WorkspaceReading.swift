@@ -20,9 +20,11 @@ public protocol WorkspaceReading: Sendable {
   /// `.skillNameDirectoryMismatch`. A name claimed by several directories has no principled winner,
   /// so every claimant is dropped under one `.duplicateSkillName` — a conformance must never
   /// silently shadow one with another. Descriptions are collapsed to a single line and capped, so
-  /// one manifest cannot occupy several index rows. A missing `skills/` directory or a subdirectory
-  /// with no `SKILL.md` is skipped without a warning; a `skills/` directory that exists but cannot
-  /// be listed yields `.unreadableSkillsDirectory`. Never a half-entry, never a crash. Descriptors
-  /// are sorted by directory name.
+  /// one manifest cannot occupy several index rows. A manifest that resolves outside the workspace
+  /// yields `.escapingSkillDirectory` and is dropped, since the loader refuses to serve a body from
+  /// there. A missing `skills/` directory or a subdirectory with no `SKILL.md` is skipped without a
+  /// warning; a `skills/` directory that exists but cannot be listed yields
+  /// `.unreadableSkillsDirectory`. Never a half-entry, never a crash. Descriptors are sorted by
+  /// directory name.
   func scanSkills() -> SkillScanResult
 }

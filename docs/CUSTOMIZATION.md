@@ -30,8 +30,8 @@ The trust tier decides how much authority the text carries:
   system prompt, so text that reached them through poisoned memory cannot claim system
   authority. Both count as private data for the exfiltration gate below.
 
-When the agent writes to `SOUL.md`, `AGENTS.md`, `USER.md`, or `MEMORY.md`, the approval
-card carries a privileged-file banner. `TOOLS.md` does not get one.
+When the agent writes to a file that steers a later turn, the approval card carries a
+privileged-file banner: any of the files above, plus `HEARTBEAT.md` and any `SKILL.md`.
 
 The agent writes and reads dated daily logs (`memory/YYYY-MM-DD.md`) when a turn calls for
 one; the context builder never injects them the way it injects the files above.
@@ -95,6 +95,9 @@ saying it until you fix the file, since the scan runs fresh on every turn:
 - `⚠ Skill weekly-review: manifest name weekly-summary must match the directory name; skipped.`
   — and sibling notices for a missing frontmatter block, a name that breaks the shape
   rules, or a duplicated name.
+- `⚠ Skill research: its SKILL.md resolves outside the workspace, which I can't load from;
+  skipped.` A skill directory has to live under `skills/`, not be symlinked in from
+  elsewhere — clawd reads nothing outside the workspace. Copy the folder in instead.
 - `⚠ Skills index over budget; left out this turn: research, weekly-review.` The index has
   its own slice of the context budget. Skills are indexed in alphabetical order and the
   overflow is cut from the end, so shortening descriptions is what brings the tail back.

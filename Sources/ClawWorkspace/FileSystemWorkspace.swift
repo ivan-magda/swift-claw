@@ -68,46 +68,76 @@ public struct FileSystemWorkspace: WorkspaceReading {
     var warnings: [WorkspaceWarning] = []
 
     for subdir in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-      let manifestURL = subdir.appendingPathComponent(WorkspaceSkills.manifestName)
-
-      guard fileManager.fileExists(atPath: manifestURL.path) else {
-        continue  // not a skill directory: normal, no warning
-      }
-
-      // An unreadable manifest folds to "" → empty frontmatter → the same invalid-manifest warning.
-      let manifestText = (try? String(contentsOf: manifestURL, encoding: .utf8)) ?? ""
-      let frontmatter = Self.frontmatter(in: manifestText)
-      let directoryName = subdir.lastPathComponent
-      let description = Self.singleLine(frontmatter["description"] ?? "")
-      guard
-        let name = frontmatter["name"], name.isEmpty == false,
-        description.isEmpty == false
-      else {
-        warnings.append(.invalidSkillManifest(skill: directoryName))
+      switch Self.entry(at: subdir, under: skillsRoot) {
+      case .notASkill:
         continue
+      case .rejected(let warning):
+        warnings.append(warning)
+      case .usable(let descriptor):
+        descriptors.append(descriptor)
       }
-      guard Self.isSkillIdentifier(name) else {
-        warnings.append(.invalidSkillName(directory: directoryName, name: Self.bounded(name)))
-        continue
-      }
-      guard name == directoryName else {
-        warnings.append(.skillNameDirectoryMismatch(directory: directoryName, name: name))
-        continue
-      }
-
-      descriptors.append(
-        SkillDescriptor(
-          name: name,
-          description: TextTruncation.cap(description, maxGraphemes: Self.maxDescriptionGraphemes),
-          directory: subdir
-        )
-      )
     }
 
     let reconciled = Self.withoutCollidingNames(descriptors)
     return SkillScanResult(
       descriptors: reconciled.descriptors,
       warnings: warnings + reconciled.warnings
+    )
+  }
+
+  /// What one `skills/` subdirectory turns out to be.
+  enum SkillEntry {
+    /// No `SKILL.md` at all — an ordinary subdirectory, not an authoring fault.
+    case notASkill
+    case rejected(WorkspaceWarning)
+    case usable(SkillDescriptor)
+  }
+
+  /// Settles one subdirectory's identity: containment first, then the manifest's own claims.
+  static func entry(at subdir: URL, under skillsRoot: URL) -> SkillEntry {
+    let manifestURL = subdir.appendingPathComponent(WorkspaceSkills.manifestName)
+    guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+      return .notASkill
+    }
+
+    let directoryName = subdir.lastPathComponent
+    // The loader resolves this same relative path through containment before serving a body, so a
+    // manifest that lives outside the workspace is dropped here rather than indexed as a skill
+    // every load would refuse. The vetted path is then what gets read.
+    let manifestPath: String
+    switch WorkspacePathContainment.resolveExisting(
+      path: "\(directoryName)/\(WorkspaceSkills.manifestName)",
+      root: skillsRoot.path
+    ) {
+    case .refused:
+      return .rejected(.escapingSkillDirectory(directory: directoryName))
+    case .resolved(let resolved):
+      manifestPath = resolved
+    }
+
+    // An unreadable manifest folds to "" → empty frontmatter → the same invalid-manifest warning.
+    let manifestText = (try? String(contentsOfFile: manifestPath, encoding: .utf8)) ?? ""
+    let frontmatter = Self.frontmatter(in: manifestText)
+    let description = Self.singleLine(frontmatter["description"] ?? "")
+    guard
+      let name = frontmatter["name"], name.isEmpty == false,
+      description.isEmpty == false
+    else {
+      return .rejected(.invalidSkillManifest(skill: directoryName))
+    }
+    guard Self.isSkillIdentifier(name) else {
+      return .rejected(.invalidSkillName(directory: directoryName, name: Self.bounded(name)))
+    }
+    guard name == directoryName else {
+      return .rejected(.skillNameDirectoryMismatch(directory: directoryName, name: name))
+    }
+
+    return .usable(
+      SkillDescriptor(
+        name: name,
+        description: TextTruncation.cap(description, maxGraphemes: Self.maxDescriptionGraphemes),
+        directory: subdir
+      )
     )
   }
 
