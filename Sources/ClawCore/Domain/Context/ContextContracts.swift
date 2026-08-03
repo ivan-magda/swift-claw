@@ -177,6 +177,10 @@ public struct RecallHit: Sendable, Equatable, Identifiable {
 }
 
 public struct LabeledContext: Sendable, Equatable {
+  /// The fence tag, and the inert spelling every occurrence inside `content` is rewritten to.
+  private static let fenceTag = "claw-untrusted"
+  private static let defusedFenceTag = "claw-untrusted-escaped"
+
   public let label: String
   public let content: String
   public let nonce: String
@@ -187,11 +191,23 @@ public struct LabeledContext: Sendable, Equatable {
     self.nonce = nonce
   }
 
+  /// A fence label is a trust statement the system prompt writes carve-outs against, so a fence
+  /// tag appearing inside `content` would let untrusted text open a nested fence and claim one.
+  /// Every occurrence is rewritten inert first, leaving the tag the renderer writes as the only
+  /// one in the output — the nonce alone guards the close, not the open.
   public func render() -> String {
     """
-    <claw-untrusted nonce="\(nonce)" label="\(label)">
-    \(content)
-    </claw-untrusted nonce="\(nonce)">
+    <\(Self.fenceTag) nonce="\(nonce)" label="\(label)">
+    \(Self.defusingFenceTags(in: content))
+    </\(Self.fenceTag) nonce="\(nonce)">
     """
+  }
+
+  private static func defusingFenceTags(in content: String) -> String {
+    content.replacingOccurrences(
+      of: fenceTag,
+      with: defusedFenceTag,
+      options: [.caseInsensitive]
+    )
   }
 }
