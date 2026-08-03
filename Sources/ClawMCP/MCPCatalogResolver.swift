@@ -69,8 +69,12 @@ public struct ResolvedMCPCatalog: Sendable, Equatable {
 /// Nothing here throws. One server being unreachable, hostile, or oversized is a fact about that
 /// server; the daemon and every other server carry on, and the reason is recorded for the owner.
 public enum MCPCatalogResolver {
-  public static func resolve(sessions: [MCPServerSession]) async -> ResolvedMCPCatalog {
+  public static func resolve(
+    sessions: [MCPServerSession],
+    metadataRedactor: SecretRedactor = SecretRedactor(secretValues: [])
+  ) async -> ResolvedMCPCatalog {
     let discoveries = await discoverAll(sessions)
+    let sanitizer = MCPMetadataSanitizer(redactor: metadataRedactor)
 
     var candidates: [Candidate] = []
     var outcomes: [MCPServerOutcome] = []
@@ -87,14 +91,14 @@ public enum MCPCatalogResolver {
         }
         candidates.append(
           contentsOf: kept.map { remote in
-            Candidate(config: config, remote: remote)
+            Candidate(config: config, remote: remote, sanitizer: sanitizer)
           }
         )
         outcomes.append(MCPServerOutcome(server: config.name, status: .ok(toolCount: kept.count)))
       }
     }
 
-    let localNames = MCPToolNamer.assign(candidates.map(\.coordinate))
+    let localNames = MCPToolNamer.assign(candidates.map(\.namingCoordinate))
     let tools = zip(candidates, localNames).map { candidate, localName in
       candidate.resolved(as: localName)
     }
@@ -171,17 +175,27 @@ private extension MCPCatalogResolver {
   struct Candidate {
     let config: MCPServerConfig
     let remote: MCP.Tool
+    let sanitizer: MCPMetadataSanitizer
 
     var coordinate: MCPToolCoordinate {
       MCPToolCoordinate(server: config.name, remoteName: remote.name)
+    }
+
+    var namingCoordinate: MCPToolCoordinate {
+      MCPToolCoordinate(
+        server: sanitizer.text(config.name),
+        remoteName: sanitizer.text(remote.name)
+      )
     }
 
     func resolved(as localName: String) -> ResolvedMCPTool {
       ResolvedMCPTool(
         coordinate: coordinate,
         localName: localName,
-        description: MCPDescriptionCap.cap(remote.description ?? ""),
-        parameters: MCPSchemaNormalizer.normalize(MCPValueBridge.jsonValue(remote.inputSchema)),
+        description: MCPDescriptionCap.cap(sanitizer.text(remote.description ?? "")),
+        parameters: sanitizer.schema(
+          MCPSchemaNormalizer.normalize(MCPValueBridge.jsonValue(remote.inputSchema))
+        ),
         riskLevel: config.tools.riskLevel(for: remote.name)
       )
     }

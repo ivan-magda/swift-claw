@@ -39,9 +39,6 @@ enum EnvironmentLoader {
     config: AppConfig,
     servers: [MCPServerConfig]
   ) throws(CredentialStoreError) -> [String: MCPCredentialLoad] {
-    guard servers.isEmpty == false else {
-      return [:]
-    }
     return try EncryptedMCPCredentialStore(stateRoot: config.stateRoot).loadAll(servers: servers)
   }
 

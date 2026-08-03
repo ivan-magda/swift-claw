@@ -60,6 +60,14 @@ import Testing
     #expect(filter.allows("delete_issue") == false)
   }
 
+  @Test func explicitlyEmptyIncludeAllowsNoTools() {
+    // given
+    let filter = MCPToolFilter(include: [], exclude: [])
+
+    // when / then
+    #expect(filter.allows("list_issues") == false)
+  }
+
   @Test func everyToolIsAskUnlessTheOwnerDowngradedIt() {
     // given
     let filter = MCPToolFilter(risk: ["list_issues": .safe])
@@ -106,6 +114,50 @@ import Testing
     // when / then
     #expect(throws: MCPConfigError.duplicateServerName("my_docs")) {
       try MCPConfig(servers: servers)
+    }
+  }
+
+  @Test(
+    arguments: [
+      "Bad Header",
+      "Bad:Header",
+      "Ünicode",
+      "Mcp-Session-Id",
+      "content-type",
+      "MCP-PROTOCOL-VERSION",
+    ]
+  ) func invalidOrReservedStaticHeadersAreRejected(_ header: String) {
+    // given / when / then
+    #expect(throws: MCPConfigError.self) {
+      try MCPServerConfig(
+        name: "docs",
+        url: "https://example.com/mcp",
+        headers: [header: "value"]
+      )
+    }
+  }
+
+  @Test(arguments: ["Bad Header", "Ünicode", "accept", "Mcp-Session-Id"])
+  func invalidOrReservedAuthHeadersAreRejected(_ header: String) {
+    // given / when / then
+    #expect(throws: MCPConfigError.self) {
+      try MCPServerConfig(
+        name: "docs",
+        url: "https://example.com/mcp",
+        authHeader: header
+      )
+    }
+  }
+
+  @Test(arguments: ["line\rbreak", "line\nbreak", "control\u{0085}break"])
+  func staticHeaderValuesCannotInjectControls(_ value: String) {
+    // given / when / then
+    #expect(throws: MCPConfigError.self) {
+      try MCPServerConfig(
+        name: "docs",
+        url: "https://example.com/mcp",
+        headers: ["X-Client": value]
+      )
     }
   }
 

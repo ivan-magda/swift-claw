@@ -14,6 +14,51 @@ public enum MCPLimits {
   public static let configFileName = "mcp.yaml"
 }
 
+/// Header names owned by the MCP Streamable HTTP protocol, plus the RFC field-shape checks shared
+/// by config validation and the transport.
+public enum MCPHTTPHeader {
+  public static let accept = "Accept"
+  public static let contentType = "Content-Type"
+  public static let protocolVersion = "MCP-Protocol-Version"
+  public static let session = "Mcp-Session-Id"
+
+  private static let reserved = Set(
+    [accept, contentType, protocolVersion, session].map { name in name.lowercased() }
+  )
+
+  public static func isReserved(_ name: String) -> Bool {
+    reserved.contains(name.lowercased())
+  }
+
+  /// RFC 9110 `field-name` is an ASCII token. Validating before NIO sees it turns malformed owner
+  /// config into a typed startup error instead of an `HTTPHeaders` precondition failure.
+  public static func isValidName(_ name: String) -> Bool {
+    name.isEmpty == false && name.utf8.allSatisfy(isTokenByte)
+  }
+
+  /// Field values may carry printable Unicode, but never controls that can create another line or
+  /// another field on the wire. Horizontal tab is the one HTTP whitespace control RFC 9110 permits.
+  public static func isValidValue(_ value: String) -> Bool {
+    value.unicodeScalars.allSatisfy { scalar in
+      let codePoint = scalar.value
+      if codePoint == 0x09 {
+        return true
+      }
+      return codePoint >= 0x20 && codePoint != 0x7F && (0x80...0x9F).contains(codePoint) == false
+    }
+  }
+
+  private static func isTokenByte(_ byte: UInt8) -> Bool {
+    switch byte {
+    case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"),
+      UInt8(ascii: "0")...UInt8(ascii: "9"):
+      return true
+    default:
+      return "!#$%&'*+-.^_`|~".utf8.contains(byte)
+    }
+  }
+}
+
 /// Where the server catalog is read from, and whether the owner named it.
 ///
 /// The distinction is the failure policy: a path the owner typed must exist (a typo is an owner
@@ -37,11 +82,13 @@ public enum MCPConfigSource: Sendable, Equatable {
   }
 }
 
+// An empty allowlist and no allowlist have different meanings in the owner config.
+// swiftlint:disable discouraged_optional_collection
 /// Which remote tools a server contributes, and the tier they land on.
 public struct MCPToolFilter: Sendable, Equatable {
-  /// Remote (unprefixed) names. When non-empty this is the whole allowed set and `exclude` is
-  /// ignored — an owner who names both meant the narrower one.
-  public let include: [String]
+  /// Remote (unprefixed) names. Presence makes this the whole allowed set and ignores `exclude`;
+  /// an explicitly empty list therefore exposes no tools, while nil means no allowlist was set.
+  public let include: [String]?
   public let exclude: [String]
   /// Owner downgrades, keyed by remote name. Absent means `.ask`; `.dangerous` is rejected at load.
   public let risk: [String: RiskLevel]
@@ -49,7 +96,7 @@ public struct MCPToolFilter: Sendable, Equatable {
   public static let allowAll = MCPToolFilter()
 
   public init(
-    include: [String] = [],
+    include: [String]? = nil,
     exclude: [String] = [],
     risk: [String: RiskLevel] = [:]
   ) {
@@ -59,10 +106,10 @@ public struct MCPToolFilter: Sendable, Equatable {
   }
 
   public func allows(_ remoteName: String) -> Bool {
-    guard include.isEmpty else {
-      return include.contains(remoteName)
+    guard let include else {
+      return exclude.contains(remoteName) == false
     }
-    return exclude.contains(remoteName) == false
+    return include.contains(remoteName)
   }
 
   /// The tier a remote tool lands on. Every MCP tool is `.ask` unless the owner downgraded it.
@@ -70,6 +117,7 @@ public struct MCPToolFilter: Sendable, Equatable {
     risk[remoteName] ?? .ask
   }
 }
+// swiftlint:enable discouraged_optional_collection
 
 /// One owner-configured MCP server. Construction validates, so a value of this type is always
 /// dispatchable: reachable-shaped URL, usable header names, timeouts inside their bounds, and no
@@ -115,18 +163,7 @@ public struct MCPServerConfig: Sendable, Equatable {
       throw MCPConfigError.invalidURL(server: trimmedName, value: rawURL)
     }
 
-    let trimmedAuthHeader = authHeader.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmedAuthHeader.isEmpty == false else {
-      throw MCPConfigError.invalidValue(key: "authHeader", value: authHeader)
-    }
-    // A static header of the same name would silently shadow the stored token, which is exactly the
-    // shape of an owner pasting a plaintext credential into the file we told them not to.
-    guard
-      headers.keys.contains(where: { $0.caseInsensitiveCompare(trimmedAuthHeader) == .orderedSame })
-        == false
-    else {
-      throw MCPConfigError.invalidValue(key: "headers", value: trimmedAuthHeader)
-    }
+    let trimmedAuthHeader = try Self.validateHeaders(headers, authHeader: authHeader)
 
     guard MCPLimits.connectTimeoutRange.contains(connectTimeoutSeconds) else {
       throw MCPConfigError.invalidValue(
@@ -168,6 +205,43 @@ public struct MCPServerConfig: Sendable, Equatable {
       return token
     }
     return "Bearer \(token)"
+  }
+}
+
+// MARK: - Header Validation
+
+private extension MCPServerConfig {
+  static func validateHeaders(
+    _ headers: [String: String],
+    authHeader: String
+  ) throws -> String {
+    let trimmedAuthHeader = authHeader.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard MCPHTTPHeader.isValidName(trimmedAuthHeader) else {
+      throw MCPConfigError.invalidValue(key: "authHeader", value: "invalid HTTP field name")
+    }
+    guard MCPHTTPHeader.isReserved(trimmedAuthHeader) == false else {
+      throw MCPConfigError.invalidValue(key: "authHeader", value: "reserved MCP header")
+    }
+    for (header, value) in headers {
+      guard MCPHTTPHeader.isValidName(header) else {
+        throw MCPConfigError.invalidValue(key: "headers", value: "invalid HTTP field name")
+      }
+      guard MCPHTTPHeader.isReserved(header) == false else {
+        throw MCPConfigError.invalidValue(key: "headers", value: "reserved MCP header")
+      }
+      guard MCPHTTPHeader.isValidValue(value) else {
+        throw MCPConfigError.invalidValue(key: "headers", value: "invalid HTTP field value")
+      }
+    }
+
+    // A static header of the same name would shadow the stored token.
+    let shadowsToken = headers.keys.contains { header in
+      header.caseInsensitiveCompare(trimmedAuthHeader) == .orderedSame
+    }
+    guard shadowsToken == false else {
+      throw MCPConfigError.invalidValue(key: "headers", value: trimmedAuthHeader)
+    }
+    return trimmedAuthHeader
   }
 }
 

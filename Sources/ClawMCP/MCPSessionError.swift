@@ -5,9 +5,9 @@
 public enum MCPSessionError: Error, Sendable, Equatable {
   /// The call outlived the whole budget a tool call is allowed (connect plus request).
   case callTimedOut(seconds: Int)
-  /// A handshake or tool-list exchange outlived that same budget. The HTTP timeouts bound each
-  /// exchange, but a server that answers one without ever sending the response our request is
-  /// waiting for leaves nothing for them to fire on.
+  /// A handshake or tool-list exchange outlived its phase-specific connect/request budget. The HTTP
+  /// timeouts bound each transfer, but a server that sends no matching response id leaves nothing
+  /// for those transfer bounds to fire on.
   case discoveryTimedOut(seconds: Int)
   case tooManyPages(limit: Int)
   case tooManyTools(limit: Int)

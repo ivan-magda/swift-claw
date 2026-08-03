@@ -7,10 +7,8 @@ import ClawSecrets
 
 /// The one builder behind both MCP health surfaces.
 ///
-/// `clawd doctor` runs in its own process while the daemon may not even be up, so it can only read
-/// what is on disk — the catalog and the token store — and prints `rows` alone. The running daemon
-/// prints the same rows plus what each server actually contributed when it pinned its catalog,
-/// which nothing outside that process can know.
+/// `rows` reports the catalog and token store without contacting a server. A full doctor appends a
+/// live probe, while the daemon appends the catalog outcome it pinned at boot for `/mcp`.
 enum MCPDoctorRows {
   static func rows(
     config: MCPConfig,
@@ -103,8 +101,11 @@ private extension MCPDoctorRows {
   }
 
   static func filterState(_ filter: MCPToolFilter) -> String {
-    guard filter.include.isEmpty else {
-      return "include: \(filter.include.joined(separator: ", "))"
+    if let include = filter.include {
+      guard include.isEmpty == false else {
+        return "include: no tools"
+      }
+      return "include: \(include.joined(separator: ", "))"
     }
     guard filter.exclude.isEmpty else {
       return "exclude: \(filter.exclude.joined(separator: ", "))"

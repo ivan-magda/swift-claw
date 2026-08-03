@@ -67,6 +67,38 @@ import Testing
     #expect(remote.egressClass == .arbitraryDestination)
   }
 
+  @Test("MCP credentials are redacted from provider-facing catalog metadata")
+  func remoteMetadataIsRedactedWithTheBootUnion() async throws {
+    // given the credential appears in every metadata position a hostile server controls
+    let secret = "linear-token"
+    let server = ScriptedMCPHTTPServer(
+      tools: [
+        RemoteTool(
+          name: "search_\(secret)",
+          description: "uses \(secret)",
+          schemaJSON:
+            #"{"type":"object","properties":{"linear-token":{"description":"linear-token"}}}"#
+        )
+      ]
+    )
+    let builder = try makeBuilder(
+      http: server,
+      servers: [try serverConfig()],
+      credentials: ["linear": .token(secret)]
+    )
+
+    // when
+    let stack = await builder.resolveMCPStack()
+    let dispatcher = try makeDispatcher(builder, mcpTools: stack.tools)
+
+    // then
+    let definition = try #require(dispatcher.definitions.first { $0.name.hasPrefix("mcp__") })
+    let parameters = try #require(CanonicalJSON.encode(definition.parameters))
+    let providerSurface = definition.name + definition.description + parameters
+    #expect(providerSurface.contains(secret) == false)
+    #expect(providerSurface.contains(SecretRedactor.replacement))
+  }
+
   @Test("a server that contributes no tool still leaves a session for shutdown to hang up")
   func zeroToolServerStillYieldsASession() async throws {
     // given a server whose whole catalog is filtered away, so no adapter holds its session
@@ -108,6 +140,28 @@ import Testing
     #expect(first != widened)
   }
 
+  @Test("the policy sub-hash moves when an MCP endpoint changes")
+  func policySubhashPinsTheEndpoint() async throws {
+    // given
+    let tools = [RemoteTool(name: "list_issues")]
+    let config = try CompositionAcceptance.chatGPTConfig()
+
+    // when
+    let first = try await subhash(
+      ScriptedMCPHTTPServer(tools: tools),
+      config,
+      [try serverConfig(url: "https://mcp.test.invalid/one")]
+    )
+    let moved = try await subhash(
+      ScriptedMCPHTTPServer(tools: tools),
+      config,
+      [try serverConfig(url: "https://mcp.test.invalid/two")]
+    )
+
+    // then
+    #expect(first != moved)
+  }
+
   // MARK: Ask-tier round trip
 
   @Test("an ask-tier MCP call parks, then executes as untrusted through the approved path")
@@ -134,7 +188,7 @@ import Testing
     // then
     let recorded = try #require(parked.requiresApproval)
     #expect(parked.observation.status == .blockedPendingApproval)
-    #expect(recorded.canonicalTarget == "linear (mcp.test.invalid)")
+    #expect(recorded.canonicalTarget == "linear (https://mcp.test.invalid/mcp)")
     #expect(recorded.presentation.blastRadius == "MCP: linear · list_issues")
     #expect(await server.calledTools.isEmpty)
 
@@ -176,7 +230,7 @@ import Testing
     // when
     let payload = await tool.execute(
       arguments: .object(["query": .string("open")]),
-      canonicalTarget: "linear (mcp.test.invalid)"
+      canonicalTarget: "linear (https://mcp.test.invalid/mcp)"
     )
 
     // then

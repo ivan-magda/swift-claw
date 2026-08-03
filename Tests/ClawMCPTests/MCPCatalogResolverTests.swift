@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import MCP
 import Testing
@@ -86,6 +87,46 @@ struct MCPCatalogResolverTests {
     await CatalogFixture.tearDown(sessions, scripted)
   }
 
+  @Test("remote catalog metadata is redacted before it becomes provider-facing")
+  func catalogMetadataRedacted() async throws {
+    // given
+    let secret = "mcp-token-value"
+    let scripted = ScriptedMCPServer(
+      list: ScriptedMCPServer.paged([
+        [
+          ScriptedMCPServer.tool(
+            "search_\(secret)",
+            description: "uses \(secret)",
+            schema: .object([
+              "type": .string("object"),
+              "properties": .object([
+                "\(secret)_query": .object(["description": .string(secret)])
+              ]),
+            ])
+          )
+        ]
+      ])
+    )
+    let sessions = [try CatalogFixture.session(named: "docs", against: scripted)]
+
+    // when
+    let catalog = await MCPCatalogResolver.resolve(
+      sessions: sessions,
+      metadataRedactor: SecretRedactor(secretValues: [secret])
+    )
+
+    // then
+    let resolved = try #require(catalog.tools.first)
+    let parameters = try #require(CanonicalJSON.encode(resolved.parameters))
+    let providerSurface = resolved.localName + resolved.description + parameters
+    #expect(resolved.localName.contains(secret) == false)
+    #expect(resolved.description.contains(secret) == false)
+    #expect(providerSurface.contains(secret) == false)
+    #expect(providerSurface.contains(SecretRedactor.replacement))
+
+    await CatalogFixture.tearDown(sessions, scripted)
+  }
+
   @Test("an include list wins and exclude is ignored")
   func includeWins() async throws {
     // given
@@ -107,6 +148,30 @@ struct MCPCatalogResolverTests {
     // then
     #expect(catalog.tools.map(\.coordinate.remoteName) == ["keep", "also_keep"])
     #expect(catalog.outcomes == [MCPServerOutcome(server: "linear", status: .ok(toolCount: 2))])
+
+    await CatalogFixture.tearDown(sessions, scripted)
+  }
+
+  @Test("an explicit empty include contributes no tools")
+  func emptyIncludeAllowsNone() async throws {
+    // given
+    let scripted = ScriptedMCPServer(
+      list: ScriptedMCPServer.paged([[ScriptedMCPServer.tool("search")]])
+    )
+    let sessions = [
+      try CatalogFixture.session(
+        named: "docs",
+        against: scripted,
+        tools: MCPToolFilter(include: [])
+      )
+    ]
+
+    // when
+    let catalog = await MCPCatalogResolver.resolve(sessions: sessions)
+
+    // then
+    #expect(catalog.tools.isEmpty)
+    #expect(catalog.outcomes == [MCPServerOutcome(server: "docs", status: .ok(toolCount: 0))])
 
     await CatalogFixture.tearDown(sessions, scripted)
   }
@@ -250,9 +315,81 @@ struct MCPCatalogResolverTests {
       await server.stop()
     }
   }
+
+  @Test("discovery never opens more than the configured connection window")
+  func discoveryConcurrencyIsBounded() async throws {
+    // given every factory parks while it is counted as active
+    let count = MCPDiscoveryLimits.connectConcurrency * 2 + 1
+    let scripted = (0..<count).map { index in
+      ScriptedMCPServer(list: ScriptedMCPServer.paged([[ScriptedMCPServer.tool("tool_\(index)")]]))
+    }
+    let release = AsyncGate()
+    defer { release.open() }
+    let probe = DiscoveryConcurrencyProbe(
+      limit: MCPDiscoveryLimits.connectConcurrency,
+      release: release
+    )
+    let sessions = try scripted.enumerated().map { index, server in
+      MCPServerSession(
+        config: try CatalogFixture.config(named: "server_\(index)"),
+        transportFactory: StubTransportFactory {
+          await probe.enter()
+          return try await server.makeTransport()
+        },
+        clientVersion: CatalogFixture.clientVersion
+      )
+    }
+    let resolution = Task {
+      await MCPCatalogResolver.resolve(sessions: sessions)
+    }
+    await probe.waitUntilFull()
+
+    // when
+    let peakWhileHeld = await probe.peak
+    release.open()
+    _ = await resolution.value
+
+    // then
+    #expect(peakWhileHeld == MCPDiscoveryLimits.connectConcurrency)
+    #expect(await probe.peak == MCPDiscoveryLimits.connectConcurrency)
+
+    for session in sessions {
+      await session.disconnect()
+    }
+    for server in scripted {
+      await server.stop()
+    }
+  }
 }
 
 // MARK: - Fixtures
+
+private actor DiscoveryConcurrencyProbe {
+  private let limit: Int
+  private let release: AsyncGate
+  private let full = AsyncGate()
+  private var active = 0
+  private(set) var peak = 0
+
+  init(limit: Int, release: AsyncGate) {
+    self.limit = limit
+    self.release = release
+  }
+
+  func enter() async {
+    active += 1
+    peak = max(peak, active)
+    if active == limit {
+      full.open()
+    }
+    await release.waitIgnoringCancellation()
+    active -= 1
+  }
+
+  func waitUntilFull() async {
+    await full.wait()
+  }
+}
 
 private enum CatalogFixture {
   static let clientVersion = "0.0.0-test"

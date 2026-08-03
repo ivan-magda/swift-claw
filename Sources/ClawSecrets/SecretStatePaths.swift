@@ -27,7 +27,7 @@ public enum SecretCredentialEntry: Sendable, Equatable, CaseIterable {
 /// file such as another vendor's home directory or an exported auth blob. The absence of an import
 /// path is a property of the type rather than a promise buried in control flow.
 public struct SecretStatePaths: Sendable, Equatable {
-  /// The 32-byte symmetric key protecting both envelopes. Mode 0600, owner-only.
+  /// The 32-byte symmetric key protecting all three envelopes. Mode 0600, owner-only.
   public static let keyName = SecretFile.key
   /// The runtime secrets the daemon boots on: the Telegram token plus the optional LLM and search
   /// keys.
@@ -36,13 +36,13 @@ public struct SecretStatePaths: Sendable, Equatable {
   /// Its associated data is distinct from that envelope's, so the two cannot be swapped: either one
   /// moved to the other's name fails authentication instead of opening as the wrong kind of secret.
   public static let credentialEnvelopeName = "llm-credentials.enc"
-  /// The MCP server-keyed access-token map, sealed under the same key as the two envelopes above and
+  /// The MCP server-keyed access-token map, sealed under the same key as the other two envelopes and
   /// kept apart by its own associated data: a token map moved to either other name fails
   /// authentication rather than opening as the wrong kind of secret.
   public static let mcpCredentialEnvelopeName = "mcp-credentials.enc"
   /// The daemon instance lock, named here so one type names every state-root entry the secret layer
-  /// touches. `clawd run`, the `auth login` transition, and `secrets seal` all acquire it, so a
-  /// seal-capable command can never race the daemon or another seal.
+  /// touches. `clawd run`, credential mutations, and `secrets seal` all acquire it, so a command
+  /// that writes protected state cannot race the daemon or another writer.
   public static let instanceLockName = "clawd.lock"
 
   private let stateRoot: URL

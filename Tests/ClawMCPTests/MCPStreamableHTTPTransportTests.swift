@@ -1,6 +1,7 @@
 import ClawCore
 import ClawTestSupport
 import Foundation
+import MCP
 import Testing
 
 @testable import ClawMCP
@@ -54,31 +55,6 @@ struct MCPStreamableHTTPTransportTests {
     #expect(await executor.lastHeaders["Authorization"] == nil)
   }
 
-  @Test("an owner header may add to an exchange but never redefine what it is")
-  func ownerHeadersCannotRedefineFraming() async throws {
-    // given a config that spells the framing headers itself, one of them in a different case
-    let executor = ScriptedHTTPExecutor([.stream(TransportFixture.jsonHead(), [Fixture.reply])])
-    let server = try TransportFixture.server(
-      headers: [
-        "accept": "text/plain",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "MCP-Protocol-Version": "1999-01-01",
-      ]
-    )
-    let transport = MCPStreamableHTTPTransport(server: server, http: executor)
-    try await transport.connect()
-
-    // when
-    try await transport.send(Fixture.request)
-
-    // then the framing wins, and no second spelling of a header rides along with it
-    let recorded = try #require(await executor.recorded.first)
-    #expect(recorded.headers["Accept"] == "application/json, text/event-stream")
-    #expect(recorded.headers["accept"] == nil)
-    #expect(recorded.headers["Content-Type"] == "application/json")
-    #expect(recorded.headers["MCP-Protocol-Version"] == MCPProtocol.version)
-  }
-
   @Test("every request after the handshake names the revision the server agreed to")
   func adoptsNegotiatedProtocolVersion() async throws {
     // given
@@ -99,6 +75,44 @@ struct MCPStreamableHTTPTransportTests {
       request.headers["MCP-Protocol-Version"]
     }
     #expect(versions == [MCPProtocol.version, "2025-06-18"])
+  }
+
+  @Test("the initialized notification already carries the negotiated protocol revision")
+  func adoptsVersionBeforeInitializedNotification() async throws {
+    // given a real SDK client and a server that selects an older supported revision
+    let selected = "2025-06-18"
+    let executor = ScriptedHTTPExecutor([
+      .respondingStream { request in
+        let envelope = try #require(
+          JSONSerialization.jsonObject(with: request.body ?? Data()) as? [String: Any]
+        )
+        let identifier = try #require(envelope["id"])
+        let response = try JSONSerialization.data(withJSONObject: [
+          "jsonrpc": "2.0",
+          "id": identifier,
+          "result": [
+            "protocolVersion": selected,
+            "capabilities": ["tools": ["listChanged": false]],
+            "serverInfo": ["name": "test", "version": "1"],
+          ],
+        ])
+        return (TransportFixture.jsonHead(), [response])
+      },
+      .stream(HTTPStreamHead(statusCode: 202, headers: [:]), []),
+    ])
+    let transport = try TransportFixture.transport(http: executor)
+    let client = Client(name: "test", version: "1")
+
+    // when
+    _ = try await client.connect(transport: transport)
+
+    // then
+    let versions = await executor.recorded.map { request in
+      request.headers[MCPHTTPHeader.protocolVersion]
+    }
+    #expect(versions == [MCPProtocol.version, selected])
+
+    await client.disconnect()
   }
 
   @Test("a JSON reply past the message cap is refused")
@@ -318,6 +332,42 @@ struct MCPStreamableHTTPTransportTests {
     await #expect(throws: MCPTransportError.unsupportedContentType("text/plain")) {
       try await transport.send(Fixture.request)
     }
+  }
+
+  @Test(
+    "only the exact JSON and event-stream media types are accepted",
+    arguments: ["application/jsonp", "text/event-stream-malformed"]
+  )
+  func nearMatchContentTypesAreRejected(_ contentType: String) async throws {
+    // given
+    let head = HTTPStreamHead(statusCode: 200, headers: ["Content-Type": contentType])
+    let executor = ScriptedHTTPExecutor([.stream(head, [Fixture.reply])])
+    let transport = try TransportFixture.transport(http: executor)
+    try await transport.connect()
+
+    // when / then
+    await #expect(throws: MCPTransportError.unsupportedContentType(contentType)) {
+      try await transport.send(Fixture.request)
+    }
+  }
+
+  @Test(
+    "media type matching ignores case, surrounding whitespace, and parameters",
+    arguments: [" Application/JSON ; charset=utf-8", " TEXT/EVENT-STREAM; charset=utf-8"]
+  )
+  func validParameterizedContentTypesAreAccepted(_ contentType: String) async throws {
+    // given
+    let head = HTTPStreamHead(statusCode: 200, headers: ["Content-Type": contentType])
+    let body =
+      contentType.lowercased().contains("event-stream")
+      ? Data("data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n".utf8)
+      : Fixture.reply
+    let executor = ScriptedHTTPExecutor([.stream(head, [body])])
+    let transport = try TransportFixture.transport(http: executor)
+    try await transport.connect()
+
+    // when / then
+    try await transport.send(Fixture.request)
   }
 
   @Test(

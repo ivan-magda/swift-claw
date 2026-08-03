@@ -164,13 +164,18 @@ public struct ToolDefinition: Sendable, Equatable {
   public let egressClass: ToolEgressClass
   /// The declared risk tier (orthogonal to egress). NOT advertised on the wire.
   public let riskLevel: RiskLevel
+  /// Credential-free execution identity used only by `policy_version` when the advertised fields do
+  /// not fully identify what will run (for example, an adapter backed by a configured endpoint).
+  /// NOT advertised on the wire.
+  public let invocationIdentity: String?
 
   public init(
     name: String,
     description: String,
     parameters: JSONValue,
     egressClass: ToolEgressClass,
-    riskLevel: RiskLevel
+    riskLevel: RiskLevel,
+    invocationIdentity: String? = nil
   ) {
     self.name = name
     self.description = description
@@ -178,6 +183,7 @@ public struct ToolDefinition: Sendable, Equatable {
 
     self.egressClass = egressClass
     self.riskLevel = riskLevel
+    self.invocationIdentity = invocationIdentity
   }
 }
 

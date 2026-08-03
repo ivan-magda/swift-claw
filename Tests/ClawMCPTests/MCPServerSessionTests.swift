@@ -243,12 +243,12 @@ struct MCPServerSessionTests {
         SilentTransport()
       },
       clientVersion: SessionFixture.clientVersion,
-      allowance: .zero
+      connectAllowance: .zero
     )
 
     // when / then
     await #expect(
-      throws: MCPSessionError.discoveryTimedOut(seconds: config.worstCaseCallSeconds)
+      throws: MCPSessionError.discoveryTimedOut(seconds: config.connectTimeoutSeconds)
     ) {
       try await session.connect()
     }
@@ -264,7 +264,7 @@ struct MCPServerSessionTests {
 
     // when / then
     await #expect(
-      throws: MCPSessionError.discoveryTimedOut(seconds: config.worstCaseCallSeconds)
+      throws: MCPSessionError.discoveryTimedOut(seconds: config.requestTimeoutSeconds)
     ) {
       try await session.listAllTools()
     }
@@ -285,6 +285,36 @@ struct MCPServerSessionTests {
     ) {
       try await session.callTool(name: "create_issue", arguments: [:])
     }
+    await SessionFixture.tearDown(session, scripted)
+  }
+
+  @Test("a timed-out request is explicitly cancelled in the SDK")
+  func timeoutCancelsPendingSDKRequest() async throws {
+    // given
+    let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
+    let transports = MutedTransportRecorder()
+    let session = MCPServerSession(
+      config: try SessionFixture.config(),
+      transportFactory: StubTransportFactory {
+        let opened = MuteAfterHandshakeTransport(
+          wrapping: try await scripted.makeTransport(),
+          mutingSend: FaultyTransport.firstCallSend
+        )
+        await transports.record(opened)
+        return opened
+      },
+      clientVersion: SessionFixture.clientVersion,
+      requestAllowance: SessionFixture.mutedAllowance
+    )
+    try await session.connect()
+
+    // when
+    _ = try? await session.listAllTools()
+
+    // then
+    let opened = try #require(await transports.last)
+    #expect(await opened.methods.contains("notifications/cancelled"))
+
     await SessionFixture.tearDown(session, scripted)
   }
 
@@ -409,6 +439,14 @@ private actor TransportRecorder {
   }
 }
 
+private actor MutedTransportRecorder {
+  private(set) var last: MuteAfterHandshakeTransport?
+
+  func record(_ transport: MuteAfterHandshakeTransport) {
+    last = transport
+  }
+}
+
 private enum SessionFixture {
   static let clientVersion = "0.0.0-test"
 
@@ -429,7 +467,8 @@ private enum SessionFixture {
         )
       },
       clientVersion: clientVersion,
-      allowance: mutedAllowance
+      requestAllowance: mutedAllowance,
+      callAllowance: mutedAllowance
     )
   }
 

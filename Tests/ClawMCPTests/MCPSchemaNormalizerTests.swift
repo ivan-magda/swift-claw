@@ -21,6 +21,53 @@ struct MCPSchemaNormalizerTests {
     #expect(normalized["$defs"] == .object(["Issue": .object(["type": .string("string")])]))
   }
 
+  @Test("references follow a promoted root definitions map")
+  func rewritesRootDefinitionReferences() throws {
+    // given
+    let schema = JSONValue.object([
+      "type": .string("object"),
+      "definitions": .object(["Issue": .object(["type": .string("string")])]),
+      "properties": .object([
+        "issue": .object(["$ref": .string("#/definitions/Issue")])
+      ]),
+    ])
+
+    // when
+    let normalized = try #require(MCPSchemaNormalizer.normalize(schema).objectValue)
+    let reference = normalized["properties"]?.objectValue?["issue"]?.objectValue?["$ref"]
+
+    // then
+    #expect(reference == .string("#/$defs/Issue"))
+  }
+
+  @Test("references follow a promoted nested definitions map with escaped pointer segments")
+  func rewritesNestedDefinitionReferences() throws {
+    // given
+    let schema = JSONValue.object([
+      "type": .string("object"),
+      "properties": .object([
+        "nested/name": .object([
+          "definitions": .object(["Value": .object(["type": .string("string")])]),
+          "properties": .object([
+            "value": .object([
+              "$ref": .string("#/properties/nested~1name/definitions/Value")
+            ])
+          ]),
+        ])
+      ]),
+    ])
+
+    // when
+    let normalized = MCPSchemaNormalizer.normalize(schema)
+    let nested = try #require(
+      normalized.objectValue?["properties"]?.objectValue?["nested/name"]?.objectValue
+    )
+    let reference = nested["properties"]?.objectValue?["value"]?.objectValue?["$ref"]
+
+    // then
+    #expect(reference == .string("#/properties/nested~1name/$defs/Value"))
+  }
+
   @Test("a property named definitions keeps its name")
   func leavesPropertyNamedDefinitionsAlone() throws {
     // given

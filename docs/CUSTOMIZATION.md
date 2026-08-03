@@ -46,8 +46,8 @@ clawd shows an approval card for two reasons.
 **The tool's own risk tier.** File writes, memory writes, and code execution park the run
 every time, whatever else the session did.
 
-**Exfiltration risk.** clawd holds a fetch to an arbitrary URL for your approval once the
-session has done *both* of these:
+**Exfiltration risk.** clawd holds an arbitrary-destination tool call, including `web_fetch`
+and MCP calls, for your approval once the session has done *both* of these:
 
 - **Ingested untrusted content.** A web page, a file read, tool output, a voice transcript,
   or a photo. Durable memory does not count: it is labeled untrusted but does not taint
@@ -56,8 +56,8 @@ session has done *both* of these:
   the context is enough; no tool has to read them. Once you have filled in `USER.md`, this
   leg is armed on essentially every turn, and it sticks for the session.
 
-One leg alone does not trigger the gate, so the first `web_fetch` of a clean session runs
-unprompted. `/new` clears both legs.
+One leg alone does not trigger the gate, so the first `web_fetch` or safe MCP call of a clean
+session runs unprompted. `/new` clears both legs.
 
 Your LLM provider and the search backend are pinned destinations, so they never park for
 approval: no injected instruction can aim clawd at an attacker's URL instead. clawd also
@@ -163,8 +163,9 @@ servers:
       exclude: [delete_note]                 # used only when include is absent
 ```
 
-A `headers` entry named the same as `authHeader` is refused: that is where the stored token goes,
-and a config that could overwrite it would be a config that could leak one.
+A `headers` entry named the same as `authHeader` is refused. clawd also rejects malformed header
+names and values and protocol-owned fields such as `Content-Type` and `Mcp-Session-Id`. Set
+`tools.include: []` when you want a configured server to contribute no tools.
 
 **No tokens in this file.** Store each one encrypted instead, with the daemon stopped — clawd reads
 tokens once at startup:
@@ -195,8 +196,9 @@ are config-and-CLI jobs, so nothing the model reads can talk clawd into any of t
 Remote tools show up as `mcp__<server>__<tool>` alongside the built-ins, and clawd treats them as
 the least-trusted tools it has:
 
-- **Every one asks for approval**, whatever the server says about itself. `risk: <tool>: safe` drops
-  the tap for a tool you name; there is no way to push one up to the sandbox tier.
+- **Each tool asks for approval by default.** `risk: <tool>: safe` drops that default tap for a tool
+  you name. The exfiltration gate above can still require approval, and config cannot push an MCP
+  tool up to the sandbox tier.
 - **Results come back as untrusted content**, so a remote call taints the session for the
   exfiltration gate above the same way a web page does.
 - **Calling one counts as egress to an arbitrary destination**, and that is not configurable.
@@ -205,7 +207,8 @@ The catalog is fixed at startup. A server that is down, slow, or misbehaving is 
 reason `clawd doctor` and `/mcp` will show, and clawd starts anyway with the rest. A mistake in
 `mcp.yaml` is yours to fix rather than a server's, so it stops startup with exit 10 — a misspelled
 key included. When the set of tools changes across a restart, clawd voids any approval still
-waiting from before, since you granted it against a tool surface that no longer exists.
+waiting from before. Changing a server endpoint or the remote operation behind a normalized name
+also voids the approval. Approval cards show the complete configured endpoint.
 
 A skipped server is not a boot failure, but it *is* a doctor failure: `clawd doctor` reports the
 skip, exits 1, and withholds the start command it normally ends with. The daemon itself comes up

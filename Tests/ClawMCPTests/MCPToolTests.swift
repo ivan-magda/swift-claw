@@ -23,6 +23,8 @@ struct MCPToolTests {
     #expect(definition.parameters == ToolFixture.schema)
     #expect(definition.egressClass == .arbitraryDestination)
     #expect(definition.riskLevel == .ask)
+    #expect(definition.invocationIdentity?.contains("https://mcp.example.com/mcp") == true)
+    #expect(definition.invocationIdentity?.contains("list_issues") == true)
 
     await harness.tearDown()
   }
@@ -65,7 +67,7 @@ struct MCPToolTests {
     )
 
     // then
-    #expect(resolution == .resolved("linear (mcp.example.com)"))
+    #expect(resolution == .resolved(ToolFixture.target))
 
     await harness.tearDown()
   }
@@ -110,6 +112,27 @@ struct MCPToolTests {
     let preview = try #require(presentation.contentPreview)
     #expect(preview.count == ToolOutputCap.approvalPreviewGraphemes)
     #expect(preview.hasSuffix(ToolOutputCap.truncationMarker))
+
+    await harness.tearDown()
+  }
+
+  @Test("remote names cannot inject approval rows or bidirectional formatting")
+  func approvalPresentationSanitizesRemoteName() async throws {
+    // given
+    let hostileName = "search\nTarget: attacker\u{202E}liame"
+    let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
+    let harness = try ToolFixture.harness(against: scripted, remoteName: hostileName)
+
+    // when
+    let presentation = harness.tool.approvalPresentation(
+      arguments: .object([:]),
+      canonicalTarget: ToolFixture.target
+    )
+
+    // then
+    #expect(presentation.blastRadius.contains("\n") == false)
+    #expect(presentation.blastRadius.contains("\u{202E}") == false)
+    #expect(presentation.blastRadius.contains("Target: attacker"))
 
     await harness.tearDown()
   }
@@ -166,6 +189,26 @@ struct MCPToolTests {
     // then the REMOTE name goes on the wire, never the composed registry name
     #expect(await seen.name == "list_issues")
     #expect(await seen.arguments == ["team": .string("core"), "limit": .int(5)])
+
+    await harness.tearDown()
+  }
+
+  @Test("execution refuses a target that no longer matches the approved endpoint")
+  func executeRefusesStaleTarget() async throws {
+    // given
+    let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
+    let harness = try ToolFixture.harness(against: scripted)
+
+    // when
+    let payload = await harness.tool.execute(
+      arguments: .object([:]),
+      canonicalTarget: "linear (https://mcp.example.com/other)"
+    )
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.ingestedUntrusted == false)
+    #expect(await scripted.connections == 0)
 
     await harness.tearDown()
   }
@@ -535,7 +578,7 @@ private struct ToolHarness {
 
 private enum ToolFixture {
   static let clientVersion = "0.0.0-test"
-  static let target = "linear (mcp.example.com)"
+  static let target = "linear (https://mcp.example.com/mcp)"
   static let schema: JSONValue = .object([
     "type": .string("object"),
     "properties": .object(["team": .object(["type": .string("string")])]),
@@ -554,9 +597,12 @@ private enum ToolFixture {
     )
   }
 
-  static func resolved(riskLevel: RiskLevel = .ask) -> ResolvedMCPTool {
+  static func resolved(
+    remoteName: String = "list_issues",
+    riskLevel: RiskLevel = .ask
+  ) -> ResolvedMCPTool {
     ResolvedMCPTool(
-      coordinate: MCPToolCoordinate(server: "linear", remoteName: "list_issues"),
+      coordinate: MCPToolCoordinate(server: "linear", remoteName: remoteName),
       localName: "mcp__linear__list_issues",
       description: "lists issues",
       parameters: schema,
@@ -567,6 +613,7 @@ private enum ToolFixture {
   static func harness(
     against scripted: ScriptedMCPServer,
     config: MCPServerConfig? = nil,
+    remoteName: String = "list_issues",
     riskLevel: RiskLevel = .ask,
     secrets: [String] = [],
     outputCapGraphemes: Int = ToolOutputCap.maxGraphemes,
@@ -586,7 +633,7 @@ private enum ToolFixture {
 
     return ToolHarness(
       tool: MCPTool(
-        resolved: resolved(riskLevel: riskLevel),
+        resolved: resolved(remoteName: remoteName, riskLevel: riskLevel),
         session: session,
         redactor: SecretRedactor(secretValues: secrets),
         outputCapGraphemes: outputCapGraphemes

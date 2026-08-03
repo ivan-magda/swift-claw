@@ -151,6 +151,7 @@ actor MuteAfterHandshakeTransport: Transport {
   private let mutingSend: Int
   private var stream: AsyncThrowingStream<Data, any Error>?
   private var sends = 0
+  private(set) var methods: [String] = []
 
   init(wrapping inner: InMemoryTransport, mutingSend: Int) {
     self.inner = inner
@@ -168,6 +169,10 @@ actor MuteAfterHandshakeTransport: Transport {
 
   func send(_ data: Data) async throws {
     sends += 1
+    let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    if let method = object?["method"] as? String {
+      methods.append(method)
+    }
     guard sends < mutingSend else {
       return
     }

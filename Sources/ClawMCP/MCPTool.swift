@@ -41,12 +41,14 @@ public struct MCPTool: ClawCore.Tool {
   }
 
   public var definition: ToolDefinition {
-    ToolDefinition(
+    let sanitizer = MCPMetadataSanitizer(redactor: redactor)
+    return ToolDefinition(
       name: resolved.localName,
-      description: resolved.description,
-      parameters: resolved.parameters,
+      description: sanitizer.text(resolved.description),
+      parameters: sanitizer.schema(resolved.parameters),
       egressClass: .arbitraryDestination,
-      riskLevel: resolved.riskLevel
+      riskLevel: resolved.riskLevel,
+      invocationIdentity: invocationIdentity
     )
   }
 
@@ -66,13 +68,18 @@ public struct MCPTool: ClawCore.Tool {
     canonicalTarget: String
   ) -> ToolApprovalPresentation {
     ToolApprovalPresentation(
-      blastRadius: "MCP: \(config.name) · \(resolved.coordinate.remoteName)",
+      blastRadius:
+        "MCP: \(config.name) · "
+        + MCPMetadataSanitizer(redactor: redactor).displayName(resolved.coordinate.remoteName),
       contentPreview: preview(of: arguments),
       warnings: []
     )
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+    guard canonicalTarget == target else {
+      return localFailure("\(resolved.localName) was not sent because its approved target changed.")
+    }
     guard let payload = arguments.objectValue else {
       return localFailure("\(resolved.localName) needs a JSON object of arguments.")
     }
@@ -102,10 +109,19 @@ public struct MCPTool: ClawCore.Tool {
 private extension MCPTool {
   var config: MCPServerConfig { session.config }
 
-  /// Names the server and the host it lives on: the owner approves a destination, and the
-  /// configured name alone would not say where that is.
+  /// Names the server and its complete endpoint: scheme, port, path, and query can each select a
+  /// different recipient, so a host-only label is not an exact-action binding.
   var target: String {
-    "\(config.name) (\(config.url.host ?? config.url.absoluteString))"
+    "\(config.name) (\(config.url.absoluteString))"
+  }
+
+  var invocationIdentity: String {
+    let identity = JSONValue.object([
+      "endpoint": .string(config.url.absoluteString),
+      "remoteTool": .string(resolved.coordinate.remoteName),
+    ])
+    return CanonicalJSON.encode(identity)
+      ?? "\(config.url.absoluteString)\n\(resolved.coordinate.remoteName)"
   }
 
   func preview(of arguments: JSONValue) -> String? {

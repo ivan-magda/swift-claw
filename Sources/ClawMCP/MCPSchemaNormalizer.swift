@@ -20,14 +20,16 @@ public enum MCPSchemaNormalizer {
   ])
 
   public static func normalize(_ schema: JSONValue) -> JSONValue {
-    let normalized = normalizeSchema(schema)
+    var promotions: [ReferencePromotion] = []
+    let normalized = normalizeSchema(schema, path: [], promotions: &promotions)
+    let referenced = rewriteReferences(normalized, promotions: promotions)
     // Only at the root. A non-object *node* inside a schema is ordinary — `items: true`, an enum
     // member — but the root is what reaches `function.parameters`, where a provider expects an
     // object and rejects the whole request, every built-in tool with it, when it does not find one.
-    guard case .object = normalized else {
+    guard case .object = referenced else {
       return emptyObjectSchema
     }
-    return normalized
+    return referenced
   }
 }
 
@@ -61,15 +63,24 @@ private extension MCPSchemaNormalizer {
 // MARK: - Repairs
 
 private extension MCPSchemaNormalizer {
-  static func normalizeSchema(_ node: JSONValue) -> JSONValue {
+  struct ReferencePromotion {
+    let legacy: String
+    let modern: String
+  }
+
+  static func normalizeSchema(
+    _ node: JSONValue,
+    path: [String],
+    promotions: inout [ReferencePromotion]
+  ) -> JSONValue {
     guard case .object(let raw) = node else {
       return node
     }
 
     // Collapse first: the surviving branch contributes the keys the later repairs read.
     var object = collapseNullableUnion(raw)
-    object = promoteDefinitions(object)
-    object = normalizeChildren(object)
+    object = promoteDefinitions(object, path: path, promotions: &promotions)
+    object = normalizeChildren(object, path: path, promotions: &promotions)
     object = coerceObjectType(object)
 
     return .object(pruneRequired(object))
@@ -109,7 +120,11 @@ private extension MCPSchemaNormalizer {
 
   /// Only when `$defs` is absent: a schema carrying both spellings has already chosen the modern one,
   /// and silently dropping the legacy map would lose whatever `$ref`s still point at it.
-  static func promoteDefinitions(_ object: [String: JSONValue]) -> [String: JSONValue] {
+  static func promoteDefinitions(
+    _ object: [String: JSONValue],
+    path: [String],
+    promotions: inout [ReferencePromotion]
+  ) -> [String: JSONValue] {
     guard let legacy = object[Keyword.definitions], object[Keyword.defs] == nil else {
       return object
     }
@@ -117,29 +132,48 @@ private extension MCPSchemaNormalizer {
     var promoted = object
     promoted.removeValue(forKey: Keyword.definitions)
     promoted[Keyword.defs] = legacy
+    promotions.append(
+      ReferencePromotion(
+        legacy: referencePath(path + [Keyword.definitions]),
+        modern: referencePath(path + [Keyword.defs])
+      )
+    )
 
     return promoted
   }
 
-  static func normalizeChildren(_ object: [String: JSONValue]) -> [String: JSONValue] {
+  static func normalizeChildren(
+    _ object: [String: JSONValue],
+    path: [String],
+    promotions: inout [ReferencePromotion]
+  ) -> [String: JSONValue] {
     var result = object
 
     for key in Keyword.schemaMaps {
       guard case .object(let map)? = result[key] else {
         continue
       }
-      result[key] = .object(
-        map.mapValues { child in
-          normalizeSchema(child)
+      var normalized: [String: JSONValue] = [:]
+      for name in map.keys.sorted() {
+        guard let child = map[name] else {
+          continue
         }
-      )
+        normalized[name] = normalizeSchema(
+          child,
+          path: path + [key, name],
+          promotions: &promotions
+        )
+      }
+      result[key] = .object(normalized)
     }
 
     for key in Keyword.schemaArrays {
       guard case .array(let branches)? = result[key] else {
         continue
       }
-      result[key] = .array(normalizeAll(branches))
+      result[key] = .array(
+        normalizeAll(branches, path: path + [key], promotions: &promotions)
+      )
     }
 
     for key in Keyword.schemaValues {
@@ -148,9 +182,15 @@ private extension MCPSchemaNormalizer {
       }
       switch value {
       case .object:
-        result[key] = normalizeSchema(value)
+        result[key] = normalizeSchema(
+          value,
+          path: path + [key],
+          promotions: &promotions
+        )
       case .array(let items):
-        result[key] = .array(normalizeAll(items))
+        result[key] = .array(
+          normalizeAll(items, path: path + [key], promotions: &promotions)
+        )
       default:
         continue
       }
@@ -159,10 +199,66 @@ private extension MCPSchemaNormalizer {
     return result
   }
 
-  static func normalizeAll(_ nodes: [JSONValue]) -> [JSONValue] {
-    nodes.map { node in
-      normalizeSchema(node)
+  static func normalizeAll(
+    _ nodes: [JSONValue],
+    path: [String],
+    promotions: inout [ReferencePromotion]
+  ) -> [JSONValue] {
+    var normalized: [JSONValue] = []
+    normalized.reserveCapacity(nodes.count)
+    for (index, node) in nodes.enumerated() {
+      normalized.append(
+        normalizeSchema(
+          node,
+          path: path + [String(index)],
+          promotions: &promotions
+        )
+      )
     }
+    return normalized
+  }
+
+  static func rewriteReferences(
+    _ node: JSONValue,
+    promotions: [ReferencePromotion]
+  ) -> JSONValue {
+    switch node {
+    case .object(let object):
+      var rewritten: [String: JSONValue] = [:]
+      for (key, value) in object {
+        if key == "$ref", let reference = value.stringValue {
+          rewritten[key] = .string(rewriteReference(reference, promotions: promotions))
+        } else {
+          rewritten[key] = rewriteReferences(value, promotions: promotions)
+        }
+      }
+      return .object(rewritten)
+    case .array(let values):
+      return .array(values.map { rewriteReferences($0, promotions: promotions) })
+    case .null, .bool, .number, .string:
+      return node
+    }
+  }
+
+  static func rewriteReference(
+    _ reference: String,
+    promotions: [ReferencePromotion]
+  ) -> String {
+    for promotion in promotions.sorted(by: { $0.legacy.count > $1.legacy.count }) {
+      guard reference == promotion.legacy || reference.hasPrefix(promotion.legacy + "/") else {
+        continue
+      }
+      return promotion.modern + reference.dropFirst(promotion.legacy.count)
+    }
+    return reference
+  }
+
+  static func referencePath(_ components: [String]) -> String {
+    "#/"
+      + components.map { component in
+        component.replacingOccurrences(of: "~", with: "~0")
+          .replacingOccurrences(of: "/", with: "~1")
+      }.joined(separator: "/")
   }
 
   static func coerceObjectType(_ object: [String: JSONValue]) -> [String: JSONValue] {

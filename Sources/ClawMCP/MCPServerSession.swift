@@ -78,17 +78,18 @@ public struct MCPToolCallResult: Sendable {
 /// — but only when the failure proves the call never ran, since a remote tool is a side effect and
 /// retrying a maybe-executed one would run it twice.
 ///
-/// Every exchange — the handshake and each tool-list page as much as a call — is bounded by the
-/// server's worst case (connect plus request), which is the budget `Tool.timeout` is sized from. The
-/// HTTP timeouts bound each request; this bounds the chain, so a server that answers with something
-/// the SDK never matches to our request cannot park a caller forever.
+/// The handshake and each ordinary request keep their configured budgets; a tool call additionally
+/// gets the combined connect-plus-request budget because it may reconnect once. The HTTP timeouts
+/// bound each transfer, while these bounds also cover a server that sends no matching JSON-RPC id.
 public actor MCPServerSession {
   nonisolated public let config: MCPServerConfig
 
   private let factory: any MCPTransportFactory
   private let clientVersion: String
   private let logger: Logger
-  private let allowance: Duration
+  private let connectAllowance: Duration
+  private let requestAllowance: Duration
+  private let callAllowance: Duration
   private let encoder = JSONEncoder()
 
   private var client: Client?
@@ -96,20 +97,22 @@ public actor MCPServerSession {
   /// serialize across `await`, so without this two concurrent calls would each open a session.
   private var opening: Task<Client, any Error>?
 
-  /// - Parameter allowance: What one exchange gets before it is given up on. Defaults to the
-  ///   server's own worst case, which is the only value production has any business using.
   public init(
     config: MCPServerConfig,
     transportFactory: any MCPTransportFactory,
     clientVersion: String,
     logger: Logger = Logger(label: "claw.mcp.session"),
-    allowance: Duration? = nil
+    connectAllowance: Duration? = nil,
+    requestAllowance: Duration? = nil,
+    callAllowance: Duration? = nil
   ) {
     self.config = config
     self.factory = transportFactory
     self.clientVersion = clientVersion
     self.logger = logger
-    self.allowance = allowance ?? .seconds(config.worstCaseCallSeconds)
+    self.connectAllowance = connectAllowance ?? .seconds(config.connectTimeoutSeconds)
+    self.requestAllowance = requestAllowance ?? .seconds(config.requestTimeoutSeconds)
+    self.callAllowance = callAllowance ?? .seconds(config.worstCaseCallSeconds)
   }
 
   /// Performs the initialize handshake if one is not already live.
@@ -120,7 +123,7 @@ public actor MCPServerSession {
   /// The server's whole tool list, paged under the discovery caps.
   public func listAllTools() async throws -> [MCP.Tool] {
     let client = try await connected()
-    let budget = config.worstCaseCallSeconds
+    let budget = config.requestTimeoutSeconds
 
     var discovered: [MCP.Tool] = []
     var replayed: Set<String> = []
@@ -133,9 +136,21 @@ public actor MCPServerSession {
         throw MCPSessionError.tooManyPages(limit: MCPDiscoveryLimits.maxPages)
       }
       let requested = cursor
-      let listing = try await bounded(timingOutWith: .discoveryTimedOut(seconds: budget)) {
-        try await client.listTools(cursor: requested)
+      let request =
+        requested.map { cursor in
+          ListTools.request(.init(cursor: cursor))
+        } ?? ListTools.request(.init())
+      let cancellation = MCPRequestCancellation()
+      let context: RequestContext<ListTools.Result> = try await client.send(request)
+      await cancellation.track(client: client, requestID: context.requestID)
+      let listing = try await bounded(
+        allowance: requestAllowance,
+        timingOutWith: .discoveryTimedOut(seconds: budget),
+        cancellation: cancellation
+      ) {
+        try await context.value
       }
+      await cancellation.clear(requestID: context.requestID)
       page += 1
 
       discovered.append(contentsOf: listing.tools)
@@ -164,8 +179,13 @@ public actor MCPServerSession {
     let payload = arguments.mapValues(MCPValueBridge.value)
     let budget = config.worstCaseCallSeconds
 
-    return try await bounded(timingOutWith: .callTimedOut(seconds: budget)) {
-      try await self.attempt(name: name, arguments: payload)
+    let cancellation = MCPRequestCancellation()
+    return try await bounded(
+      allowance: callAllowance,
+      timingOutWith: .callTimedOut(seconds: budget),
+      cancellation: cancellation
+    ) {
+      try await self.attempt(name: name, arguments: payload, cancellation: cancellation)
     }
   }
 
@@ -209,6 +229,37 @@ private actor BoundedSlot<Value: Sendable> {
   }
 }
 
+/// The SDK stores request continuations outside the caller task, so cancelling only the task leaves
+/// them pending. Tracking the request id lets every deadline use the SDK's explicit cancellation path.
+private actor MCPRequestCancellation {
+  private var pending: (client: Client, requestID: ID)?
+  private var cancelled = false
+
+  func track(client: Client, requestID: ID) async {
+    guard cancelled == false else {
+      try? await client.cancelRequest(requestID, reason: "swift-claw deadline")
+      return
+    }
+    pending = (client, requestID)
+  }
+
+  func clear(requestID: ID) {
+    guard pending?.requestID == requestID else {
+      return
+    }
+    pending = nil
+  }
+
+  func cancel() async {
+    cancelled = true
+    guard let pending else {
+      return
+    }
+    self.pending = nil
+    try? await pending.client.cancelRequest(pending.requestID, reason: "swift-claw deadline")
+  }
+}
+
 // MARK: - Budget
 
 private extension MCPServerSession {
@@ -220,7 +271,9 @@ private extension MCPServerSession {
   /// a caller waiting on something no timeout will ever fire on. Discovery runs at boot, so that
   /// caller would be the whole daemon.
   func bounded<Value: Sendable>(
+    allowance: Duration,
     timingOutWith timeout: MCPSessionError,
+    cancellation: MCPRequestCancellation? = nil,
     _ operation: @escaping @Sendable () async throws -> Value
   ) async throws -> Value {
     let slot = BoundedSlot<Value>()
@@ -232,8 +285,10 @@ private extension MCPServerSession {
     case .operationReturned:
       return try await slot.resolve(orTimingOutWith: timeout)
     case .deadlineExpired:
+      await cancellation?.cancel()
       throw timeout
     case .callerCancelled:
+      await cancellation?.cancel()
       throw CancellationError()
     }
   }
@@ -265,10 +320,13 @@ private extension MCPServerSession {
   func open() async throws -> Client {
     let transport = try await factory.makeTransport()
     let client = Client(name: MCPProtocol.clientName, version: clientVersion)
-    let budget = config.worstCaseCallSeconds
+    let budget = config.connectTimeoutSeconds
 
     do {
-      let result = try await bounded(timingOutWith: .discoveryTimedOut(seconds: budget)) {
+      let result = try await bounded(
+        allowance: connectAllowance,
+        timingOutWith: .discoveryTimedOut(seconds: budget)
+      ) {
         try await client.connect(transport: transport)
       }
       if let negotiating = transport as? any MCPNegotiatingTransport {
@@ -301,27 +359,42 @@ private extension MCPServerSession {
 // MARK: - Calling
 
 private extension MCPServerSession {
-  func attempt(name: String, arguments: [String: Value]) async throws -> MCPToolCallResult {
+  func attempt(
+    name: String,
+    arguments: [String: Value],
+    cancellation: MCPRequestCancellation
+  ) async throws -> MCPToolCallResult {
     do {
-      return try await invoke(name: name, arguments: arguments)
+      return try await invoke(name: name, arguments: arguments, cancellation: cancellation)
     } catch {
       guard Self.isSpentSession(error) else {
         throw error
       }
       await teardown()
-      return try await invoke(name: name, arguments: arguments)
+      return try await invoke(name: name, arguments: arguments, cancellation: cancellation)
     }
   }
 
-  func invoke(name: String, arguments: [String: Value]) async throws -> MCPToolCallResult {
+  func invoke(
+    name: String,
+    arguments: [String: Value],
+    cancellation: MCPRequestCancellation
+  ) async throws -> MCPToolCallResult {
     let client = try await connected()
-    // The annotation picks the awaiting overload over the one returning a request context; the
-    // optional is the SDK's own — a server that omits `isError` is not reporting a failure.
-    // swiftlint:disable:next discouraged_optional_boolean
-    let result: (content: [MCP.Tool.Content], isError: Bool?) = try await client.callTool(
+    let context: RequestContext<CallTool.Result> = try await client.callTool(
       name: name,
       arguments: arguments
     )
+    await cancellation.track(client: client, requestID: context.requestID)
+
+    let result = try await bounded(
+      allowance: requestAllowance,
+      timingOutWith: .callTimedOut(seconds: config.requestTimeoutSeconds),
+      cancellation: cancellation
+    ) {
+      try await context.value
+    }
+    await cancellation.clear(requestID: context.requestID)
 
     return MCPToolCallResult(content: result.content, isError: result.isError ?? false)
   }

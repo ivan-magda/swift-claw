@@ -139,11 +139,11 @@ private extension MCPConfigLoader {
     try requireKnownKeys(in: mapping, allowed: ToolsKey.all, context: context)
 
     return MCPToolFilter(
-      include: try optionalStringList(
+      include: try presentStringList(
         mapping[ToolsKey.include],
         key: "\(context).\(ToolsKey.include)"
       ),
-      exclude: try optionalStringList(
+      exclude: try stringList(
         mapping[ToolsKey.exclude],
         key: "\(context).\(ToolsKey.exclude)"
       ),
@@ -225,9 +225,11 @@ private extension MCPConfigLoader {
     return value
   }
 
-  static func optionalStringList(_ raw: Any?, key: String) throws -> [String] {
+  // nil and [] encode different include-filter policies.
+  // swiftlint:disable:next discouraged_optional_collection
+  static func presentStringList(_ raw: Any?, key: String) throws -> [String]? {
     guard let raw = unwrapped(raw) else {
-      return []
+      return nil
     }
     guard let entries = raw as? [Any] else {
       throw MCPConfigError.invalidValue(key: key, value: "expected a list of strings")
@@ -238,6 +240,10 @@ private extension MCPConfigLoader {
       }
       return value
     }
+  }
+
+  static func stringList(_ raw: Any?, key: String) throws -> [String] {
+    try presentStringList(raw, key: key) ?? []
   }
 
   static func optionalStringMap(_ raw: Any?, key: String) throws -> [String: String] {

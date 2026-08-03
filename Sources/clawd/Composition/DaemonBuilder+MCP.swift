@@ -28,8 +28,11 @@ extension DaemonBuilder {
     }
 
     let sessions = servers.map(makeSession(for:))
-    let catalog = await MCPCatalogResolver.resolve(sessions: sessions)
     let redactor = SecretRedactor(secretValues: redactionValues)
+    let catalog = await MCPCatalogResolver.resolve(
+      sessions: sessions,
+      metadataRedactor: redactor
+    )
 
     // Walked from the sessions rather than looked up per tool: the adapter has to call through the
     // SAME session that discovered the tool — that is what reuses the connection the handshake

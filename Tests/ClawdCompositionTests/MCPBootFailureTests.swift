@@ -62,6 +62,27 @@ import Testing
     // then
     #expect(inputs.config.servers.isEmpty)
   }
+
+  @Test func corruptOrphanedTokenEnvelopeStillRefusesTheBoot() throws {
+    // given no catalog, but a stale credential envelope whose integrity cannot be trusted
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-boot")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    try EncryptedFileSecretStore.seal(
+      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      stateRoot: stateRoot
+    )
+    try Data("not an envelope".utf8).write(
+      to: SecretStatePaths(stateRoot: stateRoot).mcpCredentialEnvelope
+    )
+
+    // when
+    let thrown = #expect(throws: ExitCode.self) {
+      try RunCommand.loadMCPOrExit(config: try config(stateRoot: stateRoot))
+    }
+
+    // then
+    #expect(thrown == ExitCode(ClawExitCode.secretLoadFailed.rawValue))
+  }
 }
 
 /// Sessions opened at boot outlive the tools that use them — a server may contribute none at all —

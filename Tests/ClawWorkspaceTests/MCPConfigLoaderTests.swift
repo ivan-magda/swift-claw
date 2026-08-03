@@ -83,6 +83,24 @@ import Testing
     #expect(server.tools.allows("write") == false)
   }
 
+  @Test func explicitEmptyIncludeExposesNoRemoteTools() throws {
+    // given
+    let yaml = """
+      servers:
+        - name: docs
+          url: https://example.com/mcp
+          tools:
+            include: []
+      """
+
+    // when
+    let server = try #require(MCPConfigLoader.parse(yaml: yaml).servers.first)
+
+    // then
+    #expect(server.tools.include == [])
+    #expect(server.tools.allows("search") == false)
+  }
+
   @Test func emptyDocumentAndAbsentServerListBothYieldNoServers() throws {
     // given
     let documents = ["", "# only a comment\n", "servers:\n"]

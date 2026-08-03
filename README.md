@@ -37,8 +37,9 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
 - **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
-  the built-ins — as the least-trusted tools clawd has: every call asks first, and only
-  you can add a server or change what it exposes.
+  the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
+  named tool safe, but the exfiltration gate can still require approval. Only you can add a
+  server or change what it exposes.
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
   can run an eligible model on a ChatGPT subscription.
 - **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.

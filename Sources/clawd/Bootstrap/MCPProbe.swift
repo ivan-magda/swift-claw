@@ -65,7 +65,13 @@ enum MCPProbe {
       )
     }
 
-    let outcomes = await MCPCatalogResolver.resolve(sessions: sessions).outcomes
+    let metadataRedactor = SecretRedactor(
+      secretValues: credentials.values.compactMap(\.token)
+    )
+    let outcomes = await MCPCatalogResolver.resolve(
+      sessions: sessions,
+      metadataRedactor: metadataRedactor
+    ).outcomes
 
     // A probe owns nothing past its answer, so every session it opened is hung up — including the
     // ones that answered. The resolver closes only the failures, because a daemon keeps the rest.

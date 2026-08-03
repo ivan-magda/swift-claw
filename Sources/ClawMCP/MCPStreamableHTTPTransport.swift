@@ -10,6 +10,9 @@ public enum MCPTransportLimits {
   /// waiting for its blank line. A stream may run far longer than this — the bound is per message,
   /// not per transfer.
   public static let maxMessageBytes = 4 * 1024 * 1024
+  /// Cancellation is advisory and local continuation cleanup has already won. Do not let a server
+  /// that ignores the notice consume another full request budget while the caller is timing out.
+  public static let cancellationTimeout: Duration = .seconds(1)
 }
 
 /// The MCP Streamable HTTP transport, spoken over swift-claw's own HTTP seam.
@@ -123,7 +126,10 @@ public actor MCPStreamableHTTPTransport: MCPNegotiatingTransport {
   /// Switches every request after the handshake to the revision the server agreed to speak. Until
   /// one has been agreed the header carries our offer, which is the only thing there is to send.
   public func adopt(protocolVersion: String) {
-    baseHeaders.setValue(protocolVersion, forHeader: Header.protocolVersion)
+    guard Version.supported.contains(protocolVersion) else {
+      return
+    }
+    baseHeaders.setValue(protocolVersion, forHeader: MCPHTTPHeader.protocolVersion)
   }
 }
 
@@ -134,13 +140,6 @@ private extension MCPStreamableHTTPTransport {
     case idle
     case connected
     case disconnected
-  }
-
-  enum Header {
-    static let accept = "Accept"
-    static let contentType = "Content-Type"
-    static let protocolVersion = "MCP-Protocol-Version"
-    static let session = "Mcp-Session-Id"
   }
 
   enum ContentType {
@@ -157,9 +156,12 @@ private extension MCPStreamableHTTPTransport {
       headers.setValue(server.authorizationValue(for: token), forHeader: server.authHeader)
     }
 
-    headers.setValue("\(ContentType.json), \(ContentType.eventStream)", forHeader: Header.accept)
-    headers.setValue(ContentType.json, forHeader: Header.contentType)
-    headers.setValue(MCPProtocol.version, forHeader: Header.protocolVersion)
+    headers.setValue(
+      "\(ContentType.json), \(ContentType.eventStream)",
+      forHeader: MCPHTTPHeader.accept
+    )
+    headers.setValue(ContentType.json, forHeader: MCPHTTPHeader.contentType)
+    headers.setValue(MCPProtocol.version, forHeader: MCPHTTPHeader.protocolVersion)
 
     return headers
   }
@@ -170,7 +172,7 @@ private extension MCPStreamableHTTPTransport {
     }
 
     var headers = baseHeaders
-    headers.setValue(sessionID, forHeader: Header.session)
+    headers.setValue(sessionID, forHeader: MCPHTTPHeader.session)
 
     return headers
   }
@@ -181,7 +183,7 @@ private extension MCPStreamableHTTPTransport {
       url: endpoint,
       headers: outboundHeaders(),
       body: body,
-      timeout: handshakeCompleted ? requestTimeout : connectTimeout,
+      timeout: exchangeTimeout(for: body),
       responseBodyPolicy: .streaming(
         maximumUnreadBytes: MCPTransportLimits.maxMessageBytes,
         errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
@@ -195,11 +197,28 @@ private extension MCPStreamableHTTPTransport {
     }
   }
 
+  func exchangeTimeout(for body: Data) -> Duration {
+    guard handshakeCompleted else {
+      return connectTimeout
+    }
+    guard
+      let envelope = try? JSONDecoder().decode(OutboundMethodEnvelope.self, from: body),
+      envelope.method == CancelledNotification.name
+    else {
+      return requestTimeout
+    }
+    return min(requestTimeout, MCPTransportLimits.cancellationTimeout)
+  }
+
+  struct OutboundMethodEnvelope: Decodable {
+    let method: String?
+  }
+
   /// Sends the spec's session teardown. Best effort by definition: the session is already gone as
   /// far as this process is concerned, and a server that refuses the DELETE cannot change that.
   func deleteSession(_ session: String) async {
     var headers = baseHeaders
-    headers.setValue(session, forHeader: Header.session)
+    headers.setValue(session, forHeader: MCPHTTPHeader.session)
 
     let request = HTTPRequest(
       method: .delete,
@@ -227,7 +246,10 @@ private extension MCPStreamableHTTPTransport {
 
 private extension MCPStreamableHTTPTransport {
   func capture(from head: HTTPStreamHead) {
-    guard let session = head.getHeader(for: Header.session), session.isEmpty == false else {
+    guard
+      let session = head.getHeader(for: MCPHTTPHeader.session),
+      session.isEmpty == false
+    else {
       return
     }
     sessionID = session
@@ -253,13 +275,19 @@ private extension MCPStreamableHTTPTransport {
       return
     }
 
-    let contentType = exchange.head.getHeader(for: Header.contentType)?.lowercased() ?? ""
-    if contentType.contains(ContentType.eventStream) {
+    let rawContentType = exchange.head.getHeader(for: MCPHTTPHeader.contentType) ?? ""
+    let contentType =
+      rawContentType
+      .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
+      .first?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased() ?? ""
+    if contentType == ContentType.eventStream {
       try await deliverEvents(exchange)
-    } else if contentType.contains(ContentType.json) {
+    } else if contentType == ContentType.json {
       try await deliverDocument(exchange)
     } else {
-      throw MCPTransportError.unsupportedContentType(contentType)
+      throw MCPTransportError.unsupportedContentType(rawContentType.lowercased())
     }
   }
 
@@ -313,7 +341,30 @@ private extension MCPStreamableHTTPTransport {
     guard message.isEmpty == false else {
       return
     }
+    adoptVersionFromHandshake(message)
     messageContinuation.yield(message)
+  }
+
+  /// `Client.connect` sends `notifications/initialized` before it returns its result. The negotiated
+  /// revision therefore has to reach the header here, before the initialize response is yielded to
+  /// the SDK and unblocks that notification.
+  func adoptVersionFromHandshake(_ message: Data) {
+    guard handshakeCompleted == false,
+      let envelope = try? JSONDecoder().decode(InitializeEnvelope.self, from: message),
+      let version = envelope.result?.protocolVersion,
+      Version.supported.contains(version)
+    else {
+      return
+    }
+    baseHeaders.setValue(version, forHeader: MCPHTTPHeader.protocolVersion)
+  }
+
+  struct InitializeEnvelope: Decodable {
+    struct Result: Decodable {
+      let protocolVersion: String
+    }
+
+    let result: Result?
   }
 
   func check(_ termination: HTTPStreamTermination) throws {

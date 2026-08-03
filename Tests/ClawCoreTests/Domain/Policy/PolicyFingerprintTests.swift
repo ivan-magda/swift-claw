@@ -38,14 +38,16 @@ import Testing
     name: String,
     params: JSONValue = .object(["type": .string("object")]),
     risk: RiskLevel = .safe,
-    egress: ToolEgressClass = .none
+    egress: ToolEgressClass = .none,
+    invocationIdentity: String? = nil
   ) -> ToolDefinition {
     ToolDefinition(
       name: name,
       description: "d",
       parameters: params,
       egressClass: egress,
-      riskLevel: risk
+      riskLevel: risk,
+      invocationIdentity: invocationIdentity
     )
   }
 
@@ -123,6 +125,17 @@ import Testing
     #expect(
       subhash(tools: [tool(name: "t", egress: .none)])
         != subhash(tools: [tool(name: "t", egress: .arbitraryDestination)])
+    )
+  }
+
+  @Test func invocationIdentityIsAnInputClass() {
+    // given / when / then — two identically advertised MCP tools at different endpoints are
+    // different actions, so an outstanding approval may not survive the endpoint change.
+    #expect(
+      subhash(tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://a/mcp")])
+        != subhash(
+          tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://b/mcp")]
+        )
     )
   }
 
