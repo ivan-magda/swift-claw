@@ -29,7 +29,10 @@ import Testing
     }
     #expect(WorkspaceFile.isPromptPrivileged(basename: "SKILL.md"))
     #expect(WorkspaceFile.isPromptPrivileged(basename: "notes.md") == false)
-    #expect(WorkspaceFile.isPromptPrivileged(basename: "skill.md") == false)
+    // A case-insensitive filesystem indexes `skill.md` as a skill, and a creating write carries the
+    // caller's own spelling, so a lowercase manifest must not slip past the banner.
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "skill.md"))
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "soul.md"))
   }
 
   @Test func missingLoadedFileIsEmptyZeroLengthWithMissingOutcome() {
