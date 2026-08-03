@@ -8,4 +8,8 @@ public enum MCPProtocol {
   /// Tracks the newest revision the linked SDK can speak; servers that only
   /// support an older revision negotiate down during initialize.
   public static let version: String = Version.latest
+
+  /// What we call ourselves in the initialize handshake. The version alongside it is the daemon's
+  /// build, threaded in from composition, so a server's logs name a real build.
+  public static let clientName = "swift-claw"
 }
