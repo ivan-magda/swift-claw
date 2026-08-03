@@ -199,8 +199,37 @@ private extension ToolPolicyGate {
     tool: any Tool,
     context: ToolDispatchContext
   ) -> Verdict {
+    let argsRedacted: String
+    if tool.definition.egressClass == .none {
+      argsRedacted = argGuard.renderRedacted(argsJSON: call.argumentsJSON)
+    } else {
+      let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
+      if let rule = unconditional.blockedRule {
+        return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
+      }
+
+      let tainted = context.sessionTainted || context.runIngestedUntrusted
+      let privateData =
+        context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
+      if tainted && privateData {
+        let conditional = argGuard.evaluateConditional(
+          argsJSON: call.argumentsJSON,
+          privateFileTexts: privateFileLoader()
+        )
+        if let rule = conditional.blockedRule {
+          return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
+        }
+        argsRedacted = conditional.redactedArgs
+      } else {
+        argsRedacted = unconditional.redactedArgs
+      }
+    }
+
     guard let arguments = JSONValue.parse(call.argumentsJSON) else {
-      return askTierBlock(reason: "Malformed arguments for \(call.name).", call: call)
+      return askTierBlock(
+        reason: "Malformed arguments for \(call.name).",
+        argsRedacted: argsRedacted
+      )
     }
 
     let target: String
@@ -208,11 +237,11 @@ private extension ToolPolicyGate {
     case .resolved(let resolved):
       target = resolved
     case .refused(let reason):
-      return askTierBlock(reason: reason, call: call)
+      return askTierBlock(reason: reason, argsRedacted: argsRedacted)
     case nil:
       return askTierBlock(
         reason: "\(call.name) is ask-tier but resolved no canonical target.",
-        call: call
+        argsRedacted: argsRedacted
       )
     }
 
@@ -225,7 +254,7 @@ private extension ToolPolicyGate {
           status: .blockedPendingApproval,
           ingestedUntrusted: false
         ),
-        argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
+        argsRedacted: argsRedacted
       )
     }
 
@@ -265,10 +294,10 @@ private extension ToolPolicyGate {
     )
   }
 
-  func askTierBlock(reason: String, call: ToolCall) -> Verdict {
+  func askTierBlock(reason: String, argsRedacted: String) -> Verdict {
     .block(
       payload: ToolPayload(content: reason, status: .error, ingestedUntrusted: false),
-      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
+      argsRedacted: argsRedacted
     )
   }
 

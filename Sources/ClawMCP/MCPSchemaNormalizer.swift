@@ -26,7 +26,10 @@ public enum MCPSchemaNormalizer {
     // Only at the root. A non-object *node* inside a schema is ordinary — `items: true`, an enum
     // member — but the root is what reaches `function.parameters`, where a provider expects an
     // object and rejects the whole request, every built-in tool with it, when it does not find one.
-    guard case .object = referenced else {
+    guard
+      case .object(let root) = referenced,
+      root[Keyword.type] == .string(Keyword.object)
+    else {
       return emptyObjectSchema
     }
     return referenced

@@ -168,6 +168,28 @@ struct MCPStreamableHTTPTransportTests {
     try await streamTransport.send(Fixture.request)
   }
 
+  @Test("a server cannot outgrow the complete-message receive buffer")
+  func receiveBufferOverflow() async throws {
+    // given a stream that emits more complete messages than the SDK-facing queue can retain
+    let events = (0...MCPTransportLimits.maxBufferedMessages).map { index in
+      Data("data: {\"jsonrpc\":\"2.0\",\"id\":\(index),\"result\":{}}\n\n".utf8)
+    }
+    let executor = ScriptedHTTPExecutor([
+      .stream(TransportFixture.eventStreamHead(), events)
+    ])
+    let transport = try TransportFixture.transport(http: executor)
+    try await transport.connect()
+
+    // when / then
+    await #expect(
+      throws: MCPTransportError.receiveBufferOverflow(
+        limitMessages: MCPTransportLimits.maxBufferedMessages
+      )
+    ) {
+      try await transport.send(Fixture.request)
+    }
+  }
+
   @Test("the handshake is bounded by the connect timeout and later calls by the request timeout")
   func timeoutsPerPhase() async throws {
     // given

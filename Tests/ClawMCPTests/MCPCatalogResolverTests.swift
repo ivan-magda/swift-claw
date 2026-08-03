@@ -250,6 +250,36 @@ struct MCPCatalogResolverTests {
     await CatalogFixture.tearDown(sessions, reachable)
   }
 
+  @Test("a discovery failure cannot quote a loaded token into the skip outcome")
+  func discoveryFailureRedacted() async throws {
+    // given
+    let secret = String(repeating: "mcp-token-value", count: 8)
+    let prefix = String(repeating: "x", count: 150)
+    let session = MCPServerSession(
+      config: try CatalogFixture.config(named: "reflecting"),
+      transportFactory: StubTransportFactory {
+        throw ScriptedTransportFailure(message: prefix + secret)
+      },
+      clientVersion: CatalogFixture.clientVersion
+    )
+
+    // when
+    let catalog = await MCPCatalogResolver.resolve(
+      sessions: [session],
+      metadataRedactor: SecretRedactor(secretValues: [secret])
+    )
+
+    // then
+    let outcome = try #require(catalog.outcomes.first)
+    guard case .skipped(let reason) = outcome.status else {
+      Issue.record("expected a skipped server, got \(outcome)")
+      return
+    }
+    #expect(reason.contains(secret) == false)
+    #expect(reason.contains(String(secret.prefix(20))) == false)
+    #expect(reason.contains(SecretRedactor.replacement))
+  }
+
   @Test("a server that blows a discovery cap is skipped, not fatal")
   func oversizedServerSkipped() async throws {
     // given a server that pages without end

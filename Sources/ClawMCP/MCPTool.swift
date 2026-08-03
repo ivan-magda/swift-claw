@@ -143,7 +143,7 @@ private extension MCPTool {
   func remoteResult(_ result: MCPToolCallResult) -> ToolPayload {
     ToolPayload(
       content: ToolOutputCap.cap(
-        redactor.redact(Self.render(result.content)),
+        redactor.redact(Self.render(result)),
         maxGraphemes: outputCapGraphemes
       ),
       status: result.isError ? .error : .ok,
@@ -180,6 +180,18 @@ private extension MCPTool {
 // MARK: - Content rendering
 
 private extension MCPTool {
+  /// The content array is the compatibility representation and wins when present. A server may
+  /// return structured content alone, in which case its canonical JSON becomes the observation.
+  static func render(_ result: MCPToolCallResult) -> String {
+    guard result.content.isEmpty else {
+      return render(result.content)
+    }
+    guard let structured = result.structuredContent else {
+      return ""
+    }
+    return CanonicalJSON.encode(structured) ?? ""
+  }
+
   /// Text parts join as text; everything else is noted by kind, because the model can act on
   /// knowing a picture came back even though it cannot see one.
   static func render(_ content: [MCP.Tool.Content]) -> String {

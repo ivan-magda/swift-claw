@@ -62,11 +62,17 @@ public struct MCPStreamableHTTPTransportFactory: MCPTransportFactory {
 /// into a tool payload is the adapter's job, not the session's.
 public struct MCPToolCallResult: Sendable {
   public let content: [MCP.Tool.Content]
+  public let structuredContent: JSONValue?
   /// The server's own report that the call failed, which is a result, not a transport failure.
   public let isError: Bool
 
-  public init(content: [MCP.Tool.Content], isError: Bool) {
+  public init(
+    content: [MCP.Tool.Content],
+    structuredContent: JSONValue? = nil,
+    isError: Bool
+  ) {
     self.content = content
+    self.structuredContent = structuredContent
     self.isError = isError
   }
 }
@@ -396,7 +402,11 @@ private extension MCPServerSession {
     }
     await cancellation.clear(requestID: context.requestID)
 
-    return MCPToolCallResult(content: result.content, isError: result.isError ?? false)
+    return MCPToolCallResult(
+      content: result.content,
+      structuredContent: result.structuredContent.map(MCPValueBridge.jsonValue),
+      isError: result.isError ?? false
+    )
   }
 
   /// Whether the failure says the session is gone *and* the call provably never ran. Anything that
@@ -414,7 +424,7 @@ private extension MCPServerSession {
       return true
     case .requestFailed(let transport):
       return transport.disposition == .definitelyNotSent
-    case .httpStatus, .unsupportedContentType, .oversizedMessage:
+    case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow:
       return false
     }
   }

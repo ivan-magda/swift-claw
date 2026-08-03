@@ -10,6 +10,9 @@ public enum MCPTransportLimits {
   /// waiting for its blank line. A stream may run far longer than this — the bound is per message,
   /// not per transfer.
   public static let maxMessageBytes = 4 * 1024 * 1024
+  /// Complete protocol messages waiting for the SDK's receive loop. The HTTP body channel has its
+  /// own byte bound; this closes the second queue after framing has split that body into messages.
+  public static let maxBufferedMessages = 16
   /// Cancellation is advisory and local continuation cleanup has already won. Do not let a server
   /// that ignores the notice consume another full request budget while the caller is timing out.
   public static let cancellationTimeout: Duration = .seconds(1)
@@ -64,7 +67,8 @@ public actor MCPStreamableHTTPTransport: MCPNegotiatingTransport {
 
     let (stream, continuation) = AsyncThrowingStream.makeStream(
       of: Data.self,
-      throwing: (any Error).self
+      throwing: (any Error).self,
+      bufferingPolicy: .bufferingOldest(MCPTransportLimits.maxBufferedMessages)
     )
     self.messages = stream
     self.messageContinuation = continuation
@@ -302,7 +306,7 @@ private extension MCPStreamableHTTPTransport {
     }
     try check(await exchange.awaitTermination())
 
-    yield(message: body)
+    try yield(message: body)
   }
 
   func deliverEvents(_ exchange: HTTPStreamExchange) async throws {
@@ -314,7 +318,7 @@ private extension MCPStreamableHTTPTransport {
       while let delimiter = SSEFraming.delimiterRange(in: buffer) {
         let event = Data(buffer[..<delimiter.lowerBound])
         buffer.removeSubrange(..<delimiter.upperBound)
-        yield(event: event)
+        try yield(event: event)
       }
 
       guard buffer.count <= MCPTransportLimits.maxMessageBytes else {
@@ -326,23 +330,36 @@ private extension MCPStreamableHTTPTransport {
     // A server that closes right after its last `data:` line, without the blank line that would end
     // the event, still sent us a whole message. Reading it is what keeps such a server usable; a
     // genuinely truncated one only fails later, at decode, where it was going to fail anyway.
-    yield(event: buffer)
+    try yield(event: buffer)
   }
 
-  func yield(event raw: Data) {
+  func yield(event raw: Data) throws {
     guard let text = String(data: raw, encoding: .utf8) else {
       return
     }
     let payload = SSEFraming.dataPayloadLines(in: text).joined(separator: "\n")
-    yield(message: Data(payload.utf8))
+    try yield(message: Data(payload.utf8))
   }
 
-  func yield(message: Data) {
+  func yield(message: Data) throws {
     guard message.isEmpty == false else {
       return
     }
     adoptVersionFromHandshake(message)
-    messageContinuation.yield(message)
+    switch messageContinuation.yield(message) {
+    case .enqueued:
+      return
+    case .dropped:
+      let error = MCPTransportError.receiveBufferOverflow(
+        limitMessages: MCPTransportLimits.maxBufferedMessages
+      )
+      messageContinuation.finish(throwing: error)
+      throw error
+    case .terminated:
+      throw MCPTransportError.notConnected
+    @unknown default:
+      throw MCPTransportError.notConnected
+    }
   }
 
   /// `Client.connect` sends `notifications/initialized` before it returns its result. The negotiated

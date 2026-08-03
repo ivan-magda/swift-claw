@@ -15,16 +15,17 @@ struct RunCommand: AsyncParsableCommand {
 
   func run() async throws {
     let config = try Self.loadConfigOrExit()
+
+    // Single-instance guard — acquired before any credential snapshot and held until process exit.
+    let lock = try Self.acquireInstanceLockOrExit(config: config)
+    defer { lock.release() }
+
     let secrets = try Self.loadSecretsOrExit(config: config)
     // Before the logger on purpose: the MCP tokens are part of the redaction set the log backend is
     // installed with, so they have to be in hand before anything can write a line.
     let mcp = try Self.loadMCPOrExit(config: config)
     let redactionValues = mcp.redactionValues(with: secrets)
     let logger = Self.bootstrapLogger(redactionValues: redactionValues)
-
-    // Single-instance guard — held until the process exits (defer covers the graceful path).
-    let lock = try Self.acquireInstanceLockOrExit(config: config)
-    defer { lock.release() }
 
     let stores = try Self.openStoresOrExit(config: config, logger: logger)
     try Self.ensureWorkspaceDirectoryOrExit(config: config)

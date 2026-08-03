@@ -167,6 +167,39 @@ struct MCPToolTests {
     await harness.tearDown()
   }
 
+  @Test("a structured-only result becomes canonical untrusted tool output")
+  func executeStructuredOnlyResult() async throws {
+    // given
+    let scripted = ScriptedMCPServer(
+      list: ScriptedMCPServer.paged([[]]),
+      call: { _, _ in
+        CallTool.Result(
+          structuredContent: .object([
+            "token": .string("s3cr3t"),
+            "items": .array([.string("one"), .string("two")]),
+          ])
+        )
+      }
+    )
+    let harness = try ToolFixture.harness(against: scripted, secrets: ["s3cr3t"])
+
+    // when
+    let payload = await harness.tool.execute(
+      arguments: .object([:]),
+      canonicalTarget: ToolFixture.target
+    )
+
+    // then
+    #expect(
+      payload.content
+        == #"{"items":["one","two"],"token":"\#(SecretRedactor.replacement)"}"#
+    )
+    #expect(payload.status == .ok)
+    #expect(payload.ingestedUntrusted)
+
+    await harness.tearDown()
+  }
+
   @Test("the arguments the model proposed reach the remote tool")
   func executeForwardsArguments() async throws {
     // given

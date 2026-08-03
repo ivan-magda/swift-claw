@@ -90,6 +90,7 @@ struct MCPSchemaNormalizerTests {
   func keepsBothDefinitionSpellings() throws {
     // given
     let schema = JSONValue.object([
+      "type": .string("object"),
       "$defs": .object(["New": .object(["type": .string("string")])]),
       "definitions": .object(["Old": .object(["type": .string("string")])]),
     ])
@@ -139,13 +140,17 @@ struct MCPSchemaNormalizerTests {
       .object(["type": .string("string")]),
       .object(["type": .string("number")]),
     ])
-    let schema = JSONValue.object(["anyOf": branches])
+    let schema = JSONValue.object([
+      "type": .string("object"),
+      "properties": .object(["value": .object(["anyOf": branches])]),
+    ])
 
     // when
     let normalized = try #require(MCPSchemaNormalizer.normalize(schema).objectValue)
 
     // then
-    #expect(normalized["anyOf"] == branches)
+    let value = normalized["properties"]?.objectValue?["value"]?.objectValue
+    #expect(value?["anyOf"] == branches)
   }
 
   @Test("an object-shaped node that omits its type is coerced to object")
@@ -184,13 +189,17 @@ struct MCPSchemaNormalizerTests {
   @Test("a node with no object markers keeps its missing type")
   func leavesUnshapedNodeAlone() throws {
     // given
-    let schema = JSONValue.object(["description": .string("anything goes")])
+    let schema = JSONValue.object([
+      "type": .string("object"),
+      "properties": .object(["value": .object(["description": .string("anything goes")])]),
+    ])
 
     // when
     let normalized = try #require(MCPSchemaNormalizer.normalize(schema).objectValue)
 
     // then
-    #expect(normalized["type"] == nil)
+    let value = normalized["properties"]?.objectValue?["value"]?.objectValue
+    #expect(value?["type"] == nil)
   }
 
   @Test("required is pruned to names that exist in properties")
@@ -293,6 +302,21 @@ struct MCPSchemaNormalizerTests {
     #expect(
       normalized == .object(["type": .string("object"), "properties": .object([:])])
     )
+  }
+
+  @Test("an object-shaped schema with a non-object root type becomes the safe empty schema")
+  func repairsExplicitNonObjectRootType() {
+    // given
+    let schema = JSONValue.object([
+      "type": .string("string"),
+      "description": .string("a malformed parameter root"),
+    ])
+
+    // when
+    let normalized = MCPSchemaNormalizer.normalize(schema)
+
+    // then
+    #expect(normalized == .object(["type": .string("object"), "properties": .object([:])]))
   }
 
   @Test("a non-object node inside a schema is left alone")

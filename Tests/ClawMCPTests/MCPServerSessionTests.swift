@@ -134,6 +134,37 @@ struct MCPServerSessionTests {
     await SessionFixture.tearDown(session, scripted)
   }
 
+  @Test("a call carries structured content through the session bridge")
+  func callBridgesStructuredContent() async throws {
+    // given
+    let scripted = ScriptedMCPServer(
+      list: ScriptedMCPServer.paged([[ScriptedMCPServer.tool("lookup")]]),
+      call: { _, _ in
+        CallTool.Result(
+          structuredContent: .object([
+            "count": .int(2),
+            "items": .array([.string("one"), .string("two")]),
+          ])
+        )
+      }
+    )
+    let session = try SessionFixture.session(against: scripted)
+
+    // when
+    let result = try await session.callTool(name: "lookup", arguments: [:])
+
+    // then
+    #expect(result.content.isEmpty)
+    #expect(
+      result.structuredContent
+        == .object([
+          "count": .number(2),
+          "items": .array([.string("one"), .string("two")]),
+        ])
+    )
+    await SessionFixture.tearDown(session, scripted)
+  }
+
   @Test("a server-reported failure comes back as a result, not a throw")
   func serverReportedError() async throws {
     // given

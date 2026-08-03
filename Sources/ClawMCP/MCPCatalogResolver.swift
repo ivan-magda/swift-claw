@@ -73,7 +73,7 @@ public enum MCPCatalogResolver {
     sessions: [MCPServerSession],
     metadataRedactor: SecretRedactor = SecretRedactor(secretValues: [])
   ) async -> ResolvedMCPCatalog {
-    let discoveries = await discoverAll(sessions)
+    let discoveries = await discoverAll(sessions, metadataRedactor: metadataRedactor)
     let sanitizer = MCPMetadataSanitizer(redactor: metadataRedactor)
 
     var candidates: [Candidate] = []
@@ -117,7 +117,10 @@ private extension MCPCatalogResolver {
 
   /// Runs discovery over a rolling window of `connectConcurrency` servers, then restores config
   /// order. A slow server delays only itself.
-  static func discoverAll(_ sessions: [MCPServerSession]) async -> [Discovery] {
+  static func discoverAll(
+    _ sessions: [MCPServerSession],
+    metadataRedactor: SecretRedactor
+  ) async -> [Discovery] {
     await withTaskGroup(of: (offset: Int, discovery: Discovery).self) { group in
       var scheduled = 0
       var collected: [(offset: Int, discovery: Discovery)] = []
@@ -126,7 +129,7 @@ private extension MCPCatalogResolver {
       while scheduled < min(MCPDiscoveryLimits.connectConcurrency, sessions.count) {
         let offset = scheduled
         group.addTask {
-          (offset, await discover(sessions[offset]))
+          (offset, await discover(sessions[offset], metadataRedactor: metadataRedactor))
         }
         scheduled += 1
       }
@@ -138,7 +141,7 @@ private extension MCPCatalogResolver {
         }
         let offset = scheduled
         group.addTask {
-          (offset, await discover(sessions[offset]))
+          (offset, await discover(sessions[offset], metadataRedactor: metadataRedactor))
         }
         scheduled += 1
       }
@@ -152,19 +155,23 @@ private extension MCPCatalogResolver {
     }
   }
 
-  static func discover(_ session: MCPServerSession) async -> Discovery {
+  static func discover(
+    _ session: MCPServerSession,
+    metadataRedactor: SecretRedactor
+  ) async -> Discovery {
     do {
       try await session.connect()
       return .listed(try await session.listAllTools())
     } catch {
       // A half-open session is worse than none: drop it so nothing later calls into it.
       await session.disconnect()
-      return .skipped(reason: skipReason(error))
+      return .skipped(reason: skipReason(error, metadataRedactor: metadataRedactor))
     }
   }
 
-  static func skipReason(_ error: any Error) -> String {
-    TextTruncation.cap("\(error)", maxGraphemes: MCPServerOutcome.reasonLimit)
+  static func skipReason(_ error: any Error, metadataRedactor: SecretRedactor) -> String {
+    let redacted = metadataRedactor.redact("\(error)")
+    return TextTruncation.cap(redacted, maxGraphemes: MCPServerOutcome.reasonLimit)
   }
 }
 

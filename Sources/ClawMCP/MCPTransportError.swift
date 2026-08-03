@@ -15,6 +15,7 @@ public enum MCPTransportError: Error, Sendable, Equatable {
   /// A 2xx whose body is neither JSON nor an event stream, so it holds no message we can parse.
   case unsupportedContentType(String)
   case oversizedMessage(limitBytes: Int)
+  case receiveBufferOverflow(limitMessages: Int)
   /// The HTTP seam's own failure — a timeout, a refused connection, a broken stream — kept whole so
   /// callers can read the disposition it already decided.
   case requestFailed(HTTPTransportFailure)
@@ -25,7 +26,8 @@ public enum MCPTransportError: Error, Sendable, Equatable {
     switch self {
     case .notConnected:
       return .definitelyNotSent
-    case .sessionExpired, .httpStatus, .unsupportedContentType, .oversizedMessage:
+    case .sessionExpired, .httpStatus, .unsupportedContentType, .oversizedMessage,
+      .receiveBufferOverflow:
       return .mayHaveBeenSent
     case .requestFailed(let failure):
       return failure.disposition
@@ -46,6 +48,8 @@ extension MCPTransportError: CustomStringConvertible {
       return "MCP server returned an unsupported content type: \(Self.mediaTypeDescription(value))"
     case .oversizedMessage(let limitBytes):
       return "MCP message exceeds the \(limitBytes)-byte limit"
+    case .receiveBufferOverflow(let limitMessages):
+      return "MCP receive buffer exceeds the \(limitMessages)-message limit"
     case .requestFailed(let failure):
       return "MCP request failed: \(failure.safeMessage)"
     }
