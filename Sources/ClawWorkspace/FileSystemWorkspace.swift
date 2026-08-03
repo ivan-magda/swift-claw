@@ -87,7 +87,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
         continue
       }
       guard Self.isSkillIdentifier(name) else {
-        warnings.append(.invalidSkillName(directory: directoryName, name: name))
+        warnings.append(.invalidSkillName(directory: directoryName, name: Self.bounded(name)))
         continue
       }
       guard name == directoryName else {
@@ -136,6 +136,13 @@ public struct FileSystemWorkspace: WorkspaceReading {
   /// block scalar or a quoted newline must not let one description occupy several of them.
   private static func singleLine(_ text: String) -> String {
     text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+  }
+
+  /// A rejected name is arbitrary YAML — a block scalar carries newlines and has no length bound —
+  /// and it rides a warning into the owner's chat and the log verbatim, once per turn until the
+  /// manifest is fixed. Bind it to the shape a valid name could have had.
+  private static func bounded(_ name: String) -> String {
+    TextTruncation.cap(singleLine(name), maxGraphemes: maxNameGraphemes)
   }
 
   /// The agentskills.io identifier shape: `^[a-z0-9]+(-[a-z0-9]+)*$`, 1–64 characters.

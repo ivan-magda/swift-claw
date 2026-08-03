@@ -115,6 +115,14 @@ private extension SkillLoadTool {
       )
     }
 
+    // Frontmatter without a procedure under it is an authoring gap, not a skill: returning it as a
+    // success would spend a tool call to hand the model an empty guidance fence and no reason why.
+    guard document.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+      return errorPayload(
+        "The skill \(descriptor.name) has no instructions under its frontmatter."
+      )
+    }
+
     return ToolPayload(
       content: ToolOutputCap.cap(redactor.redact(document.body), maxGraphemes: outputCapGraphemes),
       status: .ok,

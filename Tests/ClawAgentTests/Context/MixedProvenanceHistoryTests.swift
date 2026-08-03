@@ -77,7 +77,23 @@ import Testing
     )
   }
 
-  private func makeBuilder(fenceLabels: ToolFenceLabels = .toolNames) -> ContextBuilder {
+  private func definition(
+    name: String,
+    fenceLabel: String? = nil,
+    egress: ToolEgressClass = .none,
+    risk: RiskLevel = .safe
+  ) -> ToolDefinition {
+    ToolDefinition(
+      name: name,
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      egressClass: egress,
+      riskLevel: risk,
+      fenceLabel: fenceLabel
+    )
+  }
+
+  private func makeBuilder(fenceLabels: ToolFenceLabels = .undeclared) -> ContextBuilder {
     ContextBuilder(
       systemPrompt: SystemPrompt.minimal,
       workspace: EmptyWorkspace(),
@@ -110,8 +126,9 @@ import Testing
       StoredMessage(role: .assistant, content: "it says hi", provenance: .trusted),
     ]
 
-    // when
-    let result = try makeBuilder().assemble(
+    // when — the tool declares no label of its own, so it fences under its name
+    let labels = ToolFenceLabels(definitions: [definition(name: "web_fetch")])
+    let result = try makeBuilder(fenceLabels: labels).assemble(
       snapshot: makeSnapshot(history),
       sessionId: 1,
       origin: .interactive
@@ -148,17 +165,10 @@ import Testing
         toolCallId: "c1"
       ),
     ]
-    let definition = ToolDefinition(
-      name: "skill_load",
-      description: "d",
-      parameters: .object(["type": .string("object")]),
-      egressClass: .none,
-      riskLevel: .safe,
-      fenceLabel: "skills"
-    )
+    let loader = definition(name: "skill_load", fenceLabel: "skills")
 
     // when
-    let result = try makeBuilder(fenceLabels: ToolFenceLabels(definitions: [definition])).assemble(
+    let result = try makeBuilder(fenceLabels: ToolFenceLabels(definitions: [loader])).assemble(
       snapshot: makeSnapshot(history),
       sessionId: 1,
       origin: .interactive
@@ -237,7 +247,7 @@ import Testing
     let toolMessage = try #require(result.messages.first { message in message.role == .tool })
     #expect(toolMessage.toolCallId == "c1")
     #expect(toolMessage.content.text.contains("<claw-untrusted"))
-    #expect(toolMessage.content.text.contains("label=\"\(ContextBuilder.unattributedToolLabel)\""))
+    #expect(toolMessage.content.text.contains("label=\"\(ToolFenceLabels.unattributed)\""))
     #expect(toolMessage.content.text.contains("label=\"web_fetch\"") == false)
     #expect(toolMessage.content.text.contains("label=\"web_search\"") == false)
   }
@@ -266,21 +276,8 @@ import Testing
       ),
     ]
     let definitions = [
-      ToolDefinition(
-        name: "skill_load",
-        description: "d",
-        parameters: .object(["type": .string("object")]),
-        egressClass: .none,
-        riskLevel: .safe,
-        fenceLabel: WorkspaceSkills.fenceLabel
-      ),
-      ToolDefinition(
-        name: "web_fetch",
-        description: "d",
-        parameters: .object(["type": .string("object")]),
-        egressClass: .arbitraryDestination,
-        riskLevel: .ask
-      ),
+      definition(name: "skill_load", fenceLabel: WorkspaceSkills.fenceLabel),
+      definition(name: "web_fetch", egress: .arbitraryDestination, risk: .ask),
     ]
 
     // when
@@ -296,7 +293,7 @@ import Testing
     #expect(
       toolMessage.content.text.contains("label=\"\(WorkspaceSkills.fenceLabel)\"") == false
     )
-    #expect(toolMessage.content.text.contains("label=\"\(ContextBuilder.unattributedToolLabel)\""))
+    #expect(toolMessage.content.text.contains("label=\"\(ToolFenceLabels.unattributed)\""))
   }
 
   @Test func exchangeIsOneAtomicDroppableUnit() throws {

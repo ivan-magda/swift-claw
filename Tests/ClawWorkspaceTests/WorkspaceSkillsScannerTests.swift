@@ -276,9 +276,45 @@ import Testing
     // when
     let result = workspace.scanSkills()
 
-    // then
+    // then - the warning quotes the rejected name back, bounded to what a valid one could be
     #expect(result.descriptors.isEmpty)
-    #expect(result.warnings == [.invalidSkillName(directory: name, name: name)])
+    #expect(
+      result.warnings == [
+        .invalidSkillName(directory: name, name: TextTruncation.cap(name, maxGraphemes: 64))
+      ]
+    )
+  }
+
+  @Test func aRejectedNameReachesTheOwnerAsOneBoundedLine() throws {
+    // given - a block scalar name: unbounded and multi-line, and the notice it produces is
+    // prepended to every reply until the manifest is fixed
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let runaway = String(repeating: "A", count: 500)
+    let manifest = """
+      ---
+      name: |
+        \(runaway)
+        second line
+      description: An unbounded name.
+      ---
+      """
+    try writeSkill(named: "runaway", manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then - one line, capped like a description, so no manifest can flood the owner or the log
+    #expect(result.descriptors.isEmpty)
+    #expect(
+      result.warnings == [
+        .invalidSkillName(
+          directory: "runaway",
+          name: TextTruncation.cap("\(runaway) second line", maxGraphemes: 64)
+        )
+      ]
+    )
   }
 
   @Test func manifestNameDisagreeingWithDirectoryIsSkippedWithWarning() throws {

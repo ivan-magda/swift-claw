@@ -8,6 +8,7 @@ import Testing
   /// A real temp workspace (containment is realpath-based, so it needs real files) plus a sibling
   /// "outside" directory an escaping symlink can point at.
   private struct Fixture {
+    let base: URL
     let root: URL
     let outside: URL
   }
@@ -19,7 +20,7 @@ import Testing
     let outside = base.appendingPathComponent("outside", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
-    return Fixture(root: root, outside: outside)
+    return Fixture(base: base, root: root, outside: outside)
   }
 
   @discardableResult
@@ -71,6 +72,7 @@ import Testing
   @Test func loadsTheStrippedBodyWithoutTaintingTheSession() async throws {
     // given
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let descriptor = try writeSkill(
       named: "summarize",
       manifest: Self.manifest,
@@ -95,6 +97,7 @@ import Testing
   @Test func declaresTheSkillsFenceLabelAndASafeNoEgressPosture() throws {
     // given
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let tool = makeTool(root: fixture.root, scan: SkillScanResult(descriptors: [], warnings: []))
 
     // when
@@ -111,6 +114,7 @@ import Testing
   @Test func redactsSecretsAndCapsTheBody() async throws {
     // given
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let manifest = """
       ---
       name: deploy
@@ -139,6 +143,7 @@ import Testing
   @Test func loadsABodyThatContainsAHorizontalRule() async throws {
     // given — the body's own `---` must not be mistaken for the frontmatter fence
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let manifest = """
       ---
       name: review
@@ -169,6 +174,7 @@ import Testing
   @Test func unknownNameSucceedsAndListsTheInstalledNames() async throws {
     // given — a self-correcting miss, not a failure
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let summarize = try writeSkill(
       named: "summarize",
       manifest: Self.manifest,
@@ -198,6 +204,7 @@ import Testing
     // given — the argument is model-supplied text, and every payload renders under the one fence
     // label the prompt licenses as owner-authored guidance
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let descriptor = try writeSkill(
       named: "summarize",
       manifest: Self.manifest,
@@ -220,6 +227,7 @@ import Testing
   @Test func resolvesTheManifestByDirectoryEvenWhenTheNameDiffers() async throws {
     // given — a provider whose descriptor name is not its directory name
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let descriptor = try writeSkill(
       named: "summarize",
       manifest: Self.manifest,
@@ -242,6 +250,7 @@ import Testing
   @Test func resolvesAgainstAFreshScanOnEveryCall() async throws {
     // given — a workspace whose second scan sees a skill the first one did not
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let descriptor = try writeSkill(
       named: "summarize",
       manifest: Self.manifest,
@@ -284,6 +293,7 @@ import Testing
   @Test func unknownNameWithNoSkillsInstalledSaysSo() async throws {
     // given
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let tool = makeTool(root: fixture.root, scan: SkillScanResult(descriptors: [], warnings: []))
 
     // when
@@ -297,6 +307,7 @@ import Testing
   @Test func duplicateClaimantsRefuseNamingBothDirectories() async throws {
     // given — the scanner drops both claimants and warns; silent shadowing is the named bug class
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let scan = SkillScanResult(
       descriptors: [],
       warnings: [.duplicateSkillName(name: "summarize", directories: ["summarize", "summarize-2"])]
@@ -315,6 +326,7 @@ import Testing
   @Test func duplicateDescriptorsFromAProviderAlsoRefuse() async throws {
     // given — the invariant guard: two descriptors claiming one name never resolve to a body
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let first = try writeSkill(named: "summarize", manifest: Self.manifest, under: fixture.root)
     let second = SkillDescriptor(
       name: "summarize",
@@ -337,6 +349,7 @@ import Testing
   @Test func aSymlinkedSkillDirectoryPointingOutsideIsRefused() async throws {
     // given — a skill directory that is a symlink to a directory outside the workspace
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let escapee = fixture.outside.appendingPathComponent("escapee", isDirectory: true)
     try FileManager.default.createDirectory(at: escapee, withIntermediateDirectories: true)
     try Data(Self.manifest.utf8).write(to: escapee.appendingPathComponent("SKILL.md"))
@@ -361,6 +374,7 @@ import Testing
   @Test func aMissingOrUnreadableManifestSurfacesAnError() async throws {
     // given — the file vanished between the scan and the load
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let descriptor = try writeSkill(
       named: "summarize",
       manifest: Self.manifest,
@@ -383,6 +397,7 @@ import Testing
   @Test func aManifestThatLostItsFenceErrorsInsteadOfGuessing() async throws {
     // given — the file changed on disk and no longer has a frontmatter fence
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let descriptor = try writeSkill(
       named: "summarize",
       manifest: "no fence here\njust prose",
@@ -401,9 +416,63 @@ import Testing
     #expect(payload.content.contains("frontmatter fence"))
   }
 
+  @Test func aManifestThatIsNotUTF8SurfacesAnError() async throws {
+    // given — a SKILL.md the scanner could once read, rewritten as binary
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
+    let descriptor = try writeSkill(
+      named: "summarize",
+      manifest: Self.manifest,
+      under: fixture.root
+    )
+    try Data([0xFF, 0xFE, 0x00, 0x9C]).write(
+      to: descriptor.directory.appendingPathComponent("SKILL.md")
+    )
+    let tool = makeTool(
+      root: fixture.root,
+      scan: SkillScanResult(descriptors: [descriptor], warnings: [])
+    )
+
+    // when
+    let payload = await execute(tool, name: "summarize")
+
+    // then — undecodable bytes error rather than reaching the fence as mojibake
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("could not be read"))
+  }
+
+  @Test func aManifestWithNoInstructionsUnderItsFrontmatterErrors() async throws {
+    // given — the author wrote the frontmatter and stopped; the scan indexes it either way
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
+    let descriptor = try writeSkill(
+      named: "summarize",
+      manifest: """
+        ---
+        name: summarize
+        description: Summarize owner-provided text.
+        ---
+
+        """,
+      under: fixture.root
+    )
+    let tool = makeTool(
+      root: fixture.root,
+      scan: SkillScanResult(descriptors: [descriptor], warnings: [])
+    )
+
+    // when
+    let payload = await execute(tool, name: "summarize")
+
+    // then — the model is told the skill is empty instead of getting a silent empty fence
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("no instructions"))
+  }
+
   @Test func aMissingOrEmptyNameArgumentIsRefused() async throws {
     // given
     let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.base) }
     let tool = makeTool(root: fixture.root, scan: SkillScanResult(descriptors: [], warnings: []))
 
     // when

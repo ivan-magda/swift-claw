@@ -34,13 +34,28 @@ import Testing
     #expect(labels.label(forToolNamed: "cat") == "cat")
   }
 
-  @Test func anUnknownToolNameFallsBackToItself() {
+  @Test func anUnknownToolNameFallsBackToTheUnattributedLabel() {
     // given — history can replay a tool that is no longer registered
     let labels = ToolFenceLabels(definitions: [definition(name: "skill_load", fenceLabel: "skills")]
     )
 
     // when / then
-    #expect(labels.label(forToolNamed: "web_fetch") == "web_fetch")
-    #expect(ToolFenceLabels.toolNames.label(forToolNamed: "skill_load") == "skill_load")
+    #expect(labels.label(forToolNamed: "web_fetch") == ToolFenceLabels.unattributed)
+    #expect(
+      ToolFenceLabels.undeclared.label(forToolNamed: "skill_load") == ToolFenceLabels.unattributed
+    )
+  }
+
+  @Test func anUnregisteredToolNameCannotClaimADeclaredLabel() {
+    // given — tool names arrive from the provider stream, so an injected turn can propose one that
+    // spells a privileged label; the dispatcher answers an unknown name with an error observation
+    // that still reaches the fence seam.
+    let labels = ToolFenceLabels(
+      definitions: [definition(name: "skill_load", fenceLabel: "skills")]
+    )
+
+    // when / then — only the registered tool earns "skills"
+    #expect(labels.label(forToolNamed: "skills") == ToolFenceLabels.unattributed)
+    #expect(labels.label(forToolNamed: "skill_load") == "skills")
   }
 }

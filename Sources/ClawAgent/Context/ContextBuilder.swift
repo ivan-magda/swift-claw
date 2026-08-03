@@ -18,11 +18,6 @@ public struct ContextBuilder: Sendable {
 
   static let untrustedUserLabel = "untrusted_user_message"
 
-  /// The fence for a replayed tool row whose anchor no longer attributes it to one tool. It names
-  /// no tool on purpose: every declared label is a trust statement, and an unattributable row has
-  /// earned none of them.
-  static let unattributedToolLabel = "tool"
-
   private let systemPrompt: String
   private let proactiveSystemPrompt: String
 
@@ -46,7 +41,7 @@ public struct ContextBuilder: Sendable {
     retriever: any Retriever,
     recallCutoff: any RecallCutoff = CandidateCapRecallCutoff(),
     budget: ContextBudget,
-    fenceLabels: ToolFenceLabels = .toolNames,
+    fenceLabels: ToolFenceLabels = .undeclared,
     policyStaticSubhash: String = "",
     now: @escaping @Sendable () -> Date = Date.init,
     warn: @escaping @Sendable (String) -> Void = { _ in }
@@ -614,10 +609,11 @@ private extension ContextBuilder {
       for message in group.messages {
         switch message.role {
         case .tool:
-          let toolName =
-            message.toolCallId.flatMap { callId in namesByCallId[callId] }
-            ?? Self.unattributedToolLabel
-          let label = fenceLabels.label(forToolNamed: toolName)
+          let label =
+            message.toolCallId
+            .flatMap { callId in namesByCallId[callId] }
+            .map(fenceLabels.label(forToolNamed:))
+            ?? ToolFenceLabels.unattributed
           rendered.append(
             ChatMessage(
               role: .tool,

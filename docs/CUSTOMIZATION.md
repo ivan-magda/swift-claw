@@ -66,8 +66,9 @@ Go through the open projects newest first. For each one, ...
 
 Only the name and description stay in context, one line per skill. The body arrives on
 demand: when a description covers what the agent is about to do, it asks for that skill by
-name and follows what comes back. It loads at most one per task, and it never types a path
-— names resolve against the directories the daemon scanned.
+name and follows what comes back. It is told to load at most one per task, and it never
+types a path: the tool takes a name and resolves it against the directories the daemon
+scanned, so a path cannot be typed at all.
 
 What the scan requires:
 
@@ -88,7 +89,8 @@ the rest of the session. Reading the same file with `file_read` would cost you t
 clawd touches nothing else in the directory for now: no `scripts/` runs, no `assets/` or
 `references/` load.
 
-When a skill does not make it into context, the next reply says so above the answer:
+When a skill does not make it into context, the reply says so above the answer — and keeps
+saying it until you fix the file, since the scan runs fresh on every turn:
 
 - `⚠ Skill weekly-review: manifest name weekly-summary must match the directory name; skipped.`
   — and sibling notices for a missing frontmatter block, a name that breaks the shape
