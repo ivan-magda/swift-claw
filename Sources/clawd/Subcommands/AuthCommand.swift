@@ -152,9 +152,7 @@ private extension AuthCommand {
     return AuthWorkflow(
       bootstrap: bootstrap,
       runtimeSecrets: EnvironmentRuntimeSecrets(stateRoot: stateRoot, environment: environment),
-      mutationLock: InstanceLockAdapter(
-        path: SecretStatePaths(stateRoot: stateRoot).instanceLock.path
-      ),
+      mutationLock: InstanceLockAdapter(stateRoot: stateRoot),
       makeCredentialStore: {
         EncryptedLLMCredentialStore(stateRoot: stateRoot)
       },
@@ -216,29 +214,6 @@ private extension AuthCommand {
 }
 
 // MARK: - Seam Adapters
-
-/// The daemon's own single-instance `flock`, as the lock the workflow asks for.
-///
-/// This file is the only one that knows both halves: the workflow must not learn that a lock is a
-/// file, and the daemon's lock must not learn that anything but the daemon takes it.
-private struct InstanceLockAdapter: AuthMutationLocking {
-  let path: String
-
-  func acquire() throws -> AuthMutationLease {
-    let lock: InstanceLock
-    do {
-      lock = try InstanceLock(path: path)
-    } catch InstanceLock.LockError.alreadyLocked {
-      throw AuthMutationLockFailure.held
-    } catch {
-      throw AuthMutationLockFailure.unavailable(detail: "\(error)")
-    }
-
-    return AuthMutationLease {
-      lock.release()
-    }
-  }
-}
 
 /// The real seal-and-prove-it, behind the workflow's one-call seam. The secrets it returns are the
 /// ones the daemon will boot with; login wants only the proof that it can, so they are dropped here.

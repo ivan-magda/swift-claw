@@ -13,6 +13,9 @@ public enum MCPConfigError: Error, Sendable, Equatable {
   case unsupportedScheme(server: String, value: String)
   /// Two server names that fold to the same sanitized tool-name prefix.
   case duplicateServerName(String)
+  /// A command was aimed at a server the config does not declare — a typo, or a token being set
+  /// before the server it belongs to exists.
+  case unknownServer(name: String, known: [String])
   case dangerousRiskOverride(server: String, tool: String)
 
   /// Every case is the owner's file being wrong, so one exit code covers them all.
@@ -40,6 +43,9 @@ extension MCPConfigError: CustomStringConvertible {
       return "unsupported scheme '\(value)' for MCP server '\(server)' (http or https only)"
     case .duplicateServerName(let name):
       return "duplicate MCP server name after sanitization: '\(name)'"
+    case .unknownServer(let name, let known):
+      let listed = known.isEmpty ? "none configured" : known.joined(separator: ", ")
+      return "no MCP server named '\(name)' in the config (configured: \(listed))"
     case .dangerousRiskOverride(let server, let tool):
       return "MCP server '\(server)' cannot mark tool '\(tool)' dangerous"
     }

@@ -1,6 +1,25 @@
 import ClawCore
 import Foundation
 
+/// The sealed credential maps that live under the state root, as a closed set. A store names one of
+/// these rather than a string, which is what keeps "no caller-supplied file name" true even though
+/// the two stores share one file implementation.
+public enum SecretCredentialEntry: Sendable, Equatable, CaseIterable {
+  /// The provider-keyed OAuth credential map.
+  case llmCredentials
+  /// The MCP server-keyed access-token map.
+  case mcpCredentials
+
+  public var name: String {
+    switch self {
+    case .llmCredentials:
+      return SecretStatePaths.credentialEnvelopeName
+    case .mcpCredentials:
+      return SecretStatePaths.mcpCredentialEnvelopeName
+    }
+  }
+}
+
 /// The only production source of state-root-relative secret paths.
 ///
 /// It takes a state root and nothing else. There is no member that turns a caller-supplied name
@@ -17,6 +36,10 @@ public struct SecretStatePaths: Sendable, Equatable {
   /// Its associated data is distinct from that envelope's, so the two cannot be swapped: either one
   /// moved to the other's name fails authentication instead of opening as the wrong kind of secret.
   public static let credentialEnvelopeName = "llm-credentials.enc"
+  /// The MCP server-keyed access-token map, sealed under the same key as the two envelopes above and
+  /// kept apart by its own associated data: a token map moved to either other name fails
+  /// authentication rather than opening as the wrong kind of secret.
+  public static let mcpCredentialEnvelopeName = "mcp-credentials.enc"
   /// The daemon instance lock, named here so one type names every state-root entry the secret layer
   /// touches. `clawd run`, the `auth login` transition, and `secrets seal` all acquire it, so a
   /// seal-capable command can never race the daemon or another seal.
@@ -33,7 +56,19 @@ public struct SecretStatePaths: Sendable, Equatable {
   public var credentialEnvelope: URL {
     stateRoot.appendingPathComponent(Self.credentialEnvelopeName)
   }
+  public var mcpCredentialEnvelope: URL {
+    stateRoot.appendingPathComponent(Self.mcpCredentialEnvelopeName)
+  }
   public var instanceLock: URL { stateRoot.appendingPathComponent(Self.instanceLockName) }
+
+  public func url(for entry: SecretCredentialEntry) -> URL {
+    switch entry {
+    case .llmCredentials:
+      return credentialEnvelope
+    case .mcpCredentials:
+      return mcpCredentialEnvelope
+    }
+  }
 
   /// The directory every entry above is renamed within — the fsync target that makes a rename
   /// durable, and the only directory publication ever opens.

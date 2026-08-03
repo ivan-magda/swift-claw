@@ -190,7 +190,7 @@ public struct AppConfig: Sendable, Equatable {
     let exec = try parseExecConfig(from: env)
     let voice = try parseVoiceConfig(from: env)
     let image = try parseImageConfig(from: env)
-    let mcpConfigSource = parseMCPConfigSource(from: env, stateRoot: stateRoot)
+    let mcpConfigSource = Self.mcpConfigSource(from: env, stateRoot: stateRoot)
 
     return AppConfig(
       allowlist: allowlist,
@@ -218,11 +218,15 @@ public struct AppConfig: Sendable, Equatable {
 
 // MARK: - MCP Config Location
 
-private extension AppConfig {
+public extension AppConfig {
   /// Resolves *where* the MCP catalog lives, not whether it is readable — the loader owns that, and
   /// the two answers differ: an owner-named path that is missing fails the boot, while the probed
   /// default being missing is just the feature staying off.
-  static func parseMCPConfigSource(
+  ///
+  /// Public because the CLI verbs that manage MCP tokens need the catalog's location without the
+  /// rest of the daemon's configuration having to be valid: an owner repairing a token must not be
+  /// stopped by an unrelated env var.
+  static func mcpConfigSource(
     from env: [String: String],
     stateRoot: URL
   ) -> MCPConfigSource {

@@ -12,6 +12,7 @@ struct Clawd: AsyncParsableCommand {
       DoctorCommand.self,
       SecretsCommand.self,
       AuthCommand.self,
+      MCPCommand.self,
     ],
     defaultSubcommand: RunCommand.self
   )
