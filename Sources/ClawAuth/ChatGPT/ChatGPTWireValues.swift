@@ -11,6 +11,8 @@ package enum ChatGPTWireValues {
   /// poll loop, is rejected rather than coerced.
   static func positiveInteger(_ value: JSONValue) -> Int? {
     switch value {
+    case .integer(let integer):
+      return integer > 0 && integer < Int.max ? integer : nil
     case .number(let number):
       return positiveInteger(fromNumber: number)
     case .string(let text):

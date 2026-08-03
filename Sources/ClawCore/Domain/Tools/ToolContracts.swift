@@ -45,10 +45,36 @@ public enum ToolCallCoding {
 public indirect enum JSONValue: Sendable, Equatable {
   case null
   case bool(Bool)
+  case integer(Int)
   case number(Double)
   case string(String)
   case array([JSONValue])
   case object([String: JSONValue])
+}
+
+extension JSONValue {
+  public static func == (left: JSONValue, right: JSONValue) -> Bool {
+    switch (left, right) {
+    case (.null, .null):
+      return true
+    case (.bool(let leftValue), .bool(let rightValue)):
+      return leftValue == rightValue
+    case (.integer(let leftValue), .integer(let rightValue)):
+      return leftValue == rightValue
+    case (.number(let leftValue), .number(let rightValue)):
+      return leftValue == rightValue
+    case (.integer(let integer), .number(let number)), (.number(let number), .integer(let integer)):
+      return Int(exactly: number) == integer
+    case (.string(let leftValue), .string(let rightValue)):
+      return leftValue == rightValue
+    case (.array(let leftValue), .array(let rightValue)):
+      return leftValue == rightValue
+    case (.object(let leftValue), .object(let rightValue)):
+      return leftValue == rightValue
+    default:
+      return false
+    }
+  }
 }
 
 extension JSONValue: Codable {
@@ -58,6 +84,8 @@ extension JSONValue: Codable {
       self = .null
     } else if let boolValue = try? container.decode(Bool.self) {
       self = .bool(boolValue)
+    } else if let integerValue = try? container.decode(Int.self) {
+      self = .integer(integerValue)
     } else if let numberValue = try? container.decode(Double.self) {
       self = .number(numberValue)
     } else if let stringValue = try? container.decode(String.self) {
@@ -80,6 +108,8 @@ extension JSONValue: Codable {
       try container.encodeNil()
     case .bool(let boolValue):
       try container.encode(boolValue)
+    case .integer(let integerValue):
+      try container.encode(integerValue)
     case .number(let numberValue):
       try container.encode(numberValue)
     case .string(let stringValue):
@@ -115,10 +145,14 @@ extension JSONValue {
   }
 
   public var numberValue: Double? {
-    guard case .number(let numberValue) = self else {
+    switch self {
+    case .integer(let integerValue):
+      return Double(integerValue)
+    case .number(let numberValue):
+      return numberValue
+    case .null, .bool, .string, .array, .object:
       return nil
     }
-    return numberValue
   }
 }
 

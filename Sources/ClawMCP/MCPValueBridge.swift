@@ -15,7 +15,7 @@ public enum MCPValueBridge {
     case .bool(let flag):
       return .bool(flag)
     case .int(let number):
-      return .number(Double(number))
+      return .integer(number)
     case .double(let number):
       return .number(number)
     case .string(let text):
@@ -36,6 +36,8 @@ public enum MCPValueBridge {
       return .null
     case .bool(let flag):
       return .bool(flag)
+    case .integer(let number):
+      return .int(number)
     case .number(let number):
       return numberValue(number)
     case .string(let text):

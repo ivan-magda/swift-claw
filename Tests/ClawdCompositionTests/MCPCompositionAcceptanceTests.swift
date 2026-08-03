@@ -389,7 +389,8 @@ private extension MCPCompositionAcceptanceTests {
     let config = try config ?? CompositionAcceptance.chatGPTConfig()
     let inputs = MCPBootInputs(
       config: try MCPConfig(servers: servers),
-      credentials: credentials
+      credentials: credentials,
+      credentialRedactionValues: credentials.values.compactMap(\.token)
     )
     let secrets = Secrets(telegramBotToken: "tg-token", llmApiKey: nil, searchApiKey: nil)
 

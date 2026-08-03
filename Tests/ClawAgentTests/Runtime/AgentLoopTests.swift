@@ -314,6 +314,40 @@ import Testing
     #expect(outcome.exchanges.count == 1)  // the executed exchange still rides the commit
   }
 
+  @Test func advertisedToolsCountTowardTheInputCapBeforeTheProviderCall() async throws {
+    // given
+    let provider = SequenceProvider([okResponse(content: "never reached")])
+    let definition = ToolDefinition(
+      name: "mcp__linear__large_schema",
+      description: "remote tool",
+      parameters: .object([
+        "type": .string("object"),
+        "description": .string(String(repeating: "x", count: 8_000)),
+      ]),
+      egressClass: .arbitraryDestination,
+      riskLevel: .ask
+    )
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let budget = RunBudget(
+      maxInputTokens: 1_000,
+      maxOutputTokens: 64,
+      wallClockDeadlineSeconds: 60,
+      retryBudget: 0,
+      perRunUSD: 10,
+      perDayUSD: 100,
+      proactivePerDayUSD: 2,
+      referenceUSDPerToken: 0.000_015
+    )
+    let runtime = makeRuntime(provider: provider, budget: budget, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunInputTokenCap))
+    #expect(await provider.requests.isEmpty)
+  }
+
   @Test func aDeadlineAlreadyElapsedBeforeSendDegradesWithoutDebiting() async throws {
     // given — a whole-run deadline already elapsed at loop entry, so the first round never issues
     let provider = SequenceProvider([

@@ -32,6 +32,19 @@ public enum MCPCredentialLoad: Sendable, Equatable {
   }
 }
 
+/// One read of the encrypted map, split into authentication outcomes for configured servers and the
+/// complete token set that process-wide redaction must cover. A URL mismatch or a removed server
+/// keeps its token out of authentication while it remains secret data.
+public struct MCPCredentialSnapshot: Sendable, Equatable {
+  public let outcomes: [String: MCPCredentialLoad]
+  public let redactionValues: [String]
+
+  public init(outcomes: [String: MCPCredentialLoad], redactionValues: [String]) {
+    self.outcomes = outcomes
+    self.redactionValues = redactionValues
+  }
+}
+
 // MARK: - Store
 
 /// The MCP server-keyed token map, sealed under the same 256-bit `secret.key` as the runtime and
@@ -80,12 +93,23 @@ public struct EncryptedMCPCredentialStore: Sendable {
   public func loadAll(
     servers: [MCPServerConfig]
   ) throws(CredentialStoreError) -> [String: MCPCredentialLoad] {
+    try loadSnapshot(servers: servers).outcomes
+  }
+
+  /// Opens the envelope once for boot, returning both the credentials safe to send and every stored
+  /// token that must remain unprintable even after its server is removed or re-pointed.
+  public func loadSnapshot(
+    servers: [MCPServerConfig]
+  ) throws(CredentialStoreError) -> MCPCredentialSnapshot {
     let stored = try file.load()?.servers ?? [:]
     var outcomes: [String: MCPCredentialLoad] = [:]
     for server in servers {
       outcomes[server.name] = Self.outcome(for: stored[server.name], server: server)
     }
-    return outcomes
+    let redactionValues = stored.keys.sorted().compactMap { name in
+      stored[name]?.token
+    }
+    return MCPCredentialSnapshot(outcomes: outcomes, redactionValues: redactionValues)
   }
 
   /// The names carrying a record, whatever URL each was bound to. It is what lets an owner-facing

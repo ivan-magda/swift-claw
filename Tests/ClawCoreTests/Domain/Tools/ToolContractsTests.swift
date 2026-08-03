@@ -38,6 +38,25 @@ private struct DefaultPrepareTool: Tool {
     #expect(object["deep"]?.objectValue?["flag"] == .bool(true))
   }
 
+  @Test func jsonValuePreservesIntegersBeyondDoublePrecision() throws {
+    // given
+    let raw = #"{"record_id":9007199254740993}"#
+
+    // when
+    let parsed = try #require(JSONValue.parse(raw))
+    let encoded = try #require(CanonicalJSON.encode(parsed))
+
+    // then
+    #expect(parsed.objectValue?["record_id"] == .integer(9_007_199_254_740_993))
+    #expect(encoded == raw)
+  }
+
+  @Test func integerAndExactDoubleCasesHaveTheSameJSONNumericValue() {
+    // given / when / then
+    #expect(JSONValue.integer(5) == .number(5))
+    #expect(JSONValue.integer(9_007_199_254_740_993) != .number(9_007_199_254_740_992))
+  }
+
   @Test func jsonValueParseRejectsMalformedJSON() {
     // given / when / then
     #expect(JSONValue.parse(#"{"url": "#) == nil)

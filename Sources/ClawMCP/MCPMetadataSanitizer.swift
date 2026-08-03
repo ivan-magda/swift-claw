@@ -29,7 +29,7 @@ struct MCPMetadataSanitizer: Sendable {
       return .array(values.map(schema))
     case .string(let value):
       return .string(text(value))
-    case .null, .bool, .number:
+    case .null, .bool, .integer, .number:
       return value
     }
   }

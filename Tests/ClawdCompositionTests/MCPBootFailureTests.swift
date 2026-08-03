@@ -1,5 +1,6 @@
 import ArgumentParser
 import ClawCore
+import ClawGateway
 import ClawMCP
 import ClawSecrets
 import ClawTestSupport
@@ -82,6 +83,31 @@ import Testing
 
     // then
     #expect(thrown == ExitCode(ClawExitCode.secretLoadFailed.rawValue))
+  }
+
+  @Test func doctorClassifiesAnUnopenableTokenEnvelopeAsASecretFailure() throws {
+    // given
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-doctor")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    try EncryptedFileSecretStore.seal(
+      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      stateRoot: stateRoot
+    )
+    try write("servers:\n  - name: linear\n    url: https://mcp.test.invalid/mcp\n", to: stateRoot)
+    try Data("not an envelope".utf8).write(
+      to: SecretStatePaths(stateRoot: stateRoot).mcpCredentialEnvelope
+    )
+    var report = DoctorReport()
+
+    // when
+    let result = DoctorCommand.addMCPRows(
+      to: &report,
+      config: try config(stateRoot: stateRoot)
+    )
+
+    // then
+    #expect(result.failureExitCode == .secretLoadFailed)
+    #expect(report.ok == false)
   }
 }
 

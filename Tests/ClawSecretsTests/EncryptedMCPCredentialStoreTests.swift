@@ -110,6 +110,34 @@ import Testing
     #expect(try store.storedServerNames() == ["linear", "retired"])
   }
 
+  @Test func bootSnapshotRedactsConfiguredRepointedAndOrphanedTokens() throws {
+    // given
+    let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let store = EncryptedMCPCredentialStore(stateRoot: stateRoot)
+    let configured = try makeServer()
+    let repointed = try makeServer(name: "repointed", url: "https://old.example/mcp")
+    let retired = try makeServer(name: "retired", url: "https://retired.example/mcp")
+    try store.save(token: "configured-token", for: configured)
+    try store.save(token: "repointed-token", for: repointed)
+    try store.save(token: "retired-token", for: retired)
+
+    // when
+    let snapshot = try store.loadSnapshot(servers: [
+      configured,
+      try makeServer(name: "repointed", url: "https://new.example/mcp"),
+    ])
+
+    // then
+    #expect(snapshot.outcomes["linear"] == .token("configured-token"))
+    #expect(snapshot.outcomes["repointed"] == .boundToDifferentURL)
+    #expect(
+      Set(snapshot.redactionValues) == [
+        "configured-token", "repointed-token", "retired-token",
+      ]
+    )
+  }
+
   // MARK: - URL binding
 
   @Test func aTokenSetForAnotherURLIsReportedAsBoundElsewhereRatherThanReturned() throws {

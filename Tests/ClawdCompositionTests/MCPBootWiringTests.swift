@@ -14,7 +14,8 @@ import Testing
     // given
     let inputs = MCPBootInputs(
       config: try MCPConfig(servers: [try server(named: "linear"), try server(named: "notion")]),
-      credentials: ["linear": .token("linear-token"), "notion": .token("notion-token")]
+      credentials: ["linear": .token("linear-token"), "notion": .token("notion-token")],
+      credentialRedactionValues: ["linear-token", "notion-token"]
     )
 
     // when
@@ -26,12 +27,13 @@ import Testing
     #expect(Set(values) == ["tg-token", "sk-key", "linear-token", "notion-token"])
   }
 
-  @Test("a token bound to a different URL is neither sent nor added to the union")
+  @Test("a token bound to a different URL is redacted but never sent")
   func rePointedTokenIsTreatedAsAbsent() throws {
     // given
     let inputs = MCPBootInputs(
       config: try MCPConfig(servers: [try server(named: "linear")]),
-      credentials: ["linear": .boundToDifferentURL]
+      credentials: ["linear": .boundToDifferentURL],
+      credentialRedactionValues: ["old-host-token"]
     )
 
     // when
@@ -40,7 +42,7 @@ import Testing
     )
 
     // then
-    #expect(values == ["tg-token"])
+    #expect(values == ["tg-token", "old-host-token"])
     #expect(inputs.token(for: "linear") == nil)
   }
 
@@ -49,7 +51,8 @@ import Testing
     // given — the union exactly as `RunCommand.bootstrapLogger` consumes it.
     let inputs = MCPBootInputs(
       config: try MCPConfig(servers: [try server(named: "linear")]),
-      credentials: ["linear": .token("mcp-linear-secret-token")]
+      credentials: ["linear": .token("mcp-linear-secret-token")],
+      credentialRedactionValues: ["mcp-linear-secret-token"]
     )
     let values = inputs.redactionValues(
       with: Secrets(telegramBotToken: "tg-token", llmApiKey: nil, searchApiKey: nil)

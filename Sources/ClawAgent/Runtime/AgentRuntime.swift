@@ -119,6 +119,9 @@ public struct AgentRuntime: Sendable {
   /// The token reservation replay state needs on top of ordinary text estimation. Injected, so the
   /// loop reserves against persisted provider-state bytes it never decodes.
   let reservationPolicy: LLMInputReservationPolicy
+  /// The same immutable definitions the request sends, retained so every accounting path charges
+  /// the exact tool surface even when it runs from the result-classification extension.
+  let toolDefinitions: [ToolDefinition]
 
   private let toolDispatcher: (any ToolDispatching)?
 
@@ -164,6 +167,7 @@ public struct AgentRuntime: Sendable {
     self.configuredReference = configuredReference
     self.costPolicy = costPolicy
     self.reservationPolicy = reservationPolicy
+    self.toolDefinitions = toolDispatcher?.definitions ?? []
     self.accountant = ProviderUsageAccountant(
       configuredReference: configuredReference,
       costPolicy: costPolicy,
@@ -204,7 +208,7 @@ public struct AgentRuntime: Sendable {
     carryOver: ResumeUsage? = nil
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
-    let definitions = toolDispatcher?.definitions ?? []
+    let definitions = toolDefinitions
     let gate = BudgetGate(budget: budget, costPolicy: costPolicy)
 
     // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
@@ -257,6 +261,7 @@ public struct AgentRuntime: Sendable {
         usage: accountant.conservativeRow(
           callID: callID,
           context: wire,
+          tools: definitions,
           observedCompletionTokens: 0,
           runId: runId,
           sessionId: sessionId
@@ -270,7 +275,7 @@ public struct AgentRuntime: Sendable {
     for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
       let callID = providerCallIDGenerator.next()
 
-      let preflight = accountant.preflightEstimate(context: wire)
+      let preflight = accountant.preflightEstimate(context: wire, tools: definitions)
       if preflight.inputTokens > budget.maxInputTokens {
         return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
       }
@@ -347,6 +352,7 @@ public struct AgentRuntime: Sendable {
         for: response,
         callID: callID,
         context: wire,
+        tools: definitions,
         runId: runId,
         sessionId: sessionId
       )

@@ -265,18 +265,39 @@ public struct PriceTable: Sendable, Equatable {
 /// grapheme-domain assembly cap). A double-ceil of `graphemes / 4 * 1.25` rounds the estimate
 /// up at each step; `graphemeBudget` is its inverse (rounds down) for the assembly cap.
 public enum TokenEstimator {
-  /// Estimated input tokens, summed per message so each message's rounding adds headroom.
-  /// Re-sent assistant `tool_calls` (name + arguments JSON) are counted too.
-  public static func estimateInputTokens(_ messages: [ChatMessage]) -> Int {
-    messages.reduce(0) { running, message in
+  /// Estimated input tokens, with messages rounded separately for headroom and the advertised tool
+  /// array charged in its provider-wire shape. Re-sent assistant `tool_calls` count as message input.
+  public static func estimateInputTokens(
+    _ messages: [ChatMessage],
+    tools: [ToolDefinition] = []
+  ) -> Int {
+    let messageTokens = messages.reduce(0) { running, message in
       running + estimateTokens(forText: message.content.text) + toolCallTokens(for: message)
     }
+    return SaturatingArithmetic.sum(messageTokens, toolDefinitionTokens(tools))
   }
 
   private static func toolCallTokens(for message: ChatMessage) -> Int {
     message.toolCalls.reduce(0) { running, call in
       running + estimateTokens(forText: call.name) + estimateTokens(forText: call.argumentsJSON)
     }
+  }
+
+  private static func toolDefinitionTokens(_ tools: [ToolDefinition]) -> Int {
+    guard tools.isEmpty == false else {
+      return 0
+    }
+    let wireTools = tools.map { definition in
+      ToolInputEstimate(
+        name: definition.name,
+        description: definition.description,
+        parameters: definition.parameters
+      )
+    }
+    guard let json = CanonicalJSON.encode(wireTools) else {
+      return .max
+    }
+    return estimateTokens(forText: json)
   }
 
   /// Estimated tokens for a single text body — used to account for an assistant reply when the
@@ -297,6 +318,16 @@ public enum TokenEstimator {
 
   private static func inputTokens(forGraphemes graphemes: Int) -> Int {
     Int(ceil(ceil(Double(graphemes) / 4) * 1.25))
+  }
+
+  /// The larger of the two provider tool spellings: Responses uses the flat `strict` form, while
+  /// Chat Completions nests the same three owner-controlled fields below `function`.
+  private struct ToolInputEstimate: Encodable {
+    let type = "function"
+    let name: String
+    let description: String
+    let strict = false
+    let parameters: JSONValue
   }
 }
 
@@ -385,12 +416,12 @@ public struct ResolvedUsage: Sendable, Equatable {
     guard isEstimated, reservation > 0 else {
       return self
     }
-    let promptTokens = usage.promptTokens + reservation
+    let promptTokens = SaturatingArithmetic.sum(usage.promptTokens, reservation)
     return ResolvedUsage(
       usage: ChatUsage(
         promptTokens: promptTokens,
         completionTokens: usage.completionTokens,
-        totalTokens: promptTokens + usage.completionTokens
+        totalTokens: SaturatingArithmetic.sum(promptTokens, usage.completionTokens)
       ),
       isEstimated: true
     )
@@ -405,21 +436,29 @@ public struct UsageResolver: Sendable {
 
   /// Provider-returned usage wins; when the response omits it, estimate prompt from the sent
   /// `context` and completion from the returned `response.content`.
-  public func resolve(response: ChatResponse, context: [ChatMessage]) -> ResolvedUsage {
+  public func resolve(
+    response: ChatResponse,
+    context: [ChatMessage],
+    tools: [ToolDefinition] = []
+  ) -> ResolvedUsage {
     if let reported = response.usage {
       return ResolvedUsage(usage: reported, isEstimated: false)
     }
     return estimated(
-      promptTokens: TokenEstimator.estimateInputTokens(context),
+      promptTokens: TokenEstimator.estimateInputTokens(context, tools: tools),
       completionTokens: TokenEstimator.estimateTokens(forText: response.content)
     )
   }
 
   /// The estimate for a call that produced no response (deadline / exhausted retries): prompt from
   /// `context`, completion reserved at the output cap since no reply exists to measure.
-  public func estimate(context: [ChatMessage], maxOutputTokens: Int) -> ResolvedUsage {
+  public func estimate(
+    context: [ChatMessage],
+    tools: [ToolDefinition] = [],
+    maxOutputTokens: Int
+  ) -> ResolvedUsage {
     estimated(
-      promptTokens: TokenEstimator.estimateInputTokens(context),
+      promptTokens: TokenEstimator.estimateInputTokens(context, tools: tools),
       completionTokens: maxOutputTokens
     )
   }
@@ -429,7 +468,7 @@ public struct UsageResolver: Sendable {
       usage: ChatUsage(
         promptTokens: promptTokens,
         completionTokens: completionTokens,
-        totalTokens: promptTokens + completionTokens
+        totalTokens: SaturatingArithmetic.sum(promptTokens, completionTokens)
       ),
       isEstimated: true
     )

@@ -230,12 +230,14 @@ extension RunCommand {
     }
 
     do {
+      let snapshot = try EnvironmentLoader.loadMCPCredentialSnapshot(
+        config: config,
+        servers: catalog.servers
+      )
       return MCPBootInputs(
         config: catalog,
-        credentials: try EnvironmentLoader.loadMCPCredentials(
-          config: config,
-          servers: catalog.servers
-        )
+        credentials: snapshot.outcomes,
+        credentialRedactionValues: snapshot.redactionValues
       )
     } catch {
       FileHandle.standardError.write(Data("mcp credential error: \(error)\n".utf8))

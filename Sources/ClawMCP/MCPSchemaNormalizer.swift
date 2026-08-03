@@ -238,7 +238,7 @@ private extension MCPSchemaNormalizer {
       return .object(rewritten)
     case .array(let values):
       return .array(values.map { rewriteReferences($0, promotions: promotions) })
-    case .null, .bool, .number, .string:
+    case .null, .bool, .integer, .number, .string:
       return node
     }
   }

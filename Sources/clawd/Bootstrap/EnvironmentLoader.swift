@@ -42,6 +42,15 @@ enum EnvironmentLoader {
     return try EncryptedMCPCredentialStore(stateRoot: config.stateRoot).loadAll(servers: servers)
   }
 
+  /// Reads the boot snapshot: configured-server authentication outcomes plus every stored token for
+  /// process-wide redaction, including records the current catalog no longer uses.
+  static func loadMCPCredentialSnapshot(
+    config: AppConfig,
+    servers: [MCPServerConfig]
+  ) throws(CredentialStoreError) -> MCPCredentialSnapshot {
+    try EncryptedMCPCredentialStore(stateRoot: config.stateRoot).loadSnapshot(servers: servers)
+  }
+
   /// Opens the store bundle at the state root's database path (runs pending migrations).
   static func openStores(config: AppConfig) throws -> ClawStores {
     try ClawDatabase.openStores(path: databasePath(config: config))
