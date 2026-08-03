@@ -1,6 +1,14 @@
 import ClawCore
 import Foundation
 
+/// Whether a failed MCP call could have run on the remote server. This is separate from HTTP
+/// transmission: a session-expired request reached the server, but the server rejected it before the
+/// tool ran.
+public enum MCPCallExecutionDisposition: Sendable, Equatable {
+  case definitelyNotExecuted
+  case mayHaveExecuted
+}
+
 /// A Streamable HTTP exchange that did not deliver a JSON-RPC message.
 ///
 /// Every case is safe to render. Nothing quotes the server's body, and the one case that carries a
@@ -33,6 +41,20 @@ public enum MCPTransportError: Error, Sendable, Equatable {
       return .mayHaveBeenSent
     case .requestFailed(let failure):
       return failure.disposition
+    }
+  }
+
+  /// The side-effect disposition the session retry classifier and owner-facing observation share.
+  public var callExecutionDisposition: MCPCallExecutionDisposition {
+    switch self {
+    case .notConnected, .sessionExpired:
+      return .definitelyNotExecuted
+    case .requestFailed(let failure):
+      return failure.disposition == .definitelyNotSent
+        ? .definitelyNotExecuted : .mayHaveExecuted
+    case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow,
+      .receiveStreamTerminated:
+      return .mayHaveExecuted
     }
   }
 }

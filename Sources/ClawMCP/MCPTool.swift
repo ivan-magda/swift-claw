@@ -46,6 +46,7 @@ public struct MCPTool: ClawCore.Tool {
       name: resolved.localName,
       description: sanitizer.text(resolved.description),
       parameters: sanitizer.schema(resolved.parameters),
+      metadataProvenance: .untrusted,
       egressClass: .arbitraryDestination,
       riskLevel: resolved.riskLevel,
       invocationIdentity: invocationIdentity
@@ -182,18 +183,29 @@ private extension MCPTool {
   /// unrecognized collapses to a generic line and the detail goes to the log instead.
   func failureText(_ error: any Error) -> String {
     let detail: String
+    let disposition: MCPCallExecutionDisposition
     switch error {
     case let transport as MCPTransportError:
       detail = "\(transport)"
+      disposition = transport.callExecutionDisposition
     case let session as MCPSessionError:
       detail = "\(session)"
+      disposition = session.callExecutionDisposition
     case is CancellationError:
       detail = "the call was cancelled"
+      disposition = .mayHaveExecuted
     default:
       detail = "the server did not complete the call"
+      disposition = .mayHaveExecuted
     }
 
-    return "\(resolved.localName) failed: \(detail)."
+    switch disposition {
+    case .definitelyNotExecuted:
+      return "\(resolved.localName) failed: \(detail)."
+    case .mayHaveExecuted:
+      return
+        "\(resolved.localName) may have completed remotely; verify its effects before retrying: \(detail)."
+    }
   }
 }
 

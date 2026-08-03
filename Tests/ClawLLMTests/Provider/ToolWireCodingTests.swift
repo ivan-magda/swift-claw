@@ -58,6 +58,7 @@ import Testing
         "properties": .object(["url": .object(["type": .string("string")])]),
         "required": .array([.string("url")]),
       ]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe
     )

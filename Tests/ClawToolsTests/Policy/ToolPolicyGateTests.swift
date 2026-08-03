@@ -17,6 +17,7 @@ struct FetchLikeTool: Tool {
       name: name,
       description: "stub",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .arbitraryDestination,
       riskLevel: riskLevel
     )
@@ -46,6 +47,7 @@ struct SearchLikeTool: Tool {
     name: "web_search",
     description: "stub",
     parameters: .object(["type": .string("object")]),
+    metadataProvenance: .trusted,
     egressClass: .fixedEndpoint,
     riskLevel: .safe
   )
@@ -70,6 +72,7 @@ struct WriteLikeTool: Tool {
       name: name,
       description: "stub",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .ask
     )
@@ -106,6 +109,7 @@ private struct PreparedDangerousTool: Tool {
       name: "execute_code",
       description: "test dangerous tool",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .dangerous
     )
@@ -143,6 +147,7 @@ private struct ProbedDangerousTool: Tool {
       name: "execute_code",
       description: "test dangerous tool",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .dangerous
     )
@@ -949,6 +954,7 @@ private struct ProbedDangerousTool: Tool {
         name: "web_fetch",
         description: "stub",
         parameters: .object(["type": .string("object")]),
+        metadataProvenance: .trusted,
         egressClass: .arbitraryDestination,
         riskLevel: .safe
       )
@@ -993,6 +999,7 @@ private struct ProbedDangerousTool: Tool {
         name: "slow",
         description: "slow",
         parameters: .object(["type": .string("object")]),
+        metadataProvenance: .trusted,
         egressClass: .none,
         riskLevel: .safe
       )
@@ -1071,6 +1078,7 @@ struct WedgedTool: Tool {
     name: "wedged",
     description: "wedged",
     parameters: .object(["type": .string("object")]),
+    metadataProvenance: .trusted,
     egressClass: .none,
     riskLevel: .safe
   )

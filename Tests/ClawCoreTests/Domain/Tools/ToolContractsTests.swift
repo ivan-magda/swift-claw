@@ -9,6 +9,7 @@ private struct DefaultPrepareTool: Tool {
       name: "default_prepare",
       description: "test",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe
     )

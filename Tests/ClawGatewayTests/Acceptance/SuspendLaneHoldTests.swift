@@ -18,6 +18,7 @@ struct ScriptedAskTool: Tool {
       name: "scripted_write",
       description: "test-only ask-tier tool",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .ask
     )

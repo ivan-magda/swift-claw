@@ -16,6 +16,19 @@ public enum MCPSessionError: Error, Sendable, Equatable {
   case pagingStalled
 }
 
+extension MCPSessionError {
+  /// Discovery failures precede a tool invocation. A call deadline can expire after handoff, so the
+  /// remote side effect remains unknown.
+  public var callExecutionDisposition: MCPCallExecutionDisposition {
+    switch self {
+    case .callTimedOut:
+      return .mayHaveExecuted
+    case .discoveryTimedOut, .tooManyPages, .tooManyTools, .catalogTooLarge, .pagingStalled:
+      return .definitelyNotExecuted
+    }
+  }
+}
+
 extension MCPSessionError: CustomStringConvertible {
   public var description: String {
     switch self {

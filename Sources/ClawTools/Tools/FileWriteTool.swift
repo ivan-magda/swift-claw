@@ -51,6 +51,7 @@ public struct FileWriteTool: Tool {
         ]),
         "required": .array([.string("path"), .string("content")]),
       ]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .ask
     )

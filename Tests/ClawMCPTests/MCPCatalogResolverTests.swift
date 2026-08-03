@@ -315,6 +315,37 @@ struct MCPCatalogResolverTests {
     await CatalogFixture.tearDown(sessions, endless)
   }
 
+  @Test("provider-heavy definitions skip one server without dropping later servers")
+  func providerDefinitionBudgetSkipsOnlyTheOversizedServer() async throws {
+    // given
+    let description = String(repeating: "x", count: MCPDescriptionCap.maxGraphemes)
+    let heavyTools = (0..<80).map { index in
+      ScriptedMCPServer.tool("heavy_\(index)", description: description)
+    }
+    let heavy = ScriptedMCPServer(list: ScriptedMCPServer.paged([heavyTools]))
+    let small = ScriptedMCPServer(
+      list: ScriptedMCPServer.paged([[ScriptedMCPServer.tool("search")]])
+    )
+    let sessions = [
+      try CatalogFixture.session(named: "heavy", against: heavy),
+      try CatalogFixture.session(named: "docs", against: small),
+    ]
+
+    // when
+    let catalog = await MCPCatalogResolver.resolve(sessions: sessions)
+
+    // then
+    #expect(catalog.tools.map(\.localName) == ["mcp__docs__search"])
+    guard case .skipped(let reason) = catalog.outcomes[0].status else {
+      Issue.record("expected the provider-heavy server to be skipped")
+      return
+    }
+    #expect(reason.contains("\(MCPDiscoveryLimits.maxProviderDefinitionTokens)-token"))
+    #expect(catalog.outcomes[1] == MCPServerOutcome(server: "docs", status: .ok(toolCount: 1)))
+
+    await CatalogFixture.tearDown(sessions, heavy, small)
+  }
+
   @Test("more servers than the connect window still resolve in config order")
   func boundedConcurrencyKeepsOrder() async throws {
     // given twice as many servers as run at once

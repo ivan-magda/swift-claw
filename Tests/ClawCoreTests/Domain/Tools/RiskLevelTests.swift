@@ -17,12 +17,14 @@ import Testing
       name: "file_write",
       description: "stub",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .ask
     )
 
     // when / then
     #expect(definition.riskLevel == .ask)
+    #expect(definition.metadataProvenance == .trusted)
   }
 
   @Test func approvalReasonsHaveStableRawValues() {

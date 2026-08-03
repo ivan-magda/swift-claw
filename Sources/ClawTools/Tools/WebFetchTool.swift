@@ -59,6 +59,7 @@ public struct WebFetchTool: Tool {
         ]),
         "required": .array([.string("url")]),
       ]),
+      metadataProvenance: .trusted,
       egressClass: .arbitraryDestination,
       riskLevel: .safe
     )

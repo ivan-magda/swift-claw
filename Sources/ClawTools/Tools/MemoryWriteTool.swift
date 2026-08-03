@@ -46,6 +46,7 @@ public struct MemoryWriteTool: Tool {
         ]),
         "required": .array([.string("text"), .string("kind")]),
       ]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .ask
     )

@@ -20,6 +20,7 @@ struct StubTool: Tool {
       name: name,
       description: "stub",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: egressClass,
       riskLevel: .safe
     )

@@ -76,7 +76,8 @@ public enum MCPCatalogResolver {
     let discoveries = await discoverAll(sessions, metadataRedactor: metadataRedactor)
     let sanitizer = MCPMetadataSanitizer(redactor: metadataRedactor)
 
-    var candidates: [Candidate] = []
+    var admittedCandidates: [Candidate] = []
+    var admittedTools: [ResolvedMCPTool] = []
     var outcomes: [MCPServerOutcome] = []
 
     for (session, discovery) in zip(sessions, discoveries) {
@@ -89,21 +90,44 @@ public enum MCPCatalogResolver {
         let kept = remoteTools.filter { remote in
           config.tools.allows(remote.name)
         }
-        candidates.append(
-          contentsOf: kept.map { remote in
-            Candidate(config: config, remote: remote, sanitizer: sanitizer)
-          }
-        )
+        let serverCandidates = kept.map { remote in
+          Candidate(config: config, remote: remote, sanitizer: sanitizer)
+        }
+        let proposedCandidates = admittedCandidates + serverCandidates
+        let proposedTools = resolve(proposedCandidates)
+        let providerDefinitions = proposedTools.map(\.providerDefinition)
+        let providerTokens = TokenEstimator.estimateInputTokens([], tools: providerDefinitions)
+
+        guard providerTokens <= MCPDiscoveryLimits.maxProviderDefinitionTokens else {
+          outcomes.append(
+            MCPServerOutcome(
+              server: config.name,
+              status: .skipped(reason: providerDefinitionBudgetReason)
+            )
+          )
+          continue
+        }
+
+        admittedCandidates = proposedCandidates
+        admittedTools = proposedTools
         outcomes.append(MCPServerOutcome(server: config.name, status: .ok(toolCount: kept.count)))
       }
     }
 
+    return ResolvedMCPCatalog(tools: admittedTools, outcomes: outcomes)
+  }
+}
+
+private extension MCPCatalogResolver {
+  static var providerDefinitionBudgetReason: String {
+    "MCP tool definitions exceed the \(MCPDiscoveryLimits.maxProviderDefinitionTokens)-token provider-input limit"
+  }
+
+  static func resolve(_ candidates: [Candidate]) -> [ResolvedMCPTool] {
     let localNames = MCPToolNamer.assign(candidates.map(\.namingCoordinate))
-    let tools = zip(candidates, localNames).map { candidate, localName in
+    return zip(candidates, localNames).map { candidate, localName in
       candidate.resolved(as: localName)
     }
-
-    return ResolvedMCPCatalog(tools: tools, outcomes: outcomes)
   }
 }
 
@@ -206,5 +230,18 @@ private extension MCPCatalogResolver {
         riskLevel: config.tools.riskLevel(for: remote.name)
       )
     }
+  }
+}
+
+private extension ResolvedMCPTool {
+  var providerDefinition: ToolDefinition {
+    ToolDefinition(
+      name: localName,
+      description: description,
+      parameters: parameters,
+      metadataProvenance: .untrusted,
+      egressClass: .arbitraryDestination,
+      riskLevel: riskLevel
+    )
   }
 }

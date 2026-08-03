@@ -147,6 +147,28 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(statefulTokens == bareTokens)
   }
 
+  @Test func messageBudgetSubtractsTheAdvertisedToolDefinitions() {
+    // given
+    let definition = ToolDefinition(
+      name: "search",
+      description: "Search remote documents.",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .untrusted,
+      egressClass: .arbitraryDestination,
+      riskLevel: .ask
+    )
+    let definitionTokens = TokenEstimator.estimateInputTokens([], tools: [definition])
+
+    // when
+    let messageTokens = TokenEstimator.messageInputBudget(
+      maxInputTokens: 100_000,
+      tools: [definition]
+    )
+
+    // then
+    #expect(messageTokens + definitionTokens == 100_000)
+  }
+
   // MARK: - Included-Plan Cost
 
   private static let resolver = CostResolver(

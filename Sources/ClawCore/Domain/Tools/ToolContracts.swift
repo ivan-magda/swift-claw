@@ -194,6 +194,10 @@ public struct ToolDefinition: Sendable, Equatable {
   public let name: String
   public let description: String
   public let parameters: JSONValue  // JSON-Schema object
+  /// Trust of the provider-facing name, description, and schema. External metadata reaches the
+  /// model before any tool result exists, so the runtime uses this provenance to arm taint before
+  /// the first provider call.
+  public let metadataProvenance: Provenance
   /// The declared policy class the gate enforces. NOT advertised on the wire.
   public let egressClass: ToolEgressClass
   /// The declared risk tier (orthogonal to egress). NOT advertised on the wire.
@@ -207,6 +211,7 @@ public struct ToolDefinition: Sendable, Equatable {
     name: String,
     description: String,
     parameters: JSONValue,
+    metadataProvenance: Provenance,
     egressClass: ToolEgressClass,
     riskLevel: RiskLevel,
     invocationIdentity: String? = nil
@@ -214,6 +219,7 @@ public struct ToolDefinition: Sendable, Equatable {
     self.name = name
     self.description = description
     self.parameters = parameters
+    self.metadataProvenance = metadataProvenance
 
     self.egressClass = egressClass
     self.riskLevel = riskLevel

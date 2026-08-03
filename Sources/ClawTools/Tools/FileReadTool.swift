@@ -35,6 +35,7 @@ public struct FileReadTool: Tool {
         ]),
         "required": .array([.string("path")]),
       ]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe
     )

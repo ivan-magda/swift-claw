@@ -56,10 +56,11 @@ public enum PolicyFingerprint {
   }
 
   /// Hashes the static inputs: the tool surface sorted by name (each tool contributes name,
-  /// canonical `.sortedKeys` parameter JSON, `riskLevel.rawValue`, the egress label, and any declared
-  /// invocation identity), then the remaining config identity with the exec block normalized. Sorted
-  /// lists mean config order cannot move the hash; a change to any egress-policy input voids an
-  /// outstanding approval. Computed once at the composition root and injected into `ContextBuilder`.
+  /// canonical `.sortedKeys` parameter JSON, metadata provenance, `riskLevel.rawValue`, the egress
+  /// label, and any declared invocation identity), then the remaining config identity with the exec
+  /// block normalized. Sorted lists mean config order cannot move the hash; a change to any
+  /// egress-policy input voids an outstanding approval. Computed once at the composition root and
+  /// injected into `ContextBuilder`.
   public static func staticSubhash(inputs: StaticInputs) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -76,6 +77,7 @@ public enum PolicyFingerprint {
         } ?? ""
       parts.append(tool.name)
       parts.append(canonicalParameters)
+      parts.append(tool.metadataProvenance.rawValue)
       parts.append(tool.riskLevel.rawValue)
       parts.append(egressLabel(tool.egressClass))
       parts.append(tool.invocationIdentity ?? "")

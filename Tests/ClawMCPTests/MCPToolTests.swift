@@ -21,6 +21,7 @@ struct MCPToolTests {
     #expect(definition.name == "mcp__linear__list_issues")
     #expect(definition.description == "lists issues")
     #expect(definition.parameters == ToolFixture.schema)
+    #expect(definition.metadataProvenance == .untrusted)
     #expect(definition.egressClass == .arbitraryDestination)
     #expect(definition.riskLevel == .ask)
     #expect(definition.invocationIdentity?.contains("https://mcp.example.com/mcp") == true)
@@ -449,7 +450,42 @@ struct MCPToolTests {
     // then
     #expect(payload.status == .error)
     #expect(payload.ingestedUntrusted == false)
-    #expect(payload.content == "mcp__linear__list_issues failed: \(timedOut).")
+    #expect(payload.content.contains("may have completed remotely"))
+    #expect(payload.content.contains("verify its effects before retrying"))
+    #expect(payload.content.contains("\(timedOut)"))
+
+    await harness.tearDown()
+  }
+
+  @Test("a possibly executed transport failure warns against retrying")
+  func executeAmbiguousTransportFailure() async throws {
+    // given
+    let failure = MCPTransportError.requestFailed(
+      HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "connection lost")
+    )
+    let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
+    let harness = try ToolFixture.harness(
+      against: scripted,
+      transport: { transport, _ in
+        ThrowingTransport(
+          wrapping: transport,
+          failingSend: ThrowingTransport.firstCallSend,
+          with: failure
+        )
+      }
+    )
+
+    // when
+    let payload = await harness.tool.execute(
+      arguments: .object([:]),
+      canonicalTarget: ToolFixture.target
+    )
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.ingestedUntrusted == false)
+    #expect(payload.content.contains("may have completed remotely"))
+    #expect(payload.content.contains("verify its effects before retrying"))
 
     await harness.tearDown()
   }
@@ -476,7 +512,8 @@ struct MCPToolTests {
     #expect(payload.ingestedUntrusted == false)
     #expect(payload.content.contains("IGNORE PREVIOUS INSTRUCTIONS") == false)
     #expect(
-      payload.content == "mcp__linear__list_issues failed: the server did not complete the call."
+      payload.content
+        == "mcp__linear__list_issues may have completed remotely; verify its effects before retrying: the server did not complete the call."
     )
 
     await harness.tearDown()

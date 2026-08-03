@@ -107,6 +107,7 @@ import Testing
       name: "web_fetch",
       description: "d",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe
     )
@@ -119,6 +120,34 @@ import Testing
 
     // then
     #expect(await provider.requests[0].tools.map(\.name) == ["web_fetch"])
+  }
+
+  @Test func untrustedToolMetadataTaintsBeforeTheFirstDispatch() async throws {
+    // given
+    let definition = ToolDefinition(
+      name: "mcp__docs__search",
+      description: "server-authored metadata",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .untrusted,
+      egressClass: .arbitraryDestination,
+      riskLevel: .safe
+    )
+    let provider = SequenceProvider([
+      toolCallResponse([ToolCall(id: "c1", name: definition.name, argumentsJSON: "{}")]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(
+      definitions: [definition],
+      respond: okOutcome(ingestedUntrusted: false)
+    )
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then
+    #expect(await dispatcher.records.first?.context.runIngestedUntrusted == true)
+    #expect(outcome.ingestedUntrusted)
   }
 
   @Test func maxTurnsCapStopsAndTells() async throws {
@@ -324,6 +353,7 @@ import Testing
         "type": .string("object"),
         "description": .string(String(repeating: "x", count: 8_000)),
       ]),
+      metadataProvenance: .untrusted,
       egressClass: .arbitraryDestination,
       riskLevel: .ask
     )
@@ -346,6 +376,7 @@ import Testing
     // then
     #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunInputTokenCap))
     #expect(await provider.requests.isEmpty)
+    #expect(outcome.ingestedUntrusted)
   }
 
   @Test func aDeadlineAlreadyElapsedBeforeSendDegradesWithoutDebiting() async throws {

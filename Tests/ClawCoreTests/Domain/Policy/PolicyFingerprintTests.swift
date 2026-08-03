@@ -37,6 +37,7 @@ import Testing
   private func tool(
     name: String,
     params: JSONValue = .object(["type": .string("object")]),
+    provenance: Provenance = .trusted,
     risk: RiskLevel = .safe,
     egress: ToolEgressClass = .none,
     invocationIdentity: String? = nil
@@ -45,6 +46,7 @@ import Testing
       name: name,
       description: "d",
       parameters: params,
+      metadataProvenance: provenance,
       egressClass: egress,
       riskLevel: risk,
       invocationIdentity: invocationIdentity
@@ -117,6 +119,14 @@ import Testing
     #expect(
       subhash(tools: [tool(name: "t", risk: .safe)])
         != subhash(tools: [tool(name: "t", risk: .ask)])
+    )
+  }
+
+  @Test func metadataProvenanceIsAnInputClass() {
+    // given / when / then
+    #expect(
+      subhash(tools: [tool(name: "t", provenance: .trusted)])
+        != subhash(tools: [tool(name: "t", provenance: .untrusted)])
     )
   }
 

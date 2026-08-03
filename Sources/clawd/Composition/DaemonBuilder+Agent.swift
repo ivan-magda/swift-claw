@@ -38,7 +38,8 @@ extension DaemonBuilder {
     )
     let contextBuilder = makeContextBuilder(
       workspace: workspace,
-      policyStaticSubhash: staticSubhash
+      policyStaticSubhash: staticSubhash,
+      toolDefinitions: toolDispatcher.definitions
     )
     return AgentStack(toolDispatcher: toolDispatcher, agent: agent, contextBuilder: contextBuilder)
   }
@@ -48,11 +49,16 @@ extension DaemonBuilder {
   /// surface, not a test default.
   func makeContextBuilder(
     workspace: FileSystemWorkspace,
-    policyStaticSubhash: String
+    policyStaticSubhash: String,
+    toolDefinitions: [ToolDefinition]
   ) -> ContextBuilder {
+    let messageInputTokens = TokenEstimator.messageInputBudget(
+      maxInputTokens: config.budget.maxInputTokens,
+      tools: toolDefinitions
+    )
     let contextBudget = ContextBudget(
       inputCapGraphemes: TokenEstimator.graphemeBudget(
-        forInputTokens: config.budget.maxInputTokens
+        forInputTokens: messageInputTokens
       ),
       userFileCap: ContextBudget.default.userFileCap,
       memoryFileCap: ContextBudget.default.memoryFileCap,

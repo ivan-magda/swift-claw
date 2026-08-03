@@ -277,6 +277,15 @@ public enum TokenEstimator {
     return SaturatingArithmetic.sum(messageTokens, toolDefinitionTokens(tools))
   }
 
+  /// Message-side share of the provider input cap after the immutable tool array is charged. Context
+  /// assembly uses this value so its own fitting cannot consume space already reserved for tools.
+  public static func messageInputBudget(
+    maxInputTokens: Int,
+    tools: [ToolDefinition]
+  ) -> Int {
+    max(0, maxInputTokens - toolDefinitionTokens(tools))
+  }
+
   private static func toolCallTokens(for message: ChatMessage) -> Int {
     message.toolCalls.reduce(0) { running, call in
       running + estimateTokens(forText: call.name) + estimateTokens(forText: call.argumentsJSON)

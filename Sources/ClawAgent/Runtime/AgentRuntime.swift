@@ -70,7 +70,7 @@ public struct TurnOutcome: Sendable {
   public let result: TurnResult
   /// Every round-trip that proposed tool calls, to persist.
   public let exchanges: [ToolExchange]
-  /// Taint signal: any executed observation ingested untrusted content this run.
+  /// Taint signal: provider-facing metadata or an executed observation ingested untrusted content.
   public let ingestedUntrusted: Bool
   /// Private-data signal: the assembly flag (fitted USER/MEMORY sections) OR any executed
   /// observation that read private data this run — `assemblyPrivateData ∪ runPrivateData`. Every
@@ -225,7 +225,9 @@ public struct AgentRuntime: Sendable {
     var wire = buildResult.messages
     var exchanges: [ToolExchange] = []
 
-    var ingestedUntrusted = false
+    var ingestedUntrusted = definitions.contains { definition in
+      definition.metadataProvenance == .untrusted
+    }
     var runPrivateData = false
 
     var pendingSuspension: PendingToolAction?

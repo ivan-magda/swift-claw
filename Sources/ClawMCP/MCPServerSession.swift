@@ -9,6 +9,9 @@ public enum MCPDiscoveryLimits {
   public static let maxPages = 16
   public static let maxTools = 512
   public static let maxCatalogBytes = 2 * 1024 * 1024
+  /// Aggregate provider-input allowance for MCP definitions across all admitted servers. The rest of
+  /// the run's input cap remains available to built-ins and messages.
+  public static let maxProviderDefinitionTokens = 25_000
   /// How many servers are contacted at once. Discovery order stays config order regardless.
   public static let connectConcurrency = 4
 }
@@ -415,18 +418,6 @@ private extension MCPServerSession {
     guard let failure = error as? MCPTransportError else {
       return false
     }
-
-    switch failure {
-    case .notConnected:
-      return true
-    case .sessionExpired:
-      // The server rejected us at session lookup, before any tool could run.
-      return true
-    case .requestFailed(let transport):
-      return transport.disposition == .definitelyNotSent
-    case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow,
-      .receiveStreamTerminated:
-      return false
-    }
+    return failure.callExecutionDisposition == .definitelyNotExecuted
   }
 }
