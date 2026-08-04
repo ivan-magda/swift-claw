@@ -4,7 +4,6 @@ import Yams
 
 public struct FileSystemWorkspace: WorkspaceReading {
   private static let maxNameGraphemes = 64
-  /// The spec allows 1024; the index has to scale with skill count, not with one author's prose.
   private static let maxDescriptionGraphemes = 300
 
   public let root: URL
@@ -92,7 +91,6 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   /// What one `skills/` subdirectory turns out to be.
   enum SkillEntry {
-    /// No `SKILL.md` at all — an ordinary subdirectory, not an authoring fault.
     case notASkill
     case rejected(WorkspaceWarning)
     case usable(SkillDescriptor)
@@ -137,15 +135,18 @@ public struct FileSystemWorkspace: WorkspaceReading {
     let manifestText = (try? String(contentsOfFile: manifestPath, encoding: .utf8)) ?? ""
     let frontmatter = Self.frontmatter(in: manifestText)
     let description = Self.singleLine(frontmatter["description"] ?? "")
+
     guard
       let name = frontmatter["name"], name.isEmpty == false,
       description.isEmpty == false
     else {
       return .rejected(.invalidSkillManifest(skill: directoryName))
     }
+
     guard Self.isSkillIdentifier(name) else {
       return .rejected(.invalidSkillName(directory: directoryName, name: Self.bounded(name)))
     }
+
     guard name == directoryName else {
       return .rejected(.skillNameDirectoryMismatch(directory: directoryName, name: name))
     }
@@ -153,7 +154,10 @@ public struct FileSystemWorkspace: WorkspaceReading {
     return .usable(
       SkillDescriptor(
         name: name,
-        description: TextTruncation.cap(description, maxGraphemes: Self.maxDescriptionGraphemes),
+        description: TextTruncation.cap(
+          description,
+          maxGraphemes: Self.maxDescriptionGraphemes
+        ),
         directory: subdir
       )
     )
@@ -177,7 +181,11 @@ public struct FileSystemWorkspace: WorkspaceReading {
     let warnings = collidingNames.sorted().map { name in
       WorkspaceWarning.duplicateSkillName(name: name, directories: directoriesByName[name] ?? [])
     }
-    return (descriptors.filter { collidingNames.contains($0.name) == false }, warnings)
+
+    return (
+      descriptors.filter { collidingNames.contains($0.name) == false },
+      warnings
+    )
   }
 
   /// The index prints one line per skill and counts those lines in its drop marker, so a YAML
