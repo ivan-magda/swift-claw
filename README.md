@@ -29,6 +29,9 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 - **Durable memory.** Facts you confirm persist in SQLite, and clawd recalls them by
   importance and recency. Workspace Markdown files hold your profile, notes, and daily
   logs, and conversation history is full-text searchable.
+- **Skills you write once.** A `skills/<name>/SKILL.md` file shows up in context as its name
+  and one line about when to use it; when a task matches, clawd loads the body and follows
+  your procedure instead of asking you to paste it again.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
 - **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
@@ -129,6 +132,7 @@ Persona and behavior live in Markdown files under `~/.swift-claw/workspace/`:
 | `TOOLS.md` | When and how to use tools | System prompt |
 | `USER.md` | Who you are | Untrusted, labeled |
 | `HEARTBEAT.md` | The proactive heartbeat checklist | Heartbeat runs only |
+| `skills/<name>/SKILL.md` | A procedure the agent loads when a task calls for it | Untrusted, labeled |
 
 MCP servers go in `~/.swift-claw/mcp.yaml`, with their tokens stored encrypted by
 `clawd mcp set-token`. Other runtime knobs are environment variables: the model route

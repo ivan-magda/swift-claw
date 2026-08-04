@@ -202,6 +202,10 @@ public struct ToolDefinition: Sendable, Equatable {
   public let egressClass: ToolEgressClass
   /// The declared risk tier (orthogonal to egress). NOT advertised on the wire.
   public let riskLevel: RiskLevel
+  /// The untrusted-fence label this tool's output renders under, defaulting to the tool's name.
+  /// A tool declares another label only when trusted policy already licenses that label for
+  /// exactly this content — the label is what the prompt's carve-outs are written against.
+  public let fenceLabel: String
   /// Credential-free execution identity used only by `policy_version` when the advertised fields do
   /// not fully identify what will run (for example, an adapter backed by a configured endpoint).
   /// NOT advertised on the wire.
@@ -214,6 +218,7 @@ public struct ToolDefinition: Sendable, Equatable {
     metadataProvenance: Provenance,
     egressClass: ToolEgressClass,
     riskLevel: RiskLevel,
+    fenceLabel: String? = nil,
     invocationIdentity: String? = nil
   ) {
     self.name = name
@@ -223,6 +228,7 @@ public struct ToolDefinition: Sendable, Equatable {
 
     self.egressClass = egressClass
     self.riskLevel = riskLevel
+    self.fenceLabel = fenceLabel ?? name
     self.invocationIdentity = invocationIdentity
   }
 }

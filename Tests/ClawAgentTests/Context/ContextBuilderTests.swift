@@ -275,7 +275,203 @@ struct ContextBuilderTests {
       .content.text
     #expect(untrusted.contains("label=\"skills\""))
     #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
+    // The model names a skill, never a path — printing one would invite it to type one back.
+    #expect(untrusted.contains("/tmp/skills") == false)
+    #expect(untrusted.contains("showing") == false)
     #expect(result.hasPrivateDataAccess == false)
+    #expect(result.ownerNotices.isEmpty)
+  }
+
+  @Test func rejectedSkillManifestsSurfaceToTheOwnerAsNotices() throws {
+    // given
+    let builder = makeBuilder(
+      workspace: FakeWorkspace(
+        skills: [
+          SkillDescriptor(
+            name: "summarize",
+            description: "Summarize owner-provided text.",
+            directory: URL(fileURLWithPath: "/tmp/skills/summarize")
+          )
+        ],
+        skillWarnings: [
+          .invalidSkillManifest(skill: "no-frontmatter"),
+          .invalidSkillName(directory: "Shouting", name: "Shouting"),
+          .skillNameDirectoryMismatch(directory: "triage", name: "triage-mail"),
+          .duplicateSkillName(name: "deploy", directories: ["deploy", "deploy-copy"]),
+          .escapingSkillDirectory(directory: "linked-out"),
+          .skillsDirectoryOutsideWorkspace,
+          .unreadableSkillsDirectory,
+        ]
+      )
+    )
+
+    // when
+    let result = try builder.assemble(
+      snapshot: emptySnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then — one notice per authoring fault; the I/O fault stays in the log
+    #expect(result.ownerNotices.count == 6)
+    #expect(result.ownerNotices[0].contains("`no-frontmatter`"))
+    #expect(result.ownerNotices[1].contains("`Shouting`"))
+    #expect(result.ownerNotices[2].contains("`triage-mail`"))
+    #expect(result.ownerNotices[3].contains("`deploy-copy`"))
+    #expect(result.ownerNotices[4].contains("`linked-out`"))
+    #expect(result.ownerNotices[5].contains("all skills skipped"))
+    let untrusted = try #require(result.messages.first { message in message.role == .user })
+      .content.text
+    #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
+  }
+
+  @Test func skillsDroppedByTheBudgetAreNamedInAnOwnerNotice() throws {
+    // given — the skills cap admits the first index line plus the drop marker, not the second
+    let budget = ContextBudget(
+      inputCapGraphemes: 4_000,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 1,
+      recallCap: 1,
+      skillsCap: 40,
+      recallHitCap: 1
+    )
+    let builder = makeBuilder(
+      workspace: FakeWorkspace(
+        skills: [
+          SkillDescriptor(
+            name: "alpha",
+            description: "one",
+            directory: URL(fileURLWithPath: "/tmp/skills/alpha")
+          ),
+          SkillDescriptor(
+            name: "bravo",
+            description: String(repeating: "b", count: 31),
+            directory: URL(fileURLWithPath: "/tmp/skills/bravo")
+          ),
+        ]
+      ),
+      budget: budget
+    )
+
+    // when
+    let result = try builder.assemble(
+      snapshot: emptySnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then
+    let untrusted = try #require(result.messages.first { message in message.role == .user })
+      .content.text
+    #expect(untrusted.contains("- alpha: one"))
+    #expect(untrusted.contains("(showing 1 of 2 skills)"))
+    #expect(result.ownerNotices.count == 1)
+    let notice = try #require(result.ownerNotices.first)
+    #expect(notice.contains("`bravo`"))
+    #expect(notice.contains("`alpha`") == false)
+  }
+
+  @Test func aSkillsIndexTheBudgetCannotAffordAtAllStillReachesTheOwner() throws {
+    // given — a cap that admits no index line at all, so the whole row leaves the prompt
+    let budget = ContextBudget(
+      inputCapGraphemes: 4_000,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 1,
+      recallCap: 1,
+      skillsCap: 0,
+      recallHitCap: 1
+    )
+    let builder = makeBuilder(
+      workspace: FakeWorkspace(
+        skills: [
+          SkillDescriptor(
+            name: "alpha",
+            description: "one",
+            directory: URL(fileURLWithPath: "/tmp/skills/alpha")
+          ),
+          SkillDescriptor(
+            name: "bravo",
+            description: "two",
+            directory: URL(fileURLWithPath: "/tmp/skills/bravo")
+          ),
+        ]
+      ),
+      budget: budget
+    )
+
+    // when
+    let result = try builder.assemble(
+      snapshot: emptySnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then — a missing index reads as "every skill dropped", never as "no skills installed"
+    let untrusted = result.messages.first { message in message.role == .user }?.content.text ?? ""
+    #expect(untrusted.contains("label=\"skills\"") == false)
+    let notice = try #require(result.ownerNotices.first)
+    #expect(notice.contains("`alpha`"))
+    #expect(notice.contains("`bravo`"))
+  }
+
+  @Test func rejectedSkillManifestsSurfaceEvenWhenTheIndexHasNoBudget() throws {
+    // given — an authoring fault is the owner's to fix whether or not the index fit this turn
+    let budget = ContextBudget(
+      inputCapGraphemes: 4_000,
+      userFileCap: 1,
+      memoryFileCap: 1,
+      itemsCap: 1,
+      historyCap: 1,
+      recallCap: 1,
+      skillsCap: 0,
+      recallHitCap: 1
+    )
+    let builder = makeBuilder(
+      workspace: FakeWorkspace(
+        skillWarnings: [.invalidSkillManifest(skill: "no-frontmatter")]
+      ),
+      budget: budget
+    )
+
+    // when
+    let result = try builder.assemble(
+      snapshot: emptySnapshot(),
+      sessionId: 42,
+      origin: .interactive
+    )
+
+    // then
+    #expect(result.ownerNotices.count == 1)
+    #expect(try #require(result.ownerNotices.first).contains("`no-frontmatter`"))
+  }
+
+  @Test(arguments: [RunOrigin.scheduled, RunOrigin.heartbeat])
+  func proactiveRunsStillSeeTheSkillsIndex(origin: RunOrigin) throws {
+    // given — the activation protocol has to hold on a fire with nobody watching
+    let builder = makeBuilder(
+      workspace: FakeWorkspace(
+        skills: [
+          SkillDescriptor(
+            name: "summarize",
+            description: "Summarize owner-provided text.",
+            directory: URL(fileURLWithPath: "/tmp/skills/summarize")
+          )
+        ]
+      )
+    )
+
+    // when
+    let result = try builder.assemble(snapshot: emptySnapshot(), sessionId: 42, origin: origin)
+
+    // then
+    let untrusted = try #require(result.messages.first { message in message.role == .user })
+      .content.text
+    #expect(untrusted.contains("label=\"skills\""))
+    #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
   }
 
   @Test func fittedHistoryKeepsNewestMessagesButRestoresChronology() throws {
@@ -563,6 +759,16 @@ private func makeBuilder(
   )
 }
 
+private func emptySnapshot() -> SessionContextSnapshot {
+  SessionContextSnapshot(
+    history: [],
+    historyMessageIds: [],
+    windowStartMessageId: 0,
+    isTainted: false,
+    hasPrivateData: false
+  )
+}
+
 private func memory(
   id: Int64,
   text: String,
@@ -598,10 +804,16 @@ private final class FakeWorkspace: WorkspaceReading, @unchecked Sendable {
 
   private let files: [WorkspaceFile: FileState]
   private let skills: [SkillDescriptor]
+  private let skillWarnings: [WorkspaceWarning]
 
-  init(files: [WorkspaceFile: FileState] = [:], skills: [SkillDescriptor] = []) {
+  init(
+    files: [WorkspaceFile: FileState] = [:],
+    skills: [SkillDescriptor] = [],
+    skillWarnings: [WorkspaceWarning] = []
+  ) {
     self.files = files
     self.skills = skills
+    self.skillWarnings = skillWarnings
   }
 
   func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
@@ -613,7 +825,7 @@ private final class FakeWorkspace: WorkspaceReading, @unchecked Sendable {
   }
 
   func scanSkills() -> SkillScanResult {
-    SkillScanResult(descriptors: skills, warnings: [])
+    SkillScanResult(descriptors: skills, warnings: skillWarnings)
   }
 }
 

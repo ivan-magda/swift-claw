@@ -237,6 +237,109 @@ import Testing
     #expect(fitted.first?.content.count == 13)
   }
 
+  @Test func skillsRowKeepsAPrefixAndMarksTheDroppedSkills() throws {
+    // given
+    let section = skillsSection(
+      cap: 800,
+      units: [
+        ("skill-alpha", 700),
+        ("skill-bravo", 300),
+        ("skill-charlie", 60),
+        ("skill-delta", 50),
+      ]
+    )
+    let budget = testBudget(inputCap: 2_000)
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
+
+    // then
+    let skills = try #require(fitted.first { row in row.id == .skills })
+    #expect(skills.units.map(\.id) == ["skill-alpha", BudgetFitter.dropMarkerUnitID])
+    #expect(skills.units.last?.content == "(showing 1 of 4 skills)")
+    #expect(skills.droppedUnitIDs == ["skill-bravo", "skill-charlie", "skill-delta"])
+    #expect(skills.content.count <= 800)
+  }
+
+  @Test func skillsRowCarriesNoMarkerWhenEverySkillFits() throws {
+    // given
+    let section = skillsSection(cap: 800, units: [("skill-alpha", 100), ("skill-bravo", 200)])
+    let budget = testBudget(inputCap: 2_000)
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
+
+    // then
+    let skills = try #require(fitted.first { row in row.id == .skills })
+    #expect(skills.units.map(\.id) == ["skill-alpha", "skill-bravo"])
+    #expect(skills.droppedUnitIDs.isEmpty)
+    #expect(skills.content.contains("showing") == false)
+  }
+
+  @Test func skillsRowShipsUnmarkedWhenTheMarkerCannotFitBesideTheKeptSkill() throws {
+    // given — a cap that admits the first index line but not that line plus the marker
+    let section = skillsSection(cap: 30, units: [("skill-alpha", 20), ("skill-bravo", 40)])
+    let budget = testBudget(inputCap: 2_000)
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
+
+    // then — the skill the owner can still use outranks the annotation about the one they cannot
+    let skills = try #require(fitted.first { row in row.id == .skills })
+    #expect(skills.units.map(\.id) == ["skill-alpha"])
+    #expect(skills.content.contains("showing") == false)
+    #expect(skills.droppedUnitIDs == ["skill-bravo"])
+  }
+
+  @Test func squeezedSkillsRowRemarksTheSkillsItStillShows() throws {
+    // given — capped rows overshoot the residual, so the lowest-priority row is re-fit smaller
+    let sections = [
+      nonTruncatable(id: .policy, priority: 0, content: filler("p", 100)),
+      truncatable(id: .history, priority: 70, cap: 200, units: [filler("h", 200)]),
+      skillsSection(
+        cap: 200,
+        units: [("skill-alpha", 40), ("skill-bravo", 40), ("skill-charlie", 40)]
+      ),
+    ]
+    let budget = testBudget(inputCap: 380)
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
+
+    // then — the marker counts what survived the re-fit, not what the first pass kept
+    let skills = try #require(fitted.first { row in row.id == .skills })
+    #expect(skills.units.map(\.id) == ["skill-alpha", BudgetFitter.dropMarkerUnitID])
+    #expect(skills.units.last?.content == "(showing 1 of 3 skills)")
+    #expect(skills.content.count <= 80)
+  }
+
+  @Test func memoryItemsRowKeepsTheGreedySubsetAcrossANonFittingUnit() throws {
+    // given — rank-ordered memory selection is not the skills index: a big item is skipped, not a
+    // stop signal
+    let section = FittableSection(
+      id: .memoryItems,
+      tier: .untrustedLabeled,
+      priority: ContextPriority(60),
+      truncatable: true,
+      cap: 800,
+      units: [
+        SectionUnit(id: "memory-1", content: filler("a", 700), canTruncate: false),
+        SectionUnit(id: "memory-2", content: filler("b", 300), canTruncate: false),
+        SectionUnit(id: "memory-3", content: filler("c", 60), canTruncate: false),
+      ]
+    )
+    let budget = testBudget(inputCap: 2_000)
+
+    // when
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
+
+    // then
+    let items = try #require(fitted.first { row in row.id == .memoryItems })
+    #expect(items.units.map(\.id) == ["memory-1", "memory-3"])
+    #expect(items.droppedUnitIDs == ["memory-2"])
+    #expect(items.content.contains("showing") == false)
+  }
+
   @Test func historyNewestUnitSurvivesWhenItAloneExceedsBudget() throws {
     // given
     let section = FittableSection(
@@ -294,6 +397,24 @@ private func sliceBudget(inputCap: Int) -> ContextBudget {
     recallCap: 20,
     skillsCap: 5,
     recallHitCap: 4
+  )
+}
+
+private func filler(_ character: Character, _ count: Int) -> String {
+  String(repeating: character, count: count)
+}
+
+private func skillsSection(cap: Int, units: [(id: String, count: Int)]) -> FittableSection {
+  FittableSection(
+    id: .skills,
+    tier: .untrustedLabeled,
+    priority: ContextPriority(90),
+    truncatable: true,
+    cap: cap,
+    dropMarker: .showingCount(noun: "skills"),
+    units: units.map { unit in
+      SectionUnit(id: unit.id, content: filler("s", unit.count), canTruncate: false)
+    }
   )
 }
 

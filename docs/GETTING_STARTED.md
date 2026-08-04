@@ -152,10 +152,28 @@ I live in Berlin and work as an iOS developer.
 EOF
 ```
 
-The agent picks them up on the next turn. [CUSTOMIZATION.md](CUSTOMIZATION.md) covers
-every file and its trust tier, the environment knobs for budgets, schedules, voice
-locales, and the code sandbox, and how to
-[connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their tools show up in chat.
+The agent picks them up on the next turn.
+
+Write a procedure you want followed on a particular kind of task into
+`skills/<name>/SKILL.md`, one directory per skill. The agent sees a one-line summary of
+each and pulls up the full text when the task matches:
+
+```bash
+mkdir -p ~/.swift-claw/workspace/skills/weekly-review
+cat > ~/.swift-claw/workspace/skills/weekly-review/SKILL.md <<'EOF'
+---
+name: weekly-review
+description: How to run the Friday review — which projects to check and what to report.
+---
+
+Go through the open projects newest first. For each one, ...
+EOF
+```
+
+[CUSTOMIZATION.md](CUSTOMIZATION.md) covers every file and its trust tier, the skill
+authoring rules, the environment knobs for budgets, schedules, voice locales, and the
+code sandbox, and how to [connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their
+tools show up in chat.
 
 ## 7. Keep it running
 

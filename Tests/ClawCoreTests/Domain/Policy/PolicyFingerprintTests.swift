@@ -40,6 +40,7 @@ import Testing
     provenance: Provenance = .trusted,
     risk: RiskLevel = .safe,
     egress: ToolEgressClass = .none,
+    fenceLabel: String? = nil,
     invocationIdentity: String? = nil
   ) -> ToolDefinition {
     ToolDefinition(
@@ -49,6 +50,7 @@ import Testing
       metadataProvenance: provenance,
       egressClass: egress,
       riskLevel: risk,
+      fenceLabel: fenceLabel,
       invocationIdentity: invocationIdentity
     )
   }
@@ -127,6 +129,15 @@ import Testing
     #expect(
       subhash(tools: [tool(name: "t", provenance: .trusted)])
         != subhash(tools: [tool(name: "t", provenance: .untrusted)])
+    )
+  }
+
+  @Test func fenceLabelIsAnInputClass() {
+    // given / when / then — the declared fence label selects the prompt carve-out a tool's output
+    // renders under, so changing it must void an outstanding approval the way a risk change does
+    #expect(
+      subhash(tools: [tool(name: "t", fenceLabel: nil)])
+        != subhash(tools: [tool(name: "t", fenceLabel: "skills")])
     )
   }
 

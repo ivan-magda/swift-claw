@@ -6,9 +6,9 @@ import Foundation
   import Darwin
 #endif
 
-/// Shared realpath-based workspace containment, extracted from `FileReadTool` and extended for
-/// file CREATION so `file_write` resolves the same invariant at gate time. Containment is
-/// path-COMPONENT prefix, never string prefix.
+/// Shared realpath-based workspace containment: the one place that decides whether a path lands
+/// inside the workspace, for the file tools at gate time and for the skills scan at index time.
+/// Containment is path-COMPONENT prefix, never string prefix.
 public enum WorkspacePathContainment {
   public enum Resolution: Sendable, Equatable {
     case resolved(String)

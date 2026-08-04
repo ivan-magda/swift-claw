@@ -109,7 +109,7 @@ public struct ContextBudget: Sendable, Equatable {
     itemsCap: 1_500,
     historyCap: 6_000,
     recallCap: 2_000,
-    skillsCap: 800,
+    skillsCap: 4_000,
     recallHitCap: 400
   )
 }
@@ -177,6 +177,9 @@ public struct RecallHit: Sendable, Equatable, Identifiable {
 }
 
 public struct LabeledContext: Sendable, Equatable {
+  private static let fenceTag = "claw-untrusted"
+  private static let defusedFenceTag = "claw-untrusted-escaped"
+
   public let label: String
   public let content: String
   public let nonce: String
@@ -189,9 +192,17 @@ public struct LabeledContext: Sendable, Equatable {
 
   public func render() -> String {
     """
-    <claw-untrusted nonce="\(nonce)" label="\(label)">
-    \(content)
-    </claw-untrusted nonce="\(nonce)">
+    <\(Self.fenceTag) nonce="\(nonce)" label="\(label)">
+    \(Self.defusingFenceTags(in: content))
+    </\(Self.fenceTag) nonce="\(nonce)">
     """
+  }
+
+  private static func defusingFenceTags(in content: String) -> String {
+    content.replacingOccurrences(
+      of: fenceTag,
+      with: defusedFenceTag,
+      options: [.caseInsensitive]
+    )
   }
 }

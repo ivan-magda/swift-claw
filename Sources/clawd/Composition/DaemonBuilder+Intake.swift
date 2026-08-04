@@ -129,6 +129,11 @@ extension DaemonBuilder {
       FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
       FileWriteTool(workspaceRoot: workspace.root, redactor: redactor),
       MemoryWriteTool(redactor: redactor),
+      SkillLoadTool(
+        workspaceRoot: workspace.root,
+        scanSkills: { workspace.scanSkills() },
+        redactor: redactor
+      ),
       WebFetchTool(
         http: toolExecutor,
         resolver: SystemAddressResolver(),

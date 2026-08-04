@@ -96,10 +96,9 @@ extension TurnRunner {
     )
   }
 
-  /// Privileged-file banner: the owner-editable prompt files, per ARCHITECTURE.md §11. Basename
-  /// match on the resolved canonical target.
+  /// Privileged-file banner: every owner-editable file that steers a later turn. Basename match on
+  /// the resolved canonical target.
   static func isPrivilegedFile(_ canonicalTarget: String) -> Bool {
-    let privileged: Set<String> = ["SOUL.md", "AGENTS.md", "USER.md", "MEMORY.md"]
-    return privileged.contains((canonicalTarget as NSString).lastPathComponent)
+    WorkspaceFile.isPromptPrivileged(basename: (canonicalTarget as NSString).lastPathComponent)
   }
 }

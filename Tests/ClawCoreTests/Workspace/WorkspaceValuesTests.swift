@@ -22,6 +22,19 @@ import Testing
     #expect(paths == ["SOUL.md", "AGENTS.md", "TOOLS.md", "USER.md", "MEMORY.md", "HEARTBEAT.md"])
   }
 
+  @Test func everyPromptSteeringFileIsPrivilegedIncludingSkillManifests() {
+    // given / when / then — a write to any of these feeds a later turn, so all earn the banner.
+    for file in WorkspaceFile.allCases {
+      #expect(WorkspaceFile.isPromptPrivileged(basename: file.relativePath))
+    }
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "SKILL.md"))
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "notes.md") == false)
+    // A case-insensitive filesystem indexes `skill.md` as a skill, and a creating write carries the
+    // caller's own spelling, so a lowercase manifest must not slip past the banner.
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "skill.md"))
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "soul.md"))
+  }
+
   @Test func missingLoadedFileIsEmptyZeroLengthWithMissingOutcome() {
     // given / when
     let missing = LoadedFile.missing

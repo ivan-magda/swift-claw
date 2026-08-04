@@ -38,6 +38,7 @@ extension DaemonBuilder {
     )
     let contextBuilder = makeContextBuilder(
       workspace: workspace,
+      fenceLabels: ToolFenceLabels(definitions: toolDispatcher.definitions),
       policyStaticSubhash: staticSubhash,
       toolDefinitions: toolDispatcher.definitions
     )
@@ -49,6 +50,7 @@ extension DaemonBuilder {
   /// surface, not a test default.
   func makeContextBuilder(
     workspace: FileSystemWorkspace,
+    fenceLabels: ToolFenceLabels,
     policyStaticSubhash: String,
     toolDefinitions: [ToolDefinition]
   ) -> ContextBuilder {
@@ -75,6 +77,7 @@ extension DaemonBuilder {
       memoryStore: stores.memory,
       retriever: stores.retriever,
       budget: contextBudget,
+      fenceLabels: fenceLabels,
       policyStaticSubhash: policyStaticSubhash,
       warn: { warning in
         logger.warning("\(warning)")

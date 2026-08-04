@@ -38,7 +38,9 @@ import Testing
 
     // then
     let names = dispatcher.definitions.map(\.name)
-    #expect(names.prefix(4) == ["file_read", "file_write", "memory_write", "web_fetch"])
+    #expect(
+      names.prefix(5) == ["file_read", "file_write", "memory_write", "skill_load", "web_fetch"]
+    )
     #expect(names.suffix(2) == ["mcp__linear__list_issues", "mcp__linear__create_issue"])
 
     let remote = try #require(dispatcher.definitions.first { $0.name.hasPrefix("mcp__") })
@@ -307,7 +309,7 @@ import Testing
     #expect(stack.tools.isEmpty)
     #expect(
       dispatcher.definitions.map(\.name) == [
-        "file_read", "file_write", "memory_write", "web_fetch",
+        "file_read", "file_write", "memory_write", "skill_load", "web_fetch",
       ]
     )
 
@@ -339,7 +341,7 @@ import Testing
     #expect(stack.catalog == .empty)
     #expect(
       dispatcher.definitions.map(\.name) == [
-        "file_read", "file_write", "memory_write", "web_fetch",
+        "file_read", "file_write", "memory_write", "skill_load", "web_fetch",
       ]
     )
     #expect(MCPDoctorRows.rows(config: .empty, credentials: [:]).map(\.key) == ["mcp"])
