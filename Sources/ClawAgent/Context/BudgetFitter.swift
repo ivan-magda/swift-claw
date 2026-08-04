@@ -17,7 +17,6 @@ public struct SectionUnit: Sendable, Equatable {
 /// row-agnostic, and the rendered line is cost-accounted inside the row's cap like any other unit.
 public enum DropMarker: Sendable, Equatable {
   case none
-  /// Renders as `(showing 1 of 4 skills)`; the noun names what was counted.
   case showingCount(noun: String)
 
   func line(kept: Int, total: Int) -> String? {
@@ -65,7 +64,6 @@ public struct FittedSection: Sendable, Equatable, Identifiable {
   public let truncatable: Bool
   public let cap: Int?
   public let units: [SectionUnit]
-  /// The ids of the source units the budget left out, in source order.
   public let droppedUnitIDs: [String]
 
   public var content: String {
@@ -100,7 +98,6 @@ public enum BudgetFitterError: Error, Equatable {
 
 public enum BudgetFitter {
   public static let truncationMarker = TextTruncation.marker
-  /// The id carried by a row's drop-marker line, so consumers can tell it from a real unit.
   public static let dropMarkerUnitID = "drop-marker"
 
   public static func fit(
@@ -142,6 +139,7 @@ public enum BudgetFitter {
 
     if cappedTotal > residual {
       var excess = cappedTotal - residual
+
       for index in fittedRows.indices.reversed() where excess > 0 {
         let current = fittedRows[index]
         let targetCount = max(0, current.content.count - excess)
@@ -154,6 +152,7 @@ public enum BudgetFitter {
           fittedRows.remove(at: index)
         }
       }
+
       cappedTotal = fittedRows.map(\.content.count).reduce(0, +)
       precondition(cappedTotal <= max(residual, historyFloorCount))
     }
@@ -170,7 +169,10 @@ public enum BudgetFitter {
     }
   }
 
-  private static func fittedRow(for section: FittableSection, maxCount: Int) -> FittedRow? {
+  private static func fittedRow(
+    for section: FittableSection,
+    maxCount: Int
+  ) -> FittedRow? {
     // The newest history unit is the current turn; it is non-droppable even when it alone
     // exceeds the budget, so the model always sees the message it is answering. Flooring the
     // budget at its size means it is admitted whole on the first iteration; later units still
@@ -246,15 +248,25 @@ public enum BudgetFitter {
 
     return FittedRow(
       source: section,
-      units: kept + [SectionUnit(id: dropMarkerUnitID, content: marker, canTruncate: false)],
+      units: kept + [
+        SectionUnit(
+          id: dropMarkerUnitID,
+          content: marker,
+          canTruncate: false
+        )
+      ],
       droppedUnitIDs: droppedIDs
     )
   }
 
-  private static func droppedUnitIDs(in section: FittableSection, kept: [SectionUnit]) -> [String] {
-    // Kept units carry their source id even when truncated in place, so ids alone decide.
+  private static func droppedUnitIDs(
+    in section: FittableSection,
+    kept: [SectionUnit]
+  ) -> [String] {
     let keptIDs = Set(kept.map(\.id))
-    return section.units.map(\.id).filter { id in keptIDs.contains(id) == false }
+    return section.units.map(\.id).filter { id in
+      keptIDs.contains(id) == false
+    }
   }
 
   private static func renderedCount(_ section: FittableSection) -> Int {
