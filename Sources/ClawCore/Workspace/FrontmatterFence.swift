@@ -21,7 +21,7 @@ public enum FrontmatterFence {
   /// Nil unless the first line is a fence AND a closing fence follows: a document that lost its
   /// fence has no frontmatter and no identifiable body, and guessing one is worse than failing.
   public static func split(_ text: String) -> Document? {
-    let lines = text.components(separatedBy: "\n")
+    let lines = lines(in: text)
     guard let first = lines.first, isFence(first) else {
       return nil
     }
@@ -41,6 +41,19 @@ public enum FrontmatterFence {
     }
 
     return nil
+  }
+
+  /// Splits at LF on unicode scalars, never through `components(separatedBy:)`: CRLF is one Swift
+  /// grapheme cluster, so a grapheme-level search finds no `\n` in a CRLF file at all, and
+  /// Foundation answers differently per platform (Darwin bridges to NSString and splits on UTF-16
+  /// units; swift-corelibs-foundation does not, returning the whole file as one line). Scalars are
+  /// the level both agree on. A trailing `\r` stays on the line for `isFence` to trim.
+  private static func lines(in text: String) -> [String] {
+    text.unicodeScalars
+      .split(separator: "\n", omittingEmptySubsequences: false)
+      .map { scalars in
+        String(String.UnicodeScalarView(scalars))
+      }
   }
 
   /// A fence is a line whose trimmed text is exactly `---`, which is what makes CRLF endings and

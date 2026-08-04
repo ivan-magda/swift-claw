@@ -62,6 +62,24 @@ import Testing
     #expect(descriptor.directory.lastPathComponent == "summarize")
   }
 
+  @Test func manifestWrittenWithCRLFLineEndingsIsIndexed() throws {
+    // given - an editor that writes CRLF; the fences and the YAML are otherwise identical
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = Self.validManifest.replacingOccurrences(of: "\n", with: "\r\n")
+    try writeSkill(named: "summarize", manifest: manifest, under: root)
+    let workspace = FileSystemWorkspace(root: root)
+
+    // when
+    let result = workspace.scanSkills()
+
+    // then
+    #expect(result.warnings.isEmpty)
+    let descriptor = try #require(result.descriptors.first)
+    #expect(descriptor.name == "summarize")
+    #expect(descriptor.description == "Summarize owner-provided text.")
+  }
+
   @Test func subdirectoryWithoutManifestIsSkippedSilently() throws {
     // given
     let root = try makeTemporaryRoot()
