@@ -63,16 +63,24 @@ public struct SkillLoadTool: Tool {
     }
 
     let scan = scanSkills()
-    let claimants = scan.descriptors.filter { descriptor in descriptor.name == name }
+    let claimants = scan.descriptors.filter { descriptor in
+      descriptor.name == name
+    }
+
     guard claimants.count <= 1 else {
-      let directories = claimants.map { descriptor in descriptor.directory.lastPathComponent }
+      let directories = claimants.map { descriptor in
+        descriptor.directory.lastPathComponent
+      }
       return errorPayload(Self.duplicateRefusal(name: name, directories: directories))
     }
+
     guard let descriptor = claimants.first else {
       let collided = Self.duplicateDirectories(for: name, in: scan.warnings)
+
       guard collided.isEmpty else {
         return errorPayload(Self.duplicateRefusal(name: name, directories: collided))
       }
+
       return unknownNamePayload(scan: scan)
     }
 
@@ -125,7 +133,10 @@ private extension SkillLoadTool {
     }
 
     return ToolPayload(
-      content: ToolOutputCap.cap(redactor.redact(document.body), maxGraphemes: outputCapGraphemes),
+      content: ToolOutputCap.cap(
+        redactor.redact(document.body),
+        maxGraphemes: outputCapGraphemes
+      ),
       status: .ok,
       // A SKILL.md is owner-authored workspace material, like SOUL.md and AGENTS.md, which the
       // context injects untainted. Tainting here would suppress high-sensitivity memory for the
@@ -161,7 +172,10 @@ private extension SkillLoadTool {
 
   /// The directories that collided over `name`, empty when the scan reported no collision — a
   /// warning always names at least the two claimants that produced it.
-  static func duplicateDirectories(for name: String, in warnings: [WorkspaceWarning]) -> [String] {
+  static func duplicateDirectories(
+    for name: String,
+    in warnings: [WorkspaceWarning]
+  ) -> [String] {
     for warning in warnings {
       if case .duplicateSkillName(let warnedName, let directories) = warning, warnedName == name {
         return directories
