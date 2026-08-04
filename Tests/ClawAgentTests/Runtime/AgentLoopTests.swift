@@ -121,6 +121,39 @@ import Testing
     #expect(await provider.requests[0].tools.map(\.name) == ["web_fetch"])
   }
 
+  @Test func liveObservationsFenceUnderTheToolsDeclaredLabel() async throws {
+    // given — skill_load declares the "skills" label; its body must reach the wire under it
+    let definition = ToolDefinition(
+      name: "skill_load",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      egressClass: .none,
+      riskLevel: .safe,
+      fenceLabel: "skills"
+    )
+    let provider = SequenceProvider([
+      toolCallResponse([ToolCall(id: "c1", name: "skill_load", argumentsJSON: #"{"name":"sum"}"#)]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(
+      definitions: [definition],
+      respond: okOutcome(content: "Keep it to three bullets.", ingestedUntrusted: false)
+    )
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then — fenced as "skills", and loading a skill leaves the session untainted
+    let observationMessage = try #require(
+      await provider.requests[1].messages.last { message in message.role == .tool }
+    )
+    #expect(observationMessage.content.text.contains("label=\"skills\""))
+    #expect(observationMessage.content.text.contains("label=\"skill_load\"") == false)
+    #expect(observationMessage.content.text.contains("Keep it to three bullets."))
+    #expect(outcome.ingestedUntrusted == false)
+  }
+
   @Test func maxTurnsCapStopsAndTells() async throws {
     // given — a provider that proposes tools forever; maxTurns 2
     let provider = SequenceProvider([

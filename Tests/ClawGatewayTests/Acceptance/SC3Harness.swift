@@ -202,15 +202,9 @@ func makeSC3Harness(
     try content.write(to: destination, atomically: true, encoding: .utf8)
   }
 
-  // 3. FileSystemWorkspace + real ContextBuilder over the real memory/retriever stores.
+  // 3. FileSystemWorkspace behind the real tools and the real ContextBuilder (built at step 5b,
+  // once the dispatcher can declare the fence labels the history replay has to reuse).
   let workspace = FileSystemWorkspace(root: workspaceRoot)
-  let contextBuilder = ContextBuilder(
-    systemPrompt: SystemPrompt.minimal,
-    workspace: workspace,
-    memoryStore: stores.memory,
-    retriever: stores.retriever,
-    budget: .default
-  )
 
   // 4. Real tools over the scripted HTTP + DNS seams and an exact-value redactor.
   let http = RecordingHTTPExecutor(responses: httpResponses)
@@ -220,6 +214,11 @@ func makeSC3Harness(
     FileReadTool(workspaceRoot: workspaceRoot, redactor: redactor),
     FileWriteTool(workspaceRoot: workspaceRoot, redactor: redactor),
     MemoryWriteTool(redactor: redactor),
+    SkillLoadTool(
+      workspaceRoot: workspaceRoot,
+      scanSkills: { workspace.scanSkills() },
+      redactor: redactor
+    ),
     WebFetchTool(http: http, resolver: resolver, redactor: redactor),
     WebSearchTool(search: ExaSearchProvider(apiKey: "exa-key", http: http)),
   ]
@@ -248,6 +247,17 @@ func makeSC3Harness(
       privateFileLoader: privateFileLoader,
       execEnabled: execEnabled
     )
+  )
+
+  // 5b. ContextBuilder over the real memory/retriever stores, taking the dispatcher's declared
+  // fence labels the way composition does — replayed tool rows carry only a tool NAME.
+  let contextBuilder = ContextBuilder(
+    systemPrompt: SystemPrompt.minimal,
+    workspace: workspace,
+    memoryStore: stores.memory,
+    retriever: stores.retriever,
+    budget: .default,
+    fenceLabels: ToolFenceLabels(definitions: dispatcher.definitions)
   )
 
   // 6. AgentRuntime over the per-turn scripted provider and the real gated dispatcher.

@@ -12,11 +12,20 @@ public protocol WorkspaceReading: Sendable {
   /// not `YYYY-MM-DD`, or a missing file, returns `.missing`. Same outcome rules as `load`.
   func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile
 
-  /// Scans `skills/<name>/SKILL.md` and returns one `SkillDescriptor` per skill whose frontmatter
-  /// has a non-empty `name` and `description`, plus a `WorkspaceWarning` for each
-  /// present-but-unusable manifest. A missing `skills/` directory or a subdirectory with no
-  /// `SKILL.md` is skipped without a warning; a `skills/` directory that exists but cannot be
-  /// listed yields `.unreadableSkillsDirectory`. Never a half-entry, never a crash. Descriptors
+  /// Scans `skills/<name>/SKILL.md` and returns one `SkillDescriptor` per usable skill, plus a
+  /// `WorkspaceWarning` for each present-but-unusable manifest. A manifest is usable only when its
+  /// frontmatter carries a non-empty `description` and a `name` that is both an agentskills.io
+  /// identifier (`^[a-z0-9]+(-[a-z0-9]+)*$`, 1–64 characters) and equal to its own directory name;
+  /// the three ways to fail that yield `.invalidSkillManifest`, `.invalidSkillName`, and
+  /// `.skillNameDirectoryMismatch`. A name claimed by several directories has no principled winner,
+  /// so every claimant is dropped under one `.duplicateSkillName` — a conformance must never
+  /// silently shadow one with another. Descriptions are collapsed to a single line and capped, so
+  /// one manifest cannot occupy several index rows. A manifest that resolves outside the workspace
+  /// yields `.escapingSkillDirectory` and is dropped, since the loader refuses to serve a body from
+  /// there. A missing `skills/` directory or a subdirectory with no `SKILL.md` is skipped without a
+  /// warning; a `skills/` directory that exists but cannot be listed yields
+  /// `.unreadableSkillsDirectory`, and one that itself resolves outside the workspace scans nothing
+  /// at all under `.skillsDirectoryOutsideWorkspace`. Never a half-entry, never a crash. Descriptors
   /// are sorted by directory name.
   func scanSkills() -> SkillScanResult
 }

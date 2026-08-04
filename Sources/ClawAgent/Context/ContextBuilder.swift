@@ -14,6 +14,7 @@ public struct ContextBuilder: Sendable {
   public static let recallInjectionLimit = 5
 
   private static let historyTruncatedMarker = "\n\n[…earlier conversation truncated]"
+  private static let skillUnitIDPrefix = "skill-"
 
   static let untrustedUserLabel = "untrusted_user_message"
 
@@ -25,6 +26,7 @@ public struct ContextBuilder: Sendable {
   private let retriever: any Retriever
   private let recallCutoff: any RecallCutoff
   private let budget: ContextBudget
+  private let fenceLabels: ToolFenceLabels
 
   private let policyStaticSubhash: String
 
@@ -39,6 +41,7 @@ public struct ContextBuilder: Sendable {
     retriever: any Retriever,
     recallCutoff: any RecallCutoff = CandidateCapRecallCutoff(),
     budget: ContextBudget,
+    fenceLabels: ToolFenceLabels = .undeclared,
     policyStaticSubhash: String = "",
     now: @escaping @Sendable () -> Date = Date.init,
     warn: @escaping @Sendable (String) -> Void = { _ in }
@@ -51,6 +54,7 @@ public struct ContextBuilder: Sendable {
     self.retriever = retriever
     self.recallCutoff = recallCutoff
     self.budget = budget
+    self.fenceLabels = fenceLabels
 
     self.policyStaticSubhash = policyStaticSubhash
 
@@ -71,13 +75,17 @@ public struct ContextBuilder: Sendable {
       snapshot: snapshot,
       sessionId: sessionId,
       origin: origin,
-      residual: residual
+      residual: residual,
+      ownerNotices: &ownerNotices
     )
 
     let fitted = try BudgetFitter.fitWithUnits(
       fixedSections + truncatableSections,
       budget: budget
     )
+    if let notice = droppedSkillsNotice(fitted: fitted, requested: truncatableSections) {
+      ownerNotices.append(notice)
+    }
     let messages = renderMessages(fitted: fitted, snapshot: snapshot)
 
     return BuildResult(
@@ -113,7 +121,12 @@ private extension ContextBuilder {
         cap: nil,
         ownerNotices: &ownerNotices
       ),
-      workspaceSection(id: .tools, files: [.tools], cap: nil, ownerNotices: &ownerNotices),
+      workspaceSection(
+        id: .tools,
+        files: [.tools],
+        cap: nil,
+        ownerNotices: &ownerNotices
+      ),
       section(
         id: .metadata,
         units: [
@@ -143,7 +156,8 @@ private extension ContextBuilder {
     snapshot: SessionContextSnapshot,
     sessionId: Int64,
     origin: RunOrigin,
-    residual: Int
+    residual: Int,
+    ownerNotices: inout [String]
   ) -> [FittableSection] {
     [
       memoryItemsSection(snapshot: snapshot, residual: residual),
@@ -154,7 +168,7 @@ private extension ContextBuilder {
       origin.isProactive
         ? nil
         : recallSection(snapshot: snapshot, sessionId: sessionId, residual: residual),
-      skillsSection(residual: residual),
+      skillsSection(residual: residual, ownerNotices: &ownerNotices),
     ].compactMap { $0 }
   }
 
@@ -325,7 +339,8 @@ private extension ContextBuilder {
     let units = selected.compactMap { hit -> SectionUnit? in
       let content = cappedRecallContent(hit.content)
       return content.isEmpty
-        ? nil : SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
+        ? nil
+        : SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
     }
 
     guard units.isEmpty == false else {
@@ -336,7 +351,9 @@ private extension ContextBuilder {
   }
 
   func latestUserMessage(in history: [StoredMessage]) -> String? {
-    history.last { message in message.role == .user }?.content
+    history.last { message in
+      message.role == .user
+    }?.content
   }
 
   func cappedRecallContent(_ content: String) -> String {
@@ -354,20 +371,20 @@ private extension ContextBuilder {
     return String(content.prefix(prefixCount)) + marker
   }
 
-  func skillsSection(residual: Int) -> FittableSection? {
-    let cap = cap(for: .skills, residual: residual)
-    guard cap > 0 else {
-      return nil
-    }
-
+  /// Scans before consulting the cap: an authoring fault is the owner's to fix whether or not this
+  /// turn had room for the index, and a zero cap is left to the fitter so the drop is announced.
+  func skillsSection(residual: Int, ownerNotices: inout [String]) -> FittableSection? {
     let scan = workspace.scanSkills()
     for warning in scan.warnings {
       warn("skills scan warning: \(warning)")
+      if let notice = Self.notice(for: warning) {
+        ownerNotices.append(notice)
+      }
     }
 
     let units = scan.descriptors.map { descriptor in
       SectionUnit(
-        id: "skill-\(descriptor.name)",
+        id: Self.skillUnitID(for: descriptor.name),
         content: "- \(descriptor.name): \(descriptor.description)",
         canTruncate: false
       )
@@ -376,7 +393,78 @@ private extension ContextBuilder {
       return nil
     }
 
-    return section(id: .skills, cap: cap, units: units)
+    return section(
+      id: .skills,
+      cap: cap(for: .skills, residual: residual),
+      dropMarker: .showingCount(noun: "skills"),
+      units: units
+    )
+  }
+
+  /// A rejected manifest is an authoring fault the owner can fix, so it reaches them instead of
+  /// dying in the log. An unlistable `skills/` is an I/O fault with nothing to fix, and stays logged.
+  static func notice(for warning: WorkspaceWarning) -> String? {
+    switch warning {
+    case .invalidSkillManifest(let skill):
+      "⚠ Skill `\(skill)`: `SKILL.md` needs `---` frontmatter with `name` and `description`; skipped."
+    case .invalidSkillName(let directory, let name):
+      """
+      ⚠ Skill `\(directory)`: name `\(name)` must be lowercase letters, digits and single \
+      hyphens (1–64 characters); skipped.
+      """
+    case .skillNameDirectoryMismatch(let directory, let name):
+      "⚠ Skill `\(directory)`: manifest name `\(name)` must match the directory name; skipped."
+    case .duplicateSkillName(let name, let directories):
+      """
+      ⚠ Skill name `\(name)` is claimed by \(directories.map { "`\($0)`" }.joined(separator: ", ")); \
+      all of them skipped, rename one.
+      """
+    case .escapingSkillDirectory(let directory):
+      """
+      ⚠ Skill `\(directory)`: its `SKILL.md` resolves outside the workspace, which I can't load \
+      from; skipped. Copy the skill in instead of linking to it.
+      """
+    case .skillsDirectoryOutsideWorkspace:
+      """
+      ⚠ The `skills` directory resolves outside the workspace, which I can't load from; all \
+      skills skipped. Move it into the workspace instead of linking to it.
+      """
+    case .unreadableSkillsDirectory:
+      nil
+    }
+  }
+
+  /// A skills row too big for its cap comes back shrunk, but one whose cap admits nothing at all is
+  /// gone from `fitted` entirely — the case the owner most needs told, so it reads as every skill
+  /// dropped rather than as no skills installed.
+  func droppedSkillsNotice(fitted: [FittedSection], requested: [FittableSection]) -> String? {
+    guard let source = requested.first(where: { section in section.id == .skills }) else {
+      return nil
+    }
+
+    let fittedSkills = fitted.first { section in
+      section.id == .skills
+    }
+    let dropped =
+      (fittedSkills?.droppedUnitIDs ?? source.units.map(\.id))
+      .map(Self.skillName(fromUnitID:))
+    guard dropped.isEmpty == false else {
+      return nil
+    }
+
+    let names = dropped.map { name in
+      "`\(name)`"
+    }.joined(separator: ", ")
+
+    return "⚠ Skills index over budget; left out this turn: \(names). Trim their descriptions."
+  }
+
+  static func skillUnitID(for name: String) -> String {
+    "\(skillUnitIDPrefix)\(name)"
+  }
+
+  static func skillName(fromUnitID unitID: String) -> String {
+    String(unitID.dropFirst(skillUnitIDPrefix.count))
   }
 
   static func iso8601(_ date: Date) -> String {
@@ -432,6 +520,7 @@ private extension ContextBuilder {
   func section(
     id: ContextRowID,
     cap: Int? = nil,
+    dropMarker: DropMarker = .none,
     units: [SectionUnit]
   ) -> FittableSection {
     let spec = spec(for: id)
@@ -441,6 +530,7 @@ private extension ContextBuilder {
       priority: spec.priority,
       truncatable: spec.truncatable,
       cap: cap ?? spec.cap.resolve(in: budget, residualGraphemes: nil),
+      dropMarker: dropMarker,
       units: units
     )
   }
@@ -452,8 +542,12 @@ private extension ContextBuilder {
   func residualAfterFixedSections(_ sections: [FittableSection]) -> Int {
     let required =
       sections
-      .filter { section in !section.truncatable }
-      .map { section in section.units.map(\.content).joined(separator: "\n").count }
+      .filter { section in
+        !section.truncatable
+      }
+      .map { section in
+        section.units.map(\.content).joined(separator: "\n").count
+      }
       .reduce(0, +)
     return max(0, budget.inputCapGraphemes - required)
   }
@@ -477,13 +571,17 @@ private extension ContextBuilder {
     // Compare GROUPS, not raw rows: one unit per group by construction, so a kept-unit-count
     // shortfall against the full group count means an exchange (or plain row) was dropped.
     let keptHistoryGroupCount = Set(
-      fitted.first { section in section.id == .history }?.units.map(\.id) ?? []
+      fitted.first { section in
+        section.id == .history
+      }?.units.map(\.id) ?? []
     ).count
     let historyWasTruncated = keptHistoryGroupCount < historyGroups(from: snapshot.history).count
 
     let systemContent =
       fitted
-      .filter { section in section.tier == .system }
+      .filter { section in
+        section.tier == .system
+      }
       .map(\.content)
       .joined(separator: "\n\n")
       + (historyWasTruncated ? Self.historyTruncatedMarker : "")
@@ -491,7 +589,9 @@ private extension ContextBuilder {
 
     let untrusted =
       fitted
-      .filter { section in section.tier == .untrustedLabeled }
+      .filter { section in
+        section.tier == .untrustedLabeled
+      }
       .map { section in
         LabeledContextFactory.make(
           label: label(for: section.id),
@@ -508,8 +608,9 @@ private extension ContextBuilder {
   }
 
   /// The one render seam for both native assistant anchors (with decoded `toolCalls`) and fenced
-  /// tool rows (labeled by the owning anchor's tool name). Kept groups come from the fitter
-  /// verbatim — one `SectionUnit` per group — so this only re-expands each surviving group's rows.
+  /// tool rows (labeled by the owning anchor's declared fence label). Kept groups come from the
+  /// fitter verbatim — one `SectionUnit` per group — so this only re-expands each surviving
+  /// group's rows.
   func fittedHistoryMessages(
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
@@ -524,21 +625,41 @@ private extension ContextBuilder {
 
     for group in groups where keptIDs.contains(group.id) {
       // The anchor's id→name map labels each tool row's fence. A provider-authored response could
-      // duplicate a tool_call id; keep the first name rather than trapping on malformed history.
+      // duplicate a tool_call id, and the name a row resolves to now decides how much the prompt
+      // trusts its content — so a duplicated id names nobody and its rows fall back to the
+      // unattributed label, rather than the first declaration lending them its fence.
       let anchorCalls = group.messages.first?.toolCallsJSON.map(ToolCallCoding.decode) ?? []
+      let callsPerId = anchorCalls.reduce(into: [String: Int]()) { counts, call in
+        counts[call.id, default: 0] += 1
+      }
       let namesByCallId = Dictionary(
-        anchorCalls.map { call in (call.id, call.name) },
-        uniquingKeysWith: { first, _ in first }
+        uniqueKeysWithValues:
+          anchorCalls
+          .filter { call in
+            callsPerId[call.id] == 1
+          }
+          .map { call in
+            (call.id, call.name)
+          }
       )
 
       for message in group.messages {
         switch message.role {
         case .tool:
-          let label = message.toolCallId.flatMap { callId in namesByCallId[callId] } ?? "tool"
+          let label =
+            message.toolCallId
+            .flatMap { callId in
+              namesByCallId[callId]
+            }
+            .map(fenceLabels.label(forToolNamed:))
+            ?? ToolFenceLabels.unattributed
           rendered.append(
             ChatMessage(
               role: .tool,
-              content: LabeledContextFactory.make(label: label, content: message.content).render(),
+              content: LabeledContextFactory.make(
+                label: label,
+                content: message.content
+              ).render(),
               toolCallId: message.toolCallId
             )
           )
@@ -615,7 +736,7 @@ private extension ContextBuilder {
     case .recall:
       "recall"
     case .skills:
-      "skills"
+      WorkspaceSkills.fenceLabel
     case .policy, .systemWorkspace, .tools, .metadata, .history:
       id.rawValue
     }

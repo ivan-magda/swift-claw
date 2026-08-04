@@ -13,7 +13,7 @@ public enum ToolApprovalPrompt {
     public let recorded: RecordedToolAction
     /// The originating turn ingested untrusted content (TAINT banner).
     public let taintBanner: Bool
-    /// The canonical target is SOUL/AGENTS/USER/MEMORY .md (privileged-file banner).
+    /// The canonical target is a file that steers a later turn (privileged-file banner).
     public let privilegedFileBanner: Bool
 
     public init(recorded: RecordedToolAction, taintBanner: Bool, privilegedFileBanner: Bool) {

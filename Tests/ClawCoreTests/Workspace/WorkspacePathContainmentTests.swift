@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import ClawTools
+@testable import ClawCore
 
 @Suite struct WorkspacePathContainmentTests {
   private struct Sandbox {

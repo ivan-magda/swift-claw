@@ -33,7 +33,8 @@ import Testing
 
     // then
     #expect(rendered.contains("<claw-untrusted nonce=\"\(context.nonce)\" label=\"recall\">"))
-    #expect(rendered.contains(staleClose))
+    #expect(rendered.contains(staleClose) == false)
+    #expect(rendered.contains("claw-untrusted-escaped nonce=\"stale-nonce\""))
     #expect(matchingCloseCount == 1)
   }
 }

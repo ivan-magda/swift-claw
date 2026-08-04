@@ -38,14 +38,16 @@ import Testing
     name: String,
     params: JSONValue = .object(["type": .string("object")]),
     risk: RiskLevel = .safe,
-    egress: ToolEgressClass = .none
+    egress: ToolEgressClass = .none,
+    fenceLabel: String? = nil
   ) -> ToolDefinition {
     ToolDefinition(
       name: name,
       description: "d",
       parameters: params,
       egressClass: egress,
-      riskLevel: risk
+      riskLevel: risk,
+      fenceLabel: fenceLabel
     )
   }
 
@@ -115,6 +117,15 @@ import Testing
     #expect(
       subhash(tools: [tool(name: "t", risk: .safe)])
         != subhash(tools: [tool(name: "t", risk: .ask)])
+    )
+  }
+
+  @Test func fenceLabelIsAnInputClass() {
+    // given / when / then — the declared fence label selects the prompt carve-out a tool's output
+    // renders under, so changing it must void an outstanding approval the way a risk change does
+    #expect(
+      subhash(tools: [tool(name: "t", fenceLabel: nil)])
+        != subhash(tools: [tool(name: "t", fenceLabel: "skills")])
     )
   }
 

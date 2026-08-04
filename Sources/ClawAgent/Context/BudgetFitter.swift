@@ -13,12 +13,29 @@ public struct SectionUnit: Sendable, Equatable {
   }
 }
 
+/// How a row announces the units the budget dropped. The row owns the wording so the fitter stays
+/// row-agnostic, and the rendered line is cost-accounted inside the row's cap like any other unit.
+public enum DropMarker: Sendable, Equatable {
+  case none
+  case showingCount(noun: String)
+
+  func line(kept: Int, total: Int) -> String? {
+    switch self {
+    case .none:
+      nil
+    case .showingCount(let noun):
+      "(showing \(kept) of \(total) \(noun))"
+    }
+  }
+}
+
 public struct FittableSection: Sendable, Equatable, Identifiable {
   public let id: ContextRowID
   public let tier: ContextTier
   public let priority: ContextPriority
   public let truncatable: Bool
   public let cap: Int?
+  public let dropMarker: DropMarker
   public let units: [SectionUnit]
 
   public init(
@@ -27,6 +44,7 @@ public struct FittableSection: Sendable, Equatable, Identifiable {
     priority: ContextPriority,
     truncatable: Bool,
     cap: Int?,
+    dropMarker: DropMarker = .none,
     units: [SectionUnit]
   ) {
     self.id = id
@@ -34,6 +52,7 @@ public struct FittableSection: Sendable, Equatable, Identifiable {
     self.priority = priority
     self.truncatable = truncatable
     self.cap = cap
+    self.dropMarker = dropMarker
     self.units = units
   }
 }
@@ -45,6 +64,7 @@ public struct FittedSection: Sendable, Equatable, Identifiable {
   public let truncatable: Bool
   public let cap: Int?
   public let units: [SectionUnit]
+  public let droppedUnitIDs: [String]
 
   public var content: String {
     renderUnits(units)
@@ -61,13 +81,14 @@ public struct FittedSection: Sendable, Equatable, Identifiable {
     )
   }
 
-  fileprivate init(source: FittableSection, units: [SectionUnit]) {
+  fileprivate init(source: FittableSection, units: [SectionUnit], droppedUnitIDs: [String] = []) {
     self.id = source.id
     self.tier = source.tier
     self.priority = source.priority
     self.truncatable = source.truncatable
     self.cap = source.cap
     self.units = units
+    self.droppedUnitIDs = droppedUnitIDs
   }
 }
 
@@ -77,6 +98,7 @@ public enum BudgetFitterError: Error, Equatable {
 
 public enum BudgetFitter {
   public static let truncationMarker = TextTruncation.marker
+  public static let dropMarkerUnitID = "drop-marker"
 
   public static func fit(
     _ sections: [FittableSection],
@@ -117,6 +139,7 @@ public enum BudgetFitter {
 
     if cappedTotal > residual {
       var excess = cappedTotal - residual
+
       for index in fittedRows.indices.reversed() where excess > 0 {
         let current = fittedRows[index]
         let targetCount = max(0, current.content.count - excess)
@@ -129,6 +152,7 @@ public enum BudgetFitter {
           fittedRows.remove(at: index)
         }
       }
+
       cappedTotal = fittedRows.map(\.content.count).reduce(0, +)
       precondition(cappedTotal <= max(residual, historyFloorCount))
     }
@@ -137,7 +161,7 @@ public enum BudgetFitter {
       FittedSection(source: section, units: section.units)
     }
     let fittedSections = fittedRows.map { row in
-      FittedSection(source: row.source, units: row.units)
+      FittedSection(source: row.source, units: row.units, droppedUnitIDs: row.droppedUnitIDs)
     }
 
     return (fixedSections + fittedSections).sorted { first, second in
@@ -145,7 +169,10 @@ public enum BudgetFitter {
     }
   }
 
-  private static func fittedRow(for section: FittableSection, maxCount: Int) -> FittedRow? {
+  private static func fittedRow(
+    for section: FittableSection,
+    maxCount: Int
+  ) -> FittedRow? {
     // The newest history unit is the current turn; it is non-droppable even when it alone
     // exceeds the budget, so the model always sees the message it is answering. Flooring the
     // budget at its size means it is admitted whole on the first iteration; later units still
@@ -170,7 +197,7 @@ public enum BudgetFitter {
       }
 
       guard unit.canTruncate else {
-        if section.id == .history {
+        if keepsContiguousPrefix(section.id) {
           break
         }
         continue
@@ -189,11 +216,57 @@ public enum BudgetFitter {
       break
     }
 
-    guard !kept.isEmpty else {
+    return markedRow(for: section, kept: kept, maxCount: effectiveMax)
+  }
+
+  /// Rows whose units mean something in order: history must stay a contiguous newest-first window,
+  /// and the skills index drops as a prefix so its "N of M" marker describes a real slice.
+  private static func keepsContiguousPrefix(_ id: ContextRowID) -> Bool {
+    id == .history || id == .skills
+  }
+
+  /// Appends the row's drop marker when the budget left units out. The marker shares the cap with
+  /// the content it describes, so a cap too tight for both ships the kept units unmarked — giving
+  /// content back to make room would let an annotation about missing skills empty the whole row.
+  private static func markedRow(
+    for section: FittableSection,
+    kept: [SectionUnit],
+    maxCount: Int
+  ) -> FittedRow? {
+    guard kept.isEmpty == false else {
       return nil
     }
 
-    return FittedRow(source: section, units: kept)
+    let droppedIDs = droppedUnitIDs(in: section, kept: kept)
+    guard
+      droppedIDs.isEmpty == false,
+      let marker = section.dropMarker.line(kept: kept.count, total: section.units.count),
+      renderUnits(kept).count + 1 + marker.count <= maxCount
+    else {
+      return FittedRow(source: section, units: kept, droppedUnitIDs: droppedIDs)
+    }
+
+    return FittedRow(
+      source: section,
+      units: kept + [
+        SectionUnit(
+          id: dropMarkerUnitID,
+          content: marker,
+          canTruncate: false
+        )
+      ],
+      droppedUnitIDs: droppedIDs
+    )
+  }
+
+  private static func droppedUnitIDs(
+    in section: FittableSection,
+    kept: [SectionUnit]
+  ) -> [String] {
+    let keptIDs = Set(kept.map(\.id))
+    return section.units.map(\.id).filter { id in
+      keptIDs.contains(id) == false
+    }
   }
 
   private static func renderedCount(_ section: FittableSection) -> Int {
@@ -204,6 +277,7 @@ public enum BudgetFitter {
 private struct FittedRow: Equatable {
   let source: FittableSection
   let units: [SectionUnit]
+  let droppedUnitIDs: [String]
 
   var content: String {
     renderUnits(units)
