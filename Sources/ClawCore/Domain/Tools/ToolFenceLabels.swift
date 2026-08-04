@@ -20,8 +20,12 @@ public struct ToolFenceLabels: Sendable, Equatable {
 
   public init(definitions: [ToolDefinition]) {
     labelsByToolName = Dictionary(
-      definitions.map { definition in (definition.name, definition.fenceLabel) },
-      uniquingKeysWith: { first, _ in first }
+      definitions.map { definition in
+        (definition.name, definition.fenceLabel)
+      },
+      uniquingKeysWith: { first, _ in
+        first
+      }
     )
   }
 
