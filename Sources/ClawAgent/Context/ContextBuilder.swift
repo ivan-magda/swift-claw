@@ -121,7 +121,12 @@ private extension ContextBuilder {
         cap: nil,
         ownerNotices: &ownerNotices
       ),
-      workspaceSection(id: .tools, files: [.tools], cap: nil, ownerNotices: &ownerNotices),
+      workspaceSection(
+        id: .tools,
+        files: [.tools],
+        cap: nil,
+        ownerNotices: &ownerNotices
+      ),
       section(
         id: .metadata,
         units: [
@@ -334,7 +339,8 @@ private extension ContextBuilder {
     let units = selected.compactMap { hit -> SectionUnit? in
       let content = cappedRecallContent(hit.content)
       return content.isEmpty
-        ? nil : SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
+        ? nil
+        : SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
     }
 
     guard units.isEmpty == false else {
@@ -345,7 +351,9 @@ private extension ContextBuilder {
   }
 
   func latestUserMessage(in history: [StoredMessage]) -> String? {
-    history.last { message in message.role == .user }?.content
+    history.last { message in
+      message.role == .user
+    }?.content
   }
 
   func cappedRecallContent(_ content: String) -> String {
@@ -434,7 +442,9 @@ private extension ContextBuilder {
       return nil
     }
 
-    let fittedSkills = fitted.first { section in section.id == .skills }
+    let fittedSkills = fitted.first { section in
+      section.id == .skills
+    }
     let dropped =
       (fittedSkills?.droppedUnitIDs ?? source.units.map(\.id))
       .map(Self.skillName(fromUnitID:))
@@ -442,7 +452,10 @@ private extension ContextBuilder {
       return nil
     }
 
-    let names = dropped.map { name in "`\(name)`" }.joined(separator: ", ")
+    let names = dropped.map { name in
+      "`\(name)`"
+    }.joined(separator: ", ")
+
     return "⚠ Skills index over budget; left out this turn: \(names). Trim their descriptions."
   }
 
@@ -529,8 +542,12 @@ private extension ContextBuilder {
   func residualAfterFixedSections(_ sections: [FittableSection]) -> Int {
     let required =
       sections
-      .filter { section in !section.truncatable }
-      .map { section in section.units.map(\.content).joined(separator: "\n").count }
+      .filter { section in
+        !section.truncatable
+      }
+      .map { section in
+        section.units.map(\.content).joined(separator: "\n").count
+      }
       .reduce(0, +)
     return max(0, budget.inputCapGraphemes - required)
   }
@@ -554,13 +571,17 @@ private extension ContextBuilder {
     // Compare GROUPS, not raw rows: one unit per group by construction, so a kept-unit-count
     // shortfall against the full group count means an exchange (or plain row) was dropped.
     let keptHistoryGroupCount = Set(
-      fitted.first { section in section.id == .history }?.units.map(\.id) ?? []
+      fitted.first { section in
+        section.id == .history
+      }?.units.map(\.id) ?? []
     ).count
     let historyWasTruncated = keptHistoryGroupCount < historyGroups(from: snapshot.history).count
 
     let systemContent =
       fitted
-      .filter { section in section.tier == .system }
+      .filter { section in
+        section.tier == .system
+      }
       .map(\.content)
       .joined(separator: "\n\n")
       + (historyWasTruncated ? Self.historyTruncatedMarker : "")
@@ -568,7 +589,9 @@ private extension ContextBuilder {
 
     let untrusted =
       fitted
-      .filter { section in section.tier == .untrustedLabeled }
+      .filter { section in
+        section.tier == .untrustedLabeled
+      }
       .map { section in
         LabeledContextFactory.make(
           label: label(for: section.id),
@@ -612,8 +635,12 @@ private extension ContextBuilder {
       let namesByCallId = Dictionary(
         uniqueKeysWithValues:
           anchorCalls
-          .filter { call in callsPerId[call.id] == 1 }
-          .map { call in (call.id, call.name) }
+          .filter { call in
+            callsPerId[call.id] == 1
+          }
+          .map { call in
+            (call.id, call.name)
+          }
       )
 
       for message in group.messages {
@@ -621,13 +648,18 @@ private extension ContextBuilder {
         case .tool:
           let label =
             message.toolCallId
-            .flatMap { callId in namesByCallId[callId] }
+            .flatMap { callId in
+              namesByCallId[callId]
+            }
             .map(fenceLabels.label(forToolNamed:))
             ?? ToolFenceLabels.unattributed
           rendered.append(
             ChatMessage(
               role: .tool,
-              content: LabeledContextFactory.make(label: label, content: message.content).render(),
+              content: LabeledContextFactory.make(
+                label: label,
+                content: message.content
+              ).render(),
               toolCallId: message.toolCallId
             )
           )
