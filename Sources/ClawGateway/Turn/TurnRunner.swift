@@ -479,6 +479,9 @@ private extension TurnRunner {
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
+    // `routeNotice` is turn-scoped (set once, before the cap tripped), so a switch earlier in this
+    // same turn still owes the owner its notice even though this round produced no answer.
+    let appendedNotices = outcome.routeNotice.map { [Degradation.message(for: $0)] } ?? []
     _ = try commitDegradation(
       runId: context.runId,
       sessionId: context.sessionId,
@@ -489,7 +492,8 @@ private extension TurnRunner {
       setPrivateData: outcome.hadPrivateData,
       message: ownerVisiblePayload(
         reply: Degradation.budget(cap: cap),
-        ownerNotices: context.ownerNotices
+        ownerNotices: context.ownerNotices,
+        appendedNotices: appendedNotices
       ),
       action: .turnBudgetStopped,
       decision: cap,
