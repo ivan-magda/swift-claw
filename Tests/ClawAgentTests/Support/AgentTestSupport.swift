@@ -177,6 +177,7 @@ func makeRuntime(
   fallback: (any LLMProvider)?,
   cooldown: (any RouteCooldownTracking)? = nil,
   budget: RunBudget = .default,
+  toolDispatcher: (any ToolDispatching)? = nil,
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
   clock: any Clock<Duration> = ContinuousClock()
@@ -209,6 +210,7 @@ func makeRuntime(
     streamingEnabled: false,
     costResolver: makeCostResolver(),
     budget: budget,
+    toolDispatcher: toolDispatcher,
     usageStore: usageStore,
     auditLog: auditLog,
     clock: clock

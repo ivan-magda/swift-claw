@@ -114,6 +114,30 @@ struct AgentRuntimeFallbackTests {
     #expect(await fallback.calls == 1)
   }
 
+  @Test("a later round-trip failing on the fallback reports the fallback's own kind")
+  func laterFailureOnTheFallbackReportsItsOwnKind() async throws {
+    // given — the primary walls off on round-trip 1, then the fallback answers with a tool call and
+    // refuses the credential on round-trip 2.
+    let primary = StubProvider(.fail(.quotaLimited(retryAfterSeconds: nil)))
+    let fallback = SequenceProvider(
+      [toolCallResponse([fetchProposal()])],
+      then: ProviderError.authenticationRequired
+    )
+    let runtime = makeRuntime(
+      primary: primary,
+      fallback: fallback,
+      toolDispatcher: ScriptedDispatcher(respond: okOutcome())
+    )
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then — the exhausted plan is stale news; the refused credential is what the owner can act on.
+    let (kind, _) = try requireDegraded(outcome.result)
+    #expect(kind == .authenticationRequired)
+    #expect(await fallback.requests.count == 2)
+  }
+
   @Test("a cooling primary is skipped and the turn starts on the fallback")
   func coolingPrimaryIsSkipped() async throws {
     // given

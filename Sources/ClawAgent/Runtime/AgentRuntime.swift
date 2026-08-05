@@ -240,9 +240,6 @@ public struct AgentRuntime: Sendable {
       costResolver: costResolver,
       usageResolver: usageResolver
     )
-    // The first failure's kind stays the reported one after a switch: an exhausted plan is the
-    // actionable fact, not whatever the fallback then said about itself.
-    var firstFailureKind: DegradationKind?
     var routeNotice: RouteNotice?
 
     // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
@@ -308,6 +305,12 @@ public struct AgentRuntime: Sendable {
     let priorRounds = carryOver?.rounds ?? 0
     for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
       let callID = providerCallIDGenerator.next()
+      // Scoped to this round-trip: when a re-issue on the next route also fails, the reported kind is
+      // the one the round-trip started with, because "your plan quota is out" is the actionable fact
+      // rather than whatever the fallback then said about itself. A later round-trip failing on the
+      // route it is already using reports that route's own kind, so a refused credential or a
+      // transient there is never masked by a wall the turn already moved past.
+      var firstFailureKind: DegradationKind?
 
       let preflight = active.accountant.preflightEstimate(context: wire)
       if preflight.inputTokens > budget.maxInputTokens {
