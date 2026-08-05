@@ -13,18 +13,27 @@ public struct Secrets: Sendable, Equatable {
   public let telegramBotToken: String
   public let llmApiKey: String?
   public let searchApiKey: String?
+  /// The fallback route's key, distinct from `llmApiKey` for the same reason its base URL is
+  /// distinct: it authenticates an endpoint the primary never touches.
+  public let llmFallbackApiKey: String?
 
-  public init(telegramBotToken: String, llmApiKey: String?, searchApiKey: String? = nil) {
+  public init(
+    telegramBotToken: String,
+    llmApiKey: String?,
+    searchApiKey: String? = nil,
+    llmFallbackApiKey: String? = nil
+  ) {
     self.telegramBotToken = telegramBotToken
     self.llmApiKey = llmApiKey
     self.searchApiKey = searchApiKey
+    self.llmFallbackApiKey = llmFallbackApiKey
   }
 
   /// The concrete secret strings an exact-value redactor should scrub — from tool output
   /// (`SecretRedactor`) and from developer logs (the log-handler redactor). One source of truth so
   /// the two call sites can never drift on what counts as a secret.
   public var redactionValues: [String] {
-    [telegramBotToken, llmApiKey, searchApiKey].compactMap { value in value }
+    [telegramBotToken, llmApiKey, searchApiKey, llmFallbackApiKey].compactMap { value in value }
   }
 }
 

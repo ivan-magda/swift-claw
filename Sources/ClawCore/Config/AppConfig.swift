@@ -18,6 +18,14 @@ public struct AppConfig: Sendable, Equatable {
     static let llmStreaming = "CLAW_LLM_STREAMING"
     static let llmStructuredOutput = "CLAW_LLM_STRUCTURED_OUTPUT"
 
+    /// The fallback carries its own namespace deliberately — `CLAW_LLM_FALLBACK_*` is the one
+    /// exception to "no per-provider environment prefix" (ARCHITECTURE.md §15), because a fallback
+    /// needs its own endpoint and key rather than the primary's.
+    static let llmFallbackModel = "CLAW_LLM_FALLBACK_MODEL"
+    static let llmFallbackBaseURL = "CLAW_LLM_FALLBACK_BASE_URL"
+    static let llmFallbackMaxTokensField = "CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD"
+    static let primaryCooldownSeconds = "CLAW_LLM_PRIMARY_COOLDOWN_SECONDS"
+
     static let perRunUSD = "CLAW_PER_RUN_USD"
     static let perDayUSD = "CLAW_PER_DAY_USD"
     static let referenceUSDPerToken = "CLAW_REFERENCE_USD_PER_TOKEN"
@@ -60,6 +68,7 @@ public struct AppConfig: Sendable, Equatable {
     static let maxOutputTokens = RunDefaults.maxOutputTokens
     static let retryBudget = RunDefaults.retryBudget
     static let requestTimeoutSeconds = 180
+    static let primaryCooldownSeconds = 900
 
     static let schedCatchUpMaxAgeMinutes = 30
     static let schedMinIntervalMinutes = 5
@@ -229,6 +238,7 @@ private extension AppConfig {
       configuredBaseURL: try requiredBaseURL(from: env)
     )
     let route = try routeApplyingWireOutputField(to: resolved, env: env)
+    let fallbackRoute = try parseFallbackRoute(from: env)
 
     let rawMaxTokens = env[EnvKey.llmMaxTokens]?.trimmingCharacters(in: .whitespaces) ?? ""
     let maxOutputTokens: Int
@@ -240,7 +250,10 @@ private extension AppConfig {
       throw ConfigError.invalidMaxTokens(rawMaxTokens)
     }
 
-    let structuredOutput = try parseStructuredOutput(from: env, route: route)
+    let structuredOutput = try parseStructuredOutput(
+      from: env,
+      routes: [route, fallbackRoute].compactMap { configuredRoute in configuredRoute }
+    )
 
     return LLMConfig(
       route: route,
@@ -252,7 +265,9 @@ private extension AppConfig {
         key: EnvKey.llmStreaming,
         default: true
       ),
-      structuredOutput: structuredOutput
+      structuredOutput: structuredOutput,
+      fallbackRoute: fallbackRoute,
+      primaryCooldownSeconds: try parsePrimaryCooldown(from: env)
     )
   }
 
@@ -269,19 +284,66 @@ private extension AppConfig {
     return baseURL
   }
 
-  /// Rebuilds the route's wire output-token field from `CLAW_LLM_MAX_TOKENS_FIELD`, but only when the
-  /// resolved descriptor carries a configured field. A route that omits the wire cap honors no such
-  /// variable, so it is neither read nor validated there — parsing it would resurrect a value the
-  /// route ignores and reject a value it never consults.
+  /// Resolves the fallback route, or `nil` when none is configured. The fallback's base URL is a
+  /// distinct variable: reusing the primary's would silently point a fallback at the endpoint that
+  /// just failed, and would let a missing primary endpoint pass validation.
+  static func parseFallbackRoute(from env: [String: String]) throws -> ResolvedLLMRoute? {
+    guard
+      let model = env[EnvKey.llmFallbackModel]?.trimmingCharacters(in: .whitespaces),
+      !model.isEmpty
+    else {
+      return nil
+    }
+
+    let resolved = try LLMProviderRegistry.resolve(
+      modelReference: model,
+      configuredBaseURL: try requiredFallbackBaseURL(from: env)
+    )
+    return try routeApplyingWireOutputField(
+      to: resolved,
+      env: env,
+      fieldKey: EnvKey.llmFallbackMaxTokensField
+    )
+  }
+
+  /// The fallback route's required base URL, thrown lazily for the same reason `requiredBaseURL` is:
+  /// a managed fallback never evaluates this closure, so it stays exempt from the variable.
+  static func requiredFallbackBaseURL(from env: [String: String]) throws -> String {
+    guard
+      let baseURL = env[EnvKey.llmFallbackBaseURL]?.trimmingCharacters(in: .whitespaces),
+      !baseURL.isEmpty
+    else {
+      throw ConfigError.missingLLMFallbackBaseURL
+    }
+    return baseURL
+  }
+
+  /// The primary's cooldown window: how long a route-switch trip keeps the daemon off the primary
+  /// before it is retried. Absent/blank falls back to the 900-second default, else must be positive.
+  static func parsePrimaryCooldown(from env: [String: String]) throws -> Int {
+    try ConfigParse.boundedInt(
+      env[EnvKey.primaryCooldownSeconds],
+      default: EnvDefaults.primaryCooldownSeconds,
+      range: 1...Int.max,
+      onInvalid: ConfigError.invalidPrimaryCooldown
+    )
+  }
+
+  /// Rebuilds a route's wire output-token field from its own field-override variable, but only when
+  /// the resolved descriptor carries a configured field. A route that omits the wire cap honors no
+  /// such variable, so it is neither read nor validated there — parsing it would resurrect a value
+  /// the route ignores and reject a value it never consults. `fieldKey` lets the primary and the
+  /// fallback share this one implementation instead of each growing a near-copy.
   static func routeApplyingWireOutputField(
     to route: ResolvedLLMRoute,
-    env: [String: String]
+    env: [String: String],
+    fieldKey: String = EnvKey.llmMaxTokensField
   ) throws -> ResolvedLLMRoute {
     guard case .configured = route.descriptor.capabilities.outputTokenField else {
       return route
     }
 
-    let rawField = env[EnvKey.llmMaxTokensField]?.trimmingCharacters(in: .whitespaces) ?? ""
+    let rawField = env[fieldKey]?.trimmingCharacters(in: .whitespaces) ?? ""
     let maxTokensField: MaxTokensField
     if rawField.isEmpty {
       maxTokensField = EnvDefaults.maxTokensField
@@ -309,12 +371,13 @@ private extension AppConfig {
     )
   }
 
-  /// Parses `CLAW_LLM_STRUCTURED_OUTPUT` and enforces the route's capability: a route with no
-  /// relied-upon structured-output contract accepts only `off`, and any other value fails closed with
-  /// the route named rather than being silently sent to a wire that cannot honor it.
+  /// Parses `CLAW_LLM_STRUCTURED_OUTPUT` and enforces every configured route's capability: a mode the
+  /// fallback cannot serve is a latent failure the moment the fallback carries a turn, so a route with
+  /// no relied-upon structured-output contract accepts only `off` — any other value fails closed with
+  /// the offending route named rather than being silently sent to a wire that cannot honor it.
   static func parseStructuredOutput(
     from env: [String: String],
-    route: ResolvedLLMRoute
+    routes: [ResolvedLLMRoute]
   ) throws -> StructuredOutputMode {
     let rawStructuredOutput =
       env[EnvKey.llmStructuredOutput]?.trimmingCharacters(in: .whitespaces) ?? ""
@@ -327,9 +390,12 @@ private extension AppConfig {
       throw ConfigError.invalidStructuredOutput(rawStructuredOutput)
     }
 
-    if structuredOutput != .off, !route.descriptor.capabilities.supportsStructuredOutput {
+    let unsupportedRoute = routes.first { candidate in
+      !candidate.descriptor.capabilities.supportsStructuredOutput
+    }
+    if structuredOutput != .off, let unsupportedRoute {
       throw ConfigError.structuredOutputUnsupportedOnRoute(
-        providerID: route.descriptor.providerID,
+        providerID: unsupportedRoute.descriptor.providerID,
         mode: structuredOutput
       )
     }

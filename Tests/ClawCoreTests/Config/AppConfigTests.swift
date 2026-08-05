@@ -417,6 +417,116 @@ import Testing
     #expect(config.llm.structuredOutput == .off)
   }
 
+  // MARK: - Fallback route resolution
+
+  @Test func absentFallbackParsesNil() throws {
+    // given — no CLAW_LLM_FALLBACK_MODEL set
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.llm.fallbackRoute == nil)
+  }
+
+  @Test func fallbackResolvesRoute() throws {
+    // given — a managed primary and an OpenAI-compatible fallback with its own base URL
+    let env = chatGPTEnv([
+      EnvKey.llmFallbackModel: "gpt-5.4",
+      EnvKey.llmFallbackBaseURL: "https://fallback.example/v1",
+    ])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.llm.fallbackRoute?.configuredReference == "gpt-5.4")
+    #expect(config.llm.route.configuredReference == "openai-chatgpt/gpt-5.4")
+  }
+
+  @Test func fallbackWithoutBaseURLRejected() {
+    // given — an OpenAI-compatible fallback with no CLAW_LLM_FALLBACK_BASE_URL
+    let env = chatGPTEnv([EnvKey.llmFallbackModel: "gpt-5.4"])
+
+    // then
+    #expect(throws: ConfigError.missingLLMFallbackBaseURL) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test func fallbackBaseURLIsNotPrimaryBaseURL() {
+    // given — the fallback's base URL is set but the primary's is not; the fallback's must never
+    // stand in for the primary's
+    let env = [
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+      EnvKey.llmModel: "gpt-5.4",
+      EnvKey.llmFallbackModel: "gpt-5.4-mini",
+      EnvKey.llmFallbackBaseURL: "https://fallback.example/v1",
+    ]
+
+    // then
+    #expect(throws: ConfigError.missingLLMBaseURL) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test("a fallback that cannot serve structured output is rejected")
+  func structuredOutputRejectedForFallbackRoute() {
+    // given — a primary that supports structured output and a fallback that does not
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.llmFallbackModel] = "openai-chatgpt/gpt-5.4"
+    env[EnvKey.llmStructuredOutput] = "json_object"
+
+    // then
+    #expect(
+      throws: ConfigError.structuredOutputUnsupportedOnRoute(
+        providerID: .openAIChatGPT,
+        mode: .jsonObject
+      )
+    ) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
+  @Test("structured output stands when every configured route can serve it")
+  func structuredOutputAcceptedWhenBothRoutesSupportIt() throws {
+    // given — both the primary and the fallback are OpenAI-compatible routes that support it
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.llmFallbackModel] = "gpt-5.4-mini"
+    env[EnvKey.llmFallbackBaseURL] = "https://fallback.example/v1"
+    env[EnvKey.llmStructuredOutput] = "json_object"
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.llm.fallbackRoute != nil)
+    #expect(config.llm.structuredOutput == .jsonObject)
+  }
+
+  @Test func cooldownDefaults() throws {
+    // given
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.llm.primaryCooldownSeconds == 900)
+  }
+
+  @Test func invalidCooldownRejected() {
+    // given
+    var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    env[EnvKey.primaryCooldownSeconds] = "0"
+
+    // then
+    #expect(throws: ConfigError.invalidPrimaryCooldown("0")) {
+      try AppConfig.load(environment: env)
+    }
+  }
+
   @Test func schedulerAndHeartbeatDefaultsArePinned() throws {
     // given — none of the eight Inc 4 keys set
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])

@@ -8,6 +8,7 @@ public struct EnvSecretStore: SecretStore {
     public static let botToken = "CLAW_TELEGRAM_BOT_TOKEN"
     public static let llmApiKey = "CLAW_LLM_API_KEY"
     public static let searchApiKey = "CLAW_SEARCH_API_KEY"
+    public static let llmFallbackApiKey = "CLAW_LLM_FALLBACK_API_KEY"
   }
 
   private let environment: [String: String]
@@ -32,11 +33,13 @@ public struct EnvSecretStore: SecretStore {
 
     let apiKey = environment[EnvKey.llmApiKey].flatMap { $0.isEmpty ? nil : $0 }
     let searchKey = environment[EnvKey.searchApiKey].flatMap { $0.isEmpty ? nil : $0 }
+    let fallbackApiKey = environment[EnvKey.llmFallbackApiKey].flatMap { $0.isEmpty ? nil : $0 }
 
     return Secrets(
       telegramBotToken: botToken,
       llmApiKey: apiKey,
-      searchApiKey: searchKey
+      searchApiKey: searchKey,
+      llmFallbackApiKey: fallbackApiKey
     )
   }
 
