@@ -433,6 +433,9 @@ public enum AuditAction: String, Sendable, Equatable {
   case turnBudgetStopped = "turn_budget_stopped"
   case budgetTripped = "budget_tripped"
   case turnCancelled = "turn_cancelled"
+  /// A turn re-issued its round-trip against the next route after the one it was on failed on a
+  /// cause that provably generated nothing.
+  case providerFallback = "provider_fallback"
   case turnSuperseded = "turn_superseded"
   case jobCreated = "job_created"
   case jobExecuted = "job_executed"

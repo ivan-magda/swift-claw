@@ -169,6 +169,70 @@ func makeRuntime(
   )
 }
 
+/// A two-route runtime. The primary is an included-plan route and the fallback a metered one — the
+/// pairing that makes a mis-attributed usage row visible, because a fallback charged through the
+/// primary's accountant would read as a confirmed $0 under the wrong model name.
+func makeRuntime(
+  primary: any LLMProvider,
+  fallback: (any LLMProvider)?,
+  cooldown: (any RouteCooldownTracking)? = nil,
+  budget: RunBudget = .default,
+  usageStore: any UsageStore = RecordingUsageStore(),
+  auditLog: any AuditLog = RecordingAuditLog(),
+  clock: any Clock<Duration> = ContinuousClock()
+) -> AgentRuntime {
+  var bindings = [
+    LLMRouteBinding(
+      provider: primary,
+      wireModel: "primary-wire",
+      configuredReference: "primary-model",
+      costPolicy: .includedPlan,
+      reservationPolicy: .textOnly
+    )
+  ]
+  if let fallback {
+    bindings.append(
+      LLMRouteBinding(
+        provider: fallback,
+        wireModel: "fallback-wire",
+        configuredReference: "fallback-model",
+        costPolicy: .metered,
+        reservationPolicy: .textOnly
+      )
+    )
+  }
+  return AgentRuntime(
+    roster: ProviderRoster(bindings: bindings),
+    cooldown: cooldown,
+    typingIndicator: RecordingTyping(),
+    draftStreamer: NoopRichDraftStreaming(),
+    streamingEnabled: false,
+    costResolver: makeCostResolver(),
+    budget: budget,
+    usageStore: usageStore,
+    auditLog: auditLog,
+    clock: clock
+  )
+}
+
+/// `RunBudget.default` with the round-trip ceiling a test needs to pin.
+func makeBudget(maxTurns: Int) -> RunBudget {
+  let base = RunBudget.default
+  return RunBudget(
+    maxInputTokens: base.maxInputTokens,
+    maxOutputTokens: base.maxOutputTokens,
+    wallClockDeadlineSeconds: base.wallClockDeadlineSeconds,
+    retryBudget: base.retryBudget,
+    perRunUSD: base.perRunUSD,
+    perDayUSD: base.perDayUSD,
+    proactivePerDayUSD: base.proactivePerDayUSD,
+    referenceUSDPerToken: base.referenceUSDPerToken,
+    maxTurns: maxTurns,
+    maxToolCalls: base.maxToolCalls,
+    dayTokenCeilingOverride: base.dayTokenCeilingOverride
+  )
+}
+
 func requireCompleted(
   _ result: TurnResult
 ) throws -> (content: String, usage: ProviderUsage, providerState: ProviderExchangeState?) {

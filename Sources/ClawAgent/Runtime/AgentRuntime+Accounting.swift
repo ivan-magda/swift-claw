@@ -110,6 +110,13 @@ extension AgentRuntime {
     }
   }
 
+  /// The provider's own retry hint, so a cooldown window can honour a bound longer than its tier
+  /// default. Only a clean throttle carries one; every other cause leaves the tier to decide.
+  static func retryAfterSeconds(of error: any Error) -> Int? {
+    guard case .quotaLimited(let seconds)? = ProviderError.cause(of: error) else { return nil }
+    return seconds
+  }
+
   /// Maps a returned response to a result, debiting the reconciled usage (real, or estimated when
   /// the provider omits it): non-empty content → `.completed`; empty + `finishReason == "length"` →
   /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`. The row is
