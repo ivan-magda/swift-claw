@@ -39,6 +39,27 @@ public struct ProviderStack: Sendable {
   }
 }
 
+public extension ProviderStack {
+  /// The turn-facing slice of this stack. Drops the credential source, which belongs to
+  /// composition's shutdown sequence and never to a turn.
+  var binding: LLMRouteBinding {
+    LLMRouteBinding(
+      provider: provider,
+      wireModel: wireModel,
+      configuredReference: configuredReference,
+      costPolicy: costPolicy,
+      reservationPolicy: reservationPolicy
+    )
+  }
+}
+
+/// A composed roster plus the credential sources the shutdown sequence must commit. The sources are
+/// held apart from the roster because a turn drives routes while only composition closes them.
+public struct RosterStack: Sendable {
+  public let roster: ProviderRoster
+  public let credentialSources: [any LLMCredentialSource]
+}
+
 // MARK: - Factory
 
 /// The one place a resolved route becomes a concrete provider stack. It lives in `ClawLLM` rather than
@@ -97,6 +118,51 @@ public enum ProviderStackFactory {
         buildVersion: buildVersion
       )
     }
+  }
+  // swiftlint:enable function_parameter_count
+
+  // swiftlint:disable function_parameter_count
+  /// Composes every configured route at boot. A fallback that cannot be built is a startup failure,
+  /// never a surprise discovered when the primary's quota runs out.
+  ///
+  /// - Parameter loadFallbackBearer: the fallback route's static bearer. Read only when a fallback
+  ///   route is configured, and never for the primary.
+  public static func makeRoster(
+    primaryRoute: ResolvedLLMRoute,
+    fallbackRoute: ResolvedLLMRoute?,
+    settings: LLMConfig,
+    loadStaticBearer: () -> String?,
+    loadFallbackBearer: () -> String?,
+    makeManagedCredentialStore: () -> any LLMCredentialStore,
+    http: any HTTPExecuting & HTTPStreaming,
+    buildVersion: String
+  ) throws -> RosterStack {
+    let primaryStack = try make(
+      route: primaryRoute,
+      settings: settings,
+      loadStaticBearer: loadStaticBearer,
+      makeManagedCredentialStore: makeManagedCredentialStore,
+      http: http,
+      buildVersion: buildVersion
+    )
+    guard let fallbackRoute else {
+      return RosterStack(
+        roster: ProviderRoster(bindings: [primaryStack.binding]),
+        credentialSources: [primaryStack.credentialSource]
+      )
+    }
+    let fallbackStack = try make(
+      route: fallbackRoute,
+      settings: settings,
+      loadStaticBearer: loadFallbackBearer,
+      makeManagedCredentialStore: makeManagedCredentialStore,
+      http: http,
+      buildVersion: buildVersion
+    )
+    return RosterStack(
+      roster: ProviderRoster(bindings: [primaryStack.binding, fallbackStack.binding]),
+      credentialSources: [primaryStack.credentialSource, fallbackStack.credentialSource]
+    )
   }
   // swiftlint:enable function_parameter_count
 }

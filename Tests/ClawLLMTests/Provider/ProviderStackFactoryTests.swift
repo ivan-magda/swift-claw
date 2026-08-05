@@ -8,40 +8,6 @@ import Testing
 
 // MARK: - Doubles
 
-/// A credential store whose one behavior a test scripts: a present record, an absent one (logged
-/// out), or a typed store failure. It records whether it was opened at all, so the current route can
-/// be proven never to touch it.
-private final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Sendable {
-  enum Behavior: Sendable {
-    case value(StoredOAuthCredential?)
-    case failure(LLMCredentialStoreError)
-  }
-
-  let behavior: Behavior
-  private(set) var loadCount = 0
-
-  init(_ behavior: Behavior) {
-    self.behavior = behavior
-  }
-
-  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
-    loadCount += 1
-    switch behavior {
-    case .value(let credential):
-      return credential
-    case .failure(let error):
-      throw error
-    }
-  }
-
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {}
-
-  func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
-}
-
 /// Flips when its closure is invoked, so a test can assert a route did — or did not — read the seam.
 private final class InvocationFlag: @unchecked Sendable {
   private(set) var invoked = false
@@ -50,18 +16,6 @@ private final class InvocationFlag: @unchecked Sendable {
 }
 
 @Suite struct ProviderStackFactoryTests {
-  private var chatGPTRoute: ResolvedLLMRoute {
-    ResolvedLLMRoute(
-      descriptor: .openAIChatGPT,
-      configuredReference: "openai-chatgpt/gpt-5.4",
-      wireModel: "gpt-5.4"
-    )
-  }
-
-  private func settings(route: ResolvedLLMRoute) -> LLMConfig {
-    LLMConfig(route: route, maxOutputTokens: 256, retryBudget: 3, requestTimeoutSeconds: 30)
-  }
-
   private func storedCredential() -> StoredOAuthCredential {
     StoredOAuthCredential(
       profileID: UUID(),
@@ -165,8 +119,8 @@ private final class InvocationFlag: @unchecked Sendable {
 
     // when
     let stack = try ProviderStackFactory.make(
-      route: chatGPTRoute,
-      settings: settings(route: chatGPTRoute),
+      route: chatGPTRoute(),
+      settings: settings(route: chatGPTRoute()),
       loadStaticBearer: {
         bearerRead.mark()
         return "unused"
@@ -193,8 +147,8 @@ private final class InvocationFlag: @unchecked Sendable {
 
     // when / then — the stack builds without throwing, and the envelope was still opened once
     let stack = try ProviderStackFactory.make(
-      route: chatGPTRoute,
-      settings: settings(route: chatGPTRoute),
+      route: chatGPTRoute(),
+      settings: settings(route: chatGPTRoute()),
       loadStaticBearer: { nil },
       makeManagedCredentialStore: { store },
       http: ScriptedHTTPExecutor([]),
@@ -211,8 +165,8 @@ private final class InvocationFlag: @unchecked Sendable {
     // then — the closed store taxonomy propagates for the caller to map to the secret-load exit code
     #expect(throws: LLMCredentialStoreError.malformedStorage) {
       _ = try ProviderStackFactory.make(
-        route: chatGPTRoute,
-        settings: settings(route: chatGPTRoute),
+        route: chatGPTRoute(),
+        settings: settings(route: chatGPTRoute()),
         loadStaticBearer: { nil },
         makeManagedCredentialStore: { store },
         http: ScriptedHTTPExecutor([]),
@@ -229,8 +183,8 @@ private final class InvocationFlag: @unchecked Sendable {
       .stream(ChatGPTProviderTestSupport.okHead, ChatGPTProviderTestSupport.Fixtures.basicSuccess())
     ])
     let stack = try ProviderStackFactory.make(
-      route: chatGPTRoute,
-      settings: settings(route: chatGPTRoute),
+      route: chatGPTRoute(),
+      settings: settings(route: chatGPTRoute()),
       loadStaticBearer: { nil },
       makeManagedCredentialStore: { ScriptedCredentialStore(.value(credential)) },
       http: http,
@@ -263,26 +217,9 @@ private extension ProviderStackFactoryTests {
     )
   }
 
-  /// A static-bearer route carrying an arbitrary egress, to reach the current-route composition path
-  /// with a shape a registered descriptor never produces.
-  func currentRouteWithEgress(_ egress: LLMEgressIdentity) -> ResolvedLLMRoute {
-    ResolvedLLMRoute(
-      descriptor: LLMProviderDescriptor(
-        providerID: .openAICompatible,
-        qualifiedPrefix: nil,
-        egress: egress,
-        credentialMode: .noneOrStaticBearer,
-        capabilities: LLMProviderCapabilities(
-          supportsStructuredOutput: true,
-          outputTokenField: .configured(.maxCompletionTokens)
-        )
-      ),
-      configuredReference: "gpt-4o",
-      wireModel: "gpt-4o"
-    )
-  }
-
-  /// A static-bearer route carrying an arbitrary output-token field, for the same reason.
+  /// A static-bearer route carrying an arbitrary output-token field, to reach the current-route
+  /// composition path with a shape a registered descriptor never produces — a registry defect, not
+  /// configuration.
   func currentRouteWithOutputField(_ field: LLMWireOutputTokenField) -> ResolvedLLMRoute {
     ResolvedLLMRoute(
       descriptor: LLMProviderDescriptor(
