@@ -90,35 +90,54 @@ public struct TurnOutcome: Sendable {
   }
 }
 
+/// One route bound to the per-turn collaborators derived from it. The accountant and the budget
+/// gate are built from the route's own policies rather than the runtime's, which is what lets a
+/// metered fallback be charged and capped as metered after the primary was an included plan.
+struct ActiveRoute {
+  let binding: LLMRouteBinding
+  let index: Int
+  let accountant: ProviderUsageAccountant
+  let gate: BudgetGate
+
+  init(
+    binding: LLMRouteBinding,
+    index: Int,
+    budget: RunBudget,
+    costResolver: CostResolver,
+    usageResolver: UsageResolver
+  ) {
+    self.binding = binding
+    self.index = index
+    self.accountant = ProviderUsageAccountant(
+      configuredReference: binding.configuredReference,
+      costPolicy: binding.costPolicy,
+      reservationPolicy: binding.reservationPolicy,
+      costResolver: costResolver,
+      usageResolver: usageResolver,
+      outputCap: budget.maxOutputTokens
+    )
+    self.gate = BudgetGate(budget: budget, costPolicy: binding.costPolicy)
+  }
+}
+
 /// The pure orchestration of one blocking turn: preflight → typing + wall-clock deadline →
 /// provider call → classify. No persistence or sending (the gateway owns that); all
 /// collaborators are injected `ClawCore` protocols so tests drive it with mocks.
 public struct AgentRuntime: Sendable {
-  private let provider: any LLMProvider
+  /// The ordered routes a turn may drive, primary first. A turn resolves an `ActiveRoute` from it
+  /// per provider call, so accounting and the budget gate follow whichever route is really called
+  /// rather than one stamped at init.
+  private let roster: ProviderRoster
   private let typingIndicator: any TypingIndicator
   private let draftStreamer: any RichDraftStreaming
   private let streamingEnabled: Bool
 
-  // The cost/usage/reservation collaborators and identities are `internal`, not `private`, because
-  // the loop and the accounting extension in `AgentRuntime+Accounting.swift` both read them.
+  // Route-independent: the resolvers and the run budget outlive any one route, so each
+  // `ActiveRoute` is derived from them instead of replacing them. `internal`, not `private`, so the
+  // extensions in the sibling runtime files reach them alongside the loop.
   let costResolver: CostResolver
   let usageResolver: UsageResolver
   let budget: RunBudget
-  /// The one place every usage row is minted, shared with the schedule parser so a turn and a parse
-  /// account identically by construction rather than through parallel copies.
-  let accountant: ProviderUsageAccountant
-  /// What crosses the wire in `ChatRequest.model`.
-  private let wireModel: String
-  /// The accounting, cost-identity, and safe-diagnostic reference. Kept apart from `wireModel` so a
-  /// subscription route's usage rows key on `openai-chatgpt/<model>` and never collide with
-  /// API-billed rows for the same wire model.
-  let configuredReference: String
-  /// How the route is billed. Injected — the loop never name-checks a model — so `includedPlan`
-  /// records a confirmed zero and skips only the USD gates.
-  let costPolicy: LLMCostPolicy
-  /// The token reservation replay state needs on top of ordinary text estimation. Injected, so the
-  /// loop reserves against persisted provider-state bytes it never decodes.
-  let reservationPolicy: LLMInputReservationPolicy
 
   private let toolDispatcher: (any ToolDispatching)?
 
@@ -134,17 +153,13 @@ public struct AgentRuntime: Sendable {
   private let clock: any Clock<Duration>
 
   public init(
-    provider: any LLMProvider,
+    roster: ProviderRoster,
     typingIndicator: any TypingIndicator,
     draftStreamer: any RichDraftStreaming,
     streamingEnabled: Bool,
     costResolver: CostResolver,
     usageResolver: UsageResolver = UsageResolver(),
     budget: RunBudget,
-    wireModel: String,
-    configuredReference: String,
-    costPolicy: LLMCostPolicy = .metered,
-    reservationPolicy: LLMInputReservationPolicy = .textOnly,
     toolDispatcher: (any ToolDispatching)? = nil,
     usageStore: any UsageStore,
     auditLog: any AuditLog,
@@ -152,7 +167,7 @@ public struct AgentRuntime: Sendable {
     logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
     clock: any Clock<Duration>
   ) {
-    self.provider = provider
+    self.roster = roster
     self.typingIndicator = typingIndicator
     self.draftStreamer = draftStreamer
     self.streamingEnabled = streamingEnabled
@@ -160,18 +175,6 @@ public struct AgentRuntime: Sendable {
     self.costResolver = costResolver
     self.usageResolver = usageResolver
     self.budget = budget
-    self.wireModel = wireModel
-    self.configuredReference = configuredReference
-    self.costPolicy = costPolicy
-    self.reservationPolicy = reservationPolicy
-    self.accountant = ProviderUsageAccountant(
-      configuredReference: configuredReference,
-      costPolicy: costPolicy,
-      reservationPolicy: reservationPolicy,
-      costResolver: costResolver,
-      usageResolver: usageResolver,
-      outputCap: budget.maxOutputTokens
-    )
 
     self.toolDispatcher = toolDispatcher
 
@@ -206,7 +209,13 @@ public struct AgentRuntime: Sendable {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDispatcher?.definitions ?? []
     let fenceLabels = ToolFenceLabels(definitions: definitions)
-    let gate = BudgetGate(budget: budget, costPolicy: costPolicy)
+    let active = ActiveRoute(
+      binding: roster.primary,
+      index: 0,
+      budget: budget,
+      costResolver: costResolver,
+      usageResolver: usageResolver
+    )
 
     // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
     // ties the round-trips, tool calls, and outcome of a single turn together.
@@ -216,7 +225,7 @@ public struct AgentRuntime: Sendable {
     }
     let turnStart = ContinuousClock.now
     turnLog.info(
-      "turn started model=\(configuredReference) origin=\(origin) contextMessages=\(buildResult.messages.count) streaming=\(streamingEnabled) tools=\(definitions.count)"
+      "turn started model=\(active.binding.configuredReference) origin=\(origin) contextMessages=\(buildResult.messages.count) streaming=\(streamingEnabled) tools=\(definitions.count)"
     )
 
     var wire = buildResult.messages
@@ -255,7 +264,7 @@ public struct AgentRuntime: Sendable {
     func deadlineDegradation(_ callID: ProviderCallID) -> TurnResult {
       .degraded(
         .providerUnavailable,
-        usage: accountant.conservativeRow(
+        usage: active.accountant.conservativeRow(
           callID: callID,
           context: wire,
           observedCompletionTokens: 0,
@@ -271,15 +280,16 @@ public struct AgentRuntime: Sendable {
     for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
       let callID = providerCallIDGenerator.next()
 
-      let preflight = accountant.preflightEstimate(context: wire)
+      let preflight = active.accountant.preflightEstimate(context: wire)
       if preflight.inputTokens > budget.maxInputTokens {
         return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
       }
 
-      if costPolicy == .metered, recordedRunUSD + preflight.costUSD > budget.perRunUSD {
+      let metered = active.binding.costPolicy == .metered
+      if metered, recordedRunUSD + preflight.costUSD > budget.perRunUSD {
         return outcome(.budgetStopped(cap: BudgetGate.perRunSpendCap))
       }
-      if case .deny(let cap) = gate.preflight(
+      if case .deny(let cap) = active.gate.preflight(
         todayTokens: todayTokens + recordedRunTokens,
         todayUSD: todayUSD + recordedRunUSD,
         estimatedTotalTokens: preflight.totalTokens,
@@ -304,7 +314,7 @@ public struct AgentRuntime: Sendable {
         "round-trip \(roundTripIndex) inputTokens~=\(preflight.inputTokens) estCostUSD=\(USD.precise(preflight.costUSD))"
       )
       let request = ChatRequest(
-        model: wireModel,
+        model: active.binding.wireModel,
         messages: wire,
         maxOutputTokens: budget.maxOutputTokens,
         tools: definitions,
@@ -314,6 +324,7 @@ public struct AgentRuntime: Sendable {
       let response: ChatResponse
       do {
         response = try await roundTrip(
+          provider: active.binding.provider,
           chatId: chatId,
           draftId: runId,
           request: request,
@@ -327,7 +338,8 @@ public struct AgentRuntime: Sendable {
             callID: callID,
             context: wire,
             runId: runId,
-            sessionId: sessionId
+            sessionId: sessionId,
+            accountant: active.accountant
           )
         )
       }
@@ -339,12 +351,13 @@ public struct AgentRuntime: Sendable {
             callID: callID,
             context: wire,
             runId: runId,
-            sessionId: sessionId
+            sessionId: sessionId,
+            accountant: active.accountant
           )
         )
       }
 
-      let intermediate = accountant.reconciledRow(
+      let intermediate = active.accountant.reconciledRow(
         for: response,
         callID: callID,
         context: wire,
@@ -459,6 +472,56 @@ public struct AgentRuntime: Sendable {
   // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
 }
 
+// MARK: - Single-Route Composition
+
+extension AgentRuntime {
+  /// Single-route convenience for callers that compose one provider. Mirrors the previous
+  /// initializer's shape so a caller with no fallback configured needs no roster of its own.
+  public init(
+    provider: any LLMProvider,
+    typingIndicator: any TypingIndicator,
+    draftStreamer: any RichDraftStreaming,
+    streamingEnabled: Bool,
+    costResolver: CostResolver,
+    usageResolver: UsageResolver = UsageResolver(),
+    budget: RunBudget,
+    wireModel: String,
+    configuredReference: String,
+    costPolicy: LLMCostPolicy = .metered,
+    reservationPolicy: LLMInputReservationPolicy = .textOnly,
+    toolDispatcher: (any ToolDispatching)? = nil,
+    usageStore: any UsageStore,
+    auditLog: any AuditLog,
+    providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
+    logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
+    clock: any Clock<Duration>
+  ) {
+    self.init(
+      roster: ProviderRoster(bindings: [
+        LLMRouteBinding(
+          provider: provider,
+          wireModel: wireModel,
+          configuredReference: configuredReference,
+          costPolicy: costPolicy,
+          reservationPolicy: reservationPolicy
+        )
+      ]),
+      typingIndicator: typingIndicator,
+      draftStreamer: draftStreamer,
+      streamingEnabled: streamingEnabled,
+      costResolver: costResolver,
+      usageResolver: usageResolver,
+      budget: budget,
+      toolDispatcher: toolDispatcher,
+      usageStore: usageStore,
+      auditLog: auditLog,
+      providerCallIDGenerator: providerCallIDGenerator,
+      logger: logger,
+      clock: clock
+    )
+  }
+}
+
 // MARK: - Turn Diagnostics
 
 private extension AgentRuntime {
@@ -543,6 +606,7 @@ private extension AgentRuntime {
   /// `deadlineSeconds` is the REMAINING run budget, not a fresh 180 s. Throws the provider/deadline
   /// error; the loop maps it.
   func roundTrip(
+    provider: any LLMProvider,
     chatId: Int64,
     draftId: Int64,
     request: ChatRequest,
@@ -550,6 +614,7 @@ private extension AgentRuntime {
   ) async throws -> ChatResponse {
     guard streamingEnabled else {
       return try await runTypingTurn(
+        provider: provider,
         chatId: chatId,
         request: request,
         deadlineSeconds: deadlineSeconds
@@ -563,6 +628,7 @@ private extension AgentRuntime {
     let streamStart = ContinuousClock.now
     do {
       return try await runStreamingTurn(
+        provider: provider,
         chatId: chatId,
         draftId: draftId,
         request: request,
@@ -574,6 +640,7 @@ private extension AgentRuntime {
       // not apply. Either way one blocking attempt is safe; `complete` brings its own retry
       // budget, backoff, and Retry-After handling, all inside the remaining wall-clock window.
       return try await runTypingTurn(
+        provider: provider,
         chatId: chatId,
         request: request,
         deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart)
@@ -584,6 +651,7 @@ private extension AgentRuntime {
       // re-attempts arrive wrapped, so match them here too or the wrapper would silently defeat the
       // one-time buffered fallback.
       return try await runTypingTurn(
+        provider: provider,
         chatId: chatId,
         request: request,
         deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart)
@@ -600,6 +668,7 @@ private extension AgentRuntime {
   }
 
   func runStreamingTurn(
+    provider: any LLMProvider,
     chatId: Int64,
     draftId: Int64,
     request: ChatRequest,
@@ -616,6 +685,7 @@ private extension AgentRuntime {
   }
 
   func runTypingTurn(
+    provider: any LLMProvider,
     chatId: Int64,
     request: ChatRequest,
     deadlineSeconds: Int
