@@ -143,6 +143,10 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       responseFormat: responseFormat,
       sessionId: sessionTraceID
     )
+    // The cause reported to the router when every route fails: the FIRST one, never the last. When
+    // the primary's quota is out and the fallback then can't connect, "your plan quota is out" is
+    // the actionable fact — the fallback's own cause would only mask it behind a generic outage.
+    var firstFailureError: (any Error)?
     // Re-issuing on the next route is one more attempt at this SAME call, never a second one — the
     // parse has no round-trip budget to spend, only the one switch a permitted cause buys it.
     attempts: while true {
@@ -172,6 +176,9 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
         // owner-facing provider outage — the same rule the turn path applies to a raw cancel.
         return .providerUnavailable
       } catch {
+        if firstFailureError == nil {
+          firstFailureError = error
+        }
         guard
           let persistence = RouteSwitch.permits(error),
           let nextIndex = roster.nextIndex(after: activeIndex)
@@ -181,7 +188,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
           // brownout still moves the day cap rather than letting repeated `/schedule` attempts
           // re-issue with the totals frozen; a proven `notStarted` (terminal 4xx, auth, access,
           // quota, replay) generated nothing, so it accounts nothing. The typed causes then pick the
-          // router's actionable reply.
+          // router's actionable reply — read from the FIRST failure, not this one.
           if case .mayHaveStarted = ProviderFailureAccounting.classify(error) {
             record(
               estimatedFor: request,
@@ -190,13 +197,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
               accountant: accountant
             )
           }
-          return Self.parseFailureResult(for: error)
+          return Self.parseFailureResult(for: firstFailureError ?? error)
         }
 
         await cooldown?.arm(
           routeIndex: activeIndex,
           persistence: persistence,
-          retryAfterSeconds: Self.retryAfterSeconds(of: error)
+          retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
         )
         activeIndex = nextIndex
         activeBinding = roster.binding(at: activeIndex)
@@ -209,6 +216,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
           sessionId: sessionTraceID
         )
       }
+    }
+
+    // The route answered, so a primary that had been walled off is healthy again: clear its window
+    // so the next failure re-arms at the tier default instead of doubling a stale backoff. Pure
+    // state hygiene, not a notice — this surface stays silent, unlike a turn's `routeNotice`.
+    if activeIndex == 0 {
+      await cooldown?.clear(routeIndex: 0)
     }
 
     record(
@@ -320,13 +334,6 @@ private extension ScheduleDraftParser {
   /// the USD gate the way a turn's route-scoped gate does.
   func makeGate(for binding: LLMRouteBinding) -> BudgetGate {
     BudgetGate(budget: budget, costPolicy: binding.costPolicy)
-  }
-
-  /// The provider's own retry hint, so an armed cooldown can honor a bound longer than its tier
-  /// default. Only a clean throttle carries one; every other cause leaves the tier to decide.
-  static func retryAfterSeconds(of error: any Error) -> Int? {
-    guard case .quotaLimited(let seconds)? = ProviderError.cause(of: error) else { return nil }
-    return seconds
   }
 }
 

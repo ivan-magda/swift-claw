@@ -52,4 +52,12 @@ public enum RouteSwitch {
     }
     return persistence
   }
+
+  /// The provider's own retry hint, so an armed cooldown can honor a bound longer than its tier
+  /// default. Only a clean throttle carries one; every other cause leaves the tier to decide.
+  /// Shared by the turn and schedule surfaces so both cooldown windows honor it identically.
+  public static func retryAfterSeconds(of error: any Error) -> Int? {
+    guard case .quotaLimited(let seconds)? = ProviderError.cause(of: error) else { return nil }
+    return seconds
+  }
 }

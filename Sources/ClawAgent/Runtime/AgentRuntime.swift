@@ -391,7 +391,7 @@ public struct AgentRuntime: Sendable {
           await cooldown?.arm(
             routeIndex: active.index,
             persistence: persistence,
-            retryAfterSeconds: Self.retryAfterSeconds(of: error)
+            retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
           )
           active = ActiveRoute(
             binding: roster.binding(at: nextIndex),

@@ -88,7 +88,8 @@ import Testing
   private func makeParser(
     primary: any LLMProvider,
     fallback: any LLMProvider,
-    usageStore: any UsageStore
+    usageStore: any UsageStore,
+    cooldown: (any RouteCooldownTracking)? = nil
   ) -> ScheduleDraftParser {
     ScheduleDraftParser(
       roster: ProviderRoster(bindings: [
@@ -107,6 +108,7 @@ import Testing
           reservationPolicy: .textOnly
         ),
       ]),
+      cooldown: cooldown,
       usageStore: usageStore,
       budget: .default,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
@@ -300,6 +302,57 @@ import Testing
     // then
     #expect(result == .draft(Self.expectedDraft))
     #expect(await fallback.requests.count == 1)
+  }
+
+  @Test("a successful parse on a recovered primary clears its cooldown window")
+  func successfulParseClearsTheRecoveredPrimarysCooldown() async throws {
+    // given — the primary armed a long window, then it lapses without ever being cleared
+    let cooldownClock = ScriptedClock { _ in }
+    let cooldown = RouteCooldown(longSeconds: 900, clock: cooldownClock)
+    await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
+    try await cooldownClock.sleep(for: .seconds(901))
+    let queue = try inMemoryQueue()
+    let usageStore = UsageStoreGRDB(writer: queue)
+    let sessionId = try claimSession(queue)
+    let primary = SequenceProvider([
+      ChatResponse(content: Self.draftJSON, finishReason: "stop", usage: nil, costFromProvider: nil)
+    ])
+    let parser = makeParser(
+      primary: primary,
+      fallback: SequenceProvider([]),
+      usageStore: usageStore,
+      cooldown: cooldown
+    )
+
+    // when — the recovered primary answers
+    let result = await parser.parse(ownerText: "every weekday at 7am", sessionId: sessionId)
+
+    // then — the window is cleared, not merely lapsed: a fresh arm starts at the tier default
+    // rather than doubling the stale armed duration a lapsed-but-uncleared window would carry
+    #expect(result == .draft(Self.expectedDraft))
+    await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
+    #expect(await cooldown.remainingSeconds(routeIndex: 0) == 900)
+  }
+
+  @Test("a fallback that also fails still reports the primary's actionable cause")
+  func doubleFailureReportsThePrimarysCause() async throws {
+    // given — the primary's quota is out (switchable), then the fallback can't even connect
+    // (also switchable, but there is no third route to try)
+    let queue = try inMemoryQueue()
+    let usageStore = UsageStoreGRDB(writer: queue)
+    let sessionId = try claimSession(queue)
+    let primary = SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42))
+    let fallback = SequenceProvider([], then: ProviderError.connectFailed(message: "down"))
+    let parser = makeParser(primary: primary, fallback: fallback, usageStore: usageStore)
+
+    // when
+    let result = await parser.parse(ownerText: "x", sessionId: sessionId)
+
+    // then — the primary's actionable "quota limited" survives, not the fallback's generic outage
+    #expect(result == .quotaLimited(retryAfterSeconds: 42))
+    #expect(
+      ScheduleReplies.providerFailure(result) == ScheduleReplies.quotaLimited(retryAfterSeconds: 42)
+    )
   }
 
   @Test("turn and schedule paths still produce identical copy for one cause")
