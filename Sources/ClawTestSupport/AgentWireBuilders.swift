@@ -1,4 +1,5 @@
 import ClawCore
+import Foundation
 
 // MARK: - Response/outcome builders
 
@@ -55,4 +56,31 @@ public func toolCallResponse(
 
 public func fetchProposal(id: String = "c1", url: String = "https://example.com/a") -> ToolCall {
   ToolCall(id: id, name: "web_fetch", argumentsJSON: "{\"url\":\"\(url)\"}")
+}
+
+/// One `ProviderUsage` row for tests that build a `TurnOutcome` directly rather than deriving it
+/// from a provider round-trip. `sessionId` is required (not defaulted) because the row is only
+/// insertable against a real session — an FK-mismatched default would fail silently for callers
+/// who forgot to pass their fixture's id.
+public func usageFixture(
+  sessionId: Int64,
+  runId: Int64? = nil,
+  model: String = "test-model",
+  promptTokens: Int = 10,
+  completionTokens: Int = 5,
+  costUSD: Double = 0.001,
+  costSource: CostSource = .heuristic
+) -> ProviderUsage {
+  ProviderUsage(
+    providerCallID: UUIDProviderCallIDGenerator().next(),
+    runId: runId,
+    sessionId: sessionId,
+    model: model,
+    promptTokens: promptTokens,
+    completionTokens: completionTokens,
+    costUSD: costUSD,
+    costSource: costSource,
+    isEstimated: false,
+    ts: Date()
+  )
 }

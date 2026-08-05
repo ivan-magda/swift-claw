@@ -97,4 +97,32 @@ public enum Degradation {
       return visionUnsupported
     }
   }
+
+  /// The one-time notice that a turn was answered by a route other than the configured primary.
+  /// It names both routes because the owner's next question is which model actually replied, and
+  /// because a metered fallback behind a flat-rate primary is a spend change they should see.
+  public static func routeSwitched(from primary: String, to fallback: String) -> String {
+    "Heads up — \(primary) couldn't answer, so I used \(fallback) for this reply."
+  }
+
+  /// The matching notice when the primary answers again.
+  public static func routeRestored(route: String) -> String {
+    "\(route) is answering again."
+  }
+
+  /// Appended to a degraded reply when the turn already switched routes and the fallback then
+  /// failed too, so the reply names the primary's cause without implying the fallback was never
+  /// tried.
+  public static let fallbackAlsoFailed = "I tried the backup model too, and it also failed."
+
+  /// Maps a route transition to its owner-facing notice. Exhaustive over `RouteNotice`, so a new
+  /// case forces a deliberate copy decision here.
+  public static func message(for notice: RouteNotice) -> String {
+    switch notice {
+    case .switched(let primary, let fallback):
+      return routeSwitched(from: primary, to: fallback)
+    case .restored(let route):
+      return routeRestored(route: route)
+    }
+  }
 }

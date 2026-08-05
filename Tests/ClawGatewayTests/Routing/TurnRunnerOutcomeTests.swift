@@ -81,6 +81,23 @@ import Testing
     try fixture.stores.outbox.pendingOutbound().map(\.payload)
   }
 
+  /// Transitions the fixture's run PENDING → RUNNING (what `run()` does at pickup) and commits a
+  /// hand-built `TurnOutcome` directly. The outcome-mapping tests below only care about the
+  /// notice-to-copy mapping, not how a real turn arrives at that outcome — the switching mechanics
+  /// themselves are already covered by `AgentRuntimeFallbackTests`.
+  private func runCommit(_ fixture: Fixture, _ outcome: TurnOutcome) async throws -> String {
+    _ = try fixture.stores.runs.pickUp(runId: fixture.runId, policyVersion: nil, now: Date())
+    try await fixture.runner.commit(
+      outcome,
+      runId: fixture.runId,
+      sessionId: fixture.sessionId,
+      chatId: 7,
+      ownerNotices: [],
+      origin: .interactive
+    )
+    return try outboxPayloads(fixture).joined(separator: "\n\n")
+  }
+
   @Test func completedToolTurnPersistsExchangesTaintAndUsageRows() async throws {
     // given — one tool round-trip then an answer
     let fixture = try makeFixture(
@@ -287,5 +304,100 @@ import Testing
     #expect(payloads.contains { payload in payload.contains("/new") })
     #expect(payloads.allSatisfy { payload in payload.contains("clawd auth login") == false })
     #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
+  }
+
+  @Test("a switched turn appends the route notice to the reply")
+  func switchedTurnAppendsNotice() async throws {
+    // given
+    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
+    let outcome = TurnOutcome(
+      result: .completed(
+        content: "answer",
+        usage: usageFixture(sessionId: fixture.sessionId),
+        providerState: nil
+      ),
+      routeNotice: .switched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4")
+    )
+
+    // when
+    let sent = try await runCommit(fixture, outcome)
+
+    // then
+    #expect(sent.contains("answer"))
+    #expect(sent.contains("gpt-5.4"))
+  }
+
+  @Test("a turn with no route notice sends the reply unchanged")
+  func unswitchedTurnIsUnchanged() async throws {
+    // given
+    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
+    let outcome = TurnOutcome(
+      result: .completed(
+        content: "answer",
+        usage: usageFixture(sessionId: fixture.sessionId),
+        providerState: nil
+      ),
+      routeNotice: nil
+    )
+
+    // when
+    let sent = try await runCommit(fixture, outcome)
+
+    // then
+    #expect(sent == "answer")
+  }
+
+  @Test("a restored turn tells the owner the primary is answering again")
+  func restoredTurnAppendsNotice() async throws {
+    // given
+    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
+    let outcome = TurnOutcome(
+      result: .completed(
+        content: "answer",
+        usage: usageFixture(sessionId: fixture.sessionId),
+        providerState: nil
+      ),
+      routeNotice: .restored(route: "openai-chatgpt/gpt-5.4")
+    )
+
+    // when
+    let sent = try await runCommit(fixture, outcome)
+
+    // then
+    #expect(sent == "answer\n\n\(Degradation.routeRestored(route: "openai-chatgpt/gpt-5.4"))")
+  }
+
+  @Test("a switch that also fails tells the owner the backup was tried too")
+  func switchedThenDegradedAppendsFallbackAlsoFailed() async throws {
+    // given — the exact combination task 7 left as this task's signal: a non-nil switch notice
+    // riding a `.degraded` result.
+    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
+    let outcome = TurnOutcome(
+      result: .degraded(.providerUnavailable, usage: nil),
+      routeNotice: .switched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4")
+    )
+
+    // when
+    let sent = try await runCommit(fixture, outcome)
+
+    // then
+    #expect(sent == "\(Degradation.providerUnavailable)\n\n\(Degradation.fallbackAlsoFailed)")
+  }
+
+  @Test("a restored turn that still degrades does not claim a backup was tried")
+  func restoredThenDegradedOmitsFallbackAlsoFailed() async throws {
+    // given — `.restored` means the primary alone answered this round, so "I tried the backup
+    // model too" would be false; only a `.switched` notice earns that sentence.
+    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
+    let outcome = TurnOutcome(
+      result: .degraded(.outputTruncated, usage: nil),
+      routeNotice: .restored(route: "openai-chatgpt/gpt-5.4")
+    )
+
+    // when
+    let sent = try await runCommit(fixture, outcome)
+
+    // then
+    #expect(sent == Degradation.outputTruncated)
   }
 }
