@@ -111,7 +111,7 @@ struct RouteCooldownTests {
     await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
 
     // when
-    await cooldown.clear(routeIndex: 0)
+    _ = await cooldown.recordSuccess(routeIndex: 0)
     await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
 
     // then
@@ -119,7 +119,7 @@ struct RouteCooldownTests {
     #expect(await cooldown.remainingSeconds(routeIndex: 0) == 900)
   }
 
-  @Test("a lapsed window reports its expiry exactly once")
+  @Test("a lapsed window is reported exactly once")
   func expiryIsReportedOnce() async throws {
     // given
     let clock = ScriptedClock { _ in }
@@ -129,20 +129,21 @@ struct RouteCooldownTests {
     // when
     try await clock.sleep(for: .seconds(901))
 
-    // then
-    #expect(await cooldown.consumeExpired(routeIndex: 0) == true)
-    #expect(await cooldown.consumeExpired(routeIndex: 0) == false)
+    // then — the window is consumed and dropped in the one hop, so no second success re-reports it
+    #expect(await cooldown.recordSuccess(routeIndex: 0) == true)
+    #expect(await cooldown.recordSuccess(routeIndex: 0) == false)
   }
 
-  @Test("a live window reports no expiry")
+  @Test("a success on a live window reports nothing and still drops it")
   func liveWindowReportsNoExpiry() async {
     // given
     let clock = ScriptedClock { _ in }
     let cooldown = RouteCooldown(longSeconds: 900, clock: clock)
     await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
 
-    // when / then
-    #expect(await cooldown.consumeExpired(routeIndex: 0) == false)
+    // when / then — the route answered, so there is nothing to tell the owner about a recovery
+    #expect(await cooldown.recordSuccess(routeIndex: 0) == false)
+    #expect(await cooldown.isCooling(routeIndex: 0) == false)
   }
 
   @Test("routes cool independently")

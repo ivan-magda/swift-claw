@@ -13,6 +13,11 @@ import Testing
       promptTokens: 13155,
       runId: 136,
       isEstimated: false
+    ),
+    routeHealth: LLMRouteHealth = LLMRouteHealth(
+      primaryReference: "gpt-4o",
+      fallbackReference: nil,
+      cooldown: .clear
     )
   ) -> HealthRowsBuilder.Inputs {
     HealthRowsBuilder.Inputs(
@@ -25,6 +30,7 @@ import Testing
         lastSuccessAt: nil,
         consecutiveFailures: 0
       ),
+      routeHealth: routeHealth,
       retryBudget: 3,
       streamingEnabled: true,
       todayTokens: 100,
@@ -194,5 +200,55 @@ import Testing
 
     // then
     #expect(checks.first { $0.key == "spend.cost_source_mix" }?.value == "none")
+  }
+
+  private func routeRows(_ health: LLMRouteHealth) -> [String: String] {
+    let checks = HealthRowsBuilder.checks(inputs(routeHealth: health))
+    return Dictionary(checks.map { ($0.key, $0.value) }, uniquingKeysWith: { first, _ in first })
+  }
+
+  @Test func aLoneRouteReportsItselfActiveAndNoFallback() {
+    // when
+    let rows = routeRows(
+      LLMRouteHealth(primaryReference: "gpt-4o", fallbackReference: nil, cooldown: .clear)
+    )
+
+    // then
+    #expect(rows["llm.active_route"] == "gpt-4o")
+    #expect(rows["llm.fallback_configured"] == "no")
+    #expect(rows["llm.primary_cooldown_s"] == "none")
+  }
+
+  @Test func aCoolingPrimaryNamesTheFallbackAndTheWindow() {
+    // when
+    let rows = routeRows(
+      LLMRouteHealth(
+        primaryReference: "openai-chatgpt/gpt-5.4",
+        fallbackReference: "gpt-4o",
+        cooldown: .cooling(remainingSeconds: 840)
+      )
+    )
+
+    // then — the row names the route the next turn starts on, and the window it is waiting out
+    #expect(rows["llm.active_route"] == "gpt-4o (primary openai-chatgpt/gpt-5.4 cooling)")
+    #expect(rows["llm.fallback_configured"] == "yes (gpt-4o)")
+    #expect(rows["llm.primary_cooldown_s"] == "840")
+  }
+
+  @Test func aReaderOutsideTheDaemonClaimsNoLiveRoute() {
+    // given — the windows live in the daemon's memory; this reader is another process
+    // when
+    let rows = routeRows(
+      LLMRouteHealth(
+        primaryReference: "gpt-4o",
+        fallbackReference: "gpt-4o-mini",
+        cooldown: .unobservable
+      )
+    )
+
+    // then — the configured routes are reported, the live one is not guessed at
+    #expect(rows["llm.active_route"] == "gpt-4o (configured primary)")
+    #expect(rows["llm.fallback_configured"] == "yes (gpt-4o-mini)")
+    #expect(rows["llm.primary_cooldown_s"] == "unknown")
   }
 }

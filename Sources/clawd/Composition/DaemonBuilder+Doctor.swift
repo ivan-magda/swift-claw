@@ -4,12 +4,36 @@ import ClawGateway
 import ClawSecrets
 import Foundation
 
+// MARK: - Doctor Reporter Assembly
+
+extension DaemonBuilder {
+  /// The running daemon's `/doctor` source. It takes the same cooldown instance the turn path and
+  /// the schedule parse drive, so the route rows report the windows those surfaces actually route
+  /// on rather than a second ledger nothing arms.
+  func makeDoctorReporter(
+    sandbox: SandboxStack,
+    cooldown: any RouteCooldownTracking
+  ) -> DaemonDoctorReporter {
+    DaemonDoctorReporter(
+      stores: stores,
+      config: config,
+      sandbox: sandbox,
+      cooldown: cooldown,
+      staticAPIKey: secrets.llmApiKey,
+      makeManagedStore: makeManagedStore
+    )
+  }
+}
+
 // MARK: - Doctor Report Provider
 
 struct DaemonDoctorReporter: DoctorReporting {
   let stores: ClawStores
   let config: AppConfig
   let sandbox: SandboxBootstrapResult
+  /// The live window ledger, read for the route rows. Only this process holds it, which is why the
+  /// stopped-daemon `doctor` reports those rows as unobservable instead of guessing.
+  let cooldown: any RouteCooldownTracking
   /// The static bearer already resolved at boot, so the credential row reports the current route's
   /// key presence without re-reading secrets.
   let staticAPIKey: String?
@@ -35,7 +59,16 @@ struct DaemonDoctorReporter: DoctorReporting {
 
     report.add(
       contentsOf: HealthRowsBuilder.checks(
-        DoctorHealth.inputs(stores: stores, config: config, now: now)
+        DoctorHealth.inputs(
+          stores: stores,
+          config: config,
+          now: now,
+          routeHealth: await LLMRouteHealth.live(
+            primaryReference: config.llm.route.configuredReference,
+            fallbackReference: config.llm.fallbackRoute?.configuredReference,
+            cooldown: cooldown
+          )
+        )
       )
     )
     report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))

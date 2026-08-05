@@ -218,11 +218,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       }
     }
 
-    // The route answered, so a primary that had been walled off is healthy again: clear its window
-    // so the next failure re-arms at the tier default instead of doubling a stale backoff. Pure
-    // state hygiene, not a notice — this surface stays silent, unlike a turn's `routeNotice`.
+    // The route answered, so a primary that had been walled off is healthy again: drop its window
+    // so the next failure re-arms at the tier default instead of doubling a stale backoff. The
+    // lapsed-window verdict is discarded — this surface stays silent, unlike a turn's `routeNotice`
+    // — but it is still read through the atomic path, because a parse runs concurrently with turns
+    // on other sessions and a read-then-clear pair would erase a window one of them just armed.
     if activeIndex == 0 {
-      await cooldown?.clear(routeIndex: 0)
+      _ = await cooldown?.recordSuccess(routeIndex: 0)
     }
 
     record(

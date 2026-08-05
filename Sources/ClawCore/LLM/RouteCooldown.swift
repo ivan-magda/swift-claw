@@ -3,8 +3,8 @@
 public protocol RouteCooldownTracking: Sendable {
   func arm(routeIndex: Int, persistence: RouteFailurePersistence, retryAfterSeconds: Int?) async
   func isCooling(routeIndex: Int) async -> Bool
-  func consumeExpired(routeIndex: Int) async -> Bool
-  func clear(routeIndex: Int) async
+  func recordSuccess(routeIndex: Int) async -> Bool
+  func remainingSeconds(routeIndex: Int) async -> Int?
 }
 
 /// Per-route cooldown windows, so an exhausted plan is not probed on every turn.
@@ -15,9 +15,6 @@ public actor RouteCooldown<ClockType: Clock> where ClockType.Duration == Duratio
   private struct Window {
     var expiresAt: ClockType.Instant
     var armedSeconds: Int
-    /// Set when the window lapses without the route being cleared, so the first turn that probes
-    /// the route again can tell the owner it is answering.
-    var expiryReported: Bool
   }
 
   private let shortSeconds: Int
@@ -54,8 +51,7 @@ public actor RouteCooldown<ClockType: Clock> where ClockType.Duration == Duratio
     let bounded = min(capSeconds, max(base, retryAfterSeconds ?? 0))
     windows[routeIndex] = Window(
       expiresAt: clock.now.advanced(by: .seconds(bounded)),
-      armedSeconds: bounded,
-      expiryReported: false
+      armedSeconds: bounded
     )
   }
 
@@ -70,20 +66,17 @@ public actor RouteCooldown<ClockType: Clock> where ClockType.Duration == Duratio
     return Int(clock.now.duration(to: window.expiresAt).components.seconds)
   }
 
-  /// Reports once that a route's window lapsed, so exactly one turn tells the owner the route is
-  /// answering again. The doubling history survives, because a lapsed window that has not yet
-  /// proven the route healthy must still double if the probe fails.
-  public func consumeExpired(routeIndex: Int) -> Bool {
-    guard var window = windows[routeIndex] else { return false }
-    guard window.expiresAt <= clock.now, window.expiryReported == false else { return false }
-    window.expiryReported = true
-    windows[routeIndex] = window
-    return true
-  }
-
-  /// Drops the window and the doubling history after the route answers successfully.
-  public func clear(routeIndex: Int) {
-    windows[routeIndex] = nil
+  /// Records that the route answered: drops its window and the doubling history, and reports
+  /// whether the window it dropped had already lapsed — the one turn that owes the owner a "this
+  /// route is carrying traffic again" notice.
+  ///
+  /// Reading and dropping in ONE actor hop is the point. A separate read-then-clear pair leaves a
+  /// gap another turn can arm a fresh window inside, and the clear would then erase both that
+  /// window and its doubling history — sending the next turn back at a route known to be walled
+  /// off, with the backoff restarted at the tier default.
+  public func recordSuccess(routeIndex: Int) -> Bool {
+    guard let window = windows.removeValue(forKey: routeIndex) else { return false }
+    return window.expiresAt <= clock.now
   }
 }
 

@@ -696,8 +696,7 @@ private extension AgentRuntime {
   /// the primary is carrying traffic again.
   func primaryRecoveryNotice(binding: LLMRouteBinding) async -> RouteNotice? {
     guard let cooldown else { return nil }
-    let lapsed = await cooldown.consumeExpired(routeIndex: 0)
-    await cooldown.clear(routeIndex: 0)
+    let lapsed = await cooldown.recordSuccess(routeIndex: 0)
     return lapsed ? .restored(route: binding.configuredReference) : nil
   }
 }
