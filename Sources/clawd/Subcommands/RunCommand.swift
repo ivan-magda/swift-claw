@@ -119,6 +119,7 @@ private extension RunCommand {
   /// — and the first failure still propagates, so the shutdown outcome reports it.
   static func commitCredentials(_ sources: [any LLMCredentialSource]) async throws {
     var firstFailure: (any Error)?
+
     for source in sources {
       do {
         try await source.shutdown()
@@ -126,6 +127,7 @@ private extension RunCommand {
         firstFailure = firstFailure ?? error
       }
     }
+
     if let firstFailure {
       throw firstFailure
     }
