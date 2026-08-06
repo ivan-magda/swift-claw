@@ -262,7 +262,7 @@ public struct PriceTable: Sendable, Equatable {
   }
 
   public func price(for model: String) -> ModelPrice? {
-    prices[model]
+    prices[model] ?? prices["openrouter/\(model)"]
   }
 
   public static let empty = PriceTable(prices: [:])
