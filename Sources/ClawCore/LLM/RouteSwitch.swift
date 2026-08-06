@@ -23,11 +23,11 @@ extension ProviderError {
   public var routeSwitchPersistence: RouteFailurePersistence? {
     switch self {
     case .quotaLimited, .authenticationRequired, .accessDenied:
-      return .long
+      .long
     case .connectFailed, .rejected:
-      return .short
+      .short
     case .retryable, .terminal, .cleanRejection, .invalidProviderState, .visionUnsupported:
-      return nil
+      nil
     }
   }
 
@@ -45,11 +45,18 @@ public enum RouteSwitch {
   /// the owner's draft. A bare `ProviderError`'s conservative `mayHaveStarted` classification is a
   /// billing default, not a provider verdict, so it does not veto here.
   public static func permits(_ error: any Error) -> RouteFailurePersistence? {
-    guard let cause = ProviderError.cause(of: error) else { return nil }
-    guard let persistence = cause.routeSwitchPersistence else { return nil }
+    guard let cause = ProviderError.cause(of: error) else {
+      return nil
+    }
+
+    guard let persistence = cause.routeSwitchPersistence else {
+      return nil
+    }
+
     if let failure = error as? ProviderFailure, case .mayHaveStarted = failure.accounting {
       return nil
     }
+
     return persistence
   }
 
@@ -57,7 +64,9 @@ public enum RouteSwitch {
   /// default. Only a clean throttle carries one; every other cause leaves the tier to decide.
   /// Shared by the turn and schedule surfaces so both cooldown windows honor it identically.
   public static func retryAfterSeconds(of error: any Error) -> Int? {
-    guard case .quotaLimited(let seconds)? = ProviderError.cause(of: error) else { return nil }
+    guard case .quotaLimited(let seconds)? = ProviderError.cause(of: error) else {
+      return nil
+    }
     return seconds
   }
 }
