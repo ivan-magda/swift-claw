@@ -7,9 +7,6 @@ import Foundation
 // MARK: - Doctor Reporter Assembly
 
 extension DaemonBuilder {
-  /// The running daemon's `/doctor` source. It takes the same cooldown instance the turn path and
-  /// the schedule parse drive, so the route rows report the windows those surfaces actually route
-  /// on rather than a second ledger nothing arms.
   func makeDoctorReporter(
     sandbox: SandboxStack,
     cooldown: any RouteCooldownTracking
@@ -31,15 +28,8 @@ struct DaemonDoctorReporter: DoctorReporting {
   let stores: ClawStores
   let config: AppConfig
   let sandbox: SandboxBootstrapResult
-  /// The live window ledger, read for the route rows. Only this process holds it, which is why the
-  /// stopped-daemon `doctor` reports those rows as unobservable instead of guessing.
   let cooldown: any RouteCooldownTracking
-  /// The static bearer already resolved at boot, so the credential row reports the current route's
-  /// key presence without re-reading secrets.
   let staticAPIKey: String?
-  /// The same managed-store factory the provider stack is built on, so the `llm.auth` row inspects the
-  /// credential state the running daemon actually authenticates with — including a store a composition
-  /// test scripts — rather than re-reading the real state root behind the daemon's back.
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
 
   func report() async -> DoctorReport {
