@@ -191,6 +191,7 @@ private extension HealthRowsBuilder {
     } else {
       isCooling = false
     }
+
     return [
       check("llm.active_route", activeRoute(health), .llmRuns, headline: true),
       fallbackConfiguredCheck(fallbackReference: health.fallbackReference),
