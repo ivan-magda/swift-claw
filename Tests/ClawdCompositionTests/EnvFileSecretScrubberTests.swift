@@ -1,3 +1,4 @@
+import ClawSecrets
 import ClawTestSupport
 import Foundation
 import Testing
@@ -38,6 +39,35 @@ import Testing
         "CLAW_TELEGRAM_BOT_TOKEN", "CLAW_LLM_API_KEY", "CLAW_SEARCH_API_KEY",
       ]
     )
+  }
+
+  @Test func sealBlanksEverySecretItSeals() {
+    // given — an env file carrying every sealed secret, the fallback key among them
+    let contents = """
+      CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
+      CLAW_LLM_API_KEY=sk-live-key
+      CLAW_LLM_FALLBACK_API_KEY=sk-fallback-key
+      CLAW_SEARCH_API_KEY=exa-key
+      CLAW_LLM_MODEL=claude-sonnet-4-6
+      """
+
+    // when — scrubbing with the very list `secrets seal` passes
+    let result = EnvFileSecretScrubber.scrub(
+      contents: contents,
+      keys: EnvSecretStore.EnvKey.sealed
+    )
+
+    // then — nothing the envelope now holds is left in plaintext
+    #expect(
+      result.contents == """
+        CLAW_TELEGRAM_BOT_TOKEN=
+        CLAW_LLM_API_KEY=
+        CLAW_LLM_FALLBACK_API_KEY=
+        CLAW_SEARCH_API_KEY=
+        CLAW_LLM_MODEL=claude-sonnet-4-6
+        """
+    )
+    #expect(result.scrubbedKeys.contains(EnvSecretStore.EnvKey.llmFallbackApiKey))
   }
 
   @Test func reportsNothingScrubbedWhenValuesAreAlreadyBlankOrKeysAbsent() {

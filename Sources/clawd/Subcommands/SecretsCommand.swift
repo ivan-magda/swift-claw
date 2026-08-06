@@ -61,11 +61,7 @@ struct SecretsCommand: AsyncParsableCommand {
         ? nil
         : Self.scrubEnvFile(
           at: resolvedEnvFilePath(environment: environment),
-          keys: [
-            EnvSecretStore.EnvKey.botToken,
-            EnvSecretStore.EnvKey.llmApiKey,
-            EnvSecretStore.EnvKey.searchApiKey,
-          ]
+          keys: EnvSecretStore.EnvKey.sealed
         )
       // swiftlint:disable:next no_print_in_production
       print(
@@ -177,8 +173,7 @@ extension SecretsCommand.Seal {
       """
 
     let manualNote = """
-      Remove the plaintext \(EnvSecretStore.EnvKey.botToken) / \
-      \(EnvSecretStore.EnvKey.llmApiKey) / \(EnvSecretStore.EnvKey.searchApiKey) \
+      Remove the plaintext \(EnvSecretStore.EnvKey.sealed.joined(separator: " / ")) \
       values from your env file yourself.
       """
 

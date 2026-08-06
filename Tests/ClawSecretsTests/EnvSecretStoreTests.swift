@@ -82,6 +82,24 @@ import Testing
     #expect(spy.recorded.first?.contains("PLAINTEXT") == true)
   }
 
+  @Test func sealedKeyListNamesEverySecretALoadCanProduce() throws {
+    // given — every sealed variable populated with a distinct value
+    let environment = Dictionary(
+      uniqueKeysWithValues: EnvKey.sealed.enumerated().map { index, key in
+        (key, index == 0 ? "123:abc" : "value-\(index)")
+      }
+    )
+    let store = EnvSecretStore(environment: environment, warn: { _ in })
+
+    // when
+    let secrets = try store.loadSecrets()
+
+    // then — a secret added to `Secrets` but left out of `sealed` would reach the envelope while
+    // `secrets seal` leaves its plaintext line in the env file and never mentions it.
+    #expect(secrets.redactionValues.count == EnvKey.sealed.count)
+    #expect(Set(secrets.redactionValues) == Set(environment.values))
+  }
+
   @Test(arguments: [
     SecretStoreError.missingTelegramToken,
     SecretStoreError.keyFileInsecure("x"),

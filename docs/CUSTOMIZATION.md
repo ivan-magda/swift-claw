@@ -170,7 +170,7 @@ CLAW_LLM_FALLBACK_BASE_URL=https://api.anthropic.com/v1
 CLAW_LLM_FALLBACK_API_KEY=sk-ant-...
 ```
 
-You hear about the transitions and nothing in between: one line above the reply when the
+You hear about the transitions and nothing in between: one line under the reply when the
 fallback takes over, naming both models, and one when the primary answers again. If both
 routes fail, the reply names the primary's cause and adds that the backup was tried too.
 
@@ -191,19 +191,19 @@ Before you turn it on:
 - **Both routes are checked at startup.** `CLAW_LLM_STRUCTURED_OUTPUT` set to a mode your
   fallback cannot serve fails config validation with exit 10, naming the route, rather
   than waiting to break the first time the fallback carries a turn.
-- **A parked approval survives a switch.** The fingerprint an approval binds to names your
-  configured primary, so a run that resumes after a switch is not re-asked, even though a
-  different endpoint now sees the conversation.
+- **An approval you granted can execute against the other provider.** You approve an
+  action while your conversation is going to one provider; if the route switches before
+  the run resumes, the action runs anyway and its output goes to the other one. clawd does
+  not ask you again, because the fingerprint an approval binds to names your configured
+  primary and a switch does not change it. Both providers in a fallback pair need the
+  trust you would give either alone.
 
 `clawd doctor --check-config` reports `llm.fallback_configured` as `yes (<model>)` or
 `no`; it says nothing about whether the fallback's key works, which you find out when the
 fallback first runs. The full `clawd doctor` adds `llm.active_route` and
-`llm.primary_cooldown_s`, and a stopped daemon renders those as `(configured primary)` and
-`unknown`, since the cooldown windows belong to the running process.
-
-`clawd secrets seal` encrypts `CLAW_LLM_FALLBACK_API_KEY` with your other secrets but does
-not blank its line in `clawd.env` the way it blanks the other three. Remove that one
-yourself after sealing.
+`llm.primary_cooldown_s`, which read `<your primary model> (configured primary)` and
+`unknown` from your shell: the cooldown windows belong to the running daemon, and a
+separate process will not guess at them.
 
 ## Spending limits
 

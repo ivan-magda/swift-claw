@@ -76,12 +76,11 @@ clawd secrets seal
 This encrypts the bot token and API keys into `~/.swift-claw/secrets.enc` with a key in
 `~/.swift-claw/secret.key` (mode 0600).
 
-Sealing also blanks the plaintext `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, and
-`CLAW_SEARCH_API_KEY` lines in `clawd.env` itself, and tells you what it changed
-(`--no-scrub` keeps them; before v0.2.0, blank them yourself). `CLAW_LLM_FALLBACK_API_KEY`
-is encrypted with the rest but not blanked, so remove that line by hand if you set one.
-The daemon now reads the secrets from the encrypted store, and refuses to fall back to
-plaintext if the store is present but broken.
+Sealing also blanks every plaintext secret line in `clawd.env` itself
+(`CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, `CLAW_SEARCH_API_KEY`, and
+`CLAW_LLM_FALLBACK_API_KEY`), and tells you what it changed (`--no-scrub` keeps them;
+before v0.2.0, blank them yourself). The daemon now reads the secrets from the encrypted
+store, and refuses to fall back to plaintext if the store is present but broken.
 
 Sourcing the file again does not undo the export: your current shell still holds the
 values it read before sealing blanked them. Open a fresh shell and source the sanitized
