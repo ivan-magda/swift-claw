@@ -112,4 +112,77 @@ struct ProviderRosterFactoryTests {
     #expect(primaryBearerReads == 1)
     #expect(fallbackBearerReads == 1)
   }
+
+  // MARK: - Quota-retry flag wiring
+
+  @Test("a configured fallback disables quota retries on the primary but not on the fallback")
+  func quotaRetriesDisabledOnPrimaryOnlyWhenFallbackIsConfigured() async throws {
+    // given — two ChatGPT routes, so the same retry engine answers a 429 on both stacks; a budget of
+    // 2 is wide enough that only the flag, not an exhausted budget, can explain a single attempt
+    let primary = chatGPTRoute()
+    let fallback = chatGPTRoute()
+    let http = ScriptedHTTPExecutor([
+      quotaWallStep(),
+      quotaWallStep(),
+      quotaWallStep(),
+    ])
+    let stack = try ProviderStackFactory.makeRoster(
+      primaryRoute: primary,
+      fallbackRoute: fallback,
+      settings: settings(route: primary, retryBudget: 2),
+      loadStaticBearer: { nil },
+      loadFallbackBearer: { nil },
+      makeManagedCredentialStore: { ScriptedCredentialStore(.value(storedCredential())) },
+      http: http,
+      buildVersion: "test"
+    )
+
+    // when — the primary's first 429 fails terminally rather than spending its second budgeted
+    // attempt
+    _ = try? await stack.roster.primary.provider.complete(request: sampleRequest)
+    let afterPrimary = await http.recorded.count
+
+    // and — the fallback's first 429 still retries, spending both budgeted attempts
+    _ = try? await stack.roster.binding(at: 1).provider.complete(request: sampleRequest)
+    let afterFallback = await http.recorded.count
+
+    // then
+    #expect(afterPrimary == 1)
+    #expect(afterFallback - afterPrimary == 2)
+  }
+
+  @Test("no fallback route leaves the primary retrying a 429 as it always has")
+  func quotaRetriesStayEnabledOnThePrimaryWithoutAFallback() async throws {
+    // given — the same 429 script, with no fallback route configured
+    let primary = chatGPTRoute()
+    let http = ScriptedHTTPExecutor([quotaWallStep(), quotaWallStep()])
+    let stack = try ProviderStackFactory.makeRoster(
+      primaryRoute: primary,
+      fallbackRoute: nil,
+      settings: settings(route: primary, retryBudget: 2),
+      loadStaticBearer: { nil },
+      loadFallbackBearer: { nil },
+      makeManagedCredentialStore: { ScriptedCredentialStore(.value(storedCredential())) },
+      http: http,
+      buildVersion: "test"
+    )
+
+    // when
+    _ = try? await stack.roster.primary.provider.complete(request: sampleRequest)
+
+    // then — the retry still spends both budgeted attempts
+    #expect(await http.recorded.count == 2)
+  }
 }
+
+// MARK: - Builders
+
+private extension ProviderRosterFactoryTests {
+  /// A clean 429 with no `Retry-After` wait, so a retried attempt does not sleep in real time.
+  func quotaWallStep() -> ScriptedHTTPExecutor.Step {
+    .stream(Support.head(429, retryAfter: 0), Fixtures.errorBody("slow down"))
+  }
+}
+
+private typealias Support = ChatGPTProviderTestSupport
+private typealias Fixtures = Support.Fixtures

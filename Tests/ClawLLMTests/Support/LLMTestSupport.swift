@@ -275,9 +275,20 @@ func chatGPTRoute() -> ResolvedLLMRoute {
   )
 }
 
+/// An unexpired stored ChatGPT credential, so a managed-route composition test can authorize without
+/// opening a refresh flight.
+func storedCredential() -> StoredOAuthCredential {
+  StoredOAuthCredential(
+    profileID: UUID(),
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    expiresAt: Date().addingTimeInterval(3600)
+  )
+}
+
 /// The `LLMConfig` a resolved route composes against, holding every other setting fixed.
-func settings(route: ResolvedLLMRoute) -> LLMConfig {
-  LLMConfig(route: route, maxOutputTokens: 256, retryBudget: 3, requestTimeoutSeconds: 30)
+func settings(route: ResolvedLLMRoute, retryBudget: Int = 3) -> LLMConfig {
+  LLMConfig(route: route, maxOutputTokens: 256, retryBudget: retryBudget, requestTimeoutSeconds: 30)
 }
 
 /// A static-bearer route carrying an arbitrary egress, to reach the current-route composition path

@@ -50,6 +50,10 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
   private let http: any HTTPStreaming
   private let backoff: RetryBackoff
   private let retryBudget: Int
+  /// When set, a 429 never spends the retry budget: a subscription quota wall clears on the plan's
+  /// own clock, not inside a turn, so it is only worth retrying when no other route can finish the
+  /// turn instead. Off by default, matching the no-fallback shape where retrying is the only option.
+  private let treatsQuotaAsTerminal: Bool
   private let logger: Logger
 
   init(
@@ -59,6 +63,7 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
     jitter: @escaping @Sendable (Duration) -> Duration,
     retryBudget: Int,
     requestTimeoutSeconds: Int,
+    treatsQuotaAsTerminal: Bool = false,
     logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
   ) {
     self.credentials = credentials
@@ -69,6 +74,7 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
       requestTimeoutSeconds: requestTimeoutSeconds
     )
     self.retryBudget = retryBudget
+    self.treatsQuotaAsTerminal = treatsQuotaAsTerminal
     self.logger = logger
   }
 
@@ -567,7 +573,10 @@ private extension ChatGPTResponsesAttemptEngine {
 
     case 429:
       let clamped = backoff.clampedRetryAfterSeconds(diagnosis.retryAfterSeconds)
-      guard canRetry else {
+      // A subscription wall clears on the plan's own clock, not inside the retry budget. When
+      // another route can finish the turn, spending the deadline re-proving the wall costs the
+      // owner an answer they could already have had.
+      guard canRetry, treatsQuotaAsTerminal == false else {
         return .fail(.quotaLimited(retryAfterSeconds: clamped))
       }
       return .backoffThenRetry(clamped.map(Duration.seconds))

@@ -16,15 +16,6 @@ private final class InvocationFlag: @unchecked Sendable {
 }
 
 @Suite struct ProviderStackFactoryTests {
-  private func storedCredential() -> StoredOAuthCredential {
-    StoredOAuthCredential(
-      profileID: UUID(),
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-      expiresAt: Date().addingTimeInterval(3600)
-    )
-  }
-
   // MARK: - Current route
 
   @Test func currentRouteBuildsTheMeteredStaticStackAndOpensNoOAuthEnvelope() throws {

@@ -143,6 +143,48 @@ import Testing
     #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
+  @Test(.timeLimit(.minutes(1)))
+  func aFirst429IsTerminalWhenQuotaRetriesAreDisabled() async throws {
+    // given — a fallback route exists, so retrying this subscription wall is pure waste; the budget
+    // is wide enough that only the flag, not the budget, can explain a single attempt
+    let harness = Harness(
+      steps: [.stream(Support.head(429, retryAfter: 300), Fixtures.errorBody("slow down"))],
+      retryBudget: 3,
+      treatsQuotaAsTerminal: true
+    )
+
+    // when
+    let outcome = await harness.run()
+
+    // then — no backoff wait, and the clamped Retry-After hint still reaches the failure so a
+    // fallback's cooldown can honor it
+    #expect(await harness.attemptCount == 1)
+    #expect(await harness.delays.isEmpty)
+    #expect(failureCause(outcome) == .quotaLimited(retryAfterSeconds: 30))
+    #expect(Support.accounting(of: outcome) == .notStarted)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func a429StillRetriesWhenQuotaRetriesAreNotDisabled() async throws {
+    // given — no fallback route, so retrying the wall is still the only way to recover this turn
+    let harness = Harness(
+      steps: [
+        .stream(Support.head(429, retryAfter: 300), Fixtures.errorBody("slow down")),
+        .stream(okHead, Fixtures.basicSuccess()),
+      ],
+      retryBudget: 3,
+      treatsQuotaAsTerminal: false
+    )
+
+    // when
+    let outcome = await harness.run()
+
+    // then — the first 429 is retried after the clamped delay rather than failing immediately
+    #expect(await harness.attemptCount == 2)
+    #expect(await harness.delays == [30])
+    _ = try requireCompleted(outcome)
+  }
+
   // MARK: - Transient and transport retries
 
   @Test(.timeLimit(.minutes(1)))
@@ -583,6 +625,7 @@ private struct Harness: Sendable {
     steps: [ScriptedHTTPExecutor.Step],
     retryBudget: Int = 3,
     requestTimeoutSeconds: Int = 30,
+    treatsQuotaAsTerminal: Bool = false,
     cancelDuringSleep: Bool = false,
     failOnFirstDelta: (any Error)? = nil
   ) {
@@ -647,7 +690,8 @@ private struct Harness: Sendable {
       clock: clock,
       jitter: { $0 },
       retryBudget: retryBudget,
-      requestTimeoutSeconds: requestTimeoutSeconds
+      requestTimeoutSeconds: requestTimeoutSeconds,
+      treatsQuotaAsTerminal: treatsQuotaAsTerminal
     )
   }
 
