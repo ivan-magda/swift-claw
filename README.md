@@ -40,8 +40,7 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
-  can run an eligible model on a ChatGPT subscription. Name a second model and clawd
-  finishes the turn there when the first cannot answer.
+  can run an eligible model on a ChatGPT subscription.
 - **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
 
 ## The approval card
