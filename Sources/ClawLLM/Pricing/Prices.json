@@ -63,6 +63,10 @@
     "inputUSDPerMTok": 0,
     "outputUSDPerMTok": 0
   },
+  "amazon.titan-embed-g1-text-02": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0
+  },
   "amazon.titan-embed-image-v1": {
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 0
@@ -72,7 +76,7 @@
     "outputUSDPerMTok": 0
   },
   "amazon.titan-embed-text-v2:0": {
-    "inputUSDPerMTok": 0.2,
+    "inputUSDPerMTok": 0.02,
     "outputUSDPerMTok": 0
   },
   "amazon.titan-text-express-v1": {
@@ -163,6 +167,10 @@
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 25
   },
+  "anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
   "anthropic.claude-sonnet-4-20250514-v1:0": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
@@ -174,6 +182,10 @@
   "anthropic.claude-sonnet-4-6": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
+  },
+  "anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
   },
   "anthropic.claude-v1": {
     "inputUSDPerMTok": 8,
@@ -291,6 +303,10 @@
     "inputUSDPerMTok": 5.5,
     "outputUSDPerMTok": 27.5
   },
+  "au.anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
   "au.anthropic.claude-sonnet-4-5-20250929-v1:0": {
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 16.5
@@ -298,6 +314,10 @@
   "au.anthropic.claude-sonnet-4-6": {
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 16.5
+  },
+  "au.anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
   },
   "azure/ada": {
     "inputUSDPerMTok": 0.1,
@@ -366,6 +386,38 @@
   "azure/eu/gpt-5.1-codex-mini": {
     "inputUSDPerMTok": 0.275,
     "outputUSDPerMTok": 2.2
+  },
+  "azure/eu/gpt-5.4": {
+    "inputUSDPerMTok": 2.75,
+    "outputUSDPerMTok": 16.5
+  },
+  "azure/eu/gpt-5.4-2026-03-05": {
+    "inputUSDPerMTok": 2.75,
+    "outputUSDPerMTok": 16.5
+  },
+  "azure/eu/gpt-5.5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "azure/eu/gpt-5.5-2026-04-23": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "azure/eu/gpt-5.6": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "azure/eu/gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.22,
+    "outputUSDPerMTok": 1.32
+  },
+  "azure/eu/gpt-5.6-sol": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "azure/eu/gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 13.2
   },
   "azure/eu/o1-2024-12-17": {
     "inputUSDPerMTok": 16.5,
@@ -743,6 +795,22 @@
     "inputUSDPerMTok": 30,
     "outputUSDPerMTok": 180
   },
+  "azure/gpt-5.6": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 30
+  },
+  "azure/gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.2
+  },
+  "azure/gpt-5.6-sol": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 30
+  },
+  "azure/gpt-5.6-terra": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
   "azure/gpt-audio-1.5-2026-02-23": {
     "inputUSDPerMTok": 2.5,
     "outputUSDPerMTok": 10
@@ -919,6 +987,38 @@
     "inputUSDPerMTok": 0.275,
     "outputUSDPerMTok": 2.2
   },
+  "azure/us/gpt-5.4": {
+    "inputUSDPerMTok": 2.75,
+    "outputUSDPerMTok": 16.5
+  },
+  "azure/us/gpt-5.4-2026-03-05": {
+    "inputUSDPerMTok": 2.75,
+    "outputUSDPerMTok": 16.5
+  },
+  "azure/us/gpt-5.5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "azure/us/gpt-5.5-2026-04-23": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "azure/us/gpt-5.6": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "azure/us/gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.22,
+    "outputUSDPerMTok": 1.32
+  },
+  "azure/us/gpt-5.6-sol": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "azure/us/gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 13.2
+  },
   "azure/us/o1-2024-12-17": {
     "inputUSDPerMTok": 16.5,
     "outputUSDPerMTok": 66
@@ -1075,6 +1175,10 @@
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 25
   },
+  "azure_ai/claude-opus-5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
   "azure_ai/claude-sonnet-4-5": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
@@ -1082,6 +1186,10 @@
   "azure_ai/claude-sonnet-4-6": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
+  },
+  "azure_ai/claude-sonnet-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
   },
   "azure_ai/cohere-rerank-v3-english": {
     "inputUSDPerMTok": 0,
@@ -1851,6 +1959,18 @@
     "inputUSDPerMTok": 5.5,
     "outputUSDPerMTok": 33
   },
+  "bedrock_mantle/openai.gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.22,
+    "outputUSDPerMTok": 1.32
+  },
+  "bedrock_mantle/openai.gpt-5.6-sol": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 33
+  },
+  "bedrock_mantle/openai.gpt-5.6-terra": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 13.2
+  },
   "bedrock_mantle/openai.gpt-oss-120b": {
     "inputUSDPerMTok": 0.15,
     "outputUSDPerMTok": 0.6
@@ -1866,6 +1986,10 @@
   "bedrock_mantle/openai.gpt-oss-safeguard-20b": {
     "inputUSDPerMTok": 0.075,
     "outputUSDPerMTok": 0.3
+  },
+  "bedrock_mantle/xai.grok-4.3": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 2.5
   },
   "cerebras/gpt-oss-120b": {
     "inputUSDPerMTok": 0.35,
@@ -1975,6 +2099,10 @@
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 25
   },
+  "claude-opus-5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
   "claude-sonnet-4-20250514": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
@@ -1995,6 +2123,38 @@
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
   },
+  "claude-sonnet-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "cloudflare/@cf/aisingapore/gemma-sea-lion-v4-27b-it": {
+    "inputUSDPerMTok": 0.351,
+    "outputUSDPerMTok": 0.555
+  },
+  "cloudflare/@cf/deepseek-ai/deepseek-r1-distill-qwen-32b": {
+    "inputUSDPerMTok": 0.497,
+    "outputUSDPerMTok": 4.881
+  },
+  "cloudflare/@cf/google/gemma-2b-it-lora": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "cloudflare/@cf/google/gemma-4-26b-a4b-it": {
+    "inputUSDPerMTok": 0.1,
+    "outputUSDPerMTok": 0.3
+  },
+  "cloudflare/@cf/google/gemma-7b-it-lora": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "cloudflare/@cf/ibm-granite/granite-4.0-h-micro": {
+    "inputUSDPerMTok": 0.017,
+    "outputUSDPerMTok": 0.112
+  },
+  "cloudflare/@cf/meta-llama/llama-2-7b-chat-hf-lora": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
   "cloudflare/@cf/meta/llama-2-7b-chat-fp16": {
     "inputUSDPerMTok": 1.923,
     "outputUSDPerMTok": 1.923
@@ -2003,9 +2163,85 @@
     "inputUSDPerMTok": 1.923,
     "outputUSDPerMTok": 1.923
   },
+  "cloudflare/@cf/meta/llama-3.1-8b-instruct-fp8": {
+    "inputUSDPerMTok": 0.152,
+    "outputUSDPerMTok": 0.287
+  },
+  "cloudflare/@cf/meta/llama-3.2-11b-vision-instruct": {
+    "inputUSDPerMTok": 0.0485,
+    "outputUSDPerMTok": 0.676
+  },
+  "cloudflare/@cf/meta/llama-3.2-1b-instruct": {
+    "inputUSDPerMTok": 0.027,
+    "outputUSDPerMTok": 0.201
+  },
+  "cloudflare/@cf/meta/llama-3.2-3b-instruct": {
+    "inputUSDPerMTok": 0.0509,
+    "outputUSDPerMTok": 0.335
+  },
+  "cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
+    "inputUSDPerMTok": 0.293,
+    "outputUSDPerMTok": 2.253
+  },
+  "cloudflare/@cf/meta/llama-4-scout-17b-16e-instruct": {
+    "inputUSDPerMTok": 0.27,
+    "outputUSDPerMTok": 0.85
+  },
+  "cloudflare/@cf/meta/llama-guard-3-8b": {
+    "inputUSDPerMTok": 0.484,
+    "outputUSDPerMTok": 0.03
+  },
   "cloudflare/@cf/mistral/mistral-7b-instruct-v0.1": {
     "inputUSDPerMTok": 1.923,
     "outputUSDPerMTok": 1.923
+  },
+  "cloudflare/@cf/mistral/mistral-7b-instruct-v0.2-lora": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
+  "cloudflare/@cf/mistralai/mistral-small-3.1-24b-instruct": {
+    "inputUSDPerMTok": 0.351,
+    "outputUSDPerMTok": 0.555
+  },
+  "cloudflare/@cf/moonshotai/kimi-k2.6": {
+    "inputUSDPerMTok": 0.95,
+    "outputUSDPerMTok": 4
+  },
+  "cloudflare/@cf/moonshotai/kimi-k2.7-code": {
+    "inputUSDPerMTok": 0.95,
+    "outputUSDPerMTok": 4
+  },
+  "cloudflare/@cf/nvidia/nemotron-3-120b-a12b": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 1.5
+  },
+  "cloudflare/@cf/openai/gpt-oss-120b": {
+    "inputUSDPerMTok": 0.35,
+    "outputUSDPerMTok": 0.75
+  },
+  "cloudflare/@cf/openai/gpt-oss-20b": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 0.3
+  },
+  "cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct": {
+    "inputUSDPerMTok": 0.66,
+    "outputUSDPerMTok": 1
+  },
+  "cloudflare/@cf/qwen/qwen3-30b-a3b-fp8": {
+    "inputUSDPerMTok": 0.0509,
+    "outputUSDPerMTok": 0.335
+  },
+  "cloudflare/@cf/qwen/qwq-32b": {
+    "inputUSDPerMTok": 0.66,
+    "outputUSDPerMTok": 1
+  },
+  "cloudflare/@cf/zai-org/glm-4.7-flash": {
+    "inputUSDPerMTok": 0.0605,
+    "outputUSDPerMTok": 0.4
+  },
+  "cloudflare/@cf/zai-org/glm-5.2": {
+    "inputUSDPerMTok": 1.4,
+    "outputUSDPerMTok": 4.4
   },
   "cloudflare/@hf/thebloke/codellama-7b-instruct-awq": {
     "inputUSDPerMTok": 1.923,
@@ -2127,6 +2363,14 @@
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 0.8
   },
+  "darkbloom/gemma-4-26b": {
+    "inputUSDPerMTok": 0.03,
+    "outputUSDPerMTok": 0.165
+  },
+  "darkbloom/gpt-oss-20b": {
+    "inputUSDPerMTok": 0.0145,
+    "outputUSDPerMTok": 0.07
+  },
   "dashscope/qwen-coder": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1.5
@@ -2190,6 +2434,10 @@
   "dashscope/qwen3-vl-32b-thinking": {
     "inputUSDPerMTok": 0.16,
     "outputUSDPerMTok": 2.87
+  },
+  "dashscope/qwen3.7-max": {
+    "inputUSDPerMTok": 2.5,
+    "outputUSDPerMTok": 7.5
   },
   "dashscope/qwq-plus": {
     "inputUSDPerMTok": 0.8,
@@ -2775,6 +3023,10 @@
     "inputUSDPerMTok": 5.5,
     "outputUSDPerMTok": 27.5
   },
+  "eu.anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
   "eu.anthropic.claude-sonnet-4-20250514-v1:0": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
@@ -2786,6 +3038,10 @@
   "eu.anthropic.claude-sonnet-4-6": {
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 16.5
+  },
+  "eu.anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
   },
   "eu.deepseek.v3.2": {
     "inputUSDPerMTok": 0.74,
@@ -3887,14 +4143,6 @@
     "inputUSDPerMTok": 0.2,
     "outputUSDPerMTok": 0.2
   },
-  "fireworks_ai/accounts/fireworks/models/whisper-v3": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
-  "fireworks_ai/accounts/fireworks/models/whisper-v3-turbo": {
-    "inputUSDPerMTok": 0,
-    "outputUSDPerMTok": 0
-  },
   "fireworks_ai/accounts/fireworks/models/yi-34b": {
     "inputUSDPerMTok": 0.9,
     "outputUSDPerMTok": 0.9
@@ -4155,6 +4403,10 @@
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 3
   },
+  "gemini-3-pro-image": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
   "gemini-3-pro-image-preview": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 12
@@ -4162,6 +4414,10 @@
   "gemini-3-pro-preview": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 12
+  },
+  "gemini-3.1-flash-image": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 3
   },
   "gemini-3.1-flash-image-preview": {
     "inputUSDPerMTok": 0.5,
@@ -4190,6 +4446,14 @@
   "gemini-3.5-flash": {
     "inputUSDPerMTok": 1.5,
     "outputUSDPerMTok": 9
+  },
+  "gemini-3.5-flash-lite": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 2.5
+  },
+  "gemini-3.6-flash": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
   },
   "gemini-embedding-001": {
     "inputUSDPerMTok": 0.15,
@@ -4222,6 +4486,10 @@
   "gemini-live-2.5-flash-preview-native-audio-09-2025": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 2
+  },
+  "gemini-omni-flash-preview": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 9
   },
   "gemini-pro-latest": {
     "inputUSDPerMTok": 1.25,
@@ -4315,6 +4583,10 @@
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 3
   },
+  "gemini/gemini-3-pro-image": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
   "gemini/gemini-3-pro-image-preview": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 12
@@ -4322,6 +4594,10 @@
   "gemini/gemini-3-pro-preview": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 12
+  },
+  "gemini/gemini-3.1-flash-image": {
+    "inputUSDPerMTok": 0.25,
+    "outputUSDPerMTok": 1.5
   },
   "gemini/gemini-3.1-flash-image-preview": {
     "inputUSDPerMTok": 0.25,
@@ -4350,6 +4626,14 @@
   "gemini/gemini-3.5-flash": {
     "inputUSDPerMTok": 1.5,
     "outputUSDPerMTok": 9
+  },
+  "gemini/gemini-3.5-flash-lite": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 2.5
+  },
+  "gemini/gemini-3.6-flash": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
   },
   "gemini/gemini-embedding-001": {
     "inputUSDPerMTok": 0.15,
@@ -4391,6 +4675,10 @@
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 2
   },
+  "gemini/gemini-omni-flash-preview": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 9
+  },
   "gemini/gemini-pro-latest": {
     "inputUSDPerMTok": 1.25,
     "outputUSDPerMTok": 10
@@ -4398,6 +4686,14 @@
   "gemini/gemini-robotics-er-1.5-preview": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 2.5
+  },
+  "gemini/gemini-robotics-er-1.6-preview": {
+    "inputUSDPerMTok": 1,
+    "outputUSDPerMTok": 5
+  },
+  "gemini/gemini-robotics-er-2-preview": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
   },
   "gemini/gemma-3-27b-it": {
     "inputUSDPerMTok": 0,
@@ -4479,6 +4775,10 @@
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 25
   },
+  "global.anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
   "global.anthropic.claude-sonnet-4-20250514-v1:0": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
@@ -4490,6 +4790,10 @@
   "global.anthropic.claude-sonnet-4-6": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
+  },
+  "global.anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
   },
   "gmi/MiniMaxAI/MiniMax-M2.1": {
     "inputUSDPerMTok": 0.3,
@@ -4570,6 +4874,10 @@
   "google.gemma-3-4b-it": {
     "inputUSDPerMTok": 0.04,
     "outputUSDPerMTok": 0.08
+  },
+  "google/gemma-4-26b-a4b-it:free": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
   },
   "gpt-3.5-turbo": {
     "inputUSDPerMTok": 0.5,
@@ -4919,6 +5227,22 @@
     "inputUSDPerMTok": 30,
     "outputUSDPerMTok": 180
   },
+  "gpt-5.6": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 30
+  },
+  "gpt-5.6-luna": {
+    "inputUSDPerMTok": 0.2,
+    "outputUSDPerMTok": 1.2
+  },
+  "gpt-5.6-sol": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 30
+  },
+  "gpt-5.6-terra": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
   "gpt-audio": {
     "inputUSDPerMTok": 2.5,
     "outputUSDPerMTok": 10
@@ -4970,6 +5294,14 @@
   "gpt-realtime-2": {
     "inputUSDPerMTok": 4,
     "outputUSDPerMTok": 16
+  },
+  "gpt-realtime-2.1": {
+    "inputUSDPerMTok": 4,
+    "outputUSDPerMTok": 24
+  },
+  "gpt-realtime-2.1-mini": {
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.4
   },
   "gpt-realtime-2025-08-28": {
     "inputUSDPerMTok": 4,
@@ -5199,6 +5531,14 @@
     "inputUSDPerMTok": 5.5,
     "outputUSDPerMTok": 27.5
   },
+  "jp.anthropic.claude-opus-4-8": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
+  "jp.anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
   "jp.anthropic.claude-sonnet-4-5-20250929-v1:0": {
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 16.5
@@ -5206,6 +5546,10 @@
   "jp.anthropic.claude-sonnet-4-6": {
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 16.5
+  },
+  "jp.anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
   },
   "kimi-k2-thinking-251104": {
     "inputUSDPerMTok": 0,
@@ -5479,6 +5823,10 @@
     "inputUSDPerMTok": 0.17,
     "outputUSDPerMTok": 0.66
   },
+  "meta/muse-spark-1.1": {
+    "inputUSDPerMTok": 1.25,
+    "outputUSDPerMTok": 4.25
+  },
   "minimax.minimax-m2": {
     "inputUSDPerMTok": 0.3,
     "outputUSDPerMTok": 1.2
@@ -5699,6 +6047,14 @@
     "inputUSDPerMTok": 0.4,
     "outputUSDPerMTok": 2
   },
+  "mistral/mistral-medium-2508": {
+    "inputUSDPerMTok": 0.4,
+    "outputUSDPerMTok": 2
+  },
+  "mistral/mistral-medium-2604": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
+  },
   "mistral/mistral-medium-3-1-2508": {
     "inputUSDPerMTok": 0.4,
     "outputUSDPerMTok": 2
@@ -5708,8 +6064,8 @@
     "outputUSDPerMTok": 7.5
   },
   "mistral/mistral-medium-latest": {
-    "inputUSDPerMTok": 0.4,
-    "outputUSDPerMTok": 2
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
   },
   "mistral/mistral-small": {
     "inputUSDPerMTok": 0.1,
@@ -7175,6 +7531,10 @@
     "inputUSDPerMTok": 0.8,
     "outputUSDPerMTok": 2.56
   },
+  "openrouter/z-ai/glm-5.1": {
+    "inputUSDPerMTok": 1.05,
+    "outputUSDPerMTok": 3.5
+  },
   "ovhcloud/DeepSeek-R1-Distill-Llama-70B": {
     "inputUSDPerMTok": 0.67,
     "outputUSDPerMTok": 0.67
@@ -7655,6 +8015,10 @@
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 4.5
   },
+  "sambanova/DeepSeek-V3.2": {
+    "inputUSDPerMTok": 3,
+    "outputUSDPerMTok": 4.5
+  },
   "sambanova/Llama-4-Maverick-17B-128E-Instruct": {
     "inputUSDPerMTok": 0.63,
     "outputUSDPerMTok": 1.8
@@ -7688,8 +8052,8 @@
     "outputUSDPerMTok": 0.3
   },
   "sambanova/MiniMax-M2.7": {
-    "inputUSDPerMTok": 0.3,
-    "outputUSDPerMTok": 1.2
+    "inputUSDPerMTok": 0.6,
+    "outputUSDPerMTok": 2.4
   },
   "sambanova/QwQ-32B": {
     "inputUSDPerMTok": 0.5,
@@ -7703,9 +8067,13 @@
     "inputUSDPerMTok": 0.4,
     "outputUSDPerMTok": 0.8
   },
+  "sambanova/gemma-4-31B-it": {
+    "inputUSDPerMTok": 0.38,
+    "outputUSDPerMTok": 1.15
+  },
   "sambanova/gpt-oss-120b": {
-    "inputUSDPerMTok": 3,
-    "outputUSDPerMTok": 4.5
+    "inputUSDPerMTok": 0.22,
+    "outputUSDPerMTok": 0.59
   },
   "sarvam/sarvam-m": {
     "inputUSDPerMTok": 0,
@@ -7858,6 +8226,14 @@
   "snowflake/snowflake-llama-3.3-70b": {
     "inputUSDPerMTok": 0.72,
     "outputUSDPerMTok": 0.72
+  },
+  "tencent/deepseek-v4-flash": {
+    "inputUSDPerMTok": 0.14,
+    "outputUSDPerMTok": 0.28
+  },
+  "tencent/deepseek-v4-pro": {
+    "inputUSDPerMTok": 0.435,
+    "outputUSDPerMTok": 0.87
   },
   "tensormesh/MiniMaxAI/MiniMax-M2.5": {
     "inputUSDPerMTok": 0.3,
@@ -8207,6 +8583,10 @@
     "inputUSDPerMTok": 5.5,
     "outputUSDPerMTok": 27.5
   },
+  "us.anthropic.claude-opus-5": {
+    "inputUSDPerMTok": 5.5,
+    "outputUSDPerMTok": 27.5
+  },
   "us.anthropic.claude-sonnet-4-20250514-v1:0": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
@@ -8218,6 +8598,10 @@
   "us.anthropic.claude-sonnet-4-6": {
     "inputUSDPerMTok": 3.3,
     "outputUSDPerMTok": 16.5
+  },
+  "us.anthropic.claude-sonnet-5": {
+    "inputUSDPerMTok": 2.2,
+    "outputUSDPerMTok": 11
   },
   "us.deepseek.r1-v1:0": {
     "inputUSDPerMTok": 1.35,
@@ -8807,6 +9191,14 @@
     "inputUSDPerMTok": 15,
     "outputUSDPerMTok": 75
   },
+  "vertex_ai/claude-opus-5": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
+  "vertex_ai/claude-opus-5@default": {
+    "inputUSDPerMTok": 5,
+    "outputUSDPerMTok": 25
+  },
   "vertex_ai/claude-sonnet-4": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
@@ -8830,6 +9222,14 @@
   "vertex_ai/claude-sonnet-4@20250514": {
     "inputUSDPerMTok": 3,
     "outputUSDPerMTok": 15
+  },
+  "vertex_ai/claude-sonnet-5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
+  },
+  "vertex_ai/claude-sonnet-5@default": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 10
   },
   "vertex_ai/codestral-2": {
     "inputUSDPerMTok": 0.3,
@@ -8879,6 +9279,10 @@
     "inputUSDPerMTok": 0.5,
     "outputUSDPerMTok": 3
   },
+  "vertex_ai/gemini-3-pro-image": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 12
+  },
   "vertex_ai/gemini-3-pro-image-preview": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 12
@@ -8886,6 +9290,10 @@
   "vertex_ai/gemini-3-pro-preview": {
     "inputUSDPerMTok": 2,
     "outputUSDPerMTok": 12
+  },
+  "vertex_ai/gemini-3.1-flash-image": {
+    "inputUSDPerMTok": 0.5,
+    "outputUSDPerMTok": 3
   },
   "vertex_ai/gemini-3.1-flash-image-preview": {
     "inputUSDPerMTok": 0.5,
@@ -8910,6 +9318,14 @@
   "vertex_ai/gemini-3.5-flash": {
     "inputUSDPerMTok": 1.5,
     "outputUSDPerMTok": 9
+  },
+  "vertex_ai/gemini-3.5-flash-lite": {
+    "inputUSDPerMTok": 0.3,
+    "outputUSDPerMTok": 2.5
+  },
+  "vertex_ai/gemini-3.6-flash": {
+    "inputUSDPerMTok": 1.5,
+    "outputUSDPerMTok": 7.5
   },
   "vertex_ai/gemini-embedding-2": {
     "inputUSDPerMTok": 0.2,
@@ -9491,6 +9907,14 @@
     "inputUSDPerMTok": 1.25,
     "outputUSDPerMTok": 2.5
   },
+  "xai/grok-4.5": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
+  "xai/grok-4.5-latest": {
+    "inputUSDPerMTok": 2,
+    "outputUSDPerMTok": 6
+  },
   "xai/grok-beta": {
     "inputUSDPerMTok": 5,
     "outputUSDPerMTok": 15
@@ -9559,6 +9983,10 @@
     "inputUSDPerMTok": 0.6,
     "outputUSDPerMTok": 2.2
   },
+  "zai/glm-4.7-flash": {
+    "inputUSDPerMTok": 0,
+    "outputUSDPerMTok": 0
+  },
   "zai/glm-5": {
     "inputUSDPerMTok": 1,
     "outputUSDPerMTok": 3.2
@@ -9566,5 +9994,9 @@
   "zai/glm-5-code": {
     "inputUSDPerMTok": 1.2,
     "outputUSDPerMTok": 5
+  },
+  "zai/glm-5.1": {
+    "inputUSDPerMTok": 1.4,
+    "outputUSDPerMTok": 4.4
   }
 }
