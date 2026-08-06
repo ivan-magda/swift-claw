@@ -18,9 +18,6 @@ public struct AppConfig: Sendable, Equatable {
     static let llmStreaming = "CLAW_LLM_STREAMING"
     static let llmStructuredOutput = "CLAW_LLM_STRUCTURED_OUTPUT"
 
-    /// The fallback carries its own namespace deliberately — `CLAW_LLM_FALLBACK_*` is the one
-    /// exception to "no per-provider environment prefix" (ARCHITECTURE.md §15), because a fallback
-    /// needs its own endpoint and key rather than the primary's.
     static let llmFallbackModel = "CLAW_LLM_FALLBACK_MODEL"
     static let llmFallbackBaseURL = "CLAW_LLM_FALLBACK_BASE_URL"
     static let llmFallbackMaxTokensField = "CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD"
@@ -252,7 +249,9 @@ private extension AppConfig {
 
     let structuredOutput = try parseStructuredOutput(
       from: env,
-      routes: [route, fallbackRoute].compactMap { configuredRoute in configuredRoute }
+      routes: [route, fallbackRoute].compactMap { configuredRoute in
+        configuredRoute
+      }
     )
 
     return LLMConfig(
@@ -299,6 +298,7 @@ private extension AppConfig {
       modelReference: model,
       configuredBaseURL: try requiredFallbackBaseURL(from: env)
     )
+
     return try routeApplyingWireOutputField(
       to: resolved,
       env: env,
@@ -364,6 +364,7 @@ private extension AppConfig {
         outputTokenField: .configured(maxTokensField)
       )
     )
+
     return ResolvedLLMRoute(
       descriptor: rebuilt,
       configuredReference: route.configuredReference,
@@ -382,6 +383,7 @@ private extension AppConfig {
     let rawStructuredOutput =
       env[EnvKey.llmStructuredOutput]?.trimmingCharacters(in: .whitespaces) ?? ""
     let structuredOutput: StructuredOutputMode
+
     if rawStructuredOutput.isEmpty {
       structuredOutput = EnvDefaults.structuredOutput
     } else if let parsedMode = StructuredOutputMode(rawValue: rawStructuredOutput) {
@@ -399,6 +401,7 @@ private extension AppConfig {
         mode: structuredOutput
       )
     }
+
     return structuredOutput
   }
 }
@@ -455,7 +458,11 @@ private extension AppConfig {
 
   /// An optional positive `Int` ceiling override; `nil` when absent so the budget derives it.
   static func positiveBudgetIntOrNil(_ raw: String?) throws -> Int? {
-    try ConfigParse.boundedIntOrNil(raw, range: 1...Int.max, onInvalid: ConfigError.invalidBudget)
+    try ConfigParse.boundedIntOrNil(
+      raw,
+      range: 1...Int.max,
+      onInvalid: ConfigError.invalidBudget
+    )
   }
 }
 
