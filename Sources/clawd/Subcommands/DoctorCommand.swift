@@ -93,16 +93,14 @@ private extension DoctorCommand {
       value: config.llm.streamingEnabled ? "on" : "off",
       group: .llmRuns
     )
-    report.add(key: "sched.timezone", value: config.timezone.identifier, group: .scheduler)
+    // The one route row a stopped daemon can answer for: whether a second route is configured at
+    // all is a fact about the environment, unlike which route is currently carrying traffic.
     report.add(
-      key: "sched.catchup_max_age_min",
-      value: "\(config.schedCatchUpMaxAgeMinutes)",
-      group: .scheduler
-    )
-    report.add(
-      key: "sched.min_interval_min",
-      value: "\(config.schedMinIntervalMinutes)",
-      group: .scheduler
+      contentsOf: [
+        HealthRowsBuilder.fallbackConfiguredCheck(
+          fallbackReference: config.llm.fallbackRoute?.configuredReference
+        )
+      ]
     )
     // Warn-not-fail: a proactive cap at/above the global cap is legal but inert —
     // the household kill-switch dominates.
@@ -113,6 +111,34 @@ private extension DoctorCommand {
       key: "spend.proactive_per_day_usd",
       value: USD.display(config.proactivePerDayUSD) + proactiveNote,
       group: .spend
+    )
+    report.add(
+      key: "approval.expiry_s",
+      value: "\(config.approvalExpirySeconds)",
+      group: .approvals
+    )
+    let exemptCIDRs = config.webFetchExemptCIDRs.map { cidr in
+      "\(cidr)"
+    }
+    report.add(
+      key: "webfetch.exempt_cidrs",
+      value: exemptCIDRs.isEmpty ? "none" : exemptCIDRs.joined(separator: " "),
+      group: .connectivity
+    )
+    addSchedulerConfigRows(to: &report, config: config)
+  }
+
+  func addSchedulerConfigRows(to report: inout DoctorReport, config: AppConfig) {
+    report.add(key: "sched.timezone", value: config.timezone.identifier, group: .scheduler)
+    report.add(
+      key: "sched.catchup_max_age_min",
+      value: "\(config.schedCatchUpMaxAgeMinutes)",
+      group: .scheduler
+    )
+    report.add(
+      key: "sched.min_interval_min",
+      value: "\(config.schedMinIntervalMinutes)",
+      group: .scheduler
     )
     report.add(
       key: "heartbeat.enabled",
@@ -133,19 +159,6 @@ private extension DoctorCommand {
       key: "heartbeat.max_per_day",
       value: "\(config.heartbeatMaxPerDay)",
       group: .scheduler
-    )
-    report.add(
-      key: "approval.expiry_s",
-      value: "\(config.approvalExpirySeconds)",
-      group: .approvals
-    )
-    let exemptCIDRs = config.webFetchExemptCIDRs.map { cidr in
-      "\(cidr)"
-    }
-    report.add(
-      key: "webfetch.exempt_cidrs",
-      value: exemptCIDRs.isEmpty ? "none" : exemptCIDRs.joined(separator: " "),
-      group: .connectivity
     )
   }
 
@@ -289,7 +302,19 @@ private extension DoctorCommand {
     let now = Date()
     report.add(
       contentsOf: HealthRowsBuilder.checks(
-        DoctorHealth.inputs(stores: stores, config: config, now: now)
+        DoctorHealth.inputs(
+          stores: stores,
+          config: config,
+          now: now,
+          // The cooldown windows live in the running daemon's memory. This command is a separate
+          // process, so it reports the configured routes and says plainly that it cannot see which
+          // one is answering.
+          routeHealth: LLMRouteHealth(
+            primaryReference: config.llm.route.configuredReference,
+            fallbackReference: config.llm.fallbackRoute?.configuredReference,
+            cooldown: .unobservable
+          )
+        )
       )
     )
     report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))

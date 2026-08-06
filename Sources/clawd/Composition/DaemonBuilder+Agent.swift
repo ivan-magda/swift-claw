@@ -19,7 +19,8 @@ extension DaemonBuilder {
   }
 
   func makeAgentStack(
-    providerStack: ProviderStack,
+    roster: ProviderRoster,
+    cooldown: any RouteCooldownTracking,
     workspace: FileSystemWorkspace,
     costResolver: CostResolver,
     sandbox: SandboxStack
@@ -27,7 +28,8 @@ extension DaemonBuilder {
     let toolDispatcher = makeToolDispatcher(workspace: workspace, sandbox: sandbox)
     let staticSubhash = policyStaticSubhash(toolDispatcher: toolDispatcher, workspace: workspace)
     let agent = makeAgent(
-      providerStack: providerStack,
+      roster: roster,
+      cooldown: cooldown,
       toolDispatcher: toolDispatcher,
       costResolver: costResolver
     )
@@ -74,33 +76,26 @@ extension DaemonBuilder {
     )
   }
 
-  /// Assembles the LLM agent stack: the route-resolved provider, the injected offline-first cost
-  /// resolver (shared with the /schedule parse), and the `AgentRuntime` that orchestrates one turn.
-  /// The stack carries the erased provider, both model identities, and both policies, so this seam
-  /// takes no concrete provider type and stamps whichever billing and reservation the route selected.
-  /// Kept separate from the service wiring so the composition root reads as "build the agent → feed
-  /// the turn runner → register the services".
+  /// Assembles the LLM agent stack: the composed route roster, the shared cooldown ledger, the
+  /// injected offline-first cost resolver (shared with the /schedule parse), and the `AgentRuntime`
+  /// that orchestrates one turn. Each binding in the roster carries its own erased provider, both
+  /// model identities, and both policies, so this seam takes no concrete provider type and whichever
+  /// route answers stamps its own billing and reservation. Kept separate from the service wiring so
+  /// the composition root reads as "build the agent → feed the turn runner → register the services".
   func makeAgent(
-    providerStack: ProviderStack,
+    roster: ProviderRoster,
+    cooldown: any RouteCooldownTracking,
     toolDispatcher: GatedToolDispatcher,
     costResolver: CostResolver
   ) -> AgentRuntime {
     AgentRuntime(
-      provider: providerStack.provider,
+      roster: roster,
+      cooldown: cooldown,
       typingIndicator: TelegramTypingIndicator(transport: transport),
       draftStreamer: TelegramRichDraftStreamer(transport: transport),
       streamingEnabled: config.llm.streamingEnabled,
       costResolver: costResolver,
       budget: config.budget,
-      // The wire model reaches `ChatRequest`; the configured reference reaches accounting and safe
-      // diagnostics. The route split them so subscription and API-billed calls for one wire model
-      // never share a usage identity — and the policies ride the same stack, so the ChatGPT route is
-      // billed as an included plan and reserves for replay state while the current route stays
-      // metered and text-only.
-      wireModel: providerStack.wireModel,
-      configuredReference: providerStack.configuredReference,
-      costPolicy: providerStack.costPolicy,
-      reservationPolicy: providerStack.reservationPolicy,
       toolDispatcher: toolDispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,

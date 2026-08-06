@@ -8,6 +8,12 @@ public struct EnvSecretStore: SecretStore {
     public static let botToken = "CLAW_TELEGRAM_BOT_TOKEN"
     public static let llmApiKey = "CLAW_LLM_API_KEY"
     public static let searchApiKey = "CLAW_SEARCH_API_KEY"
+    public static let llmFallbackApiKey = "CLAW_LLM_FALLBACK_API_KEY"
+
+    /// Every variable `loadSecrets` seals, in the order an owner meets them in `.env.example`.
+    /// `clawd secrets seal` blanks exactly this list and names exactly this list when it cannot,
+    /// so a secret can never reach the envelope while its plaintext line survives unmentioned.
+    public static let sealed = [botToken, llmApiKey, searchApiKey, llmFallbackApiKey]
   }
 
   private let environment: [String: String]
@@ -32,11 +38,13 @@ public struct EnvSecretStore: SecretStore {
 
     let apiKey = environment[EnvKey.llmApiKey].flatMap { $0.isEmpty ? nil : $0 }
     let searchKey = environment[EnvKey.searchApiKey].flatMap { $0.isEmpty ? nil : $0 }
+    let fallbackApiKey = environment[EnvKey.llmFallbackApiKey].flatMap { $0.isEmpty ? nil : $0 }
 
     return Secrets(
       telegramBotToken: botToken,
       llmApiKey: apiKey,
-      searchApiKey: searchKey
+      searchApiKey: searchKey,
+      llmFallbackApiKey: fallbackApiKey
     )
   }
 

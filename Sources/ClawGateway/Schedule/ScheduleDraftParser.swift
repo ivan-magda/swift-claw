@@ -55,19 +55,18 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     schedule, set "unparseable" to true and set "label", "prompt", and "schedule" to null.
     """
 
-  private let provider: any LLMProvider
-  /// What crosses the wire in `ChatRequest.model`.
-  private let wireModel: String
+  /// The ordered routes the parse may drive, primary first. Mirrors `AgentRuntime`'s roster: a
+  /// switchable failure re-issues on the next binding instead of degrading straight away.
+  private let roster: ProviderRoster
+  /// The per-route cooldown windows a switch arms, shared with `AgentRuntime` so a route that just
+  /// walled off a turn is not re-probed by the very next `/schedule` parse. Absent when nothing
+  /// composed one.
+  private let cooldown: (any RouteCooldownTracking)?
   private let responseFormat: ResponseFormat?
 
   private let usageStore: any UsageStore
-  private let gate: BudgetGate
-  /// The one place every usage row is minted, shared with `AgentRuntime` so a parse and a turn
-  /// account identically by construction rather than through parallel copies. It owns the cost
-  /// identity (`openai-chatgpt/<model>` for a subscription route, never colliding with API-billed
-  /// rows for the same wire model), the billing and reservation policies, and the resolvers; the
-  /// parse's `now` is its timestamp source.
-  private let accountant: ProviderUsageAccountant
+  private let budget: RunBudget
+  private let costResolver: CostResolver
   /// Mints the identity the parse's usage row is recorded under. Injected so a test can pin the
   /// identity rather than assert against a random UUID.
   private let providerCallIDGenerator: any ProviderCallIDGenerating
@@ -78,34 +77,24 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   private let logger: Logger
 
   public init(
-    provider: any LLMProvider,
-    wireModel: String,
-    configuredReference: String? = nil,
+    roster: ProviderRoster,
+    cooldown: (any RouteCooldownTracking)? = nil,
     usageStore: any UsageStore,
     budget: RunBudget,
     costResolver: CostResolver,
-    costPolicy: LLMCostPolicy = .metered,
-    reservationPolicy: LLMInputReservationPolicy = .textOnly,
     structuredOutput: StructuredOutputMode = .off,
     providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
     now: @escaping @Sendable () -> Date = { Date() },
     clock: any Clock<Duration>,
     logger: Logger
   ) {
-    self.provider = provider
-    self.wireModel = wireModel
+    self.roster = roster
+    self.cooldown = cooldown
     self.responseFormat = Self.responseFormat(for: structuredOutput)
 
     self.usageStore = usageStore
-    self.gate = BudgetGate(budget: budget, costPolicy: costPolicy)
-    self.accountant = ProviderUsageAccountant(
-      configuredReference: configuredReference ?? wireModel,
-      costPolicy: costPolicy,
-      reservationPolicy: reservationPolicy,
-      costResolver: costResolver,
-      outputCap: Self.maxParseOutputTokens,
-      now: now
-    )
+    self.budget = budget
+    self.costResolver = costResolver
     self.providerCallIDGenerator = providerCallIDGenerator
 
     self.now = now
@@ -114,61 +103,137 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     self.logger = logger
   }
 
+  // swiftlint:disable:next function_body_length
   public func parse(ownerText: String, sessionId: Int64) async -> ScheduleDraftParseResult {
     // The parse is one provider call, so it is one identity — shared by the reconciled row a reply
     // yields and the estimate a deadline or brownout forces, since only one of them can ever be
     // recorded for this call.
     let callID = providerCallIDGenerator.next()
-    let request = ChatRequest(
-      model: wireModel,
-      messages: [
-        ChatMessage(role: .system, content: Self.systemPrompt),
-        ChatMessage(role: .user, content: ownerText),
-      ],
-      maxOutputTokens: Self.maxParseOutputTokens,
-      responseFormat: responseFormat,
-      // The one shared trace identity — the same formatter a turn stamps — so a session's parse and
-      // its turns never split across two trace identities.
-      sessionId: SessionTraceID.format(sessionID: sessionId)
-    )
+    let messages = [
+      ChatMessage(role: .system, content: Self.systemPrompt),
+      ChatMessage(role: .user, content: ownerText),
+    ]
+    // The one shared trace identity — the same formatter a turn stamps — so a session's parse and
+    // its turns never split across two trace identities.
+    let sessionTraceID = SessionTraceID.format(sessionID: sessionId)
+
+    var activeIndex = 0
+    if roster.hasFallback, await cooldown?.isCooling(routeIndex: 0) == true {
+      // The primary is inside a live cooldown window, so start on a route that can answer instead
+      // of re-proving the wall.
+      activeIndex = roster.nextIndex(after: 0) ?? 0
+    }
+    var activeBinding = roster.binding(at: activeIndex)
+    var accountant = makeAccountant(for: activeBinding)
 
     // Day-cap preflight before issuing: a denial or an accounting failure refuses without a call.
-    if let refusal = preflightRefusal(for: request.messages) {
+    if let refusal = preflightRefusal(
+      for: messages,
+      gate: makeGate(for: activeBinding),
+      accountant: accountant
+    ) {
       return refusal
     }
 
-    let response: ChatResponse
-    do {
-      response = try await completeBounded(request: request)
-    } catch let racedSuccess as RacedDeadlineSuccess {
-      // A real reply landed alongside the won deadline: book its authoritative usage (real counts,
-      // provider cost), never the estimate a bare timeout forces — while the owner still sees the
-      // same DEG-01 degradation the poller expects.
-      let landed = racedSuccess.response
-      record(usageFor: landed, request: request, callID: callID, sessionId: sessionId)
-      return .providerUnavailable
-    } catch is ParseDeadlineExceeded {
-      // The request may still be billing server-side; debit the estimate so the day cap
-      // sees the spend, exactly like a deadline-hit turn.
-      record(estimatedFor: request, callID: callID, sessionId: sessionId)
-      return .providerUnavailable
-    } catch is CancellationError {
-      // The command was cancelled: nothing was generated to bill, and cancellation is never an
-      // owner-facing provider outage — the same rule the turn path applies to a raw cancel.
-      return .providerUnavailable
-    } catch {
-      // One decision for every natural failure, keyed on the same vendor-neutral disposition a turn
-      // reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a brownout
-      // still moves the day cap rather than letting repeated `/schedule` attempts re-issue with the
-      // totals frozen; a proven `notStarted` (terminal 4xx, auth, access, quota, replay) generated
-      // nothing, so it accounts nothing. The typed causes then pick the router's actionable reply.
-      if case .mayHaveStarted = ProviderFailureAccounting.classify(error) {
-        record(estimatedFor: request, callID: callID, sessionId: sessionId)
+    var response: ChatResponse
+    var request = ChatRequest(
+      model: activeBinding.wireModel,
+      messages: messages,
+      maxOutputTokens: Self.maxParseOutputTokens,
+      responseFormat: responseFormat,
+      sessionId: sessionTraceID
+    )
+    // The cause reported to the router when every route fails: the FIRST one, never the last. When
+    // the primary's quota is out and the fallback then can't connect, "your plan quota is out" is
+    // the actionable fact — the fallback's own cause would only mask it behind a generic outage.
+    var firstFailureError: (any Error)?
+    // Re-issuing on the next route is one more attempt at this SAME call, never a second one — the
+    // parse has no round-trip budget to spend, only the one switch a permitted cause buys it.
+    attempts: while true {
+      do {
+        response = try await completeBounded(request: request, provider: activeBinding.provider)
+        break attempts
+      } catch let racedSuccess as RacedDeadlineSuccess {
+        // A real reply landed alongside the won deadline: book its authoritative usage (real counts,
+        // provider cost), never the estimate a bare timeout forces — while the owner still sees the
+        // same DEG-01 degradation the poller expects.
+        let landed = racedSuccess.response
+        record(
+          usageFor: landed,
+          request: request,
+          callID: callID,
+          sessionId: sessionId,
+          accountant: accountant
+        )
+        return .providerUnavailable
+      } catch is ParseDeadlineExceeded {
+        // The request may still be billing server-side; debit the estimate so the day cap
+        // sees the spend, exactly like a deadline-hit turn.
+        record(estimatedFor: request, callID: callID, sessionId: sessionId, accountant: accountant)
+        return .providerUnavailable
+      } catch is CancellationError {
+        // The command was cancelled: nothing was generated to bill, and cancellation is never an
+        // owner-facing provider outage — the same rule the turn path applies to a raw cancel.
+        return .providerUnavailable
+      } catch {
+        if firstFailureError == nil {
+          firstFailureError = error
+        }
+        guard
+          let persistence = RouteSwitch.permits(error),
+          let nextIndex = roster.nextIndex(after: activeIndex)
+        else {
+          // One decision for every natural failure, keyed on the same vendor-neutral disposition a
+          // turn reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a
+          // brownout still moves the day cap rather than letting repeated `/schedule` attempts
+          // re-issue with the totals frozen; a proven `notStarted` (terminal 4xx, auth, access,
+          // quota, replay) generated nothing, so it accounts nothing. The typed causes then pick the
+          // router's actionable reply — read from the FIRST failure, not this one.
+          if case .mayHaveStarted = ProviderFailureAccounting.classify(error) {
+            record(
+              estimatedFor: request,
+              callID: callID,
+              sessionId: sessionId,
+              accountant: accountant
+            )
+          }
+          return Self.parseFailureResult(for: firstFailureError ?? error)
+        }
+
+        await cooldown?.arm(
+          routeIndex: activeIndex,
+          persistence: persistence,
+          retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
+        )
+        activeIndex = nextIndex
+        activeBinding = roster.binding(at: activeIndex)
+        accountant = makeAccountant(for: activeBinding)
+        request = ChatRequest(
+          model: activeBinding.wireModel,
+          messages: messages,
+          maxOutputTokens: Self.maxParseOutputTokens,
+          responseFormat: responseFormat,
+          sessionId: sessionTraceID
+        )
       }
-      return Self.parseFailureResult(for: error)
     }
 
-    record(usageFor: response, request: request, callID: callID, sessionId: sessionId)
+    // The route answered, so a primary that had been walled off is healthy again: drop its window
+    // so the next failure re-arms at the tier default instead of doubling a stale backoff. The
+    // lapsed-window verdict is discarded — this surface stays silent, unlike a turn's `routeNotice`
+    // — but it is still read through the atomic path, because a parse runs concurrently with turns
+    // on other sessions and a read-then-clear pair would erase a window one of them just armed.
+    if activeIndex == 0 {
+      _ = await cooldown?.recordSuccess(routeIndex: 0)
+    }
+
+    record(
+      usageFor: response,
+      request: request,
+      callID: callID,
+      sessionId: sessionId,
+      accountant: accountant
+    )
 
     let result = Self.decode(response.content)
     if result == .unparseable {
@@ -205,6 +270,72 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     }
 
     return .draft(draft)
+  }
+}
+
+// MARK: - Single-Route Composition
+
+extension ScheduleDraftParser {
+  /// Single-route convenience for callers that compose one provider. Mirrors `AgentRuntime`'s
+  /// convenience initializer so a caller with no fallback configured needs no roster of its own.
+  public init(
+    provider: any LLMProvider,
+    wireModel: String,
+    configuredReference: String? = nil,
+    usageStore: any UsageStore,
+    budget: RunBudget,
+    costResolver: CostResolver,
+    costPolicy: LLMCostPolicy = .metered,
+    reservationPolicy: LLMInputReservationPolicy = .textOnly,
+    structuredOutput: StructuredOutputMode = .off,
+    providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
+    now: @escaping @Sendable () -> Date = { Date() },
+    clock: any Clock<Duration>,
+    logger: Logger
+  ) {
+    self.init(
+      roster: ProviderRoster(bindings: [
+        LLMRouteBinding(
+          provider: provider,
+          wireModel: wireModel,
+          configuredReference: configuredReference ?? wireModel,
+          costPolicy: costPolicy,
+          reservationPolicy: reservationPolicy
+        )
+      ]),
+      usageStore: usageStore,
+      budget: budget,
+      costResolver: costResolver,
+      structuredOutput: structuredOutput,
+      providerCallIDGenerator: providerCallIDGenerator,
+      now: now,
+      clock: clock,
+      logger: logger
+    )
+  }
+}
+
+// MARK: - Route Accounting
+
+private extension ScheduleDraftParser {
+  /// The accountant for one route, built from its own cost and reservation policies so a metered
+  /// fallback is charged and capped as metered after an included-plan primary — the same per-route
+  /// derivation `AgentRuntime.ActiveRoute` uses.
+  func makeAccountant(for binding: LLMRouteBinding) -> ProviderUsageAccountant {
+    ProviderUsageAccountant(
+      configuredReference: binding.configuredReference,
+      costPolicy: binding.costPolicy,
+      reservationPolicy: binding.reservationPolicy,
+      costResolver: costResolver,
+      outputCap: Self.maxParseOutputTokens,
+      now: now
+    )
+  }
+
+  /// The budget gate for one route, built from its own cost policy so a subscription route skips
+  /// the USD gate the way a turn's route-scoped gate does.
+  func makeGate(for binding: LLMRouteBinding) -> BudgetGate {
+    BudgetGate(budget: budget, costPolicy: binding.costPolicy)
   }
 }
 
@@ -302,7 +433,11 @@ private extension ScheduleDraftParser {
   /// replay-state reservation rides on ordinary text estimation so a state-carrying wire could not
   /// slip past the token gate; the parse carries none today but reserves the same way a turn does,
   /// and the USD figure is resolved under the injected policy so `includedPlan` skips the dollar gate.
-  func preflightRefusal(for messages: [ChatMessage]) -> ScheduleDraftParseResult? {
+  func preflightRefusal(
+    for messages: [ChatMessage],
+    gate: BudgetGate,
+    accountant: ProviderUsageAccountant
+  ) -> ScheduleDraftParseResult? {
     let todayTokens: Int
     let todayUSD: Double
     do {
@@ -358,7 +493,8 @@ private extension ScheduleDraftParser {
     usageFor response: ChatResponse,
     request: ChatRequest,
     callID: ProviderCallID,
-    sessionId: Int64
+    sessionId: Int64,
+    accountant: ProviderUsageAccountant
   ) {
     persist(
       accountant.reconciledRow(
@@ -374,7 +510,12 @@ private extension ScheduleDraftParser {
   /// The conservative estimate a deadline or brownout that may have started forces. Run-less, capped
   /// at the parse output ceiling, and routed through the shared accountant so it matches a turn's
   /// conservative row.
-  func record(estimatedFor request: ChatRequest, callID: ProviderCallID, sessionId: Int64) {
+  func record(
+    estimatedFor request: ChatRequest,
+    callID: ProviderCallID,
+    sessionId: Int64,
+    accountant: ProviderUsageAccountant
+  ) {
     persist(
       accountant.conservativeRow(
         callID: callID,
@@ -412,7 +553,10 @@ private extension ScheduleDraftParser {
   /// disposition — a proven no-start owes nothing, a may-have-started owes the estimate — rather than
   /// collapsing both into one debit; a provider that wins with its own failure rethrows for the typed
   /// catches above.
-  func completeBounded(request: ChatRequest) async throws -> ChatResponse {
+  func completeBounded(
+    request: ChatRequest,
+    provider: any LLMProvider
+  ) async throws -> ChatResponse {
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: Self.parseDeadlineSeconds,
       clock: clock,

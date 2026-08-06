@@ -12,22 +12,20 @@ extension DaemonBuilder {
   /// deterministic validator, and the read/claim stores. Extracted from `build` so the parser's
   /// spend-discipline wiring reads in one place.
   func makeScheduleSurface(
-    providerStack: ProviderStack,
+    roster: ProviderRoster,
+    cooldown: any RouteCooldownTracking,
     costResolver: CostResolver
   ) -> ScheduleSurface {
     ScheduleSurface(
       parser: ScheduleDraftParser(
-        provider: providerStack.provider,
-        // The same identities and policies `makeAgent` stamps, flipped in lockstep: the /schedule
-        // parse's one LLM call bills and reserves exactly as a turn does, so a subscription route is
-        // an included plan here too and never a metered call the turn no longer is.
-        wireModel: providerStack.wireModel,
-        configuredReference: providerStack.configuredReference,
+        // The same roster and the same cooldown instance `makeAgent` takes: the /schedule parse's
+        // one LLM call bills, reserves, and switches routes exactly as a turn does, and a window a
+        // turn just armed is one this parse already sees.
+        roster: roster,
+        cooldown: cooldown,
         usageStore: stores.usage,
         budget: config.budget,
         costResolver: costResolver,
-        costPolicy: providerStack.costPolicy,
-        reservationPolicy: providerStack.reservationPolicy,
         structuredOutput: config.llm.structuredOutput,
         clock: ContinuousClock(),
         logger: logger

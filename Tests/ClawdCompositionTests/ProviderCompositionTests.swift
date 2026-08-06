@@ -47,8 +47,8 @@ private final class InvocationFlag: @unchecked Sendable {
     recorder: CloseRecorder,
     makeManagedStore: @escaping @Sendable (URL) -> any LLMCredentialStore,
     buildDaemon:
-      @escaping @Sendable (DaemonBuilder, ProviderStack) async throws ->
-      DaemonRuntimeBundle
+      @escaping @Sendable (DaemonBuilder, RosterStack, RouteCooldown<ContinuousClock>) async throws
+      -> DaemonRuntimeBundle
   ) throws -> RunComposition {
     var composition = RunComposition(
       config: config,
@@ -76,7 +76,7 @@ private final class InvocationFlag: @unchecked Sendable {
         storeBuilt.mark()
         return FreshCredentialStore(present: false)
       },
-      buildDaemon: { _, stack in
+      buildDaemon: { _, stack, _ in
         box.stack = stack
         throw BuildStopped()
       }
@@ -88,8 +88,9 @@ private final class InvocationFlag: @unchecked Sendable {
       try await composition.compose()
     }
     #expect(storeBuilt.invoked == false)
-    #expect(box.stack?.costPolicy == .metered)
-    #expect(box.stack?.configuredReference == "gpt-4o")
+    #expect(box.stack?.roster.primary.costPolicy == .metered)
+    #expect(box.stack?.roster.primary.configuredReference == "gpt-4o")
+    #expect(box.stack?.roster.hasFallback == false)
     #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 
@@ -100,7 +101,7 @@ private final class InvocationFlag: @unchecked Sendable {
       config: config(model: "openai-chatgpt/gpt-5.4", baseURL: nil),
       recorder: recorder,
       makeManagedStore: { _ in FreshCredentialStore(failure: .malformedStorage) },
-      buildDaemon: { _, _ in
+      buildDaemon: { _, _, _ in
         Issue.record("assembly must not run when the stack build fails")
         throw BuildStopped()
       }

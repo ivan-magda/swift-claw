@@ -11,11 +11,49 @@ public struct AllowlistHealth: Sendable, Equatable {
   }
 }
 
+/// The route picture the doctor reports: which route is configured as primary, which fallback (if
+/// any) stands behind it, and what the reader can say about the primary's cooldown window.
+public struct LLMRouteHealth: Sendable, Equatable {
+  /// The windows live in the running daemon's memory, so a reader outside that process can only
+  /// say that it does not know — never that the primary is clear.
+  public enum Cooldown: Sendable, Equatable {
+    case clear
+    case cooling(remainingSeconds: Int)
+    case unobservable
+  }
+
+  public let primaryReference: String
+  public let fallbackReference: String?
+  public let cooldown: Cooldown
+
+  public init(primaryReference: String, fallbackReference: String?, cooldown: Cooldown) {
+    self.primaryReference = primaryReference
+    self.fallbackReference = fallbackReference
+    self.cooldown = cooldown
+  }
+
+  /// Reads the live window from the cooldown the daemon composed, so the rows report the same
+  /// state the next turn will route on.
+  public static func live(
+    primaryReference: String,
+    fallbackReference: String?,
+    cooldown: any RouteCooldownTracking
+  ) async -> LLMRouteHealth {
+    let remaining = await cooldown.remainingSeconds(routeIndex: 0)
+    return LLMRouteHealth(
+      primaryReference: primaryReference,
+      fallbackReference: fallbackReference,
+      cooldown: remaining.map { seconds in .cooling(remainingSeconds: seconds) } ?? .clear
+    )
+  }
+}
+
 public enum HealthRowsBuilder {
   public struct Inputs: Sendable {
     public let allowlist: AllowlistHealth
     public let lastOffset: Int64?
     public let runsHealth: RunsHealth
+    public let routeHealth: LLMRouteHealth
     public let retryBudget: Int
     public let streamingEnabled: Bool
     public let todayTokens: Int
@@ -31,6 +69,7 @@ public enum HealthRowsBuilder {
       allowlist: AllowlistHealth,
       lastOffset: Int64?,
       runsHealth: RunsHealth,
+      routeHealth: LLMRouteHealth,
       retryBudget: Int,
       streamingEnabled: Bool,
       todayTokens: Int,
@@ -45,6 +84,7 @@ public enum HealthRowsBuilder {
       self.allowlist = allowlist
       self.lastOffset = lastOffset
       self.runsHealth = runsHealth
+      self.routeHealth = routeHealth
       self.retryBudget = retryBudget
       self.streamingEnabled = streamingEnabled
       self.todayTokens = todayTokens
@@ -61,9 +101,20 @@ public enum HealthRowsBuilder {
   public static func checks(_ inputs: Inputs) -> [DoctorReport.Check] {
     databaseChecks(inputs)
       + runChecks(inputs)
+      + routeChecks(inputs.routeHealth)
       + contextChecks(inputs)
       + spendChecks(inputs)
       + storageChecks(inputs)
+  }
+
+  /// The one spelling of the fallback row, so the config-only doctor path and the live health table
+  /// can never disagree about the key or the wording.
+  public static func fallbackConfiguredCheck(fallbackReference: String?) -> DoctorReport.Check {
+    check(
+      "llm.fallback_configured",
+      fallbackReference.map { reference in "yes (\(reference))" } ?? "no",
+      .llmRuns
+    )
   }
 }
 
@@ -127,6 +178,53 @@ private extension HealthRowsBuilder {
         .llmRuns
       ),
     ]
+  }
+
+  /// Which model is answering is the one route fact an owner asks for by name, so `active_route`
+  /// rides the group line into the Telegram summary, which keeps only headlines. The window is a
+  /// headline **only while one is live**: `none` on every healthy turn would spend a summary slot on
+  /// a state that says nothing, and a live window is exactly when the seconds are worth reading.
+  static func routeChecks(_ health: LLMRouteHealth) -> [DoctorReport.Check] {
+    let isCooling: Bool
+    if case .cooling = health.cooldown {
+      isCooling = true
+    } else {
+      isCooling = false
+    }
+
+    return [
+      check("llm.active_route", activeRoute(health), .llmRuns, headline: true),
+      fallbackConfiguredCheck(fallbackReference: health.fallbackReference),
+      check(
+        "llm.primary_cooldown_s",
+        cooldownSeconds(health.cooldown),
+        .llmRuns,
+        headline: isCooling
+      ),
+    ]
+  }
+
+  /// The route the next turn starts on — not one proven healthy. Only the primary's window is ever
+  /// armed, so a fallback that is itself failing looks the same here; the failure counters above
+  /// are what report that.
+  static func activeRoute(_ health: LLMRouteHealth) -> String {
+    switch health.cooldown {
+    case .clear:
+      return health.primaryReference
+    case .cooling:
+      let answering = health.fallbackReference ?? health.primaryReference
+      return "\(answering) (primary \(health.primaryReference) cooling)"
+    case .unobservable:
+      return "\(health.primaryReference) (configured primary)"
+    }
+  }
+
+  static func cooldownSeconds(_ cooldown: LLMRouteHealth.Cooldown) -> String {
+    switch cooldown {
+    case .clear: "none"
+    case .cooling(let remainingSeconds): "\(remainingSeconds)"
+    case .unobservable: "unknown"
+    }
   }
 
   static func contextChecks(_ inputs: Inputs) -> [DoctorReport.Check] {

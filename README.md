@@ -130,8 +130,9 @@ Persona and behavior live in Markdown files under `~/.swift-claw/workspace/`:
 | `HEARTBEAT.md` | The proactive heartbeat checklist | Heartbeat runs only |
 | `skills/<name>/SKILL.md` | A procedure the agent loads when a task calls for it | Untrusted, labeled |
 
-Runtime knobs are environment variables: the model route (`CLAW_LLM_MODEL`), USD
-budgets, schedules and quiet hours, voice locales, sandbox limits.
+Runtime knobs are environment variables: the model route (`CLAW_LLM_MODEL`), an optional
+fallback route (`CLAW_LLM_FALLBACK_MODEL`, off unless you set it), USD budgets, schedules
+and quiet hours, voice locales, sandbox limits.
 [`.env.example`](.env.example) documents every variable;
 [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) is the guide.
 
