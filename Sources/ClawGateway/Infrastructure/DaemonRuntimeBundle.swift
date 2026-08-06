@@ -26,9 +26,6 @@ public actor LaneShutdownOutcome {
 public struct DaemonRuntimeBundle: Sendable {
   public let daemon: Daemon
   public let lanes: SessionLaneRegistry
-  /// One per composed route, primary first. A fallback authorizes on its own credential, so the
-  /// shutdown commit is a loop: committing only the primary would drop a managed fallback's
-  /// rotation on the floor.
   public let credentialSources: [any LLMCredentialSource]
   public let laneShutdownOutcome: LaneShutdownOutcome
 
