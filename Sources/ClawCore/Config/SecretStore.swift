@@ -13,8 +13,6 @@ public struct Secrets: Sendable, Equatable {
   public let telegramBotToken: String
   public let llmApiKey: String?
   public let searchApiKey: String?
-  /// The fallback route's key, distinct from `llmApiKey` for the same reason its base URL is
-  /// distinct: it authenticates an endpoint the primary never touches.
   public let llmFallbackApiKey: String?
 
   public init(
