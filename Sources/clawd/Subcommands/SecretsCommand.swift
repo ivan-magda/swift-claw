@@ -39,11 +39,13 @@ struct SecretsCommand: AsyncParsableCommand {
         throw ExitCode(error.exitCode)
       }
 
+      let existing = try? EncryptedFileSecretStore(stateRoot: config.stateRoot).loadSecrets()
+      let mergedEnvironment = Self.mergeEnvironment(environment, fallingBackTo: existing)
+
       let secrets: Secrets
       do {
-        // Suppress the plaintext warning — reading plaintext to encrypt it is the intent here.
         secrets = try EnvSecretStore(
-          environment: environment,
+          environment: mergedEnvironment,
           warn: { _ in }
         ).loadSecrets()
       } catch let error as SecretStoreError {
@@ -108,6 +110,36 @@ extension SecretsCommand.Seal {
       )
       throw ExitCode(ClawExitCode.alreadyRunning.rawValue)
     }
+  }
+}
+
+// MARK: - Merge
+
+extension SecretsCommand.Seal {
+  static func mergeEnvironment(
+    _ environment: [String: String],
+    fallingBackTo existing: Secrets?
+  ) -> [String: String] {
+    guard let existing else {
+      return environment
+    }
+
+    var merged = environment
+    let existingByKey: [String: String?] = [
+      EnvSecretStore.EnvKey.botToken: existing.telegramBotToken,
+      EnvSecretStore.EnvKey.llmApiKey: existing.llmApiKey,
+      EnvSecretStore.EnvKey.searchApiKey: existing.searchApiKey,
+      EnvSecretStore.EnvKey.llmFallbackApiKey: existing.llmFallbackApiKey,
+    ]
+
+    for (key, existingValue) in existingByKey {
+      let isBlank = merged[key]?.isEmpty ?? true
+      if isBlank, let existingValue {
+        merged[key] = existingValue
+      }
+    }
+
+    return merged
   }
 }
 
