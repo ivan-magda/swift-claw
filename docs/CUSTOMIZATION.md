@@ -200,10 +200,11 @@ Before you turn it on:
 
 `clawd doctor --check-config` reports `llm.fallback_configured` as `yes (<model>)` or
 `no`; it says nothing about whether the fallback's key works, which you find out when the
-fallback first runs. The full `clawd doctor` adds `llm.active_route` and
-`llm.primary_cooldown_s`, which read `<your primary model> (configured primary)` and
-`unknown` from your shell: the cooldown windows belong to the running daemon, and a
-separate process will not guess at them.
+fallback first runs. To see which model is answering right now, send `/doctor` to your bot:
+its `LLM & Runs` line names the active route, and adds the remaining cooldown while the
+primary is walled off. The same rows exist in `clawd doctor` at the shell, where they read
+`<your primary model> (configured primary)` and `unknown` — the cooldown windows belong to
+the running daemon, and a separate process will not guess at them.
 
 ## Spending limits
 

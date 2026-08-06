@@ -242,9 +242,9 @@ Distilled from the verified best-practices research:
 
 **v1 = the daily-driver milestone.** It is *conversational + durable memory + read-only tools + streaming* — the smallest slice that earns daily use over the official ChatGPT/Claude apps. We still build it increment-by-increment (see the roadmap), but the success criteria below are claimed only for slices that can actually earn daily use.
 
-**In v1:** conversational core; durable memory (remember-on-confirm + FTS5 recall); read-only tools (`web_search`, `web_fetch`, workspace file READ — all `safe` tier, no sandbox/approval); streaming replies; the USD spend breaker; onboarding/first-run; non-text intake handling; user-visible degradation; data export/delete; single-instance guard + 409 handling; `status`/`doctor`.
+**In v1:** conversational core; durable memory (remember-on-confirm + FTS5 recall); read-only tools (`web_search`, `web_fetch`, workspace file READ — all `safe` tier, no sandbox/approval); streaming replies; the USD spend breaker; onboarding/first-run; non-text intake handling; user-visible degradation; data export/delete; single-instance guard + 409 handling; `status`/`doctor`; the optional fallback route (FR-R3).
 
-**Deferred to later phases:** write/shell/code tools + sandbox + approvals + the enforced lethal-trifecta gate; scheduling/proactive (its own phase); ChatGPT subscription authentication (its own phase); the optional fallback route (its own phase); per-call USD attribution dashboards.
+**Deferred to later phases:** write/shell/code tools + sandbox + approvals + the enforced lethal-trifecta gate; scheduling/proactive (its own phase); ChatGPT subscription authentication (its own phase); a roster longer than two routes; per-call USD attribution dashboards.
 
 | Phase | Capability | Headline outcome |
 |---|---|---|

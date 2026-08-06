@@ -82,7 +82,7 @@ import Testing
     #expect(spy.recorded.first?.contains("PLAINTEXT") == true)
   }
 
-  @Test func sealedKeyListNamesEverySecretALoadCanProduce() throws {
+  @Test func everySealedKeyIsOneTheLoaderActuallyReads() throws {
     // given — every sealed variable populated with a distinct value
     let environment = Dictionary(
       uniqueKeysWithValues: EnvKey.sealed.enumerated().map { index, key in
@@ -94,10 +94,29 @@ import Testing
     // when
     let secrets = try store.loadSecrets()
 
-    // then — a secret added to `Secrets` but left out of `sealed` would reach the envelope while
-    // `secrets seal` leaves its plaintext line in the env file and never mentions it.
+    // then — a key listed in `sealed` that the loader ignores would leave a value unaccounted for
     #expect(secrets.redactionValues.count == EnvKey.sealed.count)
     #expect(Set(secrets.redactionValues) == Set(environment.values))
+  }
+
+  @Test func sealedKeyListCoversEverySecretTheEnvelopeCarries() {
+    // given — the envelope carries a `Secrets`, so every sealed secret is one of its stored
+    // properties. Reflection counts them, which is what ties the scrub list to the payload:
+    // comparing `sealed` against another hand-written list would only prove two lists match.
+    let secrets = Secrets(
+      telegramBotToken: "123:abc",
+      llmApiKey: "sk-x",
+      searchApiKey: "exa-x",
+      llmFallbackApiKey: "sk-fallback-x"
+    )
+
+    // when
+    let storedSecretCount = Mirror(reflecting: secrets).children.count
+
+    // then — a fifth secret added to `Secrets` and loaded, but left out of `sealed`, would seal into
+    // the envelope while `secrets seal` left its plaintext line in the env file and never named it.
+    // That is the direction the fallback key's own bug ran in.
+    #expect(storedSecretCount == EnvKey.sealed.count)
   }
 
   @Test(arguments: [

@@ -180,11 +180,26 @@ private extension HealthRowsBuilder {
     ]
   }
 
+  /// Which model is answering is the one route fact an owner asks for by name, so `active_route`
+  /// rides the group line into the Telegram summary, which keeps only headlines. The window is a
+  /// headline **only while one is live**: `none` on every healthy turn would spend a summary slot on
+  /// a state that says nothing, and a live window is exactly when the seconds are worth reading.
   static func routeChecks(_ health: LLMRouteHealth) -> [DoctorReport.Check] {
-    [
-      check("llm.active_route", activeRoute(health), .llmRuns),
+    let isCooling: Bool
+    if case .cooling = health.cooldown {
+      isCooling = true
+    } else {
+      isCooling = false
+    }
+    return [
+      check("llm.active_route", activeRoute(health), .llmRuns, headline: true),
       fallbackConfiguredCheck(fallbackReference: health.fallbackReference),
-      check("llm.primary_cooldown_s", cooldownSeconds(health.cooldown), .llmRuns),
+      check(
+        "llm.primary_cooldown_s",
+        cooldownSeconds(health.cooldown),
+        .llmRuns,
+        headline: isCooling
+      ),
     ]
   }
 
