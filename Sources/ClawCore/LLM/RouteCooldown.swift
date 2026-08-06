@@ -57,12 +57,19 @@ public actor RouteCooldown<ClockType: Clock> where ClockType.Duration == Duratio
 
   /// Whether the route is inside a live window.
   public func isCooling(routeIndex: Int) -> Bool {
-    guard let window = windows[routeIndex] else { return false }
-    return window.expiresAt > clock.now
+    if let window = windows[routeIndex] {
+      return window.expiresAt > clock.now
+    }
+    return false
   }
 
   public func remainingSeconds(routeIndex: Int) -> Int? {
-    guard let window = windows[routeIndex], window.expiresAt > clock.now else { return nil }
+    guard
+      let window = windows[routeIndex],
+      window.expiresAt > clock.now
+    else {
+      return nil
+    }
     return Int(clock.now.duration(to: window.expiresAt).components.seconds)
   }
 
@@ -75,8 +82,10 @@ public actor RouteCooldown<ClockType: Clock> where ClockType.Duration == Duratio
   /// window and its doubling history — sending the next turn back at a route known to be walled
   /// off, with the backoff restarted at the tier default.
   public func recordSuccess(routeIndex: Int) -> Bool {
-    guard let window = windows.removeValue(forKey: routeIndex) else { return false }
-    return window.expiresAt <= clock.now
+    if let window = windows.removeValue(forKey: routeIndex) {
+      return window.expiresAt <= clock.now
+    }
+    return false
   }
 }
 
