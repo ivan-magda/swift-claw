@@ -277,8 +277,9 @@ still runs as a turn carrying the caption: opting out of pixels does not throw a
 
 ### Seal (first-time setup)
 
-Reads `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, and `CLAW_SEARCH_API_KEY`
-from the environment and writes two files under `~/.swift-claw/`:
+Reads `CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`, `CLAW_SEARCH_API_KEY`, and
+`CLAW_LLM_FALLBACK_API_KEY` from the environment and writes two files under
+`~/.swift-claw/`:
 
 - `secrets.enc` — encrypted envelope
 - `secret.key` — AES key (mode 0600)
@@ -288,9 +289,10 @@ set -a && source ~/.swift-claw/clawd.env && set +a
 .build/debug/clawd secrets seal
 ```
 
-Sealing also blanks the three secret lines (`CLAW_TELEGRAM_BOT_TOKEN`,
-`CLAW_LLM_API_KEY`, `CLAW_SEARCH_API_KEY`) in the env file and prints what it changed.
-`--no-scrub` leaves them in place; `--env-file <path>` targets a file other than
+Sealing also blanks three of those lines (`CLAW_TELEGRAM_BOT_TOKEN`, `CLAW_LLM_API_KEY`,
+`CLAW_SEARCH_API_KEY`) in the env file and prints what it changed;
+`CLAW_LLM_FALLBACK_API_KEY` is sealed but left in place, so blank it yourself.
+`--no-scrub` leaves them all in place; `--env-file <path>` targets a file other than
 `$CLAW_ENV_FILE` / `~/.swift-claw/clawd.env`. The non-secret config
 (`CLAW_LLM_BASE_URL`, `CLAW_LLM_MODEL`, etc.) is untouched.
 

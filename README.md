@@ -40,7 +40,8 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
-  can run an eligible model on a ChatGPT subscription.
+  can run an eligible model on a ChatGPT subscription. Name a second model and clawd
+  finishes the turn there when the first cannot answer.
 - **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
 
 ## The approval card
@@ -130,8 +131,9 @@ Persona and behavior live in Markdown files under `~/.swift-claw/workspace/`:
 | `HEARTBEAT.md` | The proactive heartbeat checklist | Heartbeat runs only |
 | `skills/<name>/SKILL.md` | A procedure the agent loads when a task calls for it | Untrusted, labeled |
 
-Runtime knobs are environment variables: the model route (`CLAW_LLM_MODEL`), USD
-budgets, schedules and quiet hours, voice locales, sandbox limits.
+Runtime knobs are environment variables: the model route (`CLAW_LLM_MODEL`), an optional
+fallback route (`CLAW_LLM_FALLBACK_MODEL`, off unless you set it), USD budgets, schedules
+and quiet hours, voice locales, sandbox limits.
 [`.env.example`](.env.example) documents every variable;
 [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) is the guide.
 

@@ -147,6 +147,64 @@ party you trust with that content.
 Related knobs: `CLAW_LLM_STREAMING` (rich streamed drafts, on by default),
 `CLAW_LLM_MAX_TOKENS`, `CLAW_LLM_MAX_TOKENS_FIELD`, `CLAW_LLM_STRUCTURED_OUTPUT`.
 
+### A second route to fall back to
+
+Name a second model and clawd finishes the turn there when the first route cannot answer:
+the plan quota ran out, the credential was refused or the account denied, or the endpoint
+would not connect. Leave `CLAW_LLM_FALLBACK_MODEL` unset and none of this is in play.
+
+| Variable | Controls |
+|---|---|
+| `CLAW_LLM_FALLBACK_MODEL` | The second route's model, chosen the same way `CLAW_LLM_MODEL` is. Unset means no fallback. |
+| `CLAW_LLM_FALLBACK_BASE_URL` | Its endpoint. Required when the model resolves to the OpenAI-compatible route, unused on `openai-chatgpt/`. |
+| `CLAW_LLM_FALLBACK_API_KEY` | Its key, sealed alongside `CLAW_LLM_API_KEY`. |
+| `CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD` | The fallback's own `CLAW_LLM_MAX_TOKENS_FIELD` (default `max_completion_tokens`). |
+| `CLAW_LLM_PRIMARY_COOLDOWN_SECONDS` | How long a walled-off primary is left alone before clawd tries it again (default 900). |
+
+A ChatGPT subscription in front, a metered API key behind it:
+
+```bash
+CLAW_LLM_MODEL=openai-chatgpt/gpt-5.4
+CLAW_LLM_FALLBACK_MODEL=claude-sonnet-4-6
+CLAW_LLM_FALLBACK_BASE_URL=https://api.anthropic.com/v1
+CLAW_LLM_FALLBACK_API_KEY=sk-ant-...
+```
+
+You hear about the transitions and nothing in between: one line above the reply when the
+fallback takes over, naming both models, and one when the primary answers again. If both
+routes fail, the reply names the primary's cause and adds that the backup was tried too.
+
+A route that fails goes on a cooldown, so clawd stops probing an exhausted plan every
+turn: 900 seconds by default, 60 for a failure that looked like a network problem,
+doubling on each further failure up to an hour. Turns during that window start on the
+fallback. The windows live in memory, so a restart costs one probe against the primary.
+
+Before you turn it on:
+
+- **The dollar caps start applying.** The fallback is billed per token, so the limits
+  below bind from the call it takes over. They were inert while a flat-rate primary
+  answered. Read [Spending limits](#spending-limits), including the one call that can go
+  over.
+- **A failure mid-answer does not switch.** Once the model may have started generating,
+  re-sending the same work elsewhere could bill you twice, so clawd degrades the turn
+  instead of moving it.
+- **Both routes are checked at startup.** `CLAW_LLM_STRUCTURED_OUTPUT` set to a mode your
+  fallback cannot serve fails config validation with exit 10, naming the route, rather
+  than waiting to break the first time the fallback carries a turn.
+- **A parked approval survives a switch.** The fingerprint an approval binds to names your
+  configured primary, so a run that resumes after a switch is not re-asked, even though a
+  different endpoint now sees the conversation.
+
+`clawd doctor --check-config` reports `llm.fallback_configured` as `yes (<model>)` or
+`no`; it says nothing about whether the fallback's key works, which you find out when the
+fallback first runs. The full `clawd doctor` adds `llm.active_route` and
+`llm.primary_cooldown_s`, and a stopped daemon renders those as `(configured primary)` and
+`unknown`, since the cooldown windows belong to the running process.
+
+`clawd secrets seal` encrypts `CLAW_LLM_FALLBACK_API_KEY` with your other secrets but does
+not blank its line in `clawd.env` the way it blanks the other three. Remove that one
+yourself after sealing.
+
 ## Spending limits
 
 All optional; unset means the built-in defaults.
@@ -164,6 +222,16 @@ has no metered cost to compare against, so `CLAW_PER_RUN_USD` and
 `CLAW_PER_DAY_USD` still binds indirectly, because the daily token ceiling derives from it;
 set `CLAW_DAY_TOKEN_CEILING` to control that directly. Token, turn, tool-call, and
 wall-clock bounds apply the same on both routes.
+
+**With a [fallback route](#a-second-route-to-fall-back-to) configured, one call can go
+over the dollar caps.** clawd checks the budget once per round-trip, before it calls the
+model, against whichever route is active at that moment. The switch happens inside that
+same round-trip, and the fallback's call on it is not checked again. Under a flat-rate
+primary clawd skips the dollar checks outright, so that first metered call runs even when
+the day's cap is already spent. Turns after it start on the fallback and are checked
+normally, which puts the overshoot at roughly one call per cooldown window. The daily
+token ceiling did gate that round-trip, since clawd checks it whether the active route is
+metered or flat-rate; the dollar caps are the ones that let the call through.
 
 ## Proactive behavior
 
@@ -227,9 +295,10 @@ Stop the daemon first; sealing takes the same state-root lock. Put **all** the s
 want back in the environment, not just the new one, since the reseal replaces the envelope:
 
 ```bash
-export CLAW_TELEGRAM_BOT_TOKEN=...   # the values the first seal blanked from clawd.env
+export CLAW_TELEGRAM_BOT_TOKEN=...     # the values the first seal blanked from clawd.env
 export CLAW_LLM_API_KEY=...
-export CLAW_SEARCH_API_KEY=...       # the one you are adding
+export CLAW_LLM_FALLBACK_API_KEY=...   # only if you run a fallback route
+export CLAW_SEARCH_API_KEY=...         # the one you are adding
 clawd secrets seal
 ```
 
