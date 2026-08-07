@@ -303,7 +303,10 @@ private extension TurnRunner {
 
 // MARK: - Turn Commit
 
-private extension TurnRunner {
+/// Not `private`: the outcome-mapping gateway tests commit a hand-built `TurnOutcome` directly, so
+/// `commit` needs to be reachable outside this file. Its helpers below stay `private` — nothing
+/// else calls them.
+extension TurnRunner {
   /// Persists one `TurnResult` against a single commit-time clock. The ordering is the contract:
   ///  - `.completed`: `runs.commitAssistantTurn` writes the assistant message + run→DONE +
   ///    provider_usage + outbox chunk(s) in ONE transaction, before any send; then audit + notify.
@@ -345,7 +348,9 @@ private extension TurnRunner {
       try await suspendForApproval(pending: pending, usage: usage, outcome: outcome, in: context)
     }
   }
+}
 
+private extension TurnRunner {
   func commitCompleted(
     content: String,
     usage: ProviderUsage,
@@ -353,7 +358,7 @@ private extension TurnRunner {
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
-    let appendedNotices: [String] = []
+    let appendedNotices = outcome.routeNotice.map { [Degradation.message(for: $0)] } ?? []
     // Ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
     // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
     let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
@@ -438,6 +443,11 @@ private extension TurnRunner {
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
+    // Only a switch-then-fail owes this sentence — `.restored` means the fallback was never tried.
+    var appendedNotices: [String] = []
+    if case .switched = outcome.routeNotice {
+      appendedNotices = [Degradation.fallbackAlsoFailed]
+    }
     let commitResult = try commitDegradation(
       runId: context.runId,
       sessionId: context.sessionId,
@@ -448,7 +458,8 @@ private extension TurnRunner {
       setPrivateData: outcome.hadPrivateData,
       message: ownerVisiblePayload(
         reply: Degradation.message(for: kind),
-        ownerNotices: context.ownerNotices
+        ownerNotices: context.ownerNotices,
+        appendedNotices: appendedNotices
       ),
       action: .turnDegraded,
       decision: kind.auditDecision,
@@ -468,6 +479,9 @@ private extension TurnRunner {
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
+    // `routeNotice` is turn-scoped (set once, before the cap tripped), so a switch earlier in this
+    // same turn still owes the owner its notice even though this round produced no answer.
+    let appendedNotices = outcome.routeNotice.map { [Degradation.message(for: $0)] } ?? []
     _ = try commitDegradation(
       runId: context.runId,
       sessionId: context.sessionId,
@@ -478,7 +492,8 @@ private extension TurnRunner {
       setPrivateData: outcome.hadPrivateData,
       message: ownerVisiblePayload(
         reply: Degradation.budget(cap: cap),
-        ownerNotices: context.ownerNotices
+        ownerNotices: context.ownerNotices,
+        appendedNotices: appendedNotices
       ),
       action: .turnBudgetStopped,
       decision: cap,

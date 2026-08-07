@@ -7,6 +7,40 @@ import Testing
 
 // MARK: - Test doubles
 
+/// A credential store whose one behavior a test scripts: a present record, an absent one (logged
+/// out), or a typed store failure. It records whether it was opened at all, so the current route can
+/// be proven never to touch it.
+final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Sendable {
+  enum Behavior: Sendable {
+    case value(StoredOAuthCredential?)
+    case failure(LLMCredentialStoreError)
+  }
+
+  let behavior: Behavior
+  private(set) var loadCount = 0
+
+  init(_ behavior: Behavior) {
+    self.behavior = behavior
+  }
+
+  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
+    loadCount += 1
+    switch behavior {
+    case .value(let credential):
+      return credential
+    case .failure(let error):
+      throw error
+    }
+  }
+
+  func save(
+    _ credential: StoredOAuthCredential,
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) {}
+
+  func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
+}
+
 /// Offers exactly the headers and redaction values a test names. `StaticLLMCredentialSource` can
 /// only ever offer `Authorization`, so it cannot drive the adapter's header allowlist at all — that
 /// is precisely what this double exists to reach.
@@ -68,6 +102,51 @@ func makeCurrentRoute(
     descriptor: .openAICompatible(endpoint: endpoint),
     configuredReference: model,
     wireModel: model
+  )
+}
+
+/// The managed ChatGPT route, so a test needing only the Responses adapter's shape does not restate
+/// the qualified descriptor.
+func chatGPTRoute() -> ResolvedLLMRoute {
+  ResolvedLLMRoute(
+    descriptor: .openAIChatGPT,
+    configuredReference: "openai-chatgpt/gpt-5.4",
+    wireModel: "gpt-5.4"
+  )
+}
+
+/// An unexpired stored ChatGPT credential, so a managed-route composition test can authorize without
+/// opening a refresh flight.
+func storedCredential() -> StoredOAuthCredential {
+  StoredOAuthCredential(
+    profileID: UUID(),
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    expiresAt: Date().addingTimeInterval(3600)
+  )
+}
+
+/// The `LLMConfig` a resolved route composes against, holding every other setting fixed.
+func settings(route: ResolvedLLMRoute, retryBudget: Int = 3) -> LLMConfig {
+  LLMConfig(route: route, maxOutputTokens: 256, retryBudget: retryBudget, requestTimeoutSeconds: 30)
+}
+
+/// A static-bearer route carrying an arbitrary egress, to reach the current-route composition path
+/// with a shape a registered descriptor never produces — a registry defect, not configuration.
+func currentRouteWithEgress(_ egress: LLMEgressIdentity) -> ResolvedLLMRoute {
+  ResolvedLLMRoute(
+    descriptor: LLMProviderDescriptor(
+      providerID: .openAICompatible,
+      qualifiedPrefix: nil,
+      egress: egress,
+      credentialMode: .noneOrStaticBearer,
+      capabilities: LLMProviderCapabilities(
+        supportsStructuredOutput: true,
+        outputTokenField: .configured(.maxCompletionTokens)
+      )
+    ),
+    configuredReference: "gpt-4o",
+    wireModel: "gpt-4o"
   )
 }
 

@@ -7,7 +7,7 @@
 set -euo pipefail
 
 SOURCE_URL="https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
-OUTPUT="Sources/ClawLLM/Prices.json"
+OUTPUT="Sources/ClawLLM/Pricing/Prices.json"
 
 # Ensure output directory exists
 mkdir -p "$(dirname "$OUTPUT")"

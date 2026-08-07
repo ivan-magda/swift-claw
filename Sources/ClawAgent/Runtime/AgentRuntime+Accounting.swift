@@ -3,8 +3,9 @@ import Foundation
 
 // MARK: - Result Classification
 
-// Internal rather than `private` so the round-trip loop in `AgentRuntime.swift` can reach these; the
-// stored collaborators they read are widened to `internal` there for the same reason.
+// Internal rather than `private` so the round-trip loop in `AgentRuntime.swift` can reach these.
+// They take the accountant rather than reading one off the runtime, so each call is charged under
+// the policies of the route that issued it.
 extension AgentRuntime {
   /// The single accounting decision for every natural failure and cancellation. It reads the
   /// vendor-neutral disposition — `ProviderFailure.accounting` when the provider tagged one — never
@@ -16,12 +17,19 @@ extension AgentRuntime {
   /// asked anyway. Both flow to the run-cancel path — the degradation reason stays
   /// `.providerUnavailable`, but a cancelled run's commit is arbitrated away, so no outage copy
   /// reaches the owner.
-  func failureOutcome(
+  ///
+  /// `accountant` is the one bound to the route that made this call, so a failure is charged under
+  /// the policies that call was actually issued with. `overrideKind` replaces the kind read from the
+  /// error on the natural-failure path when the caller already knows the owner-facing reason;
+  /// `nil` keeps the error's own kind.
+  func failureOutcome(  // swiftlint:disable:this function_parameter_count
     _ error: any Error,
     callID: ProviderCallID,
     context: [ChatMessage],
     runId: Int64,
-    sessionId: Int64
+    sessionId: Int64,
+    accountant: ProviderUsageAccountant,
+    overrideKind: DegradationKind? = nil
   ) -> TurnResult {
     if let racedSuccess = error as? RacedDeadlineSuccess {
       // A real response landed alongside a won deadline: its usage is authoritative, so it is booked
@@ -59,7 +67,7 @@ extension AgentRuntime {
     // The vendor-neutral kind is read from the cause, the debit from the accounting disposition —
     // independently, so an auth/access/quota/replay rejection surfaces its own owner guidance while
     // an ambiguous transport loss stays the generic outage with a conservative row.
-    let kind = Self.degradationKind(for: error)
+    let kind = overrideKind ?? Self.degradationKind(for: error)
     switch Self.accounting(for: error) {
     case .notStarted:
       return .degraded(kind, usage: nil)
@@ -108,14 +116,15 @@ extension AgentRuntime {
   /// Maps a returned response to a result, debiting the reconciled usage (real, or estimated when
   /// the provider omits it): non-empty content → `.completed`; empty + `finishReason == "length"` →
   /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`. The row is
-  /// minted through the shared accountant (provider cost wins), the same route an intermediate
-  /// round-trip books through.
-  func classify(
+  /// minted through the passed accountant (provider cost wins), the same route an intermediate
+  /// round-trip books through — that accountant belongs to the route that produced this response.
+  func classify(  // swiftlint:disable:this function_parameter_count
     response: ChatResponse,
     callID: ProviderCallID,
     context: [ChatMessage],
     runId: Int64,
-    sessionId: Int64
+    sessionId: Int64,
+    accountant: ProviderUsageAccountant
   ) -> TurnResult {
     let usage = accountant.reconciledRow(
       for: response,

@@ -8,7 +8,8 @@ enum DoctorHealth {
   static func inputs(
     stores: ClawStores,
     config: AppConfig,
-    now: Date
+    now: Date,
+    routeHealth: LLMRouteHealth
   ) -> HealthRowsBuilder.Inputs {
     let emptyRunsHealth = RunsHealth(
       inFlight: 0,
@@ -36,6 +37,7 @@ enum DoctorHealth {
       ),
       lastOffset: try? stores.cursor.loadCursor(),
       runsHealth: runsHealth,
+      routeHealth: routeHealth,
       retryBudget: config.llm.retryBudget,
       streamingEnabled: config.llm.streamingEnabled,
       todayTokens: todayTokens,

@@ -170,11 +170,13 @@ private extension EncryptedFileSecretStore {
     let telegramBotToken: String
     let llmApiKey: String?
     let searchApiKey: String?
+    let llmFallbackApiKey: String?
 
     enum CodingKeys: String, CodingKey {
       case telegramBotToken = "telegram_bot_token"
       case llmApiKey = "llm_api_key"
       case searchApiKey = "search_api_key"
+      case llmFallbackApiKey = "llm_fallback_api_key"
     }
   }
 }
@@ -184,7 +186,8 @@ extension EncryptedFileSecretStore {
     let payload = Payload(
       telegramBotToken: secrets.telegramBotToken,
       llmApiKey: secrets.llmApiKey,
-      searchApiKey: secrets.searchApiKey
+      searchApiKey: secrets.searchApiKey,
+      llmFallbackApiKey: secrets.llmFallbackApiKey
     )
 
     guard let encoded = try? JSONEncoder().encode(payload) else {
@@ -207,11 +210,15 @@ extension EncryptedFileSecretStore {
     let searchKey = payload.searchApiKey.flatMap { value in
       value.isEmpty ? nil : value
     }
+    let fallbackApiKey = payload.llmFallbackApiKey.flatMap { value in
+      value.isEmpty ? nil : value
+    }
 
     return Secrets(
       telegramBotToken: payload.telegramBotToken,
       llmApiKey: apiKey,
-      searchApiKey: searchKey
+      searchApiKey: searchKey,
+      llmFallbackApiKey: fallbackApiKey
     )
   }
 }

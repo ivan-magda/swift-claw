@@ -83,6 +83,93 @@ import Testing
     )
   }
 
+  /// A two-route parser, so a quota rejection on the primary can be proven to fall back rather than
+  /// degrade — the schedule twin of `AgentTestSupport.makeRuntime`'s primary/fallback pairing.
+  private func makeParser(
+    primary: any LLMProvider,
+    fallback: any LLMProvider,
+    usageStore: any UsageStore,
+    cooldown: (any RouteCooldownTracking)? = nil
+  ) -> ScheduleDraftParser {
+    ScheduleDraftParser(
+      roster: ProviderRoster(bindings: [
+        LLMRouteBinding(
+          provider: primary,
+          wireModel: "primary-wire",
+          configuredReference: "primary-model",
+          costPolicy: .metered,
+          reservationPolicy: .textOnly
+        ),
+        LLMRouteBinding(
+          provider: fallback,
+          wireModel: "fallback-wire",
+          configuredReference: "fallback-model",
+          costPolicy: .metered,
+          reservationPolicy: .textOnly
+        ),
+      ]),
+      cooldown: cooldown,
+      usageStore: usageStore,
+      budget: .default,
+      costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
+      clock: ContinuousClock(),
+      logger: TestLog.silent
+    )
+  }
+
+  /// A single-route roster built through the SAME `ProviderRoster` constructor a multi-route caller
+  /// uses, so the parity property is proven against the roster-taking path, not the convenience
+  /// initializer's parallel one-binding shortcut.
+  private func makeAgentWithRoster(
+    provider: any LLMProvider,
+    usageStore: any UsageStore
+  ) -> AgentRuntime {
+    AgentRuntime(
+      roster: ProviderRoster(bindings: [
+        LLMRouteBinding(
+          provider: provider,
+          wireModel: "test-model",
+          configuredReference: "test-model",
+          costPolicy: .metered,
+          reservationPolicy: .textOnly
+        )
+      ]),
+      typingIndicator: NoopTyping(),
+      draftStreamer: NoopRichDraftStreaming(),
+      streamingEnabled: false,
+      costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
+      budget: .default,
+      toolDispatcher: nil,
+      usageStore: usageStore,
+      auditLog: RecordingAuditLog(),
+      clock: ContinuousClock()
+    )
+  }
+
+  /// The schedule twin of `makeAgentWithRoster`: a single-route roster built through the same
+  /// `ProviderRoster` constructor the fallback-configured caller uses.
+  private func makeParserWithRoster(
+    provider: any LLMProvider,
+    usageStore: any UsageStore
+  ) -> ScheduleDraftParser {
+    ScheduleDraftParser(
+      roster: ProviderRoster(bindings: [
+        LLMRouteBinding(
+          provider: provider,
+          wireModel: "test-model",
+          configuredReference: "test-model",
+          costPolicy: .metered,
+          reservationPolicy: .textOnly
+        )
+      ]),
+      usageStore: usageStore,
+      budget: .default,
+      costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
+      clock: ContinuousClock(),
+      logger: TestLog.silent
+    )
+  }
+
   private func claimSession(_ queue: DatabaseQueue) throws -> Int64 {
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
@@ -195,6 +282,112 @@ import Testing
     #expect(copy == ScheduleReplies.quotaLimited(retryAfterSeconds: 30))
     #expect(copy.contains("30"))
     #expect(copy.contains("clawd auth login") == false)
+  }
+
+  @Test("a quota rejection on the primary parses the draft on the fallback")
+  func scheduleParseFallsBack() async throws {
+    // given
+    let queue = try inMemoryQueue()
+    let usageStore = UsageStoreGRDB(writer: queue)
+    let sessionId = try claimSession(queue)
+    let primary = SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: nil))
+    let fallback = SequenceProvider([
+      ChatResponse(content: Self.draftJSON, finishReason: "stop", usage: nil, costFromProvider: nil)
+    ])
+    let parser = makeParser(primary: primary, fallback: fallback, usageStore: usageStore)
+
+    // when
+    let result = await parser.parse(ownerText: "every weekday at 7am Berlin", sessionId: sessionId)
+
+    // then
+    #expect(result == .draft(Self.expectedDraft))
+    #expect(await fallback.requests.count == 1)
+  }
+
+  @Test("a successful parse on a recovered primary clears its cooldown window")
+  func successfulParseClearsTheRecoveredPrimarysCooldown() async throws {
+    // given — the primary armed a long window, then it lapses without ever being cleared
+    let cooldownClock = ScriptedClock { _ in }
+    let cooldown = RouteCooldown(longSeconds: 900, clock: cooldownClock)
+    await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
+    try await cooldownClock.sleep(for: .seconds(901))
+    let queue = try inMemoryQueue()
+    let usageStore = UsageStoreGRDB(writer: queue)
+    let sessionId = try claimSession(queue)
+    let primary = SequenceProvider([
+      ChatResponse(content: Self.draftJSON, finishReason: "stop", usage: nil, costFromProvider: nil)
+    ])
+    let parser = makeParser(
+      primary: primary,
+      fallback: SequenceProvider([]),
+      usageStore: usageStore,
+      cooldown: cooldown
+    )
+
+    // when — the recovered primary answers
+    let result = await parser.parse(ownerText: "every weekday at 7am", sessionId: sessionId)
+
+    // then — the window is cleared, not merely lapsed: a fresh arm starts at the tier default
+    // rather than doubling the stale armed duration a lapsed-but-uncleared window would carry
+    #expect(result == .draft(Self.expectedDraft))
+    await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
+    #expect(await cooldown.remainingSeconds(routeIndex: 0) == 900)
+  }
+
+  @Test("a fallback that also fails still reports the primary's actionable cause")
+  func doubleFailureReportsThePrimarysCause() async throws {
+    // given — the primary's quota is out (switchable), then the fallback can't even connect
+    // (also switchable, but there is no third route to try)
+    let queue = try inMemoryQueue()
+    let usageStore = UsageStoreGRDB(writer: queue)
+    let sessionId = try claimSession(queue)
+    let primary = SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42))
+    let fallback = SequenceProvider([], then: ProviderError.connectFailed(message: "down"))
+    let parser = makeParser(primary: primary, fallback: fallback, usageStore: usageStore)
+
+    // when
+    let result = await parser.parse(ownerText: "x", sessionId: sessionId)
+
+    // then — the primary's actionable "quota limited" survives, not the fallback's generic outage
+    #expect(result == .quotaLimited(retryAfterSeconds: 42))
+    #expect(
+      ScheduleReplies.providerFailure(result) == ScheduleReplies.quotaLimited(retryAfterSeconds: 42)
+    )
+  }
+
+  @Test("turn and schedule paths still produce identical copy for one cause")
+  func parityHoldsWithARoster() async throws {
+    // given a single-route roster on both paths
+    let turnQueue = try inMemoryQueue()
+    let parseQueue = try inMemoryQueue()
+    let agent = makeAgentWithRoster(
+      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42)),
+      usageStore: UsageStoreGRDB(writer: turnQueue)
+    )
+    let parser = makeParserWithRoster(
+      provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42)),
+      usageStore: UsageStoreGRDB(writer: parseQueue)
+    )
+    let parseSession = try claimSession(parseQueue)
+
+    // when both fail with .quotaLimited(retryAfterSeconds: 42)
+    let turnOutcome = try await agent.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: userBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+    let parseResult = await parser.parse(ownerText: "x", sessionId: parseSession)
+
+    // then both replies equal Degradation.quotaLimited(retryAfterSeconds: 42)
+    #expect(turnOutcome.result == .degraded(.quotaLimited(retryAfterSeconds: 42), usage: nil))
+    #expect(parseResult == .quotaLimited(retryAfterSeconds: 42))
+    let copy = Degradation.quotaLimited(retryAfterSeconds: 42)
+    #expect(copy == ScheduleReplies.quotaLimited(retryAfterSeconds: 42))
   }
 
   @Test func bothSurfacesShareTheTraceFormatterAndSplitWireModelFromIdentity() async throws {

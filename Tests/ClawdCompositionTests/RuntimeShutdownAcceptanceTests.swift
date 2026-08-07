@@ -206,7 +206,7 @@ import Testing
     return DaemonRuntimeBundle(
       daemon: daemon,
       lanes: lane.registry,
-      credentialSource: lane.stack.credentialSource,
+      credentialSources: [lane.stack.credentialSource],
       laneShutdownOutcome: outcome
     )
   }

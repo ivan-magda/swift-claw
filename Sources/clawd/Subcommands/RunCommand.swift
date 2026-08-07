@@ -97,7 +97,7 @@ private extension RunCommand {
       daemonError: runFailure,
       laneDrain: laneDrain,
       dependent: RuntimeShutdownCoordinator.DependentCleanup(
-        commitCredentials: { try await bundle.credentialSource.shutdown() },
+        commitCredentials: { try await Self.commitCredentials(bundle.credentialSources) },
         // The dedicated redirect-disabled LLM client, now its own resource rather than the Telegram
         // client it shared: its transport stays alive across the credential commit above so a
         // refresh's token rotation can finish, then closes here.
@@ -117,6 +117,25 @@ private extension RunCommand {
         activeRunIDs: activeRunIDs,
         logger: logger
       )
+    }
+  }
+
+  /// Commits every route's credential rotation, primary first. Each source is attempted even after
+  /// an earlier one throws — a fallback's rotation must not be dropped because the primary's failed
+  /// — and the first failure still propagates, so the shutdown outcome reports it.
+  static func commitCredentials(_ sources: [any LLMCredentialSource]) async throws {
+    var firstFailure: (any Error)?
+
+    for source in sources {
+      do {
+        try await source.shutdown()
+      } catch {
+        firstFailure = firstFailure ?? error
+      }
+    }
+
+    if let firstFailure {
+      throw firstFailure
     }
   }
 }

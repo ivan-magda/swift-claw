@@ -212,6 +212,9 @@ public struct LLMConfig: Sendable, Equatable {
   public let requestTimeoutSeconds: Int
   public let streamingEnabled: Bool
   public let structuredOutput: StructuredOutputMode
+  public let fallbackRoute: ResolvedLLMRoute?
+  /// Seconds a route-switch trip keeps the daemon off the primary before it is retried.
+  public let primaryCooldownSeconds: Int
 
   public init(
     route: ResolvedLLMRoute,
@@ -219,7 +222,9 @@ public struct LLMConfig: Sendable, Equatable {
     retryBudget: Int,
     requestTimeoutSeconds: Int,
     streamingEnabled: Bool = true,
-    structuredOutput: StructuredOutputMode = .off
+    structuredOutput: StructuredOutputMode = .off,
+    fallbackRoute: ResolvedLLMRoute? = nil,
+    primaryCooldownSeconds: Int = 900
   ) {
     self.route = route
     self.maxOutputTokens = maxOutputTokens
@@ -227,6 +232,8 @@ public struct LLMConfig: Sendable, Equatable {
     self.requestTimeoutSeconds = requestTimeoutSeconds
     self.streamingEnabled = streamingEnabled
     self.structuredOutput = structuredOutput
+    self.fallbackRoute = fallbackRoute
+    self.primaryCooldownSeconds = primaryCooldownSeconds
   }
 }
 
@@ -253,7 +260,7 @@ public struct PriceTable: Sendable, Equatable {
   }
 
   public func price(for model: String) -> ModelPrice? {
-    prices[model]
+    prices[model] ?? prices["openrouter/\(model)"]
   }
 
   public static let empty = PriceTable(prices: [:])

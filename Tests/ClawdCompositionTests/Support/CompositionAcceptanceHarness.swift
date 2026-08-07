@@ -1,11 +1,15 @@
 import AsyncHTTPClient
 import ClawCore
 import ClawData
+import ClawGateway
 import ClawLLM
 import ClawTelegram
 import ClawTestSupport
 import Foundation
 import GRDB
+import Logging
+
+@testable import clawd
 
 // MARK: - Fixed fresh credential
 
@@ -206,10 +210,10 @@ actor CloseRecorder {
   }
 }
 
-/// Captures the one provider stack the assembler received, so a test reads the resolved route without
+/// Captures the one roster the assembler received, so a test reads the resolved routes without
 /// standing up a real daemon.
 final class StackBox: @unchecked Sendable {
-  var stack: ProviderStack?
+  var stack: RosterStack?
 }
 
 /// The runtime HTTP clients wired to real per-role `HTTPClient`s, each of which records its role on
@@ -228,5 +232,164 @@ func instrumentedClients(recorder: CloseRecorder) -> RuntimeHTTPClients<RuntimeH
         try await client.shutdown()
       }
     )
+  }
+}
+
+// MARK: - Booted daemon
+
+/// The environment variables a composition test sets by name. `AppConfig.EnvKey` keeps most of its
+/// members internal to `ClawCore`, so this is the one place a test spells the raw variable.
+enum AcceptanceEnv {
+  static let baseURL = "CLAW_LLM_BASE_URL"
+  static let fallbackModel = "CLAW_LLM_FALLBACK_MODEL"
+  static let fallbackBaseURL = "CLAW_LLM_FALLBACK_BASE_URL"
+  static let primaryCooldownSeconds = "CLAW_LLM_PRIMARY_COOLDOWN_SECONDS"
+  static let voiceTranscription = "CLAW_VOICE_TRANSCRIPTION"
+}
+
+/// A daemon composed through the **production `RunComposition`**: the real config parse, the real
+/// roster factory, the real service graph. It captures the exact roster, cooldown, and builder the
+/// assembled daemon runs on, so a test reads what was wired rather than re-deriving it, and answers
+/// the health rows through the same reporter the daemon's `/doctor` replies with.
+///
+/// No socket is opened: the three runtime clients share the process-wide `HTTPClient.shared`
+/// (nothing is ever sent through them, and it needs no shutdown) and the bot identity is stubbed.
+struct CompositionAcceptanceHarness {
+  let config: AppConfig
+  let stores: ClawStores
+  let builder: DaemonBuilder
+  let rosterStack: RosterStack
+  let cooldown: RouteCooldown<ContinuousClock>
+  let bundle: DaemonRuntimeBundle
+  private let sandbox: DaemonBuilder.SandboxStack
+  private let rows: [String: String]
+
+  /// A configuration that boots: a private state root, the current OpenAI-compatible route, and
+  /// voice off so no test reaches for an on-device speech engine.
+  static func validEnv() -> [String: String] {
+    [
+      AppConfig.EnvKey.stateRoot: NSTemporaryDirectory() + "clawd-boot-" + UUID().uuidString,
+      AppConfig.EnvKey.llmModel: "gpt-4o",
+      AcceptanceEnv.baseURL: "https://primary.example/v1",
+      AcceptanceEnv.voiceTranscription: "false",
+    ]
+  }
+
+  static func boot(
+    environment: [String: String],
+    secrets: Secrets = Secrets(telegramBotToken: "token", llmApiKey: "sk-static"),
+    managedStore: @escaping @Sendable () -> any LLMCredentialStore = { FreshCredentialStore() }
+  ) async throws -> CompositionAcceptanceHarness {
+    let config = try AppConfig.load(environment: environment)
+    let stores = try EnvironmentLoader.openStores(config: config)
+    let capture = BootCapture()
+
+    var composition = RunComposition(
+      config: config,
+      secrets: secrets,
+      stores: stores,
+      logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+    )
+    composition.makeClients = {
+      RuntimeHTTPClients { _ in
+        RuntimeHTTPClient(executor: AsyncHTTPExecutor(client: .shared), close: {})
+      }
+    }
+    composition.makeManagedStore = { _ in managedStore() }
+    composition.fetchBotUsername = { _, _ in nil }
+    composition.buildDaemon = { builder, rosterStack, cooldown in
+      capture.record(builder: builder, rosterStack: rosterStack, cooldown: cooldown)
+      return try await RunComposition.assembleDaemon(builder, rosterStack, cooldown)
+    }
+
+    let composed = try await composition.compose()
+    let builder = try capture.requireBuilder()
+    let sandbox = await builder.prepareSandbox()
+
+    return CompositionAcceptanceHarness(
+      config: config,
+      stores: stores,
+      builder: builder,
+      rosterStack: try capture.requireRosterStack(),
+      cooldown: try capture.requireCooldown(),
+      bundle: composed.bundle,
+      sandbox: sandbox,
+      rows: await Self.healthRows(builder: builder, sandbox: sandbox, capture: capture)
+    )
+  }
+
+  func healthRow(_ key: String) -> String? { rows[key] }
+
+  /// Re-reads the rows from the same reporter, so a test that changes live state (arming the shared
+  /// cooldown, say) sees what the daemon would report now rather than what it reported at boot.
+  func freshHealthRows() async -> [String: String] {
+    await Self.rowValues(
+      builder.makeDoctorReporter(sandbox: sandbox, cooldown: cooldown, mcpOutcomes: [])
+    )
+  }
+
+  private static func healthRows(
+    builder: DaemonBuilder,
+    sandbox: DaemonBuilder.SandboxStack,
+    capture: BootCapture
+  ) async -> [String: String] {
+    guard let cooldown = try? capture.requireCooldown() else { return [:] }
+    return await rowValues(
+      builder.makeDoctorReporter(sandbox: sandbox, cooldown: cooldown, mcpOutcomes: [])
+    )
+  }
+
+  private static func rowValues(_ reporter: DaemonDoctorReporter) async -> [String: String] {
+    let report = await reporter.report()
+    return Dictionary(
+      report.checks.map { check in (check.key, check.value) },
+      uniquingKeysWith: { first, _ in first }
+    )
+  }
+}
+
+/// A boot that never reached the assembler left nothing to read; that is a test defect, so the
+/// accessors throw rather than force-unwrap.
+struct BootNeverAssembled: Error {}
+
+/// Captures what the production assembler received, so the harness holds the same instances the
+/// daemon does instead of building look-alikes.
+final class BootCapture: @unchecked Sendable {
+  private let lock = NSLock()
+  private var builder: DaemonBuilder?
+  private var rosterStack: RosterStack?
+  private var cooldown: RouteCooldown<ContinuousClock>?
+
+  func record(
+    builder: DaemonBuilder,
+    rosterStack: RosterStack,
+    cooldown: RouteCooldown<ContinuousClock>
+  ) {
+    lock.lock()
+    defer { lock.unlock() }
+    self.builder = builder
+    self.rosterStack = rosterStack
+    self.cooldown = cooldown
+  }
+
+  func requireBuilder() throws -> DaemonBuilder {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let builder else { throw BootNeverAssembled() }
+    return builder
+  }
+
+  func requireRosterStack() throws -> RosterStack {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let rosterStack else { throw BootNeverAssembled() }
+    return rosterStack
+  }
+
+  func requireCooldown() throws -> RouteCooldown<ContinuousClock> {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let cooldown else { throw BootNeverAssembled() }
+    return cooldown
   }
 }

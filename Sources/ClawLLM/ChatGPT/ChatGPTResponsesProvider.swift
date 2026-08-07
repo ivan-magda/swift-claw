@@ -29,6 +29,8 @@ where ClockType.Duration == Duration {
   ///   version carrying stray bytes cannot fold a header of its own.
   /// - Parameter epochID: mints replay epochs; injected so a test can name the epoch a history
   ///   derives instead of matching against randomness.
+  /// - Parameter treatsQuotaAsTerminal: set only when a fallback route exists, so a 429 fails onto it
+  ///   immediately instead of burning the turn deadline retrying a subscription quota wall.
   public init(
     http: any HTTPStreaming,
     credentials: any LLMCredentialSource,
@@ -38,7 +40,8 @@ where ClockType.Duration == Duration {
     requestTimeoutSeconds: Int,
     clock: ClockType,
     jitter: @escaping @Sendable (Duration) -> Duration,
-    epochID: @escaping @Sendable () -> UUID
+    epochID: @escaping @Sendable () -> UUID,
+    treatsQuotaAsTerminal: Bool = false
   ) {
     self.init(
       http: http,
@@ -50,6 +53,7 @@ where ClockType.Duration == Duration {
       clock: clock,
       jitter: jitter,
       epochID: epochID,
+      treatsQuotaAsTerminal: treatsQuotaAsTerminal,
       // The bootstrapped default handler, never a forced no-op: this is the only path production wires
       // from `clawd`, so silencing it here would sink the replay-drop diagnostic and every engine line
       // with it. A nil reporter below then routes drops through this same logger, counts only.
@@ -70,6 +74,7 @@ where ClockType.Duration == Duration {
     clock: ClockType,
     jitter: @escaping @Sendable (Duration) -> Duration,
     epochID: @escaping @Sendable () -> UUID,
+    treatsQuotaAsTerminal: Bool = false,
     logger: Logger,
     replayDropsReporter: (@Sendable (ChatGPTReplayDrops) -> Void)?
   ) {
@@ -100,6 +105,7 @@ where ClockType.Duration == Duration {
       jitter: jitter,
       retryBudget: retryBudget,
       requestTimeoutSeconds: requestTimeoutSeconds,
+      treatsQuotaAsTerminal: treatsQuotaAsTerminal,
       logger: logger
     )
   }

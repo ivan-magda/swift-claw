@@ -32,7 +32,7 @@ import Testing
     let store = FreshCredentialStore(present: false)
     let box = StackBox()
     var composition = try Self.makeComposition(recorder: recorder, store: store)
-    composition.buildDaemon = { _, stack in
+    composition.buildDaemon = { _, stack, _ in
       box.stack = stack
       throw StopBuild()
     }
@@ -42,10 +42,11 @@ import Testing
       _ = try await composition.compose()
     }
     #expect(store.loadCount == 1)
-    #expect(box.stack?.costPolicy == .includedPlan)
-    #expect(box.stack?.reservationPolicy == .chatGPTReplayState)
-    #expect(box.stack?.configuredReference == CompositionAcceptance.qualifiedModel)
-    #expect(box.stack?.wireModel == CompositionAcceptance.wireModel)
+    let primary = box.stack?.roster.primary
+    #expect(primary?.costPolicy == .includedPlan)
+    #expect(primary?.reservationPolicy == .chatGPTReplayState)
+    #expect(primary?.configuredReference == CompositionAcceptance.qualifiedModel)
+    #expect(primary?.wireModel == CompositionAcceptance.wireModel)
     #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 

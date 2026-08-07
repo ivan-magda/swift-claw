@@ -136,7 +136,8 @@ Persona and behavior live in Markdown files under `~/.swift-claw/workspace/`:
 
 MCP servers go in `~/.swift-claw/mcp.yaml`, with their tokens stored encrypted by
 `clawd mcp set-token`. Other runtime knobs are environment variables: the model route
-(`CLAW_LLM_MODEL`), USD budgets, schedules and quiet hours, voice locales, sandbox limits.
+(`CLAW_LLM_MODEL`), an optional fallback route (`CLAW_LLM_FALLBACK_MODEL`, off unless you
+set it), USD budgets, schedules and quiet hours, voice locales, sandbox limits.
 [`.env.example`](.env.example) documents every variable;
 [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) is the guide.
 

@@ -39,6 +39,27 @@ public struct ProviderStack: Sendable {
   }
 }
 
+public extension ProviderStack {
+  /// The turn-facing slice of this stack. Drops the credential source, which belongs to
+  /// composition's shutdown sequence and never to a turn.
+  var binding: LLMRouteBinding {
+    LLMRouteBinding(
+      provider: provider,
+      wireModel: wireModel,
+      configuredReference: configuredReference,
+      costPolicy: costPolicy,
+      reservationPolicy: reservationPolicy
+    )
+  }
+}
+
+/// A composed roster plus the credential sources the shutdown sequence must commit. The sources are
+/// held apart from the roster because a turn drives routes while only composition closes them.
+public struct RosterStack: Sendable {
+  public let roster: ProviderRoster
+  public let credentialSources: [any LLMCredentialSource]
+}
+
 // MARK: - Factory
 
 /// The one place a resolved route becomes a concrete provider stack. It lives in `ClawLLM` rather than
@@ -72,13 +93,17 @@ public enum ProviderStackFactory {
   ///   secret-load exit code.
   /// - Parameter buildVersion: `ClawdVersion.current`, sanitized by the ChatGPT adapter into its
   ///   User-Agent. Unused by the current route.
+  /// - Parameter treatsQuotaAsTerminal: whether a 429 on this route should fail immediately rather
+  ///   than spend the retry budget — set for the primary only when a fallback route exists to take
+  ///   over. Unused by the current route, which carries no subscription quota to wall against.
   public static func make(
     route: ResolvedLLMRoute,
     settings: LLMConfig,
     loadStaticBearer: () -> String?,
     makeManagedCredentialStore: () -> any LLMCredentialStore,
     http: any HTTPExecuting & HTTPStreaming,
-    buildVersion: String
+    buildVersion: String,
+    treatsQuotaAsTerminal: Bool = false
   ) throws -> ProviderStack {
     switch route.descriptor.credentialMode {
     case .noneOrStaticBearer:
@@ -94,9 +119,60 @@ public enum ProviderStackFactory {
         settings: settings,
         store: makeManagedCredentialStore(),
         http: http,
-        buildVersion: buildVersion
+        buildVersion: buildVersion,
+        treatsQuotaAsTerminal: treatsQuotaAsTerminal
       )
     }
+  }
+  // swiftlint:enable function_parameter_count
+
+  // swiftlint:disable function_parameter_count
+  /// Composes every configured route at boot. A fallback that cannot be built is a startup failure,
+  /// never a surprise discovered when the primary's quota runs out.
+  ///
+  /// - Parameter loadFallbackBearer: the fallback route's static bearer. Read only when a fallback
+  ///   route is configured, and never for the primary.
+  public static func makeRoster(
+    primaryRoute: ResolvedLLMRoute,
+    fallbackRoute: ResolvedLLMRoute?,
+    settings: LLMConfig,
+    loadStaticBearer: () -> String?,
+    loadFallbackBearer: () -> String?,
+    makeManagedCredentialStore: () -> any LLMCredentialStore,
+    http: any HTTPExecuting & HTTPStreaming,
+    buildVersion: String
+  ) throws -> RosterStack {
+    // A fallback route existing is the whole condition: only then is retrying a quota wall on the
+    // primary pure waste, because only then is there somewhere else to finish the turn.
+    let primaryStack = try make(
+      route: primaryRoute,
+      settings: settings,
+      loadStaticBearer: loadStaticBearer,
+      makeManagedCredentialStore: makeManagedCredentialStore,
+      http: http,
+      buildVersion: buildVersion,
+      treatsQuotaAsTerminal: fallbackRoute != nil
+    )
+    guard let fallbackRoute else {
+      return RosterStack(
+        roster: ProviderRoster(bindings: [primaryStack.binding]),
+        credentialSources: [primaryStack.credentialSource]
+      )
+    }
+    // The fallback is the last route in the chain, so its own quota wall is worth retrying: there is
+    // nowhere further to fail onto.
+    let fallbackStack = try make(
+      route: fallbackRoute,
+      settings: settings,
+      loadStaticBearer: loadFallbackBearer,
+      makeManagedCredentialStore: makeManagedCredentialStore,
+      http: http,
+      buildVersion: buildVersion
+    )
+    return RosterStack(
+      roster: ProviderRoster(bindings: [primaryStack.binding, fallbackStack.binding]),
+      credentialSources: [primaryStack.credentialSource, fallbackStack.credentialSource]
+    )
   }
   // swiftlint:enable function_parameter_count
 }
@@ -170,7 +246,8 @@ private extension ProviderStackFactory {
     settings: LLMConfig,
     store: any LLMCredentialStore,
     http: any HTTPExecuting & HTTPStreaming,
-    buildVersion: String
+    buildVersion: String,
+    treatsQuotaAsTerminal: Bool = false
   ) throws -> ProviderStack {
     let initial = try store.load(providerID: ChatGPTProviderMetadata.providerID)
 
@@ -190,7 +267,8 @@ private extension ProviderStackFactory {
       requestTimeoutSeconds: settings.requestTimeoutSeconds,
       clock: ContinuousClock(),
       jitter: Self.jitter,
-      epochID: { UUID() }
+      epochID: { UUID() },
+      treatsQuotaAsTerminal: treatsQuotaAsTerminal
     )
     return ProviderStack(
       provider: provider,

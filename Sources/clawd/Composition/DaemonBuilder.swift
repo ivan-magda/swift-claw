@@ -12,10 +12,10 @@ import ServiceLifecycle
 
 /// The composition root. Holds the cross-cutting inputs `run()` resolves before wiring — config,
 /// secrets, stores, the dedicated tool executor, the Telegram transport, and the logger — plus the
-/// lazy managed-store factory. `makeProviderStack` resolves the route into `any LLMProvider` on the
-/// dedicated LLM executor, and `build(providerStack:)` assembles the whole service graph from it:
-/// the provider + agent feed a `TurnRunner`, which the router dispatches from the poller. The `make*`
-/// builders are organized by subsystem in `DaemonBuilder+*.swift`.
+/// lazy managed-store factory. `makeRosterStack` resolves the configured routes into erased
+/// providers on the dedicated LLM executor, and `build(rosterStack:cooldown:)` assembles the whole
+/// service graph from them: the roster + agent feed a `TurnRunner`, which the router dispatches from
+/// the poller. The `make*` builders are organized by subsystem in `DaemonBuilder+*.swift`.
 struct DaemonBuilder: Sendable {
   let config: AppConfig
   let secrets: Secrets
@@ -50,24 +50,33 @@ struct DaemonBuilder: Sendable {
   /// admission-close, cancel, and the bounded drain all share one deadline.
   static let gracefulShutdownSeconds = 30
 
-  /// Resolves the configured route into a provider stack on the dedicated LLM executor. It supplies
-  /// only inputs — the resolved route and settings, the lazy static bearer, the lazy managed store,
-  /// the executor, and the build version — while the tested `ProviderStackFactory` in `ClawLLM` owns
-  /// the selection. The static bearer is read only for the current route and the managed store built
-  /// only for the ChatGPT route, so a route never opens the other's credential path. A malformed or
-  /// insecure managed envelope throws the closed store taxonomy for the caller to map.
-  func makeProviderStack(http: AsyncHTTPExecutor) throws -> ProviderStack {
-    try ProviderStackFactory.make(
-      route: config.llm.route,
+  /// Resolves every configured route into a provider roster on the dedicated LLM executor. It
+  /// supplies only inputs — the resolved routes and settings, the two lazy bearers, the lazy managed
+  /// store, the executor, and the build version — while the tested `ProviderStackFactory` in
+  /// `ClawLLM` owns the selection. Each bearer is read only for the route it belongs to and the
+  /// managed store is built only for the ChatGPT route, so a route never opens another's credential
+  /// path. A fallback that cannot be built throws here, at boot, rather than at the 3am the
+  /// primary's quota runs out; a malformed or insecure managed envelope throws the closed store
+  /// taxonomy for the caller to map.
+  func makeRosterStack(http: any HTTPExecuting & HTTPStreaming) throws -> RosterStack {
+    try ProviderStackFactory.makeRoster(
+      primaryRoute: config.llm.route,
+      fallbackRoute: config.llm.fallbackRoute,
       settings: config.llm,
       loadStaticBearer: { secrets.llmApiKey },
+      loadFallbackBearer: { secrets.llmFallbackApiKey },
       makeManagedCredentialStore: makeManagedStore,
       http: http,
       buildVersion: ClawdVersion.current
     )
   }
 
-  func build(providerStack: ProviderStack) async throws -> DaemonRuntimeBundle {
+  /// - Parameter cooldown: the ONE window ledger the turn path and the `/schedule` parse share, so a
+  ///   route a turn just walled off is not re-probed by the very next scheduled parse.
+  func build(
+    rosterStack: RosterStack,
+    cooldown: any RouteCooldownTracking
+  ) async throws -> DaemonRuntimeBundle {
     let sandbox = await prepareSandbox()
     let coordination = TurnCoordination()
 
@@ -84,8 +93,10 @@ struct DaemonBuilder: Sendable {
     let mcpStack = await resolveMCPStack()
 
     let workspace = FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config))
+    let roster = rosterStack.roster
     let agentStack = makeAgentStack(
-      providerStack: providerStack,
+      roster: roster,
+      cooldown: cooldown,
       workspace: workspace,
       costResolver: costResolver,
       sandbox: sandbox,
@@ -95,7 +106,8 @@ struct DaemonBuilder: Sendable {
     let consumers = makeRunnerConsumers(
       coordination: coordination,
       agentStack: agentStack,
-      providerStack: providerStack,
+      roster: roster,
+      cooldown: cooldown,
       costResolver: costResolver,
       workspace: workspace,
       sandbox: sandbox,
@@ -118,9 +130,9 @@ struct DaemonBuilder: Sendable {
     return runtimeBundle(
       services: services,
       coordination: coordination,
-      // The shutdown bundle commits the rotation of the very source the provider authorized with:
-      // one credential source, hoisted here from the stack the factory composed.
-      credentialSource: providerStack.credentialSource,
+      // The shutdown bundle commits the rotation of every source the roster authorized with —
+      // primary first, in route order — hoisted here from the stack the factory composed.
+      credentialSources: rosterStack.credentialSources,
       boot: bootSequence(
         coordination: coordination,
         waiter: consumers.approvals.waiter,
@@ -146,7 +158,8 @@ struct DaemonBuilder: Sendable {
   func makeRunnerConsumers(  // swiftlint:disable:this function_parameter_count
     coordination: TurnCoordination,
     agentStack: AgentStack,
-    providerStack: ProviderStack,
+    roster: ProviderRoster,
+    cooldown: any RouteCooldownTracking,
     costResolver: CostResolver,
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
@@ -157,23 +170,20 @@ struct DaemonBuilder: Sendable {
       turnRunner: makeTurnRunner(
         coordination: coordination,
         agentStack: agentStack,
-        costPolicy: providerStack.costPolicy
+        costPolicy: roster.primary.costPolicy
       ),
       scheduleSurface: makeScheduleSurface(
-        providerStack: providerStack,
+        roster: roster,
+        cooldown: cooldown,
         costResolver: costResolver
       ),
       approvalCallbacks: makeApprovalCallbackHandler(
         coordination: coordination,
         agentStack: agentStack
       ),
-      doctor: DaemonDoctorReporter(
-        stores: stores,
-        config: config,
+      doctor: makeDoctorReporter(
         sandbox: sandbox,
-        staticAPIKey: secrets.llmApiKey,
-        makeManagedStore: makeManagedStore,
-        mcp: mcp,
+        cooldown: cooldown,
         mcpOutcomes: mcpCatalog.outcomes
       )
     )
@@ -203,7 +213,7 @@ struct DaemonBuilder: Sendable {
   func runtimeBundle(
     services: [any Service],
     coordination: TurnCoordination,
-    credentialSource: any LLMCredentialSource,
+    credentialSources: [any LLMCredentialSource],
     boot: @escaping @Sendable () async -> Void
   ) -> DaemonRuntimeBundle {
     let laneShutdownOutcome = LaneShutdownOutcome()
@@ -224,7 +234,7 @@ struct DaemonBuilder: Sendable {
     return DaemonRuntimeBundle(
       daemon: daemon,
       lanes: coordination.lanes,
-      credentialSource: credentialSource,
+      credentialSources: credentialSources,
       laneShutdownOutcome: laneShutdownOutcome
     )
   }

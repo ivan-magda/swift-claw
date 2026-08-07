@@ -3,6 +3,8 @@ public enum ConfigError: Error, Sendable, Equatable {
   case unwritableStateRoot(String)
   case missingLLMBaseURL
   case missingLLMModel
+  case missingLLMFallbackBaseURL
+  case invalidPrimaryCooldown(String)
   case invalidMaxTokensField(String)
   case invalidStructuredOutput(String)
   case emptyQualifiedModelSuffix(reference: String)
@@ -25,6 +27,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidExecCPUs(String)
   case invalidExecTimeout(String)
 
-  /// Every config error is a configuration-invalid failure, so one exit code covers them all.
-  public var exitCode: Int32 { ClawExitCode.configInvalid.rawValue }
+  public var exitCode: Int32 {
+    ClawExitCode.configInvalid.rawValue
+  }
 }

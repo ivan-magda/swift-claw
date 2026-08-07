@@ -5,18 +5,35 @@ import ClawMCP
 import ClawSecrets
 import Foundation
 
+// MARK: - Doctor Reporter Assembly
+
+extension DaemonBuilder {
+  func makeDoctorReporter(
+    sandbox: SandboxStack,
+    cooldown: any RouteCooldownTracking,
+    mcpOutcomes: [MCPServerOutcome]
+  ) -> DaemonDoctorReporter {
+    DaemonDoctorReporter(
+      stores: stores,
+      config: config,
+      sandbox: sandbox,
+      cooldown: cooldown,
+      staticAPIKey: secrets.llmApiKey,
+      makeManagedStore: makeManagedStore,
+      mcp: mcp,
+      mcpOutcomes: mcpOutcomes
+    )
+  }
+}
+
 // MARK: - Doctor Report Provider
 
 struct DaemonDoctorReporter: DoctorReporting {
   let stores: ClawStores
   let config: AppConfig
   let sandbox: SandboxBootstrapResult
-  /// The static bearer already resolved at boot, so the credential row reports the current route's
-  /// key presence without re-reading secrets.
+  let cooldown: any RouteCooldownTracking
   let staticAPIKey: String?
-  /// The same managed-store factory the provider stack is built on, so the `llm.auth` row inspects the
-  /// credential state the running daemon actually authenticates with — including a store a composition
-  /// test scripts — rather than re-reading the real state root behind the daemon's back.
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
   /// The catalog and tokens this daemon booted with — the same inputs the offline `doctor` reads, so
   /// both surfaces answer from one builder.
@@ -41,7 +58,16 @@ struct DaemonDoctorReporter: DoctorReporting {
 
     report.add(
       contentsOf: HealthRowsBuilder.checks(
-        DoctorHealth.inputs(stores: stores, config: config, now: now)
+        DoctorHealth.inputs(
+          stores: stores,
+          config: config,
+          now: now,
+          routeHealth: await LLMRouteHealth.live(
+            primaryReference: config.llm.route.configuredReference,
+            fallbackReference: config.llm.fallbackRoute?.configuredReference,
+            cooldown: cooldown
+          )
+        )
       )
     )
     report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))

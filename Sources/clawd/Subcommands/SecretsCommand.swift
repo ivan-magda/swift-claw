@@ -39,11 +39,13 @@ struct SecretsCommand: AsyncParsableCommand {
         throw ExitCode(error.exitCode)
       }
 
+      let existing = try? EncryptedFileSecretStore(stateRoot: config.stateRoot).loadSecrets()
+      let mergedEnvironment = Self.mergeEnvironment(environment, fallingBackTo: existing)
+
       let secrets: Secrets
       do {
-        // Suppress the plaintext warning — reading plaintext to encrypt it is the intent here.
         secrets = try EnvSecretStore(
-          environment: environment,
+          environment: mergedEnvironment,
           warn: { _ in }
         ).loadSecrets()
       } catch let error as SecretStoreError {
@@ -61,11 +63,7 @@ struct SecretsCommand: AsyncParsableCommand {
         ? nil
         : Self.scrubEnvFile(
           at: resolvedEnvFilePath(environment: environment),
-          keys: [
-            EnvSecretStore.EnvKey.botToken,
-            EnvSecretStore.EnvKey.llmApiKey,
-            EnvSecretStore.EnvKey.searchApiKey,
-          ]
+          keys: EnvSecretStore.EnvKey.sealed
         )
       // swiftlint:disable:next no_print_in_production
       print(
@@ -112,6 +110,36 @@ extension SecretsCommand.Seal {
       )
       throw ExitCode(ClawExitCode.alreadyRunning.rawValue)
     }
+  }
+}
+
+// MARK: - Merge
+
+extension SecretsCommand.Seal {
+  static func mergeEnvironment(
+    _ environment: [String: String],
+    fallingBackTo existing: Secrets?
+  ) -> [String: String] {
+    guard let existing else {
+      return environment
+    }
+
+    var merged = environment
+    let existingByKey: [String: String?] = [
+      EnvSecretStore.EnvKey.botToken: existing.telegramBotToken,
+      EnvSecretStore.EnvKey.llmApiKey: existing.llmApiKey,
+      EnvSecretStore.EnvKey.searchApiKey: existing.searchApiKey,
+      EnvSecretStore.EnvKey.llmFallbackApiKey: existing.llmFallbackApiKey,
+    ]
+
+    for (key, existingValue) in existingByKey {
+      let isBlank = merged[key]?.isEmpty ?? true
+      if isBlank, let existingValue {
+        merged[key] = existingValue
+      }
+    }
+
+    return merged
   }
 }
 
@@ -177,8 +205,7 @@ extension SecretsCommand.Seal {
       """
 
     let manualNote = """
-      Remove the plaintext \(EnvSecretStore.EnvKey.botToken) / \
-      \(EnvSecretStore.EnvKey.llmApiKey) / \(EnvSecretStore.EnvKey.searchApiKey) \
+      Remove the plaintext \(EnvSecretStore.EnvKey.sealed.joined(separator: " / ")) \
       values from your env file yourself.
       """
 

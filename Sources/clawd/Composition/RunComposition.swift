@@ -53,10 +53,12 @@ struct RunComposition {
     }
   }
 
-  /// Assembles the daemon bundle from the provider stack. Injectable so a test forces a post-clients
-  /// build failure and proves every already-created client is closed rather than leaked.
-  var buildDaemon: @Sendable (DaemonBuilder, ProviderStack) async throws -> DaemonRuntimeBundle =
-    Self.assembleDaemon
+  /// Assembles the daemon bundle from the roster and the shared cooldown. Injectable so a test
+  /// forces a post-clients build failure and proves every already-created client is closed rather
+  /// than leaked, and so an acceptance test reads the exact roster and cooldown the daemon runs on.
+  var buildDaemon:
+    @Sendable (DaemonBuilder, RosterStack, RouteCooldown<ContinuousClock>) async throws ->
+      DaemonRuntimeBundle = Self.assembleDaemon
 
   struct Composed {
     let bundle: DaemonRuntimeBundle
@@ -88,8 +90,15 @@ struct RunComposition {
         logger: logger,
         makeManagedStore: { makeManagedStore(config.stateRoot) }
       )
-      let stack = try builder.makeProviderStack(http: clients.llm.executor)
-      let bundle = try await buildDaemon(builder, stack)
+      let stack = try builder.makeRosterStack(http: clients.llm.executor)
+      // ONE ledger for the whole process. The turn path and the /schedule parse both take this
+      // instance, so a window a turn arms is a window the next scheduled parse already sees; two
+      // instances would each re-probe a route the other knows is walled off.
+      let cooldown = RouteCooldown(
+        longSeconds: config.llm.primaryCooldownSeconds,
+        clock: ContinuousClock()
+      )
+      let bundle = try await buildDaemon(builder, stack, cooldown)
 
       return Composed(bundle: bundle, clients: clients)
     } catch {
@@ -106,9 +115,10 @@ extension RunComposition {
   /// function reference rather than a multi-line closure the formatter and linter disagree on.
   static func assembleDaemon(
     _ builder: DaemonBuilder,
-    _ stack: ProviderStack
+    _ stack: RosterStack,
+    _ cooldown: RouteCooldown<ContinuousClock>
   ) async throws -> DaemonRuntimeBundle {
-    try await builder.build(providerStack: stack)
+    try await builder.build(rosterStack: stack, cooldown: cooldown)
   }
 }
 
