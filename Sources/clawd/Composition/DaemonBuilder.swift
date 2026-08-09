@@ -21,16 +21,11 @@ struct DaemonBuilder: Sendable {
   let secrets: Secrets
   let stores: ClawStores
 
-  /// Protocol-typed rather than the concrete executor: every consumer — the two HTTP tools and each
-  /// MCP transport — takes it through these seams, so a test can script the whole tool-side HTTP
-  /// road without a socket.
   let toolExecutor: any HTTPExecuting & HTTPStreaming
 
   let transport: TelegramClient
   let botUsername: String?
 
-  /// The owner's MCP catalog and the tokens bound to it, resolved before the logger existed so the
-  /// tokens could join `redactionValues`.
   let mcp: MCPBootInputs
 
   let logger: Logger

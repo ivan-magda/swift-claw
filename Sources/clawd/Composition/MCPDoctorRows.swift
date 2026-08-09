@@ -107,9 +107,11 @@ private extension MCPDoctorRows {
       }
       return "include: \(include.joined(separator: ", "))"
     }
+
     guard filter.exclude.isEmpty else {
       return "exclude: \(filter.exclude.joined(separator: ", "))"
     }
+
     return "all tools"
   }
 

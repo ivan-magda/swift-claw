@@ -22,8 +22,6 @@ struct RunComposition {
   let stores: ClawStores
   let logger: Logger
 
-  /// The MCP catalog and tokens `run` resolved before the logger. Empty means the feature is off,
-  /// which is also what a composition test that says nothing about MCP means.
   var mcp: MCPBootInputs = .empty
 
   /// Builds the three runtime clients. Injectable so a test records which client reaches which

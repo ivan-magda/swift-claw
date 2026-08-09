@@ -35,10 +35,7 @@ struct DaemonDoctorReporter: DoctorReporting {
   let cooldown: any RouteCooldownTracking
   let staticAPIKey: String?
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
-  /// The catalog and tokens this daemon booted with — the same inputs the offline `doctor` reads, so
-  /// both surfaces answer from one builder.
   let mcp: MCPBootInputs
-  /// What each server contributed while the catalog was pinned. Only the running daemon knows it.
   let mcpOutcomes: [MCPServerOutcome]
 
   func report() async -> DoctorReport {

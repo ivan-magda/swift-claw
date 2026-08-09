@@ -15,8 +15,6 @@ public enum Command: Sendable, Equatable {
   case cancelJob(jobId: Int64?)
   case help
   case doctor
-  /// Status only, and argument-free by design: no MCP server may be added, changed, or credentialed
-  /// from a chat message.
   case mcp
   case plain(String)
 

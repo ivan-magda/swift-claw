@@ -303,6 +303,7 @@ public enum TokenEstimator {
     guard tools.isEmpty == false else {
       return 0
     }
+
     let wireTools = tools.map { definition in
       ToolInputEstimate(
         name: definition.name,
@@ -310,9 +311,11 @@ public enum TokenEstimator {
         parameters: definition.parameters
       )
     }
+
     guard let json = CanonicalJSON.encode(wireTools) else {
       return .max
     }
+
     return estimateTokens(forText: json)
   }
 
