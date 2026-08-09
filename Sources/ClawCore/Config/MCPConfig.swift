@@ -37,7 +37,7 @@ public enum MCPHTTPHeader {
       "Trailer",
       "Transfer-Encoding",
       "Upgrade",
-    ].map { name in name.lowercased() }
+    ].map { $0.lowercased() }
   )
 
   public static func isReserved(_ name: String) -> Bool {

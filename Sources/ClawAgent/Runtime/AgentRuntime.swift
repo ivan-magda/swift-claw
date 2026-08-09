@@ -154,8 +154,6 @@ public struct AgentRuntime: Sendable {
   let costResolver: CostResolver
   let usageResolver: UsageResolver
   let budget: RunBudget
-  /// The same immutable definitions the request sends, retained so every accounting path charges
-  /// the exact tool surface even when it runs from the result-classification extension.
   let toolDefinitions: [ToolDefinition]
 
   private let toolDispatcher: (any ToolDispatching)?

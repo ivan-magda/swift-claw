@@ -57,7 +57,6 @@ public struct AppConfig: Sendable, Equatable {
     static let execTimeout = "CLAW_EXEC_TIMEOUT"
     static let execAllowEgress = "CLAW_EXEC_ALLOW_EGRESS"
 
-    /// Path only. The server catalog itself is a YAML file, decoded outside this env-only loader.
     static let mcpConfigPath = "CLAW_MCP_CONFIG"
   }
 
@@ -112,7 +111,6 @@ public struct AppConfig: Sendable, Equatable {
   public let exec: ExecConfig
   public let voice: VoiceConfig
   public let image: ImageConfig
-  /// Where to read the MCP server catalog from; the file itself is decoded by ClawWorkspace.
   public let mcpConfigSource: MCPConfigSource
 
   public init(
