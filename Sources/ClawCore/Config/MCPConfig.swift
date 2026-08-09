@@ -64,7 +64,8 @@ public enum MCPHTTPHeader {
 
   private static func isTokenByte(_ byte: UInt8) -> Bool {
     switch byte {
-    case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"),
+    case UInt8(ascii: "A")...UInt8(ascii: "Z"),
+      UInt8(ascii: "a")...UInt8(ascii: "z"),
       UInt8(ascii: "0")...UInt8(ascii: "9"):
       return true
     default:
@@ -236,17 +237,21 @@ private extension MCPServerConfig {
     guard MCPHTTPHeader.isReserved(trimmedAuthHeader) == false else {
       throw MCPConfigError.invalidValue(key: "authHeader", value: "reserved transport header")
     }
+
     var seenHeaderNames: Set<String> = []
     for (header, value) in headers {
       guard MCPHTTPHeader.isValidName(header) else {
         throw MCPConfigError.invalidValue(key: "headers", value: "invalid HTTP field name")
       }
+
       guard MCPHTTPHeader.isReserved(header) == false else {
         throw MCPConfigError.invalidValue(key: "headers", value: "reserved transport header")
       }
+
       guard seenHeaderNames.insert(header.lowercased()).inserted else {
         throw MCPConfigError.invalidValue(key: "headers", value: "duplicate HTTP field name")
       }
+
       guard MCPHTTPHeader.isValidValue(value) else {
         throw MCPConfigError.invalidValue(key: "headers", value: "invalid HTTP field value")
       }
@@ -259,6 +264,7 @@ private extension MCPServerConfig {
     guard shadowsToken == false else {
       throw MCPConfigError.invalidValue(key: "headers", value: trimmedAuthHeader)
     }
+
     return trimmedAuthHeader
   }
 }
@@ -278,12 +284,14 @@ public struct MCPConfig: Sendable, Equatable {
   /// than refusing to boot.
   public init(servers: [MCPServerConfig]) throws {
     var seen: Set<String> = []
+
     for server in servers {
       let sanitized = MCPNaming.sanitizeFragment(server.name)
       guard seen.insert(sanitized).inserted else {
         throw MCPConfigError.duplicateServerName(sanitized)
       }
     }
+
     self.init(unchecked: servers)
   }
 
