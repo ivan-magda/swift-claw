@@ -162,7 +162,11 @@ systemctl --user enable --now swift-claw.service
 - **Linux:** `journalctl --user -u swift-claw -f`.
 
 A second `clawd` against the same state root refuses to boot (file lock), and a Telegram
-409 conflict is logged as critical. Exit codes are diagnostic:
+409 conflict is logged as critical. The commands that write into the state root take that
+same lock — `clawd secrets seal`, `clawd auth login` / `logout`, and `clawd mcp set-token`
+/ `clear-token` — so stop the service before running them. Read-only commands
+(`clawd doctor`, `clawd auth status`, `clawd mcp list` / `probe`) are safe against a
+running daemon. Exit codes are diagnostic:
 
 | Code | Meaning |
 |---|---|

@@ -39,6 +39,7 @@ enum ChatGPTProviderTestSupport {
     name: "clock",
     description: "Read the clock.",
     parameters: .object(["type": .string("object")]),
+    metadataProvenance: .trusted,
     egressClass: .none,
     riskLevel: .safe
   )
@@ -51,6 +52,7 @@ enum ChatGPTProviderTestSupport {
       "properties": .object(["url": .object(["type": .string("string")])]),
       "required": .array([.string("url")]),
     ]),
+    metadataProvenance: .trusted,
     egressClass: .arbitraryDestination,
     riskLevel: .ask
   )

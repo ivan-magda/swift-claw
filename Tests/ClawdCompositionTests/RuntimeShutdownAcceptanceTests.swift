@@ -24,7 +24,7 @@ import Testing
   /// the LLM producer and its nested HTTP exchange.
   private struct HeldLane: Sendable {
     let registry: SessionLaneRegistry
-    let hold: AcceptanceStreamingHTTP.StreamHold
+    let hold: ScriptedStreamHold
     let join: TerminationBox
     let stack: ProviderStack
   }
@@ -33,12 +33,12 @@ import Testing
     sessionId: Int64,
     runId: Int64
   ) async throws -> HeldLane {
-    let hold = AcceptanceStreamingHTTP.StreamHold()
-    let http = AcceptanceStreamingHTTP(streamScripts: [
-      .init(
-        head: CompositionAcceptance.okHead,
-        chunks: CompositionAcceptance.terminalRound(tokens: (5, 2)),
-        hold: hold
+    let hold = ScriptedStreamHold()
+    let http = ScriptedHTTPExecutor([
+      .blockedStream(
+        CompositionAcceptance.okHead,
+        CompositionAcceptance.terminalRound(tokens: (5, 2)),
+        hold
       )
     ])
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())

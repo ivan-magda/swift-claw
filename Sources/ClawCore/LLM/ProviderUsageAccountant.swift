@@ -69,10 +69,11 @@ public struct ProviderUsageAccountant: Sendable {
     for response: ChatResponse,
     callID: ProviderCallID,
     context: [ChatMessage],
+    tools: [ToolDefinition] = [],
     runId: Int64?,
     sessionId: Int64
   ) -> ProviderUsage {
-    let resolvedUsage = usageResolver.resolve(response: response, context: context)
+    let resolvedUsage = usageResolver.resolve(response: response, context: context, tools: tools)
       .addingReservation(reservationPolicy.additionalTokens(for: context))
     let resolvedCost = costResolver.resolve(
       model: configuredReference,
@@ -100,13 +101,18 @@ public struct ProviderUsageAccountant: Sendable {
   public func conservativeRow(
     callID: ProviderCallID,
     context: [ChatMessage],
+    tools: [ToolDefinition] = [],
     observedCompletionTokens: Int,
     runId: Int64?,
     sessionId: Int64
   ) -> ProviderUsage {
     let resolvedUsage =
       usageResolver
-      .estimate(context: context, maxOutputTokens: max(outputCap, observedCompletionTokens))
+      .estimate(
+        context: context,
+        tools: tools,
+        maxOutputTokens: max(outputCap, observedCompletionTokens)
+      )
       .addingReservation(reservationPolicy.additionalTokens(for: context))
     let resolvedCost = costResolver.resolve(
       model: configuredReference,
@@ -128,10 +134,15 @@ public struct ProviderUsageAccountant: Sendable {
   /// The pre-call estimate a budget gate reads before a call is issued: reserved input, the total for
   /// the token cap, and the USD figure — resolved under the injected policy, so `includedPlan` yields
   /// a zero the dollar gate skips — for the spend cap.
-  public func preflightEstimate(context: [ChatMessage]) -> PreflightEstimate {
-    let inputTokens =
-      TokenEstimator.estimateInputTokens(context) + reservationPolicy.additionalTokens(for: context)
-    let totalTokens = inputTokens + outputCap
+  public func preflightEstimate(
+    context: [ChatMessage],
+    tools: [ToolDefinition] = []
+  ) -> PreflightEstimate {
+    let inputTokens = SaturatingArithmetic.sum(
+      TokenEstimator.estimateInputTokens(context, tools: tools),
+      reservationPolicy.additionalTokens(for: context)
+    )
+    let totalTokens = SaturatingArithmetic.sum(inputTokens, outputCap)
     let costUSD = costResolver.resolve(
       model: configuredReference,
       usage: ChatUsage(

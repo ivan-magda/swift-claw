@@ -44,6 +44,10 @@ public struct RecordedHTTPRequest: Sendable, Equatable {
 /// was (and was not) dispatched. A call that matches neither the map nor a canned fallback throws,
 /// so an unexpected dispatch surfaces as a test failure.
 ///
+/// Reach for it when a test is about *which* endpoint was asked and what came back, in any order —
+/// `ScriptedHTTPExecutor` is the other half of the split, an order-sensitive queue that also speaks
+/// `HTTPStreaming`.
+///
 /// It honours the seam's contract rather than shortcutting it: the body policy must be `.buffered`,
 /// the handoff runs once before the scripted answer is produced, and a scripted body past the
 /// applicable cap meets the same fate the real executor would give it — a success fails, an error

@@ -114,11 +114,10 @@ struct FallbackCompositionAcceptanceTests {
 
     // given — a transport that walls the plan off on the primary's endpoint and answers on the
     // fallback's, and the production roster composed over it
-    let http = AcceptanceStreamingHTTP(
-      streamScripts: [],
-      bufferedResponses: [FallbackWire.chatCompletionsURL: FallbackWire.okCompletion],
-      streamScriptsByURL: [FallbackWire.chatGPTURL: FallbackWire.quotaExhausted]
-    )
+    let http = ScriptedHTTPExecutor([
+      FallbackWire.quotaExhausted,
+      .ok(FallbackWire.okCompletion),
+    ])
     let rosterStack = try harness.builder.makeRosterStack(http: http)
     let runtime = FallbackWire.makeRuntime(
       roster: rosterStack.roster,
@@ -189,10 +188,10 @@ private enum FallbackWire {
 
   /// A clean throttle head: the plan is out, nothing was generated. `retry-after: 0` keeps the
   /// adapter's own retry pacing instant so the test spends no wall-clock proving the switch.
-  static var quotaExhausted: AcceptanceStreamingHTTP.StreamScript {
-    AcceptanceStreamingHTTP.StreamScript(
-      head: HTTPStreamHead(statusCode: 429, headers: ["retry-after": "0"]),
-      chunks: [Data(#"{"error":{"code":"usage_limit_reached","message":"plan exhausted"}}"#.utf8)]
+  static var quotaExhausted: ScriptedHTTPExecutor.Step {
+    .stream(
+      HTTPStreamHead(statusCode: 429, headers: ["retry-after": "0"]),
+      [Data(#"{"error":{"code":"usage_limit_reached","message":"plan exhausted"}}"#.utf8)]
     )
   }
 

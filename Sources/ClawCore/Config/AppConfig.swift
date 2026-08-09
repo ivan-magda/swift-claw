@@ -56,6 +56,8 @@ public struct AppConfig: Sendable, Equatable {
     static let execCPUs = "CLAW_EXEC_CPUS"
     static let execTimeout = "CLAW_EXEC_TIMEOUT"
     static let execAllowEgress = "CLAW_EXEC_ALLOW_EGRESS"
+
+    static let mcpConfigPath = "CLAW_MCP_CONFIG"
   }
 
   enum EnvDefaults {
@@ -109,6 +111,7 @@ public struct AppConfig: Sendable, Equatable {
   public let exec: ExecConfig
   public let voice: VoiceConfig
   public let image: ImageConfig
+  public let mcpConfigSource: MCPConfigSource
 
   public init(
     allowlist: Set<Int64>,
@@ -128,7 +131,8 @@ public struct AppConfig: Sendable, Equatable {
     webFetchExemptCIDRs: [CIDR],
     exec: ExecConfig,
     voice: VoiceConfig,
-    image: ImageConfig
+    image: ImageConfig,
+    mcpConfigSource: MCPConfigSource
   ) {
     self.allowlist = allowlist
     self.stateRoot = stateRoot
@@ -152,6 +156,7 @@ public struct AppConfig: Sendable, Equatable {
     self.exec = exec
     self.voice = voice
     self.image = image
+    self.mcpConfigSource = mcpConfigSource
   }
 
   /// Loads and validates non-secret config from the environment. Secrets (the bot token / LLM key)
@@ -189,6 +194,7 @@ public struct AppConfig: Sendable, Equatable {
     let exec = try parseExecConfig(from: env)
     let voice = try parseVoiceConfig(from: env)
     let image = try parseImageConfig(from: env)
+    let mcpConfigSource = Self.mcpConfigSource(from: env, stateRoot: stateRoot)
 
     return AppConfig(
       allowlist: allowlist,
@@ -208,8 +214,31 @@ public struct AppConfig: Sendable, Equatable {
       webFetchExemptCIDRs: webFetchExemptCIDRs,
       exec: exec,
       voice: voice,
-      image: image
+      image: image,
+      mcpConfigSource: mcpConfigSource
     )
+  }
+}
+
+// MARK: - MCP Config Location
+
+public extension AppConfig {
+  /// Resolves *where* the MCP catalog lives, not whether it is readable — the loader owns that, and
+  /// the two answers differ: an owner-named path that is missing fails the boot, while the probed
+  /// default being missing is just the feature staying off.
+  ///
+  /// Public because the CLI verbs that manage MCP tokens need the catalog's location without the
+  /// rest of the daemon's configuration having to be valid: an owner repairing a token must not be
+  /// stopped by an unrelated env var.
+  static func mcpConfigSource(
+    from env: [String: String],
+    stateRoot: URL
+  ) -> MCPConfigSource {
+    let raw = env[EnvKey.mcpConfigPath]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard raw.isEmpty == false else {
+      return .probed(stateRoot.appendingPathComponent(MCPLimits.configFileName))
+    }
+    return .explicit(URL(fileURLWithPath: raw))
   }
 }
 

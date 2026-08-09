@@ -74,20 +74,10 @@ public struct StoredOAuthCredential: Sendable, Equatable, Codable {
   }
 }
 
-/// A closed, redaction-safe taxonomy for the credential store. It is closed on purpose: a raw
-/// `Crypto`, `POSIX`, or Foundation error carries paths and key material in its description, so
-/// none may cross this seam — the same rule `StoreError` enforces at the GRDB seam.
-public enum LLMCredentialStoreError: Error, Sendable, Equatable {
-  case missingRuntimeKey
-  case insecureStorage
-  case malformedStorage
-  case unsupportedVersion
-  case oversizedStorage
-  case publicationFailed
-  /// A publication that neither provably landed nor provably did not. It is distinct from
-  /// `publicationFailed` because a caller must not retry it as though nothing was written.
-  case commitUncertain
-}
+/// The provider store's spelling of the shared credential-file taxonomy. The failures a sealed map
+/// can have are the file's, not the vendor's, so the cases live once in `CredentialStoreError` and
+/// this name is what the LLM seam calls them.
+public typealias LLMCredentialStoreError = CredentialStoreError
 
 /// Durable storage for one provider's credential. Typed throws keep the closed taxonomy above at
 /// the seam rather than trusting every implementation to remember to map its errors.

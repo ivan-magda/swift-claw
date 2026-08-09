@@ -39,6 +39,10 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   code and treats inbound content as data, never as instructions.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
+- **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
+  the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
+  named tool safe, but the exfiltration gate can still require approval. Only you can add a
+  server or change what it exposes.
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
   can run an eligible model on a ChatGPT subscription.
 - **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
@@ -130,9 +134,10 @@ Persona and behavior live in Markdown files under `~/.swift-claw/workspace/`:
 | `HEARTBEAT.md` | The proactive heartbeat checklist | Heartbeat runs only |
 | `skills/<name>/SKILL.md` | A procedure the agent loads when a task calls for it | Untrusted, labeled |
 
-Runtime knobs are environment variables: the model route (`CLAW_LLM_MODEL`), an optional
-fallback route (`CLAW_LLM_FALLBACK_MODEL`, off unless you set it), USD budgets, schedules
-and quiet hours, voice locales, sandbox limits.
+MCP servers go in `~/.swift-claw/mcp.yaml`, with their tokens stored encrypted by
+`clawd mcp set-token`. Other runtime knobs are environment variables: the model route
+(`CLAW_LLM_MODEL`), an optional fallback route (`CLAW_LLM_FALLBACK_MODEL`, off unless you
+set it), USD budgets, schedules and quiet hours, voice locales, sandbox limits.
 [`.env.example`](.env.example) documents every variable;
 [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) is the guide.
 

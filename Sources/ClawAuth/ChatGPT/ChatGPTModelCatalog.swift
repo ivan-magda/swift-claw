@@ -187,7 +187,7 @@ private extension ChatGPTModelCatalog {
     case .string(let raw)?:
       let stated = raw.trimmingCharacters(in: .whitespaces)
       return stated.isEmpty || stated.lowercased() == Catalog.listedVisibility
-    case .bool, .number, .array, .object:
+    case .bool, .integer, .number, .array, .object:
       return false
     }
   }
@@ -201,7 +201,7 @@ private extension ChatGPTModelCatalog {
       return true
     case .bool(let isOffered)?:
       return isOffered
-    case .string, .number, .array, .object:
+    case .string, .integer, .number, .array, .object:
       return false
     }
   }
@@ -209,10 +209,14 @@ private extension ChatGPTModelCatalog {
   /// Only a finite number is an ordering. A missing, non-numeric, or non-finite priority leaves the
   /// row unranked rather than coerced into a place it did not earn.
   static func priority(_ value: JSONValue?) -> Double {
-    guard case .number(let stated)? = value, stated.isFinite else {
+    switch value {
+    case .integer(let stated)?:
+      return Double(stated)
+    case .number(let stated)? where stated.isFinite:
+      return stated
+    case nil, .null?, .bool?, .string?, .number?, .array?, .object?:
       return ChatGPTCatalogModel.unrankedPriority
     }
-    return stated
   }
 }
 

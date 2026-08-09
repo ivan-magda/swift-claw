@@ -23,9 +23,14 @@ extension DaemonBuilder {
     cooldown: any RouteCooldownTracking,
     workspace: FileSystemWorkspace,
     costResolver: CostResolver,
-    sandbox: SandboxStack
+    sandbox: SandboxStack,
+    mcpTools: [any Tool]
   ) -> AgentStack {
-    let toolDispatcher = makeToolDispatcher(workspace: workspace, sandbox: sandbox)
+    let toolDispatcher = makeToolDispatcher(
+      workspace: workspace,
+      sandbox: sandbox,
+      mcpTools: mcpTools
+    )
     let staticSubhash = policyStaticSubhash(toolDispatcher: toolDispatcher, workspace: workspace)
     let agent = makeAgent(
       roster: roster,
@@ -36,7 +41,8 @@ extension DaemonBuilder {
     let contextBuilder = makeContextBuilder(
       workspace: workspace,
       fenceLabels: ToolFenceLabels(definitions: toolDispatcher.definitions),
-      policyStaticSubhash: staticSubhash
+      policyStaticSubhash: staticSubhash,
+      toolDefinitions: toolDispatcher.definitions
     )
     return AgentStack(toolDispatcher: toolDispatcher, agent: agent, contextBuilder: contextBuilder)
   }
@@ -47,11 +53,16 @@ extension DaemonBuilder {
   func makeContextBuilder(
     workspace: FileSystemWorkspace,
     fenceLabels: ToolFenceLabels,
-    policyStaticSubhash: String
+    policyStaticSubhash: String,
+    toolDefinitions: [ToolDefinition]
   ) -> ContextBuilder {
+    let messageInputTokens = TokenEstimator.messageInputBudget(
+      maxInputTokens: config.budget.maxInputTokens,
+      tools: toolDefinitions
+    )
     let contextBudget = ContextBudget(
       inputCapGraphemes: TokenEstimator.graphemeBudget(
-        forInputTokens: config.budget.maxInputTokens
+        forInputTokens: messageInputTokens
       ),
       userFileCap: ContextBudget.default.userFileCap,
       memoryFileCap: ContextBudget.default.memoryFileCap,

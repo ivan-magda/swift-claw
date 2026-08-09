@@ -413,6 +413,45 @@ struct FullSessions: SessionMessageStore {
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
+  @Test func allowlistedMCPSendsOnlyTheMCPSectionOfTheHealthReport() async throws {
+    // given — a report carrying both an MCP row and an unrelated one
+    var report = DoctorReport()
+    report.add(key: "db.writable", value: "true", group: .database)
+    report.add(key: "mcp.linear.tools", value: "skipped: unreachable", ok: false, group: .mcp)
+    let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(stubbed: report))
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/mcp")
+    )
+
+    // then — status only: the reply renders the snapshot the daemon already holds, and no turn runs
+    #expect(outcome == .processed)
+    let reply = try #require(await harness.transport.sent.first)
+    #expect(reply.text.contains("MCP: FAIL"))
+    #expect(reply.text.contains("mcp.linear.tools: skipped: unreachable"))
+    #expect(reply.text.contains("db.writable") == false)
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func mcpArgumentsAreIgnoredSoNoChatMessageCanManageAServer() async throws {
+    // given
+    var report = DoctorReport()
+    report.add(key: "mcp", value: "no servers configured", group: .mcp)
+    let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(stubbed: report))
+
+    // when — an argument tail shaped like a management verb
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/mcp set-token linear hunter2")
+    )
+
+    // then — it is answered as the same status request, and nothing was dispatched
+    #expect(outcome == .processed)
+    let reply = try #require(await harness.transport.sent.first)
+    #expect(reply.text.contains("mcp: no servers configured"))
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
   @Test func unsupportedMediaGetsFriendlyReply() async throws {
     // given
     let harness = try makeHarness(allowed: [42])

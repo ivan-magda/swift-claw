@@ -107,6 +107,7 @@ import Testing
       name: "web_fetch",
       description: "d",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe
     )
@@ -121,12 +122,41 @@ import Testing
     #expect(await provider.requests[0].tools.map(\.name) == ["web_fetch"])
   }
 
+  @Test func untrustedToolMetadataTaintsBeforeTheFirstDispatch() async throws {
+    // given
+    let definition = ToolDefinition(
+      name: "mcp__docs__search",
+      description: "server-authored metadata",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .untrusted,
+      egressClass: .arbitraryDestination,
+      riskLevel: .safe
+    )
+    let provider = SequenceProvider([
+      toolCallResponse([ToolCall(id: "c1", name: definition.name, argumentsJSON: "{}")]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(
+      definitions: [definition],
+      respond: okOutcome(ingestedUntrusted: false)
+    )
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then
+    #expect(await dispatcher.records.first?.context.runIngestedUntrusted == true)
+    #expect(outcome.ingestedUntrusted)
+  }
+
   @Test func liveObservationsFenceUnderTheToolsDeclaredLabel() async throws {
     // given — skill_load declares the "skills" label; its body must reach the wire under it
     let definition = ToolDefinition(
       name: "skill_load",
       description: "d",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe,
       fenceLabel: "skills"
@@ -345,6 +375,42 @@ import Testing
     #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunInputTokenCap))
     #expect(await provider.requests.count == 1)
     #expect(outcome.exchanges.count == 1)  // the executed exchange still rides the commit
+  }
+
+  @Test func advertisedToolsCountTowardTheInputCapBeforeTheProviderCall() async throws {
+    // given
+    let provider = SequenceProvider([okResponse(content: "never reached")])
+    let definition = ToolDefinition(
+      name: "mcp__linear__large_schema",
+      description: "remote tool",
+      parameters: .object([
+        "type": .string("object"),
+        "description": .string(String(repeating: "x", count: 8_000)),
+      ]),
+      metadataProvenance: .untrusted,
+      egressClass: .arbitraryDestination,
+      riskLevel: .ask
+    )
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let budget = RunBudget(
+      maxInputTokens: 1_000,
+      maxOutputTokens: 64,
+      wallClockDeadlineSeconds: 60,
+      retryBudget: 0,
+      perRunUSD: 10,
+      perDayUSD: 100,
+      proactivePerDayUSD: 2,
+      referenceUSDPerToken: 0.000_015
+    )
+    let runtime = makeRuntime(provider: provider, budget: budget, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunInputTokenCap))
+    #expect(await provider.requests.isEmpty)
+    #expect(outcome.ingestedUntrusted)
   }
 
   @Test func aDeadlineAlreadyElapsedBeforeSendDegradesWithoutDebiting() async throws {

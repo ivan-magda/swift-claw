@@ -45,10 +45,36 @@ public enum ToolCallCoding {
 public indirect enum JSONValue: Sendable, Equatable {
   case null
   case bool(Bool)
+  case integer(Int)
   case number(Double)
   case string(String)
   case array([JSONValue])
   case object([String: JSONValue])
+}
+
+extension JSONValue {
+  public static func == (left: JSONValue, right: JSONValue) -> Bool {
+    switch (left, right) {
+    case (.null, .null):
+      return true
+    case (.bool(let leftValue), .bool(let rightValue)):
+      return leftValue == rightValue
+    case (.integer(let leftValue), .integer(let rightValue)):
+      return leftValue == rightValue
+    case (.number(let leftValue), .number(let rightValue)):
+      return leftValue == rightValue
+    case (.integer(let integer), .number(let number)), (.number(let number), .integer(let integer)):
+      return Int(exactly: number) == integer
+    case (.string(let leftValue), .string(let rightValue)):
+      return leftValue == rightValue
+    case (.array(let leftValue), .array(let rightValue)):
+      return leftValue == rightValue
+    case (.object(let leftValue), .object(let rightValue)):
+      return leftValue == rightValue
+    default:
+      return false
+    }
+  }
 }
 
 extension JSONValue: Codable {
@@ -58,6 +84,8 @@ extension JSONValue: Codable {
       self = .null
     } else if let boolValue = try? container.decode(Bool.self) {
       self = .bool(boolValue)
+    } else if let integerValue = try? container.decode(Int.self) {
+      self = .integer(integerValue)
     } else if let numberValue = try? container.decode(Double.self) {
       self = .number(numberValue)
     } else if let stringValue = try? container.decode(String.self) {
@@ -80,6 +108,8 @@ extension JSONValue: Codable {
       try container.encodeNil()
     case .bool(let boolValue):
       try container.encode(boolValue)
+    case .integer(let integerValue):
+      try container.encode(integerValue)
     case .number(let numberValue):
       try container.encode(numberValue)
     case .string(let stringValue):
@@ -115,10 +145,14 @@ extension JSONValue {
   }
 
   public var numberValue: Double? {
-    guard case .number(let numberValue) = self else {
+    switch self {
+    case .integer(let integerValue):
+      return Double(integerValue)
+    case .number(let numberValue):
+      return numberValue
+    case .null, .bool, .string, .array, .object:
       return nil
     }
-    return numberValue
   }
 }
 
@@ -160,6 +194,10 @@ public struct ToolDefinition: Sendable, Equatable {
   public let name: String
   public let description: String
   public let parameters: JSONValue  // JSON-Schema object
+  /// Trust of the provider-facing name, description, and schema. External metadata reaches the
+  /// model before any tool result exists, so the runtime uses this provenance to arm taint before
+  /// the first provider call.
+  public let metadataProvenance: Provenance
   /// The declared policy class the gate enforces. NOT advertised on the wire.
   public let egressClass: ToolEgressClass
   /// The declared risk tier (orthogonal to egress). NOT advertised on the wire.
@@ -168,22 +206,30 @@ public struct ToolDefinition: Sendable, Equatable {
   /// A tool declares another label only when trusted policy already licenses that label for
   /// exactly this content — the label is what the prompt's carve-outs are written against.
   public let fenceLabel: String
+  /// Credential-free execution identity used only by `policy_version` when the advertised fields do
+  /// not fully identify what will run (for example, an adapter backed by a configured endpoint).
+  /// NOT advertised on the wire.
+  public let invocationIdentity: String?
 
   public init(
     name: String,
     description: String,
     parameters: JSONValue,
+    metadataProvenance: Provenance,
     egressClass: ToolEgressClass,
     riskLevel: RiskLevel,
-    fenceLabel: String? = nil
+    fenceLabel: String? = nil,
+    invocationIdentity: String? = nil
   ) {
     self.name = name
     self.description = description
     self.parameters = parameters
+    self.metadataProvenance = metadataProvenance
 
     self.egressClass = egressClass
     self.riskLevel = riskLevel
     self.fenceLabel = fenceLabel ?? name
+    self.invocationIdentity = invocationIdentity
   }
 }
 

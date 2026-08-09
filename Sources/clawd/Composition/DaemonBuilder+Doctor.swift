@@ -1,6 +1,7 @@
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawMCP
 import ClawSecrets
 import Foundation
 
@@ -9,7 +10,8 @@ import Foundation
 extension DaemonBuilder {
   func makeDoctorReporter(
     sandbox: SandboxStack,
-    cooldown: any RouteCooldownTracking
+    cooldown: any RouteCooldownTracking,
+    mcpOutcomes: [MCPServerOutcome]
   ) -> DaemonDoctorReporter {
     DaemonDoctorReporter(
       stores: stores,
@@ -17,7 +19,9 @@ extension DaemonBuilder {
       sandbox: sandbox,
       cooldown: cooldown,
       staticAPIKey: secrets.llmApiKey,
-      makeManagedStore: makeManagedStore
+      makeManagedStore: makeManagedStore,
+      mcp: mcp,
+      mcpOutcomes: mcpOutcomes
     )
   }
 }
@@ -31,6 +35,8 @@ struct DaemonDoctorReporter: DoctorReporting {
   let cooldown: any RouteCooldownTracking
   let staticAPIKey: String?
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
+  let mcp: MCPBootInputs
+  let mcpOutcomes: [MCPServerOutcome]
 
   func report() async -> DoctorReport {
     var report = DoctorReport()
@@ -70,6 +76,9 @@ struct DaemonDoctorReporter: DoctorReporting {
         unavailableReason: sandbox.unavailableReason
       )
     )
+
+    report.add(contentsOf: MCPDoctorRows.rows(config: mcp.config, credentials: mcp.credentials))
+    report.add(contentsOf: MCPDoctorRows.bootRows(outcomes: mcpOutcomes))
 
     if let maintenance = sandbox.maintenance {
       report.add(contentsOf: [SandboxHealthRows.admittingRow(await maintenance.isAdmitting())])

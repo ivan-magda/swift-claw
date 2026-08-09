@@ -37,17 +37,21 @@ import Testing
   private func tool(
     name: String,
     params: JSONValue = .object(["type": .string("object")]),
+    provenance: Provenance = .trusted,
     risk: RiskLevel = .safe,
     egress: ToolEgressClass = .none,
-    fenceLabel: String? = nil
+    fenceLabel: String? = nil,
+    invocationIdentity: String? = nil
   ) -> ToolDefinition {
     ToolDefinition(
       name: name,
       description: "d",
       parameters: params,
+      metadataProvenance: provenance,
       egressClass: egress,
       riskLevel: risk,
-      fenceLabel: fenceLabel
+      fenceLabel: fenceLabel,
+      invocationIdentity: invocationIdentity
     )
   }
 
@@ -120,6 +124,14 @@ import Testing
     )
   }
 
+  @Test func metadataProvenanceIsAnInputClass() {
+    // given / when / then
+    #expect(
+      subhash(tools: [tool(name: "t", provenance: .trusted)])
+        != subhash(tools: [tool(name: "t", provenance: .untrusted)])
+    )
+  }
+
   @Test func fenceLabelIsAnInputClass() {
     // given / when / then — the declared fence label selects the prompt carve-out a tool's output
     // renders under, so changing it must void an outstanding approval the way a risk change does
@@ -134,6 +146,17 @@ import Testing
     #expect(
       subhash(tools: [tool(name: "t", egress: .none)])
         != subhash(tools: [tool(name: "t", egress: .arbitraryDestination)])
+    )
+  }
+
+  @Test func invocationIdentityIsAnInputClass() {
+    // given / when / then — two identically advertised MCP tools at different endpoints are
+    // different actions, so an outstanding approval may not survive the endpoint change.
+    #expect(
+      subhash(tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://a/mcp")])
+        != subhash(
+          tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://b/mcp")]
+        )
     )
   }
 

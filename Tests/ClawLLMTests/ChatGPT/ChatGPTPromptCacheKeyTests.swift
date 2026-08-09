@@ -104,6 +104,7 @@ import Testing
             "type": .string("object"),
             "properties": .object(["tz": .object(["type": .string("string")])]),
           ]),
+          metadataProvenance: .trusted,
           egressClass: .none,
           riskLevel: .safe
         )
@@ -128,6 +129,7 @@ import Testing
           name: "clock",
           description: "Read the wall clock.",
           parameters: .object(["type": .string("object")]),
+          metadataProvenance: .trusted,
           egressClass: .none,
           riskLevel: .safe
         )
@@ -185,6 +187,7 @@ import Testing
           name: "clock",
           description: "Vermillion-Toolbox-Description",
           parameters: .object(["type": .string("object")]),
+          metadataProvenance: .trusted,
           egressClass: .none,
           riskLevel: .safe
         )
@@ -226,6 +229,7 @@ import Testing
           name: "a",
           description: "d",
           parameters: .object(["type": .string("object")]),
+          metadataProvenance: .trusted,
           egressClass: .none,
           riskLevel: .safe
         )

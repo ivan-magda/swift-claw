@@ -78,7 +78,7 @@ public struct TurnOutcome: Sendable {
   public let result: TurnResult
   /// Every round-trip that proposed tool calls, to persist.
   public let exchanges: [ToolExchange]
-  /// Taint signal: any executed observation ingested untrusted content this run.
+  /// Taint signal: provider-facing metadata or an executed observation ingested untrusted content.
   public let ingestedUntrusted: Bool
   /// Private-data signal: the assembly flag (fitted USER/MEMORY sections) OR any executed
   /// observation that read private data this run — `assemblyPrivateData ∪ runPrivateData`. Every
@@ -154,6 +154,7 @@ public struct AgentRuntime: Sendable {
   let costResolver: CostResolver
   let usageResolver: UsageResolver
   let budget: RunBudget
+  let toolDefinitions: [ToolDefinition]
 
   private let toolDispatcher: (any ToolDispatching)?
 
@@ -193,6 +194,7 @@ public struct AgentRuntime: Sendable {
     self.costResolver = costResolver
     self.usageResolver = usageResolver
     self.budget = budget
+    self.toolDefinitions = toolDispatcher?.definitions ?? []
 
     self.toolDispatcher = toolDispatcher
 
@@ -225,7 +227,7 @@ public struct AgentRuntime: Sendable {
     carryOver: ResumeUsage? = nil
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
-    let definitions = toolDispatcher?.definitions ?? []
+    let definitions = toolDefinitions
     let fenceLabels = ToolFenceLabels(definitions: definitions)
     var startIndex = 0
     if roster.hasFallback, await cooldown?.isCooling(routeIndex: 0) == true {
@@ -256,7 +258,9 @@ public struct AgentRuntime: Sendable {
     var wire = buildResult.messages
     var exchanges: [ToolExchange] = []
 
-    var ingestedUntrusted = false
+    var ingestedUntrusted = definitions.contains { definition in
+      definition.metadataProvenance == .untrusted
+    }
     var runPrivateData = false
 
     var pendingSuspension: PendingToolAction?
@@ -293,6 +297,7 @@ public struct AgentRuntime: Sendable {
         usage: active.accountant.conservativeRow(
           callID: callID,
           context: wire,
+          tools: definitions,
           observedCompletionTokens: 0,
           runId: runId,
           sessionId: sessionId
@@ -312,7 +317,7 @@ public struct AgentRuntime: Sendable {
       // transient there is never masked by a wall the turn already moved past.
       var firstFailureKind: DegradationKind?
 
-      let preflight = active.accountant.preflightEstimate(context: wire)
+      let preflight = active.accountant.preflightEstimate(context: wire, tools: definitions)
       if preflight.inputTokens > budget.maxInputTokens {
         return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
       }
@@ -444,6 +449,7 @@ public struct AgentRuntime: Sendable {
         for: response,
         callID: callID,
         context: wire,
+        tools: definitions,
         runId: runId,
         sessionId: sessionId
       )

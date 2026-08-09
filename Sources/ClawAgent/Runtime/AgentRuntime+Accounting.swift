@@ -41,6 +41,7 @@ extension AgentRuntime {
           for: racedSuccess.response,
           callID: callID,
           context: context,
+          tools: toolDefinitions,
           runId: runId,
           sessionId: sessionId
         )
@@ -52,6 +53,7 @@ extension AgentRuntime {
         usage: accountant.conservativeRow(
           callID: callID,
           context: context,
+          tools: toolDefinitions,
           observedCompletionTokens: cancellation.observedCompletionTokens,
           runId: runId,
           sessionId: sessionId
@@ -75,6 +77,7 @@ extension AgentRuntime {
         usage: accountant.conservativeRow(
           callID: callID,
           context: context,
+          tools: toolDefinitions,
           observedCompletionTokens: observedCompletionTokens,
           runId: runId,
           sessionId: sessionId
@@ -127,6 +130,7 @@ extension AgentRuntime {
       for: response,
       callID: callID,
       context: context,
+      tools: toolDefinitions,
       runId: runId,
       sessionId: sessionId
     )

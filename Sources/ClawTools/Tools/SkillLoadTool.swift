@@ -42,6 +42,7 @@ public struct SkillLoadTool: Tool {
         ]),
         "required": .array([.string("name")]),
       ]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe,
       fenceLabel: WorkspaceSkills.fenceLabel

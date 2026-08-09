@@ -45,6 +45,7 @@ extension DaemonBuilder {
             BotMenuCommand(command: "runnow", description: "Run a schedule now."),
             BotMenuCommand(command: "cancel", description: "Cancel a schedule."),
             BotMenuCommand(command: "status", description: "Show daemon health."),
+            BotMenuCommand(command: "mcp", description: "Show MCP server status."),
             BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
           ]
         )

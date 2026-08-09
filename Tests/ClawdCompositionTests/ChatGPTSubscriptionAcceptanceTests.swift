@@ -57,10 +57,10 @@ import Testing
   /// qualified reference for accounting.
   @Test func composedProviderUsesFixedEndpointPinnedHeadersAndWireModel() async throws {
     // given
-    let http = AcceptanceStreamingHTTP(streamScripts: [
-      .init(
-        head: CompositionAcceptance.okHead,
-        chunks: CompositionAcceptance.terminalRound(tokens: (5, 2))
+    let http = ScriptedHTTPExecutor([
+      .stream(
+        CompositionAcceptance.okHead,
+        CompositionAcceptance.terminalRound(tokens: (5, 2))
       )
     ])
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
@@ -123,14 +123,14 @@ import Testing
     let firstCallID = ProviderCallID(rawValue: "acc-call-1")
 
     // given — one composed provider drives both rounds; turn 1 mints replay state
-    let http = AcceptanceStreamingHTTP(streamScripts: [
-      .init(
-        head: CompositionAcceptance.okHead,
-        chunks: CompositionAcceptance.toolRound(callID: "call_a", tokens: (7, 3))
+    let http = ScriptedHTTPExecutor([
+      .stream(
+        CompositionAcceptance.okHead,
+        CompositionAcceptance.toolRound(callID: "call_a", tokens: (7, 3))
       ),
-      .init(
-        head: CompositionAcceptance.okHead,
-        chunks: CompositionAcceptance.terminalRound(tokens: (9, 4))
+      .stream(
+        CompositionAcceptance.okHead,
+        CompositionAcceptance.terminalRound(tokens: (9, 4))
       ),
     ])
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
@@ -241,18 +241,18 @@ import Testing
 
     // given — turn 1 mints replay state carrying the reasoning ENC-A under an initial epoch; turn 2
     // then replays it, the backend rejects it as poisoned, and the state-free recovery succeeds.
-    let firstHTTP = AcceptanceStreamingHTTP(streamScripts: [
-      .init(
-        head: CompositionAcceptance.okHead,
-        chunks: CompositionAcceptance.toolRound(callID: "call_a", tokens: (7, 3))
+    let firstHTTP = ScriptedHTTPExecutor([
+      .stream(
+        CompositionAcceptance.okHead,
+        CompositionAcceptance.toolRound(callID: "call_a", tokens: (7, 3))
       ),
-      .init(
-        head: CompositionAcceptance.invalidEncryptedContentHead,
-        chunks: CompositionAcceptance.invalidEncryptedContentBody()
+      .stream(
+        CompositionAcceptance.invalidEncryptedContentHead,
+        CompositionAcceptance.invalidEncryptedContentBody()
       ),
-      .init(
-        head: CompositionAcceptance.okHead,
-        chunks: CompositionAcceptance.terminalRound(tokens: (9, 4))
+      .stream(
+        CompositionAcceptance.okHead,
+        CompositionAcceptance.terminalRound(tokens: (9, 4))
       ),
     ])
     let firstStack = try CompositionAcceptance.makeStack(
@@ -341,10 +341,10 @@ import Testing
 
     // when — RESTART: a fresh composed provider/codec over the same GRDB history threads the whole
     // conversation — both the poisoned anchor and the recovered one — into the next turn
-    let restartHTTP = AcceptanceStreamingHTTP(streamScripts: [
-      .init(
-        head: CompositionAcceptance.okHead,
-        chunks: CompositionAcceptance.terminalRound(tokens: (2, 1))
+    let restartHTTP = ScriptedHTTPExecutor([
+      .stream(
+        CompositionAcceptance.okHead,
+        CompositionAcceptance.terminalRound(tokens: (2, 1))
       )
     ])
     let restartStack = try CompositionAcceptance.makeStack(

@@ -27,6 +27,30 @@ enum EnvironmentLoader {
     return try resolution.store.loadSecrets()
   }
 
+  /// Reads the owner's MCP server catalog. A file the owner named by env var and that cannot be read
+  /// is their error; the probed default simply being absent is how the feature stays off.
+  static func loadMCPConfig(config: AppConfig) throws -> MCPConfig {
+    try MCPConfigLoader.load(from: config.mcpConfigSource)
+  }
+
+  /// Reads the token bound to each configured server in one pass, so the envelope opens once. Every
+  /// declared server gets an outcome, disabled ones included — doctor reports on the whole file.
+  static func loadMCPCredentials(
+    config: AppConfig,
+    servers: [MCPServerConfig]
+  ) throws(CredentialStoreError) -> [String: MCPCredentialLoad] {
+    return try EncryptedMCPCredentialStore(stateRoot: config.stateRoot).loadAll(servers: servers)
+  }
+
+  /// Reads the boot snapshot: configured-server authentication outcomes plus every stored token for
+  /// process-wide redaction, including records the current catalog no longer uses.
+  static func loadMCPCredentialSnapshot(
+    config: AppConfig,
+    servers: [MCPServerConfig]
+  ) throws(CredentialStoreError) -> MCPCredentialSnapshot {
+    try EncryptedMCPCredentialStore(stateRoot: config.stateRoot).loadSnapshot(servers: servers)
+  }
+
   /// Opens the store bundle at the state root's database path (runs pending migrations).
   static func openStores(config: AppConfig) throws -> ClawStores {
     try ClawDatabase.openStores(path: databasePath(config: config))

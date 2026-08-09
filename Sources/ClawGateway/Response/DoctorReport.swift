@@ -10,6 +10,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
   case scheduler
   case approvals
   case connectivity
+  case mcp
   case sandbox
 
   public var title: String {
@@ -23,6 +24,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
     case .scheduler: "Scheduler"
     case .approvals: "Approvals"
     case .connectivity: "Connectivity"
+    case .mcp: "MCP"
     case .sandbox: "Sandbox"
     }
   }
@@ -93,6 +95,22 @@ public struct DoctorReport: Sendable {
     let sections = nonEmptyGroups().map { summarySection(group: $0.group, rows: $0.rows) }
 
     return ([verdict, ""] + sections).joined(separator: "\n")
+  }
+
+  /// One group on its own, every row included. The whole-report summary prints only failures under
+  /// each heading, which is right when eleven groups compete for one message; a reply asking about a
+  /// single subsystem is asking to read its rows.
+  public func renderTelegramGroup(_ group: DoctorGroup) -> String {
+    let rows = checks.filter { $0.group == group }
+    guard rows.isEmpty == false else {
+      return "\(group.title): nothing reported"
+    }
+
+    let header = "\(group.title): \(rows.allSatisfy(\.ok) ? "ok" : "FAIL")"
+    let lines = rows.map { row in
+      "\(row.ok ? "" : "✗ ")\(row.key): \(Self.truncatedValue(row.value))"
+    }
+    return ([header] + lines).joined(separator: "\n")
   }
 
   public func renderJSON() -> String {

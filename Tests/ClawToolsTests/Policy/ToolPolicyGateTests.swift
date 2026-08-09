@@ -10,14 +10,16 @@ import Testing
 /// resolution contract without HTTP plumbing.
 struct FetchLikeTool: Tool {
   var name = "web_fetch"
+  var riskLevel: RiskLevel = .safe
 
   var definition: ToolDefinition {
     ToolDefinition(
       name: name,
       description: "stub",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .arbitraryDestination,
-      riskLevel: .safe
+      riskLevel: riskLevel
     )
   }
 
@@ -45,6 +47,7 @@ struct SearchLikeTool: Tool {
     name: "web_search",
     description: "stub",
     parameters: .object(["type": .string("object")]),
+    metadataProvenance: .trusted,
     egressClass: .fixedEndpoint,
     riskLevel: .safe
   )
@@ -69,6 +72,7 @@ struct WriteLikeTool: Tool {
       name: name,
       description: "stub",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .ask
     )
@@ -105,6 +109,7 @@ private struct PreparedDangerousTool: Tool {
       name: "execute_code",
       description: "test dangerous tool",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .dangerous
     )
@@ -142,6 +147,7 @@ private struct ProbedDangerousTool: Tool {
       name: "execute_code",
       description: "test dangerous tool",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .dangerous
     )
@@ -453,6 +459,45 @@ private struct ProbedDangerousTool: Tool {
     #expect(recorded.tool == "file_write")
     #expect(recorded.canonicalTarget == "/workspace/notes/plan.md")
     #expect(recorded.reason == .askTier)
+  }
+
+  @Test func askTierEgressRunsArgumentGuardsBeforeApproval() async {
+    // given an ask-tier arbitrary-destination tool, matching the MCP policy declarations
+    let tool = FetchLikeTool(name: "mcp__linear__create_issue", riskLevel: .ask)
+    let privateSubstring = String(Self.memoryText.dropFirst(10).prefix(16))
+
+    // when
+    let unconditional = await makeGate().evaluate(
+      call: ToolCall(
+        id: "m1",
+        name: tool.name,
+        argumentsJSON: #"{"url":"https://mcp.example/?token=s3cret-value-1"}"#
+      ),
+      tool: tool,
+      context: makeContext()
+    )
+    let conditional = await makeGate().evaluate(
+      call: ToolCall(
+        id: "m2",
+        name: tool.name,
+        argumentsJSON: #"{"url":"https://mcp.example/?body=\#(privateSubstring)"}"#
+      ),
+      tool: tool,
+      context: makeContext(tainted: true, assemblyPrivate: true)
+    )
+
+    // then neither match can become an approvable action
+    guard case .block(let unconditionalPayload, let unconditionalArgs) = unconditional else {
+      Issue.record("expected the unconditional guard to block, got \(unconditional)")
+      return
+    }
+    #expect(unconditionalPayload.status == .blockedArgs)
+    #expect(unconditionalArgs.contains("s3cret-value-1") == false)
+    guard case .block(let conditionalPayload, _) = conditional else {
+      Issue.record("expected the conditional guard to block, got \(conditional)")
+      return
+    }
+    #expect(conditionalPayload.status == .blockedArgs)
   }
 
   @Test func askTierRecordsCanonicalArgsHashAndPresentation() async {
@@ -909,6 +954,7 @@ private struct ProbedDangerousTool: Tool {
         name: "web_fetch",
         description: "stub",
         parameters: .object(["type": .string("object")]),
+        metadataProvenance: .trusted,
         egressClass: .arbitraryDestination,
         riskLevel: .safe
       )
@@ -953,6 +999,7 @@ private struct ProbedDangerousTool: Tool {
         name: "slow",
         description: "slow",
         parameters: .object(["type": .string("object")]),
+        metadataProvenance: .trusted,
         egressClass: .none,
         riskLevel: .safe
       )
@@ -1031,6 +1078,7 @@ struct WedgedTool: Tool {
     name: "wedged",
     description: "wedged",
     parameters: .object(["type": .string("object")]),
+    metadataProvenance: .trusted,
     egressClass: .none,
     riskLevel: .safe
   )

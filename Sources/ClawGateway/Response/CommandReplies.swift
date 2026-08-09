@@ -15,7 +15,7 @@ public enum CommandReplies {
     /pause <id> · /resume <id> · /runnow <id> · /cancel <id>: manage schedules
     /remember, /memory: durable memory
     /new: fresh conversation · /stop: stop the current run
-    /status: daemon health (also /doctor)
+    /status: daemon health (also /doctor) · /mcp: MCP server status
 
     Confirmations:
     Slash commands never resolve a pending confirmation. Only your next plain-text \

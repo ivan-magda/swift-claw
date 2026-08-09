@@ -409,10 +409,38 @@ reported delay or plan reset. Logging in again fixes neither.
 ### Backups
 
 `secret.key` (the AES key) must stay **out of your backup boundary**, exactly as
-for `secrets.enc`. The ChatGPT credential envelope
-(`llm-credentials.enc`) is encrypted with that key, so a backup that excludes the
-key cannot decrypt it. A restore without the key — or a crash during a vendor
+for `secrets.enc`. The ChatGPT credential envelope (`llm-credentials.enc`) and the
+MCP token envelope (`mcp-credentials.enc`) are encrypted with that same key, so a
+backup that excludes the key cannot decrypt them. A restore without the key — or a crash during a vendor
 token rotation — can require a fresh `clawd auth login`.
+
+---
+
+## MCP servers
+
+Point clawd at an MCP server by writing `<state root>/mcp.yaml` (or setting
+`CLAW_MCP_CONFIG`). The file format and the trust rules are in
+[CUSTOMIZATION.md](CUSTOMIZATION.md#mcp-servers); this is the local loop.
+
+```bash
+.build/debug/clawd mcp list                  # config + token state, no network
+.build/debug/clawd mcp probe                 # connect + initialize + tool count, exits 1 on any failure
+.build/debug/clawd mcp probe linear          # one server, even a disabled one
+printf '%s' "$TOKEN" | .build/debug/clawd mcp set-token linear
+```
+
+`set-token` and `clear-token` take the state-root lock, so stop the daemon first;
+`list` and `probe` are read-only and safe against a running one. A full
+`clawd doctor` prints the same offline rows plus a live probe row per server,
+and `--check-config` stays offline.
+
+`probe` is the fastest way to tell a config mistake from a server problem: it
+reports what each server answered, and the tool count it prints is what **your**
+include/exclude filter admits, not the server's full catalog.
+
+A server that is simply down makes `clawd doctor` exit 1 and withhold the start
+command, even though the daemon itself would boot fine without it. `clawd run`
+directly is the way past that while you work on something else.
 
 ---
 
@@ -428,6 +456,8 @@ Default: `~/.swift-claw/`. Contents:
 | `secrets.enc` | Encrypted secrets envelope    |
 | `secret.key`  | AES key (keep out of backups) |
 | `llm-credentials.enc` | ChatGPT OAuth credential (encrypted; only on that route) |
+| `mcp.yaml`    | MCP server catalog (optional; absent = no MCP tools) |
+| `mcp-credentials.enc` | MCP server tokens (encrypted; only once you set one) |
 
 Override the state root with `CLAW_STATE_ROOT` for isolated test setups.
 

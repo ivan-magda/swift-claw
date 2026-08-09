@@ -18,9 +18,6 @@ public struct FileWriteTool: Tool {
   /// Refuse absurd payloads before they ever reach an approval prompt. 256 KiB covers any sane
   /// note/config write; a named constant so tests assert the code's own number.
   public static let maxContentBytes = 256 * 1024
-  /// The preview stays owner-readable, never a wall of text.
-  static let previewCapGraphemes = 400
-
   private let workspaceRoot: URL
   private let redactor: SecretRedactor
 
@@ -54,6 +51,7 @@ public struct FileWriteTool: Tool {
         ]),
         "required": .array([.string("path"), .string("content")]),
       ]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .ask
     )
@@ -120,7 +118,7 @@ public struct FileWriteTool: Tool {
       blastRadius: "\(exists ? "overwrite" : "create"), \(ByteCount.text(content.utf8.count))",
       contentPreview: ToolOutputCap.cap(
         redactor.redact(content),
-        maxGraphemes: Self.previewCapGraphemes
+        maxGraphemes: ToolOutputCap.approvalPreviewGraphemes
       ),
       warnings: []
     )

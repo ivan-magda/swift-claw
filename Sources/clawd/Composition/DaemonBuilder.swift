@@ -2,6 +2,7 @@ import ClawCore
 import ClawData
 import ClawGateway
 import ClawLLM
+import ClawMCP
 import ClawSecrets
 import ClawTelegram
 import ClawWorkspace
@@ -20,10 +21,12 @@ struct DaemonBuilder: Sendable {
   let secrets: Secrets
   let stores: ClawStores
 
-  let toolExecutor: AsyncHTTPExecutor
+  let toolExecutor: any HTTPExecuting & HTTPStreaming
 
   let transport: TelegramClient
   let botUsername: String?
+
+  let mcp: MCPBootInputs
 
   let logger: Logger
 
@@ -31,6 +34,12 @@ struct DaemonBuilder: Sendable {
   /// than a literal so a composition test scripts a missing or malformed envelope in place of the
   /// real one; the current route never invokes it.
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
+
+  /// The one redaction set for this process — secret-store values plus MCP tokens. Every redactor
+  /// and arg guard the builder makes reads this instead of `secrets.redactionValues`, so none of
+  /// them can be built from a narrower list than the log backend was. Derived rather than passed in:
+  /// a caller that could supply the list is a caller that could supply a shorter one.
+  var redactionValues: [String] { mcp.redactionValues(with: secrets) }
 
   /// The single production bound on both the ServiceGroup's graceful window and the lane drain, so
   /// admission-close, cancel, and the bounded drain all share one deadline.
@@ -73,6 +82,11 @@ struct DaemonBuilder: Sendable {
       referenceUSDPerToken: config.budget.referenceUSDPerToken
     )
 
+    // Pinned here, before the agent stack: the remote catalog is part of the tool surface the
+    // registry advertises and `policy_version` folds over, so it has to be settled before either
+    // exists. Nothing in it can fail the boot.
+    let mcpStack = await resolveMCPStack()
+
     let workspace = FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config))
     let roster = rosterStack.roster
     let agentStack = makeAgentStack(
@@ -80,7 +94,8 @@ struct DaemonBuilder: Sendable {
       cooldown: cooldown,
       workspace: workspace,
       costResolver: costResolver,
-      sandbox: sandbox
+      sandbox: sandbox,
+      mcpTools: mcpStack.tools
     )
 
     let consumers = makeRunnerConsumers(
@@ -90,7 +105,8 @@ struct DaemonBuilder: Sendable {
       cooldown: cooldown,
       costResolver: costResolver,
       workspace: workspace,
-      sandbox: sandbox
+      sandbox: sandbox,
+      mcpCatalog: mcpStack.catalog
     )
 
     var services: [any Service] = [
@@ -101,6 +117,9 @@ struct DaemonBuilder: Sendable {
     ]
     if let maintenance = sandbox.maintenance {
       services.append(SandboxLifecycleService(maintenance: maintenance))
+    }
+    if mcpStack.sessions.isEmpty == false {
+      services.append(MCPSessionLifecycleService(sessions: mcpStack.sessions))
     }
 
     return runtimeBundle(
@@ -138,7 +157,8 @@ struct DaemonBuilder: Sendable {
     cooldown: any RouteCooldownTracking,
     costResolver: CostResolver,
     workspace: FileSystemWorkspace,
-    sandbox: SandboxStack
+    sandbox: SandboxStack,
+    mcpCatalog: ResolvedMCPCatalog
   ) -> RunnerConsumers {
     let intake = makeIntakeServices(
       coordination: coordination,
@@ -156,7 +176,11 @@ struct DaemonBuilder: Sendable {
         coordination: coordination,
         agentStack: agentStack
       ),
-      doctor: makeDoctorReporter(sandbox: sandbox, cooldown: cooldown)
+      doctor: makeDoctorReporter(
+        sandbox: sandbox,
+        cooldown: cooldown,
+        mcpOutcomes: mcpCatalog.outcomes
+      )
     )
     let approvals = makeApprovalFabric(
       coordination: coordination,

@@ -176,8 +176,9 @@ EOF
 ```
 
 [CUSTOMIZATION.md](CUSTOMIZATION.md) covers every file and its trust tier, the skill
-authoring rules, plus the environment knobs for budgets, schedules, voice locales, and
-the code sandbox.
+authoring rules, the environment knobs for budgets, schedules, voice locales, and the
+code sandbox, and how to [connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their
+tools show up in chat.
 
 ## 7. Keep it running
 
@@ -239,7 +240,8 @@ This route is unofficial and vendor-dependent; details and caveats in
   and never deletes from it. Revoking takes a row deletion; see
   [CUSTOMIZATION.md](CUSTOMIZATION.md#everything-else).
 - **A second daemon won't start:** by design. One `clawd` per state root, enforced with
-  a file lock. `clawd auth login` and `clawd secrets seal` take the same lock.
+  a file lock. `clawd auth login`, `clawd secrets seal`, and `clawd mcp set-token` /
+  `clear-token` take the same lock, so stop the daemon before running them.
 - **Telegram reports a 409 conflict:** another process is long-polling the same bot
   token, usually a forgotten instance on another machine.
 - **Voice notes get a canned refusal:** voice transcription needs macOS 26; on Linux and

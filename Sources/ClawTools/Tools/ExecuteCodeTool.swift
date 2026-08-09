@@ -64,6 +64,7 @@ public struct ExecuteCodeTool: Tool {
         ]),
         "required": .array([.string("language"), .string("code")]),
       ]),
+      metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .dangerous
     )

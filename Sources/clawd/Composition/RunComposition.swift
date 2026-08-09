@@ -22,6 +22,8 @@ struct RunComposition {
   let stores: ClawStores
   let logger: Logger
 
+  var mcp: MCPBootInputs = .empty
+
   /// Builds the three runtime clients. Injectable so a test records which client reaches which
   /// consumer, and counts closes, without opening real sockets.
   var makeClients: @Sendable () -> RuntimeHTTPClients<RuntimeHTTPClient> = {
@@ -82,6 +84,7 @@ struct RunComposition {
         toolExecutor: clients.tool.executor,
         transport: transport,
         botUsername: botUsername,
+        mcp: mcp,
         logger: logger,
         makeManagedStore: { makeManagedStore(config.stateRoot) }
       )

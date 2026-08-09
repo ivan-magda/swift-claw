@@ -216,6 +216,47 @@ import Testing
     #expect(summary.contains("…"))
   }
 
+  @Test func telegramGroupRendersEveryRowOfThatGroupAndNothingElse() {
+    // given
+    var report = DoctorReport()
+    report.add(key: "db.writable", value: "true", group: .database)
+    report.add(key: "mcp", value: "2 configured, 1 enabled", group: .mcp)
+    report.add(key: "mcp.linear.tools", value: "7", group: .mcp)
+
+    // when
+    let text = report.renderTelegramGroup(.mcp)
+
+    // then — a passing row is shown too: a single-group reply is asked for to read the rows.
+    #expect(text.contains("MCP: ok"))
+    #expect(text.contains("mcp: 2 configured, 1 enabled"))
+    #expect(text.contains("mcp.linear.tools: 7"))
+    #expect(text.contains("db.writable") == false)
+  }
+
+  @Test func telegramGroupMarksFailingRowsAndTruncatesLongValues() {
+    // given
+    var report = DoctorReport()
+    let longValue = String(repeating: "x", count: 500)
+    report.add(key: "mcp.linear.tools", value: longValue, ok: false, group: .mcp)
+
+    // when
+    let text = report.renderTelegramGroup(.mcp)
+
+    // then
+    #expect(text.contains("MCP: FAIL"))
+    #expect(text.contains("✗ mcp.linear.tools"))
+    #expect(text.contains(longValue) == false)
+    #expect(text.contains("…"))
+  }
+
+  @Test func telegramGroupSaysSoWhenTheGroupHasNoRows() {
+    // given — a report built before the subsystem reported anything.
+    let report = DoctorReport()
+
+    // when / then — an empty string would read as a delivery failure to the owner.
+    #expect(report.renderTelegramGroup(.mcp) == "MCP: nothing reported")
+  }
+
   @Test func jsonIncludesGroupAndTopLevelOk() {
     // given
     var report = DoctorReport()

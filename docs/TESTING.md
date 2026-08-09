@@ -50,6 +50,8 @@ The useful question is never "mock or not" — it is **what kind of dependency i
 - **Managed dependencies** are implementation details the outside world never observes. For us that is **SQLite via GRDB**. _Do not mock them._ Test against a real in-memory or file-backed database; a mocked store only tests the mock. Real SQLite is the right call for SQL, FTS, migration, trigger, and atomicity tests.
 - **Unmanaged dependencies** are observable to the outside world, and their communication pattern _is_ a contract. For us that is the **LLM provider** and **Telegram**. Substitute them at their protocol seam (`LLMProvider`, `ToolDispatching`, `HTTPExecuting`, the Telegram transport) with a scripted double, and — only here — asserting the request we send them is legitimate, because that request is externally observable.
 
+When the **protocol library itself** is what has to be real — the thing under test is our conformance to someone else's wire contract, not our own logic — neither option above fits: a scripted double at the seam only replays what we already believe, and a loopback server drags real sockets into the deterministic path. Run the real client against a real server over an **in-memory transport pair** instead (MCP does this with the SDK's `InMemoryTransport.createConnectedPair()`). It is a fake in the taxonomy below, at protocol rather than component granularity.
+
 Pick the lightest double that expresses the intent (Meszaros/Fowler taxonomy):
 
 | Double    | What it is                                      | Use when                                                    |

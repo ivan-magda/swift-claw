@@ -83,6 +83,7 @@ import Testing
         name: toolName,
         description: "stub",
         parameters: .object(["type": .string("object")]),
+        metadataProvenance: .trusted,
         egressClass: .none,
         riskLevel: .ask
       )
@@ -110,6 +111,7 @@ import Testing
         name: "file_write",
         description: "stub",
         parameters: .object(["type": .string("object")]),
+        metadataProvenance: .trusted,
         egressClass: .none,
         riskLevel: .ask
       )

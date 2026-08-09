@@ -105,6 +105,14 @@ All capability areas are in scope over time; the v1 cut and later phasing are in
 - Authoring faults are reported, not swallowed: a missing frontmatter block, a name outside the identifier shape, a name that disagrees with its directory, and two directories claiming one name each produce a notice naming the skill, and the skill is skipped.
 - The index has its own slice of the context budget. When it overflows, the prompt says how many skills it is showing and the owner is told which ones were left out.
 
+
+### 5.8 Tools from MCP servers *(P-mcp)*
+- *As the owner, I point swift-claw at an MCP server I already use and its tools show up in chat, without writing an adapter for each one.*
+- The owner lists servers in a config file and stores each server's token with a CLI command; the daemon reads both at startup and the tools appear beside the built-ins.
+- **Remote tools are treated as the least-trusted tools in the registry**: every one asks for approval by default, their results enter the context as untrusted data, and calling one counts as egress to an arbitrary destination. The owner can lower a *named* tool to no-tap; nothing can raise one to the sandbox tier.
+- **Nothing the model says can add a server, change which tools exist, or reveal a token.** Managing servers is a CLI-and-config job; from Telegram the owner can only ask for status.
+- A server that is down, slow, or misbehaving is skipped with a stated reason — the assistant still starts and the other servers still work.
+
 ## 6. Functional requirements
 
 Requirements tagged *(v1)* are part of the daily-driver milestone (§9); others land in their phase. Technical mechanism detail lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md); this section states the product contract.
@@ -188,6 +196,7 @@ Requirements tagged *(v1)* are part of the daily-driver milestone (§9); others 
 - **FR-T7.** *(tools phase)* **Enforced lethal-trifecta gate.** Taint is a **sticky, persisted session property** (`session.tainted = true` once any untrusted content is ingested — durable memory and a loaded skill are the two exceptions: both are labeled untrusted, neither taints). When a tainted session attempts a privileged or egress action, the approval path is **forced in code** (or `/new` is required), independent of the tool's own risk tier. Compaction/rolling-summary **preserves an untrusted-provenance marker** and never folds untrusted tool output into the trusted summary.
 - **FR-T8.** *(v1)* **SSRF protection.** `web_fetch` refuses non-public destinations: after DNS resolution and following redirects, the target must be a public IP — private/RFC-1918, loopback, link-local (incl. the `169.254.169.254` cloud-metadata endpoint), and reserved ranges are blocked. A tested invariant.
 - **FR-T9.** *(P-skills)* **Workspace skills.** A skill is a directory under `skills/` holding a `SKILL.md` whose frontmatter declares `name` and `description`. Identity is settled at scan time: the name matches `^[a-z0-9]+(-[a-z0-9]+)*$` (1–64 characters) **and** equals its directory name, the description is capped and single-line, and two directories claiming one name drop **both** — silent shadowing decides identity where no principled winner exists. The context carries only the index; a body is loaded by a `safe`, no-egress tool that takes a **name** and resolves it against a fresh scan, so frontmatter never becomes a path component and the model never types a path. Index and body render under one label, and the system prompt's follow-as-guidance carve-out names **that label**, never the tool. A loaded body does not taint (FR-T7). Every rejection and every budget drop reaches the owner as a notice.
+- **FR-T10.** *(P-mcp)* **Remote (MCP) tools enter through the same registry and the same gate.** Tools discovered from an owner-configured MCP server are namespaced so they cannot collide with a built-in, default to the **`ask`** tier with arbitrary-destination egress, and mark their results as untrusted content; owner config may lower a **named** tool to `safe` and may never raise one to `dangerous`. The catalog is fixed for the lifetime of the process and folds into the policy version, so a change across a restart invalidates approvals bound to the old surface. Server credentials are stored encrypted and **bound to the server URL they were issued for**. An unreachable or misbehaving server is skipped with a reported reason and never blocks startup; a malformed owner config does fail startup. No model-reachable tool can add a server, alter the catalog, or read a credential.
 
 ### 6.8 Scheduler *(later phase)*
 - **FR-C1.** Restart-safe scheduler stores jobs in SQLite (id, owner, due/recurrence, timezone, prompt/message, status, created/executed timestamps).
@@ -244,7 +253,7 @@ Distilled from the verified best-practices research:
 
 **In v1:** conversational core; durable memory (remember-on-confirm + FTS5 recall); read-only tools (`web_search`, `web_fetch`, workspace file READ — all `safe` tier, no sandbox/approval); streaming replies; the USD spend breaker; onboarding/first-run; non-text intake handling; user-visible degradation; data export/delete; single-instance guard + 409 handling; `status`/`doctor`; the optional fallback route (FR-R3).
 
-**Deferred to later phases:** write/shell/code tools + sandbox + approvals + the enforced lethal-trifecta gate; scheduling/proactive (its own phase); ChatGPT subscription authentication (its own phase); a roster longer than two routes; per-call USD attribution dashboards.
+**Deferred to later phases:** write/shell/code tools + sandbox + approvals + the enforced lethal-trifecta gate; scheduling/proactive (its own phase); ChatGPT subscription authentication (its own phase); tools from MCP servers (its own phase); a roster longer than two routes; per-call USD attribution dashboards.
 
 | Phase | Capability | Headline outcome |
 |---|---|---|
@@ -253,6 +262,7 @@ Distilled from the verified best-practices research:
 | **P-schedule** | §5.5 | NL reminders; restart-safe DST-correct scheduler; confirm-before-arm; reduced-privilege proactive runs; opt-in heartbeat with quiet hours; delivery to DM. |
 | **P-auth** | §5.6 | ChatGPT subscription login (`clawd auth login` / `status` / `logout`) + the ChatGPT Responses route behind the existing `LLMProvider` seam; one qualified model value selects it; no API key, no API billing, no new environment variables; the configured OpenAI-compatible route unchanged and still the default. *Independent of the v1→Linux build order — see [`ARCHITECTURE.md` §20].* |
 | **P-skills** | §5.7 | Workspace skills the owner authors as `skills/<name>/SKILL.md`: scan-time identity, a one-line-per-skill index with a prefix-drop marker, a `safe` name-resolving loader that does not taint, a prompt carve-out scoped to the fence label, and owner notices for every rejection and drop. |
+| **P-mcp** | §5.8 | MCP **client** over Streamable HTTP: owner-configured servers' tools join the registry beside the built-ins at the `ask` tier with untrusted results and arbitrary-destination egress; per-server tokens encrypted and URL-bound; catalog pinned at boot and folded into the policy version; an unreachable server is skipped with a reported reason; `clawd mcp list`/`probe` and a status-only `/mcp` are the whole ops surface. *Independent of the v1→Linux build order — see [`ARCHITECTURE.md` §20].* |
 | **P-portability** | — | Linux portability + deployment (static SDK, distroless/systemd, CI Linux gate). |
 | **Roadmap (later)** | — | Native Anthropic adapter (prompt caching); pairing flow; sqlite-vec recall (behind a protocol). |
 

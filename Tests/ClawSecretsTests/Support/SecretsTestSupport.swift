@@ -47,6 +47,10 @@ func envelopeURL(in stateRoot: URL) -> URL {
   SecretStatePaths(stateRoot: stateRoot).credentialEnvelope
 }
 
+func mcpEnvelopeURL(in stateRoot: URL) -> URL {
+  SecretStatePaths(stateRoot: stateRoot).mcpCredentialEnvelope
+}
+
 /// The publisher-relevant permission bits `url` carries on disk, read through `lstat` so a symlink
 /// is inspected rather than whatever it points at.
 func permissionBits(of url: URL) throws -> UInt32 {

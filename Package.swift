@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.1
 import PackageDescription
 
 let package = Package(
@@ -12,6 +12,16 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.0"),
     .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.2"),
+    .package(url: "https://github.com/modelcontextprotocol/swift-sdk", from: "0.12.1"),
+    // Transitive through the MCP SDK. Declared here only to switch its "AsyncHTTPClient"
+    // trait on: the trait is off by default, yet the module is visible in our build (we
+    // depend on AsyncHTTPClient directly), so its `canImport` guard compiles code against
+    // a dependency the target never declared and the module search path breaks.
+    .package(
+      url: "https://github.com/mattt/eventsource.git",
+      from: "1.4.1",
+      traits: ["AsyncHTTPClient"]
+    ),
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
@@ -75,6 +85,14 @@ let package = Package(
       ]
     ),
     .target(name: "ClawTools", dependencies: ["ClawCore"]),
+    .target(
+      name: "ClawMCP",
+      dependencies: [
+        "ClawCore",
+        .product(name: "Logging", package: "swift-log"),
+        .product(name: "MCP", package: "swift-sdk"),
+      ]
+    ),
     .target(name: "ClawAppleSpeech", dependencies: ["ClawCore"]),
     .target(
       name: "ClawExec",
@@ -105,6 +123,7 @@ let package = Package(
       dependencies: [
         "ClawCore", "ClawData", "ClawSecrets", "ClawTelegram", "ClawGateway", "ClawLLM",
         "ClawAgent", "ClawWorkspace", "ClawTools", "ClawExec", "ClawAuth", "ClawAppleSpeech",
+        "ClawMCP",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
@@ -156,6 +175,13 @@ let package = Package(
       name: "ClawToolsTests",
       dependencies: ["ClawTools", "ClawCore", "ClawTestSupport"]
     ),
+    .testTarget(
+      name: "ClawMCPTests",
+      dependencies: [
+        "ClawMCP", "ClawCore", "ClawTestSupport",
+        .product(name: "MCP", package: "swift-sdk"),
+      ]
+    ),
     .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore"]),
     .testTarget(
       name: "ClawAppleSpeechTests",
@@ -176,7 +202,7 @@ let package = Package(
       dependencies: [
         "clawd", "ClawGateway", "ClawAgent", "ClawTestSupport",
         "ClawCore", "ClawAuth", "ClawSecrets", "ClawLLM", "ClawData", "ClawTelegram",
-        "ClawWorkspace",
+        "ClawWorkspace", "ClawMCP", "ClawTools",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "GRDB", package: "GRDB.swift"),

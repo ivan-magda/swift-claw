@@ -87,6 +87,7 @@ import Testing
       name: name,
       description: "d",
       parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
       egressClass: egress,
       riskLevel: risk,
       fenceLabel: fenceLabel
