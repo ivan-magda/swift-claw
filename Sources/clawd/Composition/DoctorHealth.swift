@@ -2,6 +2,7 @@ import ClawCore
 import ClawData
 import ClawExec
 import ClawGateway
+import ClawWorkspace
 import Foundation
 
 enum DoctorHealth {
@@ -23,6 +24,10 @@ enum DoctorHealth {
     let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
     let costMix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
     let latestContext = try? stores.usage.latestPromptUsage()
+    let skillDiagnostics = SkillDiagnostics(
+      scan: skillScan(config: config),
+      skillsCap: ContextBudget.default.skillsCap
+    )
 
     let dbPath = EnvironmentLoader.databasePath(config: config)
     let walBytes =
@@ -47,8 +52,13 @@ enum DoctorHealth {
       perRunUSD: config.budget.perRunUSD,
       walBytes: walBytes,
       freeBytes: freeBytes,
-      latestContext: latestContext
+      latestContext: latestContext,
+      skillDiagnostics: skillDiagnostics
     )
+  }
+
+  static func skillScan(config: AppConfig) -> SkillScanResult {
+    FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config)).scanSkills()
   }
 
   static func schedulerChecks(

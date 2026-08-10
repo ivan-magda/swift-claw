@@ -38,6 +38,10 @@ struct DaemonDoctorReporter: DoctorReporting {
   let mcp: MCPBootInputs
   let mcpOutcomes: [MCPServerOutcome]
 
+  func scanSkills() async -> SkillScanResult {
+    DoctorHealth.skillScan(config: config)
+  }
+
   func report() async -> DoctorReport {
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)

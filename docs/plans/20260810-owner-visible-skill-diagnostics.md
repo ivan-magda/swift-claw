@@ -108,21 +108,21 @@ and public skill documentation.
 - Modify: `Tests/ClawGatewayTests/Response/DoctorReportTests.swift`
 - Create: `Tests/ClawdCompositionTests/SkillDiagnosticsCompositionTests.swift`
 
-- [ ] Extend the runtime diagnostics seam with a fresh `SkillScanResult` operation so `/skills`
+- [x] Extend the runtime diagnostics seam with a fresh `SkillScanResult` operation so `/skills`
       and `/status` read the workspace through one owner-diagnostics provider.
-- [ ] Have `DoctorHealth` scan `EnvironmentLoader.workspaceRoot(config:)` each time it builds full
+- [x] Have `DoctorHealth` scan `EnvironmentLoader.workspaceRoot(config:)` each time it builds full
       health inputs; keep `doctor --check-config` limited to its existing config and secret scope.
-- [ ] Add the `context.skills` headline check in `HealthRowsBuilder`, with accepted and rejected
+- [x] Add the `context.skills` headline check in `HealthRowsBuilder`, with accepted and rejected
       counts plus the cap-fit flag.
-- [ ] Mark the row unhealthy when warnings exist or the index does not fit, so full `clawd doctor`
+- [x] Mark the row unhealthy when warnings exist or the index does not fit, so full `clawd doctor`
       exits nonzero and `/status` expands the actionable row.
-- [ ] Update the daemon reporter and test stub to serve fresh or scripted scans.
-- [ ] Add row tests for no skills, accepted skills, warnings, exact-cap fit, and overflow; assert the
+- [x] Update the daemon reporter and test stub to serve fresh or scripted scans.
+- [x] Add row tests for no skills, accepted skills, warnings, exact-cap fit, and overflow; assert the
       healthy `/status` headline and failing detail without freezing full prose.
-- [ ] Add JSON assertions for the row's key, value fields, `ok`, `.context` group, and headline flag.
-- [ ] Add a composition test using a temporary workspace to prove a real scan reaches the daemon
+- [x] Add JSON assertions for the row's key, value fields, `ok`, `.context` group, and headline flag.
+- [x] Add a composition test using a temporary workspace to prove a real scan reaches the daemon
       health report and changes after the workspace changes.
-- [ ] Run the affected ClawGateway and ClawdComposition tests; all must pass before Task 3.
+- [x] Run the affected ClawGateway and ClawdComposition tests; all must pass before Task 3.
 
 ### Task 3: Add `/skills`, help, and Telegram command discovery
 

@@ -64,6 +64,7 @@ public enum HealthRowsBuilder {
     public let walBytes: Int
     public let freeBytes: Int
     public let latestContext: LatestPromptUsage?
+    public let skillDiagnostics: SkillDiagnostics
 
     public init(
       allowlist: AllowlistHealth,
@@ -79,7 +80,8 @@ public enum HealthRowsBuilder {
       perRunUSD: Double,
       walBytes: Int,
       freeBytes: Int,
-      latestContext: LatestPromptUsage?
+      latestContext: LatestPromptUsage?,
+      skillDiagnostics: SkillDiagnostics
     ) {
       self.allowlist = allowlist
       self.lastOffset = lastOffset
@@ -95,6 +97,7 @@ public enum HealthRowsBuilder {
       self.walBytes = walBytes
       self.freeBytes = freeBytes
       self.latestContext = latestContext
+      self.skillDiagnostics = skillDiagnostics
     }
   }
 
@@ -114,6 +117,17 @@ public enum HealthRowsBuilder {
       "llm.fallback_configured",
       fallbackReference.map { reference in "yes (\(reference))" } ?? "no",
       .llmRuns
+    )
+  }
+
+  static func skillsCheck(_ diagnostics: SkillDiagnostics) -> DoctorReport.Check {
+    DoctorReport.Check(
+      key: "context.skills",
+      value: "accepted=\(diagnostics.acceptedCount) rejected=\(diagnostics.rejectedCount) "
+        + "fits_cap=\(diagnostics.fitsSkillsCap)",
+      ok: diagnostics.rejectedCount == 0 && diagnostics.fitsSkillsCap,
+      group: .context,
+      isHeadline: true
     )
   }
 }
@@ -241,7 +255,8 @@ private extension HealthRowsBuilder {
         value,
         .context,
         headline: true
-      )
+      ),
+      skillsCheck(inputs.skillDiagnostics),
     ]
   }
 

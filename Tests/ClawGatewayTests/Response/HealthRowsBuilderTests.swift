@@ -1,4 +1,5 @@
 import ClawCore
+import Foundation
 import Testing
 
 @testable import ClawGateway
@@ -18,6 +19,10 @@ import Testing
       primaryReference: "gpt-4o",
       fallbackReference: nil,
       cooldown: .clear
+    ),
+    skillDiagnostics: SkillDiagnostics = SkillDiagnostics(
+      scan: SkillScanResult(descriptors: [], warnings: []),
+      skillsCap: ContextBudget.default.skillsCap
     )
   ) -> HealthRowsBuilder.Inputs {
     HealthRowsBuilder.Inputs(
@@ -40,7 +45,8 @@ import Testing
       perRunUSD: 0.5,
       walBytes: 12,
       freeBytes: freeBytes,
-      latestContext: latestContext
+      latestContext: latestContext,
+      skillDiagnostics: skillDiagnostics
     )
   }
 
@@ -139,6 +145,7 @@ import Testing
     #expect(byKey["spend.today_usd"]?.isHeadline == true)
     #expect(byKey["spend.remaining_day_usd"]?.isHeadline == true)
     #expect(byKey["llm.active_route"]?.isHeadline == true)
+    #expect(byKey["context.skills"]?.isHeadline == true)
     // …while static config echoes stay collapsed
     #expect(byKey["llm.retry_budget"]?.isHeadline == false)
     #expect(byKey["llm.streaming"]?.isHeadline == false)
@@ -196,6 +203,104 @@ import Testing
     // then
     #expect(row?.value == "none")
     #expect(row?.ok == true)
+  }
+
+  @Test func skillRowPassesWithNoInstalledSkills() {
+    // given
+    let diagnostics = skillDiagnostics()
+
+    // when
+    let row = skillRow(diagnostics)
+
+    // then
+    #expect(row?.value == "accepted=0 rejected=0 fits_cap=true")
+    #expect(row?.ok == true)
+    #expect(row?.group == .context)
+    #expect(row?.isHeadline == true)
+  }
+
+  @Test func skillRowReportsAcceptedSkills() {
+    // given
+    let diagnostics = skillDiagnostics(
+      descriptors: [skill(name: "summarize"), skill(name: "translate")]
+    )
+
+    // when
+    let row = skillRow(diagnostics)
+
+    // then
+    #expect(row?.value == "accepted=2 rejected=0 fits_cap=true")
+    #expect(row?.ok == true)
+  }
+
+  @Test func skillRowFailsWhenTheScanRejectsAnEntry() {
+    // given
+    let diagnostics = skillDiagnostics(
+      warnings: [.invalidSkillManifest(skill: "broken")]
+    )
+
+    // when
+    let row = skillRow(diagnostics)
+
+    // then
+    #expect(row?.value == "accepted=0 rejected=1 fits_cap=true")
+    #expect(row?.ok == false)
+  }
+
+  @Test func skillRowPassesWhenTheCompleteIndexExactlyFitsTheCap() {
+    // given
+    let descriptor = skill(name: "summarize")
+    let exactCap = WorkspaceSkills.completeIndexGraphemeCount(for: [descriptor])
+    let diagnostics = skillDiagnostics(descriptors: [descriptor], skillsCap: exactCap)
+
+    // when
+    let row = skillRow(diagnostics)
+
+    // then
+    #expect(row?.value == "accepted=1 rejected=0 fits_cap=true")
+    #expect(row?.ok == true)
+  }
+
+  @Test func skillRowFailsWhenTheCompleteIndexExceedsTheCap() {
+    // given
+    let descriptor = skill(name: "summarize")
+    let indexSize = WorkspaceSkills.completeIndexGraphemeCount(for: [descriptor])
+    let diagnostics = skillDiagnostics(descriptors: [descriptor], skillsCap: indexSize - 1)
+
+    // when
+    let row = skillRow(diagnostics)
+
+    // then
+    #expect(row?.value == "accepted=1 rejected=0 fits_cap=false")
+    #expect(row?.ok == false)
+  }
+
+  @Test func telegramShowsHealthySkillsAsAContextHeadline() {
+    // given
+    var report = DoctorReport()
+    report.add(contentsOf: HealthRowsBuilder.checks(inputs()))
+
+    // when
+    let summary = report.renderTelegramSummary()
+
+    // then
+    #expect(summary.contains("skills accepted=0 rejected=0 fits_cap=true"))
+  }
+
+  @Test func telegramExpandsFailingSkillDetails() {
+    // given
+    let diagnostics = skillDiagnostics(
+      warnings: [.invalidSkillManifest(skill: "broken")]
+    )
+    var report = DoctorReport()
+    report.add(contentsOf: HealthRowsBuilder.checks(inputs(skillDiagnostics: diagnostics)))
+
+    // when
+    let summary = report.renderTelegramSummary()
+
+    // then
+    #expect(summary.contains("Context: FAIL"))
+    #expect(summary.contains("context.skills: accepted=0 rejected=1 fits_cap=true"))
   }
 
   @Test func emptyCostMixRendersAsNone() {
@@ -307,5 +412,32 @@ import Testing
 
     // then — `doctor --check-config` is where a config echo belongs; the group line stays for state
     #expect(summary.contains("fallback_configured") == false)
+  }
+}
+
+private extension HealthRowsBuilderTests {
+  func skill(name: String) -> SkillDescriptor {
+    SkillDescriptor(
+      name: name,
+      description: "Owner-facing \(name) skill.",
+      directory: URL(fileURLWithPath: "/workspace/skills/\(name)")
+    )
+  }
+
+  func skillDiagnostics(
+    descriptors: [SkillDescriptor] = [],
+    warnings: [WorkspaceWarning] = [],
+    skillsCap: Int = ContextBudget.default.skillsCap
+  ) -> SkillDiagnostics {
+    SkillDiagnostics(
+      scan: SkillScanResult(descriptors: descriptors, warnings: warnings),
+      skillsCap: skillsCap
+    )
+  }
+
+  func skillRow(_ diagnostics: SkillDiagnostics) -> DoctorReport.Check? {
+    HealthRowsBuilder
+      .checks(inputs(skillDiagnostics: diagnostics))
+      .first { $0.key == "context.skills" }
   }
 }
