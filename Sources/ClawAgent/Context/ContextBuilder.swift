@@ -377,15 +377,18 @@ private extension ContextBuilder {
     let scan = workspace.scanSkills()
     for warning in scan.warnings {
       warn("skills scan warning: \(warning)")
-      if let notice = Self.notice(for: warning) {
-        ownerNotices.append(notice)
+      if case .unreadableSkillsDirectory = warning {
+        // Ordinary turns scan repeatedly; a transient I/O failure stays in diagnostics and logs
+        // instead of notifying the owner on every message.
+        continue
       }
+      ownerNotices.append("⚠ \(warning.ownerFacingReason)")
     }
 
     let units = scan.descriptors.map { descriptor in
       SectionUnit(
         id: Self.skillUnitID(for: descriptor.name),
-        content: "- \(descriptor.name): \(descriptor.description)",
+        content: WorkspaceSkills.indexLine(for: descriptor),
         canTruncate: false
       )
     }
@@ -399,39 +402,6 @@ private extension ContextBuilder {
       dropMarker: .showingCount(noun: "skills"),
       units: units
     )
-  }
-
-  /// A rejected manifest is an authoring fault the owner can fix, so it reaches them instead of
-  /// dying in the log. An unlistable `skills/` is an I/O fault with nothing to fix, and stays logged.
-  static func notice(for warning: WorkspaceWarning) -> String? {
-    switch warning {
-    case .invalidSkillManifest(let skill):
-      "⚠ Skill `\(skill)`: `SKILL.md` needs `---` frontmatter with `name` and `description`; skipped."
-    case .invalidSkillName(let directory, let name):
-      """
-      ⚠ Skill `\(directory)`: name `\(name)` must be lowercase letters, digits and single \
-      hyphens (1–64 characters); skipped.
-      """
-    case .skillNameDirectoryMismatch(let directory, let name):
-      "⚠ Skill `\(directory)`: manifest name `\(name)` must match the directory name; skipped."
-    case .duplicateSkillName(let name, let directories):
-      """
-      ⚠ Skill name `\(name)` is claimed by \(directories.map { "`\($0)`" }.joined(separator: ", ")); \
-      all of them skipped, rename one.
-      """
-    case .escapingSkillDirectory(let directory):
-      """
-      ⚠ Skill `\(directory)`: its `SKILL.md` resolves outside the workspace, which I can't load \
-      from; skipped. Copy the skill in instead of linking to it.
-      """
-    case .skillsDirectoryOutsideWorkspace:
-      """
-      ⚠ The `skills` directory resolves outside the workspace, which I can't load from; all \
-      skills skipped. Move it into the workspace instead of linking to it.
-      """
-    case .unreadableSkillsDirectory:
-      nil
-    }
   }
 
   /// A skills row too big for its cap comes back shrunk, but one whose cap admits nothing at all is

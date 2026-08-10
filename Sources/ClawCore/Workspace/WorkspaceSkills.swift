@@ -12,4 +12,21 @@ public enum WorkspaceSkills {
   /// The fence label the skills index row and every loaded skill body render under. The system
   /// prompt's follow-this-as-guidance exception is written against exactly this label.
   public static let fenceLabel = "skills"
+
+  /// The canonical one-line index entry advertised to the model and shown to the owner.
+  public static func indexLine(for descriptor: SkillDescriptor) -> String {
+    "- \(descriptor.name): \(descriptor.description)"
+  }
+
+  /// The complete index before any turn-specific budget fitting.
+  public static func completeIndex(for descriptors: [SkillDescriptor]) -> String {
+    descriptors.map { descriptor in
+      indexLine(for: descriptor)
+    }.joined(separator: "\n")
+  }
+
+  /// Counts the complete canonical index in the grapheme domain used by context caps.
+  public static func completeIndexGraphemeCount(for descriptors: [SkillDescriptor]) -> Int {
+    completeIndex(for: descriptors).count
+  }
 }

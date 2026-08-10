@@ -312,8 +312,20 @@ struct ContextBuilderTests {
       origin: .interactive
     )
 
-    // then — one notice per authoring fault; the I/O fault stays in the log
-    #expect(result.ownerNotices.count == 6)
+    // then — shared owner reasons remain notices except for the repeatedly scanned I/O fault
+    #expect(
+      result.ownerNotices
+        == ([
+          .invalidSkillManifest(skill: "no-frontmatter"),
+          .invalidSkillName(directory: "Shouting", name: "Shouting"),
+          .skillNameDirectoryMismatch(directory: "triage", name: "triage-mail"),
+          .duplicateSkillName(name: "deploy", directories: ["deploy", "deploy-copy"]),
+          .escapingSkillDirectory(directory: "linked-out"),
+          .skillsDirectoryOutsideWorkspace,
+        ] as [WorkspaceWarning]).map { warning in
+          "⚠ \(warning.ownerFacingReason)"
+        }
+    )
     #expect(result.ownerNotices[0].contains("`no-frontmatter`"))
     #expect(result.ownerNotices[1].contains("`Shouting`"))
     #expect(result.ownerNotices[2].contains("`triage-mail`"))

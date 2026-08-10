@@ -1,7 +1,7 @@
 import Foundation
 
-/// A non-fatal diagnostic from a workspace scan, for the consuming layer to log.
-/// `ClawWorkspace` is pure I/O and owns no logger.
+/// A non-fatal diagnostic from a workspace scan. `ClawWorkspace` is pure I/O and owns neither
+/// logging nor presentation, so consumers decide where the shared owner-facing reason appears.
 public enum WorkspaceWarning: Sendable, Equatable {
   /// `skills/<skill>/SKILL.md` exists but is unusable (no `---` fence, malformed YAML, or missing
   /// `name`/`description`).
@@ -30,6 +30,43 @@ public enum WorkspaceWarning: Sendable, Equatable {
   /// `skills/` itself resolves outside the workspace (a symlinked directory). It anchors every
   /// per-skill containment check, so nothing under it can be trusted to be inside the workspace.
   case skillsDirectoryOutsideWorkspace
+
+  /// The complete reason an owner needs to identify and repair this rejected scan entry.
+  public var ownerFacingReason: String {
+    switch self {
+    case .invalidSkillManifest(let skill):
+      return """
+        Skill `\(skill)`: `SKILL.md` needs `---` frontmatter with `name` and `description`; skipped.
+        """
+    case .invalidSkillName(let directory, let name):
+      return """
+        Skill `\(directory)`: name `\(name)` must be lowercase letters, digits and single hyphens \
+        (1–64 characters); skipped.
+        """
+    case .skillNameDirectoryMismatch(let directory, let name):
+      return "Skill `\(directory)`: manifest name `\(name)` must match the directory name; skipped."
+    case .duplicateSkillName(let name, let directories):
+      let claimants = directories.map { directory in
+        "`\(directory)`"
+      }.joined(separator: ", ")
+      return "Skill name `\(name)` is claimed by \(claimants); all of them skipped, rename one."
+    case .escapingSkillDirectory(let directory):
+      return """
+        Skill `\(directory)`: its `SKILL.md` resolves outside the workspace, which I can't load \
+        from; skipped. Copy the skill in instead of linking to it.
+        """
+    case .unreadableSkillsDirectory:
+      return """
+        The `skills` directory couldn't be read; all skills skipped. Check its permissions and try \
+        again.
+        """
+    case .skillsDirectoryOutsideWorkspace:
+      return """
+        The `skills` directory resolves outside the workspace, which I can't load from; all skills \
+        skipped. Move it into the workspace instead of linking to it.
+        """
+    }
+  }
 }
 
 /// The result of scanning `skills/`: the valid descriptors plus any skip warnings.
