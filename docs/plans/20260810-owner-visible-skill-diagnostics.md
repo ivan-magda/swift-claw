@@ -184,16 +184,16 @@ and public skill documentation.
 - Review for consistency: `docs/INSTALL.md`
 - Review for consistency: `deploy/README.md`
 
-- [ ] Update the architecture code map, skills section, and observability table with `/skills`, the
+- [x] Update the architecture code map, skills section, and observability table with `/skills`, the
       fresh-scan rule, `context.skills` fields, failure semantics, and absolute-cap interpretation.
-- [ ] Update the PRD skills requirements and success criteria with on-demand diagnostics and
+- [x] Update the PRD skills requirements and success criteria with on-demand diagnostics and
       doctor/status visibility.
-- [ ] Update README skill discovery text to point owners to `/skills`.
-- [ ] Update GETTING_STARTED so the sample skill can be checked with `/skills` and the doctor row is
+- [x] Update README skill discovery text to point owners to `/skills`.
+- [x] Update GETTING_STARTED so the sample skill can be checked with `/skills` and the doctor row is
       explained.
-- [ ] Update CUSTOMIZATION's failure-surface section to distinguish automatic turn notices from the
+- [x] Update CUSTOMIZATION's failure-surface section to distinguish automatic turn notices from the
       complete on-demand `/skills` view and the summarized doctor row.
-- [ ] Sweep INSTALL and deploy documentation for command inventories or health-output claims;
+- [x] Sweep INSTALL and deploy documentation for command inventories or health-output claims;
       change them only if the new surface invalidates existing text.
-- [ ] Run the stop-slop pass over new public prose.
-- [ ] Run `swift test` and `scripts/lint.sh` after documentation changes; both must pass.
+- [x] Run the stop-slop pass over new public prose.
+- [x] Run `swift test` and `scripts/lint.sh` after documentation changes; both must pass.

@@ -31,7 +31,8 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   logs, and conversation history is full-text searchable.
 - **Skills you write once.** A `skills/<name>/SKILL.md` file shows up in context as its name
   and one line about when to use it; when a task matches, clawd loads the body and follows
-  your procedure instead of asking you to paste it again.
+  your procedure instead of asking you to paste it again. Send `/skills` to see every
+  accepted skill and each file the scanner rejected.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
 - **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
