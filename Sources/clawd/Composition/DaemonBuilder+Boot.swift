@@ -5,6 +5,23 @@ import Foundation
 // MARK: - Boot Sequence
 
 extension DaemonBuilder {
+  static let botMenuCommands = [
+    BotMenuCommand(command: "start", description: "Start the bot."),
+    BotMenuCommand(command: "new", description: "Start a new session."),
+    BotMenuCommand(command: "stop", description: "Stop the current run."),
+    BotMenuCommand(command: "remember", description: "Save a memory."),
+    BotMenuCommand(command: "memory", description: "Review saved memories."),
+    BotMenuCommand(command: "schedule", description: "Create or list schedules."),
+    BotMenuCommand(command: "pause", description: "Pause a schedule."),
+    BotMenuCommand(command: "resume", description: "Resume a paused schedule."),
+    BotMenuCommand(command: "runnow", description: "Run a schedule now."),
+    BotMenuCommand(command: "cancel", description: "Cancel a schedule."),
+    BotMenuCommand(command: "status", description: "Show daemon health."),
+    BotMenuCommand(command: "mcp", description: "Show MCP server status."),
+    BotMenuCommand(command: "skills", description: "Show accepted and rejected skills."),
+    BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
+  ]
+
   /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram
   /// (`registerMenu`), sweep crash-orphaned runs (`reconcileRuns`), then re-park unresolved
   /// approvals (`reconcileApprovals`). Each step is best-effort, but `reconcileApprovals` is
@@ -32,23 +49,7 @@ extension DaemonBuilder {
   func registerMenuCommands() -> @Sendable () async -> Void {
     {
       do {
-        try await transport.setMyCommands(
-          [
-            BotMenuCommand(command: "start", description: "Start the bot."),
-            BotMenuCommand(command: "new", description: "Start a new session."),
-            BotMenuCommand(command: "stop", description: "Stop the current run."),
-            BotMenuCommand(command: "remember", description: "Save a memory."),
-            BotMenuCommand(command: "memory", description: "Review saved memories."),
-            BotMenuCommand(command: "schedule", description: "Create or list schedules."),
-            BotMenuCommand(command: "pause", description: "Pause a schedule."),
-            BotMenuCommand(command: "resume", description: "Resume a paused schedule."),
-            BotMenuCommand(command: "runnow", description: "Run a schedule now."),
-            BotMenuCommand(command: "cancel", description: "Cancel a schedule."),
-            BotMenuCommand(command: "status", description: "Show daemon health."),
-            BotMenuCommand(command: "mcp", description: "Show MCP server status."),
-            BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
-          ]
-        )
+        try await transport.setMyCommands(Self.botMenuCommands)
       } catch {
         logger.warning("setMyCommands failed: \(error)")
       }

@@ -137,20 +137,20 @@ and public skill documentation.
 - Modify: `Tests/ClawGatewayTests/Routing/ScheduleInteractionTests.swift`
 - Create: `Tests/ClawdCompositionTests/BotMenuCommandsTests.swift`
 
-- [ ] Add the `.skills` command and parse bare, case-insensitive, and matching-bot forms; treat an
+- [x] Add the `.skills` command and parse bare, case-insensitive, and matching-bot forms; treat an
       argument tail as the same read-only diagnostics request.
-- [ ] Route allowlisted `/skills` directly through `DoctorReporting` to a fresh scan and
+- [x] Route allowlisted `/skills` directly through `DoctorReporting` to a fresh scan and
       `SkillDiagnostics`; do not dispatch an LLM turn or write skill state.
-- [ ] Preserve default-deny behavior so non-allowlisted senders learn nothing about installed or
+- [x] Preserve default-deny behavior so non-allowlisted senders learn nothing about installed or
       rejected skills.
-- [ ] Add `/skills` to `CommandReplies.help` and Telegram's registered command picker.
-- [ ] Add parser and router tests proving fresh results, accepted and rejected output, no turn
+- [x] Add `/skills` to `CommandReplies.help` and Telegram's registered command picker.
+- [x] Add parser and router tests proving fresh results, accepted and rejected output, no turn
       dispatch, duplicate-update handling, and unauthorized access control.
-- [ ] Add a menu test that verifies the registered catalog contains `/skills` with owner-facing
+- [x] Add a menu test that verifies the registered catalog contains `/skills` with owner-facing
       diagnostic wording.
-- [ ] Update the existing help test to keep using `CommandReplies.help` as the copy owner rather
+- [x] Update the existing help test to keep using `CommandReplies.help` as the copy owner rather
       than duplicating the full help text.
-- [ ] Run the affected ClawCore, ClawGateway, and ClawdComposition tests; all must pass before
+- [x] Run the affected ClawCore, ClawGateway, and ClawdComposition tests; all must pass before
       Task 4.
 
 ### Task 4: Verify acceptance criteria

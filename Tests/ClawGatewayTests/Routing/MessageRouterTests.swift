@@ -452,6 +452,88 @@ struct FullSessions: SessionMessageStore {
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
+  @Test func allowlistedSkillsUsesAFreshScanAndDoesNotDispatchATurn() async throws {
+    // given
+    let firstScan = SkillScanResult(
+      descriptors: [skillDescriptor(name: "alpha", description: "First skill.")],
+      warnings: []
+    )
+    let secondScan = SkillScanResult(
+      descriptors: [skillDescriptor(name: "bravo", description: "Second skill.")],
+      warnings: [.invalidSkillManifest(skill: "broken")]
+    )
+    let doctor = StubDoctorReporter(skillScans: [firstScan, secondScan])
+    let harness = try makeHarness(allowed: [42], doctor: doctor)
+
+    // when
+    let firstOutcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/skills")
+    )
+    let secondOutcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 2, from: 42, text: "/skills details")
+    )
+
+    // then
+    #expect(firstOutcome == .processed)
+    #expect(secondOutcome == .processed)
+    let sent = await harness.transport.sent
+    #expect(sent.count == 2)
+    #expect(sent[0].text.contains(WorkspaceSkills.indexLine(for: firstScan.descriptors[0])))
+    #expect(sent[0].text.contains("broken") == false)
+    #expect(sent[1].text.contains(WorkspaceSkills.indexLine(for: secondScan.descriptors[0])))
+    #expect(sent[1].text.contains(secondScan.warnings[0].ownerFacingReason))
+    #expect(await harness.dispatcher.calls.isEmpty)
+    #expect(try messageCount(harness.queue, content: "/skills") == 0)
+  }
+
+  @Test func duplicateSkillsUpdateSendsDiagnosticsOnlyOnce() async throws {
+    // given
+    let scan = SkillScanResult(
+      descriptors: [skillDescriptor(name: "alpha", description: "First skill.")],
+      warnings: []
+    )
+    let harness = try makeHarness(
+      allowed: [42],
+      doctor: StubDoctorReporter(skillScans: [scan])
+    )
+    let update = textUpdate(id: 1, from: 42, text: "/skills")
+
+    // when
+    let firstOutcome = await harness.router.handle(rawUpdate: update)
+    let duplicateOutcome = await harness.router.handle(rawUpdate: update)
+
+    // then
+    #expect(firstOutcome == .processed)
+    #expect(duplicateOutcome == .skipped)
+    #expect(await harness.transport.sent.count == 1)
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func nonAllowlistedSkillsRevealsNoSkillDiagnostics() async throws {
+    // given
+    let scan = SkillScanResult(
+      descriptors: [skillDescriptor(name: "private-skill", description: "Owner only.")],
+      warnings: [.invalidSkillManifest(skill: "private-broken")]
+    )
+    let harness = try makeHarness(
+      allowed: [42],
+      doctor: StubDoctorReporter(skillScans: [scan])
+    )
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 7, text: "/skills")
+    )
+
+    // then
+    #expect(outcome == .processed)
+    let reply = try #require(await harness.transport.sent.first)
+    #expect(reply.text == MessageRouter.privateBotText)
+    #expect(reply.text.contains("private-skill") == false)
+    #expect(reply.text.contains("private-broken") == false)
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
   @Test func unsupportedMediaGetsFriendlyReply() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
@@ -552,5 +634,13 @@ struct FullSessions: SessionMessageStore {
         arguments: [content]
       ) ?? 0
     }
+  }
+
+  private func skillDescriptor(name: String, description: String) -> SkillDescriptor {
+    SkillDescriptor(
+      name: name,
+      description: description,
+      directory: URL(fileURLWithPath: "/tmp/skills/\(name)")
+    )
   }
 }

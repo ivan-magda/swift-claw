@@ -237,6 +237,7 @@ import Testing
     // then — the router emits the help text verbatim; its content is owned by CommandReplies.help
     let reply = try #require(await harness.transport.sent.last?.text)
     #expect(reply == CommandReplies.help)
+    #expect(reply.contains("/skills"))
   }
 
   @Test func strangersGetNoHelp() async throws {

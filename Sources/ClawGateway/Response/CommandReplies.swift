@@ -16,6 +16,7 @@ public enum CommandReplies {
     /remember, /memory: durable memory
     /new: fresh conversation · /stop: stop the current run
     /status: daemon health (also /doctor) · /mcp: MCP server status
+    /skills: accepted and rejected workspace skills
 
     Confirmations:
     Slash commands never resolve a pending confirmation. Only your next plain-text \
