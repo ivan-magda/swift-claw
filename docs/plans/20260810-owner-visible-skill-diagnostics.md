@@ -159,18 +159,18 @@ and public skill documentation.
 
 - Verify: all production and test files changed in Tasks 1-3
 
-- [ ] Verify `/skills` lists every accepted descriptor and every scanner warning from a fresh scan.
-- [ ] Verify full `clawd doctor` and Telegram `/status` expose the same accepted count, rejected
+- [x] Verify `/skills` lists every accepted descriptor and every scanner warning from a fresh scan.
+- [x] Verify full `clawd doctor` and Telegram `/status` expose the same accepted count, rejected
       count, and cap-fit result.
-- [ ] Verify healthy skill diagnostics remain visible in `/status` as a headline and rejected or
+- [x] Verify healthy skill diagnostics remain visible in `/status` as a headline and rejected or
       dropped skills fail the row.
-- [ ] Verify `clawd doctor --json` includes the complete `context.skills` check fields.
-- [ ] Run the full suite with `swift test`.
-- [ ] Run `scripts/lint.sh --fix`, then `scripts/lint.sh`; both must pass.
-- [ ] Run `swift test --enable-code-coverage`, locate the report with
+- [x] Verify `clawd doctor --json` includes the complete `context.skills` check fields.
+- [x] Run the full suite with `swift test`.
+- [x] Run `scripts/lint.sh --fix`, then `scripts/lint.sh`; both must pass.
+- [x] Run `swift test --enable-code-coverage`, locate the report with
       `swift test --show-code-coverage-path`, and confirm the changed diagnostic paths have at least
       80% line coverage.
-- [ ] Confirm Git tracks every new file with `git status --short`.
+- [x] Confirm Git tracks every new file with `git status --short`.
 
 ### Task 5: Update specifications and public documentation
 
