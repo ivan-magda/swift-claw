@@ -26,17 +26,6 @@ public protocol MCPTransportFactory: Sendable {
   func makeTransport() async throws -> any Transport
 }
 
-/// A transport that names the protocol revision on the wire, and so has to be told which one the
-/// handshake actually settled on.
-///
-/// The SDK offers the newest revision it knows and the server answers with the one it will speak. A
-/// client that keeps announcing the offer rather than the answer is telling a server pinned to an
-/// older revision that it is about to receive something it never agreed to, which the spec lets that
-/// server refuse outright. The SDK updates only its own HTTP transport, so ours declares this.
-public protocol MCPNegotiatingTransport: Transport {
-  func adopt(protocolVersion: String) async
-}
-
 /// The production factory: one Streamable HTTP transport per connection, over the shared HTTP seam.
 public struct MCPStreamableHTTPTransportFactory: MCPTransportFactory {
   private let server: MCPServerConfig
@@ -337,9 +326,6 @@ private extension MCPServerSession {
         timingOutWith: .discoveryTimedOut(seconds: budget)
       ) {
         try await client.connect(transport: transport)
-      }
-      if let negotiating = transport as? any MCPNegotiatingTransport {
-        await negotiating.adopt(protocolVersion: result.protocolVersion)
       }
       logger.debug(
         "MCP session established",

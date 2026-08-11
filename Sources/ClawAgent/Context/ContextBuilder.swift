@@ -24,7 +24,6 @@ public struct ContextBuilder: Sendable {
   private let workspace: any WorkspaceReading
   private let memoryStore: any MemoryStore
   private let retriever: any Retriever
-  private let recallCutoff: any RecallCutoff
   private let budget: ContextBudget
   private let fenceLabels: ToolFenceLabels
 
@@ -39,7 +38,6 @@ public struct ContextBuilder: Sendable {
     workspace: any WorkspaceReading,
     memoryStore: any MemoryStore,
     retriever: any Retriever,
-    recallCutoff: any RecallCutoff = CandidateCapRecallCutoff(),
     budget: ContextBudget,
     fenceLabels: ToolFenceLabels = .undeclared,
     policyStaticSubhash: String = "",
@@ -52,7 +50,6 @@ public struct ContextBuilder: Sendable {
     self.workspace = workspace
     self.memoryStore = memoryStore
     self.retriever = retriever
-    self.recallCutoff = recallCutoff
     self.budget = budget
     self.fenceLabels = fenceLabels
 
@@ -335,7 +332,10 @@ private extension ContextBuilder {
       return nil
     }
 
-    let selected = recallCutoff.select(hits: hits, limit: Self.recallInjectionLimit)
+    let selected = CandidateCapRecallCutoff.select(
+      hits: hits,
+      limit: Self.recallInjectionLimit
+    )
     let units = selected.compactMap { hit -> SectionUnit? in
       let content = cappedRecallContent(hit.content)
       return content.isEmpty

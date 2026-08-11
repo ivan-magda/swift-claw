@@ -764,7 +764,6 @@ private func makeBuilder(
     workspace: workspace,
     memoryStore: memoryStore,
     retriever: retriever,
-    recallCutoff: CandidateCapRecallCutoff(),
     budget: budget,
     policyStaticSubhash: policyStaticSubhash,
     now: { Date(timeIntervalSince1970: 0) }

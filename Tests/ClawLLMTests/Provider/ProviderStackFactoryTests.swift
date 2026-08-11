@@ -38,11 +38,11 @@ private final class InvocationFlag: @unchecked Sendable {
 
     // then — the OpenAI-compatible adapter, metered and text-only, with the current route never
     // touching the OAuth envelope
-    #expect(stack.provider is OpenAICompatibleProvider)
-    #expect(stack.costPolicy == .metered)
-    #expect(stack.reservationPolicy == .textOnly)
-    #expect(stack.wireModel == "gpt-4o")
-    #expect(stack.configuredReference == "gpt-4o")
+    #expect(stack.binding.provider is OpenAICompatibleProvider)
+    #expect(stack.binding.costPolicy == .metered)
+    #expect(stack.binding.reservationPolicy == .textOnly)
+    #expect(stack.binding.wireModel == "gpt-4o")
+    #expect(stack.binding.configuredReference == "gpt-4o")
     #expect(managedOpened.invoked == false)
   }
 
@@ -60,7 +60,7 @@ private final class InvocationFlag: @unchecked Sendable {
     )
 
     // when
-    _ = try await stack.provider.complete(request: sampleRequest)
+    _ = try await stack.binding.provider.complete(request: sampleRequest)
 
     // then — the resolved endpoint reached the wire as the Chat Completions URL
     let recorded = await http.recorded
@@ -123,11 +123,11 @@ private final class InvocationFlag: @unchecked Sendable {
 
     // then — the Responses adapter, included-plan with the replay reservation, the OAuth envelope
     // loaded exactly once, and the static bearer never read
-    #expect(stack.provider is ChatGPTResponsesProvider<ContinuousClock>)
-    #expect(stack.costPolicy == .includedPlan)
-    #expect(stack.reservationPolicy == .chatGPTReplayState)
-    #expect(stack.wireModel == "gpt-5.4")
-    #expect(stack.configuredReference == "openai-chatgpt/gpt-5.4")
+    #expect(stack.binding.provider is ChatGPTResponsesProvider<ContinuousClock>)
+    #expect(stack.binding.costPolicy == .includedPlan)
+    #expect(stack.binding.reservationPolicy == .chatGPTReplayState)
+    #expect(stack.binding.wireModel == "gpt-5.4")
+    #expect(stack.binding.configuredReference == "openai-chatgpt/gpt-5.4")
     #expect(store.loadCount == 1)
     #expect(bearerRead.invoked == false)
   }
@@ -145,7 +145,7 @@ private final class InvocationFlag: @unchecked Sendable {
       http: ScriptedHTTPExecutor([]),
       buildVersion: "0.0.0-test"
     )
-    #expect(stack.provider is ChatGPTResponsesProvider<ContinuousClock>)
+    #expect(stack.binding.provider is ChatGPTResponsesProvider<ContinuousClock>)
     #expect(store.loadCount == 1)
   }
 
@@ -183,7 +183,7 @@ private final class InvocationFlag: @unchecked Sendable {
     )
 
     // when
-    _ = try await stack.provider.complete(request: sampleRequest)
+    _ = try await stack.binding.provider.complete(request: sampleRequest)
 
     // then — the factory wired the fixed Codex Responses URL and the store-seeded bearer reached it,
     // the symmetric twin of the current-route wire assertion
