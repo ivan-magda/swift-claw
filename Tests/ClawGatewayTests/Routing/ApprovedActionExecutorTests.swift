@@ -276,13 +276,12 @@ import Testing
     )
 
     // when
-    let outcome = await executor.executeApproved(
+    let commit = await executor.executeApproved(
       approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
     )
 
     // then — the tool's real result lands in the placeholder and the run resumes
-    #expect(outcome.commit == .committed)
-    #expect(outcome.observationContent == "Wrote 12 B to /w/plan.md.")
+    #expect(commit == .committed)
     #expect(try messageContent(env) == "Wrote 12 B to /w/plan.md.")
     #expect(try runState(env) == RunState.running.rawValue)
   }
@@ -310,10 +309,10 @@ import Testing
     }
     await gate.waitUntilStarted()
     await gate.release()
-    let outcome = await execution.value
+    let commit = await execution.value
 
     // then: approved execution awaits completion and records the truthful result
-    #expect(outcome.observationContent == "the gated write finished")
+    #expect(commit == .committed)
     #expect(try messageContent(env) == "the gated write finished")
   }
 
@@ -339,13 +338,13 @@ import Testing
     )
 
     // when
-    let outcome = await executor.executeApproved(
+    let commit = await executor.executeApproved(
       approval(env, tool: "execute_code", argsJSON: rawArgs, target: "code_exec:sh:abcd")
     )
 
     // then
-    #expect(outcome.commit == .committed)
-    #expect(outcome.observationContent == "exit 9")
+    #expect(commit == .committed)
+    #expect(try messageContent(env) == "exit 9")
     #expect(try sessionFlags(env).tainted)
     #expect(try sessionFlags(env).privateData)
     let audit = try lastToolAudit(env)
@@ -386,10 +385,10 @@ import Testing
       now: Date()
     )
     await gate.release()
-    let outcome = await execution.value
+    let commit = await execution.value
 
     // then
-    #expect(outcome.commit == .committed)
+    #expect(commit == .committed)
     #expect(try runState(env) == RunState.cancelled.rawValue)
     #expect(try messageContent(env) == "completed output")
     #expect(try sessionFlags(env).tainted)
@@ -422,10 +421,10 @@ import Testing
     // when: /new supersedes/detaints after claim but before fill
     _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
     await gate.release()
-    let outcome = await execution.value
+    let commit = await execution.value
 
     // then: old observation and audit are truthful; fresh-window flags remain clear
-    #expect(outcome.commit == .committed)
+    #expect(commit == .committed)
     #expect(try runState(env) == RunState.superseded.rawValue)
     #expect(try messageContent(env) == "old-window output")
     #expect(try sessionFlags(env).tainted == false)
@@ -450,8 +449,8 @@ import Testing
     let second = await executor.executeApproved(memoryApproval)
 
     // then — one memory row, observation filled, and the duplicate is a no-op (§6.3)
-    #expect(first.commit == .committed)
-    #expect(second.commit == .ignored)
+    #expect(first == .committed)
+    #expect(second == .ignored)
     let memoryCount = try await env.queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
     }
@@ -473,13 +472,13 @@ import Testing
     )
 
     // when
-    let outcome = await executor.executeApproved(
+    let commit = await executor.executeApproved(
       approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
     )
 
     // then — the tool body never ran, the run stays cancelled, and the placeholder is resolved
     // with the truthful not-run note instead of dangling
-    #expect(outcome.commit == .runNotResumable)
+    #expect(commit == .runNotResumable)
     #expect(await probe.executed == false)
     #expect(try runState(env) == RunState.cancelled.rawValue)
     #expect(try messageContent(env) == ApprovedActionExecutor.notResumableObservationContent)
@@ -494,13 +493,13 @@ import Testing
     )
 
     // when
-    let outcome = await executor.executeApproved(
+    let commit = await executor.executeApproved(
       approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
     )
 
     // then — the AWAITING→RUNNING claim committed BEFORE the external effect started, so a /stop
     // arriving from here on can only cancel a run that already owns its write
-    #expect(outcome.commit == .committed)
+    #expect(commit == .committed)
     #expect(try messageContent(env) == RunState.running.rawValue)
   }
 
@@ -514,13 +513,13 @@ import Testing
     )
 
     // when
-    let outcome = await executor.executeApproved(
+    let commit = await executor.executeApproved(
       approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
     )
 
     // then — DISTINCT from storeFailed: the action ran, so the waiter must not promise a retry;
     // the run stays claimed RUNNING for the boot orphan-fail sweep
-    #expect(outcome.commit == .recordFailed)
+    #expect(commit == .recordFailed)
     #expect(try runState(env) == RunState.running.rawValue)
     #expect(try messageContent(env) == "awaiting owner approval")
   }
@@ -535,13 +534,13 @@ import Testing
     )
 
     // when
-    let outcome = await executor.executeApproved(
+    let commit = await executor.executeApproved(
       approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
     )
 
     // then — a store failure is DISTINCT from a duplicate resume: the waiter must not read it as
     // "already resumed"; the run stays AWAITING_APPROVAL for the §6.5 boot crash-window recovery
-    #expect(outcome.commit == .storeFailed)
+    #expect(commit == .storeFailed)
     #expect(try runState(env) == RunState.awaitingApproval.rawValue)
     #expect(try messageContent(env) == "awaiting owner approval")
   }
@@ -552,7 +551,7 @@ import Testing
     let executor = makeExecutor(env, tools: [], runs: DiskFullRuns())
 
     // when
-    let outcome = await executor.executeApproved(
+    let commit = await executor.executeApproved(
       approval(
         env,
         tool: "memory_write",
@@ -562,7 +561,7 @@ import Testing
     )
 
     // then — same contract as the generic write: distinct failure signal, nothing committed
-    #expect(outcome.commit == .storeFailed)
+    #expect(commit == .storeFailed)
     #expect(try runState(env) == RunState.awaitingApproval.rawValue)
     let memoryCount = try await env.queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items")
@@ -688,12 +687,12 @@ import Testing
     let executor = makeExecutor(env, tools: [])
 
     // when
-    let outcome = await executor.executeApproved(
+    let commit = await executor.executeApproved(
       approval(env, tool: "vanished_tool", argsJSON: "{}")
     )
 
     // then — the run must not hang: it resumes with a truthful failure observation
-    #expect(outcome.commit == .committed)
+    #expect(commit == .committed)
     #expect(try runState(env) == RunState.running.rawValue)
     #expect(try messageContent(env)?.isEmpty == false)
   }

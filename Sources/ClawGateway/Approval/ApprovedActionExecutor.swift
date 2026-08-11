@@ -7,7 +7,7 @@ import Logging
 /// recorded-args execution. Tools are held by name as ClawCore `Tool`s: the executor never imports
 /// `ClawTools`; the composition root injects the same instances the dispatcher uses.
 public protocol ApprovedActionExecuting: Sendable {
-  func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome
+  func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome
 }
 
 /// How the executor's durable commit landed. Distinct from the store seam's vocabulary because a
@@ -28,19 +28,6 @@ public enum ApprovedCommitOutcome: Sendable, Equatable {
   /// The run reached a terminal state (`/stop`, `/new`) after the approve CAS but before the
   /// claim: nothing executed, and the claim transaction resolved the placeholder observation.
   case runNotResumable
-}
-
-public struct ApprovedExecutionOutcome: Sendable, Equatable {
-  /// What the placeholder observation now says (the waiter forwards nothing — the executor already
-  /// committed it; this is returned for logging/assertions).
-  public let observationContent: String
-  /// `.committed` when this call performed the resume; `.ignored` when a duplicate already did.
-  public let commit: ApprovedCommitOutcome
-
-  public init(observationContent: String, commit: ApprovedCommitOutcome) {
-    self.observationContent = observationContent
-    self.commit = commit
-  }
 }
 
 public struct ApprovedActionExecutor: ApprovedActionExecuting {
@@ -78,7 +65,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
     self.logger = logger
   }
 
-  public func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
+  public func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
     if approval.tool == Self.memoryWriteToolName {
       return applyMemoryWrite(approval)
     }
@@ -89,7 +76,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 // MARK: - Generic Write Execution
 
 private extension ApprovedActionExecutor {
-  func executeGenericWrite(_ approval: Approval) async -> ApprovedExecutionOutcome {
+  func executeGenericWrite(_ approval: Approval) async -> ApprovedCommitOutcome {
     // Claim BEFORE the external effect: the AWAITING→RUNNING flip and a `/stop`//`new`
     // cancellation contend on the same run row, so exactly one side wins — an approved write can
     // never land after the owner cancelled the run.
@@ -103,16 +90,13 @@ private extension ApprovedActionExecutor {
       )
     } catch {
       logger.error("approved-execution claim failed for run \(approval.runId): \(error)")
-      return ApprovedExecutionOutcome(observationContent: "", commit: .storeFailed)
+      return .storeFailed
     }
     switch claim {
     case .alreadyResumed:
-      return ApprovedExecutionOutcome(observationContent: "", commit: .ignored)
+      return .ignored
     case .runNotResumable:
-      return ApprovedExecutionOutcome(
-        observationContent: Self.notResumableObservationContent,
-        commit: .runNotResumable
-      )
+      return .runNotResumable
     case .committed:
       break
     }
@@ -134,12 +118,9 @@ private extension ApprovedActionExecutor {
       )
     } catch {
       logger.error("recording the executed result failed for run \(approval.runId): \(error)")
-      return ApprovedExecutionOutcome(
-        observationContent: payload.content,
-        commit: .recordFailed
-      )
+      return .recordFailed
     }
-    return ApprovedExecutionOutcome(observationContent: payload.content, commit: .committed)
+    return .committed
   }
 
   /// Runs the claimed action and returns its full payload — a truthful error payload when the
@@ -177,7 +158,7 @@ private extension ApprovedActionExecutor {
 // MARK: - Memory Write (Fused, Exactly-Once)
 
 private extension ApprovedActionExecutor {
-  func applyMemoryWrite(_ approval: Approval) -> ApprovedExecutionOutcome {
+  func applyMemoryWrite(_ approval: Approval) -> ApprovedCommitOutcome {
     guard
       let arguments = JSONValue.parse(approval.canonicalArgsJSON),
       case .parsed(let request) = MemoryWriteArguments.parse(
@@ -211,21 +192,15 @@ private extension ApprovedActionExecutor {
       )
       switch claim {
       case .committed:
-        return ApprovedExecutionOutcome(observationContent: content, commit: .committed)
+        return .committed
       case .alreadyResumed:
-        return ApprovedExecutionOutcome(observationContent: content, commit: .ignored)
+        return .ignored
       case .runNotResumable:
-        return ApprovedExecutionOutcome(
-          observationContent: Self.notResumableObservationContent,
-          commit: .runNotResumable
-        )
+        return .runNotResumable
       }
     } catch {
       logger.error("applyApprovedMemoryWrite failed for run \(approval.runId): \(error)")
-      return ApprovedExecutionOutcome(
-        observationContent: "The memory item could not be recorded.",
-        commit: .storeFailed
-      )
+      return .storeFailed
     }
   }
 
@@ -234,7 +209,7 @@ private extension ApprovedActionExecutor {
   func resumeWithSyntheticObservation(
     _ approval: Approval,
     content: String
-  ) -> ApprovedExecutionOutcome {
+  ) -> ApprovedCommitOutcome {
     do {
       let claim = try runs.claimApprovedExecution(
         runId: approval.runId,
@@ -244,12 +219,9 @@ private extension ApprovedActionExecutor {
       )
       switch claim {
       case .alreadyResumed:
-        return ApprovedExecutionOutcome(observationContent: content, commit: .ignored)
+        return .ignored
       case .runNotResumable:
-        return ApprovedExecutionOutcome(
-          observationContent: Self.notResumableObservationContent,
-          commit: .runNotResumable
-        )
+        return .runNotResumable
       case .committed:
         break
       }
@@ -265,10 +237,10 @@ private extension ApprovedActionExecutor {
           now: now()
         )
       )
-      return ApprovedExecutionOutcome(observationContent: content, commit: .committed)
+      return .committed
     } catch {
       logger.error("synthetic observation resume failed for run \(approval.runId): \(error)")
-      return ApprovedExecutionOutcome(observationContent: content, commit: .storeFailed)
+      return .storeFailed
     }
   }
 }

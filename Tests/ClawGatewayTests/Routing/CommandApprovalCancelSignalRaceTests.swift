@@ -17,8 +17,8 @@ import Testing
   // MARK: - Doubles
 
   private struct InertExecutor: ApprovedActionExecuting {
-    func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
-      ApprovedExecutionOutcome(observationContent: "", commit: .ignored)
+    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
+      .ignored
     }
   }
 
