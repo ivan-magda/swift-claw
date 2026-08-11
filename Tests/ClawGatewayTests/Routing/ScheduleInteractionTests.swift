@@ -56,6 +56,7 @@ import Testing
       accessControl: AccessControl(allowlist: AllowlistStoreGRDB(writer: queue)),
       delivery: transport,
       turnRunner: dispatcher,
+      imageCache: ImageCache(),
       lanes: SessionLaneRegistry(),
       schedule: ScheduleSurface(
         parser: FakeDraftParser(results: parseResults),

@@ -11,10 +11,8 @@ struct TurnDispatch: Sendable {
   let enqueuer: TurnEnqueuer
   let replies: ReplySender
 
-  /// Where an inbound photo's bytes wait for the turn that replays them. Defaulted so text-only
-  /// construction sites pass nothing; `MessageRouter.withImageCache` swaps in the instance the
-  /// runner reads from, which is the only way a stored image is ever seen again.
-  var imageCache = ImageCache()
+  /// Where an inbound photo's bytes wait for the turn that replays them.
+  let imageCache: ImageCache
 
   let now: @Sendable () -> Date
   let logger: Logger

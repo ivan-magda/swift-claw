@@ -146,10 +146,8 @@ struct DaemonBuilder: Sendable {
     let heartbeatOwner: Int64?
   }
 
-  /// Assembles those consumers in the one order that works, which is why they are built together
-  /// rather than at four call sites: the runner goes in unnamed and comes back image-wired from the
-  /// intake wiring, so nothing here can reach a copy that predates the cache an inbound photo lands
-  /// in. A consumer holding such a copy replays no images and fails no test.
+  /// Assembles those consumers together rather than at four call sites so they share one runner
+  /// value and, with it, the one image cache an inbound photo's bytes land in.
   func makeRunnerConsumers(  // swiftlint:disable:this function_parameter_count
     coordination: TurnCoordination,
     agentStack: AgentStack,
@@ -160,13 +158,15 @@ struct DaemonBuilder: Sendable {
     sandbox: SandboxStack,
     mcpCatalog: ResolvedMCPCatalog
   ) -> RunnerConsumers {
+    let turnRunner = makeTurnRunner(
+      coordination: coordination,
+      agentStack: agentStack,
+      costPolicy: roster.primary.costPolicy,
+      imageCache: ImageCache()
+    )
     let intake = makeIntakeServices(
       coordination: coordination,
-      turnRunner: makeTurnRunner(
-        coordination: coordination,
-        agentStack: agentStack,
-        costPolicy: roster.primary.costPolicy
-      ),
+      turnRunner: turnRunner,
       scheduleSurface: makeScheduleSurface(
         roster: roster,
         cooldown: cooldown,
@@ -185,11 +185,11 @@ struct DaemonBuilder: Sendable {
     let approvals = makeApprovalFabric(
       coordination: coordination,
       agentStack: agentStack,
-      turnRunner: intake.turnRunner
+      turnRunner: turnRunner
     )
     let (scheduler, heartbeatOwner) = makeScheduler(
       coordination: coordination,
-      turnRunner: intake.turnRunner,
+      turnRunner: turnRunner,
       workspace: workspace
     )
 

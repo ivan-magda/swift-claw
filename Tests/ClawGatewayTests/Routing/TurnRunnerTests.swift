@@ -550,6 +550,7 @@ struct Env {
   let runId: Int64
   let triggerMessageId: Int64
 
+  let imageCache: ImageCache
   let provider: StubLLMProvider
 }
 
@@ -630,6 +631,7 @@ func makeEnv(
     clock: ContinuousClock()
   )
 
+  let imageCache = ImageCache()
   let runner = TurnRunner(
     sessionMessages: sessionMessagesForRunner ?? sessionMessages,
     runs: runsFactory?(queue, sessionId) ?? runs ?? RunStoreGRDB(writer: queue),
@@ -638,6 +640,7 @@ func makeEnv(
     agent: agent,
     budget: budget,
     contextBuilder: builder,
+    imageCache: imageCache,
     notifyOutbox: {},
     breaker: breaker,
     delivery: transport,
@@ -657,6 +660,7 @@ func makeEnv(
     chatId: chatId,
     runId: runId,
     triggerMessageId: triggerMessageId,
+    imageCache: imageCache,
     provider: provider
   )
 }

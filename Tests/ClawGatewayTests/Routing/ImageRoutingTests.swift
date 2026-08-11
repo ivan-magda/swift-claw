@@ -79,6 +79,7 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
       accessControl: AccessControl(allowlist: allowlist),
       delivery: transport,
       turnRunner: dispatcher,
+      imageCache: cache,
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       images: images,
@@ -89,7 +90,7 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
     )
 
     return Harness(
-      router: router.withImageCache(cache),
+      router: router,
       transport: transport,
       dispatcher: dispatcher,
       sessionMessages: sessionMessages,
@@ -372,8 +373,8 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func theWiredPairSharesOneCacheFromDepositToReplay() async throws {
-    // given — the production seam: one cache, the router built from the runner it wired
+  @Test func onePhotoCrossesFromTheRouterThatDepositedItToTheRunnerThatReplaysIt() async throws {
+    // given — a stack wired the way the composition root wires it: one cache, both ends
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     let stack = try makeStack(

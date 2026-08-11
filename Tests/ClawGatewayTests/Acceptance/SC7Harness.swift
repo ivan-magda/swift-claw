@@ -236,6 +236,7 @@ func makeSC7Harness(
   //    every turn — interactive AND scheduled/heartbeat — reads its budget day from the ManualClock.
   let transport = RecordingTransport()
   let logger = TestLog.silent
+  let imageCache = ImageCache()
   let runner = TurnRunner(
     sessionMessages: stores.sessionMessages,
     runs: stores.runs,
@@ -244,6 +245,7 @@ func makeSC7Harness(
     agent: agent,
     budget: .default,
     contextBuilder: contextBuilder,
+    imageCache: imageCache,
     notifyOutbox: {},
     breaker: withBreaker ? BudgetBreaker(budget: .default) : nil,
     delivery: withBreaker ? transport : nil,
@@ -269,6 +271,7 @@ func makeSC7Harness(
     accessControl: AccessControl(allowlist: stores.allowlist),
     delivery: transport,
     turnRunner: runner,
+    imageCache: imageCache,
     lanes: lanes,
     schedule: ScheduleSurface(
       parser: parser,

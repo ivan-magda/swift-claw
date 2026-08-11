@@ -82,6 +82,7 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
       accessControl: AccessControl(allowlist: allowlist),
       delivery: transport,
       turnRunner: dispatcher,
+      imageCache: ImageCache(),
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       voice: voice,

@@ -186,6 +186,7 @@ private extension CommandApprovalCancelSignalRaceTests {
       accessControl: AccessControl(allowlist: allowlist),
       delivery: RecordingTransport(),
       turnRunner: FakeTurnRunner(),
+      imageCache: ImageCache(),
       lanes: lanes,
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: coordinator,

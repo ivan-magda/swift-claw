@@ -59,6 +59,7 @@ import Testing
       agent: agent,
       budget: budget,
       contextBuilder: makeEmptyContextBuilder(),
+      imageCache: ImageCache(),
       notifyOutbox: {},
       // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
       parker: InertApprovalParker(coordinator: ApprovalCoordinator()),

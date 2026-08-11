@@ -9,14 +9,9 @@ import Foundation
 // MARK: - Intake Services & Tool Catalog
 
 extension DaemonBuilder {
-  /// The intake services and the image-wired `TurnRunner` the router dispatches through. The runner
-  /// is handed back because `MessageRouter` copies it: only the copy the router was built from
-  /// carries the cache an inbound photo's bytes land in, so every other consumer that copies a
-  /// runner must take THIS one or replay nothing.
   struct IntakeStack {
     let poller: TelegramPollerService
     let outbox: OutboxDispatcher
-    let turnRunner: TurnRunner
   }
 
   func makeIntakeServices(
@@ -29,31 +24,28 @@ extension DaemonBuilder {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
 
-    // The closure parameter deliberately shadows `turnRunner`: inside this body no name resolves to
-    // the unwired runner, so the router cannot be built from a copy that predates the image cache.
-    let (router, wiredRunner) = ImageWiring.wire(runner: turnRunner) { turnRunner in
-      MessageRouter(
-        processed: stores.processed,
-        sessionMessages: stores.sessionMessages,
-        commands: stores.commands,
-        memory: stores.memory,
-        memoryCommands: stores.memoryCommands,
-        pendingConfirmations: coordination.pendingConfirmations,
-        botUsername: botUsername,
-        accessControl: AccessControl(allowlist: stores.allowlist),
-        delivery: transport,
-        turnRunner: turnRunner,
-        lanes: coordination.lanes,
-        schedule: scheduleSurface,
-        approvalCallbacks: approvalCallbacks,
-        voice: voiceService,
-        images: imageService,
-        typing: TelegramTypingIndicator(transport: transport),
-        coordinator: coordination.approvalCoordinator,
-        doctor: doctor,
-        logger: logger
-      )
-    }
+    let router = MessageRouter(
+      processed: stores.processed,
+      sessionMessages: stores.sessionMessages,
+      commands: stores.commands,
+      memory: stores.memory,
+      memoryCommands: stores.memoryCommands,
+      pendingConfirmations: coordination.pendingConfirmations,
+      botUsername: botUsername,
+      accessControl: AccessControl(allowlist: stores.allowlist),
+      delivery: transport,
+      turnRunner: turnRunner,
+      imageCache: turnRunner.imageCache,
+      lanes: coordination.lanes,
+      schedule: scheduleSurface,
+      approvalCallbacks: approvalCallbacks,
+      voice: voiceService,
+      images: imageService,
+      typing: TelegramTypingIndicator(transport: transport),
+      coordinator: coordination.approvalCoordinator,
+      doctor: doctor,
+      logger: logger
+    )
 
     let poller = TelegramPollerService(
       intake: transport,
@@ -68,7 +60,7 @@ extension DaemonBuilder {
       signal: coordination.outboxSignal,
       logger: logger
     )
-    return IntakeStack(poller: poller, outbox: dispatcher, turnRunner: wiredRunner)
+    return IntakeStack(poller: poller, outbox: dispatcher)
   }
 
   /// Nil when the owner opted out, which is what makes the photo path fail closed: the router's only

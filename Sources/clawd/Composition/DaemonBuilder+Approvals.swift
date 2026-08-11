@@ -22,8 +22,8 @@ extension DaemonBuilder {
   }
 
   /// The approve-resume fabric: the waiter (the single execution locus) and the expiry sweeper.
-  /// The callback handler is built separately because it needs no `TurnRunner` and the router does
-  /// need it — so it can be, and has to be, built before the runner is image-wired.
+  /// The callback handler is built separately because it needs no `TurnRunner` while the router
+  /// does, so it has to exist before the router that carries it.
   struct ApprovalFabric {
     let waiter: ApprovalWaiter
     let expiry: ApprovalExpiryService
@@ -32,7 +32,8 @@ extension DaemonBuilder {
   func makeTurnRunner(
     coordination: TurnCoordination,
     agentStack: AgentStack,
-    costPolicy: LLMCostPolicy
+    costPolicy: LLMCostPolicy,
+    imageCache: ImageCache
   ) -> TurnRunner {
     let outboxSignal = coordination.outboxSignal
     return TurnRunner(
@@ -43,6 +44,7 @@ extension DaemonBuilder {
       agent: agentStack.agent,
       budget: config.budget,
       contextBuilder: agentStack.contextBuilder,
+      imageCache: imageCache,
       notifyOutbox: { outboxSignal.poke() },
       // The resolved route's billing, not the init default: a subscription route must not fire a
       // daily USD-cap DM against dollars earlier metered usage rang up.
@@ -55,7 +57,7 @@ extension DaemonBuilder {
   }
 
   /// The handler that answers an owner's approve/deny tap. It reaches the router, so it is built
-  /// ahead of the runner the router dispatches through.
+  /// ahead of the router it answers into.
   func makeApprovalCallbackHandler(
     coordination: TurnCoordination,
     agentStack: AgentStack
