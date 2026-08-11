@@ -70,17 +70,6 @@ public struct FittedSection: Sendable, Equatable, Identifiable {
     renderUnits(units)
   }
 
-  public var section: Section {
-    Section(
-      id: id,
-      tier: tier,
-      priority: priority,
-      truncatable: truncatable,
-      cap: cap,
-      content: content
-    )
-  }
-
   fileprivate init(source: FittableSection, units: [SectionUnit], droppedUnitIDs: [String] = []) {
     self.id = source.id
     self.tier = source.tier
@@ -99,13 +88,6 @@ public enum BudgetFitterError: Error, Equatable {
 public enum BudgetFitter {
   public static let truncationMarker = TextTruncation.marker
   public static let dropMarkerUnitID = "drop-marker"
-
-  public static func fit(
-    _ sections: [FittableSection],
-    budget: ContextBudget
-  ) throws -> [Section] {
-    try fitWithUnits(sections, budget: budget).map(\.section)
-  }
 
   public static func fitWithUnits(
     _ sections: [FittableSection],
