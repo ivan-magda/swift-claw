@@ -8,7 +8,7 @@ import Foundation
 ///
 /// Nothing here is durable — a restart loses every entry, so a caller must be able to carry on
 /// without an image it stored earlier.
-actor ImageCache {
+package actor ImageCache {
   private struct Entry {
     let sessionId: Int64
     let messageId: Int64
@@ -23,7 +23,7 @@ actor ImageCache {
 
   /// Holds more than any single request can replay, so an image a turn could not afford is still
   /// there for the next one.
-  init(
+  package init(
     maximumImages: Int = ImageBounds.maximumCachedImages,
     maximumBytes: Int = ImageBounds.maximumAggregateReplayBytes * 4
   ) {
@@ -31,7 +31,7 @@ actor ImageCache {
     self.maximumBytes = maximumBytes
   }
 
-  func store(_ image: ImagePart, sessionId: Int64, messageId: Int64) {
+  package func store(_ image: ImagePart, sessionId: Int64, messageId: Int64) {
     let existing = entries.firstIndex { entry in
       entry.sessionId == sessionId && entry.messageId == messageId
     }
@@ -51,7 +51,7 @@ actor ImageCache {
     }
   }
 
-  func images(sessionId: Int64) -> [Int64: ImagePart] {
+  package func images(sessionId: Int64) -> [Int64: ImagePart] {
     var found: [Int64: ImagePart] = [:]
 
     for entry in entries where entry.sessionId == sessionId {

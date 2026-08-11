@@ -146,10 +146,9 @@ struct DaemonBuilder: Sendable {
     let heartbeatOwner: Int64?
   }
 
-  /// Assembles those consumers in the one order that works, which is why they are built together
-  /// rather than at four call sites: the runner goes in unnamed and comes back image-wired from the
-  /// intake wiring, so nothing here can reach a copy that predates the cache an inbound photo lands
-  /// in. A consumer holding such a copy replays no images and fails no test.
+  /// Assembles those consumers together rather than at four call sites so they share one runner
+  /// value and, with it, one image cache: this is the only place an inbound photo's bytes get a
+  /// destination, and handing the router a second cache would store every photo and replay none.
   func makeRunnerConsumers(  // swiftlint:disable:this function_parameter_count
     coordination: TurnCoordination,
     agentStack: AgentStack,
@@ -160,13 +159,17 @@ struct DaemonBuilder: Sendable {
     sandbox: SandboxStack,
     mcpCatalog: ResolvedMCPCatalog
   ) -> RunnerConsumers {
+    let imageCache = ImageCache()
+    let turnRunner = makeTurnRunner(
+      coordination: coordination,
+      agentStack: agentStack,
+      costPolicy: roster.primary.costPolicy,
+      imageCache: imageCache
+    )
     let intake = makeIntakeServices(
       coordination: coordination,
-      turnRunner: makeTurnRunner(
-        coordination: coordination,
-        agentStack: agentStack,
-        costPolicy: roster.primary.costPolicy
-      ),
+      turnRunner: turnRunner,
+      imageCache: imageCache,
       scheduleSurface: makeScheduleSurface(
         roster: roster,
         cooldown: cooldown,
@@ -185,11 +188,11 @@ struct DaemonBuilder: Sendable {
     let approvals = makeApprovalFabric(
       coordination: coordination,
       agentStack: agentStack,
-      turnRunner: intake.turnRunner
+      turnRunner: turnRunner
     )
     let (scheduler, heartbeatOwner) = makeScheduler(
       coordination: coordination,
-      turnRunner: intake.turnRunner,
+      turnRunner: turnRunner,
       workspace: workspace
     )
 

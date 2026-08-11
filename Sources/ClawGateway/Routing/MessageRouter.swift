@@ -27,7 +27,7 @@ public struct MessageRouter: Sendable {
   private let commandHandlers: CommandHandlers
   private let scheduleHandlers: ScheduleHandlers
   private let confirmations: ConfirmationResolver
-  private var turnDispatch: TurnDispatch
+  private let turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
   private let voice: (any VoiceMessageTranscribing)?
   private let images: (any ImageMessageHandling)?
@@ -36,7 +36,7 @@ public struct MessageRouter: Sendable {
   private let doctor: any DoctorReporting
   private let logger: Logger
 
-  public init(
+  package init(
     processed: any ProcessedUpdateStore,
     sessionMessages: any SessionMessageStore,
     commands: any CommandStore,
@@ -47,6 +47,7 @@ public struct MessageRouter: Sendable {
     accessControl: AccessControl,
     delivery: any MessageDelivery,
     turnRunner: any TurnDispatching,
+    imageCache: ImageCache,
     lanes: SessionLaneRegistry,
     schedule: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
@@ -75,6 +76,7 @@ public struct MessageRouter: Sendable {
       sessionMessages: sessionMessages,
       enqueuer: enqueuer,
       replies: replies,
+      imageCache: imageCache,
       now: now,
       logger: logger
     )
@@ -444,20 +446,6 @@ private extension MessageRouter {
       return resolved
     }
     return try await turnDispatch.dispatch(rawUpdate: rawUpdate, message: message, text: text)
-  }
-}
-
-// MARK: - Image Cache
-
-extension MessageRouter {
-  /// Hands the router the cache an inbound photo's bytes land in, as a copy rather than an `init`
-  /// parameter: the cache is module-internal and `MessageRouter.init` is public, so it cannot cross
-  /// that signature. Half of a pair — call `ImageWiring.wire`, which is what guarantees the runner
-  /// replaying those bytes got the same cache.
-  func withImageCache(_ cache: ImageCache) -> MessageRouter {
-    var copy = self
-    copy.turnDispatch.imageCache = cache
-    return copy
   }
 }
 

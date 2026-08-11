@@ -210,6 +210,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
       accessControl: accessControl,
       delivery: RecordingTransport(),
       turnRunner: FakeTurnRunner(),
+      imageCache: ImageCache(),
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       approvalCallbacks: wireHandler ? handler : nil,

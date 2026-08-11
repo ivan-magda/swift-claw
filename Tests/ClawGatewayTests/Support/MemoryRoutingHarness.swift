@@ -48,6 +48,7 @@ struct MemoryRoutingHarness {
       accessControl: AccessControl(allowlist: allowlist),
       delivery: transport,
       turnRunner: dispatcher,
+      imageCache: ImageCache(),
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),

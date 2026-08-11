@@ -36,7 +36,10 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  var imageCache: ImageCache?
+  /// Where an inbound photo's bytes wait between the router that deposited them and this run.
+  /// The `MessageRouter` doing the depositing must hold this same instance. Not `private`: the
+  /// replay side lives in `TurnRunner+Images`.
+  let imageCache: ImageCache
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that
@@ -60,7 +63,7 @@ public struct TurnRunner: TurnDispatching {
   /// Most-recent messages pulled for context; `ContextBuilder` then caps by grapheme budget.
   private static let historyLimit = 50
 
-  public init(
+  package init(
     sessionMessages: any SessionMessageStore,
     runs: any RunStore,
     usageStore: any UsageStore,
@@ -68,6 +71,7 @@ public struct TurnRunner: TurnDispatching {
     agent: AgentRuntime,
     budget: RunBudget,
     contextBuilder: ContextBuilder,
+    imageCache: ImageCache,
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     delivery: (any MessageDelivery)? = nil,
@@ -87,7 +91,7 @@ public struct TurnRunner: TurnDispatching {
     self.agent = agent
     self.budget = budget
     self.contextBuilder = contextBuilder
-    self.imageCache = nil
+    self.imageCache = imageCache
 
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker

@@ -285,6 +285,7 @@ func makeSC3Harness(
   let transport = RecordingTransport()
   let logger = TestLog.silent
   let deferredParker = DeferredApprovalParker()
+  let imageCache = ImageCache()
   let runner = TurnRunner(
     sessionMessages: stores.sessionMessages,
     runs: stores.runs,
@@ -293,6 +294,7 @@ func makeSC3Harness(
     agent: agent,
     budget: .default,
     contextBuilder: contextBuilder,
+    imageCache: imageCache,
     notifyOutbox: {},
     parker: deferredParker,
     approvalExpirySeconds: testApprovalExpirySeconds,
@@ -350,6 +352,7 @@ func makeSC3Harness(
     accessControl: AccessControl(allowlist: stores.allowlist),
     delivery: transport,
     turnRunner: runner,
+    imageCache: imageCache,
     lanes: lanes,
     schedule: ScheduleSurface(
       parser: FakeDraftParser(result: .unparseable),

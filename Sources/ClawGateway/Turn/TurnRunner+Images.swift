@@ -3,19 +3,9 @@ import ClawCore
 // MARK: - Image Attachment
 
 extension TurnRunner {
-  /// Hands the runner the cache to replay from, as a copy rather than an `init` parameter: the
-  /// cache is module-internal and `TurnRunner.init` is public, so it cannot cross that signature.
-  /// Half of a pair — call `ImageWiring.wire`, which is what guarantees the router depositing those
-  /// bytes got the same cache.
-  func withImageCache(_ cache: ImageCache) -> TurnRunner {
-    var copy = self
-    copy.imageCache = cache
-    return copy
-  }
-
-  /// The session's cached images, or none while no cache has been handed over.
+  /// The images this session's inbound photos left behind, whatever survived eviction.
   func cachedImages(sessionId: Int64) async -> [Int64: ImagePart] {
-    await imageCache?.images(sessionId: sessionId) ?? [:]
+    await imageCache.images(sessionId: sessionId)
   }
 
   /// Moves cached images onto the history rows they arrived on, matching by message id while

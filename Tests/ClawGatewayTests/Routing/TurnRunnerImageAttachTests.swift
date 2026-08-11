@@ -71,11 +71,10 @@ import Testing
         )
       )
     )
-    let cache = ImageCache()
-    await cache.store(alpha, sessionId: env.sessionId, messageId: env.triggerMessageId)
+    await env.imageCache.store(alpha, sessionId: env.sessionId, messageId: env.triggerMessageId)
 
     // when
-    try await env.runner.withImageCache(cache).run(
+    try await env.runner.run(
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,
@@ -109,12 +108,11 @@ import Testing
       ),
       now: { fixedNow }
     )
-    let cache = ImageCache()
-    await cache.store(alpha, sessionId: env.sessionId, messageId: env.triggerMessageId)
+    await env.imageCache.store(alpha, sessionId: env.sessionId, messageId: env.triggerMessageId)
     let observationMessageId = try await suspendOnAGatedFetchThenApprove(env: env, now: fixedNow)
 
     // when
-    await env.runner.withImageCache(cache).resume(
+    await env.runner.resume(
       runId: env.runId,
       sessionId: env.sessionId,
       chatId: env.chatId,

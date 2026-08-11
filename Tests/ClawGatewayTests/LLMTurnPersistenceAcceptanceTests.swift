@@ -362,6 +362,9 @@ func makeStack(
     clock: ContinuousClock()
   )
 
+  // One cache into both ends, exactly as the composition root builds it: the router deposits an
+  // inbound photo's bytes here and the runner replays them from here.
+  let imageCache = ImageCache()
   let turnRunner = TurnRunner(
     sessionMessages: sessionMessages,
     runs: runs,
@@ -370,6 +373,7 @@ func makeStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer, workspace: workspace),
+    imageCache: imageCache,
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
@@ -379,28 +383,25 @@ func makeStack(
     logger: logger
   )
 
-  // Through the production seam, so the stack the acceptance tests drive is wired exactly the way
-  // the composition root has to wire it.
-  let (router, _) = ImageWiring.wire(runner: turnRunner) { wiredRunner in
-    MessageRouter(
-      processed: processed,
-      sessionMessages: sessionMessages,
-      commands: commands,
-      memory: MemoryStoreGRDB(writer: writer),
-      memoryCommands: MemoryCommandStoreGRDB(writer: writer),
-      pendingConfirmations: PendingConfirmationRegistry(),
-      botUsername: "claw_bot",
-      accessControl: AccessControl(allowlist: allowlist),
-      delivery: transport,
-      turnRunner: wiredRunner,
-      lanes: lanes,
-      schedule: makeIdleScheduleSurface(writer: writer),
-      images: images,
-      coordinator: ApprovalCoordinator(),
-      doctor: StubDoctorReporter(),
-      logger: logger
-    )
-  }
+  let router = MessageRouter(
+    processed: processed,
+    sessionMessages: sessionMessages,
+    commands: commands,
+    memory: MemoryStoreGRDB(writer: writer),
+    memoryCommands: MemoryCommandStoreGRDB(writer: writer),
+    pendingConfirmations: PendingConfirmationRegistry(),
+    botUsername: "claw_bot",
+    accessControl: AccessControl(allowlist: allowlist),
+    delivery: transport,
+    turnRunner: turnRunner,
+    imageCache: imageCache,
+    lanes: lanes,
+    schedule: makeIdleScheduleSurface(writer: writer),
+    images: images,
+    coordinator: ApprovalCoordinator(),
+    doctor: StubDoctorReporter(),
+    logger: logger
+  )
 
   let dispatcher = OutboxDispatcher(
     outbox: outbox,
@@ -462,6 +463,7 @@ func makeStreamingStack(
     // no test here waits out a real probe interval.
     clock: ScriptedClock.compressed(parkingAt: .seconds(3))
   )
+  let imageCache = ImageCache()
   let turnRunner = TurnRunner(
     sessionMessages: sessionMessages,
     runs: runs,
@@ -470,6 +472,7 @@ func makeStreamingStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer),
+    imageCache: imageCache,
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
@@ -489,6 +492,7 @@ func makeStreamingStack(
     accessControl: AccessControl(allowlist: allowlist),
     delivery: transport,
     turnRunner: turnRunner,
+    imageCache: imageCache,
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
     coordinator: ApprovalCoordinator(),
@@ -548,6 +552,7 @@ func makeStopNewStack(
     clock: ContinuousClock()
   )
 
+  let imageCache = ImageCache()
   let turnRunner = TurnRunner(
     sessionMessages: sessionMessages,
     runs: runs,
@@ -556,6 +561,7 @@ func makeStopNewStack(
     agent: agent,
     budget: .default,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer),
+    imageCache: imageCache,
     notifyOutbox: { signal.poke() },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
@@ -576,6 +582,7 @@ func makeStopNewStack(
     accessControl: AccessControl(allowlist: allowlist),
     delivery: transport,
     turnRunner: turnRunner,
+    imageCache: imageCache,
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
     coordinator: ApprovalCoordinator(),
