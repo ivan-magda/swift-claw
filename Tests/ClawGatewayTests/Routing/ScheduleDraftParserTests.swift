@@ -51,12 +51,14 @@ import Testing
       )
     )
     let parser = ScheduleDraftParser(
-      provider: provider,
-      wireModel: "test-model",
+      roster: makeSingleRouteRoster(
+        provider: provider,
+        wireModel: "test-model",
+        costPolicy: costPolicy
+      ),
       usageStore: UsageStoreGRDB(writer: queue),
       budget: budget,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
-      costPolicy: costPolicy,
       structuredOutput: structuredOutput,
       clock: clock,
       logger: TestLog.silent

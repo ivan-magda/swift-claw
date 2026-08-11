@@ -266,7 +266,7 @@ func makeSC3Harness(
     beforeCompletion: beforeCompletion
   )
   let agent = AgentRuntime(
-    provider: provider,
+    roster: makeSingleRouteRoster(provider: provider, wireModel: "test-model"),
     typingIndicator: NoopTyping(),
     draftStreamer: NoopRichDraftStreaming(),
     streamingEnabled: false,
@@ -275,8 +275,6 @@ func makeSC3Harness(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    wireModel: "test-model",
-    configuredReference: "test-model",
     toolDispatcher: dispatcherOverride ?? dispatcher,
     usageStore: stores.usage,
     auditLog: stores.audit,
