@@ -12,18 +12,6 @@ enum DoctorHealth {
     now: Date,
     routeHealth: LLMRouteHealth
   ) -> HealthRowsBuilder.Inputs {
-    let emptyRunsHealth = RunsHealth(
-      inFlight: 0,
-      oldestRunAgeSeconds: nil,
-      lastFailedAt: nil,
-      lastSuccessAt: nil,
-      consecutiveFailures: 0
-    )
-    let runsHealth = (try? stores.runs.runsHealth(now: now)) ?? emptyRunsHealth
-
-    let (todayTokens, todayUSD) = (try? stores.usage.todayTokensAndCost(now: now)) ?? (0, 0)
-    let costMix = (try? stores.usage.costSourceMix(now: now)) ?? [:]
-    let latestContext = try? stores.usage.latestPromptUsage()
     let skillDiagnostics = SkillDiagnostics(
       scan: skillScan(config: config),
       skillsCap: ContextBudget.default.skillsCap
@@ -41,18 +29,17 @@ enum DoctorHealth {
         configured: config.allowlist.count
       ),
       lastOffset: try? stores.cursor.loadCursor(),
-      runsHealth: runsHealth,
+      runsHealth: read { try stores.runs.runsHealth(now: now) },
       routeHealth: routeHealth,
       retryBudget: config.llm.retryBudget,
       streamingEnabled: config.llm.streamingEnabled,
-      todayTokens: todayTokens,
-      todayUSD: todayUSD,
-      costMix: costMix,
+      todayUsage: read { try stores.usage.todayTokensAndCost(now: now) },
+      costMix: read { try stores.usage.costSourceMix(now: now) },
       perDayUSD: config.budget.perDayUSD,
       perRunUSD: config.budget.perRunUSD,
       walBytes: walBytes,
       freeBytes: freeBytes,
-      latestContext: latestContext,
+      latestContext: read { try stores.usage.latestPromptUsage() },
       skillDiagnostics: skillDiagnostics
     )
   }
@@ -66,26 +53,15 @@ enum DoctorHealth {
     config: AppConfig,
     now: Date
   ) -> [DoctorReport.Check] {
-    let emptyState = SchedulerState(
-      lastTickAt: nil,
-      lastMisfireAt: nil,
-      lastMisfireSkippedCount: 0,
-      lastHeartbeatAt: nil,
-      heartbeatCountDay: nil,
-      heartbeatCount: 0
-    )
-    let state = (try? stores.scheduledJobs.schedulerState()) ?? emptyState
-
-    let dueCount = try? stores.scheduledJobs.dueJobs(now: now).count
-    let proactiveUsage = try? stores.usage.todayTokensAndCost(
-      origins: [.scheduled, .heartbeat],
-      now: now
-    )
-
     let snapshot = SchedulerHealth.Snapshot(
-      state: state,
-      dueCount: dueCount,
-      proactiveTodayUSD: proactiveUsage?.costUSD,
+      state: read { try stores.scheduledJobs.schedulerState() },
+      dueCount: read { try stores.scheduledJobs.dueJobs(now: now).count },
+      proactiveTodayUSD: read {
+        try stores.usage.todayTokensAndCost(
+          origins: [.scheduled, .heartbeat],
+          now: now
+        ).costUSD
+      },
       proactivePerDayUSD: config.budget.proactivePerDayUSD,
       heartbeatEnabled: config.heartbeatEnabled,
       heartbeatMaxPerDay: config.heartbeatMaxPerDay,
@@ -101,11 +77,8 @@ enum DoctorHealth {
     config: AppConfig,
     now: Date
   ) -> [DoctorReport.Check] {
-    let emptyHealth = ApprovalsHealth(pendingCount: 0, oldestPendingAgeSeconds: nil)
-    let health = (try? stores.approvals.approvalsHealth(now: now)) ?? emptyHealth
-
     return ApprovalsHealthRows.rows(
-      health: health,
+      health: read { try stores.approvals.approvalsHealth(now: now) },
       approvalExpirySeconds: config.approvalExpirySeconds
     )
   }
@@ -121,5 +94,17 @@ enum DoctorHealth {
       unavailableReason: unavailableReason
     )
     return SandboxHealthRows.rows(for: status)
+  }
+}
+
+private extension DoctorHealth {
+  static func read<Value: Sendable>(
+    _ load: () throws -> Value
+  ) -> HealthValue<Value> {
+    do {
+      return .available(try load())
+    } catch {
+      return .unavailable
+    }
   }
 }

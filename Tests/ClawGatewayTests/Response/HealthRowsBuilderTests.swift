@@ -28,24 +28,25 @@ import Testing
     HealthRowsBuilder.Inputs(
       allowlist: allowlist,
       lastOffset: 42,
-      runsHealth: RunsHealth(
-        inFlight: 0,
-        oldestRunAgeSeconds: nil,
-        lastFailedAt: nil,
-        lastSuccessAt: nil,
-        consecutiveFailures: 0
+      runsHealth: .available(
+        RunsHealth(
+          inFlight: 0,
+          oldestRunAgeSeconds: nil,
+          lastFailedAt: nil,
+          lastSuccessAt: nil,
+          consecutiveFailures: 0
+        )
       ),
       routeHealth: routeHealth,
       retryBudget: 3,
       streamingEnabled: true,
-      todayTokens: 100,
-      todayUSD: todayUSD,
-      costMix: [:],
+      todayUsage: .available((tokens: 100, costUSD: todayUSD)),
+      costMix: .available([:]),
       perDayUSD: perDayUSD,
       perRunUSD: 0.5,
       walBytes: 12,
       freeBytes: freeBytes,
-      latestContext: latestContext,
+      latestContext: .available(latestContext),
       skillDiagnostics: skillDiagnostics
     )
   }

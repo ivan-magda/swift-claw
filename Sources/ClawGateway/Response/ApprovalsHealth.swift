@@ -8,29 +8,30 @@ import ClawCore
 /// `ApprovalsHealth` data struct it renders — ClawGateway imports both.
 public enum ApprovalsHealthRows {
   public static func rows(
-    health: ApprovalsHealth,
+    health: HealthValue<ApprovalsHealth>,
     approvalExpirySeconds: Int
   ) -> [DoctorReport.Check] {
     // Oldest pending age shown against the expiry window (age/expiry), mirroring the
     // heartbeat.today "count/cap" idiom — a row nearing the cap flags a stuck approval before the
     // ticker sweeps it.
-    let oldestAge =
-      health.oldestPendingAgeSeconds.map { age in "\(age)/\(approvalExpirySeconds)" } ?? "none"
-
     return [
-      DoctorReport.Check(
+      .storeRead(
+        health,
         key: "approvals.pending",
-        value: "\(health.pendingCount)",
-        ok: true,
         group: .approvals,
         isHeadline: true
-      ),
-      DoctorReport.Check(
+      ) { health in
+        "\(health.pendingCount)"
+      },
+      .storeRead(
+        health,
         key: "approvals.oldest_age_s",
-        value: oldestAge,
-        ok: true,
         group: .approvals
-      ),
+      ) { health in
+        health.oldestPendingAgeSeconds.map { age in
+          "\(age)/\(approvalExpirySeconds)"
+        } ?? "none"
+      },
     ]
   }
 }
