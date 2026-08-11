@@ -109,7 +109,7 @@ import Testing
     let seeded = try harness.seedItem(text: "obsolete fact", kind: .user)
     let sessionId = try harness.ownerSessionId()
     await harness.pendingConfirmations.park(
-      .command(.deleteItem(id: seeded.id)),
+      .deleteItem(id: seeded.id),
       sessionId: sessionId
     )
 

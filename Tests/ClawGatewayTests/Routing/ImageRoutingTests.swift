@@ -179,7 +179,7 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
       sessionKey: SessionKey.telegramDM(chatId: 42),
       now: Date()
     )
-    await harness.pendingConfirmations.park(.command(.deleteItem(id: 7)), sessionId: sessionId)
+    await harness.pendingConfirmations.park(.deleteItem(id: 7), sessionId: sessionId)
 
     // when
     let outcome = await harness.router.handle(
@@ -327,7 +327,7 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
       sessionKey: SessionKey.telegramDM(chatId: 42),
       now: Date()
     )
-    await harness.pendingConfirmations.park(.command(.deleteItem(id: 7)), sessionId: sessionId)
+    await harness.pendingConfirmations.park(.deleteItem(id: 7), sessionId: sessionId)
 
     // when — a caption that reads exactly like a confirmation
     let outcome = await harness.router.handle(
