@@ -137,7 +137,7 @@ import Testing
     let sessionId = try harness.ownerSessionId()
     #expect(
       await harness.pendingConfirmations.pending(sessionId: sessionId)
-        == .command(.deleteItem(id: item.id))
+        == .deleteItem(id: item.id)
     )
     #expect(await harness.dispatcher.calls.isEmpty)
   }

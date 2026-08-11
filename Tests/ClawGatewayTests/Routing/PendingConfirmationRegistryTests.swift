@@ -8,7 +8,7 @@ import Testing
   @Test func parkedEntryIsReadableUntilCleared() async throws {
     // given
     let registry = PendingConfirmationRegistry()
-    let entry = try PendingConfirmation.command(.rememberWrite(memoryWriteRequest(sessionId: 42)))
+    let entry = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionId: 42))
 
     // when
     await registry.park(entry, sessionId: 42)
@@ -24,8 +24,8 @@ import Testing
   @Test func reparkingReplacesPreviousEntryForSameSession() async throws {
     // given
     let registry = PendingConfirmationRegistry()
-    let first = try PendingConfirmation.command(.rememberWrite(memoryWriteRequest(sessionId: 42)))
-    let second = PendingConfirmation.command(.deleteItem(id: 7))
+    let first = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionId: 42))
+    let second = CommandConfirmation.deleteItem(id: 7)
 
     // when
     await registry.park(first, sessionId: 42)
@@ -38,8 +38,8 @@ import Testing
   @Test func sessionsAreIsolated() async throws {
     // given
     let registry = PendingConfirmationRegistry()
-    let first = try PendingConfirmation.command(.rememberWrite(memoryWriteRequest(sessionId: 42)))
-    let second = PendingConfirmation.command(.deleteItem(id: 7))
+    let first = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionId: 42))
+    let second = CommandConfirmation.deleteItem(id: 7)
 
     // when
     await registry.park(first, sessionId: 42)

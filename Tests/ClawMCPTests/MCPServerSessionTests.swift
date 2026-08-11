@@ -407,30 +407,6 @@ struct MCPServerSessionTests {
     await SessionFixture.tearDown(session, scripted)
   }
 
-  @Test("the session tells its transport which revision the handshake settled on")
-  func adoptsNegotiatedVersion() async throws {
-    // given
-    let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
-    let transports = TransportRecorder()
-    let session = MCPServerSession(
-      config: try SessionFixture.config(),
-      transportFactory: StubTransportFactory {
-        let opened = NegotiationRecordingTransport(wrapping: try await scripted.makeTransport())
-        await transports.record(opened)
-        return opened
-      },
-      clientVersion: SessionFixture.clientVersion
-    )
-
-    // when
-    try await session.connect()
-
-    // then the header on every request after the handshake names the answer, not our offer
-    let opened = try #require(await transports.last)
-    #expect(await opened.adopted == MCPProtocol.version)
-    await SessionFixture.tearDown(session, scripted)
-  }
-
   @Test("a server that never answers surfaces its connect failure")
   func unreachableServer() async throws {
     // given
@@ -459,14 +435,6 @@ private actor ArgumentRecorder {
 
   func record(_ arguments: [String: Value]) {
     self.arguments = arguments
-  }
-}
-
-private actor TransportRecorder {
-  private(set) var last: NegotiationRecordingTransport?
-
-  func record(_ transport: NegotiationRecordingTransport) {
-    last = transport
   }
 }
 

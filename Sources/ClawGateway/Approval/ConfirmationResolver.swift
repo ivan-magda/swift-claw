@@ -38,14 +38,10 @@ struct ConfirmationResolver: Sendable {
       return nil
     }
 
-    guard case .command(let confirmation) = entry else {
-      return nil
-    }
-
     switch ConfirmationReply.parse(text) {
     case .confirm:
       return try await commitPending(
-        confirmation,
+        entry,
         sessionId: sessionId,
         rawUpdate: rawUpdate,
         message: message

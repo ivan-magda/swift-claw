@@ -28,31 +28,24 @@ import Testing
     let settings = HeartbeatSettings.resolve(config: config)
 
     // then
-    #expect(settings.enabled)
-    #expect(settings.intervalMinutes == 30)
-    #expect(settings.quietHours.rendered == "23:00-08:00")
-    #expect(settings.maxPerDay == 4)
-    #expect(settings.ownerChatId == 777)
-    #expect(settings.timezone.identifier == "Europe/Berlin")
+    let active = try #require(settings)
+    #expect(active.intervalMinutes == 30)
+    #expect(active.quietHours.rendered == "23:00-08:00")
+    #expect(active.maxPerDay == 4)
+    #expect(active.ownerChatId == 777)
+    #expect(active.timezone.identifier == "Europe/Berlin")
   }
 
-  @Test func resolveWithoutASingleOwnerYieldsNilTarget() throws {
-    // given — reachable only with the heartbeat DISABLED (Cycle B rejects enabled+ambiguous)
-    let config = try loadConfig(allowlist: "1,2", enabled: false)
+  @Test func disabledConfigReturnsNoActiveSettingsAndRetainsTheReconcileOwner() throws {
+    // given
+    let config = try loadConfig(allowlist: "777", enabled: false)
 
     // when
     let settings = HeartbeatSettings.resolve(config: config)
 
     // then
-    #expect(settings.enabled == false)
-    #expect(settings.ownerChatId == nil)
-  }
-
-  @Test func disabledBundleIsOffWithNoTarget() {
-    // given / when / then
-    #expect(HeartbeatSettings.disabled.enabled == false)
-    #expect(HeartbeatSettings.disabled.ownerChatId == nil)
-    #expect(HeartbeatSettings.disabled.maxPerDay == 8)
+    #expect(settings == nil)
+    #expect(config.heartbeatOwnerChatId == 777)
   }
 
   @Test func templateWrapsTheChecklistUnderTheVerbatimContractSentence() {

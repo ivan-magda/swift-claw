@@ -25,7 +25,7 @@ import Testing
     #expect(try harness.memoryItemCount() == 0)
     let sessionId = try harness.ownerSessionId()
     let entry = await harness.pendingConfirmations.pending(sessionId: sessionId)
-    guard case .command(.rememberWrite(let request)) = try #require(entry) else {
+    guard case .rememberWrite(let request) = try #require(entry) else {
       Issue.record("expected a parked remember entry, got \(String(describing: entry))")
       return
     }
@@ -47,7 +47,7 @@ import Testing
     // then
     let sessionId = try harness.ownerSessionId()
     let entry = await harness.pendingConfirmations.pending(sessionId: sessionId)
-    guard case .command(.rememberWrite(let request)) = try #require(entry) else {
+    guard case .rememberWrite(let request) = try #require(entry) else {
       Issue.record("expected a parked remember entry, got \(String(describing: entry))")
       return
     }
@@ -136,7 +136,7 @@ import Testing
     // then
     let sessionId = try harness.ownerSessionId()
     let entry = await harness.pendingConfirmations.pending(sessionId: sessionId)
-    guard case .command(.rememberWrite(let request)) = try #require(entry) else {
+    guard case .rememberWrite(let request) = try #require(entry) else {
       Issue.record("expected a parked remember entry, got \(String(describing: entry))")
       return
     }

@@ -192,7 +192,7 @@ import Testing
       firstOccurrence: Self.fixedNow.addingTimeInterval(-86_400),
       recurrenceInWords: "every weekday at 07:00"
     )
-    await harness.pending.park(.command(.scheduleArm(stale)), sessionId: sessionId)
+    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
@@ -238,7 +238,7 @@ import Testing
       firstOccurrence: Date(timeIntervalSince1970: 1_783_337_700),
       recurrenceInWords: "every 30 minutes"
     )
-    await harness.pending.park(.command(.scheduleArm(stale)), sessionId: sessionId)
+    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
@@ -272,7 +272,7 @@ import Testing
       firstOccurrence: Self.fixedNow.addingTimeInterval(-3_600),
       recurrenceInWords: "once"
     )
-    await harness.pending.park(.command(.scheduleArm(stale)), sessionId: sessionId)
+    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
