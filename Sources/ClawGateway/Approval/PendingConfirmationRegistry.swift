@@ -8,24 +8,16 @@ public enum CommandConfirmation: Sendable, Equatable {
   case scheduleArm(ValidatedSchedule)
 }
 
-/// What the confirmation slot can hold: only owner COMMAND confirmations (`/remember`,
-/// `/memory delete`, schedule confirm-before-arm) still resolve through the ephemeral yes/no
-/// commit/cancel switch. Tool approvals are durable now — a parked run lives in the
-/// `approvals` table and resolves by authenticated button callback, never by a plain text reply.
-public enum PendingConfirmation: Sendable, Equatable {
-  case command(CommandConfirmation)
-}
-
 public actor PendingConfirmationRegistry {
-  private var entries: [Int64: PendingConfirmation] = [:]
+  private var entries: [Int64: CommandConfirmation] = [:]
 
   public init() {}
 
-  public func park(_ entry: PendingConfirmation, sessionId: Int64) {
+  public func park(_ entry: CommandConfirmation, sessionId: Int64) {
     entries[sessionId] = entry
   }
 
-  public func pending(sessionId: Int64) -> PendingConfirmation? {
+  public func pending(sessionId: Int64) -> CommandConfirmation? {
     entries[sessionId]
   }
 

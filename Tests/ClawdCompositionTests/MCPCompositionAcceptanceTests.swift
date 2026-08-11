@@ -250,7 +250,7 @@ import Testing
 
     // when
     let run = try makeSuspendedRun()
-    let outcome = await ApprovedActionExecutor(
+    let commit = await ApprovedActionExecutor(
       tools: dispatcher.toolsByName,
       runs: run.runs,
       redactArguments: { $0 },
@@ -259,8 +259,8 @@ import Testing
     ).executeApproved(approval(run, recorded: recorded))
 
     // then
-    #expect(outcome.commit == .committed)
-    #expect(outcome.observationContent == "ISSUE-1: the roof leaks")
+    #expect(commit == .committed)
+    #expect(try run.observationContent() == "ISSUE-1: the roof leaks")
     #expect(await server.calledTools == ["list_issues"])
     #expect(try run.sessionIsTainted())
   }
@@ -463,6 +463,16 @@ private struct SuspendedRun {
         sql: "SELECT tainted FROM sessions WHERE id = ?",
         arguments: [sessionId]
       ) ?? false
+    }
+  }
+
+  func observationContent() throws -> String? {
+    try queue.read { database in
+      try String.fetchOne(
+        database,
+        sql: "SELECT content FROM messages WHERE id = ?",
+        arguments: [observationMessageId]
+      )
     }
   }
 }

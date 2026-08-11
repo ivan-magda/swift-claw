@@ -40,14 +40,12 @@ import Testing
       )
     )
     let agent = AgentRuntime(
-      provider: provider,
+      roster: makeSingleRouteRoster(provider: provider, wireModel: "test-model"),
       typingIndicator: NoopTyping(),
       draftStreamer: NoopRichDraftStreaming(),
       streamingEnabled: false,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
       budget: budget,
-      wireModel: "test-model",
-      configuredReference: "test-model",
       toolDispatcher: dispatcher,
       usageStore: stores.usage,
       auditLog: stores.audit,

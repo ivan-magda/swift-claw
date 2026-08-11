@@ -561,56 +561,6 @@ public struct AgentRuntime: Sendable {
   // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
 }
 
-// MARK: - Single-Route Composition
-
-extension AgentRuntime {
-  /// Single-route convenience for callers that compose one provider. Mirrors the previous
-  /// initializer's shape so a caller with no fallback configured needs no roster of its own.
-  public init(
-    provider: any LLMProvider,
-    typingIndicator: any TypingIndicator,
-    draftStreamer: any RichDraftStreaming,
-    streamingEnabled: Bool,
-    costResolver: CostResolver,
-    usageResolver: UsageResolver = UsageResolver(),
-    budget: RunBudget,
-    wireModel: String,
-    configuredReference: String,
-    costPolicy: LLMCostPolicy = .metered,
-    reservationPolicy: LLMInputReservationPolicy = .textOnly,
-    toolDispatcher: (any ToolDispatching)? = nil,
-    usageStore: any UsageStore,
-    auditLog: any AuditLog,
-    providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
-    logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
-    clock: any Clock<Duration>
-  ) {
-    self.init(
-      roster: ProviderRoster(bindings: [
-        LLMRouteBinding(
-          provider: provider,
-          wireModel: wireModel,
-          configuredReference: configuredReference,
-          costPolicy: costPolicy,
-          reservationPolicy: reservationPolicy
-        )
-      ]),
-      typingIndicator: typingIndicator,
-      draftStreamer: draftStreamer,
-      streamingEnabled: streamingEnabled,
-      costResolver: costResolver,
-      usageResolver: usageResolver,
-      budget: budget,
-      toolDispatcher: toolDispatcher,
-      usageStore: usageStore,
-      auditLog: auditLog,
-      providerCallIDGenerator: providerCallIDGenerator,
-      logger: logger,
-      clock: clock
-    )
-  }
-}
-
 // MARK: - Turn Diagnostics
 
 private extension AgentRuntime {

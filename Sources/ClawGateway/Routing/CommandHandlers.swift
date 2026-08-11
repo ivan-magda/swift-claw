@@ -149,7 +149,7 @@ struct CommandHandlers: Sendable {
       )
     }
 
-    await pendingConfirmations.park(.command(.rememberWrite(request)), sessionId: sessionId)
+    await pendingConfirmations.park(.rememberWrite(request), sessionId: sessionId)
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
@@ -260,7 +260,7 @@ private extension CommandHandlers {
       return replies.skipDuplicate(updateId: rawUpdate.updateId)
     }
 
-    await pendingConfirmations.park(.command(.deleteItem(id: id)), sessionId: sessionId)
+    await pendingConfirmations.park(.deleteItem(id: id), sessionId: sessionId)
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,

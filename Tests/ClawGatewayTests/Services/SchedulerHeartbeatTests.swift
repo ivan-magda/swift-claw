@@ -36,14 +36,12 @@ private struct HeartbeatWorkspace: WorkspaceReading {
   private let berlin = TimeZone(identifier: "Europe/Berlin")!
 
   private func settings(
-    enabled: Bool = true,
     intervalMinutes: Int = 60,
     quietHours: String = "22:00-09:00",
     maxPerDay: Int = 8,
-    ownerChatId: Int64? = 777
+    ownerChatId: Int64 = 777
   ) -> HeartbeatSettings {
     HeartbeatSettings(
-      enabled: enabled,
       intervalMinutes: intervalMinutes,
       // swiftlint:disable:next force_unwrapping — every call site passes a fixed, valid window.
       quietHours: QuietHours.parse(quietHours)!,
@@ -76,7 +74,7 @@ private struct HeartbeatWorkspace: WorkspaceReading {
   }
 
   private func makeFixture(
-    heartbeat: HeartbeatSettings,
+    heartbeat: HeartbeatSettings?,
     state: SchedulerState,
     file: LoadedFile,
     now: Date,
@@ -90,7 +88,7 @@ private struct HeartbeatWorkspace: WorkspaceReading {
         runId: 901,
         sessionId: 501,
         triggerMessageId: 301,
-        ownerChatId: heartbeat.ownerChatId ?? 0
+        ownerChatId: heartbeat?.ownerChatId ?? 777
       )
       : nil
     let store = ScriptedJobStore(
@@ -130,7 +128,7 @@ private struct HeartbeatWorkspace: WorkspaceReading {
   @Test func disabledHeartbeatIsStructurallyInert() async throws {
     // given — default OFF; even a due-looking state and a rich file must cost NOTHING
     let fixture = makeFixture(
-      heartbeat: .disabled,
+      heartbeat: nil,
       state: state(lastHeartbeatAt: nil),
       file: presentFile("- check backups"),
       now: Self.daytime
@@ -339,23 +337,6 @@ private struct HeartbeatWorkspace: WorkspaceReading {
     #expect(fixture.store.heartbeatFires.isEmpty)
     #expect(skipDecisions(fixture) == [HeartbeatSkipReason.emptyFile.rawValue])
     #expect(await fixture.runner.calls.isEmpty)
-  }
-
-  @Test func missingOwnerTargetFailsClosedAsDisabledMidFlight() async throws {
-    // given — enabled with no resolvable owner (unreachable past AppConfig.load; defensive)
-    let fixture = makeFixture(
-      heartbeat: settings(ownerChatId: nil),
-      state: state(lastHeartbeatAt: nil),
-      file: presentFile("- check backups"),
-      now: Self.daytime
-    )
-
-    // when
-    await fixture.service.tick()
-
-    // then
-    #expect(fixture.store.heartbeatFires.isEmpty)
-    #expect(skipDecisions(fixture) == [HeartbeatSkipReason.disabledMidFlight.rawValue])
   }
 
   @Test func intervalElapsedFiresAgain() async throws {

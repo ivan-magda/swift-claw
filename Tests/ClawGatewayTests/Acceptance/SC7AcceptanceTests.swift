@@ -549,7 +549,6 @@ import Testing
     quietHours: String = "22:00-09:00"
   ) -> HeartbeatSettings {
     HeartbeatSettings(
-      enabled: true,
       intervalMinutes: 60,
       // swiftlint:disable:next force_unwrapping — every call site passes a fixed, valid window.
       quietHours: QuietHours.parse(quietHours)!,
