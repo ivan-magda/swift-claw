@@ -36,7 +36,7 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  let imageCache: ImageCache
+  package let imageCache: ImageCache
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
   private let notifyOutbox: @Sendable () -> Void
   /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that

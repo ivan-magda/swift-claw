@@ -14,10 +14,9 @@ extension DaemonBuilder {
     let outbox: OutboxDispatcher
   }
 
-  func makeIntakeServices(  // swiftlint:disable:this function_parameter_count
+  func makeIntakeServices(
     coordination: TurnCoordination,
     turnRunner: TurnRunner,
-    imageCache: ImageCache,
     scheduleSurface: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler,
     doctor: any DoctorReporting
@@ -36,7 +35,7 @@ extension DaemonBuilder {
       accessControl: AccessControl(allowlist: stores.allowlist),
       delivery: transport,
       turnRunner: turnRunner,
-      imageCache: imageCache,
+      imageCache: turnRunner.imageCache,
       lanes: coordination.lanes,
       schedule: scheduleSurface,
       approvalCallbacks: approvalCallbacks,

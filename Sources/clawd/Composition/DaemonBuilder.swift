@@ -147,8 +147,7 @@ struct DaemonBuilder: Sendable {
   }
 
   /// Assembles those consumers together rather than at four call sites so they share one runner
-  /// value and, with it, one image cache: this is the only place an inbound photo's bytes get a
-  /// destination, and handing the router a second cache would store every photo and replay none.
+  /// value and, with it, the one image cache an inbound photo's bytes land in.
   func makeRunnerConsumers(  // swiftlint:disable:this function_parameter_count
     coordination: TurnCoordination,
     agentStack: AgentStack,
@@ -159,17 +158,15 @@ struct DaemonBuilder: Sendable {
     sandbox: SandboxStack,
     mcpCatalog: ResolvedMCPCatalog
   ) -> RunnerConsumers {
-    let imageCache = ImageCache()
     let turnRunner = makeTurnRunner(
       coordination: coordination,
       agentStack: agentStack,
       costPolicy: roster.primary.costPolicy,
-      imageCache: imageCache
+      imageCache: ImageCache()
     )
     let intake = makeIntakeServices(
       coordination: coordination,
       turnRunner: turnRunner,
-      imageCache: imageCache,
       scheduleSurface: makeScheduleSurface(
         roster: roster,
         cooldown: cooldown,
