@@ -236,7 +236,7 @@ private final class SleepRecorder: @unchecked Sendable {
       triggerMessageId: 300,
       ownerChatId: 42
     ),
-    heartbeat: HeartbeatSettings = .disabled,
+    heartbeat: HeartbeatSettings? = nil,
     now: Date
   ) -> Fixture {
     let store = ScriptedJobStore(jobs: jobs, claimResult: claimResult)
@@ -418,7 +418,7 @@ private final class SleepRecorder: @unchecked Sendable {
       turns: FakeTurnRunner(),
       calculator: OccurrenceCalculator(),
       catchUpMaxAge: .seconds(1800),
-      heartbeat: .disabled,
+      heartbeat: nil,
       workspace: EmptyWorkspace(),
       audit: RecordingAuditLog(),
       now: { Date(timeIntervalSince1970: 1_750_000_000) },

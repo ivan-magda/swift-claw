@@ -18,7 +18,7 @@ public struct SchedulerService: Service {
   private let policy: OccurrencePolicy
 
   private let catchUpMaxAge: Duration
-  private let heartbeat: HeartbeatSettings
+  private let heartbeat: HeartbeatSettings?
 
   private let workspace: any WorkspaceReading
 
@@ -37,7 +37,7 @@ public struct SchedulerService: Service {
     turns: any TurnDispatching,
     calculator: OccurrenceCalculator,
     catchUpMaxAge: Duration,
-    heartbeat: HeartbeatSettings,
+    heartbeat: HeartbeatSettings?,
     workspace: any WorkspaceReading,
     audit: any AuditLog,
     now: @escaping @Sendable () -> Date,
@@ -202,7 +202,7 @@ private extension SchedulerService {
   /// daily cap ∧ HEARTBEAT.md usable. "Due" = enabled ∧ interval elapsed; only a DUE beat that
   /// skips is audited, so the audit trail stays quiet tick-to-tick.
   func heartbeatIfDue(tickTime: Date) async {
-    guard heartbeat.enabled else {
+    guard let heartbeat else {
       return  // default OFF ⇒ structurally inert: no state read, no audit, no cost
     }
 
@@ -222,11 +222,6 @@ private extension SchedulerService {
       }
     }
 
-    guard let ownerChatId = heartbeat.ownerChatId else {
-      // Unreachable when AppConfig validated the enabled+owner pair; fail closed, audibly.
-      await auditHeartbeatSkip(reason: .disabledMidFlight, at: tickTime)
-      return
-    }
     guard heartbeat.quietHours.contains(tickTime, timezone: heartbeat.timezone) == false else {
       await auditHeartbeatSkip(reason: .quietHours, at: tickTime)
       return
@@ -252,7 +247,7 @@ private extension SchedulerService {
       guard
         let fire = try jobs.fireHeartbeat(
           prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
-          ownerChatId: ownerChatId,
+          ownerChatId: heartbeat.ownerChatId,
           now: tickTime,
           day: day
         )
@@ -295,7 +290,6 @@ private extension SchedulerService {
 /// The reason a due heartbeat tick skipped a fire — one source of truth for the audit `decision`
 /// string, so production and tests never re-type the bare literals.
 enum HeartbeatSkipReason: String, Sendable {
-  case disabledMidFlight = "disabled_mid_flight"
   case quietHours = "quiet_hours"
   case dailyCap = "daily_cap"
   case emptyFile = "empty_file"

@@ -106,6 +106,14 @@ public struct AppConfig: Sendable, Equatable {
   public let heartbeatQuietHours: QuietHours
   public let heartbeatMaxPerDay: Int
 
+  /// The single allowlisted owner target, retained while heartbeat is off for crash reconciliation.
+  public var heartbeatOwnerChatId: Int64? {
+    guard allowlist.count == 1 else {
+      return nil
+    }
+    return allowlist.first
+  }
+
   public let approvalExpirySeconds: Int
   public let webFetchExemptCIDRs: [CIDR]
   public let exec: ExecConfig

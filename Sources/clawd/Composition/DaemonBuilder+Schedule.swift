@@ -63,6 +63,6 @@ extension DaemonBuilder {
       clock: ContinuousClock(),
       logger: logger
     )
-    return (scheduler, heartbeatSettings.ownerChatId)
+    return (scheduler, config.heartbeatOwnerChatId)
   }
 }
