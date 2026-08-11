@@ -36,9 +36,6 @@ public struct TurnRunner: TurnDispatching {
   private let agent: AgentRuntime
   private let budget: RunBudget
   private let contextBuilder: ContextBuilder
-  /// Where an inbound photo's bytes wait between the router that deposited them and this run.
-  /// The `MessageRouter` doing the depositing must hold this same instance. Not `private`: the
-  /// replay side lives in `TurnRunner+Images`.
   let imageCache: ImageCache
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
   private let notifyOutbox: @Sendable () -> Void

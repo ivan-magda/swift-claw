@@ -11,9 +11,7 @@ struct TurnDispatch: Sendable {
   let enqueuer: TurnEnqueuer
   let replies: ReplySender
 
-  /// Where an inbound photo's bytes wait for the turn that replays them. The `TurnRunner` that
-  /// replays them must hold this same instance, or every photo is stored and none is ever seen
-  /// again.
+  /// Where an inbound photo's bytes wait for the turn that replays them.
   let imageCache: ImageCache
 
   let now: @Sendable () -> Date

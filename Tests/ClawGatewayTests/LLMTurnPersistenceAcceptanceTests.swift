@@ -362,8 +362,6 @@ func makeStack(
     clock: ContinuousClock()
   )
 
-  // One cache into both ends, exactly as the composition root builds it: the router deposits an
-  // inbound photo's bytes here and the runner replays them from here.
   let imageCache = ImageCache()
   let turnRunner = TurnRunner(
     sessionMessages: sessionMessages,

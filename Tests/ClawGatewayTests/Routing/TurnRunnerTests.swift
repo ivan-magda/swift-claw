@@ -550,7 +550,6 @@ struct Env {
   let runId: Int64
   let triggerMessageId: Int64
 
-  /// The cache `runner` replays from — store into it to give a run's message an image.
   let imageCache: ImageCache
   let provider: StubLLMProvider
 }

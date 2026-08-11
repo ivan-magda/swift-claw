@@ -14,8 +14,6 @@ extension DaemonBuilder {
     let outbox: OutboxDispatcher
   }
 
-  /// `imageCache` is the same instance `turnRunner` was built with: the router deposits an inbound
-  /// photo's bytes into it and the runner replays them out of it.
   func makeIntakeServices(  // swiftlint:disable:this function_parameter_count
     coordination: TurnCoordination,
     turnRunner: TurnRunner,
