@@ -120,10 +120,10 @@ private extension ApprovalWaiter {
       return
     }
 
-    let outcome = await withTypingPulse(chatId: chatId, indicator: typing, clock: clock) {
+    let commit = await withTypingPulse(chatId: chatId, indicator: typing, clock: clock) {
       await executor.executeApproved(approval)
     }
-    switch outcome.commit {
+    switch commit {
     case .ignored:
       // A duplicate signal already resumed the run; do not run the continuation twice.
       logger.debug("approved resume for run \(runId) was a no-op (duplicate signal)")

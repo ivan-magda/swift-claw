@@ -37,8 +37,8 @@ import Testing
   private struct ScriptedExecutor: ApprovedActionExecuting {
     let commit: ApprovedCommitOutcome
 
-    func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
-      ApprovedExecutionOutcome(observationContent: "scripted", commit: commit)
+    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
+      commit
     }
   }
 
@@ -47,9 +47,9 @@ import Testing
   private struct GatedExecutor: ApprovedActionExecuting {
     let gate: TypingReleaseGate
 
-    func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
+    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
       await gate.awaitRelease()
-      return ApprovedExecutionOutcome(observationContent: "scripted", commit: .committed)
+      return .committed
     }
   }
 
@@ -64,10 +64,10 @@ import Testing
       self.callbacks = callbacks
     }
 
-    func executeApproved(_ approval: Approval) async -> ApprovedExecutionOutcome {
+    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
       executed = true
       disarmedBeforeExecution = await !callbacks.disarmed.isEmpty
-      return ApprovedExecutionOutcome(observationContent: "scripted", commit: .committed)
+      return .committed
     }
   }
 
