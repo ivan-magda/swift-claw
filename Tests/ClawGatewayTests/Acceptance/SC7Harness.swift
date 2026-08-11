@@ -148,7 +148,7 @@ func makeSC7Harness(
   ],
   secretValues: [String] = ["llm-key-abc123"],
   workspaceFiles: [String: String] = [:],
-  heartbeat: HeartbeatSettings = .disabled,
+  heartbeat: HeartbeatSettings? = nil,
   withBreaker: Bool = false,
   registry: PendingConfirmationRegistry = PendingConfirmationRegistry(),
   databasePath: String? = nil,
