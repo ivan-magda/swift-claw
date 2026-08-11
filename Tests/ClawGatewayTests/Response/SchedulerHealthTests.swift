@@ -29,9 +29,9 @@ import Testing
     // when
     let rows = SchedulerHealth.rows(
       SchedulerHealth.Snapshot(
-        state: state,
-        dueCount: 0,
-        proactiveTodayUSD: 0,
+        state: .available(state),
+        dueCount: .available(0),
+        proactiveTodayUSD: .available(0),
         proactivePerDayUSD: 2.0,
         heartbeatEnabled: false,
         heartbeatMaxPerDay: 8,
@@ -65,9 +65,9 @@ import Testing
     // when
     let rows = SchedulerHealth.rows(
       SchedulerHealth.Snapshot(
-        state: state,
-        dueCount: 2,
-        proactiveTodayUSD: 0.42,
+        state: .available(state),
+        dueCount: .available(2),
+        proactiveTodayUSD: .available(0.42),
         proactivePerDayUSD: 2.0,
         heartbeatEnabled: true,
         heartbeatMaxPerDay: 8,
@@ -101,9 +101,9 @@ import Testing
     // when
     let rows = SchedulerHealth.rows(
       SchedulerHealth.Snapshot(
-        state: state,
-        dueCount: nil,
-        proactiveTodayUSD: nil,
+        state: .available(state),
+        dueCount: .unavailable,
+        proactiveTodayUSD: .unavailable,
         proactivePerDayUSD: 2.0,
         heartbeatEnabled: true,
         heartbeatMaxPerDay: 8,
@@ -112,10 +112,12 @@ import Testing
       )
     )
 
-    // then — a stale stamp reads as zero; an unreadable count/spend says so instead of lying
+    // then — a stale stamp reads as zero; failed queries fail their rows instead of lying
     #expect(value(rows, "heartbeat.today") == "0/8")
-    #expect(value(rows, "scheduler.due_count") == "unknown")
-    #expect(value(rows, "spend.proactive_today_usd") == "unknown/2.00")
+    #expect(value(rows, "scheduler.due_count") == "unreadable (db read failed)")
+    #expect(value(rows, "spend.proactive_today_usd") == "unreadable (db read failed)")
+    #expect(rows.first { $0.key == "scheduler.due_count" }?.ok == false)
+    #expect(rows.first { $0.key == "spend.proactive_today_usd" }?.ok == false)
   }
 
   @Test func dayBoundaryUsesTheConfiguredZoneNotUTC() {
@@ -133,9 +135,9 @@ import Testing
     // when
     let rows = SchedulerHealth.rows(
       SchedulerHealth.Snapshot(
-        state: state,
-        dueCount: 0,
-        proactiveTodayUSD: 0,
+        state: .available(state),
+        dueCount: .available(0),
+        proactiveTodayUSD: .available(0),
         proactivePerDayUSD: 2.0,
         heartbeatEnabled: true,
         heartbeatMaxPerDay: 8,

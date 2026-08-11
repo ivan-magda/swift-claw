@@ -52,35 +52,33 @@ public enum HealthRowsBuilder {
   public struct Inputs: Sendable {
     public let allowlist: AllowlistHealth
     public let lastOffset: Int64?
-    public let runsHealth: RunsHealth
+    public let runsHealth: HealthValue<RunsHealth>
     public let routeHealth: LLMRouteHealth
     public let retryBudget: Int
     public let streamingEnabled: Bool
-    public let todayTokens: Int
-    public let todayUSD: Double
-    public let costMix: [CostSource: Int]
+    public let todayUsage: HealthValue<(tokens: Int, costUSD: Double)>
+    public let costMix: HealthValue<[CostSource: Int]>
     public let perDayUSD: Double
     public let perRunUSD: Double
     public let walBytes: Int
     public let freeBytes: Int
-    public let latestContext: LatestPromptUsage?
+    public let latestContext: HealthValue<LatestPromptUsage?>
     public let skillDiagnostics: SkillDiagnostics
 
     public init(
       allowlist: AllowlistHealth,
       lastOffset: Int64?,
-      runsHealth: RunsHealth,
+      runsHealth: HealthValue<RunsHealth>,
       routeHealth: LLMRouteHealth,
       retryBudget: Int,
       streamingEnabled: Bool,
-      todayTokens: Int,
-      todayUSD: Double,
-      costMix: [CostSource: Int],
+      todayUsage: HealthValue<(tokens: Int, costUSD: Double)>,
+      costMix: HealthValue<[CostSource: Int]>,
       perDayUSD: Double,
       perRunUSD: Double,
       walBytes: Int,
       freeBytes: Int,
-      latestContext: LatestPromptUsage?,
+      latestContext: HealthValue<LatestPromptUsage?>,
       skillDiagnostics: SkillDiagnostics
     ) {
       self.allowlist = allowlist
@@ -89,8 +87,7 @@ public enum HealthRowsBuilder {
       self.routeHealth = routeHealth
       self.retryBudget = retryBudget
       self.streamingEnabled = streamingEnabled
-      self.todayTokens = todayTokens
-      self.todayUSD = todayUSD
+      self.todayUsage = todayUsage
       self.costMix = costMix
       self.perDayUSD = perDayUSD
       self.perRunUSD = perRunUSD
@@ -155,7 +152,7 @@ private extension HealthRowsBuilder {
 
   static func ownersOutcome(_ owners: AllowlistHealth) -> (value: String, ok: Bool) {
     guard let seeded = owners.seeded else {
-      return ("unreadable (db read failed)", false)
+      return (DoctorReport.Check.storeReadFailureValue, false)
     }
 
     if seeded >= 1 {
@@ -170,27 +167,34 @@ private extension HealthRowsBuilder {
   }
 
   static func runChecks(_ inputs: Inputs) -> [DoctorReport.Check] {
-    let health = inputs.runsHealth
-    return [
-      check(
-        "llm.last_success",
-        health.lastSuccessAt.map(String.init(describing:)) ?? "never",
-        .llmRuns
-      ),
-      check("llm.consecutive_failures", "\(health.consecutiveFailures)", .llmRuns, headline: true),
+    [
+      .storeRead(inputs.runsHealth, key: "llm.last_success", group: .llmRuns) { health in
+        health.lastSuccessAt.map(String.init(describing:)) ?? "never"
+      },
+      .storeRead(
+        inputs.runsHealth,
+        key: "llm.consecutive_failures",
+        group: .llmRuns,
+        isHeadline: true
+      ) { health in
+        "\(health.consecutiveFailures)"
+      },
       check("llm.retry_budget", "\(inputs.retryBudget)", .llmRuns),
       check("llm.streaming", inputs.streamingEnabled ? "on" : "off", .llmRuns),
-      check("runs.in_flight", "\(health.inFlight)", .llmRuns, headline: true),
-      check(
-        "runs.oldest_age_s",
-        health.oldestRunAgeSeconds.map { String(format: "%.0f", $0) } ?? "none",
-        .llmRuns
-      ),
-      check(
-        "runs.last_FAILED",
-        health.lastFailedAt.map(String.init(describing:)) ?? "none",
-        .llmRuns
-      ),
+      .storeRead(
+        inputs.runsHealth,
+        key: "runs.in_flight",
+        group: .llmRuns,
+        isHeadline: true
+      ) { health in
+        "\(health.inFlight)"
+      },
+      .storeRead(inputs.runsHealth, key: "runs.oldest_age_s", group: .llmRuns) { health in
+        health.oldestRunAgeSeconds.map { String(format: "%.0f", $0) } ?? "none"
+      },
+      .storeRead(inputs.runsHealth, key: "runs.last_FAILED", group: .llmRuns) { health in
+        health.lastFailedAt.map(String.init(describing:)) ?? "none"
+      },
     ]
   }
 
@@ -242,41 +246,56 @@ private extension HealthRowsBuilder {
   }
 
   static func contextChecks(_ inputs: Inputs) -> [DoctorReport.Check] {
-    let value =
-      inputs.latestContext.map { context in
-        let tokens = "\(context.isEstimated ? "~" : "")\(context.promptTokens)"
-        return context.runId.map { runId in
-          "\(tokens) (run \(runId))"
-        } ?? tokens
-      } ?? "none"
-    return [
-      check(
-        "context.last_prompt_tokens",
-        value,
-        .context,
-        headline: true
-      ),
+    [
+      .storeRead(
+        inputs.latestContext,
+        key: "context.last_prompt_tokens",
+        group: .context,
+        isHeadline: true
+      ) { latestContext in
+        latestContext.map { context in
+          let tokens = "\(context.isEstimated ? "~" : "")\(context.promptTokens)"
+          return context.runId.map { runId in
+            "\(tokens) (run \(runId))"
+          } ?? tokens
+        } ?? "none"
+      },
       skillsCheck(inputs.skillDiagnostics),
     ]
   }
 
   static func spendChecks(_ inputs: Inputs) -> [DoctorReport.Check] {
-    let mixText =
-      inputs.costMix
-      .map { entry in "\(entry.key.rawValue)=\(entry.value)" }
-      .sorted()
-      .joined(separator: " ")
-    return [
-      check("spend.today_usd", USD.precise(inputs.todayUSD), .spend, headline: true),
-      check("spend.today_tokens", "\(inputs.todayTokens)", .spend),
-      check(
-        "spend.remaining_day_usd",
-        USD.display(max(0, inputs.perDayUSD - inputs.todayUSD)),
-        .spend,
-        headline: true
-      ),
+    [
+      .storeRead(
+        inputs.todayUsage,
+        key: "spend.today_usd",
+        group: .spend,
+        isHeadline: true
+      ) { usage in
+        USD.precise(usage.costUSD)
+      },
+      .storeRead(inputs.todayUsage, key: "spend.today_tokens", group: .spend) { usage in
+        "\(usage.tokens)"
+      },
+      .storeRead(
+        inputs.todayUsage,
+        key: "spend.remaining_day_usd",
+        group: .spend,
+        isHeadline: true
+      ) { usage in
+        USD.display(max(0, inputs.perDayUSD - usage.costUSD))
+      },
       check("spend.per_run_cap_usd", USD.display(inputs.perRunUSD), .spend),
-      check("spend.cost_source_mix", mixText.isEmpty ? "none" : mixText, .spend),
+      .storeRead(inputs.costMix, key: "spend.cost_source_mix", group: .spend) { costMix in
+        let text =
+          costMix
+          .map { entry in
+            "\(entry.key.rawValue)=\(entry.value)"
+          }
+          .sorted()
+          .joined(separator: " ")
+        return text.isEmpty ? "none" : text
+      },
     ]
   }
 

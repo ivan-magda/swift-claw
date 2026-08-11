@@ -8,11 +8,11 @@ public enum SchedulerHealth {
   /// One doctor-time observation: persisted `scheduler_state` plus the live/config values that
   /// contextualize it (due query result, proactive spend vs. its cap, heartbeat settings).
   public struct Snapshot: Sendable {
-    public let state: SchedulerState
+    public let state: HealthValue<SchedulerState>
 
-    public let dueCount: Int?
+    public let dueCount: HealthValue<Int>
 
-    public let proactiveTodayUSD: Double?
+    public let proactiveTodayUSD: HealthValue<Double>
     public let proactivePerDayUSD: Double
 
     public let heartbeatEnabled: Bool
@@ -22,9 +22,9 @@ public enum SchedulerHealth {
     public let now: Date
 
     public init(
-      state: SchedulerState,
-      dueCount: Int?,
-      proactiveTodayUSD: Double?,
+      state: HealthValue<SchedulerState>,
+      dueCount: HealthValue<Int>,
+      proactiveTodayUSD: HealthValue<Double>,
       proactivePerDayUSD: Double,
       heartbeatEnabled: Bool,
       heartbeatMaxPerDay: Int,
@@ -47,43 +47,43 @@ public enum SchedulerHealth {
   }
 
   public static func rows(_ snapshot: Snapshot) -> [DoctorReport.Check] {
-    let state = snapshot.state
-    let misfire: String
-    if let lastMisfireAt = state.lastMisfireAt {
-      misfire = "\(lastMisfireAt) (skipped \(state.lastMisfireSkippedCount))"
-    } else {
-      misfire = "none"
-    }
-    let todayCount = heartbeatCountToday(
-      state: state,
-      timezone: snapshot.timezone,
-      now: snapshot.now
-    )
-    // A proactive-cap trip is visible here even while global spend is under its cap.
-    let proactiveSpend =
-      snapshot.proactiveTodayUSD.map { spent in USD.display(spent) } ?? "unknown"
-
-    return [
-      check(
-        "scheduler.last_tick_at",
+    [
+      .storeRead(snapshot.state, key: "scheduler.last_tick_at", group: .scheduler) { state in
         state.lastTickAt.map(String.init(describing:)) ?? "never"
-      ),
-      check(
-        "scheduler.due_count",
-        snapshot.dueCount.map(String.init) ?? "unknown",
-        headline: true
-      ),
-      check("scheduler.last_misfire", misfire),
-      check(
-        "spend.proactive_today_usd",
-        "\(proactiveSpend)/\(USD.display(snapshot.proactivePerDayUSD))"
-      ),
+      },
+      .storeRead(
+        snapshot.dueCount,
+        key: "scheduler.due_count",
+        group: .scheduler,
+        isHeadline: true
+      ) { count in
+        String(count)
+      },
+      .storeRead(snapshot.state, key: "scheduler.last_misfire", group: .scheduler) { state in
+        guard let lastMisfireAt = state.lastMisfireAt else {
+          return "none"
+        }
+        return "\(lastMisfireAt) (skipped \(state.lastMisfireSkippedCount))"
+      },
+      .storeRead(
+        snapshot.proactiveTodayUSD,
+        key: "spend.proactive_today_usd",
+        group: .scheduler
+      ) { spent in
+        "\(USD.display(spent))/\(USD.display(snapshot.proactivePerDayUSD))"
+      },
       check("heartbeat.enabled", snapshot.heartbeatEnabled ? "on" : "off"),
-      check(
-        "heartbeat.last",
+      .storeRead(snapshot.state, key: "heartbeat.last", group: .scheduler) { state in
         state.lastHeartbeatAt.map(String.init(describing:)) ?? "never"
-      ),
-      check("heartbeat.today", "\(todayCount)/\(snapshot.heartbeatMaxPerDay)"),
+      },
+      .storeRead(snapshot.state, key: "heartbeat.today", group: .scheduler) { state in
+        let todayCount = heartbeatCountToday(
+          state: state,
+          timezone: snapshot.timezone,
+          now: snapshot.now
+        )
+        return "\(todayCount)/\(snapshot.heartbeatMaxPerDay)"
+      },
     ]
   }
 

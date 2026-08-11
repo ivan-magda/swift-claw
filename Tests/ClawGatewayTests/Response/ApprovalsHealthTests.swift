@@ -13,7 +13,7 @@ import Testing
     let health = ApprovalsHealth(pendingCount: 0, oldestPendingAgeSeconds: nil)
 
     // when
-    let rows = ApprovalsHealthRows.rows(health: health, approvalExpirySeconds: 3600)
+    let rows = ApprovalsHealthRows.rows(health: .available(health), approvalExpirySeconds: 3600)
 
     // then
     #expect(value(rows, "approvals.pending") == "0")
@@ -25,7 +25,7 @@ import Testing
     let health = ApprovalsHealth(pendingCount: 2, oldestPendingAgeSeconds: 900)
 
     // when
-    let rows = ApprovalsHealthRows.rows(health: health, approvalExpirySeconds: 3600)
+    let rows = ApprovalsHealthRows.rows(health: .available(health), approvalExpirySeconds: 3600)
 
     // then — age/expiry mirrors the heartbeat.today count/cap idiom (spec §4.6)
     #expect(value(rows, "approvals.pending") == "2")

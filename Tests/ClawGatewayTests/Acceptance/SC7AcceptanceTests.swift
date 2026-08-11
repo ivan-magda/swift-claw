@@ -761,9 +761,9 @@ import Testing
     )
     let rows = SchedulerHealth.rows(
       SchedulerHealth.Snapshot(
-        state: state,
-        dueCount: dueCount,
-        proactiveTodayUSD: proactiveSpend.costUSD,
+        state: .available(state),
+        dueCount: .available(dueCount),
+        proactiveTodayUSD: .available(proactiveSpend.costUSD),
         proactivePerDayUSD: 2.0,
         heartbeatEnabled: false,
         heartbeatMaxPerDay: 8,

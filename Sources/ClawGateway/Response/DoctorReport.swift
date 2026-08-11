@@ -30,6 +30,12 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
   }
 }
 
+/// Distinguishes a successful health read, including empty values, from an unreadable source.
+public enum HealthValue<Value: Sendable>: Sendable {
+  case available(Value)
+  case unavailable
+}
+
 /// The doctor/status health table.
 /// Holds a list of named checks, each tagged with the `DoctorGroup` it belongs to;
 /// `ok` is the conjunction of all of them.
@@ -198,4 +204,35 @@ private extension DoctorReport {
 private struct DoctorReportPayload: Encodable {
   let ok: Bool
   let checks: [DoctorReport.Check]
+}
+
+extension DoctorReport.Check {
+  static let storeReadFailureValue = "unreadable (db read failed)"
+
+  static func storeRead<Value: Sendable>(
+    _ read: HealthValue<Value>,
+    key: String,
+    group: DoctorGroup,
+    isHeadline: Bool = false,
+    render: (Value) -> String
+  ) -> DoctorReport.Check {
+    switch read {
+    case .available(let value):
+      return DoctorReport.Check(
+        key: key,
+        value: render(value),
+        ok: true,
+        group: group,
+        isHeadline: isHeadline
+      )
+    case .unavailable:
+      return DoctorReport.Check(
+        key: key,
+        value: storeReadFailureValue,
+        ok: false,
+        group: group,
+        isHeadline: isHeadline
+      )
+    }
+  }
 }
