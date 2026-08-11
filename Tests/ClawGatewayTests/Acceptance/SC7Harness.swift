@@ -97,7 +97,7 @@ struct SC7Harness {
     try stores.sessionMessages.findSession(sessionKey: SessionKey.telegramDM(chatId: 7)) ?? 0
   }
 
-  func ownerPending() async throws -> PendingConfirmation? {
+  func ownerPending() async throws -> CommandConfirmation? {
     await registry.pending(sessionId: try ownerSessionId())
   }
 
