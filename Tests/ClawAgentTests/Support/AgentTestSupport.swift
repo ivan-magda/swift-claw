@@ -151,16 +151,18 @@ func makeRuntime(
   clock: any Clock<Duration> = ContinuousClock()
 ) -> AgentRuntime {
   AgentRuntime(
-    provider: provider,
+    roster: makeSingleRouteRoster(
+      provider: provider,
+      wireModel: model,
+      configuredReference: configuredReference,
+      costPolicy: costPolicy,
+      reservationPolicy: reservationPolicy
+    ),
     typingIndicator: typing,
     draftStreamer: drafts,
     streamingEnabled: streamingEnabled,
     costResolver: costResolver,
     budget: budget,
-    wireModel: model,
-    configuredReference: configuredReference ?? model,
-    costPolicy: costPolicy,
-    reservationPolicy: reservationPolicy,
     toolDispatcher: toolDispatcher,
     usageStore: usageStore,
     auditLog: auditLog,

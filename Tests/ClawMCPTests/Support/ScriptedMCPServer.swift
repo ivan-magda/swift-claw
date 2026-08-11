@@ -187,44 +187,6 @@ actor MuteAfterHandshakeTransport: Transport {
   }
 }
 
-/// Records the protocol revision the session adopted after the handshake, which a transport that
-/// carries no headers would otherwise have nowhere to show.
-actor NegotiationRecordingTransport: MCPNegotiatingTransport {
-  nonisolated let logger = Logger(label: "test.mcp.negotiating")
-
-  private let inner: InMemoryTransport
-  private var stream: AsyncThrowingStream<Data, any Error>?
-  private(set) var adopted: String?
-
-  init(wrapping inner: InMemoryTransport) {
-    self.inner = inner
-  }
-
-  func adopt(protocolVersion: String) {
-    adopted = protocolVersion
-  }
-
-  func connect() async throws {
-    try await inner.connect()
-    stream = await inner.receive()
-  }
-
-  func disconnect() async {
-    await inner.disconnect()
-  }
-
-  func send(_ data: Data) async throws {
-    try await inner.send(data)
-  }
-
-  func receive() -> AsyncThrowingStream<Data, any Error> {
-    stream
-      ?? AsyncThrowingStream { continuation in
-        continuation.finish()
-      }
-  }
-}
-
 /// Wraps a live transport and fails one `send`, which is how a server that dropped our session (or
 /// answered with a status we cannot use) looks from inside the SDK client.
 ///

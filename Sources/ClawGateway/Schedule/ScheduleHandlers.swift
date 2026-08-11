@@ -75,7 +75,7 @@ struct ScheduleHandlers: Sendable {
         )
       case .success(let validated):
         // Single slot per session: a second /schedule visibly displaces the older draft.
-        await pendingConfirmations.park(.command(.scheduleArm(validated)), sessionId: sessionId)
+        await pendingConfirmations.park(.scheduleArm(validated), sessionId: sessionId)
         return await replies.sendCommandAck(
           updateId: rawUpdate.updateId,
           chatId: message.chatId,

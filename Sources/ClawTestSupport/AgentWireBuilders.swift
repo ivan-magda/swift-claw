@@ -1,6 +1,26 @@
 import ClawCore
 import Foundation
 
+// MARK: - Provider roster builders
+
+public func makeSingleRouteRoster(
+  provider: any LLMProvider,
+  wireModel: String,
+  configuredReference: String? = nil,
+  costPolicy: LLMCostPolicy = .metered,
+  reservationPolicy: LLMInputReservationPolicy = .textOnly
+) -> ProviderRoster {
+  ProviderRoster(bindings: [
+    LLMRouteBinding(
+      provider: provider,
+      wireModel: wireModel,
+      configuredReference: configuredReference ?? wireModel,
+      costPolicy: costPolicy,
+      reservationPolicy: reservationPolicy
+    )
+  ])
+}
+
 // MARK: - Response/outcome builders
 
 public func okResponse(

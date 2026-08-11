@@ -46,16 +46,17 @@ import Testing
     costPolicy: LLMCostPolicy = .metered
   ) -> AgentRuntime {
     AgentRuntime(
-      provider: provider,
+      roster: makeSingleRouteRoster(
+        provider: provider,
+        wireModel: wireModel,
+        configuredReference: configuredReference,
+        costPolicy: costPolicy
+      ),
       typingIndicator: NoopTyping(),
       draftStreamer: NoopRichDraftStreaming(),
       streamingEnabled: false,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
       budget: .default,
-      wireModel: wireModel,
-      configuredReference: configuredReference,
-      costPolicy: costPolicy,
-      reservationPolicy: .textOnly,
       toolDispatcher: nil,
       usageStore: usageStore,
       auditLog: RecordingAuditLog(),
@@ -71,13 +72,15 @@ import Testing
     costPolicy: LLMCostPolicy = .metered
   ) -> ScheduleDraftParser {
     ScheduleDraftParser(
-      provider: provider,
-      wireModel: wireModel,
-      configuredReference: configuredReference,
+      roster: makeSingleRouteRoster(
+        provider: provider,
+        wireModel: wireModel,
+        configuredReference: configuredReference,
+        costPolicy: costPolicy
+      ),
       usageStore: usageStore,
       budget: .default,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
-      costPolicy: costPolicy,
       clock: ContinuousClock(),
       logger: TestLog.silent
     )
@@ -109,59 +112,6 @@ import Testing
         ),
       ]),
       cooldown: cooldown,
-      usageStore: usageStore,
-      budget: .default,
-      costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
-      clock: ContinuousClock(),
-      logger: TestLog.silent
-    )
-  }
-
-  /// A single-route roster built through the SAME `ProviderRoster` constructor a multi-route caller
-  /// uses, so the parity property is proven against the roster-taking path, not the convenience
-  /// initializer's parallel one-binding shortcut.
-  private func makeAgentWithRoster(
-    provider: any LLMProvider,
-    usageStore: any UsageStore
-  ) -> AgentRuntime {
-    AgentRuntime(
-      roster: ProviderRoster(bindings: [
-        LLMRouteBinding(
-          provider: provider,
-          wireModel: "test-model",
-          configuredReference: "test-model",
-          costPolicy: .metered,
-          reservationPolicy: .textOnly
-        )
-      ]),
-      typingIndicator: NoopTyping(),
-      draftStreamer: NoopRichDraftStreaming(),
-      streamingEnabled: false,
-      costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
-      budget: .default,
-      toolDispatcher: nil,
-      usageStore: usageStore,
-      auditLog: RecordingAuditLog(),
-      clock: ContinuousClock()
-    )
-  }
-
-  /// The schedule twin of `makeAgentWithRoster`: a single-route roster built through the same
-  /// `ProviderRoster` constructor the fallback-configured caller uses.
-  private func makeParserWithRoster(
-    provider: any LLMProvider,
-    usageStore: any UsageStore
-  ) -> ScheduleDraftParser {
-    ScheduleDraftParser(
-      roster: ProviderRoster(bindings: [
-        LLMRouteBinding(
-          provider: provider,
-          wireModel: "test-model",
-          configuredReference: "test-model",
-          costPolicy: .metered,
-          reservationPolicy: .textOnly
-        )
-      ]),
       usageStore: usageStore,
       budget: .default,
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
@@ -360,11 +310,11 @@ import Testing
     // given a single-route roster on both paths
     let turnQueue = try inMemoryQueue()
     let parseQueue = try inMemoryQueue()
-    let agent = makeAgentWithRoster(
+    let agent = makeAgent(
       provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42)),
       usageStore: UsageStoreGRDB(writer: turnQueue)
     )
-    let parser = makeParserWithRoster(
+    let parser = makeParser(
       provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42)),
       usageStore: UsageStoreGRDB(writer: parseQueue)
     )

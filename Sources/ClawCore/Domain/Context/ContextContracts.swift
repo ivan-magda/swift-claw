@@ -45,31 +45,6 @@ public struct ContextPriority: Sendable, Equatable, Comparable, Hashable {
   }
 }
 
-public struct Section: Sendable, Equatable, Identifiable {
-  public let id: ContextRowID
-  public let tier: ContextTier
-  public let priority: ContextPriority
-  public let truncatable: Bool
-  public let cap: Int?
-  public let content: String
-
-  public init(
-    id: ContextRowID,
-    tier: ContextTier,
-    priority: ContextPriority,
-    truncatable: Bool,
-    cap: Int?,
-    content: String
-  ) {
-    self.id = id
-    self.tier = tier
-    self.priority = priority
-    self.truncatable = truncatable
-    self.cap = cap
-    self.content = content
-  }
-}
-
 public struct ContextBudget: Sendable, Equatable {
   public let inputCapGraphemes: Int
   public let userFileCap: Int
