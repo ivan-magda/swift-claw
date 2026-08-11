@@ -151,4 +151,21 @@ import Testing
     #expect(Command.parse("/mcp add https://evil.test/mcp", botUsername: "claw_bot") == .mcp)
     #expect(Command.parse("/mcp set-token linear hunter2", botUsername: "claw_bot") == .mcp)
   }
+
+  @Test(arguments: [
+    "/skills",
+    "/SKILLS",
+    "/skills@claw_bot",
+    "/SKILLS@CLAW_BOT include rejected",
+  ])
+  func skillsParsesAsReadOnlyDiagnostics(text: String) {
+    // given
+    let botUsername = "claw_bot"
+
+    // when
+    let command = Command.parse(text, botUsername: botUsername)
+
+    // then
+    #expect(command == .skills)
+  }
 }

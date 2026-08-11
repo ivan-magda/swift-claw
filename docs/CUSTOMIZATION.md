@@ -89,8 +89,15 @@ the rest of the session. Reading the same file with `file_read` would cost you t
 clawd touches nothing else in the directory for now: no `scripts/` runs, no `assets/` or
 `references/` load.
 
-When a skill does not make it into context, the reply says so above the answer — and keeps
-saying it until you fix the file, since the scan runs fresh on every turn:
+Send `/skills` for the complete current scan. Its Accepted section lists every usable
+name and description. Its Rejected section lists every scanner warning, including a
+`skills/` directory that clawd could not read. The command starts no agent turn and
+changes no skill state.
+
+Ordinary turns use a smaller failure surface. A reply reports authoring errors,
+workspace-boundary failures, and skills dropped from that turn's budget above the answer.
+It logs a failure to read the whole `skills/` directory instead of repeating that warning
+in every reply. The scan runs again on the next turn, so unresolved notices recur:
 
 - `⚠ Skill weekly-review: manifest name weekly-summary must match the directory name; skipped.`
   — and sibling notices for a missing frontmatter block, a name that breaks the shape
@@ -104,6 +111,12 @@ saying it until you fix the file, since the scan runs fresh on every turn:
 - `⚠ Skills index over budget; left out this turn: research, weekly-review.` The index has
   its own slice of the context budget. Skills are indexed in alphabetical order and the
   overflow is cut from the end, so shortening descriptions is what brings the tail back.
+
+Full `clawd doctor` and Telegram `/status` summarize a fresh scan as
+`context.skills accepted=N rejected=N fits_cap=true|false`. The row stays visible in
+`/status` when healthy and fails if the scan has any warning or the complete canonical
+index exceeds the absolute skills cap. A particular turn can still drop skills when
+other context leaves less room; `fits_cap` does not predict that residual budget.
 
 ## When the agent asks permission
 

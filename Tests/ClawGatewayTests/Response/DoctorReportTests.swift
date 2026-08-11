@@ -1,3 +1,5 @@
+import ClawCore
+import Foundation
 import Testing
 
 @testable import ClawGateway
@@ -272,4 +274,34 @@ import Testing
     #expect(json.contains("\"spend\""))
     #expect(json.contains("\"ok\""))
   }
+
+  @Test func jsonPreservesEverySkillHealthField() throws {
+    // given
+    let diagnostics = SkillDiagnostics(
+      scan: SkillScanResult(
+        descriptors: [],
+        warnings: [.invalidSkillManifest(skill: "broken")]
+      ),
+      skillsCap: ContextBudget.default.skillsCap
+    )
+    var report = DoctorReport()
+    report.add(contentsOf: [HealthRowsBuilder.skillsCheck(diagnostics)])
+
+    // when
+    let data = try #require(report.renderJSON().data(using: .utf8))
+    let payload = try JSONDecoder().decode(DoctorJSONPayload.self, from: data)
+    let row = try #require(payload.checks.first { $0.key == "context.skills" })
+
+    // then
+    #expect(row.value.contains("accepted=0"))
+    #expect(row.value.contains("rejected=1"))
+    #expect(row.value.contains("fits_cap=true"))
+    #expect(row.ok == false)
+    #expect(row.group == .context)
+    #expect(row.isHeadline == true)
+  }
+}
+
+private struct DoctorJSONPayload: Decodable {
+  let checks: [DoctorReport.Check]
 }

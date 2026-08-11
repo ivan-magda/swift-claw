@@ -343,6 +343,8 @@ private extension MessageRouter {
       return await sendHealth(rawUpdate: rawUpdate, message: message, section: nil)
     case .mcp:
       return await sendHealth(rawUpdate: rawUpdate, message: message, section: .mcp)
+    case .skills:
+      return await sendSkills(rawUpdate: rawUpdate, message: message)
     case .stop:
       return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message)
     case .new:
@@ -399,6 +401,18 @@ private extension MessageRouter {
       updateId: rawUpdate.updateId,
       chatId: message.chatId,
       text: section.map(report.renderTelegramGroup) ?? report.renderTelegramSummary()
+    )
+  }
+
+  /// A fresh scan on every request keeps the owner view aligned with the workspace on disk. The
+  /// router only renders it; scanning and presentation remain owned by their existing seams.
+  func sendSkills(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
+    let scan = await doctor.scanSkills()
+    let diagnostics = SkillDiagnostics(scan: scan, skillsCap: ContextBudget.default.skillsCap)
+    return await replies.sendCanned(
+      updateId: rawUpdate.updateId,
+      chatId: message.chatId,
+      text: diagnostics.render()
     )
   }
 

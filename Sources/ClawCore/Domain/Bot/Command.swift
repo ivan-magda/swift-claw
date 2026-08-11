@@ -16,6 +16,7 @@ public enum Command: Sendable, Equatable {
   case help
   case doctor
   case mcp
+  case skills
   case plain(String)
 
   public static func parse(_ text: String, botUsername: String?) -> Command {
@@ -91,6 +92,8 @@ private extension Command {
       return .doctor
     case "mcp":
       return .mcp
+    case "skills":
+      return .skills
     default:
       return .plain(originalText)
     }

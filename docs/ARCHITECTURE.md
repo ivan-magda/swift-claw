@@ -126,14 +126,14 @@ form `ARCHITECTURE.md §N` is used, sparingly.
 | §8.4 Streams & attempt exposure | `LLMEventStream`, `LLMStreamTermination`, `ProviderFailure`, `ProviderFailureAccounting`, `ProviderInferenceCancellation`, `HTTPStreamExchange`, `HTTPTransportFailure`, `BoundedAsyncChannel` (ClawCore); `ProviderAttemptExposure`, `ChatGPTResponsesAttemptEngine` (ClawLLM) |
 | §8.5 Provider replay state | `ProviderExchangeState` (ClawCore); `ChatGPTProviderStateCodec` (ClawLLM) |
 | §8.6 Reliability & cost | `ProviderCallID`, `ProviderCallIDGenerating`, `LLMCostPolicy`, `LLMInputReservationPolicy` (ClawCore); `OpenAICompatibleProvider`, `SSEParser`, `PriceFileLoader` (ClawLLM) |
-| §9 Memory & context | `ContextBuilder`, `BudgetFitter`, `DropMarker`, `MemoryRanker`, `RecallCutoff`, `HistoryHygiene`, `LabeledContextFactory` (ClawAgent); `WorkspaceReading`, `WorkspaceSkills`, `SkillDescriptor`, `SkillScanResult`, `WorkspaceWarning`, `FrontmatterFence` (ClawCore); `FileSystemWorkspace` (ClawWorkspace) |
+| §9 Memory & context | `ContextBuilder`, `BudgetFitter`, `DropMarker`, `MemoryRanker`, `RecallCutoff`, `HistoryHygiene`, `LabeledContextFactory` (ClawAgent); `WorkspaceReading`, `WorkspaceSkills`, `SkillDescriptor`, `SkillScanResult`, `WorkspaceWarning`, `FrontmatterFence` (ClawCore); `FileSystemWorkspace` (ClawWorkspace); `SkillDiagnostics` (ClawGateway) |
 | §10 Tool system & policy | `ToolRegistry`, `FileReadTool`, `FileWriteTool`, `MemoryWriteTool`, `WebFetchTool`, `WebSearchTool`, `SkillLoadTool` (ClawTools); `Tool`, `ToolDefinition`, `RiskLevel`, `ToolDispatching`, `ToolFenceLabels`, `WorkspacePathContainment` (ClawCore) |
 | §10.3 MCP client | `MCPStreamableHTTPTransport`, `MCPServerSession`, `MCPCatalogResolver`, `ResolvedMCPCatalog`, `MCPServerOutcome`, `MCPMetadataSanitizer`, `MCPTool`, `MCPToolNamer`, `MCPSchemaNormalizer`, `MCPDescriptionCap`, `MCPValueBridge`, `MCPDiscoveryLimits`, `MCPTransportLimits`, `MCPNegotiatingTransport` (ClawMCP); `MCPConfig`, `MCPServerConfig`, `MCPToolFilter`, `MCPHTTPHeader`, `MCPLimits`, `MCPNaming`, `MCPConfigError` (ClawCore); `MCPConfigLoader` (ClawWorkspace); `EncryptedMCPCredentialStore`, `MCPCredentialLoad`, `SealedCredentialFile` (ClawSecrets); `MCPBootInputs`, `MCPProbe`, `MCPSessionFactory`, `MCPDoctorRows`, `MCPCommand`, `MCPSessionLifecycleService`, `DaemonBuilder.resolveMCPStack` (clawd) |
 | §11 Approval system | `Approval`, `ApprovalFSM`, `PendingToolAction`, `RecordedToolAction` (ClawCore); `ApprovalStoreGRDB` (ClawData); the §6.2/§6.5 gateway symbols above |
 | §12 Security & trust | `SecretRedactor`, `SSRFGuard`, `FakeIPDetector`, `ExfilArgGuard`, `CanonicalURL` (ClawTools); `ToolOutputCap`, `SSEFraming`, `ContextTier` provenance labels, `LabeledContext`, and the `ResolvedAddress`/`CIDR` address vocabulary (ClawCore) |
 | §13 Execution / sandbox | `ExecutionBackend`, `SandboxMaintenance`, execution value types, `PreparedToolAction` (ClawCore); `ExecuteCodeTool`, `ExfilArgGuard`, `ToolPolicyGate` dangerous arm (ClawTools); `ContainerBackend`, `ExecSandboxSettings`, `SwiftSubprocessContainerCommandRunner` (ClawExec); `SandboxBootstrapper`, `SandboxLifecycleService`, `SandboxHealthRows`, `ApprovedActionExecutor` fill (ClawGateway); `DaemonBuilder.prepareSandbox` (clawd) |
 | §15 Config & secrets | `AppConfig`, `MCPConfigSource`, `MCPServerConfig`, `QuietHours`, `StateRootResolver`, `SecretStore` + `LLMCredentialStore` seams (ClawCore); `MCPConfigLoader` (ClawWorkspace); `EncryptedFileSecretStore`, `EnvSecretStore`, `SecretStoreResolver`, `EncryptedLLMCredentialStore`, `EncryptedMCPCredentialStore`, `SecretStatePaths`, `SecureFilePublisher`, `RuntimeSecretPreparer` (ClawSecrets); `AuthBootstrap` (ClawAuth) |
-| §16 Observability | `DoctorReport`, `SchedulerHealth`, `ApprovalsHealthRows` (ClawGateway); `ApprovalsHealth`, `RunsHealth`, `AuditLog` (ClawCore); `AuditLogGRDB` (ClawData); `LLMAuthDoctor` (ClawSecrets); `MCPDoctorRows`, `MCPProbe` (clawd) |
+| §16 Observability | `DoctorReport`, `DoctorReporting`, `HealthRowsBuilder`, `SkillDiagnostics`, `SchedulerHealth`, `ApprovalsHealthRows` (ClawGateway); `ApprovalsHealth`, `RunsHealth`, `AuditLog` (ClawCore); `AuditLogGRDB` (ClawData); `LLMAuthDoctor` (ClawSecrets); `DoctorHealth`, `MCPDoctorRows`, `MCPProbe` (clawd) |
 | §19 Error taxonomy | `ClawCore/Errors/` (`ClawExitCode`, `ConfigError`, `TelegramError`, `StoreError`, `ProviderError`, `ProviderFailure`, `CredentialStoreError` — aliased `LLMCredentialStoreError`); `ClawDatabase.classifyError` → `throws(StoreError)` seam (ClawData); `AuthCommandResultMapper` (ClawAuth) |
 | §19.1 Run/approval FSM | `RunFSM`, `ApprovalFSM` (ClawCore) |
 
@@ -582,6 +582,14 @@ Responses reasoning continuity cannot be expressed as text and tool calls, so `C
 
 **Skill identity is settled at scan time**, so nothing downstream has to re-decide it: the frontmatter `name` must match `^[a-z0-9]+(-[a-z0-9]+)*$` at 1–64 characters **and** equal its own directory name, `description` is collapsed to a single line and then capped at 300 graphemes (the spec allows 1024; the index has to scale with skill count, not with one author's prose, and a block scalar must not let one skill occupy several of the index's one-line-per-skill rows), and a name claimed by two directories drops **every** claimant — silently shadowing one is the bug class the loader exists to avoid. Each rejection reaches the owner as a notice (§9.2), not only the log. The scan feeds the index row; the body is loaded on demand by `skill_load` (§10.1), never injected wholesale.
 
+**`/skills` is the complete owner diagnostic.** An allowlisted request starts a fresh workspace scan
+and renders every accepted descriptor as the canonical `- <name>: <description>` line, followed by
+every rejection reason. The renderer labels empty sections. The command does not dispatch an agent
+turn or mutate skill state. Ordinary turns keep their compact failure surface: they announce every
+scanner warning except an unreadable `skills/` directory, plus any cap drops. Repeated directory
+read failures stay in the log, `/skills`, and the unhealthy doctor row. Non-allowlisted senders
+receive no skill information.
+
 ### 9.2 Canonical ordered list + budget formula
 
 One canonical ordered assembly. Each section carries a **priority** and a **truncatable** flag.
@@ -778,6 +786,14 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **`doctor --check-config` carries a network-free `llm.auth` row.** It **never refreshes, fetches models, or contacts the provider** — a diagnostic that mutates credentials or spends a login is not a diagnostic. Current route with a static key reports `provider=openai-compatible mode=static`, without one `mode=none`; a decryptable, refreshable ChatGPT credential reports `provider=openai-chatgpt mode=oauth status=<fresh|expiring|expired-refresh-on-use>` and passes; no usable credential **fails** the row with `clawd auth login` guidance; a malformed key or envelope fails as a decrypt row. The existing `secrets` row still validates `secrets.enc` independently. `llm.auth` inspects the **primary** route only, so a fallback's credential is first exercised when the fallback carries a turn.
 - **A stopped daemon answers for configuration, never for live routing.** `doctor --check-config` carries `llm.fallback_configured`, since whether a second route exists is a fact about the environment. The cooldown windows live in the running daemon's memory (§8.6), so the full `doctor` run by a separate process renders `llm.active_route` as the configured primary and `llm.primary_cooldown_s` as `unknown` rather than claiming the primary is clear.
 - **MCP health is reported at three ranges from one row builder.** `doctor --check-config` prints the offline rows only — config and token state, no socket, same rule as `llm.auth`; a full `clawd doctor` adds a live probe over the same session path the daemon boots with, so a server that probes clean is one that will load; and the running daemon answers `/mcp` from the boot snapshot it already holds, which is what keeps that command status-only. `clawd mcp list` and `clawd mcp probe` are the same two ranges as standalone commands. All three read one row builder, so an owner comparing `clawd doctor` against `/mcp` cannot be told two different stories about the same server.
+- **Workspace skill health uses a fresh scan.** Full `clawd doctor` and each Telegram `/status`
+  request scan the configured workspace root and add the headline row `context.skills` with
+  `accepted=<count> rejected=<count> fits_cap=<true|false>`. The counts come from the scan's
+  accepted descriptors and warnings. `fits_cap` compares the complete canonical index text with
+  the absolute `skillsCap`, including equality as a fit; it does not estimate the smaller residual
+  budget available to a particular turn. Any rejection or an over-cap index fails the row, makes
+  full doctor exit nonzero, and remains visible in `/status`. `doctor --check-config` stays limited
+  to config and secret checks and does not scan the workspace.
 
 ### 16.1 Health table (doctor / status)
 
@@ -793,6 +809,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 | spend | `today_usd`, `remaining_budget` (per-run + per-day) |
 | sandbox | `available`, `os_ok`, `engine_version`, `version_ok`, `image_digest_ok`, `caps_empty`, `net_isolated`, `caps_match`, `reaper_ok`, `rootfs_ro`, `staging_ro`, `interpreters_ok`, `last_error` |
 | MCP | per server: `enabled`, `token` (`set` \| `absent` \| `bound-to-a-different-url`), effective include/exclude, and — where the boot snapshot or a live probe is available — `tool_count` or the recorded `skip_reason`; never a token value |
+| context skills | `accepted`, `rejected`, `fits_cap`; headline row from a fresh scan in full doctor and `/status`; unhealthy when `rejected > 0` or `fits_cap = false` |
 | config/secret | validation result — **printed first** if it errored |
 
 - **Audit:** ordinary append-only (§7.2) — useful for "why did it do that." No tamper-evidence claim in v1.

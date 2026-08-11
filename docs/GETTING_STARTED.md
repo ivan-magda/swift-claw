@@ -112,6 +112,11 @@ clawd doctor          # adds database, Telegram getMe, and tool-backend probes
 clawd doctor --json   # same checks, machine-readable
 ```
 
+The full check includes a `context.skills` row. It reports accepted and rejected skill
+counts plus `fits_cap`, which tells you whether the complete skill index fits its absolute
+context allowance. A rejected skill or `fits_cap=false` makes the row fail. Telegram
+`/status` shows the same row after the daemon starts.
+
 ## 5. Run and say hello
 
 ```bash
@@ -174,6 +179,10 @@ description: How to run the Friday review — which projects to check and what t
 Go through the open projects newest first. For each one, ...
 EOF
 ```
+
+Send `/skills` to the bot. The Accepted section should contain
+`weekly-review`; the Rejected section explains any frontmatter, naming, duplicate, or
+workspace-boundary problem that kept a skill out.
 
 [CUSTOMIZATION.md](CUSTOMIZATION.md) covers every file and its trust tier, the skill
 authoring rules, the environment knobs for budgets, schedules, voice locales, and the
