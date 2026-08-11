@@ -5,51 +5,23 @@ import Logging
 
 // MARK: - Provider stack
 
-/// One resolved route composed into everything downstream needs and nothing it does not: the erased
-/// provider `AgentRuntime` and the schedule parser drive, the two model identities they split wire
-/// traffic from accounting with, the two policies that decide billing and input reservation, and the
-/// live credential source the shutdown sequence must commit.
+/// One resolved route composed into the binding turn consumers drive and the live credential source
+/// the shutdown sequence must commit.
 ///
 /// The concrete provider and credential types are gone by this boundary. A caller holds `any
 /// LLMProvider` and `any LLMCredentialSource`, so no scheduled-run or agent signature below carries a
 /// `ChatGPT` or `OpenAICompatible` type, and adding a managed provider registers a descriptor and
 /// composes an adapter here rather than branching downstream.
 public struct ProviderStack: Sendable {
-  public let provider: any LLMProvider
+  public let binding: LLMRouteBinding
   public let credentialSource: any LLMCredentialSource
-  public let wireModel: String
-  public let configuredReference: String
-  public let costPolicy: LLMCostPolicy
-  public let reservationPolicy: LLMInputReservationPolicy
 
   public init(
-    provider: any LLMProvider,
-    credentialSource: any LLMCredentialSource,
-    wireModel: String,
-    configuredReference: String,
-    costPolicy: LLMCostPolicy,
-    reservationPolicy: LLMInputReservationPolicy
+    binding: LLMRouteBinding,
+    credentialSource: any LLMCredentialSource
   ) {
-    self.provider = provider
+    self.binding = binding
     self.credentialSource = credentialSource
-    self.wireModel = wireModel
-    self.configuredReference = configuredReference
-    self.costPolicy = costPolicy
-    self.reservationPolicy = reservationPolicy
-  }
-}
-
-public extension ProviderStack {
-  /// The turn-facing slice of this stack. Drops the credential source, which belongs to
-  /// composition's shutdown sequence and never to a turn.
-  var binding: LLMRouteBinding {
-    LLMRouteBinding(
-      provider: provider,
-      wireModel: wireModel,
-      configuredReference: configuredReference,
-      costPolicy: costPolicy,
-      reservationPolicy: reservationPolicy
-    )
   }
 }
 
@@ -200,14 +172,14 @@ private extension ProviderStackFactory {
       jitter: Self.jitter,
       logger: Self.llmLogger
     )
-    return ProviderStack(
+    let binding = LLMRouteBinding(
       provider: provider,
-      credentialSource: credentialSource,
       wireModel: route.wireModel,
       configuredReference: route.configuredReference,
       costPolicy: .metered,
       reservationPolicy: .textOnly
     )
+    return ProviderStack(binding: binding, credentialSource: credentialSource)
   }
 
   static func configuredEndpoint(of route: ResolvedLLMRoute) throws -> String {
@@ -270,14 +242,14 @@ private extension ProviderStackFactory {
       epochID: { UUID() },
       treatsQuotaAsTerminal: treatsQuotaAsTerminal
     )
-    return ProviderStack(
+    let binding = LLMRouteBinding(
       provider: provider,
-      credentialSource: credentialSource,
       wireModel: route.wireModel,
       configuredReference: route.configuredReference,
       costPolicy: .includedPlan,
       reservationPolicy: .chatGPTReplayState
     )
+    return ProviderStack(binding: binding, credentialSource: credentialSource)
   }
 }
 

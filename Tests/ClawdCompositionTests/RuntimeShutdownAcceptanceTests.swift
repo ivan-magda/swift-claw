@@ -46,9 +46,9 @@ import Testing
     let join = TerminationBox()
 
     let admission = await registry.enqueue(sessionID: sessionId, runID: runId) {
-      let session = stack.provider.stream(
+      let session = stack.binding.provider.stream(
         request: ChatRequest(
-          model: stack.wireModel,
+          model: stack.binding.wireModel,
           messages: [ChatMessage(role: .user, content: "hi")],
           maxOutputTokens: 256
         )

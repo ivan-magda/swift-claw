@@ -13,7 +13,7 @@ import Testing
     let budget = testBudget(inputCap: 7)
 
     // when
-    let fitted = try BudgetFitter.fit(sections, budget: budget)
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
 
     // then
     #expect(fitted.map(\.id) == [.policy])
@@ -30,7 +30,7 @@ import Testing
 
     // when / then
     #expect(throws: BudgetFitterError.nonTruncatableRowsExceedInputCap(required: 11, cap: 5)) {
-      try BudgetFitter.fit(sections, budget: budget)
+      try BudgetFitter.fitWithUnits(sections, budget: budget)
     }
   }
 
@@ -44,7 +44,7 @@ import Testing
     let budget = testBudget(inputCap: 50)
 
     // when
-    let fitted = try BudgetFitter.fit(sections, budget: budget)
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
 
     // then
     #expect(fitted.map(\.id) == [.policy, .memoryItems, .history])
@@ -64,7 +64,7 @@ import Testing
     let budget = testBudget(inputCap: 32)
 
     // when
-    let fitted = try BudgetFitter.fit(sections, budget: budget)
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
 
     // then
     #expect(fitted.map(\.id) == [.policy, .memoryItems, .history, .recall])
@@ -108,7 +108,7 @@ import Testing
     ]
 
     // when
-    let fitted = try BudgetFitter.fit(sections, budget: budget)
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
 
     // then
     #expect(fitted.map(\.id) == [.memoryItems, .history, .recall, .skills])
@@ -132,7 +132,7 @@ import Testing
     let budget = testBudget(inputCap: 9)
 
     // when
-    let fitted = try BudgetFitter.fit(sections, budget: budget)
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
 
     // then
     #expect(fitted.map(\.id) == [.memoryItems])
@@ -173,7 +173,7 @@ import Testing
     #expect(history.content == "newest")
   }
 
-  @Test func existingFitStillReturnsSectionsWithSameContent() throws {
+  @Test func fittedSectionsPreserveUnitIdentityAndRowMetadata() throws {
     // given
     let section = FittableSection(
       id: .memoryItems,
@@ -198,21 +198,18 @@ import Testing
     )
 
     // when
-    let sections = try BudgetFitter.fit([section], budget: budget)
+    let fitted = try BudgetFitter.fitWithUnits([section], budget: budget)
 
     // then
-    #expect(
-      sections == [
-        Section(
-          id: .memoryItems,
-          tier: .untrustedLabeled,
-          priority: ContextPriority(60),
-          truncatable: true,
-          cap: 20,
-          content: "alpha\nbravo"
-        )
-      ]
-    )
+    let memoryItems = try #require(fitted.first)
+    #expect(memoryItems.id == .memoryItems)
+    #expect(memoryItems.tier == .untrustedLabeled)
+    #expect(memoryItems.priority == ContextPriority(60))
+    #expect(memoryItems.truncatable)
+    #expect(memoryItems.cap == 20)
+    #expect(memoryItems.content == "alpha\nbravo")
+    #expect(memoryItems.units == section.units)
+    #expect(memoryItems.droppedUnitIDs.isEmpty)
   }
 
   @Test func truncatesUnitWithMarkerWhenUnitAllowsCharacterTruncation() throws {
@@ -230,7 +227,7 @@ import Testing
     let budget = testBudget(inputCap: 13)
 
     // when
-    let fitted = try BudgetFitter.fit(sections, budget: budget)
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
 
     // then
     #expect(fitted.first?.content == "a…[truncated]")
