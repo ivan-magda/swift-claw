@@ -348,7 +348,7 @@ func makeStack(
   let logger = TestLog.silent
 
   let agent = AgentRuntime(
-    provider: provider,
+    roster: makeSingleRouteRoster(provider: provider, wireModel: "gpt-4o"),
     typingIndicator: NoopTyping(),
     draftStreamer: NoopRichDraftStreaming(),
     streamingEnabled: false,
@@ -357,8 +357,6 @@ func makeStack(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    wireModel: "gpt-4o",
-    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()
@@ -448,7 +446,7 @@ func makeStreamingStack(
   let logger = TestLog.silent
   let draftStreamer = TelegramRichDraftStreamer(transport: transport)
   let agent = AgentRuntime(
-    provider: provider,
+    roster: makeSingleRouteRoster(provider: provider, wireModel: "gpt-4o"),
     typingIndicator: NoopTyping(),
     draftStreamer: draftStreamer,
     streamingEnabled: true,
@@ -457,8 +455,6 @@ func makeStreamingStack(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    wireModel: "gpt-4o",
-    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     // Parks the 3s per-send draft deadline and the wall deadline while the 250ms probe tick
@@ -538,7 +534,7 @@ func makeStopNewStack(
   let logger = TestLog.silent
 
   let agent = AgentRuntime(
-    provider: provider,
+    roster: makeSingleRouteRoster(provider: provider, wireModel: "gpt-4o"),
     typingIndicator: NoopTyping(),
     draftStreamer: NoopRichDraftStreaming(),
     streamingEnabled: false,
@@ -547,8 +543,6 @@ func makeStopNewStack(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    wireModel: "gpt-4o",
-    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()

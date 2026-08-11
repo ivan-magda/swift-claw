@@ -273,48 +273,6 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   }
 }
 
-// MARK: - Single-Route Composition
-
-extension ScheduleDraftParser {
-  /// Single-route convenience for callers that compose one provider. Mirrors `AgentRuntime`'s
-  /// convenience initializer so a caller with no fallback configured needs no roster of its own.
-  public init(
-    provider: any LLMProvider,
-    wireModel: String,
-    configuredReference: String? = nil,
-    usageStore: any UsageStore,
-    budget: RunBudget,
-    costResolver: CostResolver,
-    costPolicy: LLMCostPolicy = .metered,
-    reservationPolicy: LLMInputReservationPolicy = .textOnly,
-    structuredOutput: StructuredOutputMode = .off,
-    providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
-    now: @escaping @Sendable () -> Date = { Date() },
-    clock: any Clock<Duration>,
-    logger: Logger
-  ) {
-    self.init(
-      roster: ProviderRoster(bindings: [
-        LLMRouteBinding(
-          provider: provider,
-          wireModel: wireModel,
-          configuredReference: configuredReference ?? wireModel,
-          costPolicy: costPolicy,
-          reservationPolicy: reservationPolicy
-        )
-      ]),
-      usageStore: usageStore,
-      budget: budget,
-      costResolver: costResolver,
-      structuredOutput: structuredOutput,
-      providerCallIDGenerator: providerCallIDGenerator,
-      now: now,
-      clock: clock,
-      logger: logger
-    )
-  }
-}
-
 // MARK: - Route Accounting
 
 private extension ScheduleDraftParser {

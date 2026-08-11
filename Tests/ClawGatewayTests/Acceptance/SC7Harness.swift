@@ -216,7 +216,7 @@ func makeSC7Harness(
   // 6. AgentRuntime over the per-turn scripted provider and the real gated dispatcher.
   let provider = TurnScriptedProvider(scripts: scripts)
   let agent = AgentRuntime(
-    provider: provider,
+    roster: makeSingleRouteRoster(provider: provider, wireModel: "test-model"),
     typingIndicator: NoopTyping(),
     draftStreamer: NoopRichDraftStreaming(),
     streamingEnabled: false,
@@ -225,8 +225,6 @@ func makeSC7Harness(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: .default,
-    wireModel: "test-model",
-    configuredReference: "test-model",
     toolDispatcher: dispatcherOverride ?? dispatcher,
     usageStore: stores.usage,
     auditLog: stores.audit,

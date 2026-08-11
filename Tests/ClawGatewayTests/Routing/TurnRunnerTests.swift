@@ -616,7 +616,7 @@ func makeEnv(
 
   let provider = StubLLMProvider(agentOutcome)
   let agent = AgentRuntime(
-    provider: provider,
+    roster: makeSingleRouteRoster(provider: provider, wireModel: "gpt-4o"),
     typingIndicator: NoopTyping(),
     draftStreamer: NoopRichDraftStreaming(),
     streamingEnabled: false,
@@ -625,8 +625,6 @@ func makeEnv(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: budget,
-    wireModel: "gpt-4o",
-    configuredReference: "gpt-4o",
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()
