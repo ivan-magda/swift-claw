@@ -13,43 +13,6 @@ import Foundation
   import Darwin
 #endif
 
-// MARK: - Provider Selection
-
-/// The provider an auth command acts on.
-///
-/// Spelled as a type rather than a validated string so that an unknown name is refused by the
-/// parser, before `run` exists to do anything about it — which is the only way "no state is touched
-/// and no request is made" can be a fact about the command rather than a promise made by its first
-/// few lines. The names come from the route registry rather than from literals here, so the value an
-/// owner types and the record the credential is stored under cannot drift apart.
-enum AuthProvider: CaseIterable, ExpressibleByArgument {
-  case openAIChatGPT
-
-  var providerID: LLMProviderID {
-    switch self {
-    case .openAIChatGPT:
-      return ChatGPTProviderMetadata.providerID
-    }
-  }
-
-  init?(argument: String) {
-    guard let match = Self.allCases.first(where: { $0.providerID.rawValue == argument }) else {
-      return nil
-    }
-    self = match
-  }
-
-  var defaultValueDescription: String { providerID.rawValue }
-
-  static var allValueStrings: [String] { allCases.map(\.providerID.rawValue) }
-}
-
-/// Shared by all three subcommands so the surface cannot drift between them.
-struct AuthProviderOptions: ParsableArguments {
-  @Option(help: "The provider to act on.")
-  var provider: AuthProvider = .openAIChatGPT
-}
-
 // MARK: - Command
 
 struct AuthCommand: AsyncParsableCommand {
@@ -63,8 +26,6 @@ struct AuthCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Sign in to a provider and choose a model."
     )
-
-    @OptionGroup var options: AuthProviderOptions
 
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
@@ -97,8 +58,6 @@ struct AuthCommand: AsyncParsableCommand {
       abstract: "Report the stored credential without contacting the provider."
     )
 
-    @OptionGroup var options: AuthProviderOptions
-
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
       let bootstrap = try AuthCommand.resolveBootstrapOrExit(environment: environment)
@@ -116,8 +75,6 @@ struct AuthCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
       abstract: "Remove the stored credential from this machine."
     )
-
-    @OptionGroup var options: AuthProviderOptions
 
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
@@ -137,10 +94,6 @@ struct AuthCommand: AsyncParsableCommand {
 
 private extension AuthCommand {
   /// Hands the workflow the real lock, the real seal, the real store, and the owner's real terminal.
-  ///
-  /// The provider is not a parameter because there is one route that authenticates this way, and its
-  /// identity is the workflow's own. When a second one arrives, this is where the option a caller
-  /// parsed starts choosing between them.
   static func workflow(
     bootstrap: AuthBootstrap,
     environment: [String: String],

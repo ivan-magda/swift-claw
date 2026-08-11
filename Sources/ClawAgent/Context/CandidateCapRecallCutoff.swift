@@ -1,14 +1,7 @@
 import ClawCore
-import Foundation
 
-public protocol RecallCutoff: Sendable {
-  func select(hits: [RecallHit], limit: Int) -> [RecallHit]
-}
-
-public struct CandidateCapRecallCutoff: RecallCutoff {
-  public init() {}
-
-  public func select(hits: [RecallHit], limit: Int) -> [RecallHit] {
+enum CandidateCapRecallCutoff {
+  static func select(hits: [RecallHit], limit: Int) -> [RecallHit] {
     guard limit > 0 else {
       return []
     }

@@ -66,9 +66,9 @@ import Testing
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
 
     // when
-    let response = try await stack.provider.complete(
+    let response = try await stack.binding.provider.complete(
       request: ChatRequest(
-        model: stack.wireModel,
+        model: stack.binding.wireModel,
         messages: [ChatMessage(role: .user, content: "what time is it?")],
         maxOutputTokens: 256,
         sessionId: "sess-acc"
@@ -76,8 +76,8 @@ import Testing
     )
 
     // then — the route identities are distinct and the wire hit the fixed endpoint
-    #expect(stack.wireModel == CompositionAcceptance.wireModel)
-    #expect(stack.configuredReference == CompositionAcceptance.qualifiedModel)
+    #expect(stack.binding.wireModel == CompositionAcceptance.wireModel)
+    #expect(stack.binding.configuredReference == CompositionAcceptance.qualifiedModel)
     #expect(await http.requestedURLs == [Self.responsesURL])
     let headers = await http.lastHeaders
     #expect(headers["Accept"] == "text/event-stream")
@@ -136,9 +136,9 @@ import Testing
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
 
     // when — turn 1 (tool round), then commit its assistant anchor + state to GRDB
-    let firstReply = try await stack.provider.complete(
+    let firstReply = try await stack.binding.provider.complete(
       request: ChatRequest(
-        model: stack.wireModel,
+        model: stack.binding.wireModel,
         messages: [ChatMessage(role: .user, content: "what time is it?")],
         maxOutputTokens: 256
       )
@@ -179,9 +179,9 @@ import Testing
     let reloadedState = try #require(reloadedAssistant.providerState)
     #expect(reloadedState == mintedState)  // survived the round-trip byte-for-byte
 
-    let secondReply = try await stack.provider.complete(
+    let secondReply = try await stack.binding.provider.complete(
       request: ChatRequest(
-        model: stack.wireModel,
+        model: stack.binding.wireModel,
         messages: [
           ChatMessage(role: .user, content: "what time is it?"),
           ChatMessage(
@@ -261,9 +261,9 @@ import Testing
     )
 
     // when — turn 1, then commit its assistant anchor + poisoned-epoch state
-    let firstReply = try await firstStack.provider.complete(
+    let firstReply = try await firstStack.binding.provider.complete(
       request: ChatRequest(
-        model: firstStack.wireModel,
+        model: firstStack.binding.wireModel,
         messages: [ChatMessage(role: .user, content: "what time is it?")],
         maxOutputTokens: 256
       )
@@ -288,9 +288,9 @@ import Testing
         .first { $0.role == .assistant }
     )
     let poisonedAnchorState = try #require(poisonedAnchor.providerState)
-    let recoveredReply = try await firstStack.provider.complete(
+    let recoveredReply = try await firstStack.binding.provider.complete(
       request: ChatRequest(
-        model: firstStack.wireModel,
+        model: firstStack.binding.wireModel,
         messages: [
           ChatMessage(role: .user, content: "what time is it?"),
           ChatMessage(
@@ -362,9 +362,9 @@ import Testing
         ChatMessage(role: .assistant, content: anchor.content, providerState: anchor.providerState)
       }
       + [ChatMessage(role: .user, content: "still there?")]
-    _ = try await restartStack.provider.complete(
+    _ = try await restartStack.binding.provider.complete(
       request: ChatRequest(
-        model: restartStack.wireModel,
+        model: restartStack.binding.wireModel,
         messages: threaded,
         maxOutputTokens: 256
       )

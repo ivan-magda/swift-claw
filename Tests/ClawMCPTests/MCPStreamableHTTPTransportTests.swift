@@ -55,28 +55,6 @@ struct MCPStreamableHTTPTransportTests {
     #expect(await executor.lastHeaders["Authorization"] == nil)
   }
 
-  @Test("every request after the handshake names the revision the server agreed to")
-  func adoptsNegotiatedProtocolVersion() async throws {
-    // given
-    let executor = ScriptedHTTPExecutor([
-      .stream(TransportFixture.jsonHead(), [Fixture.reply]),
-      .stream(TransportFixture.jsonHead(), [Fixture.reply]),
-    ])
-    let transport = try TransportFixture.transport(http: executor)
-    try await transport.connect()
-    try await transport.send(Fixture.request)
-
-    // when the handshake settles on an older revision than the one we offered
-    await transport.adopt(protocolVersion: "2025-06-18")
-    try await transport.send(Fixture.request)
-
-    // then only the offer preceded the answer; a server pinned to that revision 400s anything else
-    let versions = await executor.recorded.map { request in
-      request.headers["MCP-Protocol-Version"]
-    }
-    #expect(versions == [MCPProtocol.version, "2025-06-18"])
-  }
-
   @Test("the initialized notification already carries the negotiated protocol revision")
   func adoptsVersionBeforeInitializedNotification() async throws {
     // given a real SDK client and a server that selects an older supported revision
@@ -107,7 +85,13 @@ struct MCPStreamableHTTPTransportTests {
     _ = try await client.connect(transport: transport)
 
     // then
-    let versions = await executor.recorded.map { request in
+    let requests = await executor.recorded
+    let initialized = try #require(requests.last)
+    let envelope = try #require(
+      JSONSerialization.jsonObject(with: initialized.body) as? [String: Any]
+    )
+    #expect(envelope["method"] as? String == InitializedNotification.name)
+    let versions = requests.map { request in
       request.headers[MCPHTTPHeader.protocolVersion]
     }
     #expect(versions == [MCPProtocol.version, selected])

@@ -157,7 +157,7 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
       now: Date()
     )
     await harness.pendingConfirmations.park(
-      .command(.deleteItem(id: 7)),
+      .deleteItem(id: 7),
       sessionId: sessionId
     )
 

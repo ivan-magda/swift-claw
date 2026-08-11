@@ -80,7 +80,7 @@ struct SC3Harness {
     try stores.sessionMessages.findSession(sessionKey: sessionKey) ?? 0
   }
 
-  func pending() async throws -> PendingConfirmation? {
+  func pending() async throws -> CommandConfirmation? {
     await registry.pending(sessionId: try sessionId())
   }
 
