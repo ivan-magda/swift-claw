@@ -32,8 +32,7 @@ public enum RoutePosition: Sendable, Equatable {
   case fallback
 }
 
-/// The route a call is driving: its position and the binding that serves it, never one without the
-/// other, so no caller can hold a position the roster cannot answer for.
+/// The route a call is driving: its position and the binding that serves it.
 public struct RouteSelection: Sendable {
   public let position: RoutePosition
   public let binding: LLMRouteBinding
