@@ -177,35 +177,31 @@ func makeRuntime(
 func makeRuntime(
   primary: any LLMProvider,
   fallback: (any LLMProvider)?,
-  cooldown: (any RouteCooldownTracking)? = nil,
+  cooldown: (any PrimaryRouteCooldownTracking)? = nil,
   budget: RunBudget = .default,
   toolDispatcher: (any ToolDispatching)? = nil,
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
   clock: any Clock<Duration> = ContinuousClock()
 ) -> AgentRuntime {
-  var bindings = [
+  let primaryBinding = LLMRouteBinding(
+    provider: primary,
+    wireModel: "primary-wire",
+    configuredReference: "primary-model",
+    costPolicy: .includedPlan,
+    reservationPolicy: .textOnly
+  )
+  let fallbackBinding = fallback.map { provider in
     LLMRouteBinding(
-      provider: primary,
-      wireModel: "primary-wire",
-      configuredReference: "primary-model",
-      costPolicy: .includedPlan,
+      provider: provider,
+      wireModel: "fallback-wire",
+      configuredReference: "fallback-model",
+      costPolicy: .metered,
       reservationPolicy: .textOnly
-    )
-  ]
-  if let fallback {
-    bindings.append(
-      LLMRouteBinding(
-        provider: fallback,
-        wireModel: "fallback-wire",
-        configuredReference: "fallback-model",
-        costPolicy: .metered,
-        reservationPolicy: .textOnly
-      )
     )
   }
   return AgentRuntime(
-    roster: ProviderRoster(bindings: bindings),
+    roster: ProviderRoster(primary: primaryBinding, fallback: fallbackBinding),
     cooldown: cooldown,
     typingIndicator: RecordingTyping(),
     draftStreamer: NoopRichDraftStreaming(),

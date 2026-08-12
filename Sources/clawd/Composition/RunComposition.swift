@@ -55,7 +55,7 @@ struct RunComposition {
   /// forces a post-clients build failure and proves every already-created client is closed rather
   /// than leaked, and so an acceptance test reads the exact roster and cooldown the daemon runs on.
   var buildDaemon:
-    @Sendable (DaemonBuilder, RosterStack, RouteCooldown<ContinuousClock>) async throws ->
+    @Sendable (DaemonBuilder, RosterStack, PrimaryRouteCooldown<ContinuousClock>) async throws ->
       DaemonRuntimeBundle = Self.assembleDaemon
 
   struct Composed {
@@ -92,7 +92,7 @@ struct RunComposition {
       // ONE ledger for the whole process. The turn path and the /schedule parse both take this
       // instance, so a window a turn arms is a window the next scheduled parse already sees; two
       // instances would each re-probe a route the other knows is walled off.
-      let cooldown = RouteCooldown(
+      let cooldown = PrimaryRouteCooldown(
         longSeconds: config.llm.primaryCooldownSeconds,
         clock: ContinuousClock()
       )
@@ -114,7 +114,7 @@ extension RunComposition {
   static func assembleDaemon(
     _ builder: DaemonBuilder,
     _ stack: RosterStack,
-    _ cooldown: RouteCooldown<ContinuousClock>
+    _ cooldown: PrimaryRouteCooldown<ContinuousClock>
   ) async throws -> DaemonRuntimeBundle {
     try await builder.build(rosterStack: stack, cooldown: cooldown)
   }

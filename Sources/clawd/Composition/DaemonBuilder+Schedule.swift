@@ -13,7 +13,7 @@ extension DaemonBuilder {
   /// spend-discipline wiring reads in one place.
   func makeScheduleSurface(
     roster: ProviderRoster,
-    cooldown: any RouteCooldownTracking,
+    cooldown: any PrimaryRouteCooldownTracking,
     costResolver: CostResolver
   ) -> ScheduleSurface {
     ScheduleSurface(

@@ -25,7 +25,7 @@ struct FallbackCompositionAcceptanceTests {
     let harness = try await CompositionAcceptanceHarness.boot(environment: env)
 
     // then
-    #expect(harness.rosterStack.roster.count == 2)
+    #expect(harness.rosterStack.roster.hasFallback == true)
     #expect(harness.rosterStack.credentialSources.count == 2)
     #expect(harness.healthRow("llm.fallback_configured") == "yes (gpt-5.4)")
     #expect(harness.healthRow("llm.active_route") == "gpt-4o")
@@ -57,7 +57,7 @@ struct FallbackCompositionAcceptanceTests {
     let harness = try await CompositionAcceptanceHarness.boot(environment: env)
 
     // when — the shared cooldown the daemon injected into both surfaces arms the primary
-    await harness.cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
+    await harness.cooldown.arm(persistence: .long, retryAfterSeconds: nil)
     let rows = await harness.freshHealthRows()
 
     // then — the window is the configured one (counted down on a real clock, so the last whole
@@ -208,7 +208,7 @@ private enum FallbackWire {
   /// under test is the LLM one; everything that decides which endpoint and which key is production.
   static func makeRuntime(
     roster: ProviderRoster,
-    cooldown: any RouteCooldownTracking,
+    cooldown: any PrimaryRouteCooldownTracking,
     stores: ClawStores
   ) -> AgentRuntime {
     AgentRuntime(

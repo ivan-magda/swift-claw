@@ -26,29 +26,57 @@ public struct LLMRouteBinding: Sendable {
   }
 }
 
-/// The ordered routes a turn may use, primary first.
-///
-/// The type is a list although configuration exposes a single fallback today, so a longer chain is
-/// a configuration change rather than a redesign.
-public struct ProviderRoster: Sendable {
-  private let bindings: [LLMRouteBinding]
+/// Which of the two configured routes a call is on.
+public enum RoutePosition: Sendable, Equatable {
+  case primary
+  case fallback
+}
 
-  /// - Precondition: `bindings` is non-empty. A roster with no primary is a composition defect, not
-  ///   a configuration error, and the factory that builds one fails closed before this point.
-  public init(bindings: [LLMRouteBinding]) {
-    precondition(bindings.isEmpty == false, "a roster needs at least a primary route")
-    self.bindings = bindings
+/// The route a call is driving: its position and the binding that serves it.
+public struct RouteSelection: Sendable {
+  public let position: RoutePosition
+  public let binding: LLMRouteBinding
+
+  public init(position: RoutePosition, binding: LLMRouteBinding) {
+    self.position = position
+    self.binding = binding
+  }
+}
+
+/// The routes a turn may use: the configured primary plus the optional fallback that takes over.
+///
+/// This mirrors configuration exactly — one primary, at most one fallback — so there is no index
+/// arithmetic and no empty roster to guard against. A third route would be a redesign of this type
+/// and of everything that traverses it, not a configuration change.
+public struct ProviderRoster: Sendable {
+  public let primary: LLMRouteBinding
+  public let fallback: LLMRouteBinding?
+
+  public init(primary: LLMRouteBinding, fallback: LLMRouteBinding? = nil) {
+    self.primary = primary
+    self.fallback = fallback
   }
 
-  public var primary: LLMRouteBinding { bindings[0] }
-  public var count: Int { bindings.count }
-  public var hasFallback: Bool { bindings.count > 1 }
+  public var hasFallback: Bool { fallback != nil }
 
-  public func binding(at index: Int) -> LLMRouteBinding { bindings[index] }
+  /// The route a call starts on: the fallback when the primary is inside a live cooldown window and
+  /// a fallback exists, so the call is not spent re-proving a wall it already knows about.
+  ///
+  /// The window is read by the caller rather than here: the roster is a value the runtime holds
+  /// across awaits, while the cooldown is an actor.
+  public func startingRoute(primaryIsCooling: Bool) -> RouteSelection {
+    guard primaryIsCooling, let fallback else {
+      return RouteSelection(position: .primary, binding: primary)
+    }
+    return RouteSelection(position: .fallback, binding: fallback)
+  }
 
-  /// The next route to try, or `nil` when the roster is exhausted.
-  public func nextIndex(after index: Int) -> Int? {
-    let candidate = index + 1
-    return candidate < bindings.count ? candidate : nil
+  /// The one failover step a call gets, or `nil` when there is nowhere left to go — no fallback is
+  /// configured, or the call is already on it.
+  public func failover(from position: RoutePosition) -> RouteSelection? {
+    guard position == .primary, let fallback else {
+      return nil
+    }
+    return RouteSelection(position: .fallback, binding: fallback)
   }
 }

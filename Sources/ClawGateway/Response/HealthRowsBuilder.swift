@@ -37,9 +37,9 @@ public struct LLMRouteHealth: Sendable, Equatable {
   public static func live(
     primaryReference: String,
     fallbackReference: String?,
-    cooldown: any RouteCooldownTracking
+    cooldown: any PrimaryRouteCooldownTracking
   ) async -> LLMRouteHealth {
-    let remaining = await cooldown.remainingSeconds(routeIndex: 0)
+    let remaining = await cooldown.remainingSeconds()
     return LLMRouteHealth(
       primaryReference: primaryReference,
       fallbackReference: fallbackReference,

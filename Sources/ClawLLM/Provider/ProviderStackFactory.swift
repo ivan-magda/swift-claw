@@ -127,12 +127,12 @@ public enum ProviderStackFactory {
     )
     guard let fallbackRoute else {
       return RosterStack(
-        roster: ProviderRoster(bindings: [primaryStack.binding]),
+        roster: ProviderRoster(primary: primaryStack.binding),
         credentialSources: [primaryStack.credentialSource]
       )
     }
-    // The fallback is the last route in the chain, so its own quota wall is worth retrying: there is
-    // nowhere further to fail onto.
+    // The fallback is the last route, so its own quota wall is worth retrying: there is nowhere
+    // further to fail onto.
     let fallbackStack = try make(
       route: fallbackRoute,
       settings: settings,
@@ -142,7 +142,7 @@ public enum ProviderStackFactory {
       buildVersion: buildVersion
     )
     return RosterStack(
-      roster: ProviderRoster(bindings: [primaryStack.binding, fallbackStack.binding]),
+      roster: ProviderRoster(primary: primaryStack.binding, fallback: fallbackStack.binding),
       credentialSources: [primaryStack.credentialSource, fallbackStack.credentialSource]
     )
   }

@@ -70,7 +70,7 @@ struct DaemonBuilder: Sendable {
   ///   route a turn just walled off is not re-probed by the very next scheduled parse.
   func build(
     rosterStack: RosterStack,
-    cooldown: any RouteCooldownTracking
+    cooldown: any PrimaryRouteCooldownTracking
   ) async throws -> DaemonRuntimeBundle {
     let sandbox = await prepareSandbox()
     let coordination = TurnCoordination()
@@ -152,7 +152,7 @@ struct DaemonBuilder: Sendable {
     coordination: TurnCoordination,
     agentStack: AgentStack,
     roster: ProviderRoster,
-    cooldown: any RouteCooldownTracking,
+    cooldown: any PrimaryRouteCooldownTracking,
     costResolver: CostResolver,
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
