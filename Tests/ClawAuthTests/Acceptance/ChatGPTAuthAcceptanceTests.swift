@@ -7,11 +7,11 @@ import Testing
 
 @testable import ClawAuth
 
-/// End-to-end auth acceptance: the production `AuthWorkflow` over a real state root, real secret
+/// End-to-end auth acceptance: the production auth workflows over a real state root, real secret
 /// sealing, a real encrypted credential store, and a real instance lock — driving the *real* device,
-/// OAuth, and catalog clients across **scripted HTTP** and a **manual clock**. Where `AuthWorkflowTests`
-/// injects scripted seams, this suite proves the integrated flow reaches the pinned ChatGPT URLs (or
-/// provably does not), so a broken transition surfaces as a wire-level assertion.
+/// OAuth, and catalog clients across **scripted HTTP** and a **manual clock**. Where the per-command
+/// workflow suites inject scripted seams, this suite proves the integrated flow reaches the pinned
+/// ChatGPT URLs (or provably does not), so a broken transition surfaces as a wire-level assertion.
 @Suite struct ChatGPTAuthAcceptanceTests {
   // MARK: - The Whole Login, End to End
 
@@ -22,7 +22,7 @@ import Testing
     try await withAuthAcceptanceWorld("acc-auth-login") { world in
       // given
       let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.loginWorkflow(http: http)
 
       // when
       let result = await workflow.login()
@@ -51,7 +51,7 @@ import Testing
       // given — nothing to seal
       world.environment = [:]
       let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.loginWorkflow(http: http)
 
       // when
       let result = await workflow.login()
@@ -72,7 +72,7 @@ import Testing
       _ = try RuntimeSecretPreparer.prepare(stateRoot: world.root, environment: world.environment)
       try FileManager.default.removeItem(at: world.paths.runtimeEnvelope)
       let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.loginWorkflow(http: http)
 
       // when
       let result = await workflow.login()
@@ -92,7 +92,7 @@ import Testing
       #expect(world.environment["CLAW_LLM_BASE_URL"] == nil)
       #expect(world.environment["CLAW_LLM_API_KEY"] == nil)
       let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.loginWorkflow(http: http)
 
       // when
       let result = await workflow.login()
@@ -116,7 +116,7 @@ import Testing
       try world.seedPriorLogin()
       #expect(world.storedCredential?.profileID == AcceptanceAuthFixture.priorProfileID)
       let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.loginWorkflow(http: http)
 
       // when
       let result = await workflow.login()
@@ -136,7 +136,7 @@ import Testing
         #"{"error":"invalid_grant"}"#
       )
       let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.loginWorkflow(http: http)
 
       // when
       let result = await workflow.login()
@@ -158,7 +158,7 @@ import Testing
         #"{"error":"server_error"}"#
       )
       let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.loginWorkflow(http: http)
 
       // when
       let result = await workflow.login()
@@ -177,7 +177,7 @@ import Testing
       // given
       world.lockFailure = .held
       let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.loginWorkflow(http: http)
 
       // when
       let result = await workflow.login()
@@ -189,7 +189,9 @@ import Testing
     }
   }
 
-  /// Status reads through a held daemon lock: no lock acquisition, no network, and no token bytes.
+  /// Status reads through a held daemon lock: no lock acquisition and no token bytes. That it also
+  /// makes no wire call is no longer something a test can catch it at — `AuthStatusWorkflow` is
+  /// handed no transport to reach for — so what is asserted here is the half that stayed behavioral.
   @Test func statusReadsThroughAHeldLockWithoutNetwork() async throws {
     try await withAuthAcceptanceWorld("acc-auth-status") { world in
       // given — a daemon holds the instance lock
@@ -200,18 +202,16 @@ import Testing
         path: world.paths.instanceLock.path,
         log: world.log
       )
-      let http = world.makeHTTP()
-      let workflow = world.workflow(http: http)
+      let workflow = world.statusWorkflow()
 
       // when
       let result = workflow.status()
 
-      // then — read-only: no lock taken, no wire call, and real status output that names the
-      // provider and the seeded credential — so the token-absence check below is over a real
-      // transcript, not a vacuously empty one.
+      // then — read-only: no lock taken, and real status output that names the provider and the
+      // seeded credential — so the token-absence check below is over a real transcript, not a
+      // vacuously empty one.
       #expect(result.exit == .success)
       #expect(world.log.recorded.contains(.lockAcquired) == false)
-      #expect(await http.requestedURLs.isEmpty)
       #expect(result.transcript.contains("provider: openai-chatgpt"))
       #expect(result.transcript.contains("credential: present"))
       #expect(

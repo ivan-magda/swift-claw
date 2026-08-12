@@ -117,6 +117,13 @@ public enum AuthCommandResultMapper {
     )
   }
 
+  public static func credentialStoreResult(for error: any Error) -> AuthCommandResult {
+    guard let named = error as? LLMCredentialStoreError else {
+      return unexpected()
+    }
+    return result(for: named)
+  }
+
   public static func result(for failure: ChatGPTOAuthFailure) -> AuthCommandResult {
     AuthCommandResult(
       exit: .commandFailure,

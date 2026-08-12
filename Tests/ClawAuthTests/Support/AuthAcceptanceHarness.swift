@@ -8,10 +8,10 @@ import Synchronization
 
 /// The auth acceptance world: one login's collaborators over a real, disposable state root, wired to
 /// the *real* device-authorization, OAuth-exchange, and catalog clients driven over **scripted HTTP**
-/// and a **manual clock** — the higher-fidelity bar than `AuthWorkflowTests`, which injects scripted
+/// and a **manual clock** — the higher-fidelity bar than the workflow suites, which inject scripted
 /// seams. Real crypto (`RuntimeSecretPreparer`, `EncryptedLLMCredentialStore`) and a real instance
 /// lock stay in the loop; only the network boundary and the pacing clock are scripted. Reuses the
-/// module-scoped doubles from `AuthWorkflowTests` (`RealRuntimeSecrets`, `ObservedCredentialStore`,
+/// module-scoped doubles from `AuthWorld` (`RealRuntimeSecrets`, `ObservedCredentialStore`,
 /// `RecordingTerminal`, `AuthEffectLog`) so the two suites cannot drift.
 struct AuthAcceptanceWorld: Sendable {
   let root: URL
@@ -45,22 +45,26 @@ struct AuthAcceptanceWorld: Sendable {
     RecordingHTTPExecutor(responses: responses)
   }
 
-  func workflow(http: RecordingHTTPExecutor) -> AuthWorkflow {
+  private var makeCredentialStore: @Sendable () -> any LLMCredentialStore {
     let stateRoot = root
     let effects = log
+    return {
+      effects.record(.credentialStoreOpened)
+      return ObservedCredentialStore(
+        inner: EncryptedLLMCredentialStore(stateRoot: stateRoot),
+        log: effects
+      )
+    }
+  }
+
+  func loginWorkflow(http: RecordingHTTPExecutor) -> AuthLoginWorkflow {
     let identity = profileID
     let wallDate: @Sendable () -> Date = { AcceptanceAuthFixture.wallNow }
-    return AuthWorkflow(
+    return AuthLoginWorkflow(
       bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
       runtimeSecrets: RealRuntimeSecrets(stateRoot: root, environment: environment, log: log),
       mutationLock: mutationLock ?? ScriptedLock(failure: lockFailure, log: log),
-      makeCredentialStore: {
-        effects.record(.credentialStoreOpened)
-        return ObservedCredentialStore(
-          inner: EncryptedLLMCredentialStore(stateRoot: stateRoot),
-          log: effects
-        )
-      },
+      makeCredentialStore: makeCredentialStore,
       makeDeviceAuthorization: {
         ChatGPTDeviceAuthorization(
           client: ChatGPTOAuthClient(http: http, wallDate: wallDate),
@@ -72,8 +76,15 @@ struct AuthAcceptanceWorld: Sendable {
       tokenExchange: ChatGPTOAuthClient(http: http, wallDate: wallDate),
       catalog: ChatGPTModelCatalog(http: http),
       terminal: terminal,
-      profileID: { identity },
-      wallDate: wallDate
+      profileID: { identity }
+    )
+  }
+
+  func statusWorkflow() -> AuthStatusWorkflow {
+    AuthStatusWorkflow(
+      bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
+      makeCredentialStore: makeCredentialStore,
+      wallDate: { AcceptanceAuthFixture.wallNow }
     )
   }
 
