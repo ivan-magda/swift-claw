@@ -4,10 +4,6 @@ import Foundation
 // MARK: - Seams
 
 /// Bringing the encrypted secret backend up to something the daemon could boot from, and proving it.
-///
-/// Named as an operation rather than as a store because the workflow must not be able to do half of
-/// it: `clawd` supplies the adapter over the shared seal, which already owns the real decrypt and
-/// the inode-guarded rollback. Nothing in this module knows what a secret file is.
 public protocol AuthRuntimeSecretPreparing: Sendable {
   func prepare() throws
 }
@@ -22,16 +18,6 @@ public protocol ChatGPTDeviceAuthorizing: Sendable {
 
 // MARK: - Workflow
 
-/// `login`, with no CLI in it.
-///
-/// The ordering inside `login` is the whole point of the type, and it is not a style: the lock comes
-/// before every side effect because a daemon holding the state root must not have a credential
-/// changed underneath it; the seal comes before the credential file because writing an envelope
-/// beside a `secret.key` this command minted on its own would strand an environment-backed
-/// installation halfway; the real decrypt comes before the first request because a login that
-/// cannot prepare its secrets should cost the owner nothing, least of all a round trip; and the
-/// profile UUID is minted after the exchange because a login replaces what came before it only once
-/// there is something to replace it with.
 public struct AuthLoginWorkflow: Sendable {
   private let bootstrap: AuthBootstrap
   private let runtimeSecrets: any AuthRuntimeSecretPreparing
@@ -83,8 +69,7 @@ public struct AuthLoginWorkflow: Sendable {
 // MARK: - The Login Sequence
 
 private extension AuthLoginWorkflow {
-  /// Streams everything an owner should see through `transcript` as it happens, and returns only the
-  /// ending. Splitting it this way is what lets the lock's `defer` in `login` be the one release.
+  /// Streams everything an owner should see through `transcript` as it happens, and returns only the ending.
   func runLogin(_ transcript: AuthTranscript) async -> AuthCommandResult {
     do {
       try runtimeSecrets.prepare()
@@ -146,11 +131,10 @@ private extension AuthLoginWorkflow {
       .output("Logged in to \(ChatGPTProviderMetadata.providerID.rawValue).")
     ])
     await selectModel(pair: pair, transcript: transcript)
+
     return AuthCommandResult(exit: .success, events: [])
   }
 
-  /// The owner has a credential by the time this runs, so nothing it can fail at is a login failure.
-  /// Every unhappy path ends the same way: say so, and print the assignment to set by hand.
   func selectModel(pair: ChatGPTTokenPair, transcript: AuthTranscript) async {
     let models: [ChatGPTCatalogModel]
     do {
@@ -209,11 +193,13 @@ private extension AuthLoginWorkflow {
         // End of input, or a bare return: both mean "the one you already offered".
         return fallback
       }
+
       guard let index = Int(typed) else {
         await transcript.emit([.error("That is not a number. Enter a row number, or press return.")]
         )
         continue
       }
+
       switch ChatGPTModelPicker.select(
         catalog: models,
         configuredSuffix: configuredSuffix,
@@ -247,9 +233,6 @@ private extension AuthLoginWorkflow {
 // MARK: - Wording
 
 private extension AuthLoginWorkflow {
-  /// The user code, the fixed URL, and the window — and nothing else. The device-auth ID is a bearer
-  /// of the pending authorization: anyone holding it can claim the grant the owner is about to
-  /// approve, so it belongs on the wire and nowhere an owner or a log can see it.
   static func deviceEvents(for device: ChatGPTDeviceCode) -> [AuthPresentationEvent] {
     let minutes = ChatGPTProviderMetadata.maximumLoginWait.components.seconds / 60
     return [
@@ -282,11 +265,11 @@ private extension AuthLoginWorkflow {
   static func explain(_ origin: ChatGPTModelChoiceOrigin) -> String {
     switch origin {
     case .configuredDefault:
-      return "Keeping the model you already had configured, which the provider still offers."
+      "Keeping the model you already had configured, which the provider still offers."
     case .firstReturnedDefault:
-      return "Choosing the first model the provider returned."
+      "Choosing the first model the provider returned."
     case .owner:
-      return "Choosing the model you picked."
+      "Choosing the model you picked."
     }
   }
 
@@ -313,14 +296,6 @@ private extension AuthLoginWorkflow {
 
 // MARK: - Transcript
 
-/// Login's output, streamed as it happens.
-///
-/// Streaming is what makes the flow usable at all: an owner cannot approve a code they have not been
-/// shown, and a transcript printed after the poll loop would be a code for a window that has closed.
-/// What this type adds over writing to the terminal directly is the ending — `finish` presents a
-/// result's events and hands back the exit alone, which is what keeps login's promise that nothing
-/// in `events` has been shown yet. A login that also returned what it had already printed would
-/// leave every renderer one `for` loop away from showing the owner each line twice.
 private struct AuthTranscript: Sendable {
   private let terminal: any AuthTerminal
 
