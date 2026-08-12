@@ -47,7 +47,8 @@ private final class InvocationFlag: @unchecked Sendable {
     recorder: CloseRecorder,
     makeManagedStore: @escaping @Sendable (URL) -> any LLMCredentialStore,
     buildDaemon:
-      @escaping @Sendable (DaemonBuilder, RosterStack, RouteCooldown<ContinuousClock>) async throws
+      @escaping @Sendable (DaemonBuilder, RosterStack, PrimaryRouteCooldown<ContinuousClock>)
+      async throws
       -> DaemonRuntimeBundle
   ) throws -> RunComposition {
     var composition = RunComposition(

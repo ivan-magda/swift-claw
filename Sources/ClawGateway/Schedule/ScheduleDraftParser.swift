@@ -55,13 +55,12 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     schedule, set "unparseable" to true and set "label", "prompt", and "schedule" to null.
     """
 
-  /// The ordered routes the parse may drive, primary first. Mirrors `AgentRuntime`'s roster: a
-  /// switchable failure re-issues on the next binding instead of degrading straight away.
+  /// The routes the parse may drive. Mirrors `AgentRuntime`'s roster: a switchable failure
+  /// re-issues on the fallback instead of degrading straight away.
   private let roster: ProviderRoster
-  /// The per-route cooldown windows a switch arms, shared with `AgentRuntime` so a route that just
-  /// walled off a turn is not re-probed by the very next `/schedule` parse. Absent when nothing
-  /// composed one.
-  private let cooldown: (any RouteCooldownTracking)?
+  /// The primary's cooldown window, shared with `AgentRuntime` so a route that just walled off a
+  /// turn is not re-probed by the very next `/schedule` parse. Absent when nothing composed one.
+  private let cooldown: (any PrimaryRouteCooldownTracking)?
   private let responseFormat: ResponseFormat?
 
   private let usageStore: any UsageStore
@@ -78,7 +77,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
 
   public init(
     roster: ProviderRoster,
-    cooldown: (any RouteCooldownTracking)? = nil,
+    cooldown: (any PrimaryRouteCooldownTracking)? = nil,
     usageStore: any UsageStore,
     budget: RunBudget,
     costResolver: CostResolver,
@@ -117,19 +116,15 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     // its turns never split across two trace identities.
     let sessionTraceID = SessionTraceID.format(sessionID: sessionId)
 
-    var activeIndex = 0
-    if roster.hasFallback, await cooldown?.isCooling(routeIndex: 0) == true {
-      // The primary is inside a live cooldown window, so start on a route that can answer instead
-      // of re-proving the wall.
-      activeIndex = roster.nextIndex(after: 0) ?? 0
-    }
-    var activeBinding = roster.binding(at: activeIndex)
-    var accountant = makeAccountant(for: activeBinding)
+    // A cooling primary starts the parse on the fallback, so the one call it gets goes to a route
+    // that can answer instead of re-proving the wall.
+    var active = roster.startingRoute(primaryIsCooling: await cooldown?.isCooling() == true)
+    var accountant = makeAccountant(for: active.binding)
 
     // Day-cap preflight before issuing: a denial or an accounting failure refuses without a call.
     if let refusal = preflightRefusal(
       for: messages,
-      gate: makeGate(for: activeBinding),
+      gate: makeGate(for: active.binding),
       accountant: accountant
     ) {
       return refusal
@@ -137,7 +132,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
 
     var response: ChatResponse
     var request = ChatRequest(
-      model: activeBinding.wireModel,
+      model: active.binding.wireModel,
       messages: messages,
       maxOutputTokens: Self.maxParseOutputTokens,
       responseFormat: responseFormat,
@@ -151,7 +146,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     // parse has no round-trip budget to spend, only the one switch a permitted cause buys it.
     attempts: while true {
       do {
-        response = try await completeBounded(request: request, provider: activeBinding.provider)
+        response = try await completeBounded(request: request, provider: active.binding.provider)
         break attempts
       } catch let racedSuccess as RacedDeadlineSuccess {
         // A real reply landed alongside the won deadline: book its authoritative usage (real counts,
@@ -181,7 +176,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
         }
         guard
           let persistence = RouteSwitch.permits(error),
-          let nextIndex = roster.nextIndex(after: activeIndex)
+          let next = roster.failover(from: active.position)
         else {
           // One decision for every natural failure, keyed on the same vendor-neutral disposition a
           // turn reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a
@@ -201,15 +196,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
         }
 
         await cooldown?.arm(
-          routeIndex: activeIndex,
           persistence: persistence,
           retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
         )
-        activeIndex = nextIndex
-        activeBinding = roster.binding(at: activeIndex)
-        accountant = makeAccountant(for: activeBinding)
+        active = next
+        accountant = makeAccountant(for: active.binding)
         request = ChatRequest(
-          model: activeBinding.wireModel,
+          model: active.binding.wireModel,
           messages: messages,
           maxOutputTokens: Self.maxParseOutputTokens,
           responseFormat: responseFormat,
@@ -223,8 +216,8 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     // lapsed-window verdict is discarded — this surface stays silent, unlike a turn's `routeNotice`
     // — but it is still read through the atomic path, because a parse runs concurrently with turns
     // on other sessions and a read-then-clear pair would erase a window one of them just armed.
-    if activeIndex == 0 {
-      _ = await cooldown?.recordSuccess(routeIndex: 0)
+    if active.position == .primary {
+      _ = await cooldown?.recordSuccess()
     }
 
     record(

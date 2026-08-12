@@ -108,19 +108,19 @@ public struct TurnOutcome: Sendable {
 /// metered fallback be charged and capped as metered after the primary was an included plan.
 struct ActiveRoute {
   let binding: LLMRouteBinding
-  let index: Int
+  let position: RoutePosition
   let accountant: ProviderUsageAccountant
   let gate: BudgetGate
 
   init(
-    binding: LLMRouteBinding,
-    index: Int,
+    selection: RouteSelection,
     budget: RunBudget,
     costResolver: CostResolver,
     usageResolver: UsageResolver
   ) {
+    let binding = selection.binding
     self.binding = binding
-    self.index = index
+    self.position = selection.position
     self.accountant = ProviderUsageAccountant(
       configuredReference: binding.configuredReference,
       costPolicy: binding.costPolicy,
@@ -137,13 +137,13 @@ struct ActiveRoute {
 /// provider call → classify. No persistence or sending (the gateway owns that); all
 /// collaborators are injected `ClawCore` protocols so tests drive it with mocks.
 public struct AgentRuntime: Sendable {
-  /// The ordered routes a turn may drive, primary first. A turn starts on the first route that is
-  /// not cooling and re-resolves its `ActiveRoute` whenever it switches, so accounting and the
-  /// budget gate follow whichever route really answered rather than one stamped at init.
+  /// The routes a turn may drive. A turn starts on the primary unless it is cooling, and
+  /// re-resolves its `ActiveRoute` when it fails over, so accounting and the budget gate follow
+  /// whichever route really answered rather than one stamped at init.
   private let roster: ProviderRoster
-  /// The per-route cooldown windows a switch arms and a healthy answer clears. Absent when nothing
-  /// composed one — a lone route has nowhere to switch, so it has nothing to remember.
-  private let cooldown: (any RouteCooldownTracking)?
+  /// The primary's cooldown window, armed by a switch and cleared by a healthy answer. Absent when
+  /// nothing composed one — a lone route has nowhere to switch, so it has nothing to remember.
+  private let cooldown: (any PrimaryRouteCooldownTracking)?
   private let typingIndicator: any TypingIndicator
   private let draftStreamer: any RichDraftStreaming
   private let streamingEnabled: Bool
@@ -171,7 +171,7 @@ public struct AgentRuntime: Sendable {
 
   public init(
     roster: ProviderRoster,
-    cooldown: (any RouteCooldownTracking)? = nil,
+    cooldown: (any PrimaryRouteCooldownTracking)? = nil,
     typingIndicator: any TypingIndicator,
     draftStreamer: any RichDraftStreaming,
     streamingEnabled: Bool,
@@ -229,15 +229,12 @@ public struct AgentRuntime: Sendable {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDefinitions
     let fenceLabels = ToolFenceLabels(definitions: definitions)
-    var startIndex = 0
-    if roster.hasFallback, await cooldown?.isCooling(routeIndex: 0) == true {
-      // The primary is inside a live window, so spend the round-trip on a route that can answer
-      // instead of re-proving the wall.
-      startIndex = roster.nextIndex(after: 0) ?? 0
-    }
+    // A cooling primary starts the turn on the fallback, so the round-trip is spent on a route
+    // that can answer instead of re-proving the wall.
     var active = ActiveRoute(
-      binding: roster.binding(at: startIndex),
-      index: startIndex,
+      selection: roster.startingRoute(
+        primaryIsCooling: await cooldown?.isCooling() == true
+      ),
       budget: budget,
       costResolver: costResolver,
       usageResolver: usageResolver
@@ -376,7 +373,7 @@ public struct AgentRuntime: Sendable {
           }
           guard
             let persistence = RouteSwitch.permits(error),
-            let nextIndex = roster.nextIndex(after: active.index)
+            let next = roster.failover(from: active.position)
           else {
             turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
             return outcome(
@@ -394,13 +391,11 @@ public struct AgentRuntime: Sendable {
 
           let previous = active.binding.configuredReference
           await cooldown?.arm(
-            routeIndex: active.index,
             persistence: persistence,
             retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
           )
           active = ActiveRoute(
-            binding: roster.binding(at: nextIndex),
-            index: nextIndex,
+            selection: next,
             budget: budget,
             costResolver: costResolver,
             usageResolver: usageResolver
@@ -428,7 +423,7 @@ public struct AgentRuntime: Sendable {
 
       // The route answered, so a primary that had been walled off is healthy again. Only the first
       // answering round-trip owes the notice; a later one finds the window already cleared.
-      if active.index == 0, routeNotice == nil {
+      if active.position == .primary, routeNotice == nil {
         routeNotice = await primaryRecoveryNotice(binding: active.binding)
       }
 
@@ -652,7 +647,7 @@ private extension AgentRuntime {
   /// the primary is carrying traffic again.
   func primaryRecoveryNotice(binding: LLMRouteBinding) async -> RouteNotice? {
     guard let cooldown else { return nil }
-    let lapsed = await cooldown.recordSuccess(routeIndex: 0)
+    let lapsed = await cooldown.recordSuccess()
     return lapsed ? .restored(route: binding.configuredReference) : nil
   }
 }

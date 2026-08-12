@@ -24,7 +24,6 @@ struct ProviderRosterFactoryTests {
     )
 
     // then
-    #expect(stack.roster.count == 1)
     #expect(stack.roster.hasFallback == false)
     #expect(stack.credentialSources.count == 1)
   }
@@ -48,10 +47,10 @@ struct ProviderRosterFactoryTests {
     )
 
     // then
-    #expect(stack.roster.hasFallback == true)
+    let fallbackBinding = try #require(stack.roster.fallback)
     #expect(stack.roster.primary.costPolicy == .includedPlan)
-    #expect(stack.roster.binding(at: 1).costPolicy == .metered)
-    #expect(stack.roster.binding(at: 1).reservationPolicy == .textOnly)
+    #expect(fallbackBinding.costPolicy == .metered)
+    #expect(fallbackBinding.reservationPolicy == .textOnly)
     #expect(stack.credentialSources.count == 2)
   }
 
@@ -144,7 +143,8 @@ struct ProviderRosterFactoryTests {
     let afterPrimary = await http.recorded.count
 
     // and — the fallback's first 429 still retries, spending both budgeted attempts
-    _ = try? await stack.roster.binding(at: 1).provider.complete(request: sampleRequest)
+    let fallbackProvider = try #require(stack.roster.fallback).provider
+    _ = try? await fallbackProvider.complete(request: sampleRequest)
     let afterFallback = await http.recorded.count
 
     // then

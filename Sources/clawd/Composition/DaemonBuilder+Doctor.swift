@@ -10,7 +10,7 @@ import Foundation
 extension DaemonBuilder {
   func makeDoctorReporter(
     sandbox: SandboxStack,
-    cooldown: any RouteCooldownTracking,
+    cooldown: any PrimaryRouteCooldownTracking,
     mcpOutcomes: [MCPServerOutcome]
   ) -> DaemonDoctorReporter {
     DaemonDoctorReporter(
@@ -32,7 +32,7 @@ struct DaemonDoctorReporter: DoctorReporting {
   let stores: ClawStores
   let config: AppConfig
   let sandbox: SandboxBootstrapResult
-  let cooldown: any RouteCooldownTracking
+  let cooldown: any PrimaryRouteCooldownTracking
   let staticAPIKey: String?
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
   let mcp: MCPBootInputs

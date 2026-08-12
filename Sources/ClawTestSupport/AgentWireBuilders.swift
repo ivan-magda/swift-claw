@@ -10,15 +10,15 @@ public func makeSingleRouteRoster(
   costPolicy: LLMCostPolicy = .metered,
   reservationPolicy: LLMInputReservationPolicy = .textOnly
 ) -> ProviderRoster {
-  ProviderRoster(bindings: [
-    LLMRouteBinding(
+  ProviderRoster(
+    primary: LLMRouteBinding(
       provider: provider,
       wireModel: wireModel,
       configuredReference: configuredReference ?? wireModel,
       costPolicy: costPolicy,
       reservationPolicy: reservationPolicy
     )
-  ])
+  )
 }
 
 // MARK: - Response/outcome builders

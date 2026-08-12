@@ -259,7 +259,7 @@ struct CompositionAcceptanceHarness {
   let stores: ClawStores
   let builder: DaemonBuilder
   let rosterStack: RosterStack
-  let cooldown: RouteCooldown<ContinuousClock>
+  let cooldown: PrimaryRouteCooldown<ContinuousClock>
   let bundle: DaemonRuntimeBundle
   private let sandbox: DaemonBuilder.SandboxStack
   private let rows: [String: String]
@@ -358,12 +358,12 @@ final class BootCapture: @unchecked Sendable {
   private let lock = NSLock()
   private var builder: DaemonBuilder?
   private var rosterStack: RosterStack?
-  private var cooldown: RouteCooldown<ContinuousClock>?
+  private var cooldown: PrimaryRouteCooldown<ContinuousClock>?
 
   func record(
     builder: DaemonBuilder,
     rosterStack: RosterStack,
-    cooldown: RouteCooldown<ContinuousClock>
+    cooldown: PrimaryRouteCooldown<ContinuousClock>
   ) {
     lock.lock()
     defer { lock.unlock() }
@@ -386,7 +386,7 @@ final class BootCapture: @unchecked Sendable {
     return rosterStack
   }
 
-  func requireCooldown() throws -> RouteCooldown<ContinuousClock> {
+  func requireCooldown() throws -> PrimaryRouteCooldown<ContinuousClock> {
     lock.lock()
     defer { lock.unlock() }
     guard let cooldown else { throw BootNeverAssembled() }

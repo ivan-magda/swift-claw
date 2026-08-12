@@ -20,7 +20,7 @@ extension DaemonBuilder {
 
   func makeAgentStack(
     roster: ProviderRoster,
-    cooldown: any RouteCooldownTracking,
+    cooldown: any PrimaryRouteCooldownTracking,
     workspace: FileSystemWorkspace,
     costResolver: CostResolver,
     sandbox: SandboxStack,
@@ -95,7 +95,7 @@ extension DaemonBuilder {
   /// the composition root reads as "build the agent → feed the turn runner → register the services".
   func makeAgent(
     roster: ProviderRoster,
-    cooldown: any RouteCooldownTracking,
+    cooldown: any PrimaryRouteCooldownTracking,
     toolDispatcher: GatedToolDispatcher,
     costResolver: CostResolver
   ) -> AgentRuntime {

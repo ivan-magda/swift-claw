@@ -141,8 +141,8 @@ struct AgentRuntimeFallbackTests {
   @Test("a cooling primary is skipped and the turn starts on the fallback")
   func coolingPrimaryIsSkipped() async throws {
     // given
-    let cooldown = RouteCooldown(longSeconds: 900, clock: ScriptedClock { _ in })
-    await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
+    let cooldown = PrimaryRouteCooldown(longSeconds: 900, clock: ScriptedClock { _ in })
+    await cooldown.arm(persistence: .long, retryAfterSeconds: nil)
     let primary = StubProvider(.respond(okResponse(content: "must not be used")))
     let fallback = StubProvider(.respond(okResponse(content: "from fallback")))
     let runtime = makeRuntime(primary: primary, fallback: fallback, cooldown: cooldown)
@@ -160,8 +160,8 @@ struct AgentRuntimeFallbackTests {
   func lapsedPrimaryReportsRestored() async throws {
     // given
     let clock = ScriptedClock { _ in }
-    let cooldown = RouteCooldown(longSeconds: 900, clock: clock)
-    await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
+    let cooldown = PrimaryRouteCooldown(longSeconds: 900, clock: clock)
+    await cooldown.arm(persistence: .long, retryAfterSeconds: nil)
     try await clock.sleep(for: .seconds(901))
     let primary = StubProvider(.respond(okResponse(content: "answered")))
     let runtime = makeRuntime(primary: primary, fallback: nil, cooldown: cooldown)
@@ -172,7 +172,7 @@ struct AgentRuntimeFallbackTests {
     // then
     _ = try requireCompleted(outcome.result)
     #expect(outcome.routeNotice == .restored(route: "primary-model"))
-    #expect(await cooldown.isCooling(routeIndex: 0) == false)
+    #expect(await cooldown.isCooling() == false)
   }
 
   @Test("a scheduled run falls back on the same terms as an interactive turn")

@@ -92,25 +92,25 @@ import Testing
     primary: any LLMProvider,
     fallback: any LLMProvider,
     usageStore: any UsageStore,
-    cooldown: (any RouteCooldownTracking)? = nil
+    cooldown: (any PrimaryRouteCooldownTracking)? = nil
   ) -> ScheduleDraftParser {
     ScheduleDraftParser(
-      roster: ProviderRoster(bindings: [
-        LLMRouteBinding(
+      roster: ProviderRoster(
+        primary: LLMRouteBinding(
           provider: primary,
           wireModel: "primary-wire",
           configuredReference: "primary-model",
           costPolicy: .metered,
           reservationPolicy: .textOnly
         ),
-        LLMRouteBinding(
+        fallback: LLMRouteBinding(
           provider: fallback,
           wireModel: "fallback-wire",
           configuredReference: "fallback-model",
           costPolicy: .metered,
           reservationPolicy: .textOnly
-        ),
-      ]),
+        )
+      ),
       cooldown: cooldown,
       usageStore: usageStore,
       budget: .default,
@@ -258,8 +258,8 @@ import Testing
   func successfulParseClearsTheRecoveredPrimarysCooldown() async throws {
     // given — the primary armed a long window, then it lapses without ever being cleared
     let cooldownClock = ScriptedClock { _ in }
-    let cooldown = RouteCooldown(longSeconds: 900, clock: cooldownClock)
-    await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
+    let cooldown = PrimaryRouteCooldown(longSeconds: 900, clock: cooldownClock)
+    await cooldown.arm(persistence: .long, retryAfterSeconds: nil)
     try await cooldownClock.sleep(for: .seconds(901))
     let queue = try inMemoryQueue()
     let usageStore = UsageStoreGRDB(writer: queue)
@@ -280,8 +280,8 @@ import Testing
     // then — the window is cleared, not merely lapsed: a fresh arm starts at the tier default
     // rather than doubling the stale armed duration a lapsed-but-uncleared window would carry
     #expect(result == .draft(Self.expectedDraft))
-    await cooldown.arm(routeIndex: 0, persistence: .long, retryAfterSeconds: nil)
-    #expect(await cooldown.remainingSeconds(routeIndex: 0) == 900)
+    await cooldown.arm(persistence: .long, retryAfterSeconds: nil)
+    #expect(await cooldown.remainingSeconds() == 900)
   }
 
   @Test("a fallback that also fails still reports the primary's actionable cause")
