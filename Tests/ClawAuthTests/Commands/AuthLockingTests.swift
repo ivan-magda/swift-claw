@@ -56,7 +56,7 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
         path: world.paths.instanceLock.path,
         log: world.log
       )
-      let workflow = world.workflow()
+      let workflow = world.loginWorkflow()
 
       // when
       let blocked = await workflow.login()
@@ -98,7 +98,7 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
         path: world.paths.instanceLock.path,
         log: world.log
       )
-      let workflow = world.workflow()
+      let workflow = world.loginWorkflow()
 
       // when
       let result = await workflow.login()
@@ -119,7 +119,7 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
         log: world.log
       )
       world.deviceOutcome = .failure { ChatGPTOAuthFailure.deadlineExceeded }
-      let workflow = world.workflow()
+      let workflow = world.loginWorkflow()
 
       // when
       let result = await workflow.login()
@@ -143,7 +143,7 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
         path: world.paths.instanceLock.path,
         log: world.log
       )
-      let workflow = world.workflow()
+      let workflow = world.logoutWorkflow()
 
       // when
       let blocked = workflow.logout()

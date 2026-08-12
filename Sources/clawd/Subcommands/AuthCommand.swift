@@ -40,7 +40,7 @@ struct AuthCommand: AsyncParsableCommand {
         eventLoopGroupProvider: .singleton,
         configuration: HTTPClientProfile.protectedEgress.configuration
       )
-      let result = await AuthCommand.workflow(
+      let result = await AuthCommand.loginWorkflow(
         bootstrap: bootstrap,
         environment: environment,
         executor: AsyncHTTPExecutor(client: httpClient)
@@ -61,13 +61,7 @@ struct AuthCommand: AsyncParsableCommand {
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
       let bootstrap = try AuthCommand.resolveBootstrapOrExit(environment: environment)
-      try AuthCommand.finish(
-        AuthCommand.workflow(
-          bootstrap: bootstrap,
-          environment: environment,
-          executor: OfflineHTTPExecutor()
-        ).status()
-      )
+      try AuthCommand.finish(AuthCommand.statusWorkflow(bootstrap: bootstrap).status())
     }
   }
 
@@ -79,13 +73,7 @@ struct AuthCommand: AsyncParsableCommand {
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
       let bootstrap = try AuthCommand.resolveBootstrapOrExit(environment: environment)
-      try AuthCommand.finish(
-        AuthCommand.workflow(
-          bootstrap: bootstrap,
-          environment: environment,
-          executor: OfflineHTTPExecutor()
-        ).logout()
-      )
+      try AuthCommand.finish(AuthCommand.logoutWorkflow(bootstrap: bootstrap).logout())
     }
   }
 }
@@ -93,31 +81,52 @@ struct AuthCommand: AsyncParsableCommand {
 // MARK: - Composition
 
 private extension AuthCommand {
-  /// Hands the workflow the real lock, the real seal, the real store, and the owner's real terminal.
-  static func workflow(
+  /// Hands login the real lock, the real seal, the real store, the owner's real terminal, and the
+  /// one HTTP client any auth command opens.
+  static func loginWorkflow(
     bootstrap: AuthBootstrap,
     environment: [String: String],
     executor: any HTTPExecuting
-  ) -> AuthWorkflow {
+  ) -> AuthLoginWorkflow {
     let stateRoot = bootstrap.stateRoot
     let oauth = ChatGPTOAuthClient(http: executor, wallDate: { Date() })
 
-    return AuthWorkflow(
+    return AuthLoginWorkflow(
       bootstrap: bootstrap,
       runtimeSecrets: EnvironmentRuntimeSecrets(stateRoot: stateRoot, environment: environment),
       mutationLock: InstanceLockAdapter(stateRoot: stateRoot),
-      makeCredentialStore: {
-        EncryptedLLMCredentialStore(stateRoot: stateRoot)
-      },
+      makeCredentialStore: credentialStore(in: stateRoot),
       makeDeviceAuthorization: {
         ChatGPTDeviceAuthorization(client: oauth, clock: ContinuousClock())
       },
       tokenExchange: oauth,
       catalog: ChatGPTModelCatalog(http: executor),
       terminal: StandardAuthTerminal(),
-      profileID: { UUID() },
+      profileID: { UUID() }
+    )
+  }
+
+  /// The store and a clock, and nothing else there is to give it: status reads the disk and reports.
+  static func statusWorkflow(bootstrap: AuthBootstrap) -> AuthStatusWorkflow {
+    AuthStatusWorkflow(
+      bootstrap: bootstrap,
+      makeCredentialStore: credentialStore(in: bootstrap.stateRoot),
       wallDate: { Date() }
     )
+  }
+
+  static func logoutWorkflow(bootstrap: AuthBootstrap) -> AuthLogoutWorkflow {
+    let stateRoot = bootstrap.stateRoot
+    return AuthLogoutWorkflow(
+      mutationLock: InstanceLockAdapter(stateRoot: stateRoot),
+      makeCredentialStore: credentialStore(in: stateRoot)
+    )
+  }
+
+  /// Deferred rather than built here, because opening the store touches the state root and a
+  /// mutating command must not have touched it before the lock says it may.
+  static func credentialStore(in stateRoot: URL) -> @Sendable () -> any LLMCredentialStore {
+    { EncryptedLLMCredentialStore(stateRoot: stateRoot) }
   }
 
   /// Resolves the state root and the raw model reference, and nothing else. Deliberately not
@@ -176,22 +185,6 @@ private struct EnvironmentRuntimeSecrets: AuthRuntimeSecretPreparing {
 
   func prepare() throws {
     _ = try RuntimeSecretPreparer.prepare(stateRoot: stateRoot, environment: environment)
-  }
-}
-
-/// The executor status and logout are composed with.
-///
-/// They need one because the workflow is a single type whose login seams must be given something,
-/// and they must not have a real one: neither command has a wire step, and reporting or deleting
-/// what is on this disk is not a thing to open a socket for. So no client is built for them at all,
-/// and this stands where one would have gone — failing closed if a wire step is ever added to a
-/// command that promises it has none, rather than quietly reaching for the network.
-private struct OfflineHTTPExecutor: HTTPExecuting {
-  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-    throw HTTPTransportFailure(
-      disposition: .definitelyNotSent,
-      safeMessage: "this command does not contact the provider"
-    )
   }
 }
 
