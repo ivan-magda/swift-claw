@@ -1,13 +1,6 @@
 import ClawCore
 import Foundation
 
-/// `status`, with no CLI in it.
-///
-/// A read, and only a read. No lock, because an owner must be able to ask what the running daemon is
-/// using without fighting it for the state root; no network and no refresh, because the answer to
-/// "what is stored" is on the disk, and spending a refresh token to answer it would change the thing
-/// being reported. Neither a lock nor a transport is a dependency this type has, so neither is
-/// something a later change can reach for by accident.
 public struct AuthStatusWorkflow: Sendable {
   private let bootstrap: AuthBootstrap
   private let makeCredentialStore: @Sendable () throws -> any LLMCredentialStore
@@ -54,9 +47,11 @@ public struct AuthStatusWorkflow: Sendable {
           + "(\(Self.label(for: freshness(of: stored))))"
       )
     )
+
     if let model = ModelSelection.qualifiedChatGPTModel(in: bootstrap.configuredModel) {
       events.append(.output("model: \(model)"))
     }
+
     return AuthCommandResult(exit: .success, events: events)
   }
 }
@@ -73,9 +68,6 @@ private extension AuthStatusWorkflow {
     return formatter.string(from: date)
   }
 
-  /// Read through the one classifier the runtime credential source and doctor also read through. A
-  /// second rule here would let an owner be told a token is fresh while the source about to spend it
-  /// decides otherwise.
   func freshness(of credential: StoredOAuthCredential) -> ChatGPTCredentialFreshness {
     ChatGPTCredentialFreshness.classify(expiresAt: credential.expiresAt, now: wallDate())
   }
@@ -83,11 +75,11 @@ private extension AuthStatusWorkflow {
   static func label(for freshness: ChatGPTCredentialFreshness) -> String {
     switch freshness {
     case .fresh:
-      return "fresh"
+      "fresh"
     case .expiring:
-      return "expiring"
+      "expiring"
     case .expired:
-      return "expired"
+      "expired"
     }
   }
 }
