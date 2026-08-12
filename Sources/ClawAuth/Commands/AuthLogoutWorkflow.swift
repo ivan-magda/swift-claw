@@ -1,12 +1,6 @@
 import ClawCore
 import Foundation
 
-/// `logout`, with no CLI in it.
-///
-/// Local deletion, and it says so. Nothing here reaches the vendor, so an access token the owner has
-/// already been issued stays valid until it expires — an owner who believes otherwise would stop
-/// looking for a token that is still live. The lock comes first all the same: the record it removes
-/// is the one a running daemon would be refreshing.
 public struct AuthLogoutWorkflow: Sendable {
   private let coordinator: AuthMutationCoordinator
   private let makeCredentialStore: @Sendable () throws -> any LLMCredentialStore
@@ -49,8 +43,7 @@ private extension AuthLogoutWorkflow {
           exit: .success,
           events: [
             .output(
-              "No stored \(ChatGPTProviderMetadata.providerID.rawValue) credential — "
-                + "already logged out."
+              "No stored \(ChatGPTProviderMetadata.providerID.rawValue) credential — already logged out."
             )
           ]
         )
