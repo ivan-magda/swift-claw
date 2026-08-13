@@ -1,8 +1,10 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import Logging
+import Synchronization
 import Testing
 
 @testable import ClawGateway
@@ -51,7 +53,9 @@ private actor BlockingTurnRunner: TurnDispatching {
     batches: [[RawUpdate]],
     allowed: [Int64],
     throwOnGetUpdates: TelegramError? = nil,
-    sendError: TelegramError? = nil
+    sendError: TelegramError? = nil,
+    logger: Logger = TestLog.silent,
+    clock: any Clock<Duration> = ContinuousClock()
   ) throws -> Stack {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -90,7 +94,8 @@ private actor BlockingTurnRunner: TurnDispatching {
       router: router,
       cursor: cursor,
       pollTimeout: 0,
-      logger: TestLog.silent
+      logger: logger,
+      clock: clock
     )
 
     return Stack(poller: poller, transport: transport, cursor: cursor, dispatcher: dispatcher)
@@ -225,37 +230,109 @@ private actor BlockingTurnRunner: TurnDispatching {
     #expect(try stack.cursor.loadCursor() == nil)  // …but the offset did NOT advance
   }
 
-  @Test func conflict409IsHandledLoudlyWithoutHotSpin() async throws {
-    // given — getUpdates throws 409; react logs critical + backs off, the loop survives
+  @Test(.timeLimit(.minutes(1)))
+  func conflict409LogsCriticalBacksOffTenSecondsAndRepolls() async throws {
+    // given — getUpdates repeatedly throws 409 and the injected clock holds each backoff
+    let recovery = PollerRecoveryControl(expectedFirstDelay: .seconds(10))
+    defer { recovery.releaseAll() }
+    let logs = RecordingLogCapture()
     let stack = try makeStack(
       batches: [],
       allowed: [42],
-      throwOnGetUpdates: .conflict409(description: "terminated by other getUpdates")
+      throwOnGetUpdates: .conflict409(description: "terminated by other getUpdates"),
+      logger: logs.logger(),
+      clock: recovery.clock
     )
 
-    // when — wait until the 409 has been hit, then cancel mid-backoff
+    // when — observe the first backoff, release it, then hold the second one after the retry
     let task = Task { try await stack.poller.run() }
-    await stack.transport.waitForPolls(atLeast: 1)
+    await recovery.firstBackoffStarted.wait()
+    recovery.allowRetry()
+    await recovery.secondBackoffStarted.wait()
     task.cancel()
 
-    // then
-    try await task.value  // returns cleanly, no throw/crash
+    // then — the fault is loud, the requested delay is exact, and one release permits one re-poll
+    try await task.value
+    #expect(recovery.requestedDelays == [.seconds(10), .seconds(10)])
+    #expect(await stack.transport.pollCount == 2)
+    let critical = try #require(logs.entries.first { entry in entry.level == .critical })
+    #expect(critical.message.contains("409 Conflict"))
+    #expect(critical.message.contains("terminated by other getUpdates"))
   }
 
-  @Test func readTimeoutOnGetUpdatesBacksOffAndTheLoopSurvives() async throws {
-    // given — a socket read timeout surfaces from the client as TelegramError.transport (A3)
+  @Test(.timeLimit(.minutes(1)))
+  func readTimeoutLogsErrorBacksOffThreeSecondsAndRepolls() async throws {
+    // given — a socket read timeout surfaces as TelegramError.transport on every poll
+    let recovery = PollerRecoveryControl(expectedFirstDelay: .seconds(3))
+    defer { recovery.releaseAll() }
+    let logs = RecordingLogCapture()
     let stack = try makeStack(
       batches: [],
       allowed: [42],
-      throwOnGetUpdates: .transport("getUpdates: read timed out")
+      throwOnGetUpdates: .transport("getUpdates: read timed out"),
+      logger: logs.logger(),
+      clock: recovery.clock
     )
 
-    // when — the first poll throws; react() logs + backs off; cancel mid-backoff
+    // when — observe the first backoff, release it, then hold the second one after the retry
     let task = Task { try await stack.poller.run() }
-    await stack.transport.waitForPolls(atLeast: 1)
+    await recovery.firstBackoffStarted.wait()
+    recovery.allowRetry()
+    await recovery.secondBackoffStarted.wait()
     task.cancel()
 
-    // then — the loop absorbed the network error and exits cleanly, never crashing the daemon
+    // then — recovery reports the transport fault, requests its delay, and keeps polling
     try await task.value
+    #expect(recovery.requestedDelays == [.seconds(3), .seconds(3)])
+    #expect(await stack.transport.pollCount == 2)
+    let error = try #require(logs.entries.first { entry in entry.level == .error })
+    #expect(error.message.contains("telegram error"))
+    #expect(error.message.contains("getUpdates: read timed out"))
+  }
+}
+
+private final class PollerRecoveryControl: Sendable {
+  let firstBackoffStarted = AsyncGate()
+  let secondBackoffStarted = AsyncGate()
+
+  private let retryAllowed = AsyncGate()
+  private let subsequentBackoffHeld = AsyncGate()
+  private let delays = Mutex<[Duration]>([])
+  private let expectedFirstDelay: Duration
+
+  init(expectedFirstDelay: Duration) {
+    self.expectedFirstDelay = expectedFirstDelay
+  }
+
+  var clock: ScriptedClock {
+    ScriptedClock { [self] delay in
+      let sleepCount = delays.withLock { recorded in
+        recorded.append(delay)
+        return recorded.count
+      }
+      if sleepCount == 1 {
+        #expect(delay == expectedFirstDelay)
+        firstBackoffStarted.open()
+        await retryAllowed.wait()
+      } else {
+        secondBackoffStarted.open()
+        await subsequentBackoffHeld.wait()
+      }
+    }
+  }
+
+  var requestedDelays: [Duration] {
+    delays.withLock { recorded in
+      recorded
+    }
+  }
+
+  func allowRetry() {
+    retryAllowed.open()
+  }
+
+  func releaseAll() {
+    retryAllowed.open()
+    subsequentBackoffHeld.open()
   }
 }

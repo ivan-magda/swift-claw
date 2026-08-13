@@ -1,140 +1,92 @@
-import ClawTestSupport
-import Foundation
 import Testing
 
 @testable import ClawCore
 
 @Suite struct ExecutionContractsTests {
-  private let passingHealth = SandboxHealth(
-    available: true,
-    osOK: true,
-    engineVersion: "1.1.0",
-    versionOK: true,
-    imageDigestOK: true,
-    capsEmpty: true,
-    netIsolated: true,
-    capsMatch: true,
-    reaperOK: true,
-    rootfsRO: true,
-    stagingRO: true,
-    interpretersOK: true,
-    lastError: nil
-  )
-
-  @Test func requestCarriesOnlyApprovedGuestInputs() {
+  @Test func healthIsReadyWhenEveryGatePasses() {
     // given
-    let entrypoint = StagedFile(
-      name: ".clawd-entrypoint.py",
-      bytes: Data("print('ok')".utf8),
-      mode: .readExecute
-    )
-    let input = StagedFile(name: "notes.txt", bytes: Data("hello".utf8), mode: .readOnly)
+    let health = SandboxHealth.passingForTests
 
     // when
-    let request = ExecutionRequest(
-      language: .python,
-      entrypoint: entrypoint,
-      inputs: [input],
-      network: false,
-      timeout: .seconds(30)
-    )
+    let isReady = health.isReady
 
     // then
-    #expect(request.language == .python)
-    #expect(request.entrypoint == entrypoint)
-    #expect(request.inputs == [input])
-    #expect(request.network == false)
-    #expect(request.timeout == .seconds(30))
-    #expect(FileMode.readOnly.rawValue == 0o400)
-    #expect(FileMode.readExecute.rawValue == 0o500)
+    #expect(isReady)
   }
 
-  @Test func healthIsReadyOnlyWhenEveryGatePasses() {
-    // given / when / then
-    #expect(passingHealth.isReady)
-    #expect(SandboxHealth.passingForTests == passingHealth)
+  @Test func healthIsNotReadyWhenAnyGateFails() {
+    // given
+    let failedHealth = HealthGate.allCases.map(Self.health(failing:))
 
-    let failed = SandboxHealth(
-      available: true,
-      osOK: true,
+    // when
+    let readiness = failedHealth.map(\.isReady)
+
+    // then
+    #expect(readiness == Array(repeating: false, count: HealthGate.allCases.count))
+  }
+}
+
+// MARK: - Health Fixtures
+
+private extension ExecutionContractsTests {
+  enum HealthGate: CaseIterable {
+    case available
+    case operatingSystem
+    case version
+    case imageDigest
+    case emptyCapabilities
+    case networkIsolation
+    case matchingCapabilities
+    case reaper
+    case readOnlyRoot
+    case readOnlyStaging
+    case interpreters
+    case lastError
+  }
+
+  static func health(failing gate: HealthGate) -> SandboxHealth {
+    var available = true
+    var osOK = true
+    var versionOK = true
+    var imageDigestOK = true
+    var capsEmpty = true
+    var netIsolated = true
+    var capsMatch = true
+    var reaperOK = true
+    var rootfsRO = true
+    var stagingRO = true
+    var interpretersOK = true
+    var lastError: String?
+
+    switch gate {
+    case .available: available = false
+    case .operatingSystem: osOK = false
+    case .version: versionOK = false
+    case .imageDigest: imageDigestOK = false
+    case .emptyCapabilities: capsEmpty = false
+    case .networkIsolation: netIsolated = false
+    case .matchingCapabilities: capsMatch = false
+    case .reaper: reaperOK = false
+    case .readOnlyRoot: rootfsRO = false
+    case .readOnlyStaging: stagingRO = false
+    case .interpreters: interpretersOK = false
+    case .lastError: lastError = "probe failed"
+    }
+
+    return SandboxHealth(
+      available: available,
+      osOK: osOK,
       engineVersion: "1.1.0",
-      versionOK: true,
-      imageDigestOK: true,
-      capsEmpty: true,
-      netIsolated: false,
-      capsMatch: true,
-      reaperOK: true,
-      rootfsRO: true,
-      stagingRO: true,
-      interpretersOK: true,
-      lastError: "network escaped"
+      versionOK: versionOK,
+      imageDigestOK: imageDigestOK,
+      capsEmpty: capsEmpty,
+      netIsolated: netIsolated,
+      capsMatch: capsMatch,
+      reaperOK: reaperOK,
+      rootfsRO: rootfsRO,
+      stagingRO: stagingRO,
+      interpretersOK: interpretersOK,
+      lastError: lastError
     )
-    #expect(failed.isReady == false)
-  }
-
-  @Test func fakeRecordsRequestsAndNeverInventsSuccess() async {
-    // given
-    let scripted = ExecutionResult(
-      terminationReason: .exited(code: 0),
-      stdout: "ok\n",
-      stderr: "",
-      truncatedRawBytes: false,
-      wallClock: .milliseconds(8)
-    )
-    let backend = FakeExecutionBackend(results: [scripted])
-    let request = ExecutionRequest(
-      language: .sh,
-      entrypoint: StagedFile(
-        name: ".clawd-entrypoint.sh",
-        bytes: Data("printf ok".utf8),
-        mode: .readExecute
-      ),
-      inputs: [],
-      network: false,
-      timeout: .seconds(5)
-    )
-
-    // when
-    let first = await backend.run(request)
-    let second = await backend.run(request)
-    let health = await backend.prepare()
-    await backend.shutdown()
-
-    // then
-    #expect(first == scripted)
-    #expect(
-      second.terminationReason
-        == .unavailable(reason: "no scripted execution result")
-    )
-    #expect(await backend.recordedRequests() == [request, request])
-    #expect(await backend.probe() == .available(engineVersion: "1.1.0"))
-    #expect(health == .passingForTests)
-    #expect(await backend.prepareCallCount() == 1)
-    #expect(await backend.shutdownCallCount() == 1)
-  }
-
-  @Test func fakeCanBeReScriptedAfterConstruction() async {
-    // given
-    let backend = FakeExecutionBackend(results: [])
-    let result = ExecutionResult(
-      terminationReason: .timedOutKilled,
-      stdout: "",
-      stderr: "",
-      truncatedRawBytes: false,
-      wallClock: .seconds(2)
-    )
-    let request = ExecutionRequest(
-      language: .python,
-      entrypoint: StagedFile(name: "entry.py", bytes: Data(), mode: .readExecute),
-      inputs: [],
-      network: false,
-      timeout: .seconds(1)
-    )
-
-    // when
-    await backend.enqueue(result)
-
-    // then
-    #expect(await backend.run(request) == result)
   }
 }

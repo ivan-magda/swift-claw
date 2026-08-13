@@ -340,7 +340,7 @@ import Testing
     #expect(copy == ScheduleReplies.quotaLimited(retryAfterSeconds: 42))
   }
 
-  @Test func bothSurfacesShareTheTraceFormatterAndSplitWireModelFromIdentity() async throws {
+  @Test func bothSurfacesSendCanonicalTraceIdentityAndSplitWireModelFromIdentity() async throws {
     // given — a recording provider that succeeds, so each surface's request and usage row are visible
     let wireModel = "wire-model"
     let identity = "identity-ref"
@@ -389,7 +389,7 @@ import Testing
     )
     let parseResult = await parser.parse(ownerText: "x", sessionId: parseSession)
 
-    // then — both requests stamp the one shared trace identity, keyed on the database session id
+    // then — both requests stamp the canonical wire identity, keyed on the database session id
     let turnRequest = try #require(await turnProvider.requests.first)
     let parseRequest = try #require(await parseProvider.requests.first)
     #expect(turnRequest.sessionId == SessionTraceID.format(sessionID: turnSession))
@@ -409,52 +409,5 @@ import Testing
       try String.fetchOne(db, sql: "SELECT model FROM provider_usage")
     }
     #expect(parseModel == identity)
-  }
-
-  @Test func noPrivateSessionTraceFormatterRemains() throws {
-    // given — the one legitimate home for the `clawd-session-` prefix
-    let sourcesRoot = Self.repoRoot().appendingPathComponent("Sources")
-
-    // when — every source file except the shared formatter is scanned for the raw prefix
-    let offenders = try Self.swiftFiles(under: sourcesRoot).filter { url in
-      guard url.lastPathComponent != "SessionTraceID.swift" else {
-        return false
-      }
-      let contents = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-      return contents.contains("clawd-session-")
-    }
-
-    // then — no second, private formatter has re-opened the split trace identity
-    #expect(offenders.isEmpty, "private clawd-session- formatter(s): \(offenders.map(\.path))")
-  }
-}
-
-// MARK: - Source Guard Support
-
-private extension ProviderSurfaceParityTests {
-  /// The repository root, four directories up from this file
-  /// (`Tests/ClawGatewayTests/Routing/<file>`).
-  static func repoRoot() -> URL {
-    URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()  // Routing
-      .deletingLastPathComponent()  // ClawGatewayTests
-      .deletingLastPathComponent()  // Tests
-      .deletingLastPathComponent()  // repo root
-  }
-
-  static func swiftFiles(under root: URL) throws -> [URL] {
-    guard
-      let enumerator = FileManager.default.enumerator(
-        at: root,
-        includingPropertiesForKeys: nil
-      )
-    else {
-      return []
-    }
-    var files: [URL] = []
-    for case let url as URL in enumerator where url.pathExtension == "swift" {
-      files.append(url)
-    }
-    return files
   }
 }

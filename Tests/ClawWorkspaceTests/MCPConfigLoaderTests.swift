@@ -225,9 +225,15 @@ import Testing
     // given
     let yaml = "servers:\n  - name: docs\n   url: [unclosed\n"
 
-    // when / then
-    #expect(throws: MCPConfigError.self) {
+    // when
+    let error = #expect(throws: MCPConfigError.self) {
       try MCPConfigLoader.parse(yaml: yaml)
+    }
+
+    // then
+    guard case .malformed = error else {
+      Issue.record("expected malformed, got \(String(describing: error))")
+      return
     }
   }
 

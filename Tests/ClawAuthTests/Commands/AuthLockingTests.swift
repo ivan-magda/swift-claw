@@ -152,7 +152,7 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
       #expect(blocked.exit == .commandFailure)
       #expect(blocked.transcript.lowercased().contains("stop"))
       #expect(world.log.recorded.isEmpty)
-      #expect(world.storedCredential == AuthFixture.priorCredential)
+      #expect(try world.loadStoredCredential() == AuthFixture.priorCredential)
 
       // when — the daemon stops
       daemon.release()
@@ -160,7 +160,8 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
 
       // then
       #expect(allowed.exit == .success)
-      #expect(world.storedCredential == nil)
+      #expect(try world.loadStoredCredential() == nil)
+      #expect(FileManager.default.fileExists(atPath: world.paths.credentialEnvelope.path))
       #expect(world.log.recorded.contains(.credentialDeleted))
     }
   }

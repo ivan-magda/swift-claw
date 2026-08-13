@@ -52,20 +52,27 @@ import Testing
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func abandoningTheIteratorMidStreamIsConservative() async {
-    // given — a stream that publishes a delta the consumer then walks away from
-    let harness = ProviderHarness(steps: [.stream(okHead, Fixtures.slowSuccess())])
-
-    // when — the consumer breaks after the first delta, dropping the iterator
+  func abandoningAHeldOpenIteratorCancelsWithConservativeAccounting() async throws {
+    // given — the HTTP producer emits a delta, then remains live until the test releases it
+    let hold = ScriptedStreamHold()
+    defer { hold.release.open() }
+    let harness = ProviderHarness(
+      steps: [.streamThenBlock(okHead, Fixtures.slowSuccess(), hold)]
+    )
     let stream = harness.provider.stream(request: plainRequest)
-    var iterator = stream.makeAsyncIterator()
-    _ = try? await iterator.next()
 
-    // then — whether the abandonment lease stopped the work first or the finite body reached its
-    // ambiguous end first, the tokens the stream produced are never silently written off: the
-    // accounting stays conservative rather than resetting to notStarted
+    // when — the helper returns only after reading a real delta while the transfer is held open;
+    // returning releases the iterator before this test joins the owning stream
+    try await readOneDeltaAndAbandon(from: stream, onceProducerIsHeldBy: hold)
+    hold.release.open()
+
+    // then — iterator abandonment, rather than natural EOF, cancelled the live inference
     let terminal = await stream.awaitTermination()
-    #expect(Support.isConservative(Support.accounting(of: terminal)))
+    guard case .cancelled(let accounting) = terminal else {
+      Issue.record("expected iterator abandonment to cancel the stream, got \(terminal)")
+      return
+    }
+    #expect(Support.isConservative(accounting))
   }
 
   @Test(.timeLimit(.minutes(1)))
@@ -100,6 +107,15 @@ import Testing
     // then
     #expect(first == second)
   }
+}
+
+private func readOneDeltaAndAbandon(
+  from stream: LLMEventStream,
+  onceProducerIsHeldBy hold: ScriptedStreamHold
+) async throws {
+  var iterator = stream.makeAsyncIterator()
+  #expect(try await iterator.next() == .delta("Hello"))
+  await hold.started.wait()
 }
 
 // MARK: - Test doubles

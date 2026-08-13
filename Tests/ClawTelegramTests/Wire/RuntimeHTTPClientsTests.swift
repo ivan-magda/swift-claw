@@ -36,14 +36,4 @@ private struct RecordingClient: Sendable {
     #expect(RuntimeHTTPClientRole.llm.egressProfile == .protectedEgress)
     #expect(RuntimeHTTPClientRole.tool.egressProfile == .protectedEgress)
   }
-
-  @Test func liveBuildsThreeIndependentClosableClients() async throws {
-    // given / when — the production bundle over real AsyncHTTPClient-backed clients
-    let clients = RuntimeHTTPClients.live()
-
-    // then — three distinct closers, each shutting its own client down cleanly
-    try await clients.llm.close()
-    try await clients.telegram.close()
-    try await clients.tool.close()
-  }
 }

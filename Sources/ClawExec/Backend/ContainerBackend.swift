@@ -22,6 +22,7 @@ public actor ContainerBackend {
   let sanitizeReason: @Sendable (String) -> String
   let now: @Sendable () -> ContinuousClock.Instant
   let supportedHost: @Sendable () -> Bool
+  let executionAdmitted: @Sendable () -> Void
   // Drives the host-watchdog deadline sleeps; injectable so tests can fire a watchdog
   // without waiting out a real per-command allowance.
   let watchdogSleep: @Sendable (Duration) async throws -> Void
@@ -47,7 +48,8 @@ public actor ContainerBackend {
       commands: commands,
       sanitizeReason: sanitizeReason,
       now: now,
-      supportedHost: Self.defaultSupportedHost
+      supportedHost: Self.defaultSupportedHost,
+      executionAdmitted: {}
     )
   }
 
@@ -58,6 +60,7 @@ public actor ContainerBackend {
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant,
     supportedHost: @escaping @Sendable () -> Bool,
+    executionAdmitted: @escaping @Sendable () -> Void = {},
     watchdogSleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
       try await Task.sleep(for: duration)
     }
@@ -69,6 +72,7 @@ public actor ContainerBackend {
     self.sanitizeReason = sanitizeReason
     self.now = now
     self.supportedHost = supportedHost
+    self.executionAdmitted = executionAdmitted
     self.watchdogSleep = watchdogSleep
 
     self.sensitiveHostPaths = [
@@ -159,16 +163,6 @@ public actor ContainerBackend {
 
   func setPreparedInitImageForTesting(_ image: String?) {
     preparedInitImage = image
-  }
-
-  var queuedExecutionCountForTesting: Int {
-    executionTasks.count
-  }
-
-  func runSerializedForTesting(
-    operation: @escaping @Sendable () async -> ExecutionResult
-  ) async -> ExecutionResult {
-    await enqueueExecution(operation: operation)
   }
 }
 

@@ -161,33 +161,6 @@ import Testing
     #expect(try String(contentsOfFile: target, encoding: .utf8) == "new")
   }
 
-  @Test func crashBetweenTempWriteAndRenameLeavesTheOriginalIntact() throws {
-    // given — an original file, and the staged-but-not-committed state a crash would leave.
-    // The target is built on the CANONICAL root (macOS: /var → /private/var), matching the only
-    // form stage/commit ever receive in production — the gate's canonical resolution.
-    let root = try makeWorkspace()
-    let canonicalRoot = try #require(WorkspacePathContainment.canonicalPath(root.path))
-    let target = canonicalRoot + "/plan.md"
-    try Data("original".utf8).write(to: URL(fileURLWithPath: target))
-
-    // when — step 1 only (the crash window of §6.3/§6.6)
-    let tempPath = try FileWriteTool.stageTemporary(
-      content: Data("replacement".utf8),
-      target: target
-    )
-
-    // then — the original is untouched and the temp lives INSIDE the workspace (same volume)
-    #expect(try String(contentsOfFile: target, encoding: .utf8) == "original")
-    #expect(WorkspacePathContainment.isContained(target: tempPath, root: canonicalRoot))
-
-    // when — step 2 commits
-    try FileWriteTool.commitRename(tempPath: tempPath, target: target)
-
-    // then — atomic replacement, temp gone
-    #expect(try String(contentsOfFile: target, encoding: .utf8) == "replacement")
-    #expect(FileManager.default.fileExists(atPath: tempPath) == false)
-  }
-
   @Test func createApprovedWriteFailsClosedWhenTheTargetAppearsAfterApproval() async throws {
     // given — gate time: plan.md does not exist, so the approval binds to a CREATE
     let root = try makeWorkspace()

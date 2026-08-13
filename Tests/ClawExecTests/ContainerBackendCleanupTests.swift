@@ -38,11 +38,13 @@ import Testing
     #expect(await runner.recorded().count == commandsAfterFirst)
   }
 
-  @Test func failedCleanupAlsoRefusesRunsAlreadyQueuedBehindIt() async throws {
+  @Test(.timeLimit(.minutes(1)))
+  func failedCleanupAlsoRefusesRunsAlreadyQueuedBehindIt() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let gate = AsyncGate()
+    let admissions = ExecutionAdmissionRecorder()
     let runner = ScriptedCommandRunner { command, history in
       if command.arguments.first == "run" {
         writeCidfile(from: command.arguments)
@@ -55,12 +57,13 @@ import Testing
       }
       return commandResult(.exited(0))
     }
-    let backend = fixture.backend(commands: runner)
+    let backend = fixture.backend(commands: runner, executionAdmitted: admissions.record)
     await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
     let first = Task { await backend.run(executionRequest()) }
+    await admissions.waitForCount(1)
     await runner.waitForCount(1)
     let second = Task { await backend.run(executionRequest()) }
-    await waitForQueuedCount(2, backend: backend)
+    await admissions.waitForCount(2)
 
     // when
     await gate.open()

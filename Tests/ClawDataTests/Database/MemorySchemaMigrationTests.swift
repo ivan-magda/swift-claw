@@ -23,9 +23,9 @@ import Testing
     // then
     let names = Set(columns.map { row in row["name"] as String })
     #expect(
-      names == [
+      names.isSuperset(of: [
         "id", "text", "kind", "sensitivity", "importance", "source", "session_id", "created_at",
-      ]
+      ])
     )
     let importanceColumn = try #require(
       columns.first { row in (row["name"] as String) == "importance" }

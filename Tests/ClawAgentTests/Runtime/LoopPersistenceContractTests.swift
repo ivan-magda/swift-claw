@@ -149,23 +149,34 @@ import Testing
   }
 
   @Test func auditWriteFailureLogsAndContinues() async throws {
-    // given — audit is observability, not a gate (§6)
+    // given — audit is observability, not a gate
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal(id: "c1")]),
       okResponse(content: "finished anyway"),
     ])
     let auditLog = RecordingAuditLog(thrown: StoreError.unexpected("scripted"))
+    let logs = RecordingLogCapture()
     let runtime = makeRuntime(
       provider: provider,
       toolDispatcher: ScriptedDispatcher(respond: okOutcome()),
-      auditLog: auditLog
+      auditLog: auditLog,
+      logger: logs.logger()
     )
 
     // when
     let outcome = try await run(runtime)
 
-    // then — the run completed despite every audit write failing
+    // then — the failure is visible to the operator, but audit observability does not gate the run
     #expect(try requireCompleted(outcome.result).content == "finished anyway")
+    let warnings = logs.entries.filter { entry in
+      entry.level == .warning
+    }
+    let warning = try #require(warnings.first)
+    #expect(warnings.count == 1)
+    #expect(warning.message.contains("audit write failed"))
+    #expect(warning.message.contains("scripted"))
+    #expect(warning.metadata["run"]?.description == "1")
+    #expect(warning.metadata["session"]?.description == "1")
   }
 
   @Test func auditWriteDiskFullPropagates() async throws {

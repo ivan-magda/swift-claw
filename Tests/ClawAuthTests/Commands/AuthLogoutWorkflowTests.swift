@@ -27,7 +27,8 @@ import Testing
           .lockReleased,
         ]
       )
-      #expect(world.storedCredential == nil)
+      #expect(try world.loadStoredCredential() == nil)
+      #expect(FileManager.default.fileExists(atPath: world.paths.credentialEnvelope.path))
     }
   }
 
@@ -93,7 +94,7 @@ import Testing
       #expect(result.transcript.lowercased().contains("stop"))
       #expect(world.log.recorded.isEmpty)
       // The credential the daemon is using is exactly as it was.
-      #expect(world.storedCredential == AuthFixture.priorCredential)
+      #expect(try world.loadStoredCredential() == AuthFixture.priorCredential)
     }
   }
 }

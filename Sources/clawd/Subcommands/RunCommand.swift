@@ -24,8 +24,8 @@ struct RunCommand: AsyncParsableCommand {
     // Before the logger on purpose: the MCP tokens are part of the redaction set the log backend is
     // installed with, so they have to be in hand before anything can write a line.
     let mcp = try Self.loadMCPOrExit(config: config)
-    let redactionValues = mcp.redactionValues(with: secrets)
-    let logger = Self.bootstrapLogger(redactionValues: redactionValues)
+    let bootLogging = Self.makeBootLogging(secrets: secrets, mcp: mcp)
+    let logger = bootLogging.logger
 
     let stores = try Self.openStoresOrExit(config: config, logger: logger)
     try Self.ensureWorkspaceDirectoryOrExit(config: config)
@@ -51,7 +51,7 @@ struct RunCommand: AsyncParsableCommand {
     logger.info("clawd starting (owners allowlisted: \(config.allowlist.count))")
     try await Self.serveThenShutDown(
       composed: composed,
-      redactionValues: redactionValues,
+      redactionValues: bootLogging.redactionValues,
       logger: logger
     )
   }
@@ -59,14 +59,15 @@ struct RunCommand: AsyncParsableCommand {
 
 // MARK: - Serve & Shutdown
 
-private extension RunCommand {
+extension RunCommand {
   /// Runs the service graph, then sequences dependent-resource teardown in the mandated order. On a
   /// lane-drain timeout it terminates the process from here — before `run`'s `defer { lock.release()
   /// }` and any client teardown unwind — so the held instance-lock fd stays owned until termination.
   static func serveThenShutDown(
     composed: RunComposition.Composed,
     redactionValues: [String],
-    logger: Logger
+    logger: Logger,
+    terminator: FatalProcessTerminator = .production
   ) async throws {
     let bundle = composed.bundle
     let clients = composed.clients
@@ -113,7 +114,7 @@ private extension RunCommand {
     case .failed(let error):
       throw error
     case .fatalLaneTimeout(let activeRunIDs):
-      try FatalProcessTerminator.production.fatalLaneDrainTimeout(
+      try terminator.fatalLaneDrainTimeout(
         activeRunIDs: activeRunIDs,
         logger: logger
       )
@@ -141,6 +142,33 @@ private extension RunCommand {
 }
 
 // MARK: - Environment Bootstrap
+
+extension RunCommand {
+  typealias LoggerBootstrap = @Sendable ([String]) -> Logger
+
+  struct BootLogging {
+    let logger: Logger
+    let redactionValues: [String]
+  }
+
+  static func makeBootLogging(
+    secrets: Secrets,
+    mcp: MCPBootInputs,
+    bootstrap: LoggerBootstrap
+  ) -> BootLogging {
+    let redactionValues = mcp.redactionValues(with: secrets)
+    return BootLogging(
+      logger: bootstrap(redactionValues),
+      redactionValues: redactionValues
+    )
+  }
+
+  static func makeBootLogging(secrets: Secrets, mcp: MCPBootInputs) -> BootLogging {
+    makeBootLogging(secrets: secrets, mcp: mcp) { redactionValues in
+      bootstrapLogger(redactionValues: redactionValues)
+    }
+  }
+}
 
 private extension RunCommand {
   /// Installs the redacting swift-log backend (level from `CLAW_LOG_LEVEL`, default `.info`) over

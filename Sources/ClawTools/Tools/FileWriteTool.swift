@@ -197,7 +197,7 @@ public struct FileWriteTool: Tool {
 
 // MARK: - Atomic Write Steps
 
-extension FileWriteTool {
+private extension FileWriteTool {
   struct RenameFailed: Error {
     let code: Int32
   }
@@ -206,9 +206,6 @@ extension FileWriteTool {
   /// approved "create", so replacing is off the table — fail closed.
   struct CreateCollision: Error {}
 
-  /// Step 1 of the atomic write, split from step 2 so the crash-window invariant is
-  /// testable: the temp file lives NEXT TO the target (same directory ⇒ same volume ⇒
-  /// `rename(2)` is atomic), inside the workspace by construction.
   static func stageTemporary(content: Data, target: String) throws -> String {
     let parent = (target as NSString).deletingLastPathComponent
     let leaf = (target as NSString).lastPathComponent
@@ -217,8 +214,6 @@ extension FileWriteTool {
     return tempPath
   }
 
-  /// Step 2 for an OVERWRITE-approved write: `rename(2)` replaces the target atomically; the
-  /// pre-existing file survives any crash before this call returns.
   static func commitRename(tempPath: String, target: String) throws {
     guard rename(tempPath, target) == 0 else {
       let code = errno
@@ -227,10 +222,6 @@ extension FileWriteTool {
     }
   }
 
-  /// Step 2 for a CREATE-approved write: `link(2)` publishes the temp atomically and fails with
-  /// `EEXIST` if the target appeared while the approval was pending — the no-replace analog of
-  /// `rename(2)`, portable across Darwin and Glibc (no `renamex_np`/`renameat2` availability
-  /// dance). The temp's extra link is removed on success.
   static func commitCreate(tempPath: String, target: String) throws {
     guard link(tempPath, target) == 0 else {
       let code = errno

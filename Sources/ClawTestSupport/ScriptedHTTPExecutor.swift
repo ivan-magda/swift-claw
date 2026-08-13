@@ -12,11 +12,10 @@ public struct ScriptedTransportFailure: Error, CustomStringConvertible, Sendable
   public var description: String { message }
 }
 
-/// Parks a scripted stream's body producer inside the exchange: `started` opens on entry (so a test
-/// knows the consumer is live inside the transfer), and the producer then waits on `release` before
-/// it may send. Ignoring cancellation is deliberate — a held producer must outlive a cancel, which is
-/// what a shutdown-grace test is there to observe. Always pair it with a `defer { release.open() }`
-/// so teardown cannot strand the producer.
+/// Parks a scripted stream's body producer at a chosen boundary inside the exchange: `started` opens
+/// on entry, and the producer then waits on `release`. Ignoring cancellation is deliberate — a held
+/// producer must outlive a cancel, which is what shutdown and abandonment tests observe. Always pair
+/// it with a `defer { release.open() }` so teardown cannot strand the producer.
 public struct ScriptedStreamHold: Sendable {
   public let started: AsyncGate
   public let release: AsyncGate
@@ -53,6 +52,9 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
     /// Chunks the producer may not send until the hold is released, so a test can keep a stream open
     /// and watch what its consumer does meanwhile.
     case blockedStream(HTTPStreamHead, [Data], ScriptedStreamHold)
+    /// Sends the chunks, then keeps the transfer open until released. A consumer can receive a real
+    /// event and abandon the stream while its producer is provably still live.
+    case streamThenBlock(HTTPStreamHead, [Data], ScriptedStreamHold)
   }
 
   public struct Recorded: Sendable {
@@ -87,7 +89,7 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
     case .ok(let result): return result
     case .fail(let error): throw error
     case .transportFailure(let failure): throw failure
-    case .stream, .streamFailure, .respondingStream, .blockedStream:
+    case .stream, .streamFailure, .respondingStream, .blockedStream, .streamThenBlock:
       throw ScriptedTransportFailure(message: "expected buffered step, got streaming step")
     }
   }
@@ -107,7 +109,25 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
         safeMessage: "scripted executor exhausted"
       )
     }
-    switch steps.removeFirst() {
+    return try Self.exchange(
+      for: steps.removeFirst(),
+      request: request,
+      maximumUnreadBytes: maximumUnreadBytes,
+      errorBytes: errorBytes
+    )
+  }
+}
+
+// MARK: - Streaming steps
+
+private extension ScriptedHTTPExecutor {
+  static func exchange(
+    for step: Step,
+    request: HTTPRequest,
+    maximumUnreadBytes: Int,
+    errorBytes: Int
+  ) throws -> HTTPStreamExchange {
+    switch step {
     case .transportFailure(let failure):
       throw failure
     case .stream(let head, let chunks):
@@ -142,7 +162,15 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
         chunks: chunks,
         unread: maximumUnreadBytes,
         error: errorBytes,
-        hold: hold
+        leadingHold: hold
+      )
+    case .streamThenBlock(let head, let chunks, let hold):
+      return Self.exchange(
+        head: head,
+        chunks: chunks,
+        unread: maximumUnreadBytes,
+        error: errorBytes,
+        trailingHold: hold
       )
     case .ok, .fail:
       throw HTTPTransportFailure(
@@ -201,16 +229,18 @@ private extension ScriptedHTTPExecutor {
     unread: Int,
     error: Int,
     failure: HTTPTransportFailure? = nil,
-    hold: ScriptedStreamHold? = nil
+    leadingHold: ScriptedStreamHold? = nil,
+    trailingHold: ScriptedStreamHold? = nil
   ) -> HTTPStreamExchange {
     HTTPStreamExchange.make(
       head: head,
       maximumUnreadBodyBytes: HTTPResponseBodyPolicy.isSuccess(head.statusCode) ? unread : error
     ) { sink in
-      if let hold {
-        hold.started.open()
-        await hold.release.waitIgnoringCancellation()
+      if let leadingHold {
+        leadingHold.started.open()
+        await leadingHold.release.waitIgnoringCancellation()
       }
+
       do {
         for chunk in chunks {
           try await sink.send(chunk)
@@ -218,9 +248,16 @@ private extension ScriptedHTTPExecutor {
       } catch {
         return .cancelled(.mayHaveBeenSent)
       }
+
+      if let trailingHold {
+        trailingHold.started.open()
+        await trailingHold.release.waitIgnoringCancellation()
+      }
+
       if let failure {
         return .failed(failure)
       }
+
       return .completed
     }
   }

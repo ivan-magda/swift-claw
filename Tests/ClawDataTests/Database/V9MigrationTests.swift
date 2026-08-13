@@ -316,26 +316,6 @@ import Testing
 
   // MARK: - FTS Synchronization
 
-  @Test func theRebuiltMessagesTableKeepsItsFtsSynchronizationTriggers() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-
-    // when
-    try ClawDatabase.migrate(queue)
-
-    // then — the external-content index is driven by triggers alone; without all three it
-    // silently drifts from the table it claims to index
-    let triggers = try queue.read { db in
-      Set(
-        try String.fetchAll(
-          db,
-          sql: "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'messages'"
-        )
-      )
-    }
-    #expect(triggers == ["__messages_fts_ai", "__messages_fts_ad", "__messages_fts_au"])
-  }
-
   @Test func theFtsIndexCarriesNoProviderStateColumn() throws {
     // given — replay state is opaque bytes only its adapter may read; indexing it would both
     // corrupt the index and expose the payload to a content search
@@ -376,7 +356,7 @@ import Testing
     #expect(Set(matched) == [1, 3])
   }
 
-  @Test func aMessageWrittenAfterTheRebuildIsIndexedAndUnindexedByTheTriggers() throws {
+  @Test func aMessageWrittenAfterTheRebuildTracksInsertUpdateAndDelete() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVEight(queue)
@@ -397,14 +377,40 @@ import Testing
     }
     #expect(indexed == messageId)
 
-    // and the delete trigger unindexes it
+    // when
     try queue.write { db in
-      try db.execute(sql: "DELETE FROM messages WHERE id = ?", arguments: [messageId])
+      try db.execute(
+        sql: "UPDATE messages SET content = 'renamed needle' WHERE id = ?",
+        arguments: [messageId]
+      )
     }
-    let remaining = try queue.read { db in
+
+    // then
+    let oldContentCount = try queue.read { db in
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH 'postmigration'"
+      )
+    }
+    let updated = try queue.read { db in
+      try Int64.fetchOne(
+        db,
+        sql: "SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'renamed'"
+      )
+    }
+    #expect(oldContentCount == 0)
+    #expect(updated == messageId)
+
+    // when
+    try queue.write { db in
+      try db.execute(sql: "DELETE FROM messages WHERE id = ?", arguments: [messageId])
+    }
+
+    // then
+    let remaining = try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH 'renamed'"
       )
     }
     #expect(remaining == 0)

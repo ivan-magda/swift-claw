@@ -14,6 +14,7 @@ public struct TelegramPollerService: Service {
   private let pollTimeout: Int
 
   private let logger: Logger
+  private let clock: any Clock<Duration>
 
   /// Re-sent on every call: omitting it would reuse the previous server-side setting. Approval
   /// inline buttons are delivered as `callback_query`, so it joins direct messages and edits — the
@@ -33,7 +34,8 @@ public struct TelegramPollerService: Service {
     router: MessageRouter,
     cursor: any UpdateCursorStore,
     pollTimeout: Int,
-    logger: Logger
+    logger: Logger,
+    clock: any Clock<Duration> = ContinuousClock()
   ) {
     self.intake = intake
     self.router = router
@@ -43,6 +45,7 @@ public struct TelegramPollerService: Service {
     self.pollTimeout = pollTimeout
 
     self.logger = logger
+    self.clock = clock
   }
 
   public func run() async throws {
@@ -66,7 +69,7 @@ public struct TelegramPollerService: Service {
               logger.warning(
                 "transient failure on update \(rawUpdate.updateId); re-polling, not advancing"
               )
-              try? await Task.sleep(for: Backoff.transientFailure)
+              try? await clock.sleep(for: Backoff.transientFailure)
               break batch
             case .storageFull:
               // Disk full: the user already got the notice. Back off long and don't advance, so we
@@ -74,7 +77,7 @@ public struct TelegramPollerService: Service {
               logger.error(
                 "storage full on update \(rawUpdate.updateId); backing off, not advancing"
               )
-              try? await Task.sleep(for: Backoff.storageFull)
+              try? await clock.sleep(for: Backoff.storageFull)
               break batch
             }
           }
@@ -84,7 +87,7 @@ public struct TelegramPollerService: Service {
           try await react(to: error)
         } catch {
           logger.error("poll loop error: \(error)")
-          try? await Task.sleep(for: Backoff.otherError)
+          try? await clock.sleep(for: Backoff.otherError)
         }
       }
     }
@@ -96,13 +99,13 @@ public struct TelegramPollerService: Service {
     case .conflict409(let description):
       // The single-instance flock should prevent this locally; loud + bounded back-off otherwise.
       logger.critical("409 Conflict — another getUpdates consumer is active: \(description)")
-      try? await Task.sleep(for: Backoff.conflict)
+      try? await clock.sleep(for: Backoff.conflict)
     case .floodControl(let retryAfter):
       logger.warning("429 flood control; backing off \(retryAfter)s")
-      try? await Task.sleep(for: .seconds(retryAfter))
+      try? await clock.sleep(for: .seconds(retryAfter))
     case .apiError, .transport, .decoding:
       logger.error("telegram error: \(error)")
-      try? await Task.sleep(for: Backoff.otherError)
+      try? await clock.sleep(for: Backoff.otherError)
     }
   }
 }
