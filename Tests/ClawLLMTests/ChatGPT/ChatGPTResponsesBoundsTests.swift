@@ -10,12 +10,20 @@ private typealias Support = ChatGPTProviderTestSupport
 /// item over it. The pairs matter more than the values: a cap tested only from the failing side
 /// passes just as well when the guard rejects everything.
 @Suite struct ChatGPTResponsesBoundsTests {
+  private static let compactBounds = ChatGPTResponsesBounds(
+    maximumEventBytes: 16 * 1024,
+    maximumBufferedBytes: 32 * 1024,
+    maximumDataEvents: 256,
+    maximumOutputItems: 32,
+    maximumAccumulatedOutputBytes: 32 * 1024
+  )
+
   // MARK: - Event Bytes
 
   @Test func anEventOfExactlyTheEventCapIsParsed() throws {
     // given
-    var parser = ChatGPTResponsesSSEParser()
-    let event = Self.paddedEvent(totalBytes: ChatGPTResponsesBounds.maximumEventBytes)
+    var parser = Self.parser()
+    let event = Self.paddedEvent(totalBytes: Self.compactBounds.maximumEventBytes)
 
     // when
     let events = try parser.push(Data((event + "\n\n").utf8))
@@ -26,8 +34,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   @Test func anEventOneByteOverTheEventCapIsRejected() throws {
     // given
-    var parser = ChatGPTResponsesSSEParser()
-    let event = Self.paddedEvent(totalBytes: ChatGPTResponsesBounds.maximumEventBytes + 1)
+    var parser = Self.parser()
+    let event = Self.paddedEvent(totalBytes: Self.compactBounds.maximumEventBytes + 1)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -39,8 +47,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// stream nor grow the buffer by simply never ending its event.
   @Test func anUndelimitedEventOverTheEventCapIsRejectedBeforeItEnds() throws {
     // given
-    var parser = ChatGPTResponsesSSEParser()
-    let partial = Self.paddedEvent(totalBytes: ChatGPTResponsesBounds.maximumEventBytes + 1)
+    var parser = Self.parser()
+    let partial = Self.paddedEvent(totalBytes: Self.compactBounds.maximumEventBytes + 1)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -55,8 +63,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// than after it.
   @Test func aPushOfExactlyTheBufferCapIsParsed() throws {
     // given
-    var parser = ChatGPTResponsesSSEParser()
-    let stream = Self.framedFiller(totalBytes: ChatGPTResponsesBounds.maximumBufferedBytes)
+    var parser = Self.parser()
+    let stream = Self.framedFiller(totalBytes: Self.compactBounds.maximumBufferedBytes)
 
     // when
     let events = try parser.push(Data(stream.utf8))
@@ -67,8 +75,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   @Test func aPushOneByteOverTheBufferCapIsRejectedEvenThoughItIsWellFramed() throws {
     // given
-    var parser = ChatGPTResponsesSSEParser()
-    let stream = Self.framedFiller(totalBytes: ChatGPTResponsesBounds.maximumBufferedBytes + 1)
+    var parser = Self.parser()
+    let stream = Self.framedFiller(totalBytes: Self.compactBounds.maximumBufferedBytes + 1)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -80,11 +88,11 @@ private typealias Support = ChatGPTProviderTestSupport
 
   @Test func exactlyTheDataEventCapIsParsed() throws {
     // given
-    var parser = ChatGPTResponsesSSEParser()
+    var parser = Self.parser()
 
     // when
     let count = try Self.pushUnknownEvents(
-      ChatGPTResponsesBounds.maximumDataEvents,
+      Self.compactBounds.maximumDataEvents,
       through: &parser
     )
 
@@ -95,11 +103,11 @@ private typealias Support = ChatGPTProviderTestSupport
 
   @Test func oneDataEventOverTheCapIsRejected() throws {
     // given
-    var parser = ChatGPTResponsesSSEParser()
+    var parser = Self.parser()
 
     // then
     #expect(throws: ProviderError.self) {
-      try Self.pushUnknownEvents(ChatGPTResponsesBounds.maximumDataEvents + 1, through: &parser)
+      try Self.pushUnknownEvents(Self.compactBounds.maximumDataEvents + 1, through: &parser)
     }
   }
 
@@ -108,8 +116,8 @@ private typealias Support = ChatGPTProviderTestSupport
   @Test func exactlyTheOutputItemCapIsAccumulated() throws {
     // given
     var accumulator = Self.accumulator()
-    var parser = ChatGPTResponsesSSEParser()
-    let stream = Self.messageItems(ChatGPTResponsesBounds.maximumOutputItems)
+    var parser = Self.parser()
+    let stream = Self.messageItems(Self.compactBounds.maximumOutputItems)
 
     // when
     let events = try accumulator.consume(try parser.push(Data(stream.utf8)))
@@ -121,8 +129,8 @@ private typealias Support = ChatGPTProviderTestSupport
   @Test func oneOutputItemOverTheCapIsRejected() throws {
     // given
     var accumulator = Self.accumulator()
-    var parser = ChatGPTResponsesSSEParser()
-    let stream = Self.messageItems(ChatGPTResponsesBounds.maximumOutputItems + 1)
+    var parser = Self.parser()
+    let stream = Self.messageItems(Self.compactBounds.maximumOutputItems + 1)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -135,23 +143,23 @@ private typealias Support = ChatGPTProviderTestSupport
   @Test func visibleTextOfExactlyTheAccumulatedOutputCapIsAccepted() throws {
     // given
     var accumulator = Self.accumulator()
-    var parser = ChatGPTResponsesSSEParser()
-    let stream = Self.visibleTextStream(bytes: ChatGPTResponsesBounds.maximumAccumulatedOutputBytes)
+    var parser = Self.parser()
+    let stream = Self.visibleTextStream(bytes: Self.compactBounds.maximumAccumulatedOutputBytes)
 
     // when
     let events = try Self.deliver(stream, through: &parser, into: &accumulator)
     let response = try #require(Support.finished(events))
 
     // then
-    #expect(response.content.utf8.count == ChatGPTResponsesBounds.maximumAccumulatedOutputBytes)
+    #expect(response.content.utf8.count == Self.compactBounds.maximumAccumulatedOutputBytes)
   }
 
   @Test func visibleTextOneByteOverTheAccumulatedOutputCapIsRejected() throws {
     // given
     var accumulator = Self.accumulator()
-    var parser = ChatGPTResponsesSSEParser()
+    var parser = Self.parser()
     let stream = Self.visibleTextStream(
-      bytes: ChatGPTResponsesBounds.maximumAccumulatedOutputBytes + 1
+      bytes: Self.compactBounds.maximumAccumulatedOutputBytes + 1
     )
 
     // then
@@ -165,8 +173,8 @@ private typealias Support = ChatGPTProviderTestSupport
   @Test func toolArgumentsShareTheAccumulatedOutputBudgetWithVisibleText() throws {
     // given
     var accumulator = Self.accumulator()
-    var parser = ChatGPTResponsesSSEParser()
-    let half = ChatGPTResponsesBounds.maximumAccumulatedOutputBytes / 2
+    var parser = Self.parser()
+    let half = Self.compactBounds.maximumAccumulatedOutputBytes / 2
     let stream =
       Self.visibleTextEvents(bytes: half + 1) + Self.argumentEvents(bytes: half)
       + Self.event(Self.completed())
@@ -187,8 +195,8 @@ private typealias Support = ChatGPTProviderTestSupport
   @Test func textDeltasForANonVisibleItemAreDroppedNotRetained() throws {
     // given
     var accumulator = Self.accumulator()
-    var parser = ChatGPTResponsesSSEParser()
-    let deltaCount = 8_192
+    var parser = Self.parser()
+    let deltaCount = Self.compactBounds.maximumDataEvents - 1
     let fragment = String(repeating: "x", count: 256)
     var stream = Self.addedMessage(index: 0, phase: "commentary")
     for _ in 0..<deltaCount {
@@ -208,8 +216,8 @@ private typealias Support = ChatGPTProviderTestSupport
   @Test func argumentDeltasForANonFunctionCallItemAreDroppedNotRetained() throws {
     // given
     var accumulator = Self.accumulator()
-    var parser = ChatGPTResponsesSSEParser()
-    let deltaCount = 8_192
+    var parser = Self.parser()
+    let deltaCount = Self.compactBounds.maximumDataEvents - 1
     let fragment = String(repeating: "a", count: 256)
     var stream = Self.addedMessage(index: 0, phase: "final")
     for _ in 0..<deltaCount {
@@ -299,10 +307,10 @@ private typealias Support = ChatGPTProviderTestSupport
   @Test func aCapFailureReportsOnlyItsClassAndCountsAndNeverTheRefusedBytes() throws {
     // given
     var accumulator = Self.accumulator()
-    var parser = ChatGPTResponsesSSEParser()
+    var parser = Self.parser()
     let secret = String(repeating: "sk-live-", count: 8)
     let stream = Self.visibleTextStream(
-      bytes: ChatGPTResponsesBounds.maximumAccumulatedOutputBytes + 1,
+      bytes: Self.compactBounds.maximumAccumulatedOutputBytes + 1,
       filler: secret
     )
 
@@ -318,7 +326,7 @@ private typealias Support = ChatGPTProviderTestSupport
 
     // then
     #expect(message.contains("sk-live-") == false)
-    #expect(message.contains(String(ChatGPTResponsesBounds.maximumAccumulatedOutputBytes)))
+    #expect(message.contains(String(Self.compactBounds.maximumAccumulatedOutputBytes)))
   }
 
   // MARK: - Counter Overflow
@@ -334,7 +342,7 @@ private typealias Support = ChatGPTProviderTestSupport
 
     // then
     #expect(total == Int.max)
-    #expect(total > ChatGPTResponsesBounds.maximumAccumulatedOutputBytes)
+    #expect(total > Self.compactBounds.maximumAccumulatedOutputBytes)
   }
 }
 
@@ -344,8 +352,13 @@ extension ChatGPTResponsesBoundsTests {
   /// Any identity will do: these tests weigh payloads rather than read issuers.
   fileprivate static func accumulator() -> ChatGPTResponsesAccumulator {
     ChatGPTResponsesAccumulator(
-      identity: ChatGPTReplayIdentity(profileID: UUID(), wireModel: "gpt-5", epoch: UUID())
+      identity: ChatGPTReplayIdentity(profileID: UUID(), wireModel: "gpt-5", epoch: UUID()),
+      bounds: compactBounds
     )
+  }
+
+  fileprivate static func parser() -> ChatGPTResponsesSSEParser {
+    ChatGPTResponsesSSEParser(bounds: compactBounds)
   }
 
   fileprivate static func event(_ payload: String) -> String {
@@ -361,7 +374,7 @@ extension ChatGPTResponsesBoundsTests {
   ) throws -> [StreamEvent] {
     var events: [StreamEvent] = []
     let data = Data(stream.utf8)
-    let chunkBytes = 256 * 1024
+    let chunkBytes = compactBounds.maximumEventBytes
     for start in stride(from: 0, to: data.count, by: chunkBytes) {
       let chunk = Data(
         data[data.startIndex + start..<min(data.startIndex + start + chunkBytes, data.endIndex)]
@@ -395,7 +408,7 @@ extension ChatGPTResponsesBoundsTests {
   /// large events rather than tens of thousands of tiny ones, each of which would pay its own
   /// framing and JSON decode.
   fileprivate static func framedFiller(totalBytes: Int) -> String {
-    let unitBytes = 1024 * 1024
+    let unitBytes = compactBounds.maximumEventBytes / 2
     let unit = paddedEvent(totalBytes: unitBytes - 2) + "\n\n"
     let units = max(0, totalBytes / unitBytes - 2)
     let last = totalBytes - units * unitBytes
@@ -411,7 +424,7 @@ extension ChatGPTResponsesBoundsTests {
     // fail on the event count it is about. The payload is the cheapest thing the counter still
     // charges: a data event whose type the route does not model — the cap counts data events.
     var emitted = 0
-    let batchSize = 4_096
+    let batchSize = compactBounds.maximumDataEvents / 2
     for start in stride(from: 0, to: count, by: batchSize) {
       let batch = String(
         repeating: event(#"{"type":"u"}"#),
@@ -475,7 +488,7 @@ extension ChatGPTResponsesBoundsTests {
   /// authoritative text rather than a delta assembly. Split across items to stay under the event
   /// cap.
   fileprivate static func visibleTextEvents(bytes: Int, filler: String = "a") -> String {
-    let chunkBytes = 512 * 1024
+    let chunkBytes = compactBounds.maximumEventBytes / 4
     var stream = ""
     var written = 0
     var index = 0
@@ -508,7 +521,7 @@ extension ChatGPTResponsesBoundsTests {
 
   /// Tool arguments of exactly `bytes`, spread over calls that each stay under the event cap.
   fileprivate static func argumentEvents(bytes: Int) -> String {
-    let chunkBytes = 512 * 1024
+    let chunkBytes = compactBounds.maximumEventBytes / 4
     var stream = ""
     var written = 0
     var index = 1_000

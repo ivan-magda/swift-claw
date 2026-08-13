@@ -7,7 +7,7 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite(.serialized) struct ExecuteCodeApprovalFlowTests {
+@Suite struct ExecuteCodeApprovalFlowTests {
   private let secret = "layer-a-secret-value"
   private let privateText = "private household note created after context assembly"
 

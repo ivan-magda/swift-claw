@@ -9,7 +9,7 @@ import Testing
 /// The increment's first LIVE end-to-end pass over the durable fabric: a file_write proposal
 /// suspends the run to a persisted checkpoint, the owner's button callback approves it, and the
 /// waiter executes the RECORDED args — no fresh model turn for the gated action (§6.3).
-@Suite(.serialized) struct FileWriteApprovalFlowTests {
+@Suite struct FileWriteApprovalFlowTests {
   @Test func suspendApproveExecuteRoundTrip() async throws {
     // given — one turn: the write proposal, then the continuation reply the resume round-trip
     // consumes (an empty-toolCalls response ends the provider script)

@@ -10,7 +10,7 @@ import Testing
 /// tampered args-hash, stale policy_version — each DENY and CANNOT drive the row to APPROVED. Every
 /// clause proves it on the persisted `approvals`/`runs`/`audit_events` rows (A4: the primary proof)
 /// and, for the auth-failure clauses, the neutral-toast `answerCallbackQuery` spy (secondary).
-@Suite(.serialized) struct CallbackAuthMatrixTests {
+@Suite struct CallbackAuthMatrixTests {
   // MARK: - Fixture
 
   private func grantAudited(_ harness: SC3Harness) throws -> Bool {

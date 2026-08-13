@@ -9,7 +9,7 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite(.serialized) struct SC3AcceptanceTests {
+@Suite struct SC3AcceptanceTests {
   // Clause 1 — no-tap URL fetch + summarize; audit row; PERSISTED taint (reopen the DB).
   @Test func clauseOneNoTapFetchSummarizeTaints() async throws {
     let harness = try makeSC3Harness(
@@ -300,7 +300,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
   }
 }
 
-@Suite(.serialized) struct SC3Clause3AndRegressionTests {
+@Suite struct SC3Clause3AndRegressionTests {
   private let exfilResolver: [String: [ResolvedAddress]] = [
     "example.com": [resolvedAddress("93.184.216.34")],
     "evil.example": [resolvedAddress("93.184.216.35")],

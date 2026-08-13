@@ -15,6 +15,7 @@ struct ChatGPTResponsesAccumulator: Sendable {
   private let codec: ChatGPTProviderStateCodec
   private let identity: ChatGPTReplayIdentity
   private let redactionValues: [String]
+  private let bounds: ChatGPTResponsesBounds
 
   private var items: [Int: OutputItem] = [:]
   private var order: [Int] = []
@@ -29,11 +30,13 @@ struct ChatGPTResponsesAccumulator: Sendable {
   init(
     codec: ChatGPTProviderStateCodec = ChatGPTProviderStateCodec(),
     identity: ChatGPTReplayIdentity,
-    redactionValues: [String] = []
+    redactionValues: [String] = [],
+    bounds: ChatGPTResponsesBounds = .standard
   ) {
     self.codec = codec
     self.identity = identity
     self.redactionValues = redactionValues
+    self.bounds = bounds
   }
 
   /// A lower bound on the completion tokens this attempt may already be billed for, derived only
@@ -206,8 +209,8 @@ private extension ChatGPTResponsesAccumulator {
   /// answerable rather than damaged.
   mutating func register(index: Int, item: ChatGPTStreamItem) throws {
     guard var existing = items[index] else {
-      guard order.count < ChatGPTResponsesBounds.maximumOutputItems else {
-        throw Self.tooManyOutputItems
+      guard order.count < bounds.maximumOutputItems else {
+        throw tooManyOutputItems
       }
       items[index] = OutputItem(type: item.type, phase: item.phase, callID: item.callID)
       order.append(index)
@@ -325,8 +328,8 @@ private extension ChatGPTResponsesAccumulator {
     item.tokenEstimate = item.estimatedTokens
 
     let total = SaturatingArithmetic.sum(releasedBytes, item.countedBytes)
-    guard total <= ChatGPTResponsesBounds.maximumAccumulatedOutputBytes else {
-      throw Self.accumulatedOutputTooLarge
+    guard total <= bounds.maximumAccumulatedOutputBytes else {
+      throw accumulatedOutputTooLarge
     }
     accumulatedOutputBytes = total
     observedTokens = SaturatingArithmetic.sum(releasedTokens, item.tokenEstimate)
@@ -551,14 +554,15 @@ private extension ChatGPTResponsesAccumulator {
     "the ChatGPT reply sent output for an item it never announced"
   )
 
-  static let tooManyOutputItems = terminal(
-    "the ChatGPT reply sent more than \(ChatGPTResponsesBounds.maximumOutputItems) output items"
-  )
+  var tooManyOutputItems: ProviderError {
+    Self.terminal("the ChatGPT reply sent more than \(bounds.maximumOutputItems) output items")
+  }
 
-  static let accumulatedOutputTooLarge = terminal(
-    "the ChatGPT reply exceeded "
-      + "\(ChatGPTResponsesBounds.maximumAccumulatedOutputBytes) bytes of text and tool arguments"
-  )
+  var accumulatedOutputTooLarge: ProviderError {
+    Self.terminal(
+      "the ChatGPT reply exceeded \(bounds.maximumAccumulatedOutputBytes) bytes of text and tool arguments"
+    )
+  }
 
   /// A remote diagnostic on its way to an owner. It is stripped of the escape sequences that would
   /// repaint a terminal, collapsed onto one line, redacted against the credential the request

@@ -10,7 +10,7 @@ import Testing
 @testable import ClawGateway
 
 // swiftlint:disable:next type_body_length — the ten §17 clauses live in one @Suite by design.
-@Suite(.serialized) struct SC7AcceptanceTests {
+@Suite struct SC7AcceptanceTests {
   // MARK: - Pinned instants (verified on this host's macOS 15 Foundation — plan header table)
 
   /// Mon 2026-07-06 12:00:00 UTC = 14:00 Europe/Berlin.

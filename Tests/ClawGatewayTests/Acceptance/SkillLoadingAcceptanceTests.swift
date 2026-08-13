@@ -12,7 +12,7 @@ import Testing
 /// drops one `SKILL.md` into the workspace, the index reaches the model under the `skills` fence,
 /// the model names the skill, and the body comes back under the SAME fence without tainting the
 /// session — so the next turn still recalls high-sensitivity memory.
-@Suite(.serialized) struct SkillLoadingAcceptanceTests {
+@Suite struct SkillLoadingAcceptanceTests {
   private static let manifest = """
     ---
     name: summarize

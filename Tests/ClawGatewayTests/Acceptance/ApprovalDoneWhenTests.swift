@@ -12,7 +12,7 @@ import Testing
 /// one sweeps to DENY→FAILED at boot), the expiry ticker resolves silence to EXPIRED→DENY, and
 /// `/stop`//`new` resolve a parked approval with no orphan — including after a restart. Every clause
 /// asserts on persisted rows only.
-@Suite(.serialized) struct ApprovalDoneWhenTests {
+@Suite struct ApprovalDoneWhenTests {
   // MARK: - Fixture
 
   /// Models a `kill -TERM` + reboot: a fresh harness over the SAME DB file AND the same workspace

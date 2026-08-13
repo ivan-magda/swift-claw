@@ -9,15 +9,29 @@ import Foundation
 /// same transport but not the same protocol, and a cap that moved for one of them has no business
 /// moving for the other: a Responses event carries a whole message item and its encrypted reasoning,
 /// where a Chat Completions chunk carries one delta.
-enum ChatGPTResponsesBounds {
-  static let maximumEventBytes = 2 * 1024 * 1024
-  static let maximumBufferedBytes = 4 * 1024 * 1024
-  static let maximumDataEvents = 65_536
-  static let maximumOutputItems = 1_024
+struct ChatGPTResponsesBounds: Sendable, Equatable {
+  static let standard = ChatGPTResponsesBounds(
+    maximumEventBytes: 2 * 1024 * 1024,
+    maximumBufferedBytes: 4 * 1024 * 1024,
+    maximumDataEvents: 65_536,
+    maximumOutputItems: 1_024,
+    maximumAccumulatedOutputBytes: 4 * 1024 * 1024
+  )
+
+  static let maximumEventBytes = standard.maximumEventBytes
+  static let maximumBufferedBytes = standard.maximumBufferedBytes
+  static let maximumDataEvents = standard.maximumDataEvents
+  static let maximumOutputItems = standard.maximumOutputItems
+  static let maximumAccumulatedOutputBytes = standard.maximumAccumulatedOutputBytes
+
+  let maximumEventBytes: Int
+  let maximumBufferedBytes: Int
+  let maximumDataEvents: Int
+  let maximumOutputItems: Int
 
   /// Visible text and tool arguments together — the two accumulations the answer is built from, and
   /// the only two this side can measure what the owner was charged for from.
-  static let maximumAccumulatedOutputBytes = 4 * 1024 * 1024
+  let maximumAccumulatedOutputBytes: Int
 }
 
 // MARK: - Parser
@@ -35,11 +49,14 @@ struct ChatGPTResponsesSSEParser: Sendable {
   /// good one does — while framing comments, which carry no answer, never do.
   private(set) var hasSeenDataFieldByte = false
 
+  private let bounds: ChatGPTResponsesBounds
   private var buffer = Data()
   private var dataEventCount = 0
   private var boundary = DataFieldScan()
 
-  init() {}
+  init(bounds: ChatGPTResponsesBounds = .standard) {
+    self.bounds = bounds
+  }
 
   mutating func push(_ chunk: Data) throws -> [ChatGPTResponsesEvent] {
     // Scanned before the buffer is bounded: these bytes arrived whatever the parser goes on to make
@@ -51,8 +68,8 @@ struct ChatGPTResponsesSSEParser: Sendable {
     buffer.append(chunk)
     // Bounded before the delimiter is searched for, so a body that would have framed perfectly well
     // still cannot grow the buffer past its cap on the way to being drained.
-    guard buffer.count <= ChatGPTResponsesBounds.maximumBufferedBytes else {
-      throw Self.bufferedStreamTooLarge
+    guard buffer.count <= bounds.maximumBufferedBytes else {
+      throw bufferedStreamTooLarge
     }
 
     var events: [ChatGPTResponsesEvent] = []
@@ -68,8 +85,8 @@ struct ChatGPTResponsesSSEParser: Sendable {
       let eventData = buffer[consumed..<delimiter.lowerBound]
       consumed = delimiter.upperBound
 
-      guard eventData.count <= ChatGPTResponsesBounds.maximumEventBytes else {
-        throw Self.eventTooLarge
+      guard eventData.count <= bounds.maximumEventBytes else {
+        throw eventTooLarge
       }
       if let event = try decode(Data(eventData)) {
         events.append(event)
@@ -78,8 +95,8 @@ struct ChatGPTResponsesSSEParser: Sendable {
 
     // An event still waiting for its delimiter is bounded too: a server cannot hold a stream open by
     // simply never ending the event it is sending.
-    guard buffer.count - consumed <= ChatGPTResponsesBounds.maximumEventBytes else {
-      throw Self.eventTooLarge
+    guard buffer.count - consumed <= bounds.maximumEventBytes else {
+      throw eventTooLarge
     }
 
     return events
@@ -132,21 +149,26 @@ private struct DataFieldScan {
 // MARK: - Framing Failures
 
 private extension ChatGPTResponsesSSEParser {
-  static let bufferedStreamTooLarge = ProviderError.terminal(
-    status: nil,
-    message:
-      "the ChatGPT reply buffered more than \(ChatGPTResponsesBounds.maximumBufferedBytes) bytes"
-  )
+  var bufferedStreamTooLarge: ProviderError {
+    ProviderError.terminal(
+      status: nil,
+      message: "the ChatGPT reply buffered more than \(bounds.maximumBufferedBytes) bytes"
+    )
+  }
 
-  static let eventTooLarge = ProviderError.terminal(
-    status: nil,
-    message: "a ChatGPT reply event exceeded \(ChatGPTResponsesBounds.maximumEventBytes) bytes"
-  )
+  var eventTooLarge: ProviderError {
+    ProviderError.terminal(
+      status: nil,
+      message: "a ChatGPT reply event exceeded \(bounds.maximumEventBytes) bytes"
+    )
+  }
 
-  static let tooManyDataEvents = ProviderError.terminal(
-    status: nil,
-    message: "the ChatGPT reply sent more than \(ChatGPTResponsesBounds.maximumDataEvents) events"
-  )
+  var tooManyDataEvents: ProviderError {
+    ProviderError.terminal(
+      status: nil,
+      message: "the ChatGPT reply sent more than \(bounds.maximumDataEvents) events"
+    )
+  }
 
   static let malformedEvent = ProviderError.terminal(
     status: nil,
@@ -170,8 +192,8 @@ private extension ChatGPTResponsesSSEParser {
     }
 
     dataEventCount += 1
-    guard dataEventCount <= ChatGPTResponsesBounds.maximumDataEvents else {
-      throw Self.tooManyDataEvents
+    guard dataEventCount <= bounds.maximumDataEvents else {
+      throw tooManyDataEvents
     }
 
     let payload = Data(payloadLines.joined(separator: "\n").utf8)
