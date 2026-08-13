@@ -752,7 +752,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   failed host, version, digest, capability, network, resource, reaper, rootfs, staging, or
   interpreter assertion keeps `execute_code` out of the registry. `shutdown()` cancels the
   execution chain and reaps again.
-- **swift-subprocess is only a launcher.** It provides no isolation. Pin exact release 0.5.0, use
+- **swift-subprocess is only a launcher.** It provides no isolation. Pin exact release 1.0.0, use
   streaming capture and an explicit teardown sequence, and keep the hardware VM as the boundary.
 - `sandbox-exec`/Seatbelt may wrap the launcher only as optional defense-in-depth; it is never the
   isolation boundary.

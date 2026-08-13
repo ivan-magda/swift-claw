@@ -153,11 +153,11 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
 
       return ContainerCommandResult(
         termination: Self.classifyTermination(
-          timedOut: result.closureOutput.timedOut,
+          timedOut: result.closureResult.timedOut,
           status: result.terminationStatus
         ),
-        stdout: result.closureOutput.stdout,
-        stderr: result.closureOutput.stderr,
+        stdout: result.closureResult.stdout,
+        stderr: result.closureResult.stderr,
         processIdentifier: Int32(result.processIdentifier.value),
         wallClock: started.duration(to: clock.now)
       )
