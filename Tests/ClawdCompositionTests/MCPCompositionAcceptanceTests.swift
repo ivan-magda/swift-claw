@@ -396,16 +396,11 @@ private extension MCPCompositionAcceptanceTests {
     )
     let secrets = Secrets(telegramBotToken: "tg-token", llmApiKey: nil, searchApiKey: nil)
 
-    return DaemonBuilder(
+    return try CompositionAcceptance.makeBuilder(
+      http: http,
       config: config,
       secrets: secrets,
-      stores: try EnvironmentLoader.openStores(config: config),
-      toolExecutor: http,
-      transport: TelegramClient(token: "tg-token", http: http),
-      botUsername: nil,
-      mcp: inputs,
-      logger: Self.silentLogger,
-      makeManagedStore: { FreshCredentialStore(present: false) }
+      mcp: inputs
     )
   }
 

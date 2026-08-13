@@ -5,75 +5,60 @@ import Testing
 @testable import ClawExec
 
 @Suite struct ContainerBackendExecutionTests {
-  @Test func storedTaskChainPreventsActorReentrancyFromOverlappingExecutions() async throws {
+  @Test(.timeLimit(.minutes(1)))
+  func concurrentRunsStayNonOverlappingAndExecuteFIFO() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
-    let backend = fixture.backend()
-    let gate = AsyncGate()
-    let recorder = ExecutionRecorder()
+    let firstRunGate = AsyncGate()
+    let admissions = ExecutionAdmissionRecorder()
+    let runner = ScriptedCommandRunner { command, history in
+      switch command.arguments.first {
+      case "run":
+        writeCidfile(from: command.arguments)
+        let runNumber = history.filter { $0.arguments.first == "run" }.count
+        if runNumber == 1 {
+          await firstRunGate.wait()
+        }
+        return commandResult(.exited(Int32(runNumber)))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
+      }
+    }
+    let backend = fixture.backend(commands: runner, executionAdmitted: admissions.record)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
     let first = Task {
-      await backend.runSerializedForTesting {
-        await recorder.record(1)
-        await gate.wait()
-        return testExecutionResult(code: 1)
-      }
+      await backend.run(executionRequest(timeout: .seconds(1)))
     }
-    await recorder.waitForCount(1)
-
-    // when
+    await admissions.waitForCount(1)
+    await runner.waitForCount(1)
     let second = Task {
-      await backend.runSerializedForTesting {
-        await recorder.record(2)
-        return testExecutionResult(code: 2)
-      }
+      await backend.run(executionRequest(timeout: .seconds(2)))
     }
-    await waitForQueuedCount(2, backend: backend)
-
-    // then
-    #expect(await recorder.values() == [1])
-    await gate.open()
-    #expect(await first.value.terminationReason == .exited(code: 1))
-    #expect(await second.value.terminationReason == .exited(code: 2))
-    #expect(await recorder.values() == [1, 2])
-  }
-
-  @Test func storedTaskChainPreservesAdmissionFIFO() async throws {
-    // given
-    let fixture = try BackendFixture()
-    defer { fixture.remove() }
-    let backend = fixture.backend()
-    let gate = AsyncGate()
-    let recorder = ExecutionRecorder()
-    let first = Task {
-      await backend.runSerializedForTesting {
-        await recorder.record(1)
-        await gate.wait()
-        return testExecutionResult(code: 1)
-      }
-    }
-    await recorder.waitForCount(1)
-    let second = Task {
-      await backend.runSerializedForTesting {
-        await recorder.record(2)
-        return testExecutionResult(code: 2)
-      }
-    }
-    await waitForQueuedCount(2, backend: backend)
+    await admissions.waitForCount(2)
     let third = Task {
-      await backend.runSerializedForTesting {
-        await recorder.record(3)
-        return testExecutionResult(code: 3)
-      }
+      await backend.run(executionRequest(timeout: .seconds(3)))
     }
-    await waitForQueuedCount(3, backend: backend)
-
-    // when
-    await gate.open()
-    _ = await [first.value, second.value, third.value]
+    await admissions.waitForCount(3)
 
     // then
-    #expect(await recorder.values() == [1, 2, 3])
+    let blockedRunCommands = await runner.recorded().filter { $0.arguments.first == "run" }
+    #expect(blockedRunCommands.count == 1)
+
+    // when
+    await firstRunGate.open()
+    let results = await [first.value, second.value, third.value]
+
+    // then
+    #expect(
+      results.map(\.terminationReason) == [.exited(code: 1), .exited(code: 2), .exited(code: 3)]
+    )
+    let runCommands = await runner.recorded().filter { $0.arguments.first == "run" }
+    #expect(runCommands.map(\.timeout) == [.seconds(1), .seconds(2), .seconds(3)])
   }
 
   @Test func runRequiresPreparedRuntimeInitImageWithoutStartingACommand() async throws {
@@ -310,37 +295,51 @@ import Testing
     #expect(reason.contains("could not confirm container removal"))
   }
 
-  @Test func cancellationWhileQueuedReturnsCancelledWithoutStartingOperation() async throws {
+  @Test(.timeLimit(.minutes(1)))
+  func cancellationWhileQueuedReturnsCancelledWithoutStartingOperation() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
-    let backend = fixture.backend()
-    let gate = AsyncGate()
-    let recorder = ExecutionRecorder()
+    let firstRunGate = AsyncGate()
+    let admissions = ExecutionAdmissionRecorder()
+    let runner = ScriptedCommandRunner { command, history in
+      switch command.arguments.first {
+      case "run":
+        writeCidfile(from: command.arguments)
+        let runNumber = history.filter { $0.arguments.first == "run" }.count
+        if runNumber == 1 {
+          await firstRunGate.wait()
+        }
+        return commandResult(.exited(Int32(runNumber)))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
+      }
+    }
+    let backend = fixture.backend(commands: runner, executionAdmitted: admissions.record)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
     let first = Task {
-      await backend.runSerializedForTesting {
-        await recorder.record(1)
-        await gate.wait()
-        return testExecutionResult(code: 1)
-      }
+      await backend.run(executionRequest())
     }
-    await recorder.waitForCount(1)
+    await admissions.waitForCount(1)
+    await runner.waitForCount(1)
     let queued = Task {
-      await backend.runSerializedForTesting {
-        await recorder.record(2)
-        return testExecutionResult(code: 2)
-      }
+      await backend.run(executionRequest(timeout: .seconds(2)))
     }
-    await waitForQueuedCount(2, backend: backend)
+    await admissions.waitForCount(2)
 
     // when
     queued.cancel()
-    await gate.open()
+    await firstRunGate.open()
     _ = await first.value
     let result = await queued.value
 
     // then
     #expect(result.terminationReason == .cancelled)
-    #expect(await recorder.values() == [1])
+    let runCommands = await runner.recorded().filter { $0.arguments.first == "run" }
+    #expect(runCommands.count == 1)
   }
 }

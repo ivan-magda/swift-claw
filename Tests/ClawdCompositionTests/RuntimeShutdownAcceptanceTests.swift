@@ -3,6 +3,7 @@ import ClawCore
 import ClawData
 import ClawGateway
 import ClawLLM
+import ClawTelegram
 import ClawTestSupport
 import Foundation
 import GRDB
@@ -11,22 +12,13 @@ import Testing
 
 @testable import clawd
 
-/// Shutdown acceptance driven through the real `DaemonRuntimeBundle`: a lane held **live inside a
-/// composed ChatGPT provider's SSE and its nested HTTP exchange**, carried by a bundle whose real
-/// service graph (the production-ordered `LaneAdmissionShutdownService`) closes admission, joins the
-/// producer, and records the drain result the bundle exposes — which is then handed to the real
-/// `RuntimeShutdownCoordinator` exactly as `RunCommand` sequences it. Proves the clean-drain ordering
-/// (bundle drain → credential → llm → telegram → tool) and the grace-timeout path: active run IDs
-/// surface through the bundle, no dependent resource closes, a recording fatal terminator fires
-/// (never the production `_exit`), and a real `RUNNING` row is left for boot reconciliation.
+/// Shutdown acceptance through the production builder and command orchestration.
 @Suite struct RuntimeShutdownAcceptanceTests {
-  /// A held lane whose work runs a composed provider stream to termination, so joining the lane joins
-  /// the LLM producer and its nested HTTP exchange.
   private struct HeldLane: Sendable {
-    let registry: SessionLaneRegistry
+    let coordination: DaemonBuilder.TurnCoordination
     let hold: ScriptedStreamHold
     let join: TerminationBox
-    let stack: ProviderStack
+    let credentialSource: any LLMCredentialSource
   }
 
   private func startHeldLane(
@@ -42,10 +34,10 @@ import Testing
       )
     ])
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
-    let registry = SessionLaneRegistry()
+    let coordination = DaemonBuilder.TurnCoordination()
     let join = TerminationBox()
 
-    let admission = await registry.enqueue(sessionID: sessionId, runID: runId) {
+    let admission = await coordination.lanes.enqueue(sessionID: sessionId, runID: runId) {
       let session = stack.binding.provider.stream(
         request: ChatRequest(
           model: stack.binding.wireModel,
@@ -60,166 +52,136 @@ import Testing
 
     // The lane is now live inside the provider's SSE producer and its nested HTTP exchange.
     await hold.started.wait()
-    return HeldLane(registry: registry, hold: hold, join: join, stack: stack)
+    return HeldLane(
+      coordination: coordination,
+      hold: hold,
+      join: join,
+      credentialSource: stack.credentialSource
+    )
   }
 
   // MARK: - Clean drain
 
   @Test func cleanDrainThroughTheBundleJoinsTheProducerThenRunsCleanupInOrder() async throws {
-    // given — a lane held live inside composed provider SSE, carried by a real runtime bundle
+    // given
     let lane = try await startHeldLane(sessionId: 1, runId: 10)
     let booted = AsyncGate()
-    let bundle = Self.makeBundle(lane: lane, clock: ContinuousClock(), boot: { booted.open() })
     let recorder = StepRecorder()
+    let composed = try Self.makeComposed(
+      lane: lane,
+      clock: ContinuousClock(),
+      boot: { booted.open() },
+      recorder: recorder
+    )
 
-    // when — run the real service graph, release the SSE, then stop the graph. Its lane-admission
-    // service closes admission, joins the producer, and records the drain result on the bundle.
-    let daemonTask = Task { try await bundle.daemon.run() }
+    // when
+    let commandTask = Task {
+      try await RunCommand.serveThenShutDown(
+        composed: composed,
+        redactionValues: [],
+        logger: Self.silent
+      )
+    }
     await booted.wait()
     lane.hold.release.open()
-    daemonTask.cancel()
-    try await daemonTask.value
+    commandTask.cancel()
+    try await commandTask.value
 
-    // then — the producer/exchange actually joined and the bundle carries a clean drain
+    // then
     #expect(await lane.join.isCompleted)
-    let laneDrain = await bundle.laneShutdownOutcome.value() ?? .drained
-    #expect(laneDrain == .drained)
-
-    // when — the coordinator runs the dependent cleanup after the bundle's clean drain, exactly as
-    // `RunCommand` sequences it
-    let coordinator = RuntimeShutdownCoordinator(
-      logger: Self.silent,
-      redactor: SecretRedactor(secretValues: [])
-    )
-    let outcome = await coordinator.shutDown(
-      daemonError: nil,
-      laneDrain: laneDrain,
-      dependent: Self.recordingCleanup(recorder)
-    )
-
-    // then — credential shutdown, then the three client closes, in the mandated order
     #expect(await recorder.events == ["credential", "llm", "telegram", "tool"])
-    if case .clean = outcome {
-    } else {
-      Issue.record("expected clean outcome, got \(outcome)")
-    }
   }
 
   // MARK: - Grace timeout
 
   @Test(.timeLimit(.minutes(1)))
   func graceTimeoutThroughTheBundleSkipsCleanupReportsRunIDsAndLeavesARunningRow() async throws {
-    // given — a real RUNNING run row and a lane held live inside composed SSE that will not finish,
-    // carried by a real runtime bundle whose drain deadline fires at once on a manual clock
+    // given
     let (writer, sessionId, runId) = try Self.makeRunningRun()
     let lane = try await startHeldLane(sessionId: sessionId, runId: runId)
     let booted = AsyncGate()
-    let bundle = Self.makeBundle(lane: lane, clock: ScriptedClock { _ in }, boot: { booted.open() })
     let recorder = StepRecorder()
-
-    // when — run and then stop the service graph; the held producer outlives cancellation and the
-    // grace window expires immediately, so the bundle records a timeout, not a drain
-    let daemonTask = Task { try await bundle.daemon.run() }
-    await booted.wait()
-    daemonTask.cancel()
-    try await daemonTask.value
-
-    // then — the still-active run is reported through the bundle, not drained
-    let laneDrain = await bundle.laneShutdownOutcome.value() ?? .drained
-    guard case .timedOut(let activeRunIDs) = laneDrain else {
-      Issue.record("expected timedOut, got \(laneDrain)")
-      lane.hold.release.open()
-      _ = await lane.registry.drain(timeout: .seconds(5), clock: ContinuousClock())
-      return
-    }
-    #expect(activeRunIDs == [runId])
-
-    // when — the coordinator refuses every dependent close on a fatal lane timeout
-    let coordinator = RuntimeShutdownCoordinator(
-      logger: Self.silent,
-      redactor: SecretRedactor(secretValues: [])
+    let logs = RecordingLogCapture()
+    let composed = try Self.makeComposed(
+      lane: lane,
+      clock: ScriptedClock { _ in },
+      boot: { booted.open() },
+      recorder: recorder
     )
-    let outcome = await coordinator.shutDown(
-      daemonError: nil,
-      laneDrain: laneDrain,
-      dependent: Self.recordingCleanup(recorder)
-    )
-
-    // then — no credential or client cleanup ran, and the run IDs pass through untouched
-    #expect(await recorder.events == [])
-    guard case .fatalLaneTimeout(let fatalRunIDs) = outcome else {
-      Issue.record("expected fatalLaneTimeout, got \(outcome)")
-      lane.hold.release.open()
-      return
-    }
-    #expect(fatalRunIDs == [runId])
-
-    // when — the fatal path terminates through a recording terminator, never production `_exit`
     let recordedCode = ExitCodeBox()
     let terminator = FatalProcessTerminator { code in
       recordedCode.set(code)
       throw FatalExitSentinel()
     }
-    #expect(throws: FatalExitSentinel.self) {
-      try terminator.fatalLaneDrainTimeout(activeRunIDs: fatalRunIDs, logger: Self.silent)
-    }
-    #expect(recordedCode.value == 1)
 
-    // then — the run is still RUNNING on disk for the boot reconciler to sweep
+    // when
+    let commandTask = Task {
+      try await RunCommand.serveThenShutDown(
+        composed: composed,
+        redactionValues: [],
+        logger: logs.logger(),
+        terminator: terminator
+      )
+    }
+    await booted.wait()
+    commandTask.cancel()
+    await #expect(throws: FatalExitSentinel.self) {
+      try await commandTask.value
+    }
+
+    // then
+    #expect(await recorder.events == [])
+    #expect(recordedCode.value == 1)
+    #expect(logs.entries.contains { $0.message.contains(String(runId)) })
     let state = try Self.runState(writer, runId: runId)
     #expect(state == RunState.running.rawValue)
 
-    // cleanup — release the held producer so no task is left parked past the test
     lane.hold.release.open()
-    _ = await lane.registry.drain(timeout: .seconds(5), clock: ContinuousClock())
+    _ = await lane.coordination.lanes.drain(
+      timeout: .seconds(5),
+      clock: ContinuousClock()
+    )
   }
 
   // MARK: - Helpers
 
   private static let silent = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
 
-  /// A real `DaemonRuntimeBundle` over the held lane's registry and the composed credential source,
-  /// built with the production service-ordering helper so its daemon carries the same lane-admission
-  /// service the composition root wires. Cancelling `daemon.run()` stops the graph, driving that
-  /// service through close-admission → cancel → drain → record on `laneShutdownOutcome` — the exact
-  /// handoff `RunCommand` reads. `boot` fires once the graph is running, so a test can stop it after.
-  private static func makeBundle(
+  private static func makeComposed(
     lane: HeldLane,
     clock: any Clock<Duration>,
-    boot: @escaping @Sendable () async -> Void
-  ) -> DaemonRuntimeBundle {
-    let outcome = LaneShutdownOutcome()
-    let laneAdmission = LaneAdmissionShutdownService(
-      lanes: lane.registry,
-      outcome: outcome,
-      drainTimeout: .seconds(5),
-      clock: clock,
-      logger: silent
-    )
-    let daemon = Daemon(
-      services: DaemonBuilder.servicesWithLaneAdmissionLast(base: [], laneAdmission: laneAdmission),
+    boot: @escaping @Sendable () async -> Void,
+    recorder: StepRecorder
+  ) throws -> RunComposition.Composed {
+    let http = ScriptedHTTPExecutor([])
+    let builder = try CompositionAcceptance.makeBuilder(http: http)
+    let bundle = builder.runtimeBundle(
+      services: [],
+      coordination: lane.coordination,
+      credentialSources: [
+        RecordingCredentialSource(base: lane.credentialSource, recorder: recorder)
+      ],
       boot: boot,
-      logger: silent,
-      gracefulShutdownSignals: [],
-      gracefulShutdownSeconds: 30
+      laneDrainClock: clock,
+      gracefulShutdownSignals: []
     )
-    return DaemonRuntimeBundle(
-      daemon: daemon,
-      lanes: lane.registry,
-      credentialSources: [lane.stack.credentialSource],
-      laneShutdownOutcome: outcome
+    return RunComposition.Composed(
+      bundle: bundle,
+      clients: RuntimeHTTPClients { role in
+        RuntimeHTTPClient(
+          executor: AsyncHTTPExecutor(client: .shared),
+          close: { await recorder.record(Self.event(for: role)) }
+        )
+      }
     )
   }
 
-  private static func recordingCleanup(
-    _ recorder: StepRecorder
-  ) -> RuntimeShutdownCoordinator.DependentCleanup {
-    RuntimeShutdownCoordinator.DependentCleanup(
-      commitCredentials: { await recorder.record("credential") },
-      closeLLMClient: { await recorder.record("llm") },
-      closeTelegramClient: { await recorder.record("telegram") },
-      closeToolClient: { await recorder.record("tool") }
-    )
+  private static func event(for role: RuntimeHTTPClientRole) -> String {
+    switch role {
+    case .telegram: return "telegram"
+    case .llm: return "llm"
+    case .tool: return "tool"
+    }
   }
 
   private static func makeRunningRun() throws -> (
@@ -277,5 +239,26 @@ private actor StepRecorder {
 
   func record(_ name: String) {
     events.append(name)
+  }
+}
+
+private struct RecordingCredentialSource: LLMCredentialSource {
+  let base: any LLMCredentialSource
+  let recorder: StepRecorder
+
+  func authorization() async throws -> LLMRequestAuthorization {
+    try await base.authorization()
+  }
+
+  func reject(
+    generation: LLMCredentialGeneration,
+    disposition: LLMCredentialRejection
+  ) async {
+    await base.reject(generation: generation, disposition: disposition)
+  }
+
+  func shutdown() async throws {
+    await recorder.record("credential")
+    try await base.shutdown()
   }
 }

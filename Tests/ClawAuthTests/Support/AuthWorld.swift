@@ -309,10 +309,10 @@ struct AuthWorld: Sendable {
     builtCatalog.seenAuthorization
   }
 
-  /// The store as the owner's disk actually holds it, unrecorded — for assertions about what a
-  /// command left behind rather than about what it did.
-  var storedCredential: StoredOAuthCredential? {
-    try? EncryptedLLMCredentialStore(stateRoot: root).load(providerID: .openAIChatGPT)
+  /// Loads the store as the owner's disk actually holds it, unrecorded. Read failures remain test
+  /// failures rather than being mistaken for an absent credential.
+  func loadStoredCredential() throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
+    try EncryptedLLMCredentialStore(stateRoot: root).load(providerID: .openAIChatGPT)
   }
 
   /// The store every command in this world opens, recording the open so a test can assert *when* it

@@ -1,5 +1,6 @@
 import ClawTestSupport
 import Foundation
+import Logging
 import Testing
 
 @testable import ClawAgent
@@ -148,6 +149,7 @@ func makeRuntime(
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
   providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
+  logger: Logger = Logger(label: "test.silent", factory: { _ in SwiftLogNoOpLogHandler() }),
   clock: any Clock<Duration> = ContinuousClock()
 ) -> AgentRuntime {
   AgentRuntime(
@@ -167,6 +169,7 @@ func makeRuntime(
     usageStore: usageStore,
     auditLog: auditLog,
     providerCallIDGenerator: providerCallIDGenerator,
+    logger: logger,
     clock: clock
   )
 }

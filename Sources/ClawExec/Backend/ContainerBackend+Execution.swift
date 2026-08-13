@@ -24,6 +24,7 @@ extension ContainerBackend {
     }
     executionTasks[taskIdentifier] = work
     executionTail = work
+    executionAdmitted()
 
     let result = await withTaskCancellationHandler {
       await work.value

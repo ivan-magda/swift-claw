@@ -9,6 +9,7 @@ import ClawWorkspace
 import Foundation
 import Logging
 import ServiceLifecycle
+import UnixSignals
 
 /// The composition root. Holds the cross-cutting inputs `run()` resolves before wiring — config,
 /// secrets, stores, the dedicated tool executor, the Telegram transport, and the logger — plus the
@@ -209,13 +210,16 @@ struct DaemonBuilder: Sendable {
     services: [any Service],
     coordination: TurnCoordination,
     credentialSources: [any LLMCredentialSource],
-    boot: @escaping @Sendable () async -> Void
+    boot: @escaping @Sendable () async -> Void,
+    laneDrainClock: any Clock<Duration> = ContinuousClock(),
+    gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint]
   ) -> DaemonRuntimeBundle {
     let laneShutdownOutcome = LaneShutdownOutcome()
     let laneAdmission = LaneAdmissionShutdownService(
       lanes: coordination.lanes,
       outcome: laneShutdownOutcome,
       drainTimeout: .seconds(Self.gracefulShutdownSeconds),
+      clock: laneDrainClock,
       logger: logger
     )
 
@@ -223,6 +227,7 @@ struct DaemonBuilder: Sendable {
       services: Self.servicesWithLaneAdmissionLast(base: services, laneAdmission: laneAdmission),
       boot: boot,
       logger: logger,
+      gracefulShutdownSignals: gracefulShutdownSignals,
       gracefulShutdownSeconds: Self.gracefulShutdownSeconds
     )
 

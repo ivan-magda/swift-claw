@@ -11,6 +11,7 @@ actor DraftTransport: TelegramTransport {
   }
 
   private(set) var drafts: [DraftRecord] = []
+  private(set) var draftAttempts: [DraftRecord] = []
   var throwDraft = false
 
   func getMe() async throws -> BotIdentity { BotIdentity(id: 1, username: "claw_bot") }
@@ -26,10 +27,12 @@ actor DraftTransport: TelegramTransport {
   func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 { 1 }
 
   func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool {
+    let record = DraftRecord(chatId: chatId, draftId: draftId, markdown: markdown)
+    draftAttempts.append(record)
     if throwDraft {
       throw TelegramError.transport("draft down")
     }
-    drafts.append(DraftRecord(chatId: chatId, draftId: draftId, markdown: markdown))
+    drafts.append(record)
     return true
   }
 
@@ -65,7 +68,7 @@ actor DraftTransport: TelegramTransport {
     #expect(await transport.drafts.isEmpty)
   }
 
-  @Test func sendErrorsAreSwallowed() async {
+  @Test func sendErrorsAreSwallowedAfterAttemptingTheDraft() async throws {
     // given
     let transport = DraftTransport()
     await transport.setThrowDraft(true)
@@ -75,6 +78,8 @@ actor DraftTransport: TelegramTransport {
     await streamer.sendDraft(chatId: 42, draftId: 9, markdown: "partial")
 
     // then
+    let attempt = try #require(await transport.draftAttempts.first)
+    #expect(attempt == DraftTransport.DraftRecord(chatId: 42, draftId: 9, markdown: "partial"))
     #expect(await transport.drafts.isEmpty)
   }
 }

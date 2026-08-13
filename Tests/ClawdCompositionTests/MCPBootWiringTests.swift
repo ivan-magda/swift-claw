@@ -3,6 +3,7 @@ import ClawGateway
 import ClawMCP
 import ClawSecrets
 import Foundation
+import Logging
 import Testing
 
 @testable import clawd
@@ -46,31 +47,61 @@ import Testing
     #expect(inputs.token(for: "linear") == nil)
   }
 
-  @Test("a token quoted by a log line is scrubbed by the redactor the union builds")
-  func tokenIsUnprintableThroughTheBootRedactor() throws {
-    // given — the union exactly as `RunCommand.bootstrapLogger` consumes it.
+  @Test("the run command hands every loaded secret to the logging bootstrap")
+  func runCommandBootstrapsLoggingWithTheCompleteRedactionSet() throws {
+    // given
     let inputs = MCPBootInputs(
       config: try MCPConfig(servers: [try server(named: "linear")]),
       credentials: ["linear": .token("mcp-linear-secret-token")],
       credentialRedactionValues: ["mcp-linear-secret-token"]
     )
-    let values = inputs.redactionValues(
-      with: Secrets(telegramBotToken: "tg-token", llmApiKey: nil, searchApiKey: nil)
+    let secrets = Secrets(
+      telegramBotToken: "tg-token",
+      llmApiKey: "llm-secret-token",
+      searchApiKey: "search-secret-token"
     )
-    let redactor = SecretRedactor(secretValues: values)
+    let capture = BootLoggingCapture()
 
-    // when — the shape a transport failure takes when a server echoes the header back.
-    let line = redactor.redact(
-      "mcp send failed: 401 {\"error\":\"bad Bearer mcp-linear-secret-token\"}"
+    // when
+    let logging = RunCommand.makeBootLogging(
+      secrets: secrets,
+      mcp: inputs,
+      bootstrap: { values in
+        capture.record(values)
+        return Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+      }
     )
 
     // then
-    #expect(line.contains("mcp-linear-secret-token") == false)
-    #expect(line.contains(SecretRedactor.replacement))
+    let expected = Set([
+      "tg-token",
+      "llm-secret-token",
+      "search-secret-token",
+      "mcp-linear-secret-token",
+    ])
+    #expect(Set(capture.values) == expected)
+    #expect(Set(logging.redactionValues) == expected)
   }
 
   private func server(named name: String) throws -> MCPServerConfig {
     try MCPServerConfig(name: name, url: "https://\(name).test.invalid/mcp")
+  }
+}
+
+private final class BootLoggingCapture: @unchecked Sendable {
+  private let lock = NSLock()
+  private var recorded: [String] = []
+
+  var values: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return recorded
+  }
+
+  func record(_ values: [String]) {
+    lock.lock()
+    defer { lock.unlock() }
+    recorded = values
   }
 }
 

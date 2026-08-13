@@ -1,5 +1,6 @@
 import ClawCore
 import Foundation
+import Synchronization
 import Testing
 
 @testable import ClawExec
@@ -155,7 +156,10 @@ func pythonEntrypoint() -> StagedFile {
   StagedFile(name: ".clawd-entrypoint.py", bytes: Data("print('ok')".utf8), mode: .readExecute)
 }
 
-func executionRequest(input: StagedFile? = nil) -> ExecutionRequest {
+func executionRequest(
+  input: StagedFile? = nil,
+  timeout: Duration = .seconds(1)
+) -> ExecutionRequest {
   ExecutionRequest(
     language: .python,
     entrypoint: pythonEntrypoint(),
@@ -163,7 +167,7 @@ func executionRequest(input: StagedFile? = nil) -> ExecutionRequest {
       [staged]
     } ?? [],
     network: false,
-    timeout: .seconds(1)
+    timeout: timeout
   )
 }
 
@@ -196,6 +200,7 @@ struct BackendFixture {
     sanitizeReason: @escaping @Sendable (String) -> String = { $0 },
     now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
     supportedHost: @escaping @Sendable () -> Bool = { true },
+    executionAdmitted: @escaping @Sendable () -> Void = {},
     watchdogSleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
       try await Task.sleep(for: duration)
     }
@@ -207,6 +212,7 @@ struct BackendFixture {
       sanitizeReason: sanitizeReason,
       now: now,
       supportedHost: supportedHost,
+      executionAdmitted: executionAdmitted,
       watchdogSleep: watchdogSleep
     )
   }
@@ -264,17 +270,20 @@ actor AsyncGate {
   }
 }
 
-actor ExecutionRecorder {
-  private var recorded: [Int] = []
-  private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
+final class ExecutionAdmissionRecorder: Sendable {
+  private struct State {
+    var count = 0
+    var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
+  }
 
-  func record(_ value: Int) {
-    recorded.append(value)
-    let ready = waiters.filter { waiter in
-      recorded.count >= waiter.0
-    }
-    waiters.removeAll { waiter in
-      recorded.count >= waiter.0
+  private let state = Mutex(State())
+
+  func record() {
+    let ready = state.withLock { current in
+      current.count += 1
+      let ready = current.waiters.filter { current.count >= $0.0 }
+      current.waiters.removeAll { current.count >= $0.0 }
+      return ready
     }
     for waiter in ready {
       waiter.1.resume()
@@ -282,27 +291,17 @@ actor ExecutionRecorder {
   }
 
   func waitForCount(_ count: Int) async {
-    if recorded.count >= count { return }
     await withCheckedContinuation { continuation in
-      waiters.append((count, continuation))
+      let shouldResume = state.withLock { current in
+        guard current.count < count else {
+          return true
+        }
+        current.waiters.append((count, continuation))
+        return false
+      }
+      if shouldResume {
+        continuation.resume()
+      }
     }
   }
-
-  func values() -> [Int] { recorded }
-}
-
-func waitForQueuedCount(_ count: Int, backend: ContainerBackend) async {
-  while await backend.queuedExecutionCountForTesting < count {
-    await Task.yield()
-  }
-}
-
-func testExecutionResult(code: Int32) -> ExecutionResult {
-  ExecutionResult(
-    terminationReason: .exited(code: code),
-    stdout: "",
-    stderr: "",
-    truncatedRawBytes: false,
-    wallClock: .zero
-  )
 }

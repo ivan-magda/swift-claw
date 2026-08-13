@@ -107,7 +107,13 @@ let package = Package(
       ]
     ),
     .target(name: "ClawAuth", dependencies: ["ClawCore"]),
-    .target(name: "ClawTestSupport", dependencies: ["ClawCore", "ClawTools"]),
+    .target(
+      name: "ClawTestSupport",
+      dependencies: [
+        "ClawCore", "ClawTools",
+        .product(name: "Logging", package: "swift-log"),
+      ]
+    ),
     .target(
       name: "ClawGateway",
       dependencies: [

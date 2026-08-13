@@ -98,6 +98,30 @@ enum CompositionAcceptance {
     )
   }
 
+  static func makeBuilder(
+    http: any HTTPExecuting & HTTPStreaming,
+    config: AppConfig? = nil,
+    secrets: Secrets = Secrets(
+      telegramBotToken: "tg-token",
+      llmApiKey: nil,
+      searchApiKey: nil
+    ),
+    mcp: MCPBootInputs = .empty
+  ) throws -> DaemonBuilder {
+    let config = try config ?? chatGPTConfig()
+    return DaemonBuilder(
+      config: config,
+      secrets: secrets,
+      stores: try EnvironmentLoader.openStores(config: config),
+      toolExecutor: http,
+      transport: TelegramClient(token: secrets.telegramBotToken, http: http),
+      botUsername: nil,
+      mcp: mcp,
+      logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() }),
+      makeManagedStore: { FreshCredentialStore(present: false) }
+    )
+  }
+
   // MARK: SSE fixtures (one `data:` frame per event)
 
   static func event(_ json: String) -> Data { Data("data: \(json)\n\n".utf8) }

@@ -104,7 +104,7 @@ import Testing
 
       // then
       #expect(result.exit == .success)
-      let stored = world.storedCredential
+      let stored = try world.loadStoredCredential()
       #expect(stored?.profileID == AuthFixture.freshProfileID)
       #expect(stored?.accessToken == AuthFixture.accessToken)
       #expect(stored?.refreshToken == AuthFixture.refreshToken)
@@ -116,7 +116,7 @@ import Testing
     try await withAuthWorld("auth-login-replace") { world in
       // given
       try world.seedPriorLogin()
-      #expect(world.storedCredential?.profileID == AuthFixture.priorProfileID)
+      #expect(try world.loadStoredCredential()?.profileID == AuthFixture.priorProfileID)
       let workflow = world.loginWorkflow()
 
       // when
@@ -124,8 +124,8 @@ import Testing
 
       // then
       #expect(result.exit == .success)
-      #expect(world.storedCredential?.profileID == AuthFixture.freshProfileID)
-      #expect(world.storedCredential?.accessToken == AuthFixture.accessToken)
+      #expect(try world.loadStoredCredential()?.profileID == AuthFixture.freshProfileID)
+      #expect(try world.loadStoredCredential()?.accessToken == AuthFixture.accessToken)
     }
   }
 
@@ -256,7 +256,7 @@ import Testing
 
       // then
       #expect(result.exit == .commandFailure)
-      #expect(world.storedCredential == AuthFixture.priorCredential)
+      #expect(try world.loadStoredCredential() == AuthFixture.priorCredential)
       #expect(world.log.recorded.contains(.credentialSaved) == false)
     }
   }
@@ -273,7 +273,7 @@ import Testing
 
       // then
       #expect(result.exit == .cancelled)
-      #expect(world.storedCredential == AuthFixture.priorCredential)
+      #expect(try world.loadStoredCredential() == AuthFixture.priorCredential)
       #expect(world.log.recorded.contains(.credentialSaved) == false)
     }
   }
@@ -298,7 +298,7 @@ import Testing
 
       // then
       #expect(result.exit == .commandFailure)
-      #expect(world.storedCredential == AuthFixture.priorCredential)
+      #expect(try world.loadStoredCredential() == AuthFixture.priorCredential)
     }
   }
 
@@ -410,7 +410,8 @@ import Testing
 
       // then
       #expect(result.exit == .success)
-      #expect(world.storedCredential?.profileID == AuthFixture.freshProfileID)
+      let stored = try world.loadStoredCredential()
+      #expect(stored?.profileID == AuthFixture.freshProfileID)
       #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/<model>"))
     }
   }
@@ -426,7 +427,8 @@ import Testing
 
       // then
       #expect(result.exit == .success)
-      #expect(world.storedCredential?.profileID == AuthFixture.freshProfileID)
+      let stored = try world.loadStoredCredential()
+      #expect(stored?.profileID == AuthFixture.freshProfileID)
       #expect(world.terminal.transcript.contains("CLAW_LLM_MODEL=openai-chatgpt/<model>"))
     }
   }
