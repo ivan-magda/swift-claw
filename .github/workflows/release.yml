@@ -36,7 +36,7 @@ jobs:
           cp .build/release/clawd clawd-linux-x86_64
           sha256sum clawd-linux-x86_64 > clawd-linux-x86_64.sha256
       - name: Attest provenance
-        uses: actions/attest@v4.2.1
+        uses: actions/attest@v4.2.2
         with:
           subject-path: clawd-linux-x86_64
       - uses: actions/upload-artifact@v7
@@ -71,7 +71,7 @@ jobs:
           cp .build/release/clawd clawd-macos-arm64
           shasum -a 256 clawd-macos-arm64 > clawd-macos-arm64.sha256
       - name: Attest provenance
-        uses: actions/attest@v4.2.1
+        uses: actions/attest@v4.2.2
         with:
           subject-path: clawd-macos-arm64
       - uses: actions/upload-artifact@v7
@@ -106,7 +106,7 @@ jobs:
                     com.ivanmagda.swift-claw.plist install.sh >> SHA256SUMS
           cat SHA256SUMS
       - name: Attest checksum manifest
-        uses: actions/attest@v4.2.1
+        uses: actions/attest@v4.2.2
         with:
           subject-path: dist/SHA256SUMS
       - name: Publish GitHub Release
