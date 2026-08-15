@@ -27,8 +27,8 @@ private struct MarkSentFailingOutbox: OutboxStore {
   func pendingOutbound() throws(StoreError) -> [OutboxRow] { try base.pendingOutbound() }
 }
 
-/// Records the `replyMarkup` argument the dispatcher passes to each send overload. Implements the
-/// reply-markup overloads directly (rather than the throwing default) so the keyboard is captured.
+/// Records the `replyMarkup` argument the dispatcher passes to each send. The keyboardless spellings
+/// are extension conveniences, so implementing the requirements captures every send either way.
 private actor ReplyMarkupSpy: MessageDelivery {
   private(set) var richMarkups: [String?] = []
   private(set) var plainMarkups: [String?] = []
@@ -37,10 +37,6 @@ private actor ReplyMarkupSpy: MessageDelivery {
   init(failRich: Bool = false) {
     self.failRich = failRich
   }
-
-  func sendMessage(chatId: Int64, text: String) async throws -> Int64 { 1 }
-
-  func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 { 1 }
 
   func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
     plainMarkups.append(replyMarkup)

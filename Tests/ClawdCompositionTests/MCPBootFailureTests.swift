@@ -6,6 +6,7 @@ import ClawSecrets
 import ClawTestSupport
 import Foundation
 import Logging
+import ServiceLifecycleTestKit
 import Testing
 
 @testable import clawd
@@ -132,12 +133,26 @@ import Testing
 
     // when the service ends, as it does on graceful shutdown
     let service = MCPSessionLifecycleService(sessions: sessions)
-    let running = Task { try await service.run() }
-    running.cancel()
-    try await running.value
+    let finished = CompletionFlag()
+    try await testGracefulShutdown { trigger in
+      let running = Task {
+        try await service.run()
+        await finished.markDone()
+      }
+      for _ in 0..<50 {
+        await Task.yield()
+      }
 
-    // then both sessions were handed back rather than stranded on the server until it expires them
-    #expect(await scripted.teardowns == 2)
+      // then — still parked while the group runs, so nothing is hung up yet
+      #expect(await finished.done == false)
+      #expect(await scripted.teardowns == 0)
+
+      trigger.triggerGracefulShutdown()
+      try await running.value
+
+      // and both sessions were handed back rather than stranded until the server expires them
+      #expect(await scripted.teardowns == 2)
+    }
   }
 }
 

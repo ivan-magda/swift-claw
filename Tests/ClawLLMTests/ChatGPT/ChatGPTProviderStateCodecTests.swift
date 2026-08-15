@@ -932,10 +932,6 @@ import Testing
   }
 }
 
-// MARK: - Diagnostic Recorder
-
-/// Captures what the codec reports. A class rather than a captured var because the callback is
-/// `@Sendable`, and the codec makes no promise about which thread it fires on.
 // MARK: - Fixtures
 
 extension ChatGPTProviderStateCodecTests {

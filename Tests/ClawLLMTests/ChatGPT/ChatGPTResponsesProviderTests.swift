@@ -2,7 +2,6 @@ import ClawAuth
 import ClawCore
 import ClawTestSupport
 import Foundation
-import Synchronization
 import Testing
 
 @testable import ClawLLM
@@ -176,8 +175,8 @@ import Testing
     let response = try await provider.complete(request: request)
 
     // then — the public constructor wired a live codec and engine rather than throwing the drop away.
-    // The bootstrapped logger's non-silence cannot be asserted here: the public init exposes no logger
-    // or reporter seam, and observing it would need a process-global `LoggingSystem.bootstrap` that
+    // The bootstrapped logger's non-silence cannot be asserted here: the public init exposes no
+    // logger seam, and observing it would need a process-global `LoggingSystem.bootstrap` that
     // breaks test isolation. Obligation 3's falsifiable coverage stays at the internal-seam test below.
     #expect(response.content == "Hello")
     #expect(await http.recorded.count == 1)
@@ -322,7 +321,7 @@ import Testing
     #expect(failure.accounting == .notStarted)
   }
 
-  // MARK: - Obligation 3: a real drops reporter, metadata only
+  // MARK: - Obligation 3: a real drops diagnostic, metadata only
 
   @Test(.timeLimit(.minutes(1)))
   func aDroppedForeignStateEmitsAMetadataOnlyDiagnostic() async throws {
@@ -472,10 +471,6 @@ private func head(_ status: Int) -> HTTPStreamHead {
   Support.head(status)
 }
 
-// MARK: - Recorders
-
-/// Captures the last replay-drops diagnostic the provider emitted, proving the codec's reporter is
-/// wired rather than left as the default no-op.
 // MARK: - Assertions
 
 private func requireProviderFailure(

@@ -1,5 +1,6 @@
 import ClawCore
 import ClawTestSupport
+import ServiceLifecycleTestKit
 import Testing
 
 @testable import ClawGateway
@@ -10,12 +11,24 @@ import Testing
     let backend = FakeExecutionBackend()
     let service = SandboxLifecycleService(maintenance: backend)
 
-    // when — the service parks until the group cancels it
-    let running = Task { try await service.run() }
-    running.cancel()
-    try await running.value
+    // when — the service parks until graceful shutdown, then tears the backend down
+    let finished = CompletionFlag()
+    try await testGracefulShutdown { trigger in
+      let running = Task {
+        try await service.run()
+        await finished.markDone()
+      }
+      for _ in 0..<50 {
+        await Task.yield()
+      }
 
-    // then
-    #expect(await backend.shutdownCallCount() == 1)
+      // then — still parked, so the teardown cannot have run
+      #expect(await finished.done == false)
+      #expect(await backend.shutdownCallCount() == 0)
+
+      trigger.triggerGracefulShutdown()
+      try await running.value
+      #expect(await backend.shutdownCallCount() == 1)
+    }
   }
 }
