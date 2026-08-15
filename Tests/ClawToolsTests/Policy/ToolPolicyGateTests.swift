@@ -219,6 +219,15 @@ private struct ProbedDangerousTool: Tool {
     )
   }
 
+  /// True when the verdict is a conditional-tier redaction block, which only happens once the
+  /// trifecta has opened that tier.
+  private func blocksOnPrivateData(_ verdict: ToolPolicyGate.Verdict) -> Bool {
+    guard case .block(let payload, _) = verdict else {
+      return false
+    }
+    return payload.status == .blockedArgs
+  }
+
   private func fetchCall(_ url: String) -> ToolCall {
     ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"\#(url)"}"#)
   }
@@ -498,6 +507,56 @@ private struct ProbedDangerousTool: Tool {
       return
     }
     #expect(conditionalPayload.status == .blockedArgs)
+  }
+
+  /// Both entry points read one trifecta predicate. They diverge on what a cleared scan means — the
+  /// safe tier allows outright, the ask tier parks regardless — but never on whether the conditional
+  /// tier runs at all. A copy of the predicate drifting on one side would weaken the gate silently
+  /// rather than break the build, so pin the agreement across every leg combination.
+  @Test(
+    arguments: [
+      (tainted: false, runIngested: false, assembly: false, runPrivate: false, session: false),
+      (tainted: true, runIngested: false, assembly: false, runPrivate: false, session: false),
+      (tainted: false, runIngested: true, assembly: false, runPrivate: false, session: false),
+      (tainted: false, runIngested: false, assembly: true, runPrivate: false, session: false),
+      (tainted: true, runIngested: false, assembly: true, runPrivate: false, session: false),
+      (tainted: true, runIngested: false, assembly: false, runPrivate: true, session: false),
+      (tainted: true, runIngested: false, assembly: false, runPrivate: false, session: true),
+      (tainted: false, runIngested: true, assembly: true, runPrivate: false, session: false),
+      (tainted: false, runIngested: true, assembly: false, runPrivate: false, session: true),
+    ]
+  )
+  func bothTiersReadTheSameTrifectaPredicate(
+    legs: (tainted: Bool, runIngested: Bool, assembly: Bool, runPrivate: Bool, session: Bool)
+  ) async {
+    // given — args carrying a private-file substring, which only the conditional tier scans for
+    let privateSubstring = String(Self.memoryText.dropFirst(10).prefix(16))
+    let argumentsJSON = #"{"url":"https://mcp.example/?body=\#(privateSubstring)"}"#
+    let context = makeContext(
+      tainted: legs.tainted,
+      runIngested: legs.runIngested,
+      assemblyPrivate: legs.assembly,
+      runPrivate: legs.runPrivate,
+      sessionHasPrivate: legs.session
+    )
+
+    // when — the same context through the safe-tier and the ask-tier entry points
+    let safeVerdict = await makeGate().evaluate(
+      call: ToolCall(id: "s1", name: "web_fetch", argumentsJSON: argumentsJSON),
+      tool: FetchLikeTool(),
+      context: context
+    )
+    let askVerdict = await makeGate().evaluate(
+      call: ToolCall(id: "a1", name: "mcp__linear__create_issue", argumentsJSON: argumentsJSON),
+      tool: FetchLikeTool(name: "mcp__linear__create_issue", riskLevel: .ask),
+      context: context
+    )
+
+    // then — the conditional tier runs on exactly the same leg combinations for both
+    let trifectaHolds =
+      (legs.tainted || legs.runIngested) && (legs.assembly || legs.runPrivate || legs.session)
+    #expect(blocksOnPrivateData(safeVerdict) == trifectaHolds)
+    #expect(blocksOnPrivateData(askVerdict) == trifectaHolds)
   }
 
   @Test func askTierRecordsCanonicalArgsHashAndPresentation() async {

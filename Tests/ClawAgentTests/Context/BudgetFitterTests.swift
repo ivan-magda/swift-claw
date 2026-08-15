@@ -74,6 +74,56 @@ import Testing
     #expect(fitted.contains { section in section.id == .skills } == false)
   }
 
+  /// The assembler scales each truncatable cap against the residual before handing the sections
+  /// over, and the fit then squeezes against its own reading of the same quantity. One formula owns
+  /// it, so this pins the two readings together: a fixed row whose units render with a separator
+  /// must shrink the residual by that separator too, or every downstream cap is one grapheme
+  /// generous per unit boundary.
+  @Test func theResidualCountsTheSameRenderingTheFitMeasures() throws {
+    // given — a fixed row of three units, so two separators ride along with the content
+    let budget = testBudget(inputCap: 100)
+    let fixed = FittableSection(
+      id: .policy,
+      tier: .system,
+      priority: ContextPriority(0),
+      truncatable: false,
+      cap: nil,
+      units: [
+        SectionUnit(content: "aaa", canTruncate: false),
+        SectionUnit(content: "bbb", canTruncate: false),
+        SectionUnit(content: "ccc", canTruncate: false),
+      ]
+    )
+    let sections = [
+      fixed,
+      truncatable(id: .history, priority: 70, cap: 999, units: ["hhhh"]),
+    ]
+
+    // when
+    let residual = BudgetFitter.residual(for: sections, budget: budget)
+    let fitted = try BudgetFitter.fitWithUnits(sections, budget: budget)
+
+    // then — 9 content graphemes plus 2 separators come off the cap, and the fit agrees
+    #expect(residual == 100 - 11)
+    let fixedContent = try #require(fitted.first { section in section.id == .policy }?.content)
+    #expect(fixedContent.count == 11)
+    #expect(budget.inputCapGraphemes - fixedContent.count == residual)
+  }
+
+  /// Truncatable rows never count against the residual — they are what it is for.
+  @Test func theResidualIgnoresTruncatableRows() {
+    // given
+    let budget = testBudget(inputCap: 50)
+    let sections = [
+      nonTruncatable(id: .policy, priority: 0, content: "12345"),
+      truncatable(id: .history, priority: 70, cap: 999, units: ["hhhhhhhhhh"]),
+      truncatable(id: .recall, priority: 80, cap: 999, units: ["rrrrrrrrrr"]),
+    ]
+
+    // when / then
+    #expect(BudgetFitter.residual(for: sections, budget: budget) == 45)
+  }
+
   @Test func residualScaledCapsPreserveLowerPrioritySlicesOnSmallBudgets() throws {
     // given
     let budget = sliceBudget(inputCap: 20)

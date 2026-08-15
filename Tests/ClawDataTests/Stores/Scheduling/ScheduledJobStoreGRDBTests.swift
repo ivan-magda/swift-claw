@@ -486,6 +486,41 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try auditCount(queue, action: .jobMisfire) == 1)
   }
 
+  /// The fire claim and the misfire skip advance the occurrence through one compare-and-advance, so
+  /// they race each other, not only their own kind. A ticker that decided to skip while another
+  /// decided to fire must not do both to the same occurrence.
+  @Test func aMisfireSkipLosesToAFireClaimOnTheSameOccurrence() throws {
+    // given
+    let (store, queue) = try makeStore()
+    let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
+
+    // when — the claim advances first, then a skip arrives holding the same stale due
+    let claimed = try store.claimAndFire(
+      jobId: job.id,
+      due: dueFirst,
+      fireAt: dueFirst,
+      nextOccurrence: dueNext,
+      now: dueFirst
+    )
+    let skipped = try store.skipMisfire(
+      jobId: job.id,
+      due: dueFirst,
+      nextOccurrence: dueNext,
+      skippedCount: 3,
+      now: dueFirst.addingTimeInterval(60)
+    )
+
+    // then — the fire stands and the skip changed nothing, state and audit included
+    #expect(claimed != nil)
+    #expect(skipped == false)
+    let after = try store.job(id: job.id)
+    #expect(after?.nextOccurrence == dueNext)
+    #expect(after?.lastFiredAt == dueFirst)
+    #expect(try count(queue, sql: "SELECT COUNT(*) FROM runs") == 1)
+    #expect(try auditCount(queue, action: .jobMisfire) == 0)
+    #expect(try store.schedulerState().lastMisfireAt == nil)
+  }
+
   @Test func skipMisfireCompletesAOneShot() throws {
     // given — a one-shot whose single occurrence aged out entirely
     let (store, queue) = try makeStore()
