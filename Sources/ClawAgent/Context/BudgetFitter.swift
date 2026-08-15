@@ -107,7 +107,7 @@ public enum BudgetFitter {
       )
     }
 
-    let residual = residual(for: ordered, budget: budget)
+    let residual = residual(required: required, budget: budget)
     // The newest history unit is kept even when it alone exceeds the residual (see `fittedRow`),
     // so the squeezed total can legitimately overshoot the residual by this floor.
     let historyFloorCount =
@@ -255,7 +255,12 @@ public enum BudgetFitter {
   /// render to. The assembler pre-scales each truncatable cap against this before handing the
   /// sections over, so both sides have to read one formula or the caps stop matching the squeeze.
   public static func residual(for sections: [FittableSection], budget: ContextBudget) -> Int {
-    max(0, budget.inputCapGraphemes - requiredGraphemes(sections))
+    residual(required: requiredGraphemes(sections), budget: budget)
+  }
+
+  /// Split out so a fit that already measured the fixed rows does not render them a second time.
+  private static func residual(required: Int, budget: ContextBudget) -> Int {
+    max(0, budget.inputCapGraphemes - required)
   }
 
   /// The graphemes the non-truncatable rows consume once rendered — the same rendering the fit

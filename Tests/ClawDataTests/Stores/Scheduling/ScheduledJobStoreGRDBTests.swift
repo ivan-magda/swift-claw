@@ -486,9 +486,10 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try auditCount(queue, action: .jobMisfire) == 1)
   }
 
-  /// The fire claim and the misfire skip advance the occurrence through one compare-and-advance, so
-  /// they race each other, not only their own kind. A ticker that decided to skip while another
-  /// decided to fire must not do both to the same occurrence.
+  /// A ticker that decided to skip while another decided to fire must not do both to the same
+  /// occurrence. Sharing `advanceOccurrence` makes that structural rather than behavioural, so this
+  /// is a guard against the two verbs re-growing separate predicates — each verb's own stale-due
+  /// test would still pass while cross-verb contention silently stopped working.
   @Test func aMisfireSkipLosesToAFireClaimOnTheSameOccurrence() throws {
     // given
     let (store, queue) = try makeStore()

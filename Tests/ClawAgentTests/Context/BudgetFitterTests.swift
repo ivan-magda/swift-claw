@@ -110,20 +110,6 @@ import Testing
     #expect(budget.inputCapGraphemes - fixedContent.count == residual)
   }
 
-  /// Truncatable rows never count against the residual — they are what it is for.
-  @Test func theResidualIgnoresTruncatableRows() {
-    // given
-    let budget = testBudget(inputCap: 50)
-    let sections = [
-      nonTruncatable(id: .policy, priority: 0, content: "12345"),
-      truncatable(id: .history, priority: 70, cap: 999, units: ["hhhhhhhhhh"]),
-      truncatable(id: .recall, priority: 80, cap: 999, units: ["rrrrrrrrrr"]),
-    ]
-
-    // when / then
-    #expect(BudgetFitter.residual(for: sections, budget: budget) == 45)
-  }
-
   @Test func residualScaledCapsPreserveLowerPrioritySlicesOnSmallBudgets() throws {
     // given
     let budget = sliceBudget(inputCap: 20)

@@ -168,6 +168,19 @@ private struct ProbedDangerousTool: Tool {
 }
 
 @Suite struct ToolPolicyGateTests {
+  /// Every combination of the five trifecta inputs, exhaustive so no leg can go unexercised. Both
+  /// the gating test and the tier-agreement test read this one list: the branch that removed the
+  /// duplicated predicate from the gate must not leave two leg matrices behind to drift instead.
+  static let trifectaLegMatrix: [TrifectaLegs] = (0..<32).map { mask in
+    TrifectaLegs(
+      tainted: mask & 1 != 0,
+      runIngested: mask & 2 != 0,
+      assembly: mask & 4 != 0,
+      runPrivate: mask & 8 != 0,
+      session: mask & 16 != 0
+    )
+  }
+
   private static let memoryText = "The owner's private project is called Operation Nightjar Falcon."
 
   private func makeGate(
@@ -325,37 +338,29 @@ private struct ProbedDangerousTool: Tool {
     #expect(argsRedacted.contains("sk-abcdefghijklmnop1234") == false)
   }
 
-  @Test func trifectaConditionReadsBothUnionInputs() async {
-    // given — every combination of (taint source) × (private source) must gate (rev.1 H1)
+  @Test(arguments: ToolPolicyGateTests.trifectaLegMatrix)
+  func trifectaConditionReadsBothUnionInputs(legs: TrifectaLegs) async {
+    // given — one taint source and one private source, in every combination
     let gate = makeGate()
-    let combinations: [(ToolDispatchContext, Bool)] = [
-      (makeContext(tainted: true, assemblyPrivate: true), true),
-      (makeContext(runIngested: true, assemblyPrivate: true), true),
-      (makeContext(tainted: true, runPrivate: true), true),
-      (makeContext(runIngested: true, runPrivate: true), true),
-      (makeContext(tainted: true), false),  // taint without private data
-      (makeContext(assemblyPrivate: true), false),  // private data without taint
-      (makeContext(), false),
-    ]
 
-    // when / then
-    for (context, shouldGate) in combinations {
-      let verdict = await gate.evaluate(
-        call: fetchCall("https://example.com/a"),
-        tool: FetchLikeTool(),
-        context: context
-      )
-      if shouldGate {
-        guard case .requireApproval(let recorded) = verdict else {
-          Issue.record("expected gate for \(context)")
-          continue
-        }
-        #expect(recorded.reason == .exfilTrifecta)
-      } else {
-        guard case .allow = verdict else {
-          Issue.record("expected allow for \(context)")
-          continue
-        }
+    // when
+    let verdict = await gate.evaluate(
+      call: fetchCall("https://example.com/a"),
+      tool: FetchLikeTool(),
+      context: legs.context
+    )
+
+    // then — the trifecta gates, and nothing else does
+    if legs.holds {
+      guard case .requireApproval(let recorded) = verdict else {
+        Issue.record("expected gate for \(legs)")
+        return
+      }
+      #expect(recorded.reason == .exfilTrifecta)
+    } else {
+      guard case .allow = verdict else {
+        Issue.record("expected allow for \(legs)")
+        return
       }
     }
   }
@@ -513,50 +518,27 @@ private struct ProbedDangerousTool: Tool {
   /// safe tier allows outright, the ask tier parks regardless — but never on whether the conditional
   /// tier runs at all. A copy of the predicate drifting on one side would weaken the gate silently
   /// rather than break the build, so pin the agreement across every leg combination.
-  @Test(
-    arguments: [
-      (tainted: false, runIngested: false, assembly: false, runPrivate: false, session: false),
-      (tainted: true, runIngested: false, assembly: false, runPrivate: false, session: false),
-      (tainted: false, runIngested: true, assembly: false, runPrivate: false, session: false),
-      (tainted: false, runIngested: false, assembly: true, runPrivate: false, session: false),
-      (tainted: true, runIngested: false, assembly: true, runPrivate: false, session: false),
-      (tainted: true, runIngested: false, assembly: false, runPrivate: true, session: false),
-      (tainted: true, runIngested: false, assembly: false, runPrivate: false, session: true),
-      (tainted: false, runIngested: true, assembly: true, runPrivate: false, session: false),
-      (tainted: false, runIngested: true, assembly: false, runPrivate: false, session: true),
-    ]
-  )
-  func bothTiersReadTheSameTrifectaPredicate(
-    legs: (tainted: Bool, runIngested: Bool, assembly: Bool, runPrivate: Bool, session: Bool)
-  ) async {
+  @Test(arguments: ToolPolicyGateTests.trifectaLegMatrix)
+  func bothTiersReadTheSameTrifectaPredicate(legs: TrifectaLegs) async {
     // given — args carrying a private-file substring, which only the conditional tier scans for
     let privateSubstring = String(Self.memoryText.dropFirst(10).prefix(16))
     let argumentsJSON = #"{"url":"https://mcp.example/?body=\#(privateSubstring)"}"#
-    let context = makeContext(
-      tainted: legs.tainted,
-      runIngested: legs.runIngested,
-      assemblyPrivate: legs.assembly,
-      runPrivate: legs.runPrivate,
-      sessionHasPrivate: legs.session
-    )
 
     // when — the same context through the safe-tier and the ask-tier entry points
     let safeVerdict = await makeGate().evaluate(
       call: ToolCall(id: "s1", name: "web_fetch", argumentsJSON: argumentsJSON),
       tool: FetchLikeTool(),
-      context: context
+      context: legs.context
     )
     let askVerdict = await makeGate().evaluate(
       call: ToolCall(id: "a1", name: "mcp__linear__create_issue", argumentsJSON: argumentsJSON),
       tool: FetchLikeTool(name: "mcp__linear__create_issue", riskLevel: .ask),
-      context: context
+      context: legs.context
     )
 
     // then — the conditional tier runs on exactly the same leg combinations for both
-    let trifectaHolds =
-      (legs.tainted || legs.runIngested) && (legs.assembly || legs.runPrivate || legs.session)
-    #expect(blocksOnPrivateData(safeVerdict) == trifectaHolds)
-    #expect(blocksOnPrivateData(askVerdict) == trifectaHolds)
+    #expect(blocksOnPrivateData(safeVerdict) == legs.holds)
+    #expect(blocksOnPrivateData(askVerdict) == legs.holds)
   }
 
   @Test func askTierRecordsCanonicalArgsHashAndPresentation() async {
@@ -1148,5 +1130,35 @@ struct WedgedTool: Tool {
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     await release.wait()
     return ToolPayload(content: "late", status: .ok, ingestedUntrusted: false)
+  }
+}
+
+/// One row of the trifecta leg matrix: a taint source, a private-data source, and whether the
+/// condition `tainted(session ∪ run) && privateData(assembly ∪ run ∪ session)` holds for it.
+struct TrifectaLegs: Sendable, CustomStringConvertible {
+  let tainted: Bool
+  let runIngested: Bool
+  let assembly: Bool
+  let runPrivate: Bool
+  let session: Bool
+
+  var holds: Bool {
+    (tainted || runIngested) && (assembly || runPrivate || session)
+  }
+
+  var context: ToolDispatchContext {
+    ToolDispatchContext(
+      sessionTainted: tainted,
+      runIngestedUntrusted: runIngested,
+      assemblyPrivateData: assembly,
+      runPrivateData: runPrivate,
+      sessionHasPrivateData: session,
+      approvalAlreadyPending: false
+    )
+  }
+
+  var description: String {
+    "tainted=\(tainted) runIngested=\(runIngested) assembly=\(assembly) "
+      + "runPrivate=\(runPrivate) session=\(session)"
   }
 }
