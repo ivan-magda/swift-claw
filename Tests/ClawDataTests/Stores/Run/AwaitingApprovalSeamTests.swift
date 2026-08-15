@@ -9,7 +9,6 @@ import Testing
   private struct Fixture {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
-    let outbox: OutboxStoreGRDB
 
     let sessionId: Int64
     let runId: Int64
@@ -41,7 +40,6 @@ import Testing
     return Fixture(
       queue: queue,
       runs: runs,
-      outbox: OutboxStoreGRDB(writer: queue),
       sessionId: sessionId,
       runId: runId
     )

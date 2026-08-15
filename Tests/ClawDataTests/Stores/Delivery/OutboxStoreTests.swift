@@ -8,7 +8,6 @@ import Testing
 @Suite struct OutboxStoreTests {
   private struct Fixture {
     let outbox: OutboxStoreGRDB
-    let runs: RunStoreGRDB
     let approvals: ApprovalStoreGRDB
 
     let writer: DatabaseQueue
@@ -36,7 +35,6 @@ import Testing
     let runId = try #require(claim.runId)
     return Fixture(
       outbox: OutboxStoreGRDB(writer: queue),
-      runs: RunStoreGRDB(writer: queue),
       approvals: ApprovalStoreGRDB(writer: queue),
       writer: queue,
       sessionId: sessionId,

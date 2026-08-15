@@ -1,5 +1,4 @@
 import ClawCore
-import Logging
 import Synchronization
 
 /// The process-local resolution of a durable approval. The `approvals` row stays the source of
@@ -61,7 +60,7 @@ public actor ApprovalCoordinator {
 
 /// The seam `TurnRunner` (suspend) and boot re-park hand the lane hold to. `ApprovalWaiter` is the
 /// real conformer — it awaits the coordinator, then performs the resume or deny. Kept a protocol so
-/// the placeholder below can be wired without a forward dependency on the real waiter.
+/// `DeferredApprovalParker` can stand in during composition and so tests can park without a waiter.
 public protocol ApprovalParking: Sendable {
   func park(
     approvalId: Int64,
