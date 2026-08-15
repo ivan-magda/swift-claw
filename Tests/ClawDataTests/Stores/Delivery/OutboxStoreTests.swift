@@ -104,37 +104,6 @@ import Testing
     #expect(try env.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func activeClaimOnlyInsertsForRunningRun() throws {
-    // given
-    let env = try fixture()
-
-    // when / then
-    #expect(
-      try env.outbox.claimOutboundIfRunActive(
-        runId: env.runId,
-        chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "pending", payloadHash: "p")
-      ) == false
-    )
-    _ = try #require(try env.runs.pickUp(runId: env.runId, now: Date()))
-    #expect(
-      try env.outbox.claimOutboundIfRunActive(
-        runId: env.runId,
-        chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "running", payloadHash: "r")
-      )
-    )
-    _ = try env.runs.cancelActiveRun(
-      sessionId: env.sessionId,
-      reason: .cancelled,
-      now: Date()
-    )
-    #expect(
-      try env.outbox.claimOutboundIfRunActive(
-        runId: env.runId,
-        chunk: OutboxChunk(stepIndex: 1, chatId: 42, payload: "cancelled", payloadHash: "c")
-      ) == false
-    )
-  }
-
   @Test func pendingOutboundCarriesApprovalIdAndReplyMarkup() throws {
     // given — an approvals row and a PENDING delivery linked to it, carrying an inline keyboard
     let env = try fixture()

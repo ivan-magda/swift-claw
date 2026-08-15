@@ -360,11 +360,11 @@ extension ExchangeCommitTests {
   }
 
   private func loadedHistory(_ fixture: Fixture) throws -> [StoredMessage] {
-    try SessionMessageStoreGRDB(writer: fixture.queue).loadContext(
+    try SessionMessageStoreGRDB(writer: fixture.queue).loadContextSnapshot(
       sessionId: fixture.sessionId,
       throughMessageId: Int64.max,
       limit: 50
-    )
+    ).history
   }
 
   @Test func aCompletedCommitPersistsTheFinalStateAndEachExchangeState() throws {

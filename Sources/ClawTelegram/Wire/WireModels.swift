@@ -155,18 +155,6 @@ struct TCallbackQuery: Decodable {
   let data: String?
 }
 
-/// The inline-keyboard wire shape Telegram expects inside `reply_markup`:
-/// `{"inline_keyboard":[[{"text":…,"callback_data":…}]]}`. This is the authoritative shape the
-/// approval keyboard's JSON string must reproduce; the client sends the string parsed to a
-/// `JSONValue`, so these Encodable types are the contract, not the send path.
-struct TInlineKeyboardButton: Encodable {
-  let text: String
-  let callback_data: String
-}
-struct TInlineKeyboardMarkup: Encodable {
-  let inline_keyboard: [[TInlineKeyboardButton]]
-}
-
 struct TUpdate: Decodable {
   let update_id: Int64
   let message: TMessage?

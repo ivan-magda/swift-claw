@@ -15,10 +15,6 @@ private struct MarkSentFailingOutbox: OutboxStore {
     try base.claimOutbound(runId: runId, chunk: chunk)
   }
 
-  func claimOutboundIfRunActive(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool {
-    try base.claimOutboundIfRunActive(runId: runId, chunk: chunk)
-  }
-
   func markSent(
     runId: Int64,
     stepIndex: Int,

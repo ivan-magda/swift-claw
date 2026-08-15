@@ -93,21 +93,6 @@ import Testing
     #expect(health.oldestRunAgeSeconds != nil)
   }
 
-  @Test func outboxClaimTreatsASuspendedRunAsActive() throws {
-    // given
-    let env = try makeSuspendedFixture()
-
-    // when — the suspended run's own approval prompt rides this claim (preamble D7)
-    let claimed = try env.outbox.claimOutboundIfRunActive(
-      runId: env.runId,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "approve?", payloadHash: "h")
-    )
-
-    // then
-    #expect(claimed)
-    #expect(try env.outbox.pendingOutbound().count == 1)
-  }
-
   @Test func assistantCommitOnASuspendedRunLosesArbitration() throws {
     // given
     let env = try makeSuspendedFixture()

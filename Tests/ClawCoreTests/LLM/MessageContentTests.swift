@@ -18,7 +18,6 @@ import Testing
     // then — plain text must stay distinguishable so the wire keeps encoding it as a JSON string
     #expect(content.parts == [.text("hello")])
     #expect(content.text == "hello")
-    #expect(content.isPlainText)
     #expect(content.images.isEmpty)
   }
 
@@ -28,7 +27,6 @@ import Testing
 
     // when / then — the grapheme-based context fitter reads this and must not see image bytes
     #expect(content.text == "what is this?")
-    #expect(content.isPlainText == false)
     #expect(content.images == [pixel])
   }
 

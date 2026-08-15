@@ -170,11 +170,11 @@ import Testing
     #expect(commit == .committed)
 
     // when — reload the anchor from GRDB and thread it into turn 2
-    let reloaded = try stores.sessions.loadContext(
+    let reloaded = try stores.sessions.loadContextSnapshot(
       sessionId: sessionId,
       throughMessageId: .max,
       limit: 50
-    )
+    ).history
     let reloadedAssistant = try #require(reloaded.first { $0.role == .assistant })
     let reloadedState = try #require(reloadedAssistant.providerState)
     #expect(reloadedState == mintedState)  // survived the round-trip byte-for-byte
@@ -284,7 +284,7 @@ import Testing
     // when — turn 2 replays the poisoned anchor; the backend rejects it and the provider recovers
     let poisonedAnchor = try #require(
       try stores.sessions
-        .loadContext(sessionId: sessionId, throughMessageId: .max, limit: 50)
+        .loadContextSnapshot(sessionId: sessionId, throughMessageId: .max, limit: 50).history
         .first { $0.role == .assistant }
     )
     let poisonedAnchorState = try #require(poisonedAnchor.providerState)
@@ -352,7 +352,7 @@ import Testing
       store: FreshCredentialStore()
     )
     let anchors = try stores.sessions
-      .loadContext(sessionId: sessionId, throughMessageId: .max, limit: 50)
+      .loadContextSnapshot(sessionId: sessionId, throughMessageId: .max, limit: 50).history
       .filter { $0.role == .assistant }
     #expect(anchors.count == 2)  // both epochs are on disk
 

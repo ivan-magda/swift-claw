@@ -99,8 +99,7 @@ import Testing
       terminationReason: termination,
       stdout: stdout,
       stderr: stderr,
-      truncatedRawBytes: truncated,
-      wallClock: .milliseconds(20)
+      truncatedRawBytes: truncated
     )
   }
 

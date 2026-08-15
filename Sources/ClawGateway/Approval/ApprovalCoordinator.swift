@@ -105,30 +105,3 @@ public final class DeferredApprovalParker: ApprovalParking {
     )
   }
 }
-
-/// Placeholder: HOLDS the session lane by awaiting the coordinator, then returns without
-/// resuming. The real resume/deny is `ApprovalWaiter`, which replaces this at the composition
-/// root; until it is wired, production registers no ask-tier tool, so `park` is never reached in
-/// production.
-public struct InertApprovalParker: ApprovalParking {
-  private let coordinator: ApprovalCoordinator
-  private let logger: Logger
-
-  public init(coordinator: ApprovalCoordinator, logger: Logger = Logger(label: "approval.parker")) {
-    self.coordinator = coordinator
-    self.logger = logger
-  }
-
-  public func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    revalidatePolicyOnApprove: Bool
-  ) async {
-    let signal = await coordinator.awaitResolution(approvalId: approvalId)
-    logger.debug(
-      "approval \(approvalId) resolved as \(String(describing: signal)); the waiter completes the run"
-    )
-  }
-}

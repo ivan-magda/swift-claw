@@ -45,25 +45,4 @@ import Testing
     #expect(update.callback_query == nil)
     #expect(update.toRawUpdate().message?.text == "hi")
   }
-
-  @Test func inlineKeyboardEncodesTheTelegramWireShape() throws {
-    // given — the canonical reply_markup shape the approval keyboard's JSON string (Task 13)
-    // must reproduce byte-for-key: {"inline_keyboard":[[{"text":…,"callback_data":…}]]}
-    let markup = TInlineKeyboardMarkup(inline_keyboard: [
-      [
-        TInlineKeyboardButton(text: "Approve", callback_data: "apr:abc:y"),
-        TInlineKeyboardButton(text: "Deny", callback_data: "apr:abc:n"),
-      ]
-    ])
-
-    // when — a plain encoder: the snake_case field names ARE the wire keys, no strategy mangling
-    let data = try JSONEncoder().encode(markup)
-    let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-
-    // then
-    let rows = try #require(object["inline_keyboard"] as? [[[String: String]]])
-    #expect(rows[0][0]["text"] == "Approve")
-    #expect(rows[0][0]["callback_data"] == "apr:abc:y")
-    #expect(rows[0][1]["callback_data"] == "apr:abc:n")
-  }
 }

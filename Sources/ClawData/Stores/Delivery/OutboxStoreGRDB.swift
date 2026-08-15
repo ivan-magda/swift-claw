@@ -15,41 +15,6 @@ public struct OutboxStoreGRDB: OutboxStore {
     }
   }
 
-  public func claimOutboundIfRunActive(
-    runId: Int64,
-    chunk: OutboxChunk
-  ) throws(StoreError) -> Bool {
-    try database.writeMapping { db in
-      try db.execute(
-        sql: """
-          INSERT OR IGNORE INTO outbound_deliveries(
-            run_id, step_index, chat_id, dedup_key, payload, payload_hash,
-            approval_id, reply_markup, status, created_ts
-          )
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?
-          WHERE EXISTS (
-            SELECT 1 FROM runs WHERE id = ? AND state IN (?, ?)
-          )
-          """,
-        arguments: [
-          runId,
-          chunk.stepIndex,
-          chunk.chatId,
-          OutboxDedupKey.make(runId: runId, stepIndex: chunk.stepIndex),
-          chunk.payload,
-          chunk.payloadHash,
-          chunk.approvalId,
-          chunk.replyMarkup,
-          Date(),
-          runId,
-          RunState.running.rawValue,
-          RunState.awaitingApproval.rawValue,
-        ]
-      )
-      return db.changesCount > 0
-    }
-  }
-
   public func markSent(
     runId: Int64,
     stepIndex: Int,

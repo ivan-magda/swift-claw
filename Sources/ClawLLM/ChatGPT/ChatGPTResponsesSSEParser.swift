@@ -18,12 +18,6 @@ struct ChatGPTResponsesBounds: Sendable, Equatable {
     maximumAccumulatedOutputBytes: 4 * 1024 * 1024
   )
 
-  static let maximumEventBytes = standard.maximumEventBytes
-  static let maximumBufferedBytes = standard.maximumBufferedBytes
-  static let maximumDataEvents = standard.maximumDataEvents
-  static let maximumOutputItems = standard.maximumOutputItems
-  static let maximumAccumulatedOutputBytes = standard.maximumAccumulatedOutputBytes
-
   let maximumEventBytes: Int
   let maximumBufferedBytes: Int
   let maximumDataEvents: Int

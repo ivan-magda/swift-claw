@@ -325,11 +325,6 @@ public enum TokenEstimator {
     inputTokens(forGraphemes: text.count)
   }
 
-  /// Estimated input tokens plus the reserved output cap.
-  public static func estimateTotalTokens(_ messages: [ChatMessage], maxOutput: Int) -> Int {
-    estimateInputTokens(messages) + maxOutput
-  }
-
   /// Inverse of input-token estimation: the max graphemes that fit a token budget.
   public static func graphemeBudget(forInputTokens inputTokens: Int) -> Int {
     Int(floor(Double(inputTokens) / 1.25)) * 4

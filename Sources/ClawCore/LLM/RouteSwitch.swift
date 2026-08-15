@@ -30,9 +30,6 @@ extension ProviderError {
       nil
     }
   }
-
-  /// Whether this cause may be re-issued against a different route.
-  public var allowsRouteSwitch: Bool { routeSwitchPersistence != nil }
 }
 
 // MARK: - Decision

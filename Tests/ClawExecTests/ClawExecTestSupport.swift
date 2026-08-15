@@ -94,8 +94,7 @@ func commandResult(
       totalBytes: stderrTotal ?? stderr.count,
       truncated: stderrTruncated
     ),
-    processIdentifier: 42,
-    wallClock: .milliseconds(1)
+    processIdentifier: 42
   )
 }
 
@@ -243,8 +242,7 @@ struct NoopCommandRunner: ContainerCommandRunning {
       termination: .exited(0),
       stdout: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
       stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
-      processIdentifier: 1,
-      wallClock: .zero
+      processIdentifier: 1
     )
   }
 }

@@ -90,11 +90,11 @@ import Testing
     let triggerMessageId = try #require(result.triggerMessageId)
     #expect(triggerMessageId == messageId)
 
-    let history = try store.loadContext(
+    let history = try store.loadContextSnapshot(
       sessionId: sessionId,
       throughMessageId: triggerMessageId,
       limit: 10
-    )
+    ).history
     #expect(history == [StoredMessage(role: .user, content: "hello", provenance: .trusted)])
 
     let run = try #require(
@@ -198,11 +198,11 @@ import Testing
     let throughMessageId = try #require(claims[3].triggerMessageId)
 
     // when
-    let history = try store.loadContext(
+    let history = try store.loadContextSnapshot(
       sessionId: sessionId,
       throughMessageId: throughMessageId,
       limit: 3
-    )
+    ).history
 
     // then — bounded through m4, so m5 is invisible to m4's turn.
     #expect(history.map(\.content) == ["m2", "m3", "m4"])
@@ -223,11 +223,11 @@ import Testing
     try store.resetWindowAndDetaint(sessionId: sessionId, now: Date())
     let second = try store.claimAndPersistInbound(inbound(updateId: 2, text: "after"))
     let triggerMessageId = try #require(second.triggerMessageId)
-    let history = try store.loadContext(
+    let history = try store.loadContextSnapshot(
       sessionId: sessionId,
       throughMessageId: triggerMessageId,
       limit: 10
-    )
+    ).history
 
     // then
     #expect(history.map(\.content) == ["after"])
@@ -584,11 +584,11 @@ extension SessionMessageStoreTests {
   }
 
   private func loadHistory(_ fixture: StateFixture) throws -> [StoredMessage] {
-    try fixture.store.loadContext(
+    try fixture.store.loadContextSnapshot(
       sessionId: fixture.sessionId,
       throughMessageId: Int64.max,
       limit: 50
-    )
+    ).history
   }
 
   @Test func anAssistantAnchorRoundTripsItsProviderStateVerbatim() throws {

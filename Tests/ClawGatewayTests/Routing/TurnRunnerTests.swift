@@ -516,14 +516,6 @@ struct SnapshotFailingSessionMessages: SessionMessageStore {
     )
   }
 
-  func loadContext(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> [StoredMessage] {
-    []
-  }
-
   func loadContextSnapshot(
     sessionId: Int64,
     throughMessageId: Int64,

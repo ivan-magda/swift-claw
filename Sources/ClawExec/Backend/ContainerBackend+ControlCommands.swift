@@ -144,8 +144,6 @@ extension ContainerBackend {
       teardownGracePeriod: commandTeardownGrace
     )
 
-    let clock = ContinuousClock()
-    let started = clock.now
     let allowance = command.timeout + command.teardownGracePeriod + hostWatchdogSlack
 
     switch await raceRunnerAgainstWatchdog(
@@ -158,25 +156,23 @@ extension ContainerBackend {
     case .runnerReturned(let result):
       return result
     case .deadlineExpired:
-      return failClosedResult(.timedOut, wallClock: started.duration(to: clock.now))
+      return failClosedResult(.timedOut)
     case .callerCancelled:
-      return failClosedResult(.cancelled, wallClock: started.duration(to: clock.now))
+      return failClosedResult(.cancelled)
     }
   }
 
   // Synthesized when the runner never reported: every consumer treats it fail-closed
   // (successOutput → nil, lifecycle/absence checks → false, bounded helpers → nil).
   private static func failClosedResult(
-    _ termination: ContainerCommandTermination,
-    wallClock: Duration
+    _ termination: ContainerCommandTermination
   ) -> ContainerCommandResult {
     let empty = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
     return ContainerCommandResult(
       termination: termination,
       stdout: empty,
       stderr: empty,
-      processIdentifier: nil,
-      wallClock: wallClock
+      processIdentifier: nil
     )
   }
 

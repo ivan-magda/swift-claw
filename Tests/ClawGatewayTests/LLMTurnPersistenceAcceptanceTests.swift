@@ -890,11 +890,11 @@ func makeStopNewStack(
       sessionKey: sessionKey,
       now: Date()
     )
-    let history = try reopened.sessionMessages.loadContext(
+    let history = try reopened.sessionMessages.loadContextSnapshot(
       sessionId: sessionId,
       throughMessageId: .max,
       limit: 50
-    )
+    ).history
     #expect(history.contains { $0.role == .user && $0.content == "hello" })
     #expect(history.contains { $0.role == .assistant && $0.content == "stub answer" })
   }
