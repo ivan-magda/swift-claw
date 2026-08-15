@@ -21,7 +21,7 @@ import Testing
     let body = Self.openAIRefusalBody
 
     // when
-    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: body)
+    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: Data(body.utf8))
 
     // then
     #expect(matched)
@@ -35,7 +35,7 @@ import Testing
       """
 
     // when
-    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: body)
+    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: Data(body.utf8))
 
     // then
     #expect(matched)
@@ -48,7 +48,7 @@ import Testing
       """
 
     // when
-    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: body)
+    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: Data(body.utf8))
 
     // then
     #expect(matched == false)
@@ -61,7 +61,7 @@ import Testing
       """
 
     // when
-    let matched = ProviderErrorClassifier.isVisionRefusal(status: 500, body: body)
+    let matched = ProviderErrorClassifier.isVisionRefusal(status: 500, body: Data(body.utf8))
 
     // then
     #expect(matched == false)
@@ -72,7 +72,7 @@ import Testing
     let body = Self.openAIRefusalBody
 
     // when
-    let matched = ProviderErrorClassifier.isVisionRefusal(status: 503, body: body)
+    let matched = ProviderErrorClassifier.isVisionRefusal(status: 503, body: Data(body.utf8))
 
     // then — the status guard alone must reject this; without it an outage would read as a
     // capability answer
@@ -87,7 +87,7 @@ import Testing
       """
 
     // when
-    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: body)
+    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: Data(body.utf8))
 
     // then — the error-type guard alone must reject this
     #expect(matched == false)
@@ -98,7 +98,7 @@ import Testing
     let body = "not json"
 
     // when
-    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: body)
+    let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: Data(body.utf8))
 
     // then
     #expect(matched == false)

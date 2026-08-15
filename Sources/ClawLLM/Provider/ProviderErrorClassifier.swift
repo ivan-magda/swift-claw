@@ -14,7 +14,14 @@ enum ProviderErrorClassifier {
   private static let refusalStatus = 400
 
   /// Never throws and never traps: a body it cannot read is simply not a refusal.
-  static func isVisionRefusal(status: Int, body: String) -> Bool {
+  static func isVisionRefusal(status: Int, body: Data) -> Bool {
+    if let text = String(data: body, encoding: .utf8) {
+      return isVisionRefusal(status: status, body: text)
+    }
+    return false
+  }
+
+  private static func isVisionRefusal(status: Int, body: String) -> Bool {
     guard status == refusalStatus else {
       return false
     }
@@ -27,13 +34,5 @@ enum ProviderErrorClassifier {
     return imagePartMarkers.contains { marker in
       lowered.contains(marker)
     }
-  }
-
-  /// The raw-diagnostic overload. A body that is not UTF-8 is not a refusal.
-  static func isVisionRefusal(status: Int, body: Data) -> Bool {
-    guard let text = String(data: body, encoding: .utf8) else {
-      return false
-    }
-    return isVisionRefusal(status: status, body: text)
   }
 }
