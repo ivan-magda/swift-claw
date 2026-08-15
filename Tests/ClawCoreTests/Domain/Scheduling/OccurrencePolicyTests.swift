@@ -28,8 +28,7 @@ import Testing
       prompt: "post the standup summary",
       recurrence: recurrence,
       timezone: timezone,
-      firstOccurrence: firstOccurrence,
-      recurrenceInWords: "every 10 minutes"
+      firstOccurrence: firstOccurrence
     )
   }
 

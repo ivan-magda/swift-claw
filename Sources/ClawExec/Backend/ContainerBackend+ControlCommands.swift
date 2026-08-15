@@ -146,14 +146,14 @@ extension ContainerBackend {
 
     let allowance = command.timeout + command.teardownGracePeriod + hostWatchdogSlack
 
-    switch await raceRunnerAgainstWatchdog(
+    switch await DeadlineRace.race(
       allowance: allowance,
       sleep: watchdogSleep,
-      runner: {
+      operation: {
         await commands.run(command)
       }
     ) {
-    case .runnerReturned(let result):
+    case .operationReturned(let result):
       return result
     case .deadlineExpired:
       return failClosedResult(.timedOut)

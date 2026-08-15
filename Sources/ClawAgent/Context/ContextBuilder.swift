@@ -499,14 +499,14 @@ private extension ContextBuilder {
       tier: spec.tier,
       priority: spec.priority,
       truncatable: spec.truncatable,
-      cap: cap ?? spec.cap.resolve(in: budget, residualGraphemes: nil),
+      cap: cap ?? spec.id.resolve(in: budget, residualGraphemes: nil),
       dropMarker: dropMarker,
       units: units
     )
   }
 
   func cap(for id: ContextRowID, residual: Int) -> Int {
-    spec(for: id).cap.resolve(in: budget, residualGraphemes: residual) ?? Int.max
+    id.resolve(in: budget, residualGraphemes: residual) ?? Int.max
   }
 
   func residualAfterFixedSections(_ sections: [FittableSection]) -> Int {

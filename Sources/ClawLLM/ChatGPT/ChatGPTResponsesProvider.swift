@@ -13,14 +13,14 @@ import Logging
 /// this adapter owns. `complete` and `stream` differ only in where visible deltas go: they build the
 /// same plan and run the same engine, so their terminal reply, usage, tool calls, replay state, and
 /// retry count are identical on the same wire.
-public struct ChatGPTResponsesProvider<ClockType: Clock>: LLMProvider, Sendable
-where ClockType.Duration == Duration {
+public struct ChatGPTResponsesProvider: LLMProvider, Sendable {
   private let engine: ChatGPTResponsesAttemptEngine
   private let codec: ChatGPTProviderStateCodec
   private let encoder = ChatGPTResponsesRequestEncoder()
   private let credentialProfileID: UUID?
   private let userAgent: String
   private let requestTimeoutSeconds: Int
+  private let logger: Logger
 
   /// - Parameter credentialProfileID: the stable local profile identity replay state is bound to. An
   ///   absent ID is valid only for the logged-out provider, whose credential source fails
@@ -38,7 +38,7 @@ where ClockType.Duration == Duration {
     buildVersion: String,
     retryBudget: Int,
     requestTimeoutSeconds: Int,
-    clock: ClockType,
+    clock: any Clock<Duration>,
     jitter: @escaping @Sendable (Duration) -> Duration,
     epochID: @escaping @Sendable () -> UUID,
     treatsQuotaAsTerminal: Bool = false
@@ -56,14 +56,13 @@ where ClockType.Duration == Duration {
       treatsQuotaAsTerminal: treatsQuotaAsTerminal,
       // The bootstrapped default handler, never a forced no-op: this is the only path production wires
       // from `clawd`, so silencing it here would sink the replay-drop diagnostic and every engine line
-      // with it. A nil reporter below then routes drops through this same logger, counts only.
-      logger: Logger(label: "clawd.llm"),
-      replayDropsReporter: nil
+      // with it.
+      logger: Logger(label: "clawd.llm")
     )
   }
 
-  /// The designated init, internal so a test can observe the replay-drops diagnostic and silence or
-  /// capture logs without widening the public surface past the pinned signature above.
+  /// The designated init, internal so a test can silence or capture logs without widening the
+  /// public surface past the pinned signature above.
   init(
     http: any HTTPStreaming,
     credentials: any LLMCredentialSource,
@@ -71,32 +70,18 @@ where ClockType.Duration == Duration {
     buildVersion: String,
     retryBudget: Int,
     requestTimeoutSeconds: Int,
-    clock: ClockType,
+    clock: any Clock<Duration>,
     jitter: @escaping @Sendable (Duration) -> Duration,
     epochID: @escaping @Sendable () -> UUID,
     treatsQuotaAsTerminal: Bool = false,
-    logger: Logger,
-    replayDropsReporter: (@Sendable (ChatGPTReplayDrops) -> Void)?
+    logger: Logger
   ) {
     self.credentialProfileID = credentialProfileID
     self.requestTimeoutSeconds = requestTimeoutSeconds
     self.userAgent = Self.userAgent(buildVersion: buildVersion)
 
-    // Never left as the codec's silent no-op: a dropped foreign or malformed state emits a
-    // counts-only diagnostic. `ChatGPTReplayDrops` is all integers by construction, so a reporter is
-    // handed no payload or issuer even if one tried to spill it.
-    let reporter: @Sendable (ChatGPTReplayDrops) -> Void =
-      replayDropsReporter
-      ?? { drops in
-        logger.notice(
-          """
-          chatgpt replay state dropped \
-          foreign=\(drops.foreign) staleEpoch=\(drops.staleEpoch) malformed=\(drops.malformed) \
-          oversized=\(drops.oversized) budgetEvicted=\(drops.budgetEvicted)
-          """
-        )
-      }
-    self.codec = ChatGPTProviderStateCodec(newEpoch: epochID, reportDrops: reporter)
+    self.logger = logger
+    self.codec = ChatGPTProviderStateCodec(newEpoch: epochID)
 
     self.engine = ChatGPTResponsesAttemptEngine(
       credentials: credentials,
@@ -184,6 +169,18 @@ private extension ChatGPTResponsesProvider {
       profileID: profileID,
       wireModel: wireModel
     )
+    // Counts only: `ChatGPTReplayDrops` is all integers by construction, so the diagnostic cannot
+    // spill a payload or an issuer even if one tried.
+    if selection.drops.isEmpty == false {
+      let drops = selection.drops
+      logger.notice(
+        """
+        chatgpt replay state dropped \
+        foreign=\(drops.foreign) staleEpoch=\(drops.staleEpoch) malformed=\(drops.malformed) \
+        oversized=\(drops.oversized) budgetEvicted=\(drops.budgetEvicted)
+        """
+      )
+    }
 
     let encoder = encoder
     let userAgent = userAgent

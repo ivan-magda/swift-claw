@@ -8,17 +8,12 @@ import Testing
   @Test func endingTheServiceRunsBackendShutdownOnce() async throws {
     // given
     let backend = FakeExecutionBackend()
-    let service = SandboxLifecycleService(
-      maintenance: backend,
-      clock: ScriptedClock { duration in
-        #expect(duration == SandboxLifecycleService.idleInterval)
-        await Task.yield()
-        throw CancellationError()
-      }
-    )
+    let service = SandboxLifecycleService(maintenance: backend)
 
-    // when
-    try await service.run()
+    // when — the service parks until the group cancels it
+    let running = Task { try await service.run() }
+    running.cancel()
+    try await running.value
 
     // then
     #expect(await backend.shutdownCallCount() == 1)

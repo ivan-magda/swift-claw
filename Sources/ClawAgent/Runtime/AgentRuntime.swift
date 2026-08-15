@@ -688,22 +688,14 @@ private extension AgentRuntime {
         request: request,
         deadlineSeconds: deadlineSeconds
       )
-    } catch let providerError as ProviderError where providerError.allowsBufferedReattempt {
+    } catch let error where ProviderError.cause(of: error)?.allowsBufferedReattempt == true {
       // connectFailed: nothing was transmitted. rejected: the head carried an error status before
       // any SSE bytes, so the server generated nothing — the no-double-issue rationale does
       // not apply. Either way one blocking attempt is safe; `complete` brings its own retry
       // budget, backoff, and Retry-After handling, all inside the remaining wall-clock window.
-      return try await runTypingTurn(
-        provider: provider,
-        chatId: chatId,
-        request: request,
-        deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart)
-      )
-    } catch let failure as ProviderFailure where failure.cause.allowsBufferedReattempt {
-      // The streaming runtime now hands its failures on as the intact envelope so accounting reads
-      // the provider's disposition; the same pre-stream head failures the bare catch above
-      // re-attempts arrive wrapped, so match them here too or the wrapper would silently defeat the
-      // one-time buffered fallback.
+      // Reading through `cause(of:)` matches both shapes: the streaming runtime wraps its failures
+      // in a `ProviderFailure` envelope, and matching only the bare error would let the wrapper
+      // silently defeat the one-time buffered fallback.
       return try await runTypingTurn(
         provider: provider,
         chatId: chatId,

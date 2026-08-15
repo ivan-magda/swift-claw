@@ -326,8 +326,8 @@ import Testing
 
   @Test(.timeLimit(.minutes(1)))
   func aDroppedForeignStateEmitsAMetadataOnlyDiagnostic() async throws {
-    // given — history carrying a state from another provider, and a captured reporter
-    let recorder = DropsRecorder()
+    // given — history carrying a state from another provider, and a captured developer log
+    let capture = RecordingLogCapture()
     let request = ChatRequest(
       model: "gpt-5",
       messages: [
@@ -345,18 +345,18 @@ import Testing
     )
     let harness = ProviderHarness(
       steps: [.stream(okHead, Fixtures.basicSuccess())],
-      replayDropsReporter: { drops in
-        recorder.record(drops)
-      }
+      logger: capture.logger()
     )
 
     // when
     _ = try await harness.provider.complete(request: request)
 
-    // then — the foreign state was counted and reported; the type carries counts and nothing else
-    let drops = try #require(recorder.value)
-    #expect(drops.foreign == 1)
-    #expect(drops.total == 1)
+    // then — the foreign state was counted and reported as counts, carrying no payload or issuer
+    let line = try #require(capture.entries.first { $0.message.contains("replay state dropped") })
+    #expect(line.message.contains("foreign=1"))
+    #expect(line.message.contains("staleEpoch=0"))
+    #expect(line.message.contains("deadbeef") == false)
+    #expect(line.message.contains("some-other-provider") == false)
   }
 
   // MARK: - Obligation 4: chronological replay emission
@@ -476,22 +476,6 @@ private func head(_ status: Int) -> HTTPStreamHead {
 
 /// Captures the last replay-drops diagnostic the provider emitted, proving the codec's reporter is
 /// wired rather than left as the default no-op.
-private final class DropsRecorder: Sendable {
-  private let box = Mutex<ChatGPTReplayDrops?>(nil)
-
-  func record(_ drops: ChatGPTReplayDrops) {
-    box.withLock { current in
-      current = drops
-    }
-  }
-
-  var value: ChatGPTReplayDrops? {
-    box.withLock { current in
-      current
-    }
-  }
-}
-
 // MARK: - Assertions
 
 private func requireProviderFailure(

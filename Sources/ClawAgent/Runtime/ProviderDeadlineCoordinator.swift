@@ -264,7 +264,7 @@ private extension ProviderDeadlineCoordinator {
   /// authoritative usage. A provider that proved no start (a `notStarted` failure) owes nothing, and
   /// so does a bare `CancellationError` — the contract's proof the attempt never reached transport. A
   /// typed inference cancellation keeps its observed lower bound. Every remaining shape defers to
-  /// `AgentRuntime.accounting(for:)`, the one reducer the non-deadline path reads, so a bare provider
+  /// `ProviderFailureAccounting.classify`, the one reducer every surface reads, so a bare provider
   /// error or an untyped failure resolves to the same disposition at both entry points rather than
   /// being booked conservatively here alone.
   static func timedOut(fromLoser result: ProviderCallResult) -> ProviderDeadlineOutcome {
@@ -280,7 +280,7 @@ private extension ProviderDeadlineCoordinator {
       if error is CancellationError {
         return .timedOut(.notStarted)
       }
-      switch AgentRuntime.accounting(for: error) {
+      switch ProviderFailureAccounting.classify(error) {
       case .notStarted:
         return .timedOut(.notStarted)
       case .mayHaveStarted(let observed):

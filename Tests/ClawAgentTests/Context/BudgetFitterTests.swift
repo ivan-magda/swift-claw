@@ -83,26 +83,26 @@ import Testing
         id: .memoryItems,
         priority: 60,
         cap: try #require(
-          ContextRowCap.memoryItems.resolve(in: budget, residualGraphemes: residual)
+          ContextRowID.memoryItems.resolve(in: budget, residualGraphemes: residual)
         ),
         units: ["aaa", "bbb", "ccc", "ddd", "eee"]
       ),
       truncatable(
         id: .history,
         priority: 70,
-        cap: try #require(ContextRowCap.history.resolve(in: budget, residualGraphemes: residual)),
+        cap: try #require(ContextRowID.history.resolve(in: budget, residualGraphemes: residual)),
         units: ["hhhh", "iiii"]
       ),
       truncatable(
         id: .recall,
         priority: 80,
-        cap: try #require(ContextRowCap.recall.resolve(in: budget, residualGraphemes: residual)),
+        cap: try #require(ContextRowID.recall.resolve(in: budget, residualGraphemes: residual)),
         units: ["rrrr"]
       ),
       truncatable(
         id: .skills,
         priority: 90,
-        cap: try #require(ContextRowCap.skills.resolve(in: budget, residualGraphemes: residual)),
+        cap: try #require(ContextRowID.skills.resolve(in: budget, residualGraphemes: residual)),
         units: ["s"]
       ),
     ]

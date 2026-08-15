@@ -93,7 +93,7 @@ extension ContainerBackend {
 
     var result =
       switch await boundedForegroundRun(command, deadline: deadline) {
-      case .runnerReturned(let commandResult):
+      case .operationReturned(let commandResult):
         await classify(
           commandResult,
           identity: identity,
@@ -148,15 +148,17 @@ extension ContainerBackend {
   }
 
   // The runner enforces the guest timeout itself; this host-side watchdog is an independent
-  // bound so a wedged `container run` that never returns cannot hang the execution lane.
+  // bound so a wedged `container run` that never returns cannot hang the execution lane. A wedged
+  // runner is cancelled and abandoned after the deadline; the shielded teardown ladder plus the
+  // prepared-image disarm own containment.
   func boundedForegroundRun(
     _ command: ContainerCommand,
     deadline: ContinuousClock.Instant
-  ) async -> WatchdogRaceOutcome {
+  ) async -> DeadlineRaceOutcome<ContainerCommandResult> {
     let commands = commands
     let remaining = now().duration(to: deadline)
 
-    return await Self.raceRunnerAgainstWatchdog(
+    return await DeadlineRace.race(
       allowance: remaining,
       sleep: watchdogSleep
     ) {

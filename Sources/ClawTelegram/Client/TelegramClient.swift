@@ -52,10 +52,6 @@ public struct TelegramClient: TelegramTransport {
     return updates.map { $0.toRawUpdate() }
   }
 
-  public func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
-    try await sendMessage(chatId: chatId, text: text, replyMarkup: nil)
-  }
-
   public func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
     let request = SendMessageRequest(
       chatId: chatId,
@@ -69,10 +65,6 @@ public struct TelegramClient: TelegramTransport {
       httpTimeout: Timeout.sendMessageSeconds
     )
     return message.message_id
-  }
-
-  public func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 {
-    try await sendRichMessage(chatId: chatId, markdown: markdown, replyMarkup: nil)
   }
 
   public func sendRichMessage(

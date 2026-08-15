@@ -131,14 +131,10 @@ import Testing
     }
 
     // when the service ends, as it does on graceful shutdown
-    try await MCPSessionLifecycleService(
-      sessions: sessions,
-      clock: ScriptedClock { duration in
-        #expect(duration == MCPSessionLifecycleService.idleInterval)
-        await Task.yield()
-        throw CancellationError()
-      }
-    ).run()
+    let service = MCPSessionLifecycleService(sessions: sessions)
+    let running = Task { try await service.run() }
+    running.cancel()
+    try await running.value
 
     // then both sessions were handed back rather than stranded on the server until it expires them
     #expect(await scripted.teardowns == 2)
