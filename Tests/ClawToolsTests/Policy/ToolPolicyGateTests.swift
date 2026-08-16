@@ -5,6 +5,24 @@ import Testing
 
 @testable import ClawTools
 
+private func makeDispatchContext(
+  tainted: Bool = false,
+  runIngested: Bool = false,
+  assemblyPrivate: Bool = false,
+  runPrivate: Bool = false,
+  sessionHasPrivate: Bool = false,
+  approvalPending: Bool = false
+) -> ToolDispatchContext {
+  ToolDispatchContext(
+    sessionTainted: tainted,
+    runIngestedUntrusted: runIngested,
+    assemblyPrivateData: assemblyPrivate,
+    runPrivateData: runPrivate,
+    sessionHasPrivateData: sessionHasPrivate,
+    approvalAlreadyPending: approvalPending
+  )
+}
+
 /// Gate-test stand-ins declaring each egress class. `FetchLikeTool` resolves its target the way
 /// web_fetch does (CanonicalURL + owner-facing refusal copy), so gate tests exercise the real
 /// resolution contract without HTTP plumbing.
@@ -222,13 +240,13 @@ private struct ProbedDangerousTool: Tool {
     sessionHasPrivate: Bool = false,
     approvalPending: Bool = false
   ) -> ToolDispatchContext {
-    ToolDispatchContext(
-      sessionTainted: tainted,
-      runIngestedUntrusted: runIngested,
-      assemblyPrivateData: assemblyPrivate,
-      runPrivateData: runPrivate,
-      sessionHasPrivateData: sessionHasPrivate,
-      approvalAlreadyPending: approvalPending
+    makeDispatchContext(
+      tainted: tainted,
+      runIngested: runIngested,
+      assemblyPrivate: assemblyPrivate,
+      runPrivate: runPrivate,
+      sessionHasPrivate: sessionHasPrivate,
+      approvalPending: approvalPending
     )
   }
 
@@ -1147,13 +1165,12 @@ struct TrifectaLegs: Sendable, CustomStringConvertible {
   }
 
   var context: ToolDispatchContext {
-    ToolDispatchContext(
-      sessionTainted: tainted,
-      runIngestedUntrusted: runIngested,
-      assemblyPrivateData: assembly,
-      runPrivateData: runPrivate,
-      sessionHasPrivateData: session,
-      approvalAlreadyPending: false
+    makeDispatchContext(
+      tainted: tainted,
+      runIngested: runIngested,
+      assemblyPrivate: assembly,
+      runPrivate: runPrivate,
+      sessionHasPrivate: session
     )
   }
 

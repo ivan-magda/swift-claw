@@ -98,7 +98,7 @@ public enum BudgetFitter {
     }
     let nonTruncatable = ordered.filter { section in !section.truncatable }
     let truncatable = ordered.filter(\.truncatable)
-    let required = requiredGraphemes(ordered)
+    let required = requiredGraphemes(nonTruncatable)
 
     guard required <= budget.inputCapGraphemes else {
       throw BudgetFitterError.nonTruncatableRowsExceedInputCap(
