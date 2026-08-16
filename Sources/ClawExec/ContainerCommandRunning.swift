@@ -1,5 +1,7 @@
+import ClawCore
 import Foundation
 import Subprocess
+import Synchronization
 
 #if canImport(System)
   import System
@@ -104,7 +106,43 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
 
   public func run(_ command: ContainerCommand) async -> ContainerCommandResult {
     let clock = ContinuousClock()
+    let spawnedProcessIdentifier = SpawnedProcessIdentifierBox()
 
+    let outcome = await DeadlineRace.race(
+      allowance: command.timeout,
+      sleep: { try await clock.sleep(for: $0) },
+      operation: {
+        await self.spawnAndCapture(
+          command,
+          spawnedProcessIdentifier: spawnedProcessIdentifier
+        )
+      }
+    )
+
+    switch outcome {
+    case .operationReturned(let result):
+      return result
+    case .deadlineExpired:
+      return ContainerCommandResult(
+        termination: .timedOut,
+        stdout: Self.emptyStream,
+        stderr: Self.emptyStream,
+        processIdentifier: spawnedProcessIdentifier.value
+      )
+    case .callerCancelled:
+      return ContainerCommandResult(
+        termination: .cancelled,
+        stdout: Self.emptyStream,
+        stderr: Self.emptyStream,
+        processIdentifier: spawnedProcessIdentifier.value
+      )
+    }
+  }
+
+  private func spawnAndCapture(
+    _ command: ContainerCommand,
+    spawnedProcessIdentifier: SpawnedProcessIdentifierBox
+  ) async -> ContainerCommandResult {
     let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
 
     do {
@@ -119,39 +157,18 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         error: .sequence
       ) { execution in
         let processIdentifier = Int32(execution.processIdentifier.value)
+        spawnedProcessIdentifier.value = processIdentifier
         onSpawnForTesting(processIdentifier)
-        // The task's value carries the verdict: a cancelled sleep means the process finished
-        // first, a slept-through deadline tears the process group down and reports a timeout.
-        let timeoutTask = Task<Bool, Never> {
-          do {
-            try await clock.sleep(for: command.timeout)
-          } catch {
-            return false
-          }
-
-          await execution.teardown(using: teardownSequence)
-
-          return true
-        }
 
         async let stdout = Self.capture(execution.standardOutput, limit: command.captureLimit)
         async let stderr = Self.capture(execution.standardError, limit: command.captureLimit)
-
         let streams = try await (stdout, stderr)
-        timeoutTask.cancel()
 
-        return CommandClosureResult(
-          stdout: streams.0,
-          stderr: streams.1,
-          timedOut: await timeoutTask.value
-        )
+        return CommandClosureResult(stdout: streams.0, stderr: streams.1)
       }
 
       return ContainerCommandResult(
-        termination: Self.classifyTermination(
-          timedOut: result.closureResult.timedOut,
-          status: result.terminationStatus
-        ),
+        termination: Self.classifyTermination(status: result.terminationStatus),
         stdout: result.closureResult.stdout,
         stderr: result.closureResult.stderr,
         processIdentifier: Int32(result.processIdentifier.value)
@@ -166,7 +183,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         termination: termination,
         stdout: Self.emptyStream,
         stderr: Self.emptyStream,
-        processIdentifier: nil
+        processIdentifier: spawnedProcessIdentifier.value
       )
     }
   }
@@ -187,13 +204,8 @@ private extension SwiftSubprocessContainerCommandRunner {
   }
 
   static func classifyTermination(
-    timedOut: Bool,
     status: TerminationStatus
   ) -> ContainerCommandTermination {
-    if timedOut {
-      return .timedOut
-    }
-
     if Task.isCancelled {
       return .cancelled
     }
@@ -267,5 +279,19 @@ private extension SwiftSubprocessContainerCommandRunner {
 private struct CommandClosureResult: Sendable {
   let stdout: CapturedCommandStream
   let stderr: CapturedCommandStream
-  let timedOut: Bool
+}
+
+private final class SpawnedProcessIdentifierBox: Sendable {
+  private let storage = Mutex<Int32?>(nil)
+
+  var value: Int32? {
+    get {
+      storage.withLock { $0 }
+    }
+    set {
+      storage.withLock {
+        $0 = newValue
+      }
+    }
+  }
 }
