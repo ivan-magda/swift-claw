@@ -248,21 +248,15 @@ struct ChatGPTProviderStateCodec: Sendable {
   static let maximumAggregateStateBytes = LLMReplayStateBounds.maximumAggregateBytes
 
   private let newEpoch: @Sendable () -> UUID
-  private let reportDrops: @Sendable (ChatGPTReplayDrops) -> Void
 
   /// The epoch generator is injected so a test can name the epoch a history derives instead of
-  /// matching against randomness. The reporter is a callback rather than a logger because this type
-  /// has no business choosing a logging backend, and because a caller that wants the counts on a
-  /// metric rather than in a line should not have to parse one.
+  /// matching against randomness.
   init(
     newEpoch: @escaping @Sendable () -> UUID = {
       UUID()
-    },
-    reportDrops: @escaping @Sendable (ChatGPTReplayDrops) -> Void = { _ in
     }
   ) {
     self.newEpoch = newEpoch
-    self.reportDrops = reportDrops
   }
 
   /// Selects the replay material a request may carry, and the identity its response is stamped with.
@@ -287,7 +281,6 @@ struct ChatGPTProviderStateCodec: Sendable {
     // newest state has already been discarded above, so it cannot drag the session onto a generation
     // that no sound state belongs to.
     guard let newest = candidates.last else {
-      report(drops)
       return ChatGPTReplaySelection(
         identity: origin.identity(epoch: newEpoch()),
         turns: [:],
@@ -310,7 +303,6 @@ struct ChatGPTProviderStateCodec: Sendable {
       )
     }
 
-    report(drops)
     return ChatGPTReplaySelection(
       identity: origin.identity(epoch: newest.epoch),
       turns: turns,
@@ -444,13 +436,6 @@ private extension ChatGPTProviderStateCodec {
       selected.append(candidate)
     }
     return selected.reversed()
-  }
-
-  func report(_ drops: ChatGPTReplayDrops) {
-    guard drops.isEmpty == false else {
-      return
-    }
-    reportDrops(drops)
   }
 }
 

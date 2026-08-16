@@ -14,16 +14,14 @@ public protocol ChannelIntake: Sendable {
 public protocol MessageDelivery: Sendable {
   /// Returns the `message_id` Telegram assigned to the sent message — the outbox dispatcher records
   /// it against the delivered row so a redelivered row maps back to a known sent message.
-  func sendMessage(chatId: Int64, text: String) async throws -> Int64
+  /// `replyMarkup` is a Telegram `reply_markup` JSON string attaching an inline keyboard, or nil for
+  /// no keyboard. The approval prompt's buttons ride this.
+  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64
   /// Sends a rich-markdown message (`sendRichMessage` / `InputRichMessage{ markdown }`, Bot API 10.1).
   /// The markdown string is passed verbatim — no escaper, no converter — and rendered server-side.
-  /// Returns the assigned `message_id` like `sendMessage`. On any rich-send error the dispatcher
-  /// re-sends the chunk as plain `sendMessage`, so this never has to succeed for a reply to land.
-  func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64
-  /// As `sendMessage`, but attaches an inline keyboard when `replyMarkup` is a Telegram
-  /// `reply_markup` JSON string (nil = no keyboard). The approval prompt's buttons ride this.
-  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64
-  /// As `sendRichMessage`, but attaches the same optional inline keyboard.
+  /// Returns the assigned `message_id` like `sendMessage`, and takes the same optional keyboard. On
+  /// any rich-send error the dispatcher re-sends the chunk as plain `sendMessage`, so this never has
+  /// to succeed for a reply to land.
   func sendRichMessage(chatId: Int64, markdown: String, replyMarkup: String?) async throws -> Int64
 }
 
@@ -75,22 +73,15 @@ extension TelegramTransport {
 }
 
 extension MessageDelivery {
-  public func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
-    guard replyMarkup == nil else {
-      throw TelegramError.transport("sendMessage(replyMarkup:) not implemented")
-    }
-    return try await sendMessage(chatId: chatId, text: text)
+  /// The keyboardless spelling every ordinary reply uses. A conformer implements only the
+  /// `replyMarkup:` form, so a transport that cannot render keyboards refuses there rather than
+  /// having to reject an argument it was handed by a second requirement.
+  public func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
+    try await sendMessage(chatId: chatId, text: text, replyMarkup: nil)
   }
 
-  public func sendRichMessage(
-    chatId: Int64,
-    markdown: String,
-    replyMarkup: String?
-  ) async throws -> Int64 {
-    guard replyMarkup == nil else {
-      throw TelegramError.transport("sendRichMessage(replyMarkup:) not implemented")
-    }
-    return try await sendRichMessage(chatId: chatId, markdown: markdown)
+  public func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 {
+    try await sendRichMessage(chatId: chatId, markdown: markdown, replyMarkup: nil)
   }
 }
 

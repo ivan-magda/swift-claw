@@ -8,26 +8,15 @@ import ServiceLifecycle
 /// `DELETE` is how we say we are done with it — and it has to be sent while the tool HTTP client is
 /// still open, which is what a service gets and the dependent-cleanup sequence after it does not.
 struct MCPSessionLifecycleService: Service {
-  static let idleInterval: Duration = .seconds(3600)
-
   private let sessions: [MCPServerSession]
-  private let clock: any Clock<Duration>
 
-  init(sessions: [MCPServerSession], clock: any Clock<Duration> = ContinuousClock()) {
+  init(sessions: [MCPServerSession]) {
     self.sessions = sessions
-    self.clock = clock
   }
 
   func run() async throws {
-    await cancelWhenGracefulShutdown {
-      while !Task.isCancelled {
-        do {
-          try await clock.sleep(for: Self.idleInterval)
-        } catch {
-          break
-        }
-      }
-    }
+    // Parks until the group shuts down or the task is cancelled; both exits hang up the sessions.
+    try? await gracefulShutdown()
 
     for session in sessions {
       await session.disconnect()

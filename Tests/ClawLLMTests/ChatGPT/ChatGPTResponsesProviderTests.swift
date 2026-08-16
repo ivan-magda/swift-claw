@@ -2,7 +2,6 @@ import ClawAuth
 import ClawCore
 import ClawTestSupport
 import Foundation
-import Synchronization
 import Testing
 
 @testable import ClawLLM
@@ -176,8 +175,8 @@ import Testing
     let response = try await provider.complete(request: request)
 
     // then — the public constructor wired a live codec and engine rather than throwing the drop away.
-    // The bootstrapped logger's non-silence cannot be asserted here: the public init exposes no logger
-    // or reporter seam, and observing it would need a process-global `LoggingSystem.bootstrap` that
+    // The bootstrapped logger's non-silence cannot be asserted here: the public init exposes no
+    // logger seam, and observing it would need a process-global `LoggingSystem.bootstrap` that
     // breaks test isolation. Obligation 3's falsifiable coverage stays at the internal-seam test below.
     #expect(response.content == "Hello")
     #expect(await http.recorded.count == 1)
@@ -322,12 +321,12 @@ import Testing
     #expect(failure.accounting == .notStarted)
   }
 
-  // MARK: - Obligation 3: a real drops reporter, metadata only
+  // MARK: - Obligation 3: a real drops diagnostic, metadata only
 
   @Test(.timeLimit(.minutes(1)))
   func aDroppedForeignStateEmitsAMetadataOnlyDiagnostic() async throws {
-    // given — history carrying a state from another provider, and a captured reporter
-    let recorder = DropsRecorder()
+    // given — history carrying a state from another provider, and a captured developer log
+    let capture = RecordingLogCapture()
     let request = ChatRequest(
       model: "gpt-5",
       messages: [
@@ -345,18 +344,18 @@ import Testing
     )
     let harness = ProviderHarness(
       steps: [.stream(okHead, Fixtures.basicSuccess())],
-      replayDropsReporter: { drops in
-        recorder.record(drops)
-      }
+      logger: capture.logger()
     )
 
     // when
     _ = try await harness.provider.complete(request: request)
 
-    // then — the foreign state was counted and reported; the type carries counts and nothing else
-    let drops = try #require(recorder.value)
-    #expect(drops.foreign == 1)
-    #expect(drops.total == 1)
+    // then — the foreign state was counted and reported as counts, carrying no payload or issuer
+    let line = try #require(capture.entries.first { $0.message.contains("replay state dropped") })
+    #expect(line.message.contains("foreign=1"))
+    #expect(line.message.contains("staleEpoch=0"))
+    #expect(line.message.contains("deadbeef") == false)
+    #expect(line.message.contains("some-other-provider") == false)
   }
 
   // MARK: - Obligation 4: chronological replay emission
@@ -470,26 +469,6 @@ private let sessionedRequest = Support.sessionedRequest
 
 private func head(_ status: Int) -> HTTPStreamHead {
   Support.head(status)
-}
-
-// MARK: - Recorders
-
-/// Captures the last replay-drops diagnostic the provider emitted, proving the codec's reporter is
-/// wired rather than left as the default no-op.
-private final class DropsRecorder: Sendable {
-  private let box = Mutex<ChatGPTReplayDrops?>(nil)
-
-  func record(_ drops: ChatGPTReplayDrops) {
-    box.withLock { current in
-      current = drops
-    }
-  }
-
-  var value: ChatGPTReplayDrops? {
-    box.withLock { current in
-      current
-    }
-  }
 }
 
 // MARK: - Assertions

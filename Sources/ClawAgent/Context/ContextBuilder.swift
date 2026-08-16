@@ -499,14 +499,14 @@ private extension ContextBuilder {
       tier: spec.tier,
       priority: spec.priority,
       truncatable: spec.truncatable,
-      cap: cap ?? spec.cap.resolve(in: budget, residualGraphemes: nil),
+      cap: cap ?? id.resolve(in: budget, residualGraphemes: nil),
       dropMarker: dropMarker,
       units: units
     )
   }
 
   func cap(for id: ContextRowID, residual: Int) -> Int {
-    spec(for: id).cap.resolve(in: budget, residualGraphemes: residual) ?? Int.max
+    id.resolve(in: budget, residualGraphemes: residual) ?? Int.max
   }
 
   func residualAfterFixedSections(_ sections: [FittableSection]) -> Int {
@@ -523,7 +523,7 @@ private extension ContextBuilder {
   }
 
   func spec(for id: ContextRowID) -> RowSpec {
-    guard let spec = ContextRowPolicy.specs.first(where: { spec in spec.id == id }) else {
+    guard let spec = ContextRowPolicy.specs.first(where: { $0.id == id }) else {
       preconditionFailure("missing context row spec for \(id)")
     }
     return spec

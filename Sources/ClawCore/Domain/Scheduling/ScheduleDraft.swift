@@ -59,22 +59,23 @@ public struct ValidatedSchedule: Sendable, Equatable {
   public let recurrence: RecurrenceEnvelope?
   public let timezone: String
   public let firstOccurrence: Date
-  public let recurrenceInWords: String
+
+  /// Derived rather than stored, so the confirm prompt and `/schedule list` cannot describe one job
+  /// two ways.
+  public var recurrenceInWords: String { RecurrenceWords.describe(recurrence) }
 
   public init(
     label: String,
     prompt: String,
     recurrence: RecurrenceEnvelope?,
     timezone: String,
-    firstOccurrence: Date,
-    recurrenceInWords: String
+    firstOccurrence: Date
   ) {
     self.label = label
     self.prompt = prompt
     self.recurrence = recurrence
     self.timezone = timezone
     self.firstOccurrence = firstOccurrence
-    self.recurrenceInWords = recurrenceInWords
   }
 }
 
@@ -323,8 +324,7 @@ private extension ScheduleDraftValidator {
           prompt: prompt,
           recurrence: envelope,
           timezone: timezone.identifier,
-          firstOccurrence: first,
-          recurrenceInWords: RecurrenceWords.describe(envelope)
+          firstOccurrence: first
         )
       )
     }
@@ -488,8 +488,7 @@ private extension ScheduleDraftValidator {
         prompt: prompt,
         recurrence: nil,
         timezone: timezone.identifier,
-        firstOccurrence: resolved,
-        recurrenceInWords: RecurrenceWords.describe(nil)
+        firstOccurrence: resolved
       )
     )
   }

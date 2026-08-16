@@ -190,8 +190,7 @@ import Testing
       prompt: "Summarize my unread items",
       recurrence: RecurrenceEnvelope(schemaVersion: 1, rule: rule),
       timezone: "Europe/Berlin",
-      firstOccurrence: Self.fixedNow.addingTimeInterval(-86_400),
-      recurrenceInWords: "every weekday at 07:00"
+      firstOccurrence: Self.fixedNow.addingTimeInterval(-86_400)
     )
     await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
 
@@ -236,8 +235,7 @@ import Testing
       prompt: "Post the heartbeat",
       recurrence: RecurrenceEnvelope(schemaVersion: 1, rule: rule),
       timezone: "Europe/Berlin",
-      firstOccurrence: Date(timeIntervalSince1970: 1_783_337_700),
-      recurrenceInWords: "every 30 minutes"
+      firstOccurrence: Date(timeIntervalSince1970: 1_783_337_700)
     )
     await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
 
@@ -270,8 +268,7 @@ import Testing
       prompt: "Send the report reminder",
       recurrence: nil,
       timezone: "Europe/Berlin",
-      firstOccurrence: Self.fixedNow.addingTimeInterval(-3_600),
-      recurrenceInWords: "once"
+      firstOccurrence: Self.fixedNow.addingTimeInterval(-3_600)
     )
     await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
 

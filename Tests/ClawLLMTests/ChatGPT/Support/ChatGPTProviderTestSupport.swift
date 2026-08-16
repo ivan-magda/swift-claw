@@ -126,18 +126,18 @@ enum ChatGPTProviderTestSupport {
 
   /// The assembled provider over a scripted transport and a manual clock. Every HTTP outcome is a
   /// scripted step and every delay records on the clock, so nothing here waits on real time. Drives
-  /// the provider through its internal init so a test can capture the replay-drops diagnostic and
-  /// silence logs without widening the pinned public surface.
+  /// the provider through its internal init so a test can capture or silence its logs without
+  /// widening the pinned public surface.
   struct Harness {
     let http: ScriptedHTTPExecutor
-    let provider: ChatGPTResponsesProvider<ScriptedClock>
+    let provider: ChatGPTResponsesProvider
 
     init(
       steps: [ScriptedHTTPExecutor.Step],
       credentials: any LLMCredentialSource = ChatGPTProviderTestSupport.defaultCredentials,
       credentialProfileID: UUID? = ChatGPTProviderTestSupport.fixedProfileID,
       retryBudget: Int = 3,
-      replayDropsReporter: (@Sendable (ChatGPTReplayDrops) -> Void)? = nil
+      logger: Logger = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
     ) {
       let http = ScriptedHTTPExecutor(steps)
       self.http = http
@@ -154,8 +154,7 @@ enum ChatGPTProviderTestSupport {
         },
         jitter: { duration in duration },
         epochID: { ChatGPTProviderTestSupport.fixedEpoch },
-        logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() }),
-        replayDropsReporter: replayDropsReporter
+        logger: logger
       )
     }
   }

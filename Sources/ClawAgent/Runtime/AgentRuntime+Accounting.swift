@@ -68,7 +68,7 @@ extension AgentRuntime {
     // independently, so an auth/access/quota/replay rejection surfaces its own owner guidance while
     // an ambiguous transport loss stays the generic outage with a conservative row.
     let kind = overrideKind ?? Self.degradationKind(for: error)
-    switch Self.accounting(for: error) {
+    switch ProviderFailureAccounting.classify(error) {
     case .notStarted:
       return .degraded(kind, usage: nil)
     case .mayHaveStarted(let observedCompletionTokens):
@@ -84,12 +84,6 @@ extension AgentRuntime {
         )
       )
     }
-  }
-
-  /// The accounting disposition of a thrown error. Delegates to the one vendor-neutral reducer both
-  /// the turn and schedule paths read, so a failure is charged the same way wherever it surfaces.
-  static func accounting(for error: any Error) -> ProviderFailureAccounting {
-    ProviderFailureAccounting.classify(error)
   }
 
   /// The owner-facing degradation kind for a thrown provider failure, read from its vendor-neutral

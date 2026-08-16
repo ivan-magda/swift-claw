@@ -412,13 +412,12 @@ import Testing
 
   // MARK: - Diagnostics
 
-  /// A session degrading to stateless replay is invisible without this. The callback fires once per
-  /// history with the reasons counted, and its type carries no field a payload or an issuer could
-  /// travel in — which is what keeps the warning from becoming the leak it is warning about.
-  @Test func dropsAreReportedOnceWithCountsOnly() throws {
+  /// A session degrading to stateless replay is invisible without this. The selection carries the
+  /// reasons counted, in a type with no field a payload or an issuer could travel in — which is what
+  /// keeps the warning from becoming the leak it is warning about.
+  @Test func everyDropReasonIsCountedOnTheSelection() throws {
     // given
-    let recorder = DropsRecorder()
-    let codec = Self.codec(recorder: recorder)
+    let codec = Self.codec()
     let history = [
       ChatMessage(
         role: .assistant,
@@ -459,20 +458,16 @@ import Testing
     )
 
     // then
-    let reported = try #require(recorder.all.first)
-    #expect(recorder.all.count == 1)
-    #expect(reported == selection.drops)
-    #expect(reported.foreign == 1)
-    #expect(reported.malformed == 1)
-    #expect(reported.staleEpoch == 1)
-    #expect(reported.total == 3)
+    #expect(selection.drops.foreign == 1)
+    #expect(selection.drops.malformed == 1)
+    #expect(selection.drops.staleEpoch == 1)
+    #expect(selection.drops.total == 3)
   }
 
-  /// Nothing dropped means nothing said. A warning on every clean history would train the owner to
-  /// ignore the one that matters.
+  /// Nothing dropped means nothing said: the provider logs only a non-empty count, so a warning on
+  /// every clean history would train the owner to ignore the one that matters.
   @Test func cleanHistoryReportsNoDrops() throws {
     // given
-    let recorder = DropsRecorder()
     let history = [
       ChatMessage(
         role: .assistant,
@@ -482,14 +477,14 @@ import Testing
     ]
 
     // when
-    _ = Self.codec(recorder: recorder).decodeCompatibleHistory(
+    let selection = Self.codec().decodeCompatibleHistory(
       messages: history,
       profileID: Self.profileID,
       wireModel: Self.wireModel
     )
 
     // then
-    #expect(recorder.all.isEmpty)
+    #expect(selection.drops.isEmpty)
   }
 
   // MARK: - Normalization
@@ -937,27 +932,6 @@ import Testing
   }
 }
 
-// MARK: - Diagnostic Recorder
-
-/// Captures what the codec reports. A class rather than a captured var because the callback is
-/// `@Sendable`, and the codec makes no promise about which thread it fires on.
-private final class DropsRecorder: @unchecked Sendable {
-  private let lock = NSLock()
-  private var recorded: [ChatGPTReplayDrops] = []
-
-  func record(_ drops: ChatGPTReplayDrops) {
-    lock.lock()
-    defer { lock.unlock() }
-    recorded.append(drops)
-  }
-
-  var all: [ChatGPTReplayDrops] {
-    lock.lock()
-    defer { lock.unlock() }
-    return recorded
-  }
-}
-
 // MARK: - Fixtures
 
 extension ChatGPTProviderStateCodecTests {
@@ -995,17 +969,11 @@ extension ChatGPTProviderStateCodecTests {
   }
 
   fileprivate static func codec(
-    newEpoch: UUID = fixedUUID("00000000-0000-4000-8000-00000000ffff"),
-    recorder: DropsRecorder? = nil
+    newEpoch: UUID = fixedUUID("00000000-0000-4000-8000-00000000ffff")
   ) -> ChatGPTProviderStateCodec {
-    ChatGPTProviderStateCodec(
-      newEpoch: {
-        newEpoch
-      },
-      reportDrops: { drops in
-        recorder?.record(drops)
-      }
-    )
+    ChatGPTProviderStateCodec(newEpoch: {
+      newEpoch
+    })
   }
 
   fileprivate static func state(

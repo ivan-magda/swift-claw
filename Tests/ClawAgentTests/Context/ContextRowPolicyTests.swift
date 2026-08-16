@@ -31,13 +31,13 @@ import Testing
     )
 
     // when / then
-    #expect(ContextRowCap.none.resolve(in: budget, residualGraphemes: nil) == nil)
-    #expect(ContextRowCap.userFile.resolve(in: budget, residualGraphemes: nil) == 11)
-    #expect(ContextRowCap.memoryFile.resolve(in: budget, residualGraphemes: nil) == 22)
-    #expect(ContextRowCap.memoryItems.resolve(in: budget, residualGraphemes: nil) == 33)
-    #expect(ContextRowCap.history.resolve(in: budget, residualGraphemes: nil) == 44)
-    #expect(ContextRowCap.recall.resolve(in: budget, residualGraphemes: nil) == 55)
-    #expect(ContextRowCap.skills.resolve(in: budget, residualGraphemes: nil) == 66)
+    #expect(ContextRowID.policy.resolve(in: budget, residualGraphemes: nil) == nil)
+    #expect(ContextRowID.userFile.resolve(in: budget, residualGraphemes: nil) == 11)
+    #expect(ContextRowID.memoryFile.resolve(in: budget, residualGraphemes: nil) == 22)
+    #expect(ContextRowID.memoryItems.resolve(in: budget, residualGraphemes: nil) == 33)
+    #expect(ContextRowID.history.resolve(in: budget, residualGraphemes: nil) == 44)
+    #expect(ContextRowID.recall.resolve(in: budget, residualGraphemes: nil) == 55)
+    #expect(ContextRowID.skills.resolve(in: budget, residualGraphemes: nil) == 66)
   }
 
   @Test func truncatableRowCapsScaleByResidualBudgetShare() {
@@ -54,12 +54,12 @@ import Testing
     )
 
     // when / then
-    #expect(ContextRowCap.none.resolve(in: budget, residualGraphemes: 50) == nil)
-    #expect(ContextRowCap.userFile.resolve(in: budget, residualGraphemes: 50) == 11)
-    #expect(ContextRowCap.memoryFile.resolve(in: budget, residualGraphemes: 50) == 22)
-    #expect(ContextRowCap.memoryItems.resolve(in: budget, residualGraphemes: 50) == 7)
-    #expect(ContextRowCap.history.resolve(in: budget, residualGraphemes: 50) == 30)
-    #expect(ContextRowCap.recall.resolve(in: budget, residualGraphemes: 50) == 10)
-    #expect(ContextRowCap.skills.resolve(in: budget, residualGraphemes: 50) == 2)
+    #expect(ContextRowID.policy.resolve(in: budget, residualGraphemes: 50) == nil)
+    #expect(ContextRowID.userFile.resolve(in: budget, residualGraphemes: 50) == 11)
+    #expect(ContextRowID.memoryFile.resolve(in: budget, residualGraphemes: 50) == 22)
+    #expect(ContextRowID.memoryItems.resolve(in: budget, residualGraphemes: 50) == 7)
+    #expect(ContextRowID.history.resolve(in: budget, residualGraphemes: 50) == 30)
+    #expect(ContextRowID.recall.resolve(in: budget, residualGraphemes: 50) == 10)
+    #expect(ContextRowID.skills.resolve(in: budget, residualGraphemes: 50) == 2)
   }
 }

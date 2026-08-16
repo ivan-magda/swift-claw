@@ -1,18 +1,12 @@
 import ClawCore
 import Foundation
 
-public enum ContextRowCap: Sendable, Equatable {
-  case none
-  case userFile
-  case memoryFile
-  case memoryItems
-  case history
-  case recall
-  case skills
-
+extension ContextRowID {
+  /// The grapheme cap this row is assembled under, or nil when it is uncapped. The four system rows
+  /// carry no cap; the four truncatable rows are scaled against whatever the fixed sections left.
   public func resolve(in budget: ContextBudget, residualGraphemes: Int?) -> Int? {
     switch self {
-    case .none:
+    case .policy, .systemWorkspace, .tools, .metadata:
       nil
     case .userFile:
       budget.userFileCap
@@ -69,20 +63,17 @@ public struct RowSpec: Sendable, Equatable, Identifiable {
   public let tier: ContextTier
   public let priority: ContextPriority
   public let truncatable: Bool
-  public let cap: ContextRowCap
 
   public init(
     id: ContextRowID,
     tier: ContextTier,
     priority: ContextPriority,
-    truncatable: Bool,
-    cap: ContextRowCap
+    truncatable: Bool
   ) {
     self.id = id
     self.tier = tier
     self.priority = priority
     self.truncatable = truncatable
-    self.cap = cap
   }
 }
 
@@ -92,71 +83,61 @@ public enum ContextRowPolicy {
       id: .policy,
       tier: .system,
       priority: ContextPriority(0),
-      truncatable: false,
-      cap: .none
+      truncatable: false
     ),
     RowSpec(
       id: .systemWorkspace,
       tier: .system,
       priority: ContextPriority(10),
-      truncatable: false,
-      cap: .none
+      truncatable: false
     ),
     RowSpec(
       id: .tools,
       tier: .system,
       priority: ContextPriority(20),
-      truncatable: false,
-      cap: .none
+      truncatable: false
     ),
     RowSpec(
       id: .metadata,
       tier: .system,
       priority: ContextPriority(30),
-      truncatable: false,
-      cap: .none
+      truncatable: false
     ),
     RowSpec(
       id: .userFile,
       tier: .untrustedLabeled,
       priority: ContextPriority(40),
-      truncatable: false,
-      cap: .userFile
+      truncatable: false
     ),
     RowSpec(
       id: .memoryFile,
       tier: .untrustedLabeled,
       priority: ContextPriority(50),
-      truncatable: false,
-      cap: .memoryFile
+      truncatable: false
     ),
     RowSpec(
       id: .memoryItems,
       tier: .untrustedLabeled,
       priority: ContextPriority(60),
-      truncatable: true,
-      cap: .memoryItems
+      truncatable: true
     ),
     RowSpec(
       id: .history,
       tier: .mixed,
       priority: ContextPriority(70),
-      truncatable: true,
-      cap: .history
+      truncatable: true
     ),
     RowSpec(
       id: .recall,
       tier: .untrustedLabeled,
       priority: ContextPriority(80),
-      truncatable: true,
-      cap: .recall
+      truncatable: true
     ),
     RowSpec(
       id: .skills,
       tier: .untrustedLabeled,
       priority: ContextPriority(90),
-      truncatable: true,
-      cap: .skills
+      truncatable: true
     ),
   ]
 }

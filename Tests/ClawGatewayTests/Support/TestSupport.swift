@@ -142,7 +142,8 @@ actor RecordingTransport: TelegramTransport {
     return batches.removeFirst()
   }
 
-  func sendMessage(chatId: Int64, text: String) async throws -> Int64 {
+  // Recorded sends don't render keyboards; prompt-row assertions are DB-side (outbox rows).
+  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
     sendAttempts += 1
     resumeWaiters(.attempt, reached: sendAttempts)
     if let sendError {
@@ -157,7 +158,11 @@ actor RecordingTransport: TelegramTransport {
     return Int64(sendAttempts)
   }
 
-  func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 {
+  func sendRichMessage(
+    chatId: Int64,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     sendAttempts += 1
     resumeWaiters(.attempt, reached: sendAttempts)
     if let richError {
@@ -187,11 +192,6 @@ actor RecordingTransport: TelegramTransport {
 
   func editMessageReplyMarkup(chatId: Int64, messageId: Int64, replyMarkup: String?) async throws {
     markupEdits.append(MarkupEdit(chatId: chatId, messageId: messageId, replyMarkup: replyMarkup))
-  }
-
-  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
-    // Recorded sends don't render keyboards; prompt-row assertions are DB-side (outbox rows).
-    try await sendMessage(chatId: chatId, text: text)
   }
 
   /// Suspends until at least `threshold` messages have been recorded as sent.

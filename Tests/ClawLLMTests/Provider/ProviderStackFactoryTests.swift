@@ -123,7 +123,7 @@ private final class InvocationFlag: @unchecked Sendable {
 
     // then — the Responses adapter, included-plan with the replay reservation, the OAuth envelope
     // loaded exactly once, and the static bearer never read
-    #expect(stack.binding.provider is ChatGPTResponsesProvider<ContinuousClock>)
+    #expect(stack.binding.provider is ChatGPTResponsesProvider)
     #expect(stack.binding.costPolicy == .includedPlan)
     #expect(stack.binding.reservationPolicy == .chatGPTReplayState)
     #expect(stack.binding.wireModel == "gpt-5.4")
@@ -145,7 +145,7 @@ private final class InvocationFlag: @unchecked Sendable {
       http: ScriptedHTTPExecutor([]),
       buildVersion: "0.0.0-test"
     )
-    #expect(stack.binding.provider is ChatGPTResponsesProvider<ContinuousClock>)
+    #expect(stack.binding.provider is ChatGPTResponsesProvider)
     #expect(store.loadCount == 1)
   }
 

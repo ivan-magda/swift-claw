@@ -210,6 +210,7 @@ let package = Package(
         "ClawCore", "ClawAuth", "ClawSecrets", "ClawLLM", "ClawData", "ClawTelegram",
         "ClawWorkspace", "ClawMCP", "ClawTools",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+        .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "GRDB", package: "GRDB.swift"),
         .product(name: "Logging", package: "swift-log"),

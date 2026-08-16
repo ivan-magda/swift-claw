@@ -22,9 +22,13 @@ actor DraftTransport: TelegramTransport {
     allowedUpdates: [String]
   ) async throws -> [RawUpdate] { [] }
 
-  func sendMessage(chatId: Int64, text: String) async throws -> Int64 { 1 }
+  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 { 1 }
 
-  func sendRichMessage(chatId: Int64, markdown: String) async throws -> Int64 { 1 }
+  func sendRichMessage(
+    chatId: Int64,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 { 1 }
 
   func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool {
     let record = DraftRecord(chatId: chatId, draftId: draftId, markdown: markdown)
