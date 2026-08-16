@@ -55,14 +55,12 @@ public struct ContainerCommandResult: Sendable, Equatable {
   public let stderr: CapturedCommandStream
 
   public let processIdentifier: Int32?
-  public let wallClock: Duration
 
   public init(
     termination: ContainerCommandTermination,
     stdout: CapturedCommandStream,
     stderr: CapturedCommandStream,
-    processIdentifier: Int32?,
-    wallClock: Duration
+    processIdentifier: Int32?
   ) {
     self.termination = termination
 
@@ -70,7 +68,6 @@ public struct ContainerCommandResult: Sendable, Equatable {
     self.stderr = stderr
 
     self.processIdentifier = processIdentifier
-    self.wallClock = wallClock
   }
 }
 
@@ -107,7 +104,6 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
 
   public func run(_ command: ContainerCommand) async -> ContainerCommandResult {
     let clock = ContinuousClock()
-    let started = clock.now
 
     let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
 
@@ -158,8 +154,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         ),
         stdout: result.closureResult.stdout,
         stderr: result.closureResult.stderr,
-        processIdentifier: Int32(result.processIdentifier.value),
-        wallClock: started.duration(to: clock.now)
+        processIdentifier: Int32(result.processIdentifier.value)
       )
     } catch {
       let termination: ContainerCommandTermination =
@@ -171,8 +166,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         termination: termination,
         stdout: Self.emptyStream,
         stderr: Self.emptyStream,
-        processIdentifier: nil,
-        wallClock: started.duration(to: clock.now)
+        processIdentifier: nil
       )
     }
   }

@@ -18,12 +18,6 @@ public protocol SessionMessageStore: Sendable {
   func claimAndPersistInbound(
     _ inbound: InboundMessage
   ) throws(StoreError) -> ClaimResult
-  /// Context returned oldest-first and bounded to the message this run is answering.
-  func loadContext(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> [StoredMessage]
   /// Context snapshot returned oldest-first and bounded to the message this run is answering.
   /// Includes the durable session metadata the assembler needs for recall dedup and taint reads.
   func loadContextSnapshot(

@@ -303,11 +303,11 @@ extension SuspendedTurnCommitTests {
     )
 
     // when — resume binds context to the filled observation row
-    let history = try SessionMessageStoreGRDB(writer: fixture.queue).loadContext(
+    let history = try SessionMessageStoreGRDB(writer: fixture.queue).loadContextSnapshot(
       sessionId: fixture.sessionId,
       throughMessageId: receipt.observationMessageId,
       limit: 50
-    )
+    ).history
 
     // then — the parked anchor carries its state; the completed and placeholder rows carry none
     #expect(history.map(\.role) == [.user, .assistant, .tool, .tool])

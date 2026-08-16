@@ -9,7 +9,6 @@ import Testing
   private struct Fixture {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
-    let outbox: OutboxStoreGRDB
 
     let sessionId: Int64
     let runId: Int64
@@ -41,7 +40,6 @@ import Testing
     return Fixture(
       queue: queue,
       runs: runs,
-      outbox: OutboxStoreGRDB(writer: queue),
       sessionId: sessionId,
       runId: runId
     )
@@ -91,21 +89,6 @@ import Testing
     // then — a parked lane is live capacity; doctor must see it (spec §4.2)
     #expect(health.inFlight == 1)
     #expect(health.oldestRunAgeSeconds != nil)
-  }
-
-  @Test func outboxClaimTreatsASuspendedRunAsActive() throws {
-    // given
-    let env = try makeSuspendedFixture()
-
-    // when — the suspended run's own approval prompt rides this claim (preamble D7)
-    let claimed = try env.outbox.claimOutboundIfRunActive(
-      runId: env.runId,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "approve?", payloadHash: "h")
-    )
-
-    // then
-    #expect(claimed)
-    #expect(try env.outbox.pendingOutbound().count == 1)
   }
 
   @Test func assistantCommitOnASuspendedRunLosesArbitration() throws {

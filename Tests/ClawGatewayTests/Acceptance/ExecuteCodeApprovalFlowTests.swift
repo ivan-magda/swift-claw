@@ -19,8 +19,7 @@ import Testing
           terminationReason: .exited(code: 0),
           stdout: "answer=42 layer-a-secret-value",
           stderr: "",
-          truncatedRawBytes: false,
-          wallClock: .milliseconds(40)
+          truncatedRawBytes: false
         )
       ]
     )

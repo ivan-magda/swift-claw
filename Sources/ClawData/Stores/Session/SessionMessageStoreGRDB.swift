@@ -112,18 +112,6 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
-  public func loadContext(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> [StoredMessage] {
-    try loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: throughMessageId,
-      limit: limit
-    ).history
-  }
-
   public func loadContextSnapshot(
     sessionId: Int64,
     throughMessageId: Int64,

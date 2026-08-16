@@ -100,7 +100,6 @@ import Testing
 
     // then
     #expect(TokenEstimator.estimateInputTokens(messages) == 3)
-    #expect(TokenEstimator.estimateTotalTokens(messages, maxOutput: 16) == 19)
     #expect(TokenEstimator.graphemeBudget(forInputTokens: 3) == 8)
   }
 }

@@ -252,14 +252,6 @@ private struct FindSessionFailingSessions: SessionMessageStore {
     throw StoreError.unexpected("lookup lost")
   }
 
-  func loadContext(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> [StoredMessage] {
-    try inner.loadContext(sessionId: sessionId, throughMessageId: throughMessageId, limit: limit)
-  }
-
   func loadContextSnapshot(
     sessionId: Int64,
     throughMessageId: Int64,

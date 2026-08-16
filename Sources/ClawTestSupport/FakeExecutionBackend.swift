@@ -38,8 +38,7 @@ public actor FakeExecutionBackend: ExecutionBackend, SandboxMaintenance {
         terminationReason: .unavailable(reason: "no scripted execution result"),
         stdout: "",
         stderr: "",
-        truncatedRawBytes: false,
-        wallClock: .zero
+        truncatedRawBytes: false
       )
     }
     return results.removeFirst()

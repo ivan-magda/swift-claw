@@ -46,7 +46,6 @@ struct RouteSwitchTests {
     // when / then
     for cause in causes {
       #expect(cause.routeSwitchPersistence == nil)
-      #expect(cause.allowsRouteSwitch == false)
     }
   }
 

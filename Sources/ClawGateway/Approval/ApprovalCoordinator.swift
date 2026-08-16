@@ -1,5 +1,4 @@
 import ClawCore
-import Logging
 import Synchronization
 
 /// The process-local resolution of a durable approval. The `approvals` row stays the source of
@@ -61,7 +60,7 @@ public actor ApprovalCoordinator {
 
 /// The seam `TurnRunner` (suspend) and boot re-park hand the lane hold to. `ApprovalWaiter` is the
 /// real conformer — it awaits the coordinator, then performs the resume or deny. Kept a protocol so
-/// the placeholder below can be wired without a forward dependency on the real waiter.
+/// `DeferredApprovalParker` can stand in during composition and so tests can park without a waiter.
 public protocol ApprovalParking: Sendable {
   func park(
     approvalId: Int64,
@@ -102,33 +101,6 @@ public final class DeferredApprovalParker: ApprovalParking {
       sessionId: sessionId,
       chatId: chatId,
       revalidatePolicyOnApprove: revalidatePolicyOnApprove
-    )
-  }
-}
-
-/// Placeholder: HOLDS the session lane by awaiting the coordinator, then returns without
-/// resuming. The real resume/deny is `ApprovalWaiter`, which replaces this at the composition
-/// root; until it is wired, production registers no ask-tier tool, so `park` is never reached in
-/// production.
-public struct InertApprovalParker: ApprovalParking {
-  private let coordinator: ApprovalCoordinator
-  private let logger: Logger
-
-  public init(coordinator: ApprovalCoordinator, logger: Logger = Logger(label: "approval.parker")) {
-    self.coordinator = coordinator
-    self.logger = logger
-  }
-
-  public func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    revalidatePolicyOnApprove: Bool
-  ) async {
-    let signal = await coordinator.awaitResolution(approvalId: approvalId)
-    logger.debug(
-      "approval \(approvalId) resolved as \(String(describing: signal)); the waiter completes the run"
     )
   }
 }

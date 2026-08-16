@@ -41,8 +41,7 @@ extension ContainerBackend {
       terminationReason: .cancelled,
       stdout: "",
       stderr: "",
-      truncatedRawBytes: false,
-      wallClock: .zero
+      truncatedRawBytes: false
     )
   }
 
@@ -81,8 +80,7 @@ extension ContainerBackend {
       )
     } catch {
       return infrastructureResult(
-        "failed to materialize execution scratch: \(error)",
-        started: started
+        "failed to materialize execution scratch: \(error)"
       )
     }
 
@@ -100,13 +98,12 @@ extension ContainerBackend {
           commandResult,
           identity: identity,
           cidFile: workspace.cidFile,
-          deadline: deadline,
-          started: started
+          deadline: deadline
         )
       case .deadlineExpired:
-        self.result(.timedOutKilled, started: started)
+        self.result(.timedOutKilled)
       case .callerCancelled:
-        self.result(.cancelled, started: started)
+        self.result(.cancelled)
       }
 
     let cleanupOK = await runShieldedCleanup(
@@ -119,8 +116,7 @@ extension ContainerBackend {
       // run would boot a second VM beside the zombie.
       preparedInitImage = nil
       result = infrastructureResult(
-        "could not confirm container removal for \(identity.name)",
-        started: started
+        "could not confirm container removal for \(identity.name)"
       )
     }
 
@@ -172,47 +168,41 @@ extension ContainerBackend {
     _ commandResult: ContainerCommandResult,
     identity: ExecutionIdentity,
     cidFile: URL,
-    deadline: ContinuousClock.Instant,
-    started: ContinuousClock.Instant
+    deadline: ContinuousClock.Instant
   ) async -> ExecutionResult {
     switch commandResult.termination {
     case .timedOut:
-      return result(.timedOutKilled, started: started)
+      return result(.timedOutKilled)
     case .cancelled:
-      return result(.cancelled, started: started)
+      return result(.cancelled)
     case .startFailed(let reason):
-      return infrastructureResult(reason, started: started)
+      return infrastructureResult(reason)
     case .signaled(let signal):
       return infrastructureResult(
-        "container CLI was terminated by host signal \(signal)",
-        started: started
+        "container CLI was terminated by host signal \(signal)"
       )
     case .exited(let code):
       guard cidMatches(identity, at: cidFile) else {
         return infrastructureResult(
-          "container did not create its identity file",
-          started: started
+          "container did not create its identity file"
         )
       }
 
       guard await engineRunning(deadline: deadline) else {
         return infrastructureResult(
-          "container engine became unavailable after execution",
-          started: started
+          "container engine became unavailable after execution"
         )
       }
 
       guard let present = await containerPresent(identity.name, deadline: deadline) else {
         return infrastructureResult(
-          "could not inspect container state after execution",
-          started: started
+          "could not inspect container state after execution"
         )
       }
 
       guard !present else {
         return infrastructureResult(
-          "container remained after the foreground CLI exited",
-          started: started
+          "container remained after the foreground CLI exited"
         )
       }
 
@@ -224,8 +214,7 @@ extension ContainerBackend {
         terminationReason: .exited(code: code),
         stdout: stdout,
         stderr: stderr,
-        truncatedRawBytes: commandResult.stdout.truncated || commandResult.stderr.truncated,
-        wallClock: started.duration(to: now())
+        truncatedRawBytes: commandResult.stdout.truncated || commandResult.stderr.truncated
       )
     }
   }

@@ -70,7 +70,8 @@ import Testing
 
     // then
     let last = try #require(rendered.last)
-    #expect(last.content.isPlainText)
+    #expect(last.content.parts.count == 1)
+    #expect(last.content.images.isEmpty)
   }
 
   @Test func aPhotoRowWithNoCachedBytesSaysSoExplicitly() throws {

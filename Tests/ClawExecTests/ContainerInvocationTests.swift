@@ -83,8 +83,7 @@ import Testing
       termination: .exited(7),
       stdout: output,
       stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
-      processIdentifier: 42,
-      wallClock: .milliseconds(20)
+      processIdentifier: 42
     )
 
     // then

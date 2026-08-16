@@ -96,20 +96,17 @@ public struct ExecutionResult: Sendable, Equatable {
   public let stdout: String
   public let stderr: String
   public let truncatedRawBytes: Bool
-  public let wallClock: Duration
 
   public init(
     terminationReason: ExecTermination,
     stdout: String,
     stderr: String,
-    truncatedRawBytes: Bool,
-    wallClock: Duration
+    truncatedRawBytes: Bool
   ) {
     self.terminationReason = terminationReason
     self.stdout = stdout
     self.stderr = stderr
     self.truncatedRawBytes = truncatedRawBytes
-    self.wallClock = wallClock
   }
 }
 

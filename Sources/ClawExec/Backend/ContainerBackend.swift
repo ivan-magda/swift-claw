@@ -170,15 +170,13 @@ public actor ContainerBackend {
 
 extension ContainerBackend {
   func result(
-    _ termination: ExecTermination,
-    started: ContinuousClock.Instant
+    _ termination: ExecTermination
   ) -> ExecutionResult {
     ExecutionResult(
       terminationReason: termination,
       stdout: "",
       stderr: "",
-      truncatedRawBytes: false,
-      wallClock: started.duration(to: now())
+      truncatedRawBytes: false
     )
   }
 
@@ -187,16 +185,14 @@ extension ContainerBackend {
       terminationReason: .unavailable(reason: ownerSafe(reason)),
       stdout: "",
       stderr: "",
-      truncatedRawBytes: false,
-      wallClock: .zero
+      truncatedRawBytes: false
     )
   }
 
   func infrastructureResult(
-    _ reason: String,
-    started: ContinuousClock.Instant
+    _ reason: String
   ) -> ExecutionResult {
-    result(.startFailed(reason: ownerSafe(reason)), started: started)
+    result(.startFailed(reason: ownerSafe(reason)))
   }
 
   func ownerSafe(_ reason: String) -> String {

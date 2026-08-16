@@ -157,11 +157,11 @@ import Testing
     try runStatefulTurn(env)
 
     // when — the ordinary read seam, asked for nothing about state
-    let history = try env.sessions.loadContext(
+    let history = try env.sessions.loadContextSnapshot(
       sessionId: env.sessionId,
       throughMessageId: Int64.max,
       limit: 50
-    )
+    ).history
 
     // then — the window reads exactly as a pre-v9 window did, state riding along on the anchors
     #expect(

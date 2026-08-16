@@ -26,13 +26,6 @@ struct FullSessions: SessionMessageStore {
   func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
     throw StoreError.diskFull
   }
-  func loadContext(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> [StoredMessage] {
-    []
-  }
   func loadContextSnapshot(
     sessionId: Int64,
     throughMessageId: Int64,
@@ -122,11 +115,11 @@ struct FullSessions: SessionMessageStore {
     let sent = await harness.transport.sent
     #expect(sent.isEmpty)
     let firstCall = try #require(calls.first)
-    let history = try harness.sessionMessages.loadContext(
+    let history = try harness.sessionMessages.loadContextSnapshot(
       sessionId: firstCall.sessionId,
       throughMessageId: firstCall.triggerMessageId,
       limit: 50
-    )
+    ).history
     #expect(history.contains { $0.role == .user && $0.content == "hello" })
   }
 
@@ -270,11 +263,11 @@ struct FullSessions: SessionMessageStore {
     #expect(await harness.transport.sent.isEmpty)
     let calls = await harness.dispatcher.calls
     let firstCall = try #require(calls.first)
-    let history = try harness.sessionMessages.loadContext(
+    let history = try harness.sessionMessages.loadContextSnapshot(
       sessionId: firstCall.sessionId,
       throughMessageId: firstCall.triggerMessageId,
       limit: 50
-    )
+    ).history
     #expect(history.contains { $0.role == .user && $0.content == "/new@some_other_bot" })
   }
 
