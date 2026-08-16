@@ -67,7 +67,7 @@ public struct ContextBuilder: Sendable {
     var ownerNotices: [String] = []
 
     let fixedSections = buildFixedSections(origin: origin, ownerNotices: &ownerNotices)
-    let residual = residualAfterFixedSections(fixedSections)
+    let residual = BudgetFitter.residual(for: fixedSections, budget: budget)
     let truncatableSections = buildTruncatableSections(
       snapshot: snapshot,
       sessionId: sessionId,
@@ -507,19 +507,6 @@ private extension ContextBuilder {
 
   func cap(for id: ContextRowID, residual: Int) -> Int {
     id.resolve(in: budget, residualGraphemes: residual) ?? Int.max
-  }
-
-  func residualAfterFixedSections(_ sections: [FittableSection]) -> Int {
-    let required =
-      sections
-      .filter { section in
-        !section.truncatable
-      }
-      .map { section in
-        section.units.map(\.content).joined(separator: "\n").count
-      }
-      .reduce(0, +)
-    return max(0, budget.inputCapGraphemes - required)
   }
 
   func spec(for id: ContextRowID) -> RowSpec {

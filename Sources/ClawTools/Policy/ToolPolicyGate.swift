@@ -55,28 +55,15 @@ public struct ToolPolicyGate: Sendable {
       )
     }
 
-    // Unconditional tier — BLOCKING, every egress class.
-    let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
-    if let rule = unconditional.blockedRule {
-      return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
-    }
-
-    // Trifecta condition: tainted(session ∪ run) && privateData(assembly ∪ run ∪ session). The
-    // session flag survives a window roll, closing the over-cap gap the per-assembly leg cannot.
-    let tainted = context.sessionTainted || context.runIngestedUntrusted
-    let privateData =
-      context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
-    guard tainted && privateData else {
-      return resolveAndAllow(call: call, tool: tool, argsRedacted: unconditional.redactedArgs)
-    }
-
-    // Conditional tier — redaction-block WINS over approval; disk at gate time.
-    let conditional = argGuard.evaluateConditional(
-      argsJSON: call.argumentsJSON,
-      privateFileTexts: privateFileLoader()
-    )
-    if let rule = conditional.blockedRule {
-      return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
+    let argsRedacted: String
+    switch scanArguments(call: call, context: context) {
+    case .blocked(let verdict):
+      return verdict
+    case .cleared(let redacted, let trifectaHeld):
+      guard trifectaHeld else {
+        return resolveAndAllow(call: call, tool: tool, argsRedacted: redacted)
+      }
+      argsRedacted = redacted
     }
 
     // Trifecta arm — DURABLE: a would-park action suspends onto the approval fabric. Non-interactive
@@ -86,10 +73,10 @@ public struct ToolPolicyGate: Sendable {
     case .action(let resolved):
       action = resolved
     case .blocked(let payload):
-      return .block(payload: payload, argsRedacted: conditional.redactedArgs)
+      return .block(payload: payload, argsRedacted: argsRedacted)
     }
     guard let action else {
-      return .allow(argsRedacted: conditional.redactedArgs, action: nil)
+      return .allow(argsRedacted: argsRedacted, action: nil)
     }
 
     guard context.approvalAlreadyPending == false else {
@@ -101,7 +88,7 @@ public struct ToolPolicyGate: Sendable {
           status: .blockedPendingApproval,
           ingestedUntrusted: false
         ),
-        argsRedacted: conditional.redactedArgs
+        argsRedacted: argsRedacted
       )
     }
 
@@ -173,6 +160,48 @@ public struct ToolPolicyGate: Sendable {
   }
 }
 
+// MARK: - Argument Scanning
+
+private extension ToolPolicyGate {
+  enum ArgumentScan {
+    case blocked(Verdict)
+    /// `trifectaHeld` decides whether the caller parks an approval or allows outright; the ask tier
+    /// parks regardless and ignores it.
+    case cleared(argsRedacted: String, trifectaHeld: Bool)
+  }
+
+  /// Runs the egress-carrying argument tiers once, so both entry points read one predicate rather
+  /// than two copies that can drift apart into a weaker gate.
+  ///
+  /// Unconditional scanning blocks on every egress class. The trifecta condition is
+  /// tainted(session ∪ run) && privateData(assembly ∪ run ∪ session) — the session flag survives a
+  /// window roll, closing the over-cap gap the per-assembly leg cannot. When it holds, conditional
+  /// scanning runs and a redaction block WINS over approval; the private files are read from disk at
+  /// gate time.
+  func scanArguments(call: ToolCall, context: ToolDispatchContext) -> ArgumentScan {
+    let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
+    if let rule = unconditional.blockedRule {
+      return .blocked(blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs))
+    }
+
+    let tainted = context.sessionTainted || context.runIngestedUntrusted
+    let privateData =
+      context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
+    guard tainted && privateData else {
+      return .cleared(argsRedacted: unconditional.redactedArgs, trifectaHeld: false)
+    }
+
+    let conditional = argGuard.evaluateConditional(
+      argsJSON: call.argumentsJSON,
+      privateFileTexts: privateFileLoader()
+    )
+    if let rule = conditional.blockedRule {
+      return .blocked(blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs))
+    }
+    return .cleared(argsRedacted: conditional.redactedArgs, trifectaHeld: true)
+  }
+}
+
 // MARK: - Trifecta Verdicts
 
 private extension ToolPolicyGate {
@@ -203,25 +232,13 @@ private extension ToolPolicyGate {
     if tool.definition.egressClass == .none {
       argsRedacted = argGuard.renderRedacted(argsJSON: call.argumentsJSON)
     } else {
-      let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
-      if let rule = unconditional.blockedRule {
-        return blockedArgs(rule: rule, argsRedacted: unconditional.redactedArgs)
-      }
-
-      let tainted = context.sessionTainted || context.runIngestedUntrusted
-      let privateData =
-        context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
-      if tainted && privateData {
-        let conditional = argGuard.evaluateConditional(
-          argsJSON: call.argumentsJSON,
-          privateFileTexts: privateFileLoader()
-        )
-        if let rule = conditional.blockedRule {
-          return blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs)
-        }
-        argsRedacted = conditional.redactedArgs
-      } else {
-        argsRedacted = unconditional.redactedArgs
+      // Ask-tier parks on the approval fabric whether or not the trifecta holds, so only the
+      // redaction matters here.
+      switch scanArguments(call: call, context: context) {
+      case .blocked(let verdict):
+        return verdict
+      case .cleared(let redacted, _):
+        argsRedacted = redacted
       }
     }
 

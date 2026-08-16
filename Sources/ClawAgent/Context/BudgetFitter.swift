@@ -98,7 +98,7 @@ public enum BudgetFitter {
     }
     let nonTruncatable = ordered.filter { section in !section.truncatable }
     let truncatable = ordered.filter(\.truncatable)
-    let required = nonTruncatable.map(renderedCount).reduce(0, +)
+    let required = requiredGraphemes(nonTruncatable)
 
     guard required <= budget.inputCapGraphemes else {
       throw BudgetFitterError.nonTruncatableRowsExceedInputCap(
@@ -107,7 +107,7 @@ public enum BudgetFitter {
       )
     }
 
-    let residual = budget.inputCapGraphemes - required
+    let residual = residual(required: required, budget: budget)
     // The newest history unit is kept even when it alone exceeds the residual (see `fittedRow`),
     // so the squeezed total can legitimately overshoot the residual by this floor.
     let historyFloorCount =
@@ -249,6 +249,27 @@ public enum BudgetFitter {
     return section.units.map(\.id).filter { id in
       keptIDs.contains(id) == false
     }
+  }
+
+  /// What the truncatable rows have left to share: the input cap less whatever the fixed rows
+  /// render to. The assembler pre-scales each truncatable cap against this before handing the
+  /// sections over, so both sides have to read one formula or the caps stop matching the squeeze.
+  public static func residual(for sections: [FittableSection], budget: ContextBudget) -> Int {
+    residual(required: requiredGraphemes(sections), budget: budget)
+  }
+
+  /// Split out so a fit that already measured the fixed rows does not render them a second time.
+  private static func residual(required: Int, budget: ContextBudget) -> Int {
+    max(0, budget.inputCapGraphemes - required)
+  }
+
+  /// The graphemes the non-truncatable rows consume once rendered — the same rendering the fit
+  /// itself measures, separator included.
+  private static func requiredGraphemes(_ sections: [FittableSection]) -> Int {
+    sections
+      .filter { section in !section.truncatable }
+      .map(renderedCount)
+      .reduce(0, +)
   }
 
   private static func renderedCount(_ section: FittableSection) -> Int {

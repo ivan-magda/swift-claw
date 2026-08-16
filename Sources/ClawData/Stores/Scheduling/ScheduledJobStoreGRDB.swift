@@ -152,6 +152,58 @@ extension ScheduledJobStoreGRDB {
   }
 }
 
+// MARK: - Occurrence Compare-and-Advance
+
+extension ScheduledJobStoreGRDB {
+  /// Moves a job off the occurrence it is currently due at, and reports whether this caller won.
+  ///
+  /// The WHERE arms (id, the stored due instant, ACTIVE) are what make two racers for the same
+  /// (job, due) structurally single-winner: the loser matches no row and changes nothing. A
+  /// recurring job advances to `nextOccurrence`; a one-shot has no next, so firing means done —
+  /// terminal, NULL next, invisible to the ticker index. Both the fire claim and the misfire skip
+  /// turn on this one predicate, so a change to the race is a change to both.
+  static func advanceOccurrence(
+    _ db: Database,
+    jobId: Int64,
+    due: Date,
+    nextOccurrence: Date?,
+    now: Date
+  ) throws -> Bool {
+    if let nextOccurrence {
+      try db.execute(
+        sql: """
+          UPDATE scheduled_jobs
+          SET next_occurrence = ?, updated_ts = ?
+          WHERE id = ? AND next_occurrence = ? AND status = ?
+          """,
+        arguments: [
+          EpochSecondCodec.epoch(nextOccurrence),
+          EpochSecondCodec.epoch(now),
+          jobId,
+          EpochSecondCodec.epoch(due),
+          ScheduledJobStatus.active.rawValue,
+        ]
+      )
+    } else {
+      try db.execute(
+        sql: """
+          UPDATE scheduled_jobs
+          SET next_occurrence = NULL, status = ?, updated_ts = ?
+          WHERE id = ? AND next_occurrence = ? AND status = ?
+          """,
+        arguments: [
+          ScheduledJobStatus.completed.rawValue,
+          EpochSecondCodec.epoch(now),
+          jobId,
+          EpochSecondCodec.epoch(due),
+          ScheduledJobStatus.active.rawValue,
+        ]
+      )
+    }
+    return db.changesCount > 0
+  }
+}
+
 // MARK: - Fused Claim
 
 extension ScheduledJobStoreGRDB {
@@ -163,46 +215,21 @@ extension ScheduledJobStoreGRDB {
     now: Date
   ) throws(StoreError) -> ClaimedFire? {
     try database.writeMapping { db in
-      // Step 1: the compare-and-advance. This IS the atomic claim expressed on the occurrence:
-      // the WHERE arms (id, stored due, ACTIVE) make two racers for the same (job, due)
-      // structurally single-winner.
+      // Step 1: the compare-and-advance. This IS the atomic claim expressed on the occurrence.
       // `last_fired_at` is deliberately NOT set here: it must move only when a run is actually
       // created, so an overlap-skipped fire (insertFireRows → nil) leaves it untouched, like a
       // misfire skip. insertFireRows stamps it with `fireAt` after the overlap guard passes.
-      if let nextOccurrence {
-        try db.execute(
-          sql: """
-            UPDATE scheduled_jobs
-            SET next_occurrence = ?, updated_ts = ?
-            WHERE id = ? AND next_occurrence = ? AND status = ?
-            """,
-          arguments: [
-            EpochSecondCodec.epoch(nextOccurrence),
-            EpochSecondCodec.epoch(now),
-            jobId,
-            EpochSecondCodec.epoch(due),
-            ScheduledJobStatus.active.rawValue,
-          ]
+      //
+      // Step 2: no winner ⇒ claimed elsewhere or the job mutated — abort silently, no fire.
+      guard
+        try Self.advanceOccurrence(
+          db,
+          jobId: jobId,
+          due: due,
+          nextOccurrence: nextOccurrence,
+          now: now
         )
-      } else {
-        // One-shot: fired means done — terminal, NULL next, invisible to the ticker index.
-        try db.execute(
-          sql: """
-            UPDATE scheduled_jobs
-            SET next_occurrence = NULL, status = ?, updated_ts = ?
-            WHERE id = ? AND next_occurrence = ? AND status = ?
-            """,
-          arguments: [
-            ScheduledJobStatus.completed.rawValue,
-            EpochSecondCodec.epoch(now),
-            jobId,
-            EpochSecondCodec.epoch(due),
-            ScheduledJobStatus.active.rawValue,
-          ]
-        )
-      }
-      // Step 2: zero changes ⇒ claimed elsewhere or the job mutated — abort silently, no fire.
-      guard db.changesCount > 0 else {
+      else {
         return nil
       }
       return try Self.insertFireRows(db, jobId: jobId, fireAt: fireAt, now: now)
@@ -346,39 +373,16 @@ extension ScheduledJobStoreGRDB {
     now: Date
   ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
-      // The same CAS predicate as the claim — a concurrently-mutated job means no skip.
-      if let nextOccurrence {
-        try db.execute(
-          sql: """
-            UPDATE scheduled_jobs
-            SET next_occurrence = ?, updated_ts = ?
-            WHERE id = ? AND next_occurrence = ? AND status = ?
-            """,
-          arguments: [
-            EpochSecondCodec.epoch(nextOccurrence),
-            EpochSecondCodec.epoch(now),
-            jobId,
-            EpochSecondCodec.epoch(due),
-            ScheduledJobStatus.active.rawValue,
-          ]
+      // A concurrently-mutated job means no skip.
+      guard
+        try Self.advanceOccurrence(
+          db,
+          jobId: jobId,
+          due: due,
+          nextOccurrence: nextOccurrence,
+          now: now
         )
-      } else {
-        try db.execute(
-          sql: """
-            UPDATE scheduled_jobs
-            SET next_occurrence = NULL, status = ?, updated_ts = ?
-            WHERE id = ? AND next_occurrence = ? AND status = ?
-            """,
-          arguments: [
-            ScheduledJobStatus.completed.rawValue,
-            EpochSecondCodec.epoch(now),
-            jobId,
-            EpochSecondCodec.epoch(due),
-            ScheduledJobStatus.active.rawValue,
-          ]
-        )
-      }
-      guard db.changesCount > 0 else {
+      else {
         return false
       }
 
