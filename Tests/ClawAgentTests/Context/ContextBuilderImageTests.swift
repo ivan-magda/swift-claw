@@ -176,6 +176,7 @@ import Testing
       budget: .default
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: history,
       historyMessageIds: Array(1...Int64(history.count)),
       windowStartMessageId: nil,

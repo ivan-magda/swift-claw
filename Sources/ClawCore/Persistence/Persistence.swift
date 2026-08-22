@@ -95,7 +95,13 @@ public enum CostSource: String, Sendable, Equatable {
 
 public enum SessionKey {
   private static let dmPrefix = "tg:dm:"
+  private static let topicPrefix = "tg:topic:"
   private static let jobPrefix = "sched:job:"
+
+  /// The forum's General topic carries no `message_thread_id`, so its key needs a suffix that no
+  /// thread id can ever produce. A numeric coercion (0, or topic 1) would fuse two distinct
+  /// conversations into one session.
+  private static let generalTopicSuffix = "general"
 
   /// The heartbeat's dedicated persistent session. No chat id in the key —
   /// the delivery target is resolved from config, so `chatId(from:)` stays nil by design.
@@ -105,6 +111,26 @@ public enum SessionKey {
     "\(dmPrefix)\(chatId)"
   }
 
+  /// One session per forum topic. `threadId` is nil in the General topic and in a non-forum group,
+  /// which both collapse onto the chat's single General key — correct, since a non-forum group has
+  /// exactly one conversation.
+  public static func telegramTopic(chatId: Int64, threadId: Int64?) -> String {
+    let suffix = threadId.map(String.init) ?? generalTopicSuffix
+    return "\(topicPrefix)\(chatId):\(suffix)"
+  }
+
+  /// The one place a key is minted from an inbound message. Routing resolves the mode once and
+  /// every handler funnels through here, so a topic can never be dropped on one path and honored
+  /// on another.
+  public static func telegram(for message: IncomingMessage, mode: ChatMode) -> String {
+    switch mode {
+    case .direct:
+      telegramDM(chatId: message.chatId)
+    case .group:
+      telegramTopic(chatId: message.chatId, threadId: message.messageThreadId)
+    }
+  }
+
   /// A job's dedicated session, created lazily at first fire. No chat id in the key —
   /// the delivery target is `scheduled_jobs.owner_chat_id`, so `chatId(from:)` stays nil by design.
   public static func scheduledJob(id: Int64) -> String {
@@ -112,7 +138,32 @@ public enum SessionKey {
   }
 
   public static func chatId(from key: String) -> Int64? {
-    key.hasPrefix(dmPrefix) ? Int64(key.dropFirst(dmPrefix.count)) : nil
+    if key.hasPrefix(dmPrefix) {
+      return Int64(key.dropFirst(dmPrefix.count))
+    }
+    guard let body = topicBody(of: key), let separator = body.lastIndex(of: ":") else {
+      return nil
+    }
+    return Int64(body[body.startIndex..<separator])
+  }
+
+  /// The mode a session is being served in, recovered from its key alone — the derivation every
+  /// consumer that holds only a session id (and therefore only its key) depends on. Scheduled-job
+  /// and heartbeat sessions are the owner's own, so they read `.direct`.
+  public static func mode(from key: String) -> ChatMode {
+    key.hasPrefix(topicPrefix) ? .group : .direct
+  }
+
+  /// The forum topic to deliver into, or nil for the General topic and for every non-topic key.
+  public static func threadId(from key: String) -> Int64? {
+    guard let body = topicBody(of: key), let separator = body.lastIndex(of: ":") else {
+      return nil
+    }
+    return Int64(body[body.index(after: separator)...])
+  }
+
+  private static func topicBody(of key: String) -> Substring? {
+    key.hasPrefix(topicPrefix) ? key.dropFirst(topicPrefix.count) : nil
   }
 }
 
@@ -198,6 +249,9 @@ public struct StoredMessage: Sendable, Equatable {
 }
 
 public struct SessionContextSnapshot: Sendable, Equatable {
+  /// The owning session's key, carried so a consumer holding only a `sessionId` can still derive
+  /// the chat mode and the forum topic without a second read.
+  public let sessionKey: String
   public let history: [StoredMessage]
   public let historyMessageIds: [Int64]
   public let windowStartMessageId: Int64?
@@ -207,12 +261,14 @@ public struct SessionContextSnapshot: Sendable, Equatable {
   public let hasPrivateData: Bool
 
   public init(
+    sessionKey: String,
     history: [StoredMessage],
     historyMessageIds: [Int64],
     windowStartMessageId: Int64?,
     isTainted: Bool,
     hasPrivateData: Bool
   ) {
+    self.sessionKey = sessionKey
     self.history = history
     self.historyMessageIds = historyMessageIds
     self.windowStartMessageId = windowStartMessageId

@@ -21,12 +21,13 @@ struct TurnDispatch: Sendable {
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     text: String,
+    mode: ChatMode = .direct,
     provenance: Provenance = .trusted,
     image: ImagePart? = nil
   ) async throws(RoutingHalt) -> HandleOutcome {
     let inbound = InboundMessage(
       updateId: rawUpdate.updateId,
-      sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+      sessionKey: SessionKey.telegram(for: message, mode: mode),
       chatId: message.chatId,
       userId: message.userId,
       text: text,

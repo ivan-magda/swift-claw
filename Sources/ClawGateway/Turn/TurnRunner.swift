@@ -159,7 +159,9 @@ public struct TurnRunner: TurnDispatching {
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
       origin: origin,
-      proactiveTodayUSD: inputs.proactiveTodayUSD
+      proactiveTodayUSD: inputs.proactiveTodayUSD,
+      mode: SessionKey.mode(from: inputs.snapshot.sessionKey),
+      threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey)
     )
 
     try await commit(
@@ -189,15 +191,7 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let origin: RunOrigin
-    do {
-      guard let resolvedOrigin = try runs.runOrigin(runId: runId) else {
-        logger.debug("run \(runId) has no origin at resume; skipping")
-        return
-      }
-      origin = resolvedOrigin
-    } catch {
-      logger.error("resume origin read failed for run \(runId): \(error)")
+    guard let origin = resumeOrigin(runId: runId) else {
       return
     }
 
@@ -230,7 +224,9 @@ public struct TurnRunner: TurnDispatching {
         todayUSD: inputs.todayUSD,
         origin: origin,
         proactiveTodayUSD: inputs.proactiveTodayUSD,
-        carryOver: carryOver
+        carryOver: carryOver,
+        mode: SessionKey.mode(from: inputs.snapshot.sessionKey),
+        threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey)
       )
     } catch {
       failResume(runId: runId, stage: "turn", error: error)
@@ -255,6 +251,21 @@ public struct TurnRunner: TurnDispatching {
 // MARK: - Context Assembly
 
 private extension TurnRunner {
+  /// The resumed run's origin, or nil when it cannot be read — a resume runs inside the waiter's
+  /// `park`, so both "no such run" and a failed read resolve in-band by abandoning the resume.
+  func resumeOrigin(runId: Int64) -> RunOrigin? {
+    do {
+      guard let origin = try runs.runOrigin(runId: runId) else {
+        logger.debug("run \(runId) has no origin at resume; skipping")
+        return nil
+      }
+      return origin
+    } catch {
+      logger.error("resume origin read failed for run \(runId): \(error)")
+      return nil
+    }
+  }
+
   /// Loads the bounded snapshot, today's budget totals, and the assembled context in one place —
   /// `run` and `resume` share it; only the bounding message id and the clock differ.
   func loadTurnInputs(

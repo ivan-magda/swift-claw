@@ -21,6 +21,7 @@ struct ContextBuilderTests {
       )
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "hello", provenance: .trusted),
         StoredMessage(role: .assistant, content: "hi", provenance: .trusted),
@@ -68,6 +69,7 @@ struct ContextBuilderTests {
       )
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
@@ -98,6 +100,7 @@ struct ContextBuilderTests {
       )
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
@@ -152,6 +155,7 @@ struct ContextBuilderTests {
       workspace: FakeWorkspace(files: [.memory: .overCap(count: 2_201)])
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
@@ -182,6 +186,7 @@ struct ContextBuilderTests {
     let memoryStore = FakeMemoryStore(items: [high, normal])
     let builder = makeBuilder(memoryStore: memoryStore)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [StoredMessage(role: .user, content: "question", provenance: .trusted)],
       historyMessageIds: [44],
       windowStartMessageId: 0,
@@ -217,6 +222,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(retriever: retriever)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "first", provenance: .trusted),
         StoredMessage(role: .assistant, content: "answer", provenance: .trusted),
@@ -260,6 +266,7 @@ struct ContextBuilderTests {
       )
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
@@ -500,6 +507,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "old", provenance: .trusted),
         StoredMessage(role: .assistant, content: "middle", provenance: .trusted),
@@ -532,6 +540,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "o", provenance: .trusted),
         StoredMessage(role: .assistant, content: "oversized middle", provenance: .trusted),
@@ -566,6 +575,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "what is the meaning of this", provenance: .trusted)
       ],
@@ -600,6 +610,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(retriever: retriever)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "follow the tournament daily", provenance: .trusted)
       ],
@@ -652,6 +663,7 @@ extension ContextBuilderTests {
   /// kind the renderer can meet, with state on the anchors alone.
   private func statefulSnapshot() -> SessionContextSnapshot {
     SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "fetch the page", provenance: .trusted),
         StoredMessage(
@@ -772,6 +784,7 @@ private func makeBuilder(
 
 private func emptySnapshot() -> SessionContextSnapshot {
   SessionContextSnapshot(
+    sessionKey: SessionKey.telegramDM(chatId: 42),
     history: [],
     historyMessageIds: [],
     windowStartMessageId: 0,

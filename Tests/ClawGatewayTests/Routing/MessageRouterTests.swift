@@ -33,6 +33,7 @@ struct FullSessions: SessionMessageStore {
     limit: Int
   ) throws(StoreError) -> SessionContextSnapshot {
     SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: nil,

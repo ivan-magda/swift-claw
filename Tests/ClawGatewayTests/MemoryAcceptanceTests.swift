@@ -275,6 +275,7 @@ import Testing
     let memoryStore = MemoryStoreGRDB(writer: queue)
     let builder = makeAcceptanceContextBuilder(writer: queue)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [StoredMessage(role: .user, content: "hello", provenance: .trusted)],
       historyMessageIds: [1],
       windowStartMessageId: 0,

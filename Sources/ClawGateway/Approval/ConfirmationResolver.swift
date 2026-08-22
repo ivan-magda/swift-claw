@@ -21,14 +21,17 @@ struct ConfirmationResolver: Sendable {
   func resolve(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    text: String
+    text: String,
+    mode: ChatMode = .direct
   ) async throws(RoutingHalt) -> HandleOutcome? {
     let existing = try await replies.perform(
       "pending lookup",
       updateId: rawUpdate.updateId,
       chatId: message.chatId
     ) {
-      try sessionMessages.findSession(sessionKey: SessionKey.telegramDM(chatId: message.chatId))
+      try sessionMessages.findSession(
+        sessionKey: SessionKey.telegram(for: message, mode: mode)
+      )
     }
     guard let sessionId = existing else {
       return nil

@@ -224,7 +224,9 @@ public struct AgentRuntime: Sendable {
     todayUSD: Double,
     origin: RunOrigin = .interactive,
     proactiveTodayUSD: Double = 0,
-    carryOver: ResumeUsage? = nil
+    carryOver: ResumeUsage? = nil,
+    mode: ChatMode = .direct,
+    threadId: Int64? = nil
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDefinitions
@@ -244,7 +246,13 @@ public struct AgentRuntime: Sendable {
     // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
     // ties the round-trips, tool calls, and outcome of a single turn together.
     var turnLog = logger
-    for (key, value) in Self.turnMetadata(runId: runId, sessionId: sessionId) {
+    let metadata = Self.turnMetadata(
+      runId: runId,
+      sessionId: sessionId,
+      mode: mode,
+      threadId: threadId
+    )
+    for (key, value) in metadata {
       turnLog[metadataKey: key] = value
     }
     let turnStart = ContinuousClock.now
@@ -561,8 +569,21 @@ public struct AgentRuntime: Sendable {
 private extension AgentRuntime {
   /// The correlation fields stamped on every developer log line for one turn, so a single
   /// `grep run=<id>` ties the turn's round-trips, tool calls, and outcome together.
-  static func turnMetadata(runId: Int64, sessionId: Int64) -> Logger.Metadata {
-    ["run": "\(runId)", "session": "\(sessionId)"]
+  /// Only a group turn stamps the conversation's shape, so a DM's log lines stay exactly as they
+  /// were and a group turn is greppable by topic.
+  static func turnMetadata(
+    runId: Int64,
+    sessionId: Int64,
+    mode: ChatMode = .direct,
+    threadId: Int64? = nil
+  ) -> Logger.Metadata {
+    var metadata: Logger.Metadata = ["run": "\(runId)", "session": "\(sessionId)"]
+    guard mode == .group else {
+      return metadata
+    }
+    metadata["mode"] = "\(mode.rawValue)"
+    metadata["topic"] = "\(threadId.map(String.init) ?? "general")"
+    return metadata
   }
 
   /// Emits the one finished line for a turn; its level reflects severity — completed → info,

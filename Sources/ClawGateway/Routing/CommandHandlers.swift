@@ -22,7 +22,8 @@ struct CommandHandlers: Sendable {
 
   func stop(
     rawUpdate: RawUpdate,
-    message: IncomingMessage
+    message: IncomingMessage,
+    mode: ChatMode = .direct
   ) async throws(RoutingHalt) -> HandleOutcome {
     let result = try await replies.perform(
       "stop command",
@@ -31,7 +32,7 @@ struct CommandHandlers: Sendable {
     ) {
       try commands.applyStop(
         updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+        sessionKey: SessionKey.telegram(for: message, mode: mode),
         now: now()
       )
     }
@@ -67,7 +68,8 @@ struct CommandHandlers: Sendable {
 
   func new(
     rawUpdate: RawUpdate,
-    message: IncomingMessage
+    message: IncomingMessage,
+    mode: ChatMode = .direct
   ) async throws(RoutingHalt) -> HandleOutcome {
     let result = try await replies.perform(
       "new command",
@@ -76,7 +78,7 @@ struct CommandHandlers: Sendable {
     ) {
       try commands.applyNew(
         updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+        sessionKey: SessionKey.telegram(for: message, mode: mode),
         now: now()
       )
     }
@@ -112,7 +114,8 @@ struct CommandHandlers: Sendable {
   func remember(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    command: RememberCommand
+    command: RememberCommand,
+    mode: ChatMode = .direct
   ) async throws(RoutingHalt) -> HandleOutcome {
     guard case .save(let kind, let text) = command else {
       return await replies.sendCanned(
@@ -129,7 +132,7 @@ struct CommandHandlers: Sendable {
     ) {
       try sessionMessages.claimCommandUpdate(
         updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+        sessionKey: SessionKey.telegram(for: message, mode: mode),
         now: now()
       )
     }
@@ -161,7 +164,8 @@ struct CommandHandlers: Sendable {
   func memory(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    command: MemoryCommand
+    command: MemoryCommand,
+    mode: ChatMode = .direct
   ) async throws(RoutingHalt) -> HandleOutcome {
     switch command {
     case .review:
@@ -171,7 +175,12 @@ struct CommandHandlers: Sendable {
     case .show(let id):
       try await memoryShow(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
     case .delete(let id):
-      try await memoryDelete(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
+      try await memoryDelete(
+        rawUpdate: rawUpdate,
+        chatId: message.chatId,
+        sessionKey: SessionKey.telegram(for: message, mode: mode),
+        id: id
+      )
     case .invalid:
       await replies.sendCanned(
         updateId: rawUpdate.updateId,
@@ -226,6 +235,7 @@ private extension CommandHandlers {
   func memoryDelete(
     rawUpdate: RawUpdate,
     chatId: Int64,
+    sessionKey: String,
     id: Int64
   ) async throws(RoutingHalt) -> HandleOutcome {
     let existing = try await replies.perform(
@@ -251,7 +261,7 @@ private extension CommandHandlers {
     ) {
       try sessionMessages.claimCommandUpdate(
         updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
+        sessionKey: sessionKey,
         now: now()
       )
     }
