@@ -3,6 +3,7 @@
 // swiftlint:disable identifier_name discouraged_optional_boolean discouraged_optional_collection
 // Wire structs mirror Telegram's API: snake_case keys, and optionals model absent JSON fields.
 import ClawCore
+import Foundation
 
 struct TResponse<R: Decodable>: Decodable {
   let ok: Bool
@@ -19,9 +20,36 @@ struct TUser: Decodable {
   let id: Int64
   let is_bot: Bool?
   let username: String?
+  let first_name: String?
+  let last_name: String?
+
+  /// What a group reader would see above the message: the given name(s), else the @username.
+  var displayName: String? {
+    let parts = [first_name, last_name].compactMap { part in
+      part?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    let name = parts.filter { !$0.isEmpty }.joined(separator: " ")
+    return name.isEmpty ? username : name
+  }
 }
 struct TChat: Decodable {
   let id: Int64
+  let type: String?
+  let is_forum: Bool?
+
+  /// Bot API always sends `type`; an absent one is malformed. It maps to `.private` so a
+  /// malformed payload keeps the pre-group-mode DM behavior — group mode additionally requires an
+  /// allowlisted chat id, so this default can never promote a chat into it.
+  var kind: ChatKind {
+    type.map(ChatKind.init(apiValue:)) ?? .private
+  }
+}
+
+/// The `reply_to_message` target, decoded as its own shape rather than a nested `TMessage`
+/// (a struct cannot recursively contain itself) — only the ids the addressing check needs.
+struct TReplyTarget: Decodable {
+  let message_id: Int64?
+  let from: TUser?
 }
 
 /// Media markers — presence is all that's needed to classify an unsupported kind.
@@ -84,6 +112,10 @@ struct TMessage: Decodable {
   let message_id: Int64
   let from: TUser?
   let chat: TChat
+  let sender_chat: TChat?
+  let message_thread_id: Int64?
+  let reply_to_message: TReplyTarget?
+  let migrate_to_chat_id: Int64?
   let text: String?
   let caption: String?
   let photo: [TPhotoSize]?
@@ -120,7 +152,14 @@ struct TMessage: Decodable {
       caption: caption,
       mediaKind: mediaKind,
       voice: voice?.attachment,
-      photo: photoAttachment
+      photo: photoAttachment,
+      chatKind: chat.kind,
+      messageThreadId: message_thread_id,
+      replyToMessageId: reply_to_message?.message_id,
+      replyToUserId: reply_to_message?.from?.id,
+      senderDisplayName: from?.displayName,
+      hasSenderChat: sender_chat != nil,
+      migratedToChatId: migrate_to_chat_id
     )
   }
 }

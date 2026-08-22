@@ -147,7 +147,12 @@ private extension MessageRouter {
     }
 
     guard let message = IncomingMessage.normalize(from: rawUpdate) else {
-      logger.debug("update \(rawUpdate.updateId) has nothing actionable, skipping")
+      let dropped = rawUpdate.message ?? rawUpdate.editedMessage
+      if dropped?.hasSenderChat == true {
+        logger.debug("update \(rawUpdate.updateId) was sent on behalf of a chat, skipping")
+      } else {
+        logger.debug("update \(rawUpdate.updateId) has nothing actionable, skipping")
+      }
       return .skipped
     }
 

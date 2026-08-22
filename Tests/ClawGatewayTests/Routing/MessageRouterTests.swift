@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -60,7 +61,8 @@ struct FullSessions: SessionMessageStore {
 
   private func makeHarness(
     allowed: [Int64],
-    doctor: any DoctorReporting = StubDoctorReporter()
+    doctor: any DoctorReporting = StubDoctorReporter(),
+    logger: Logger = TestLog.silent
   ) throws -> Harness {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -87,7 +89,7 @@ struct FullSessions: SessionMessageStore {
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
       doctor: doctor,
-      logger: TestLog.silent
+      logger: logger
     )
 
     return Harness(
@@ -149,6 +151,37 @@ struct FullSessions: SessionMessageStore {
     let reply = try #require(sent.first)
     #expect(reply.text.contains("private bot"))
     #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func messageSentOnBehalfOfAChatIsSkippedWithItsOwnReason() async throws {
+    // given — an anonymous admin post: normalization drops it, and the log has to say why
+    let capture = RecordingLogCapture()
+    let harness = try makeHarness(allowed: [42], logger: capture.logger())
+    let onBehalfOfTheGroup = RawUpdate(
+      updateId: 9,
+      message: RawMessage(
+        messageId: 9,
+        fromUserId: 1_087_968_824,
+        chatId: -1_001_234,
+        text: "announcement",
+        caption: nil,
+        mediaKind: nil,
+        chatKind: .supergroup,
+        hasSenderChat: true
+      ),
+      editedMessage: nil
+    )
+
+    // when
+    let outcome = await harness.router.handle(rawUpdate: onBehalfOfTheGroup)
+
+    // then — skipped, silent, and distinguishable from a generic empty update
+    #expect(outcome == .skipped)
+    #expect(await harness.transport.sent.isEmpty)
+    #expect(await harness.dispatcher.calls.isEmpty)
+    let reasons = capture.entries.map(\.message)
+    #expect(reasons.contains { $0.contains("sent on behalf of a chat") })
+    #expect(reasons.allSatisfy { !$0.contains("nothing actionable") })
   }
 
   @Test func nonAllowlistedSenderPersistsNoRunOrMessage() async throws {
