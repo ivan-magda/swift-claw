@@ -76,6 +76,12 @@ struct RunComposition {
 
     do {
       let botUsername = await fetchBotUsername(transport, logger)
+      // Group mode recognizes an addressed message by the bot's @name. Without that name the daemon
+      // would sit in every configured group hearing nothing, so an unknown identity is fatal here
+      // rather than a warning the operator finds days later.
+      if config.groupChats.isEmpty == false, botUsername == nil {
+        throw ConfigError.groupModeRequiresBotUsername
+      }
 
       let builder = DaemonBuilder(
         config: config,
