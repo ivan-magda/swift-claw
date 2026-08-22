@@ -115,6 +115,61 @@ import Testing
     #expect(row.replyToMessageId == Self.triggerMessageId)
   }
 
+  /// A crash notice is the one enqueue with no turn behind it: the boot sweep mints it from the
+  /// run row alone, so a topic session's notice can only find its way home through the key.
+  @Test func aTopicRunsBootNoticeLandsInItsTopic() throws {
+    // given — a run left RUNNING in topic 5 by a crash, nothing delivered
+    let fixture = try fixture(
+      sessionKey: SessionKey.telegramTopic(chatId: Self.groupChatId, threadId: 5),
+      chatId: Self.groupChatId,
+      telegramMessageId: Self.triggerMessageId
+    )
+
+    // when
+    let replies = try fixture.runs.reconcileRunsAtBoot(
+      now: Date(),
+      degradationText: "unfinished",
+      heartbeatNoticeChatId: nil
+    )
+
+    // then — the notice targets the group, and its row carries the topic and the message that asked
+    #expect(
+      replies == [
+        DegradationReply(chatId: Self.groupChatId, runId: fixture.runId, text: "unfinished")
+      ]
+    )
+    let row = try #require(try fixture.outbox.pendingOutbound().first)
+    #expect(
+      row.target
+        == DeliveryTarget(
+          chatId: Self.groupChatId,
+          messageThreadId: 5,
+          replyToMessageId: Self.triggerMessageId
+        )
+    )
+  }
+
+  @Test func aDirectRunsBootNoticeCarriesNoTopic() throws {
+    // given
+    let fixture = try fixture(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
+      chatId: 42,
+      telegramMessageId: Self.triggerMessageId
+    )
+
+    // when
+    let replies = try fixture.runs.reconcileRunsAtBoot(
+      now: Date(),
+      degradationText: "unfinished",
+      heartbeatNoticeChatId: nil
+    )
+
+    // then — the DM notice is the whole-chat target it was before topics existed
+    #expect(replies == [DegradationReply(chatId: 42, runId: fixture.runId, text: "unfinished")])
+    let row = try #require(try fixture.outbox.pendingOutbound().first)
+    #expect(row.target == .chat(42))
+  }
+
   @Test func aDirectRunsReplyCarriesNeither() throws {
     // given
     let fixture = try fixture(
