@@ -11,7 +11,7 @@ import Foundation
 extension DaemonBuilder {
   struct IntakeStack {
     let poller: TelegramPollerService
-    let outbox: OutboxDispatcher
+    let outbox: OutboxDispatcher<ContinuousClock>
   }
 
   func makeIntakeServices(

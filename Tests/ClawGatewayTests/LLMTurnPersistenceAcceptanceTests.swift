@@ -253,7 +253,7 @@ actor Gate {
 /// the lane commits without sending, then `dispatcher.drainOnce()` delivers PENDING outbox rows.
 struct Stack {
   let router: MessageRouter
-  let dispatcher: OutboxDispatcher
+  let dispatcher: OutboxDispatcher<ContinuousClock>
   let transport: RecordingTransport
   let provider: RecordingProvider
   let signal: OutboxSignal
@@ -279,7 +279,7 @@ struct StopNewStack {
 
 struct StreamingStack {
   let router: MessageRouter
-  let dispatcher: OutboxDispatcher
+  let dispatcher: OutboxDispatcher<ContinuousClock>
   let transport: RecordingTransport
   let provider: StreamingAcceptanceProvider
   let signal: OutboxSignal

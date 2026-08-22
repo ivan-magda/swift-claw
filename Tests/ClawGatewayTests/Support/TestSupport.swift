@@ -272,6 +272,7 @@ func textUpdate(
 /// other. The RUNNING-with-no-outbox shape doubles as the crash-mid-turn state boot-reconcile tests
 /// need.
 struct SeededFixture {
+  let writer: any DatabaseWriter
   let outbox: OutboxStoreGRDB
   let runs: RunStoreGRDB
   let runId: Int64
@@ -288,9 +289,34 @@ func makeSeededFixture(
   let queue = try ClawDatabase.makeInMemoryQueue()
   try ClawDatabase.migrate(queue)
 
-  let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
+  let runId = try seedRun(
+    in: queue,
+    chatId: chatId,
+    sessionKey: sessionKey,
+    telegramMessageId: telegramMessageId
+  )
+  return SeededFixture(
+    writer: queue,
+    outbox: OutboxStoreGRDB(writer: queue),
+    runs: RunStoreGRDB(writer: queue),
+    runId: runId,
+    chatId: chatId
+  )
+}
+
+/// Seeds one more session + inbound message + RUNNING run into an already-migrated database, so a
+/// fixture can hold the runs of several chats — the shape a drain across chats needs.
+@discardableResult
+func seedRun(
+  in writer: any DatabaseWriter,
+  chatId: Int64,
+  updateId: Int64 = 1,
+  sessionKey: String? = nil,
+  telegramMessageId: Int64? = nil
+) throws -> Int64 {
+  let claim = try SessionMessageStoreGRDB(writer: writer).claimAndPersistInbound(
     InboundMessage(
-      updateId: 1,
+      updateId: updateId,
       sessionKey: sessionKey ?? SessionKey.telegramDM(chatId: chatId),
       chatId: chatId,
       userId: chatId,
@@ -301,14 +327,8 @@ func makeSeededFixture(
     )
   )
   let runId = try #require(claim.runId)
-  let runs = RunStoreGRDB(writer: queue)
-  _ = try #require(try runs.pickUp(runId: runId, now: Date()))
-  return SeededFixture(
-    outbox: OutboxStoreGRDB(writer: queue),
-    runs: runs,
-    runId: runId,
-    chatId: chatId
-  )
+  _ = try #require(try RunStoreGRDB(writer: writer).pickUp(runId: runId, now: Date()))
+  return runId
 }
 
 /// A boot-reconcile fixture with two HEALTHY runs and no unfinished orphan: a terminal DONE run, and

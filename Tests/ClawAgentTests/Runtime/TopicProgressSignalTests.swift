@@ -94,15 +94,12 @@ import Testing
     #expect(sent.allSatisfy { $0.chatId == -1_001 })
   }
 
-  @Test func aDirectTurnSendsNeitherPulseNorDraftIntoAThread() async throws {
+  @Test func aDirectTurnPulsesTypingIntoNoThread() async throws {
     // given
     let typing = RecordingTyping()
-    let drafts = RecordingDrafts()
     let runtime = makeRuntime(
-      provider: streamingProvider(replying: "hello"),
-      typing: typing,
-      drafts: drafts,
-      streamingEnabled: true
+      provider: SequenceProvider([okResponse(content: "ok")]),
+      typing: typing
     )
 
     // when — the DM spelling: no mode, no thread, exactly as before group mode existed
@@ -119,9 +116,33 @@ import Testing
 
     // then
     let pulses = await typing.pulses
-    let sent = await drafts.drafts
     #expect(!pulses.isEmpty)
     #expect(pulses.allSatisfy { $0.messageThreadId == nil })
+  }
+
+  @Test func aDirectStreamingDraftCarriesNoThread() async throws {
+    // given
+    let drafts = RecordingDrafts()
+    let runtime = makeRuntime(
+      provider: streamingProvider(replying: "hello"),
+      drafts: drafts,
+      streamingEnabled: true
+    )
+
+    // when
+    _ = try await runtime.runTurn(
+      runId: 11,
+      sessionId: 22,
+      chatId: 42,
+      buildResult: buildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    let sent = await drafts.drafts
     #expect(!sent.isEmpty)
     #expect(sent.allSatisfy { $0.messageThreadId == nil })
   }

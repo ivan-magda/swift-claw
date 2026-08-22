@@ -34,7 +34,7 @@ import Testing
   private func makeDispatcher(
     _ fixture: Fixture,
     transport: RecordingTransport
-  ) -> OutboxDispatcher {
+  ) -> OutboxDispatcher<ContinuousClock> {
     OutboxDispatcher(
       outbox: fixture.outbox,
       delivery: transport,
