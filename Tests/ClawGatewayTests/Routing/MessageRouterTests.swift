@@ -17,6 +17,25 @@ import Testing
     let sessionMessages: SessionMessageStoreGRDB
     let runs: RunStoreGRDB
     let queue: DatabaseQueue
+
+    /// What a forum topic's session remembers, whether the bot answered any of it or not.
+    func topicHistory(chatId: Int64, threadId: Int64?) throws -> [StoredMessage] {
+      let key = SessionKey.telegramTopic(chatId: chatId, threadId: threadId)
+      guard let sessionId = try sessionMessages.findSession(sessionKey: key) else {
+        return []
+      }
+      return try sessionMessages.loadContextSnapshot(
+        sessionId: sessionId,
+        throughMessageId: Int64.max,
+        limit: 50
+      ).history
+    }
+
+    func runCount() throws -> Int {
+      try queue.read { db in
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM runs") ?? -1
+      }
+    }
   }
 
   private struct SeededRun {
@@ -243,7 +262,7 @@ import Testing
     #expect(await harness.transport.sent.isEmpty)
   }
 
-  @Test func unaddressedGroupChatterRunsNoTurnAndSaysNothing() async throws {
+  @Test func unaddressedGroupChatterIsStoredButRunsNoTurnAndSaysNothing() async throws {
     // given
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
 
@@ -254,14 +273,121 @@ import Testing
         from: 7,
         chat: -1_001,
         text: "anyone else stuck on the wifi",
-        chatKind: .supergroup
+        chatKind: .supergroup,
+        messageThreadId: 5
       )
     )
 
-    // then — the bot stays out of it
-    #expect(outcome == .skipped)
+    // then — the bot stays out of it, but the topic remembers what was said
+    #expect(outcome == .processed)
     #expect(await harness.dispatcher.calls.isEmpty)
     #expect(await harness.transport.sent.isEmpty)
+    #expect(
+      try harness.topicHistory(chatId: -1_001, threadId: 5).map(\.content)
+        == ["anyone else stuck on the wifi"]
+    )
+    #expect(try harness.runCount() == 0)
+  }
+
+  @Test func aRedeliveredUnaddressedGroupMessageIsStoredOnlyOnce() async throws {
+    // given
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
+    let chatter = textUpdate(
+      id: 1,
+      from: 7,
+      chat: -1_001,
+      text: "the wifi password is on the badge",
+      chatKind: .supergroup,
+      messageThreadId: 5
+    )
+    await harness.router.handle(rawUpdate: chatter)
+
+    // when — the poller redelivers the update it never got to acknowledge
+    let outcome = await harness.router.handle(rawUpdate: chatter)
+
+    // then
+    #expect(outcome == .skipped)
+    #expect(try harness.topicHistory(chatId: -1_001, threadId: 5).count == 1)
+  }
+
+  @Test func anAddressedGroupMessageStillRunsATurnAfterOverheardOnes() async throws {
+    // given — the room has been talking past the bot
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
+    await harness.router.handle(
+      rawUpdate: textUpdate(
+        id: 1,
+        from: 7,
+        chat: -1_001,
+        text: "the talk starts at ten",
+        chatKind: .supergroup,
+        messageThreadId: 5
+      )
+    )
+
+    // when — someone finally names it
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(
+        id: 2,
+        from: 8,
+        chat: -1_001,
+        text: "@claw_bot which room",
+        chatKind: .supergroup,
+        messageThreadId: 5
+      )
+    )
+    await harness.dispatcher.waitForCalls(atLeast: 1)
+
+    // then — one run, over a topic history that holds both messages
+    #expect(outcome == .processed)
+    #expect(await harness.dispatcher.calls.count == 1)
+    #expect(try harness.runCount() == 1)
+    #expect(
+      try harness.topicHistory(chatId: -1_001, threadId: 5).map(\.content)
+        == ["the talk starts at ten", "@claw_bot which room"]
+    )
+  }
+
+  @Test func aFullDiskWhileObservingStaysSilentAndBacksThePollerOff() async throws {
+    // given — the observe write reports a full disk in a room the bot was not talking to
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let allowlist = AllowlistStoreGRDB(writer: queue)
+    try allowlist.seedAllowlist(userIds: [42])
+    let transport = RecordingTransport()
+    let router = MessageRouter(
+      processed: ProcessedUpdateStoreGRDB(writer: queue),
+      sessionMessages: FakeSessionMessageStore.failingEverything(with: .diskFull),
+      commands: CommandStoreGRDB(writer: queue),
+      memory: MemoryStoreGRDB(writer: queue),
+      memoryCommands: MemoryCommandStoreGRDB(writer: queue),
+      pendingConfirmations: PendingConfirmationRegistry(),
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
+      accessControl: AccessControl(allowlist: allowlist, groupChats: [-1_001]),
+      delivery: transport,
+      turnRunner: FakeTurnRunner(),
+      imageCache: ImageCache(),
+      lanes: SessionLaneRegistry(),
+      schedule: makeIdleScheduleSurface(writer: queue),
+      coordinator: ApprovalCoordinator(),
+      doctor: StubDoctorReporter(),
+      logger: TestLog.silent
+    )
+
+    // when
+    let outcome = await router.handle(
+      rawUpdate: textUpdate(
+        id: 1,
+        from: 7,
+        chat: -1_001,
+        text: "anyone else stuck on the wifi",
+        chatKind: .supergroup,
+        messageThreadId: 5
+      )
+    )
+
+    // then — the poller backs off, and the room is told nothing about the daemon's disk
+    #expect(outcome == .storageFull)
+    #expect(await transport.sent.isEmpty)
   }
 
   @Test func anUnaddressedGroupStickerIsNotAnsweredWithTheCannedLine() async throws {
@@ -276,7 +402,8 @@ import Testing
         text: nil,
         caption: nil,
         mediaKind: "stickers",
-        chatKind: .supergroup
+        chatKind: .supergroup,
+        messageThreadId: 5
       ),
       editedMessage: nil
     )
@@ -284,10 +411,11 @@ import Testing
     // when
     let outcome = await harness.router.handle(rawUpdate: sticker)
 
-    // then — nobody addressed the bot, so the room hears nothing
+    // then — nobody addressed the bot, so the room hears nothing and there is no text to keep
     #expect(outcome == .skipped)
     #expect(await harness.transport.sent.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
+    #expect(try harness.topicHistory(chatId: -1_001, threadId: 5).isEmpty)
   }
 
   @Test func anAddressedGroupStickerStillGetsTheUnsupportedLine() async throws {

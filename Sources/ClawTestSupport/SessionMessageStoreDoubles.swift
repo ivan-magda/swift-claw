@@ -13,6 +13,7 @@ public struct FakeSessionMessageStore: SessionMessageStore {
     case claimCommandUpdate
     case findSession
     case claimAndPersistInbound
+    case claimAndPersistObserved
     case loadContextSnapshot
     case resetWindowAndDetaint
   }
@@ -94,6 +95,22 @@ public struct FakeSessionMessageStore: SessionMessageStore {
       )
     }
     return try inner.claimAndPersistInbound(inbound)
+  }
+
+  public func claimAndPersistObserved(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
+    if let error = failures[.claimAndPersistObserved] {
+      throw error
+    }
+    guard let inner else {
+      return ClaimResult(
+        newlyClaimed: false,
+        sessionId: nil,
+        messageId: nil,
+        runId: nil,
+        triggerMessageId: nil
+      )
+    }
+    return try inner.claimAndPersistObserved(inbound)
   }
 
   public func loadContextSnapshot(

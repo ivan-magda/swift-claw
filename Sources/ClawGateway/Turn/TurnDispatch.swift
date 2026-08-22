@@ -5,6 +5,10 @@ import Logging
 /// The inbound plain-text → durable run bridge: fuses claim + persistence, then enqueues the
 /// run and returns without awaiting it. Persistence failure prevents cursor advancement;
 /// background turn failures are logged in-band by `TurnEnqueuer`.
+///
+/// `observe` is the same bridge minus the run, for a group message the bot overheard rather than
+/// was asked. Both paths mint the key and the claim the same way, so a room's transcript is one
+/// sequence whether or not the bot answered any given line.
 struct TurnDispatch: Sendable {
   let sessionMessages: any SessionMessageStore
 
@@ -82,6 +86,48 @@ struct TurnDispatch: Sendable {
       log: runLog
     )
 
+    return .processed
+  }
+  /// Persists an overheard group message and returns, having said and run nothing. Silence is the
+  /// contract even when the write fails: a room the bot was not talking to is told nothing about
+  /// the daemon's disk, so the outcome alone carries the failure back to the poller.
+  func observe(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    text: String,
+    mode: ChatMode,
+    provenance: Provenance = .trusted
+  ) async -> HandleOutcome {
+    let inbound = InboundMessage(
+      updateId: rawUpdate.updateId,
+      sessionKey: SessionKey.telegram(for: message, mode: mode),
+      chatId: message.chatId,
+      userId: message.userId,
+      text: text,
+      isEdited: message.isEdited,
+      provenance: provenance,
+      telegramMessageId: message.messageId,
+      ts: now()
+    )
+
+    let claim: ClaimResult
+    do {
+      claim = try sessionMessages.claimAndPersistObserved(inbound)
+    } catch StoreError.diskFull {
+      logger.error("observed persist hit a full disk on update \(rawUpdate.updateId)")
+      return .storageFull
+    } catch {
+      logger.error("observed persist failed for update \(rawUpdate.updateId): \(error)")
+      return .transientFailure
+    }
+
+    guard claim.newlyClaimed else {
+      return replies.skipDuplicate(updateId: rawUpdate.updateId)
+    }
+
+    logger.debug(
+      "observed update \(rawUpdate.updateId) in chat \(message.chatId) (chars=\(text.count))"
+    )
     return .processed
   }
 }

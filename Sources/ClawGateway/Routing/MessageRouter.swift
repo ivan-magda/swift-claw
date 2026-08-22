@@ -174,10 +174,7 @@ private extension MessageRouter {
     // Resolved once, ahead of the content switch, so an overheard photo or voice note is never
     // downloaded: in a room the bot listens to everything and acts only on what names it.
     guard addressing.isAddressed(message, mode: mode) else {
-      logger.debug(
-        "update \(rawUpdate.updateId) in chat \(message.chatId) does not address the bot, skipping"
-      )
-      return .skipped
+      return await observe(rawUpdate: rawUpdate, message: message, mode: mode)
     }
 
     switch message.content {
@@ -201,6 +198,29 @@ private extension MessageRouter {
       let command = Command.parse(text, botUsername: botUsername)
       return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
     }
+  }
+
+  /// The overheard branch. Only typed words are kept: a sticker, a voice note and a photo all
+  /// need bytes the bot deliberately never fetched for a message that did not name it, so there is
+  /// nothing of them to write down. The room's transcript therefore holds what was said in it, and
+  /// no placeholder for what was shown.
+  func observe(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async -> HandleOutcome {
+    guard case .text(let text) = message.content else {
+      logger.debug(
+        "update \(rawUpdate.updateId) in chat \(message.chatId) does not address the bot, skipping"
+      )
+      return .skipped
+    }
+    return await turnDispatch.observe(
+      rawUpdate: rawUpdate,
+      message: message,
+      text: text,
+      mode: mode
+    )
   }
 
   func routeVoice(

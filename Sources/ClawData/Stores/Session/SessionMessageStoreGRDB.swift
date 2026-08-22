@@ -48,43 +48,10 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
 
   public func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
     try database.writeMapping { db in
-      let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
-        db: db,
-        updateId: inbound.updateId,
-        claimedAt: inbound.ts
-      )
+      let stored = try Self.claimAndInsertMessage(db, inbound)
 
-      guard newlyClaimed else {
-        return ClaimResult(
-          newlyClaimed: false,
-          sessionId: nil,
-          messageId: nil,
-          runId: nil,
-          triggerMessageId: nil
-        )
-      }
-
-      let sessionId = try Self.upsertSession(db, sessionKey: inbound.sessionKey, now: inbound.ts)
-      // Owner-typed input is trusted-tier; machine-derived inbound text (a voice transcript)
-      // arrives `.untrusted` and taints the session in this same fused write, so context assembly
-      // fences it and the exfil gate arms without any tool having run.
-      try db.execute(
-        sql: """
-          INSERT INTO messages(session_id, role, content, provenance, ts)
-          VALUES (?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          sessionId,
-          MessageRole.user.rawValue,
-          inbound.text,
-          inbound.provenance.rawValue,
-          inbound.ts,
-        ]
-      )
-      let messageId = db.lastInsertedRowID
-
-      if inbound.provenance == .untrusted {
-        try RunStoreGRDB.setSessionTainted(db, sessionId: sessionId, now: inbound.ts)
+      guard let sessionId = stored.sessionId, let messageId = stored.messageId else {
+        return stored
       }
 
       try db.execute(
@@ -112,6 +79,67 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         triggerMessageId: messageId
       )
     }
+  }
+
+  public func claimAndPersistObserved(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
+    try database.writeMapping { db in
+      try Self.claimAndInsertMessage(db, inbound)
+    }
+  }
+
+  /// Claim, session upsert, message insert and taint — everything both inbound paths share, so an
+  /// overheard message dedups on the same key an answered one does and carries the same trust tier.
+  /// The run is the caller's, because only one of the two paths owes an answer.
+  private static func claimAndInsertMessage(
+    _ db: Database,
+    _ inbound: InboundMessage
+  ) throws -> ClaimResult {
+    let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
+      db: db,
+      updateId: inbound.updateId,
+      claimedAt: inbound.ts
+    )
+
+    guard newlyClaimed else {
+      return ClaimResult(
+        newlyClaimed: false,
+        sessionId: nil,
+        messageId: nil,
+        runId: nil,
+        triggerMessageId: nil
+      )
+    }
+
+    let sessionId = try upsertSession(db, sessionKey: inbound.sessionKey, now: inbound.ts)
+    // Owner-typed input is trusted-tier; machine-derived inbound text (a voice transcript)
+    // arrives `.untrusted` and taints the session in this same fused write, so context assembly
+    // fences it and the exfil gate arms without any tool having run.
+    try db.execute(
+      sql: """
+        INSERT INTO messages(session_id, role, content, provenance, ts)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+      arguments: [
+        sessionId,
+        MessageRole.user.rawValue,
+        inbound.text,
+        inbound.provenance.rawValue,
+        inbound.ts,
+      ]
+    )
+    let messageId = db.lastInsertedRowID
+
+    if inbound.provenance == .untrusted {
+      try RunStoreGRDB.setSessionTainted(db, sessionId: sessionId, now: inbound.ts)
+    }
+
+    return ClaimResult(
+      newlyClaimed: true,
+      sessionId: sessionId,
+      messageId: messageId,
+      runId: nil,
+      triggerMessageId: nil
+    )
   }
 
   public func loadContextSnapshot(
