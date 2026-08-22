@@ -8,8 +8,13 @@ public struct ToolPolicyGate: Sendable {
   public enum Verdict: Sendable, Equatable {
     /// `action` is the gate-resolved canonical action for `.arbitraryDestination` tools — the
     /// dispatcher hands its target into `execute` so the tool acts on exactly the form the gate
-    /// authorized; `nil` for the other classes.
-    case allow(argsRedacted: String, action: ToolAction?)
+    /// authorized; `nil` for the other classes. An ask-tier tool allowed without an approval
+    /// carries its resolved target here too, because its `execute` requires one.
+    ///
+    /// `preparedArgsJSON` is the dangerous tier's prepared canonical arguments, present only when
+    /// the gate allowed a dangerous action outright. `execute` decodes that recorded shape, not
+    /// the model's raw arguments, so the dispatcher must hand it over verbatim.
+    case allow(argsRedacted: String, action: ToolAction?, preparedArgsJSON: String? = nil)
     case block(payload: ToolPayload, argsRedacted: String)
     /// An ask-tier action parked for the owner's durable approval. Carries the recorded
     /// canonical args the suspend commit persists and the resume replays.
@@ -60,7 +65,9 @@ public struct ToolPolicyGate: Sendable {
     case .blocked(let verdict):
       return verdict
     case .cleared(let redacted, let trifectaHeld):
-      guard trifectaHeld else {
+      // A group topic has nobody to hold the approval, so a held trifecta allows: the
+      // unconditional and conditional argument scans above already ran and still block.
+      guard trifectaHeld, context.mode == .direct else {
         return resolveAndAllow(call: call, tool: tool, argsRedacted: redacted)
       }
       argsRedacted = redacted
@@ -262,6 +269,15 @@ private extension ToolPolicyGate {
       )
     }
 
+    if context.mode == .group {
+      return groupAskTierVerdict(
+        call: call,
+        tool: tool,
+        target: target,
+        argsRedacted: argsRedacted
+      )
+    }
+
     // The run holds one approval slot: a further ask-tier call while one is pending gets the
     // blocked observation, never a second park.
     guard context.approvalAlreadyPending == false else {
@@ -308,6 +324,38 @@ private extension ToolPolicyGate {
       canonicalTarget: target,
       reason: reason,
       presentation: presentation
+    )
+  }
+
+  /// Group mode has no approval banner, so the two things the banner used to catch are refused
+  /// here instead: a tool whose real work only ever happens on the approval waiter, and a write
+  /// that would rewrite a prompt file steering every later turn for everyone in the topic.
+  /// Everything else executes on the gate-resolved target, which its `execute` requires.
+  func groupAskTierVerdict(
+    call: ToolCall,
+    tool: any Tool,
+    target: String,
+    argsRedacted: String
+  ) -> Verdict {
+    guard tool.executesOnlyViaApproval == false else {
+      return askTierBlock(
+        reason:
+          "\(call.name) needs the owner's approval, which a group chat has no way to ask for.",
+        argsRedacted: argsRedacted
+      )
+    }
+
+    let basename = (target as NSString).lastPathComponent
+    guard WorkspaceFile.isPromptPrivileged(basename: basename) == false else {
+      return askTierBlock(
+        reason: "I don't rewrite \(basename) from a group chat — it steers every later turn.",
+        argsRedacted: argsRedacted
+      )
+    }
+
+    return .allow(
+      argsRedacted: argsRedacted,
+      action: ToolAction(tool: call.name, target: target)
     )
   }
 
@@ -385,6 +433,16 @@ private extension ToolPolicyGate {
           return blockedArgs(rule: rule, argsRedacted: "[REDACTED:\(rule)]")
         }
       }
+    }
+
+    // Group mode runs the prepared action untapped — the sandbox is the containment, not a prompt.
+    // `execEnabled` and every scan above still apply; only the approval round-trip is gone.
+    guard context.mode == .direct else {
+      return .allow(
+        argsRedacted: argGuard.renderRedacted(argsJSON: prepared.canonicalArgsJSON),
+        action: ToolAction(tool: call.name, target: prepared.canonicalTarget),
+        preparedArgsJSON: prepared.canonicalArgsJSON
+      )
     }
 
     let recorded = RecordedToolAction(
@@ -465,11 +523,12 @@ public struct GatedToolDispatcher: ToolDispatching {
         argsRedacted: gate.renderRedacted(argsJSON: recorded.canonicalArgsJSON),
         requiresApproval: recorded
       )
-    case .allow(let argsRedacted, let action):
+    case .allow(let argsRedacted, let action, let preparedArgsJSON):
       // (4) execute under the tool's own timeout, on the gate-resolved canonical target
       let payload = await executeWithTimeout(
         tool: tool,
         arguments: arguments,
+        preparedArgsJSON: preparedArgsJSON,
         canonicalTarget: action?.target
       )
       return ToolDispatchOutcome(
@@ -483,21 +542,43 @@ public struct GatedToolDispatcher: ToolDispatching {
   /// awaited: a task group always awaits its children (the pitfall `sendDraftBounded`
   /// documents), so a wedged tool — a blocking syscall, hung I/O — would otherwise hold the
   /// strict-FIFO session lane hostage far past its declared timeout, beyond `/stop`'s reach.
-  /// The abandoned execute task keeps running detached until its I/O returns; today's tools are
-  /// read-only, so a post-timeout side effect is harmless — write tools must revisit this
-  /// contract explicitly.
+  /// The abandoned execute task keeps running detached until its I/O returns.
+  ///
+  /// A group turn dispatches write tools here, so the abandonment is no longer free — and it is
+  /// still the right trade. `file_write` commits through a staged temp file and a single
+  /// `rename(2)`/`link(2)`, so an abandoned write either lands whole or leaves the previous file
+  /// untouched; there is no torn state to observe. `execute_code` runs inside a sandbox that
+  /// enforces its own shorter timeout, and the dispatcher's allowance sits 20s above it, so the
+  /// race fires only when the sandbox itself has already wedged — exactly the case worth
+  /// abandoning. In both cases the turn observes a timeout, which may understate what happened;
+  /// the alternative is a wedged tool holding the session lane, which is worse.
   private func executeWithTimeout(
     tool: any Tool,
     arguments: JSONValue,
+    preparedArgsJSON: String?,
     canonicalTarget: String?
   ) async -> ToolPayload {
+    let executedArguments: JSONValue
+    if let preparedArgsJSON {
+      guard let prepared = JSONValue.parse(preparedArgsJSON) else {
+        return ToolPayload(
+          content: "The prepared \(tool.definition.name) action is unreadable; nothing ran.",
+          status: .error,
+          ingestedUntrusted: false
+        )
+      }
+      executedArguments = prepared
+    } else {
+      executedArguments = arguments
+    }
+
     let outcome = await DeadlineRace.race(
       allowance: tool.timeout,
       sleep: { [clock] duration in
         try await clock.sleep(for: duration)
       },
       operation: {
-        await tool.execute(arguments: arguments, canonicalTarget: canonicalTarget)
+        await tool.execute(arguments: executedArguments, canonicalTarget: canonicalTarget)
       }
     )
 

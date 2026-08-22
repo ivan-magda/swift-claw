@@ -349,7 +349,7 @@ private struct ProbedDangerousTool: Tool {
     )
 
     // then — allowed, but the audit rendering still redacts the shaped token
-    guard case .allow(let argsRedacted, _) = verdict else {
+    guard case .allow(let argsRedacted, _, _) = verdict else {
       Issue.record("expected allow, got \(verdict)")
       return
     }
@@ -665,7 +665,7 @@ private struct ProbedDangerousTool: Tool {
     let verdict = await gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
 
     // then — the fetch is allowed on its resolved target; no approval
-    guard case .allow(_, let action) = verdict else {
+    guard case .allow(_, let action, _) = verdict else {
       Issue.record("expected .allow, got \(verdict)")
       return
     }

@@ -485,7 +485,8 @@ public struct AgentRuntime: Sendable {
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
           sessionHasPrivateData: sessionHasPrivateData,
-          approvalAlreadyPending: pendingSuspension != nil
+          approvalAlreadyPending: pendingSuspension != nil,
+          mode: mode
         )
 
         guard let toolDispatcher else {
