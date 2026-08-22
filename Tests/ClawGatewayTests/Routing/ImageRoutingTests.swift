@@ -7,13 +7,19 @@ import Testing
 
 @testable import ClawGateway
 
-private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawUpdate {
+private func photoUpdate(
+  id: Int64,
+  from: Int64,
+  caption: String? = nil,
+  chat: Int64? = nil,
+  chatKind: ChatKind = .private
+) -> RawUpdate {
   RawUpdate(
     updateId: id,
     message: RawMessage(
       messageId: id,
       fromUserId: from,
-      chatId: from,
+      chatId: chat ?? from,
       text: nil,
       caption: caption,
       mediaKind: PhotoAttachment.mediaKindDescription,
@@ -25,7 +31,8 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
           height: 960,
           fileSizeBytes: 186_422
         )
-      ])
+      ]),
+      chatKind: chatKind
     ),
     editedMessage: nil
   )
@@ -50,6 +57,7 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
 
   private func makeHarness(
     allowed: [Int64],
+    groupChats: Set<Int64> = [],
     imagesEnabled: Bool = true,
     fetcher: any MediaFetching = StubMediaFetcher(result: .success(ImageFixtures.jpeg)),
     typing: any TypingIndicator = NoopTyping()
@@ -75,8 +83,8 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: pendingConfirmations,
-      botUsername: "claw_bot",
-      accessControl: AccessControl(allowlist: allowlist),
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
+      accessControl: AccessControl(allowlist: allowlist, groupChats: groupChats),
       delivery: transport,
       turnRunner: dispatcher,
       imageCache: cache,
@@ -428,5 +436,45 @@ private func photoUpdate(id: Int64, from: Int64, caption: String? = nil) -> RawU
     await harness.dispatcher.waitForCalls(atLeast: 1)
     let call = try #require(await harness.dispatcher.calls.first)
     #expect(await harness.cache.images(sessionId: call.sessionId).isEmpty == false)
+  }
+
+  @Test func anUnaddressedGroupPhotoIsNeverFetched() async throws {
+    // given — a slide posted to the room, naming nobody
+    let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001], fetcher: fetcher)
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: photoUpdate(id: 1, from: 7, chat: -1_001, chatKind: .supergroup)
+    )
+
+    // then — no download, no typing pulse, no turn, no reply
+    #expect(outcome == .skipped)
+    #expect(await fetcher.calls.isEmpty)
+    #expect(await harness.transport.sent.isEmpty)
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func aGroupPhotoCaptionedWithAMentionIsFetched() async throws {
+    // given — the same slide, this time captioned at the bot
+    let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001], fetcher: fetcher)
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: photoUpdate(
+        id: 1,
+        from: 7,
+        caption: "@claw_bot what is on this slide",
+        chat: -1_001,
+        chatKind: .supergroup
+      )
+    )
+    await harness.dispatcher.waitForCalls(atLeast: 1)
+
+    // then
+    #expect(outcome == .processed)
+    #expect(await fetcher.calls.count == 1)
+    #expect(await harness.dispatcher.calls.count == 1)
   }
 }

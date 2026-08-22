@@ -590,7 +590,7 @@ import Testing
     )
     composition.makeClients = { instrumentedClients(recorder: recorder) }
     composition.makeManagedStore = { _ in store }
-    composition.fetchBotUsername = { _, _ in nil }
+    composition.fetchBotIdentity = { _, _ in nil }
     return composition
   }
 }

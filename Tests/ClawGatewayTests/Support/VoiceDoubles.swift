@@ -2,11 +2,20 @@ import ClawCore
 import ClawGateway
 import Foundation
 
-/// The one transcriber double for the `VoiceTranscribing` seam: scripted success or typed failure.
+/// The one transcriber double for the `VoiceTranscribing` seam: scripted success or typed failure,
+/// counting every call so a test can also assert the engine was never reached.
 struct StubVoiceTranscriber: VoiceTranscribing {
+  let calls = CallCounter()
   var result: Result<String, VoiceTranscriptionError> = .success("spoken words")
 
+  var callCount: Int {
+    get async {
+      await calls.count
+    }
+  }
+
   func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {
+    _ = await calls.next()
     switch result {
     case .success(let transcript):
       return transcript

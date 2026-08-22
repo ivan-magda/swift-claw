@@ -52,7 +52,7 @@ import Testing
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: pending,
-      botUsername: "claw_bot",
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
       accessControl: AccessControl(allowlist: AllowlistStoreGRDB(writer: queue)),
       delivery: transport,
       turnRunner: dispatcher,

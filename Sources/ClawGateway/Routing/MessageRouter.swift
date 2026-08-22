@@ -20,6 +20,7 @@ public enum HandleOutcome: Sendable, Equatable {
 /// `handle` is the single place the outcome returns to the poller.
 public struct MessageRouter: Sendable {
   private let botUsername: String?
+  private let addressing: AddressingResolver
 
   private let accessControl: AccessControl
   private let replies: ReplySender
@@ -43,7 +44,7 @@ public struct MessageRouter: Sendable {
     memory: any MemoryStore,
     memoryCommands: any MemoryCommandStore,
     pendingConfirmations: PendingConfirmationRegistry,
-    botUsername: String?,
+    botIdentity: BotIdentity?,
     accessControl: AccessControl,
     delivery: any MessageDelivery,
     turnRunner: any TurnDispatching,
@@ -59,7 +60,8 @@ public struct MessageRouter: Sendable {
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
-    self.botUsername = botUsername
+    self.botUsername = botIdentity?.username
+    self.addressing = AddressingResolver(identity: botIdentity)
 
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
@@ -167,6 +169,15 @@ private extension MessageRouter {
       mode = allowed
     case .denied(let denial):
       return await denyAccess(denial, rawUpdate: rawUpdate, message: message)
+    }
+
+    // Resolved once, ahead of the content switch, so an overheard photo or voice note is never
+    // downloaded: in a room the bot listens to everything and acts only on what names it.
+    guard addressing.isAddressed(message, mode: mode) else {
+      logger.debug(
+        "update \(rawUpdate.updateId) in chat \(message.chatId) does not address the bot, skipping"
+      )
+      return .skipped
     }
 
     switch message.content {

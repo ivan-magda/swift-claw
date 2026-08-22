@@ -44,7 +44,7 @@ struct MemoryRoutingHarness {
       memory: memory,
       memoryCommands: memoryCommands ?? MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: pendingConfirmations,
-      botUsername: "claw_bot",
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
       accessControl: AccessControl(allowlist: allowlist),
       delivery: transport,
       turnRunner: dispatcher,

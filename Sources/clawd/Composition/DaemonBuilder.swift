@@ -25,7 +25,7 @@ struct DaemonBuilder: Sendable {
   let toolExecutor: any HTTPExecuting & HTTPStreaming
 
   let transport: TelegramClient
-  let botUsername: String?
+  let botIdentity: BotIdentity?
 
   let mcp: MCPBootInputs
 

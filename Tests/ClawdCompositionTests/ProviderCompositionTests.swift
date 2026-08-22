@@ -67,7 +67,7 @@ private final class InvocationFlag: @unchecked Sendable {
     )
     composition.makeClients = { instrumentedClients(recorder: recorder) }
     composition.makeManagedStore = makeManagedStore
-    composition.fetchBotUsername = { _, _ in nil }
+    composition.fetchBotIdentity = { _, _ in nil }
     composition.buildDaemon = buildDaemon
     return composition
   }

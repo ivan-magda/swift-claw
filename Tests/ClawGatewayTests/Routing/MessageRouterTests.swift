@@ -47,7 +47,7 @@ import Testing
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
-      botUsername: "claw_bot",
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
       accessControl: AccessControl(allowlist: allowlist, groupChats: groupChats),
       delivery: transport,
       turnRunner: dispatcher,
@@ -221,13 +221,19 @@ import Testing
     #expect(await harness.transport.sent.isEmpty)
   }
 
-  @Test func allowlistedGroupTextIsRouted() async throws {
+  @Test func anAddressedGroupTextIsRouted() async throws {
     // given
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
 
-    // when — an attendee who is on no allowlist writes in the configured group
+    // when — an attendee who is on no allowlist mentions the bot in the configured group
     let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 7, chat: -1_001, text: "hello", chatKind: .supergroup)
+      rawUpdate: textUpdate(
+        id: 1,
+        from: 7,
+        chat: -1_001,
+        text: "@claw_bot hello",
+        chatKind: .supergroup
+      )
     )
     await harness.dispatcher.waitForCalls(atLeast: 1)
 
@@ -235,6 +241,95 @@ import Testing
     #expect(outcome == .processed)
     #expect(await harness.dispatcher.calls.count == 1)
     #expect(await harness.transport.sent.isEmpty)
+  }
+
+  @Test func unaddressedGroupChatterRunsNoTurnAndSaysNothing() async throws {
+    // given
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
+
+    // when — two attendees talk to each other in the room the bot sits in
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(
+        id: 1,
+        from: 7,
+        chat: -1_001,
+        text: "anyone else stuck on the wifi",
+        chatKind: .supergroup
+      )
+    )
+
+    // then — the bot stays out of it
+    #expect(outcome == .skipped)
+    #expect(await harness.dispatcher.calls.isEmpty)
+    #expect(await harness.transport.sent.isEmpty)
+  }
+
+  @Test func anUnaddressedGroupStickerIsNotAnsweredWithTheCannedLine() async throws {
+    // given — unsupported media, which in a DM earns the "I can't read X yet" reply
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
+    let sticker = RawUpdate(
+      updateId: 1,
+      message: RawMessage(
+        messageId: 1,
+        fromUserId: 7,
+        chatId: -1_001,
+        text: nil,
+        caption: nil,
+        mediaKind: "stickers",
+        chatKind: .supergroup
+      ),
+      editedMessage: nil
+    )
+
+    // when
+    let outcome = await harness.router.handle(rawUpdate: sticker)
+
+    // then — nobody addressed the bot, so the room hears nothing
+    #expect(outcome == .skipped)
+    #expect(await harness.transport.sent.isEmpty)
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func anAddressedGroupStickerStillGetsTheUnsupportedLine() async throws {
+    // given — a sticker sent as a reply to the bot, which is how a group addresses media
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
+    let sticker = RawUpdate(
+      updateId: 1,
+      message: RawMessage(
+        messageId: 1,
+        fromUserId: 7,
+        chatId: -1_001,
+        text: nil,
+        caption: nil,
+        mediaKind: "stickers",
+        chatKind: .supergroup,
+        replyToMessageId: 9,
+        replyToUserId: 900
+      ),
+      editedMessage: nil
+    )
+
+    // when
+    await harness.router.handle(rawUpdate: sticker)
+
+    // then
+    let reply = try #require(await harness.transport.sent.first)
+    #expect(reply.text.contains("stickers"))
+  }
+
+  @Test func aDirectMessageIsAlwaysAddressed() async throws {
+    // given — the same words that would be overheard in a group
+    let harness = try makeHarness(allowed: [42])
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "anyone else stuck on the wifi")
+    )
+    await harness.dispatcher.waitForCalls(atLeast: 1)
+
+    // then — a DM needs no mention
+    #expect(outcome == .processed)
+    #expect(await harness.dispatcher.calls.count == 1)
   }
 
   @Test func aChannelPostIsRefusedEvenFromAnAllowlistedChat() async throws {
@@ -387,7 +482,7 @@ import Testing
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
-      botUsername: "claw_bot",
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
       accessControl: AccessControl(allowlist: allowlist),
       delivery: transport,
       turnRunner: dispatcher,
@@ -451,7 +546,7 @@ import Testing
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
-      botUsername: "claw_bot",
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
       accessControl: AccessControl(allowlist: allowlist),
       delivery: transport,
       turnRunner: dispatcher,
@@ -656,7 +751,7 @@ import Testing
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
-      botUsername: "claw_bot",
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
       accessControl: AccessControl(allowlist: allowlist),
       delivery: transport,
       turnRunner: FakeTurnRunner(),

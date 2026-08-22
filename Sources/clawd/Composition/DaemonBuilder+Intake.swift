@@ -31,7 +31,7 @@ extension DaemonBuilder {
       memory: stores.memory,
       memoryCommands: stores.memoryCommands,
       pendingConfirmations: coordination.pendingConfirmations,
-      botUsername: botUsername,
+      botIdentity: botIdentity,
       accessControl: AccessControl(allowlist: stores.allowlist, groupChats: config.groupChats),
       delivery: transport,
       turnRunner: turnRunner,

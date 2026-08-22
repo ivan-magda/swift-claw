@@ -206,7 +206,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
-      botUsername: "claw_bot",
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
       accessControl: accessControl,
       delivery: RecordingTransport(),
       turnRunner: FakeTurnRunner(),

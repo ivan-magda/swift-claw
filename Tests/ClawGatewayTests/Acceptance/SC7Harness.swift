@@ -267,7 +267,7 @@ func makeSC7Harness(
     memory: stores.memory,
     memoryCommands: stores.memoryCommands,
     pendingConfirmations: registry,
-    botUsername: nil,
+    botIdentity: nil,
     accessControl: AccessControl(allowlist: stores.allowlist),
     delivery: transport,
     turnRunner: runner,
