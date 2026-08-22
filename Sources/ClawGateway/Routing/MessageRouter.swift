@@ -244,7 +244,7 @@ private extension MessageRouter {
         message: message,
         text: transcript,
         mode: mode,
-        provenance: .untrusted
+        source: .untrusted
       )
     case .failure(.storageFull):
       return await replies.storageFull(chatId: message.chatId)
@@ -294,7 +294,7 @@ private extension MessageRouter {
         message: message,
         text: ImageMarkers.photoContent(caption: caption),
         mode: mode,
-        provenance: .untrusted,
+        source: .untrusted,
         image: image
       )
     case .failure(let failure):
@@ -335,7 +335,7 @@ private extension MessageRouter {
       message: message,
       text: ImageMarkers.photoContent(caption: caption),
       mode: mode,
-      provenance: .untrusted
+      source: .untrusted
     )
   }
 

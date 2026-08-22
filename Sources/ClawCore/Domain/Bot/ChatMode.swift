@@ -8,3 +8,18 @@ public enum ChatMode: String, Sendable, Equatable, CaseIterable {
   case direct
   case group
 }
+
+extension ChatMode {
+  /// The trust tier this conversation stores a line at.
+  ///
+  /// A DM keeps whatever tier the source earned, so a voice transcript still arrives untrusted and
+  /// taints the session. A group line is always trusted: it is the room's own record, and recall
+  /// only ever returns trusted rows, so storing an attendee's words any other way would make the
+  /// topic's history unsearchable. The price is that a group session never arms taint.
+  public func storedProvenance(of source: Provenance) -> Provenance {
+    switch self {
+    case .direct: source
+    case .group: .trusted
+    }
+  }
+}

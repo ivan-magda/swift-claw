@@ -26,7 +26,7 @@ struct TurnDispatch: Sendable {
     message: IncomingMessage,
     text: String,
     mode: ChatMode = .direct,
-    provenance: Provenance = .trusted,
+    source: Provenance = .trusted,
     image: ImagePart? = nil
   ) async throws(RoutingHalt) -> HandleOutcome {
     let inbound = InboundMessage(
@@ -36,7 +36,7 @@ struct TurnDispatch: Sendable {
       userId: message.userId,
       text: mode.transcriptText(text, author: TranscriptAuthor(message: message)),
       isEdited: message.isEdited,
-      provenance: provenance,
+      provenance: mode.storedProvenance(of: source),
       telegramMessageId: message.messageId,
       ts: now()
     )
@@ -96,7 +96,7 @@ struct TurnDispatch: Sendable {
     message: IncomingMessage,
     text: String,
     mode: ChatMode,
-    provenance: Provenance = .trusted
+    source: Provenance = .trusted
   ) async -> HandleOutcome {
     let inbound = InboundMessage(
       updateId: rawUpdate.updateId,
@@ -105,7 +105,7 @@ struct TurnDispatch: Sendable {
       userId: message.userId,
       text: mode.transcriptText(text, author: TranscriptAuthor(message: message)),
       isEdited: message.isEdited,
-      provenance: provenance,
+      provenance: mode.storedProvenance(of: source),
       telegramMessageId: message.messageId,
       ts: now()
     )

@@ -21,14 +21,18 @@ import Testing
     }
 
     func storedContent(sessionKey: String) throws -> [String] {
+      try snapshot(sessionKey: sessionKey)?.history.map(\.content) ?? []
+    }
+
+    func snapshot(sessionKey: String) throws -> SessionContextSnapshot? {
       guard let sessionId = try sessionMessages.findSession(sessionKey: sessionKey) else {
-        return []
+        return nil
       }
       return try sessionMessages.loadContextSnapshot(
         sessionId: sessionId,
         throughMessageId: Int64.max,
         limit: 10
-      ).history.map(\.content)
+      )
     }
   }
 
@@ -219,5 +223,87 @@ import Testing
 
     // then
     #expect(try harness.storedContent(sessionKey: "tg:dm:42") == ["hello"])
+  }
+
+  @Test func aPlainGroupLineIsStoredTrustedSoRecallCanFindIt() async throws {
+    // given
+    let harness = try makeHarness()
+    let (raw, message) = try update(id: 1, chatId: -1_001_234, threadId: 9)
+
+    // when
+    _ = try await harness.dispatch.dispatch(
+      rawUpdate: raw,
+      message: message,
+      text: "hello",
+      mode: .group
+    )
+
+    // then
+    let snapshot = try #require(
+      try harness.snapshot(sessionKey: SessionKey.telegramTopic(chatId: -1_001_234, threadId: 9))
+    )
+    #expect(snapshot.history.map(\.provenance) == [.trusted])
+    #expect(snapshot.isTainted == false)
+  }
+
+  @Test func aGroupVoiceTranscriptIsStoredTrustedAndLeavesTheTopicUntainted() async throws {
+    // given — the same untrusted source a DM would taint on
+    let harness = try makeHarness()
+    let (raw, message) = try update(id: 1, chatId: -1_001_234, threadId: 9)
+
+    // when
+    _ = try await harness.dispatch.dispatch(
+      rawUpdate: raw,
+      message: message,
+      text: "hello",
+      mode: .group,
+      source: .untrusted
+    )
+
+    // then
+    let snapshot = try #require(
+      try harness.snapshot(sessionKey: SessionKey.telegramTopic(chatId: -1_001_234, threadId: 9))
+    )
+    #expect(snapshot.history.map(\.provenance) == [.trusted])
+    #expect(snapshot.isTainted == false)
+  }
+
+  @Test func anObservedGroupLineIsStoredTrustedToo() async throws {
+    // given
+    let harness = try makeHarness()
+    let (raw, message) = try update(id: 1, chatId: -1_001_234, threadId: 9)
+
+    // when
+    _ = await harness.dispatch.observe(
+      rawUpdate: raw,
+      message: message,
+      text: "hello",
+      mode: .group
+    )
+
+    // then
+    let snapshot = try #require(
+      try harness.snapshot(sessionKey: SessionKey.telegramTopic(chatId: -1_001_234, threadId: 9))
+    )
+    #expect(snapshot.history.map(\.provenance) == [.trusted])
+  }
+
+  @Test func aDirectVoiceTranscriptStaysUntrustedAndStillArmsTaint() async throws {
+    // given
+    let harness = try makeHarness()
+    let (raw, message) = try update(id: 1, chatId: 42, threadId: nil)
+
+    // when
+    _ = try await harness.dispatch.dispatch(
+      rawUpdate: raw,
+      message: message,
+      text: "hello",
+      source: .untrusted
+    )
+
+    // then
+    let snapshot = try #require(try harness.snapshot(sessionKey: "tg:dm:42"))
+    #expect(snapshot.history.map(\.provenance) == [.untrusted])
+    #expect(snapshot.isTainted)
   }
 }
