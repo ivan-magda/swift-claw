@@ -242,7 +242,8 @@ func textUpdate(
   text: String,
   chatKind: ChatKind = .private,
   chatTitle: String? = nil,
-  messageThreadId: Int64? = nil
+  messageThreadId: Int64? = nil,
+  senderDisplayName: String? = nil
 ) -> RawUpdate {
   RawUpdate(
     updateId: id,
@@ -255,7 +256,8 @@ func textUpdate(
       mediaKind: nil,
       chatKind: chatKind,
       chatTitle: chatTitle,
-      messageThreadId: messageThreadId
+      messageThreadId: messageThreadId,
+      senderDisplayName: senderDisplayName
     ),
     editedMessage: nil
   )

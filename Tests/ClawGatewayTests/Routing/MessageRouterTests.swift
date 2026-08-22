@@ -274,17 +274,18 @@ import Testing
         chat: -1_001,
         text: "anyone else stuck on the wifi",
         chatKind: .supergroup,
-        messageThreadId: 5
+        messageThreadId: 5,
+        senderDisplayName: "Ada"
       )
     )
 
-    // then — the bot stays out of it, but the topic remembers what was said
+    // then — the bot stays out of it, but the topic remembers who said what
     #expect(outcome == .processed)
     #expect(await harness.dispatcher.calls.isEmpty)
     #expect(await harness.transport.sent.isEmpty)
     #expect(
       try harness.topicHistory(chatId: -1_001, threadId: 5).map(\.content)
-        == ["anyone else stuck on the wifi"]
+        == ["Ada: anyone else stuck on the wifi"]
     )
     #expect(try harness.runCount() == 0)
   }
@@ -320,7 +321,8 @@ import Testing
         chat: -1_001,
         text: "the talk starts at ten",
         chatKind: .supergroup,
-        messageThreadId: 5
+        messageThreadId: 5,
+        senderDisplayName: "Ada"
       )
     )
 
@@ -332,18 +334,19 @@ import Testing
         chat: -1_001,
         text: "@claw_bot which room",
         chatKind: .supergroup,
-        messageThreadId: 5
+        messageThreadId: 5,
+        senderDisplayName: "Grace"
       )
     )
     await harness.dispatcher.waitForCalls(atLeast: 1)
 
-    // then — one run, over a topic history that holds both messages
+    // then — one run, over a topic history that holds both messages and both speakers
     #expect(outcome == .processed)
     #expect(await harness.dispatcher.calls.count == 1)
     #expect(try harness.runCount() == 1)
     #expect(
       try harness.topicHistory(chatId: -1_001, threadId: 5).map(\.content)
-        == ["the talk starts at ten", "@claw_bot which room"]
+        == ["Ada: the talk starts at ten", "Grace: @claw_bot which room"]
     )
   }
 
@@ -381,7 +384,8 @@ import Testing
         chat: -1_001,
         text: "anyone else stuck on the wifi",
         chatKind: .supergroup,
-        messageThreadId: 5
+        messageThreadId: 5,
+        senderDisplayName: "Ada"
       )
     )
 
