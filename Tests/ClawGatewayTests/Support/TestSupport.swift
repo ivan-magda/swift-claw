@@ -235,7 +235,15 @@ actor RecordingTransport: TelegramTransport {
   }
 }
 
-func textUpdate(id: Int64, from: Int64, chat: Int64? = nil, text: String) -> RawUpdate {
+func textUpdate(
+  id: Int64,
+  from: Int64,
+  chat: Int64? = nil,
+  text: String,
+  chatKind: ChatKind = .private,
+  chatTitle: String? = nil,
+  messageThreadId: Int64? = nil
+) -> RawUpdate {
   RawUpdate(
     updateId: id,
     message: RawMessage(
@@ -244,7 +252,10 @@ func textUpdate(id: Int64, from: Int64, chat: Int64? = nil, text: String) -> Raw
       chatId: chat ?? from,
       text: text,
       caption: nil,
-      mediaKind: nil
+      mediaKind: nil,
+      chatKind: chatKind,
+      chatTitle: chatTitle,
+      messageThreadId: messageThreadId
     ),
     editedMessage: nil
   )

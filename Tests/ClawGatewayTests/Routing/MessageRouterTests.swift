@@ -27,6 +27,7 @@ import Testing
 
   private func makeHarness(
     allowed: [Int64],
+    groupChats: Set<Int64> = [],
     doctor: any DoctorReporting = StubDoctorReporter(),
     logger: Logger = TestLog.silent
   ) throws -> Harness {
@@ -47,7 +48,7 @@ import Testing
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
       botUsername: "claw_bot",
-      accessControl: AccessControl(allowlist: allowlist),
+      accessControl: AccessControl(allowlist: allowlist, groupChats: groupChats),
       delivery: transport,
       turnRunner: dispatcher,
       imageCache: ImageCache(),
@@ -176,6 +177,92 @@ import Testing
     let reply = try #require(sent.first)
     #expect(reply.text.contains("7"))
     #expect(reply.text.contains("42") == false)
+  }
+
+  @Test func unlistedGroupMessageSendsNothingAndLogsTheChatId() async throws {
+    // given — the bot was added to a group nobody put in CLAW_GROUP_CHATS
+    let capture = RecordingLogCapture()
+    let harness = try makeHarness(allowed: [42], logger: capture.logger())
+
+    // when — even the owner writes there
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(
+        id: 1,
+        from: 42,
+        chat: -1_001,
+        text: "hello",
+        chatKind: .supergroup,
+        chatTitle: "Podlodka iOS Crew"
+      )
+    )
+
+    // then — silence in the room, but a trace the operator can read the chat id out of
+    #expect(outcome == .skipped)
+    #expect(await harness.transport.sent.isEmpty)
+    #expect(await harness.dispatcher.calls.isEmpty)
+    let logged = try #require(capture.entries.first { entry in entry.level == .info })
+    #expect(logged.message.contains("-1001"))
+    #expect(logged.message.contains("Podlodka iOS Crew"))
+  }
+
+  @Test func anUntitledUnlistedGroupStillLogsItsChatId() async throws {
+    // given
+    let capture = RecordingLogCapture()
+    let harness = try makeHarness(allowed: [42], logger: capture.logger())
+
+    // when — Telegram sent no title
+    await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, chat: -1_002, text: "hi", chatKind: .group)
+    )
+
+    // then
+    let logged = try #require(capture.entries.first { entry in entry.level == .info })
+    #expect(logged.message.contains("-1002"))
+    #expect(await harness.transport.sent.isEmpty)
+  }
+
+  @Test func allowlistedGroupTextIsRouted() async throws {
+    // given
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
+
+    // when — an attendee who is on no allowlist writes in the configured group
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 7, chat: -1_001, text: "hello", chatKind: .supergroup)
+    )
+    await harness.dispatcher.waitForCalls(atLeast: 1)
+
+    // then — chat membership was the proof; nothing was refused
+    #expect(outcome == .processed)
+    #expect(await harness.dispatcher.calls.count == 1)
+    #expect(await harness.transport.sent.isEmpty)
+  }
+
+  @Test func aChannelPostIsRefusedEvenFromAnAllowlistedChat() async throws {
+    // given — the same id is configured, but the update arrives as a channel
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, chat: -1_001, text: "hi", chatKind: .channel)
+    )
+
+    // then
+    #expect(outcome == .skipped)
+    #expect(await harness.transport.sent.isEmpty)
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func aStrangersGroupStartIsNeverAnsweredWithTheirUserId() async throws {
+    // given
+    let harness = try makeHarness(allowed: [42])
+
+    // when — /start in a group the bot was dragged into
+    await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 7, chat: -1_003, text: "/start", chatKind: .supergroup)
+    )
+
+    // then — the DM-only enrollment hint never leaks into a room
+    #expect(await harness.transport.sent.isEmpty)
   }
 
   @Test func allowlistedStartGetsWelcomeNotATurn() async throws {

@@ -36,6 +36,7 @@ struct TChat: Decodable {
   let id: Int64
   let type: String?
   let is_forum: Bool?
+  let title: String?
 
   /// Bot API always sends `type`; an absent one is malformed. It maps to `.private` so a
   /// malformed payload keeps the pre-group-mode DM behavior — group mode additionally requires an
@@ -154,6 +155,7 @@ struct TMessage: Decodable {
       voice: voice?.attachment,
       photo: photoAttachment,
       chatKind: chat.kind,
+      chatTitle: chat.title,
       messageThreadId: message_thread_id,
       replyToMessageId: reply_to_message?.message_id,
       replyToUserId: reply_to_message?.from?.id,

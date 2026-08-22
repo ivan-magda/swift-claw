@@ -156,16 +156,25 @@ private extension MessageRouter {
       return .skipped
     }
 
-    let isAllowed = accessControl.isAllowed(userId: message.userId)
+    let decision = accessControl.decide(
+      chatKind: message.chatKind,
+      chatId: message.chatId,
+      userId: message.userId
+    )
+    let mode: ChatMode
+    switch decision {
+    case .allowed(let allowed):
+      mode = allowed
+    case .denied(let denial):
+      return await denyAccess(denial, rawUpdate: rawUpdate, message: message)
+    }
 
     switch message.content {
     case .unsupported(let kind):
-      // Never reveal capabilities to a stranger; the owner gets a specific "can't read X yet".
-      let reply = isAllowed ? Self.unsupportedMediaText(kind: kind) : Self.privateBotText
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
         chatId: message.chatId,
-        text: reply
+        text: Self.unsupportedMediaText(kind: kind)
       )
     case .photo(let attachment, let caption):
       return try await routeImage(
@@ -173,21 +182,13 @@ private extension MessageRouter {
         caption: caption,
         rawUpdate: rawUpdate,
         message: message,
-        isAllowed: isAllowed
+        mode: mode
       )
     case .voice(let attachment):
-      return try await routeVoice(
-        attachment,
-        rawUpdate: rawUpdate,
-        message: message,
-        isAllowed: isAllowed
-      )
+      return try await routeVoice(attachment, rawUpdate: rawUpdate, message: message, mode: mode)
     case .text(let text):
       let command = Command.parse(text, botUsername: botUsername)
-      if isAllowed {
-        return try await routeAllowed(command, rawUpdate: rawUpdate, message: message)
-      }
-      return await denyAccess(command, rawUpdate: rawUpdate, message: message)
+      return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
     }
   }
 
@@ -195,12 +196,8 @@ private extension MessageRouter {
     _ attachment: VoiceAttachment,
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    isAllowed: Bool
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    guard isAllowed else {
-      return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
-    }
-
     guard let voice else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
@@ -215,6 +212,7 @@ private extension MessageRouter {
         rawUpdate: rawUpdate,
         message: message,
         text: transcript,
+        mode: mode,
         provenance: .untrusted
       )
     case .failure(.storageFull):
@@ -242,17 +240,14 @@ private extension MessageRouter {
     caption: String?,
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    isAllowed: Bool
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    guard isAllowed else {
-      return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
-    }
-
     guard let images else {
       return try await routeImageWithoutService(
         caption: caption,
         rawUpdate: rawUpdate,
-        message: message
+        message: message,
+        mode: mode
       )
     }
 
@@ -267,6 +262,7 @@ private extension MessageRouter {
         rawUpdate: rawUpdate,
         message: message,
         text: ImageMarkers.photoContent(caption: caption),
+        mode: mode,
         provenance: .untrusted,
         image: image
       )
@@ -292,7 +288,8 @@ private extension MessageRouter {
   func routeImageWithoutService(
     caption: String?,
     rawUpdate: RawUpdate,
-    message: IncomingMessage
+    message: IncomingMessage,
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
     guard let caption, caption.isEmpty == false else {
       return await replies.sendCanned(
@@ -306,32 +303,64 @@ private extension MessageRouter {
       rawUpdate: rawUpdate,
       message: message,
       text: ImageMarkers.photoContent(caption: caption),
+      mode: mode,
       provenance: .untrusted
     )
   }
 
-  /// Default-deny, applied ONCE for every command: a stranger's /start gets THEIR own id to
-  /// request access (never the allowlist, never a turn); everything else is the private-bot line.
+  /// Default-deny, applied ONCE for every update, before the content switch — so a refused photo
+  /// or voice note is never downloaded. A stranger's /start gets THEIR own id to request access
+  /// (never the allowlist, never a turn); every other DM refusal is the private-bot line, which is
+  /// also all a stranger may learn about unsupported media.
+  ///
+  /// An unlisted chat is answered with silence but still logged: the id and title are the only way
+  /// an operator can learn what to put in `CLAW_GROUP_CHATS`, since the bot says nothing in a room
+  /// until that id is already configured.
   func denyAccess(
-    _ command: Command,
+    _ denial: AccessDenial,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async -> HandleOutcome {
-    if case .start = command {
+    switch denial {
+    case .unlistedChat:
+      let title = message.chatTitle ?? "(untitled)"
+      logger.info(
+        """
+        ignoring update \(rawUpdate.updateId) from unlisted chat \(message.chatId)         "\(title)" (\(message.chatKind.apiValue))
+        """
+      )
+      return .skipped
+    case .privateStranger:
+      guard isStart(message.content) else {
+        return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
+      }
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
         chatId: message.chatId,
         text: Self.unauthorizedStartText(userId: message.userId)
       )
     }
-    return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
   }
 
-  // swiftlint:disable:next cyclomatic_complexity
+  /// True only for `/start` — the one refusal that answers with the sender's own id.
+  func isStart(_ content: IncomingMessage.Content) -> Bool {
+    guard case .text(let text) = content else {
+      return false
+    }
+    if case .start = Command.parse(text, botUsername: botUsername) {
+      return true
+    }
+    return false
+  }
+
+  // A flat dispatch table: one case per command, each delegating in a line or two. Splitting it
+  // would only hide half the table behind a name.
+  // swiftlint:disable:next cyclomatic_complexity function_body_length
   func routeAllowed(
     _ command: Command,
     rawUpdate: RawUpdate,
-    message: IncomingMessage
+    message: IncomingMessage,
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
     switch command {
     case .start:
@@ -353,20 +382,22 @@ private extension MessageRouter {
     case .skills:
       return await sendSkills(rawUpdate: rawUpdate, message: message)
     case .stop:
-      return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message)
+      return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message, mode: mode)
     case .new:
-      return try await commandHandlers.new(rawUpdate: rawUpdate, message: message)
+      return try await commandHandlers.new(rawUpdate: rawUpdate, message: message, mode: mode)
     case .remember(let rememberCommand):
       return try await commandHandlers.remember(
         rawUpdate: rawUpdate,
         message: message,
-        command: rememberCommand
+        command: rememberCommand,
+        mode: mode
       )
     case .memory(let memoryCommand):
       return try await commandHandlers.memory(
         rawUpdate: rawUpdate,
         message: message,
-        command: memoryCommand
+        command: memoryCommand,
+        mode: mode
       )
     case .schedule(let scheduleCommand):
       return try await routeSchedule(scheduleCommand, rawUpdate: rawUpdate, message: message)
@@ -391,7 +422,7 @@ private extension MessageRouter {
         jobId: jobId
       )
     case .plain(let plainText):
-      return try await routePlain(plainText, rawUpdate: rawUpdate, message: message)
+      return try await routePlain(plainText, rawUpdate: rawUpdate, message: message, mode: mode)
     }
   }
 
@@ -441,16 +472,23 @@ private extension MessageRouter {
   func routePlain(
     _ text: String,
     rawUpdate: RawUpdate,
-    message: IncomingMessage
+    message: IncomingMessage,
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
     if let resolved = try await confirmations.resolve(
       rawUpdate: rawUpdate,
       message: message,
-      text: text
+      text: text,
+      mode: mode
     ) {
       return resolved
     }
-    return try await turnDispatch.dispatch(rawUpdate: rawUpdate, message: message, text: text)
+    return try await turnDispatch.dispatch(
+      rawUpdate: rawUpdate,
+      message: message,
+      text: text,
+      mode: mode
+    )
   }
 }
 

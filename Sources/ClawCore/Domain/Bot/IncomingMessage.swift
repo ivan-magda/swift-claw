@@ -73,6 +73,9 @@ public struct RawMessage: Sendable, Equatable {
   public let voice: VoiceAttachment?
   public let photo: PhotoAttachment?
   public let chatKind: ChatKind
+  /// The room's name, for the operator-facing log that is the only way to learn an unlisted
+  /// group's chat id. Absent in a DM.
+  public let chatTitle: String?
   /// The forum topic. Absent in the General topic and in every non-forum chat, and never coerced
   /// to a topic id — the General topic and topic 1 are two different conversations.
   public let messageThreadId: Int64?
@@ -94,6 +97,7 @@ public struct RawMessage: Sendable, Equatable {
     voice: VoiceAttachment? = nil,
     photo: PhotoAttachment? = nil,
     chatKind: ChatKind = .private,
+    chatTitle: String? = nil,
     messageThreadId: Int64? = nil,
     replyToMessageId: Int64? = nil,
     replyToUserId: Int64? = nil,
@@ -110,6 +114,7 @@ public struct RawMessage: Sendable, Equatable {
     self.voice = voice
     self.photo = photo
     self.chatKind = chatKind
+    self.chatTitle = chatTitle
     self.messageThreadId = messageThreadId
     self.replyToMessageId = replyToMessageId
     self.replyToUserId = replyToUserId
@@ -134,6 +139,8 @@ public struct IncomingMessage: Sendable, Equatable {
   public let content: Content
   public let isEdited: Bool
   public let chatKind: ChatKind
+  /// The room's name, absent in a DM.
+  public let chatTitle: String?
   /// The forum topic, absent in the General topic and in every non-forum chat.
   public let messageThreadId: Int64?
   public let replyToMessageId: Int64?
@@ -149,6 +156,7 @@ public struct IncomingMessage: Sendable, Equatable {
     content: Content,
     isEdited: Bool,
     chatKind: ChatKind = .private,
+    chatTitle: String? = nil,
     messageThreadId: Int64? = nil,
     replyToMessageId: Int64? = nil,
     replyToUserId: Int64? = nil,
@@ -162,6 +170,7 @@ public struct IncomingMessage: Sendable, Equatable {
     self.content = content
     self.isEdited = isEdited
     self.chatKind = chatKind
+    self.chatTitle = chatTitle
     self.messageThreadId = messageThreadId
     self.replyToMessageId = replyToMessageId
     self.replyToUserId = replyToUserId
@@ -209,6 +218,7 @@ public struct IncomingMessage: Sendable, Equatable {
       content: content,
       isEdited: raw.message == nil && raw.editedMessage != nil,
       chatKind: message.chatKind,
+      chatTitle: message.chatTitle,
       messageThreadId: message.messageThreadId,
       replyToMessageId: message.replyToMessageId,
       replyToUserId: message.replyToUserId,
