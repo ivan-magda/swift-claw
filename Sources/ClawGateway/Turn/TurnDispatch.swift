@@ -33,6 +33,7 @@ struct TurnDispatch: Sendable {
       text: text,
       isEdited: message.isEdited,
       provenance: provenance,
+      telegramMessageId: message.messageId,
       ts: now()
     )
 

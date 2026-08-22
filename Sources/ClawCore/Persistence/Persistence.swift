@@ -175,6 +175,10 @@ public struct InboundMessage: Sendable, Equatable {
   public let text: String
   public let isEdited: Bool
   public let provenance: Provenance
+  /// Telegram's id for the message that triggered this turn, nil for an inbound with no Telegram
+  /// origin (a scheduled job). It is the reply target an answer addresses, and the fused claim is
+  /// the only write that touches the run row it belongs on.
+  public let telegramMessageId: Int64?
   public let ts: Date
 
   public init(
@@ -185,6 +189,7 @@ public struct InboundMessage: Sendable, Equatable {
     text: String,
     isEdited: Bool,
     provenance: Provenance = .trusted,
+    telegramMessageId: Int64? = nil,
     ts: Date
   ) {
     self.updateId = updateId
@@ -194,6 +199,7 @@ public struct InboundMessage: Sendable, Equatable {
     self.text = text
     self.isEdited = isEdited
     self.provenance = provenance
+    self.telegramMessageId = telegramMessageId
     self.ts = ts
   }
 }
