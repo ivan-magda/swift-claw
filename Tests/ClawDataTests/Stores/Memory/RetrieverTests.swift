@@ -83,6 +83,7 @@ import Testing
     let hits = try corpus.retriever.searchRelevantMessages(
       query: "swift concurrency",
       currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
       windowStartMessageId: nil,
       excludedMessageIds: [],
       limit: 10
@@ -112,6 +113,7 @@ import Testing
     let hits = try corpus.retriever.searchRelevantMessages(
       query: "swift",
       currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
       windowStartMessageId: nil,
       excludedMessageIds: [],
       limit: 10
@@ -137,6 +139,7 @@ import Testing
     let hits = try corpus.retriever.searchRelevantMessages(
       query: "swift",
       currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
       windowStartMessageId: nil,
       excludedMessageIds: [],
       limit: 10
@@ -168,6 +171,7 @@ import Testing
     let hits = try corpus.retriever.searchRelevantMessages(
       query: "swift",
       currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
       windowStartMessageId: inWindowId,
       excludedMessageIds: [],
       limit: 10
@@ -198,6 +202,7 @@ import Testing
     let hits = try corpus.retriever.searchRelevantMessages(
       query: "swift",
       currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
       windowStartMessageId: windowAnchorId,
       excludedMessageIds: [],
       limit: 10
@@ -228,6 +233,7 @@ import Testing
     let hits = try corpus.retriever.searchRelevantMessages(
       query: "swift",
       currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
       windowStartMessageId: nil,
       excludedMessageIds: [dropId],
       limit: 10
@@ -251,6 +257,7 @@ import Testing
     let blank = try corpus.retriever.searchRelevantMessages(
       query: "   ",
       currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
       windowStartMessageId: nil,
       excludedMessageIds: [],
       limit: 10
@@ -258,6 +265,7 @@ import Testing
     let punctuation = try corpus.retriever.searchRelevantMessages(
       query: "!!! ???",
       currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
       windowStartMessageId: nil,
       excludedMessageIds: [],
       limit: 10
@@ -266,5 +274,94 @@ import Testing
     // then
     #expect(blank.isEmpty)
     #expect(punctuation.isEmpty)
+  }
+
+  @Test func restrictingToOneSessionDropsEveryOtherSessionsHit() throws {
+    // given — the same term recorded in the searching session and in a foreign one
+    let corpus = try makeCorpus()
+    let ownId = try insertMessage(
+      corpus,
+      sessionId: corpus.sessionTwo,
+      content: "swift concurrency in our own conversation",
+      at: 10
+    )
+    let foreignId = try insertMessage(
+      corpus,
+      sessionId: corpus.sessionOne,
+      content: "swift concurrency somewhere else entirely",
+      at: 20
+    )
+
+    // when — the same query, once restricted to the searching session and once not
+    let restricted = try corpus.retriever.searchRelevantMessages(
+      query: "swift concurrency",
+      currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: corpus.sessionTwo,
+      windowStartMessageId: nil,
+      excludedMessageIds: [],
+      limit: 10
+    )
+    let unrestricted = try corpus.retriever.searchRelevantMessages(
+      query: "swift concurrency",
+      currentSessionId: corpus.sessionTwo,
+      restrictToSessionId: nil,
+      windowStartMessageId: nil,
+      excludedMessageIds: [],
+      limit: 10
+    )
+
+    // then — the restriction removes the foreign hit and nothing else changes
+    #expect(restricted.map(\.id) == [ownId])
+    #expect(Set(unrestricted.map(\.id)) == Set([ownId, foreignId]))
+  }
+
+  @Test func twoTopicsInOneChatNeverSeeEachOthersHits() throws {
+    // given — two forum topics of the same supergroup, each holding the same term
+    let corpus = try makeCorpus()
+    let topics = try corpus.queue.write { db -> (Int64, Int64) in
+      let first = try insertSession(
+        db,
+        key: SessionKey.telegramTopic(chatId: -1_001, threadId: 11)
+      )
+      let second = try insertSession(
+        db,
+        key: SessionKey.telegramTopic(chatId: -1_001, threadId: 22)
+      )
+      return (first, second)
+    }
+    let firstId = try insertMessage(
+      corpus,
+      sessionId: topics.0,
+      content: "the workshop room discussed swift macros",
+      at: 30
+    )
+    let secondId = try insertMessage(
+      corpus,
+      sessionId: topics.1,
+      content: "the hallway room discussed swift macros",
+      at: 40
+    )
+
+    // when — each topic searches restricted to itself
+    let fromFirst = try corpus.retriever.searchRelevantMessages(
+      query: "swift macros",
+      currentSessionId: topics.0,
+      restrictToSessionId: topics.0,
+      windowStartMessageId: nil,
+      excludedMessageIds: [],
+      limit: 10
+    )
+    let fromSecond = try corpus.retriever.searchRelevantMessages(
+      query: "swift macros",
+      currentSessionId: topics.1,
+      restrictToSessionId: topics.1,
+      windowStartMessageId: nil,
+      excludedMessageIds: [],
+      limit: 10
+    )
+
+    // then — neither topic reads the other's history back into its prompt
+    #expect(fromFirst.map(\.id) == [firstId])
+    #expect(fromSecond.map(\.id) == [secondId])
   }
 }

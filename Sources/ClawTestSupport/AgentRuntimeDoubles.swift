@@ -224,6 +224,7 @@ public struct EmptyRetriever: Retriever {
   public func searchRelevantMessages(
     query: String,
     currentSessionId: Int64,
+    restrictToSessionId: Int64?,
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int

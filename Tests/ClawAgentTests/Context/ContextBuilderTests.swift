@@ -242,6 +242,7 @@ struct ContextBuilderTests {
     let call = try #require(retriever.calls.first)
     #expect(call.query == "latest query")  // the latest user message, not older history
     #expect(call.currentSessionId == 42)
+    #expect(call.restrictToSessionId == nil)  // a DM still recalls across its own past sessions
     #expect(call.windowStartMessageId == 7)
     #expect(call.excludedMessageIds == [10, 11, 12])  // current history excluded from recall
     // the recall candidate limit from its source of truth, not the literal 20
@@ -250,6 +251,29 @@ struct ContextBuilderTests {
       .content.text
     #expect(untrusted.contains("label=\"recall\""))
     #expect(untrusted.contains(BudgetFitter.truncationMarker))
+  }
+
+  @Test func groupModeRestrictsRecallToTheTopicSession() throws {
+    // given — a snapshot whose key says the conversation is a forum topic
+    let retriever = FakeRetriever()
+    let builder = makeBuilder(retriever: retriever)
+    let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramTopic(chatId: -1_001, threadId: 11),
+      history: [
+        StoredMessage(role: .user, content: "latest query", provenance: .trusted)
+      ],
+      historyMessageIds: [10],
+      windowStartMessageId: 7,
+      isTainted: false,
+      hasPrivateData: false
+    )
+
+    // when
+    _ = try builder.assemble(snapshot: snapshot, sessionId: 77, origin: .interactive)
+
+    // then — the search never reaches another topic's rows
+    let call = try #require(retriever.calls.first)
+    #expect(call.restrictToSessionId == 77)
   }
 
   @Test func skillsRenderAsUntrustedIndexWithoutSettingPrivateAccess() throws {
@@ -879,6 +903,7 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
   struct Call: Sendable, Equatable {
     let query: String
     let currentSessionId: Int64
+    let restrictToSessionId: Int64?
     let windowStartMessageId: Int64?
     let excludedMessageIds: [Int64]
     let limit: Int
@@ -894,6 +919,7 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
   func searchRelevantMessages(
     query: String,
     currentSessionId: Int64,
+    restrictToSessionId: Int64?,
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int
@@ -902,6 +928,7 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
       Call(
         query: query,
         currentSessionId: currentSessionId,
+        restrictToSessionId: restrictToSessionId,
         windowStartMessageId: windowStartMessageId,
         excludedMessageIds: excludedMessageIds,
         limit: limit
