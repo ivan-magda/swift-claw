@@ -145,10 +145,16 @@ actor StreamingProvider: LLMProvider {
 }
 
 actor RecordingDrafts: RichDraftStreaming {
-  private(set) var drafts: [(chatId: Int64, draftId: Int64, markdown: String)] = []
+  private(set) var drafts:
+    [(chatId: Int64, messageThreadId: Int64?, draftId: Int64, markdown: String)] = []
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
-    drafts.append((chatId, draftId, markdown))
+  func sendDraft(
+    chatId: Int64,
+    messageThreadId: Int64?,
+    draftId: Int64,
+    markdown: String
+  ) async {
+    drafts.append((chatId, messageThreadId, draftId, markdown))
   }
 }
 
@@ -156,15 +162,21 @@ actor RecordingDrafts: RichDraftStreaming {
 /// suffix until the draft/typing loop has drawn its first frame over the prefix state — the empty
 /// window the old `.timed(pauseBefore:)` forced with a real 80ms sleep.
 actor ReleasingRecordingDrafts: RichDraftStreaming {
-  private(set) var drafts: [(chatId: Int64, draftId: Int64, markdown: String)] = []
+  private(set) var drafts:
+    [(chatId: Int64, messageThreadId: Int64?, draftId: Int64, markdown: String)] = []
   private let gate: TypingReleaseGate
 
   init(gate: TypingReleaseGate) {
     self.gate = gate
   }
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
-    drafts.append((chatId, draftId, markdown))
+  func sendDraft(
+    chatId: Int64,
+    messageThreadId: Int64?,
+    draftId: Int64,
+    markdown: String
+  ) async {
+    drafts.append((chatId, messageThreadId, draftId, markdown))
     await gate.release()
   }
 }
@@ -256,7 +268,7 @@ actor CountingReleaseTyping: TypingIndicator {
     self.gate = gate
   }
 
-  func sendTyping(chatId: Int64) async {
+  func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
     calls += 1
     if calls >= releaseAfter {
       await gate.release()
@@ -281,7 +293,12 @@ actor BlockingFinalDrafts: RichDraftStreaming {
     self.finalMarkdown = finalMarkdown
   }
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
+  func sendDraft(
+    chatId: Int64,
+    messageThreadId: Int64?,
+    draftId: Int64,
+    markdown: String
+  ) async {
     drafts.append(markdown)
     guard markdown == finalMarkdown, !released else {
       return
@@ -324,7 +341,8 @@ let draftDeadlineParkingSleep: @Sendable (Duration) async throws -> Void = { dur
 }
 
 actor BlockingDrafts: RichDraftStreaming {
-  private(set) var drafts: [(chatId: Int64, draftId: Int64, markdown: String)] = []
+  private(set) var drafts:
+    [(chatId: Int64, messageThreadId: Int64?, draftId: Int64, markdown: String)] = []
 
   private var waiters: [CheckedContinuation<Void, Never>] = []
   private var blockedWaiters: [CheckedContinuation<Void, Never>] = []
@@ -333,8 +351,13 @@ actor BlockingDrafts: RichDraftStreaming {
   private var cancelled = false
   private var firstSendBlocked = false
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
-    drafts.append((chatId, draftId, markdown))
+  func sendDraft(
+    chatId: Int64,
+    messageThreadId: Int64?,
+    draftId: Int64,
+    markdown: String
+  ) async {
+    drafts.append((chatId, messageThreadId, draftId, markdown))
     guard drafts.count == 1, !released else {
       return
     }

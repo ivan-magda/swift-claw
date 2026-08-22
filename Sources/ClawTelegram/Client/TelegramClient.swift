@@ -138,8 +138,12 @@ public struct TelegramClient: TelegramTransport {
     )
   }
 
-  public func sendChatAction(chatId: Int64, action: String) async throws {
-    let request = SendChatActionRequest(chatId: chatId, action: action)
+  public func sendChatAction(chatId: Int64, messageThreadId: Int64?, action: String) async throws {
+    let request = SendChatActionRequest(
+      chatId: chatId,
+      messageThreadId: messageThreadId,
+      action: action
+    )
     let _: Bool = try await callMethod(
       "sendChatAction",
       body: request,
@@ -332,6 +336,7 @@ private struct ReplyParameters: Encodable {
 
 private struct SendChatActionRequest: Encodable {
   let chatId: Int64
+  let messageThreadId: Int64?
   let action: String
 }
 
@@ -359,7 +364,11 @@ public struct TelegramTypingIndicator: TypingIndicator {
     self.transport = transport
   }
 
-  public func sendTyping(chatId: Int64) async {
-    try? await transport.sendChatAction(chatId: chatId, action: "typing")
+  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
+    try? await transport.sendChatAction(
+      chatId: chatId,
+      messageThreadId: messageThreadId,
+      action: "typing"
+    )
   }
 }

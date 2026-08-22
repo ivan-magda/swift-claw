@@ -48,7 +48,7 @@ public protocol TelegramTransport: ChannelIntake, MessageDelivery, CallbackRespo
   func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool
   /// Emits a Telegram chat action (e.g. `"typing"`). Fire-and-forget: the action auto-expires (~5s),
   /// so callers re-issue it on an interval and ignore failures — a missing indicator is never fatal.
-  func sendChatAction(chatId: Int64, action: String) async throws
+  func sendChatAction(chatId: Int64, messageThreadId: Int64?, action: String) async throws
   /// Registers the bot's command list with Telegram so the picker appears when a user types `/`.
   func setMyCommands(_ commands: [BotMenuCommand]) async throws
 }
@@ -104,11 +104,22 @@ extension MessageDelivery {
 }
 
 public protocol RichDraftStreaming: Sendable {
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async
+  /// `messageThreadId` names the forum topic the draft belongs to, absent in a DM.
+  func sendDraft(
+    chatId: Int64,
+    messageThreadId: Int64?,
+    draftId: Int64,
+    markdown: String
+  ) async
 }
 
 public struct NoopRichDraftStreaming: RichDraftStreaming {
   public init() {}
 
-  public func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {}
+  public func sendDraft(
+    chatId: Int64,
+    messageThreadId: Int64?,
+    draftId: Int64,
+    markdown: String
+  ) async {}
 }

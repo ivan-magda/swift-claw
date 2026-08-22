@@ -107,4 +107,32 @@ import Testing
     #expect(json["reply_parameters"] == nil)
     #expect(json["chat_id"] as? Int64 == 42)
   }
+
+  @Test func aTypingActionCarriesTheTopic() async throws {
+    // given
+    let executor = makeExecutor()
+    let indicator = TelegramTypingIndicator(transport: makeClient(executor))
+
+    // when
+    await indicator.sendTyping(chatId: -1_001, messageThreadId: 5)
+
+    // then
+    let json = try await body(executor)
+    #expect(json["message_thread_id"] as? Int64 == 5)
+    #expect(json["action"] as? String == "typing")
+  }
+
+  @Test func aDirectTypingActionCarriesNoTopic() async throws {
+    // given
+    let executor = makeExecutor()
+    let indicator = TelegramTypingIndicator(transport: makeClient(executor))
+
+    // when
+    await indicator.sendTyping(chatId: 42)
+
+    // then — the DM request is exactly what it was before topics existed
+    let json = try await body(executor)
+    #expect(json["message_thread_id"] == nil)
+    #expect(json["chat_id"] as? Int64 == 42)
+  }
 }

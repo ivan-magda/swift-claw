@@ -4,17 +4,32 @@ import ClawCore
 public struct NoopTyping: TypingIndicator {
   public init() {}
 
-  public func sendTyping(chatId: Int64) async {}
+  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {}
 }
 
-/// Counts typing pulses so "issued at least once" and "never issued" are both observable.
+/// Records every typing pulse so "issued at least once", "never issued", and "issued into the
+/// calling topic" are all observable.
 public actor RecordingTyping: TypingIndicator {
-  public private(set) var calls = 0
+  public struct Pulse: Sendable, Equatable {
+    public let chatId: Int64
+    public let messageThreadId: Int64?
+
+    public init(chatId: Int64, messageThreadId: Int64?) {
+      self.chatId = chatId
+      self.messageThreadId = messageThreadId
+    }
+  }
+
+  public private(set) var pulses: [Pulse] = []
+
+  public var calls: Int {
+    pulses.count
+  }
 
   public init() {}
 
-  public func sendTyping(chatId: Int64) async {
-    calls += 1
+  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
+    pulses.append(Pulse(chatId: chatId, messageThreadId: messageThreadId))
   }
 }
 
@@ -49,7 +64,7 @@ public actor GatingTyping: TypingIndicator {
     self.gate = gate
   }
 
-  public func sendTyping(chatId: Int64) async {
+  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
     calls += 1
     await gate.release()
   }

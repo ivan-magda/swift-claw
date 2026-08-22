@@ -187,7 +187,7 @@ actor RecordingTransport: TelegramTransport {
     return true
   }
 
-  func sendChatAction(chatId: Int64, action: String) async throws {}
+  func sendChatAction(chatId: Int64, messageThreadId: Int64?, action: String) async throws {}
 
   func answerCallbackQuery(id: String, text: String?) async throws {
     answeredCallbacks.append(CallbackAnswer(id: id, text: text))

@@ -369,8 +369,7 @@ public struct AgentRuntime: Sendable {
         do {
           response = try await roundTrip(
             provider: active.binding.provider,
-            chatId: chatId,
-            draftId: runId,
+            target: TurnProgressTarget(chatId: chatId, threadId: threadId, draftId: runId),
             request: request,
             deadlineSeconds: max(1, Int((deadline - ContinuousClock.now).components.seconds))
           )
@@ -467,7 +466,7 @@ public struct AgentRuntime: Sendable {
       recordedRunTokens += intermediate.promptTokens + intermediate.completionTokens
       recordedRunUSD += intermediate.costUSD
 
-      await typingIndicator.sendTyping(chatId: chatId)
+      await typingIndicator.sendTyping(chatId: chatId, messageThreadId: threadId)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
         proposedToolCalls += 1
@@ -683,15 +682,14 @@ private extension AgentRuntime {
   /// error; the loop maps it.
   func roundTrip(
     provider: any LLMProvider,
-    chatId: Int64,
-    draftId: Int64,
+    target: TurnProgressTarget,
     request: ChatRequest,
     deadlineSeconds: Int
   ) async throws -> ChatResponse {
     guard streamingEnabled else {
       return try await runTypingTurn(
         provider: provider,
-        chatId: chatId,
+        target: target,
         request: request,
         deadlineSeconds: deadlineSeconds
       )
@@ -705,8 +703,7 @@ private extension AgentRuntime {
     do {
       return try await runStreamingTurn(
         provider: provider,
-        chatId: chatId,
-        draftId: draftId,
+        target: target,
         request: request,
         deadlineSeconds: deadlineSeconds
       )
@@ -720,7 +717,7 @@ private extension AgentRuntime {
       // silently defeat the one-time buffered fallback.
       return try await runTypingTurn(
         provider: provider,
-        chatId: chatId,
+        target: target,
         request: request,
         deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart)
       )
@@ -737,8 +734,7 @@ private extension AgentRuntime {
 
   func runStreamingTurn(
     provider: any LLMProvider,
-    chatId: Int64,
-    draftId: Int64,
+    target: TurnProgressTarget,
     request: ChatRequest,
     deadlineSeconds: Int
   ) async throws -> ChatResponse {
@@ -749,12 +745,12 @@ private extension AgentRuntime {
       wallClockDeadlineSeconds: deadlineSeconds,
       clock: clock
     )
-    return try await runtime.run(chatId: chatId, draftId: draftId, request: request)
+    return try await runtime.run(target: target, request: request)
   }
 
   func runTypingTurn(
     provider: any LLMProvider,
-    chatId: Int64,
+    target: TurnProgressTarget,
     request: ChatRequest,
     deadlineSeconds: Int
   ) async throws -> ChatResponse {
@@ -764,7 +760,7 @@ private extension AgentRuntime {
       wallClockDeadlineSeconds: deadlineSeconds,
       clock: clock
     )
-    return try await runtime.run(chatId: chatId, request: request)
+    return try await runtime.run(target: target, request: request)
   }
 }
 

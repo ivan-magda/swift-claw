@@ -44,7 +44,7 @@ actor DraftTransport: TelegramTransport {
     return true
   }
 
-  func sendChatAction(chatId: Int64, action: String) async throws {}
+  func sendChatAction(chatId: Int64, messageThreadId: Int64?, action: String) async throws {}
 }
 
 @Suite struct TelegramRichDraftStreamerTests {
@@ -55,7 +55,7 @@ actor DraftTransport: TelegramTransport {
     let long = String(repeating: "x", count: TelegramRichDraftStreamer.maxMarkdownCharacters + 10)
 
     // when
-    await streamer.sendDraft(chatId: 42, draftId: 9, markdown: long)
+    await streamer.sendDraft(chatId: 42, messageThreadId: nil, draftId: 9, markdown: long)
 
     // then
     let draft = try #require(await transport.drafts.first)
@@ -64,13 +64,20 @@ actor DraftTransport: TelegramTransport {
     #expect(draft.markdown.count == TelegramRichDraftStreamer.maxMarkdownCharacters)
   }
 
+  /// Telegram accepts a draft only in a private chat, so a topic-scoped draft is dropped rather
+  /// than sent to the supergroup: the topic never reaches the wire.
   @Test func skipsDraftsForNonPrivateChats() async {
     // given
     let transport = DraftTransport()
     let streamer = TelegramRichDraftStreamer(transport: transport)
 
     // when
-    await streamer.sendDraft(chatId: -100_123, draftId: 9, markdown: "group draft")
+    await streamer.sendDraft(
+      chatId: -100_123,
+      messageThreadId: 77,
+      draftId: 9,
+      markdown: "group draft"
+    )
 
     // then
     #expect(await transport.drafts.isEmpty)
@@ -83,7 +90,7 @@ actor DraftTransport: TelegramTransport {
     let streamer = TelegramRichDraftStreamer(transport: transport)
 
     // when
-    await streamer.sendDraft(chatId: 42, draftId: 9, markdown: "partial")
+    await streamer.sendDraft(chatId: 42, messageThreadId: nil, draftId: 9, markdown: "partial")
 
     // then
     let attempt = try #require(await transport.draftAttempts.first)

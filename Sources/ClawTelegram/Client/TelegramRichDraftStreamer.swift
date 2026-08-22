@@ -14,7 +14,14 @@ public struct TelegramRichDraftStreamer: RichDraftStreaming {
     self.transport = transport
   }
 
-  public func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
+  /// A topic never reaches the wire: Telegram only accepts a draft in a private chat, so the
+  /// negative chat id of every supergroup is refused before `messageThreadId` could matter.
+  public func sendDraft(
+    chatId: Int64,
+    messageThreadId: Int64?,
+    draftId: Int64,
+    markdown: String
+  ) async {
     guard chatId > 0 else {
       return
     }
