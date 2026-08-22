@@ -148,6 +148,10 @@ private extension MessageRouter {
       return await approvalCallbacks.handle(callback, updateId: rawUpdate.updateId)
     }
 
+    if let observed = noteObservedEvent(in: rawUpdate) {
+      return observed
+    }
+
     guard let message = IncomingMessage.normalize(from: rawUpdate) else {
       let dropped = rawUpdate.message ?? rawUpdate.editedMessage
       if dropped?.hasSenderChat == true {
@@ -198,6 +202,57 @@ private extension MessageRouter {
       let command = Command.parse(text, botUsername: botUsername)
       return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
     }
+  }
+
+  /// The two updates the daemon can only take note of: its own membership changing, and Telegram
+  /// replacing a chat id under a running configuration. Both run ahead of `normalize`, which would
+  /// drop them as contentless — and the generic drop line is exactly the wrong trace for an event
+  /// whose whole value is that an operator sees it.
+  func noteObservedEvent(in rawUpdate: RawUpdate) -> HandleOutcome? {
+    if let membership = rawUpdate.myChatMember {
+      logMembership(membership, updateId: rawUpdate.updateId)
+      return .skipped
+    }
+    let inbound = rawUpdate.message ?? rawUpdate.editedMessage
+    if let inbound, let newChatId = inbound.migratedToChatId {
+      logMigration(from: inbound, to: newChatId)
+      return .skipped
+    }
+    return nil
+  }
+
+  /// Membership is observed, never acted on: an allowlist lives in configuration, so a room the
+  /// bot was just added to still says nothing until an operator puts its id there. The log is how
+  /// they learn the id, and how a silent removal or a rights change stops looking like a bug.
+  func logMembership(_ membership: RawChatMemberUpdate, updateId: Int64) {
+    let title = membership.chatTitle ?? "(untitled)"
+    let actor = membership.actorDisplayName ?? membership.actorUserId.map(String.init) ?? "someone"
+    let transition = "\(membership.oldStatus.apiValue) → \(membership.newStatus.apiValue)"
+    let room = "chat \(membership.chatId) \"\(title)\" (\(membership.chatKind.apiValue))"
+    switch membership.change {
+    case .added:
+      logger.notice("\(actor) added the bot to \(room): \(transition)")
+    case .removed:
+      logger.notice("\(actor) removed the bot from \(room): \(transition)")
+    case .updated:
+      logger.notice("\(actor) changed the bot's rights in \(room): \(transition)")
+    case .unchanged:
+      logger.debug("membership update \(updateId) changed nothing in \(room): \(transition)")
+    }
+  }
+
+  /// Telegram replaces a group's chat id when it upgrades to a supergroup, and the old id stops
+  /// existing. Rewriting `CLAW_GROUP_CHATS` at runtime would silently re-point an access grant at
+  /// an id nobody approved, so the daemon does the opposite: it goes quiet in that room and says
+  /// exactly what to edit.
+  func logMigration(from message: RawMessage, to newChatId: Int64) {
+    let title = message.chatTitle ?? "(untitled)"
+    logger.error(
+      """
+      chat \(message.chatId) "\(title)" was upgraded to a supergroup and is now chat \(newChatId); \
+      clawd will ignore it until CLAW_GROUP_CHATS lists \(newChatId) — update clawd.env and restart
+      """
+    )
   }
 
   /// The overheard branch. Only typed words are kept: a sticker, a voice note and a photo all

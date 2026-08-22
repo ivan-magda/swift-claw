@@ -196,11 +196,45 @@ struct TCallbackQuery: Decodable {
   let data: String?
 }
 
+/// Bot API `ChatMember` — only the status is read; the rights bitfield is not, because the log
+/// this feeds says what changed, not what the bot may now do.
+struct TChatMember: Decodable {
+  let status: String?
+}
+
+/// Bot API `ChatMemberUpdated`, delivered as `my_chat_member` when the subject is the bot itself.
+struct TChatMemberUpdated: Decodable {
+  let chat: TChat
+  let from: TUser?
+  let old_chat_member: TChatMember?
+  let new_chat_member: TChatMember?
+
+  /// An absent or statusless side decodes as an unnamed status rather than failing the batch: a
+  /// membership update is observed, so a malformed one must degrade to a vaguer log, never stall
+  /// intake for every other update in the same batch.
+  private static func status(_ member: TChatMember?) -> ChatMembershipStatus {
+    ChatMembershipStatus(apiValue: member?.status ?? "unknown")
+  }
+
+  func toRawChatMemberUpdate() -> RawChatMemberUpdate {
+    RawChatMemberUpdate(
+      chatId: chat.id,
+      chatKind: chat.kind,
+      chatTitle: chat.title,
+      actorUserId: from?.id,
+      actorDisplayName: from?.displayName,
+      oldStatus: Self.status(old_chat_member),
+      newStatus: Self.status(new_chat_member)
+    )
+  }
+}
+
 struct TUpdate: Decodable {
   let update_id: Int64
   let message: TMessage?
   let edited_message: TMessage?
   let callback_query: TCallbackQuery?
+  let my_chat_member: TChatMemberUpdated?
 
   // The button tap decodes here and maps into the wire-agnostic RawUpdate.callback; chat/message
   // ids come from the prompt message (callback_query.message), which Telegram always includes for
@@ -218,7 +252,8 @@ struct TUpdate: Decodable {
           messageId: query.message?.message_id,
           data: query.data
         )
-      }
+      },
+      myChatMember: my_chat_member?.toRawChatMemberUpdate()
     )
   }
 }

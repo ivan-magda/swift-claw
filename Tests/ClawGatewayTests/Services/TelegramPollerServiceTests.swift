@@ -132,7 +132,7 @@ private actor BlockingTurnRunner: TurnDispatching {
     try await task.value  // returns promptly, no throw
   }
 
-  @Test func requestsCallbackQueryUpdates() async throws {
+  @Test func requestsCallbackQueryAndMembershipUpdates() async throws {
     // given — an idle poller (no batches) so it only long-polls
     let stack = try makeStack(batches: [], allowed: [42])
 
@@ -142,9 +142,12 @@ private actor BlockingTurnRunner: TurnDispatching {
     task.cancel()
     try await task.value
 
-    // then — callback_query rides the same allowed_updates as messages/edits (spec §6.1)
+    // then — button taps and the bot's own membership ride the same allowed_updates as
+    // messages and edits; Telegram sends neither unless it is asked for by name
     #expect(
-      await stack.transport.lastAllowedUpdates == ["message", "edited_message", "callback_query"]
+      await stack.transport.lastAllowedUpdates == [
+        "message", "edited_message", "callback_query", "my_chat_member",
+      ]
     )
   }
 

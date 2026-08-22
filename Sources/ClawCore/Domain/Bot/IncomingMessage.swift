@@ -4,17 +4,21 @@ public struct RawUpdate: Sendable, Equatable {
   public let message: RawMessage?
   public let editedMessage: RawMessage?
   public let callback: RawCallback?
+  /// The bot's own membership changing in a chat. Carries no message and is only ever logged.
+  public let myChatMember: RawChatMemberUpdate?
 
   public init(
     updateId: Int64,
     message: RawMessage?,
     editedMessage: RawMessage?,
-    callback: RawCallback? = nil
+    callback: RawCallback? = nil,
+    myChatMember: RawChatMemberUpdate? = nil
   ) {
     self.updateId = updateId
     self.message = message
     self.editedMessage = editedMessage
     self.callback = callback
+    self.myChatMember = myChatMember
   }
 }
 
