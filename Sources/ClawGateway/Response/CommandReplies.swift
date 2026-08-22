@@ -4,6 +4,11 @@ public enum CommandReplies {
   public static let freshConversation =
     "Started a fresh conversation — earlier context cleared."
 
+  /// Refusal for the owner-scoped command families in a shared room. It names the two families so
+  /// the attendee learns the rule, not just this one rejection.
+  public static let directOnly =
+    "Not here — memory and schedules live in my owner's direct chat."
+
   /// The owner manual, including the parked-entry interaction rules (stated verbatim as
   /// owner-visible text): slash commands bypass confirmation resolution entirely; only the
   /// next plain text resolves a parked entry; /new clears it; a second /schedule displaces it;

@@ -18,11 +18,13 @@ struct ConfirmationResolver: Sendable {
   let logger: Logger
 
   /// nil ⇒ nothing to resolve; the caller falls through to normal turn dispatch.
+  ///
+  /// Direct conversations only, which is why the key is the owner's DM: a room's commands are
+  /// refused before they can park anything, so a group session is never offered here.
   func resolve(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    text: String,
-    mode: ChatMode = .direct
+    text: String
   ) async throws(RoutingHalt) -> HandleOutcome? {
     let existing = try await replies.perform(
       "pending lookup",
@@ -30,7 +32,7 @@ struct ConfirmationResolver: Sendable {
       chatId: message.chatId
     ) {
       try sessionMessages.findSession(
-        sessionKey: SessionKey.telegram(for: message, mode: mode)
+        sessionKey: SessionKey.telegramDM(chatId: message.chatId)
       )
     }
     guard let sessionId = existing else {

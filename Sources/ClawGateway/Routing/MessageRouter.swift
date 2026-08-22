@@ -393,6 +393,16 @@ private extension MessageRouter {
     message: IncomingMessage,
     mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
+    // Refused here rather than inside each handler, so a room never reaches the code that parks a
+    // confirmation: with nothing parked, the next plain line in the topic is only ever a message.
+    if mode == .group, command.isDirectOnly {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        chatId: message.chatId,
+        text: CommandReplies.directOnly
+      )
+    }
+
     switch command {
     case .start:
       return await replies.sendCanned(
@@ -500,19 +510,25 @@ private extension MessageRouter {
 
   /// Plain text first offers itself to any parked confirmation for the session; only an
   /// unclaimed message becomes a durable turn.
+  ///
+  /// A room skips the offer outright instead of being trusted to come up empty. Nothing can park
+  /// there — the two families that park are refused in `routeAllowed` — and skipping keeps it that
+  /// way even if a third one is ever added: a "yes" typed in a topic is just a word.
   func routePlain(
     _ text: String,
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    if let resolved = try await confirmations.resolve(
-      rawUpdate: rawUpdate,
-      message: message,
-      text: text,
-      mode: mode
-    ) {
-      return resolved
+    if mode == .direct {
+      let resolved = try await confirmations.resolve(
+        rawUpdate: rawUpdate,
+        message: message,
+        text: text
+      )
+      if let resolved {
+        return resolved
+      }
     }
     return try await turnDispatch.dispatch(
       rawUpdate: rawUpdate,
