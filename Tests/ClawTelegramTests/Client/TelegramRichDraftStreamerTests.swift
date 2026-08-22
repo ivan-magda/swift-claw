@@ -22,10 +22,14 @@ actor DraftTransport: TelegramTransport {
     allowedUpdates: [String]
   ) async throws -> [RawUpdate] { [] }
 
-  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 { 1 }
+  func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 { 1 }
 
   func sendRichMessage(
-    chatId: Int64,
+    to target: DeliveryTarget,
     markdown: String,
     replyMarkup: String?
   ) async throws -> Int64 { 1 }

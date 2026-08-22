@@ -23,6 +23,7 @@ struct MemoryRoutingHarness {
 
   static func make(
     allowed: [Int64] = [42],
+    groupChats: Set<Int64> = [],
     memoryCommands: (any MemoryCommandStore)? = nil,
     routerSessionMessages: ((SessionMessageStoreGRDB) -> any SessionMessageStore)? = nil
   ) throws -> MemoryRoutingHarness {
@@ -45,7 +46,7 @@ struct MemoryRoutingHarness {
       memoryCommands: memoryCommands ?? MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: pendingConfirmations,
       botIdentity: BotIdentity(id: 900, username: "claw_bot"),
-      accessControl: AccessControl(allowlist: allowlist),
+      accessControl: AccessControl(allowlist: allowlist, groupChats: groupChats),
       delivery: transport,
       turnRunner: dispatcher,
       imageCache: ImageCache(),

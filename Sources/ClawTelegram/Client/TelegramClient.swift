@@ -52,10 +52,16 @@ public struct TelegramClient: TelegramTransport {
     return updates.map { $0.toRawUpdate() }
   }
 
-  public func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
+  public func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     let request = SendMessageRequest(
-      chatId: chatId,
+      chatId: target.chatId,
       text: text,
+      messageThreadId: target.messageThreadId,
+      replyParameters: ReplyParameters(answering: target),
       linkPreviewOptions: LinkPreviewOptions(isDisabled: true),
       replyMarkup: replyMarkup.flatMap(JSONValue.parse)
     )
@@ -68,13 +74,15 @@ public struct TelegramClient: TelegramTransport {
   }
 
   public func sendRichMessage(
-    chatId: Int64,
+    to target: DeliveryTarget,
     markdown: String,
     replyMarkup: String?
   ) async throws -> Int64 {
     let request = SendRichMessageRequest(
-      chatId: chatId,
+      chatId: target.chatId,
       richMessage: InputRichMessage(markdown: markdown),
+      messageThreadId: target.messageThreadId,
+      replyParameters: ReplyParameters(answering: target),
       linkPreviewOptions: LinkPreviewOptions(isDisabled: true),
       replyMarkup: replyMarkup.flatMap(JSONValue.parse)
     )
@@ -293,6 +301,8 @@ private struct GetFileRequest: Encodable {
 private struct SendMessageRequest: Encodable {
   let chatId: Int64
   let text: String
+  let messageThreadId: Int64?
+  let replyParameters: ReplyParameters?
   let linkPreviewOptions: LinkPreviewOptions
   let replyMarkup: JSONValue?
 }
@@ -300,8 +310,24 @@ private struct SendMessageRequest: Encodable {
 private struct SendRichMessageRequest: Encodable {
   let chatId: Int64
   let richMessage: InputRichMessage
+  let messageThreadId: Int64?
+  let replyParameters: ReplyParameters?
   let linkPreviewOptions: LinkPreviewOptions
   let replyMarkup: JSONValue?
+}
+
+/// Bot API `ReplyParameters`. `allowSendingWithoutReply` is always on: a deleted target would
+/// otherwise answer 400, and a permanently failing send stalls every later outbox row behind it.
+private struct ReplyParameters: Encodable {
+  let messageId: Int64
+  let allowSendingWithoutReply = true
+
+  init?(answering target: DeliveryTarget) {
+    guard let messageId = target.replyToMessageId else {
+      return nil
+    }
+    self.messageId = messageId
+  }
 }
 
 private struct SendChatActionRequest: Encodable {

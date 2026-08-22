@@ -44,7 +44,7 @@ struct TurnDispatch: Sendable {
     let claim = try await replies.perform(
       "inbound persist",
       updateId: rawUpdate.updateId,
-      chatId: message.chatId
+      target: .reply(to: message, mode: mode)
     ) {
       try sessionMessages.claimAndPersistInbound(inbound)
     }

@@ -84,10 +84,10 @@ actor RecordingTransport: TelegramTransport {
     let replyMarkup: String?
   }
 
-  private(set) var sent: [(chatId: Int64, text: String)] = []
+  private(set) var sent: [(target: DeliveryTarget, text: String)] = []
   private(set) var answeredCallbacks: [CallbackAnswer] = []
   private(set) var markupEdits: [MarkupEdit] = []
-  private(set) var richSends: [(chatId: Int64, markdown: String)] = []
+  private(set) var richSends: [(target: DeliveryTarget, markdown: String)] = []
   private(set) var drafts: [DraftRecord] = []
   private(set) var sendAttempts = 0
   private(set) var pollCount = 0
@@ -143,7 +143,11 @@ actor RecordingTransport: TelegramTransport {
   }
 
   // Recorded sends don't render keyboards; prompt-row assertions are DB-side (outbox rows).
-  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
+  func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     sendAttempts += 1
     resumeWaiters(.attempt, reached: sendAttempts)
     if let sendError {
@@ -153,13 +157,13 @@ actor RecordingTransport: TelegramTransport {
       failPlainFallbackNext = false
       throw TelegramError.transport("plain fallback down")  // this row is undeliverable mid-batch
     }
-    sent.append((chatId, text))
+    sent.append((target, text))
     resumeWaiters(.sent, reached: sent.count + richSends.count)
     return Int64(sendAttempts)
   }
 
   func sendRichMessage(
-    chatId: Int64,
+    to target: DeliveryTarget,
     markdown: String,
     replyMarkup: String?
   ) async throws -> Int64 {
@@ -172,7 +176,7 @@ actor RecordingTransport: TelegramTransport {
       failPlainFallbackNext = true  // the dispatcher's plain retry for THIS row must also fail
       throw TelegramError.transport("rich down")
     }
-    richSends.append((chatId, markdown))
+    richSends.append((target, markdown))
     resumeWaiters(.sent, reached: sent.count + richSends.count)
     return Int64(sendAttempts)
   }
@@ -276,19 +280,23 @@ struct SeededFixture {
 
 /// Seeds the durable spine so that the `outbound_deliveries.run_id` FK is satisfied — ready for
 /// callers to claim outbound rows or run a boot-reconcile sweep against a RUNNING run.
-func makeSeededFixture() throws -> SeededFixture {
+func makeSeededFixture(
+  chatId: Int64 = 42,
+  sessionKey: String? = nil,
+  telegramMessageId: Int64? = nil
+) throws -> SeededFixture {
   let queue = try ClawDatabase.makeInMemoryQueue()
   try ClawDatabase.migrate(queue)
 
-  let chatId: Int64 = 42
   let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
     InboundMessage(
       updateId: 1,
-      sessionKey: SessionKey.telegramDM(chatId: chatId),
+      sessionKey: sessionKey ?? SessionKey.telegramDM(chatId: chatId),
       chatId: chatId,
       userId: chatId,
       text: "hi",
       isEdited: false,
+      telegramMessageId: telegramMessageId,
       ts: Date()
     )
   )

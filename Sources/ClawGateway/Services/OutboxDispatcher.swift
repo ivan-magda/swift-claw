@@ -131,7 +131,7 @@ public struct OutboxDispatcher: Service {
   private func send(_ row: OutboxRow) async throws -> Int64 {
     do {
       return try await delivery.sendRichMessage(
-        chatId: row.chatId,
+        to: row.target,
         markdown: row.payload,
         replyMarkup: row.replyMarkup
       )
@@ -140,7 +140,7 @@ public struct OutboxDispatcher: Service {
         "rich send failed for run \(row.runId) step \(row.stepIndex), falling back to plain: \(error)"
       )
       return try await delivery.sendMessage(
-        chatId: row.chatId,
+        to: row.target,
         text: row.payload,
         replyMarkup: row.replyMarkup
       )

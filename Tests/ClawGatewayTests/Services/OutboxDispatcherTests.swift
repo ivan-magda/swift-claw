@@ -32,19 +32,25 @@ private struct MarkSentFailingOutbox: OutboxStore {
 private actor ReplyMarkupSpy: MessageDelivery {
   private(set) var richMarkups: [String?] = []
   private(set) var plainMarkups: [String?] = []
+  private(set) var targets: [DeliveryTarget] = []
   private let failRich: Bool
 
   init(failRich: Bool = false) {
     self.failRich = failRich
   }
 
-  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 {
+  func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     plainMarkups.append(replyMarkup)
+    targets.append(target)
     return 1
   }
 
   func sendRichMessage(
-    chatId: Int64,
+    to target: DeliveryTarget,
     markdown: String,
     replyMarkup: String?
   ) async throws -> Int64 {
@@ -52,6 +58,7 @@ private actor ReplyMarkupSpy: MessageDelivery {
       throw TelegramError.transport("rich down")
     }
     richMarkups.append(replyMarkup)
+    targets.append(target)
     return 1
   }
 }
@@ -250,5 +257,52 @@ private actor ReplyMarkupSpy: MessageDelivery {
 
     // then — the same keyboard rode the plain fallback
     #expect(await spy.plainMarkups == [markup])
+  }
+
+  @Test func aTopicRowIsDeliveredIntoItsTopicAsAReply() async throws {
+    // given — a row committed by a run in topic 5, answering message 88
+    let groupChatId: Int64 = -1_001
+    let seeded = try makeSeededFixture(
+      chatId: groupChatId,
+      sessionKey: SessionKey.telegramTopic(chatId: groupChatId, threadId: 5),
+      telegramMessageId: 88
+    )
+    let fixture = Fixture(outbox: seeded.outbox, runId: seeded.runId, chatId: seeded.chatId)
+    try seedPending(fixture, payload: "in the room")
+    let spy = ReplyMarkupSpy()
+    let dispatcher = OutboxDispatcher(
+      outbox: fixture.outbox,
+      delivery: spy,
+      signal: OutboxSignal(),
+      logger: TestLog.silent
+    )
+
+    // when
+    await dispatcher.drainOnce()
+
+    // then — the stamped target reached the delivery seam untouched
+    #expect(
+      await spy.targets
+        == [DeliveryTarget(chatId: groupChatId, messageThreadId: 5, replyToMessageId: 88)]
+    )
+  }
+
+  @Test func aDirectRowIsDeliveredToItsChatAlone() async throws {
+    // given
+    let fixture = try makeFixture()
+    try seedPending(fixture, payload: "hello")
+    let spy = ReplyMarkupSpy()
+    let dispatcher = OutboxDispatcher(
+      outbox: fixture.outbox,
+      delivery: spy,
+      signal: OutboxSignal(),
+      logger: TestLog.silent
+    )
+
+    // when
+    await dispatcher.drainOnce()
+
+    // then
+    #expect(await spy.targets == [.chat(fixture.chatId)])
   }
 }

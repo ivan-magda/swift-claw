@@ -384,6 +384,19 @@ public struct OutboxRow: Sendable, Equatable {
   public let payload: String
   public let approvalId: Int64?
   public let replyMarkup: String?
+  /// Stamped at enqueue from the run itself, so a row delivers into the topic that asked even
+  /// after a restart, when no router is left to say where the answer belongs. Both nil in a DM.
+  public let messageThreadId: Int64?
+  public let replyToMessageId: Int64?
+
+  /// Where this row goes, as the delivery seam takes it.
+  public var target: DeliveryTarget {
+    DeliveryTarget(
+      chatId: chatId,
+      messageThreadId: messageThreadId,
+      replyToMessageId: replyToMessageId
+    )
+  }
 
   public init(
     runId: Int64,
@@ -391,13 +404,17 @@ public struct OutboxRow: Sendable, Equatable {
     chatId: Int64,
     payload: String,
     approvalId: Int64? = nil,
-    replyMarkup: String? = nil
+    replyMarkup: String? = nil,
+    messageThreadId: Int64? = nil,
+    replyToMessageId: Int64? = nil
   ) {
     self.runId = runId
     self.stepIndex = stepIndex
     self.chatId = chatId
     self.payload = payload
     self.approvalId = approvalId
+    self.messageThreadId = messageThreadId
+    self.replyToMessageId = replyToMessageId
     self.replyMarkup = replyMarkup
   }
 }

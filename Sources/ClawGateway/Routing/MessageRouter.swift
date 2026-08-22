@@ -181,7 +181,7 @@ private extension MessageRouter {
     case .unsupported(let kind):
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: Self.unsupportedMediaText(kind: kind)
       )
     case .photo(let attachment, let caption):
@@ -232,7 +232,7 @@ private extension MessageRouter {
     guard let voice else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: Self.unsupportedMediaText(kind: VoiceAttachment.mediaKindDescription)
       )
     }
@@ -247,11 +247,11 @@ private extension MessageRouter {
         source: .untrusted
       )
     case .failure(.storageFull):
-      return await replies.storageFull(chatId: message.chatId)
+      return await replies.storageFull(target: .reply(to: message, mode: mode))
     case .failure(let failure):
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: failure.ownerReplyText
       )
     }
@@ -300,7 +300,7 @@ private extension MessageRouter {
     case .failure(let failure):
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: failure.ownerReplyText
       )
     }
@@ -325,7 +325,7 @@ private extension MessageRouter {
     guard let caption, caption.isEmpty == false else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
       )
     }
@@ -363,11 +363,14 @@ private extension MessageRouter {
       return .skipped
     case .privateStranger:
       guard isStart(message.content) else {
-        return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
+        return await replies.sendPrivateBot(
+          updateId: rawUpdate.updateId,
+          target: .chat(message.chatId)
+        )
       }
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .chat(message.chatId),
         text: Self.unauthorizedStartText(userId: message.userId)
       )
     }
@@ -398,7 +401,7 @@ private extension MessageRouter {
     if mode == .group, command.isDirectOnly {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: CommandReplies.directOnly
       )
     }
@@ -407,21 +410,21 @@ private extension MessageRouter {
     case .start:
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: Self.welcomeText
       )
     case .help:
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: CommandReplies.help
       )
     case .doctor:
-      return await sendHealth(rawUpdate: rawUpdate, message: message, section: nil)
+      return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: nil)
     case .mcp:
-      return await sendHealth(rawUpdate: rawUpdate, message: message, section: .mcp)
+      return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: .mcp)
     case .skills:
-      return await sendSkills(rawUpdate: rawUpdate, message: message)
+      return await sendSkills(rawUpdate: rawUpdate, message: message, mode: mode)
     case .stop:
       return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message, mode: mode)
     case .new:
@@ -473,24 +476,29 @@ private extension MessageRouter {
   func sendHealth(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
+    mode: ChatMode,
     section: DoctorGroup?
   ) async -> HandleOutcome {
     let report = await doctor.report()
     return await replies.sendCanned(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .reply(to: message, mode: mode),
       text: section.map(report.renderTelegramGroup) ?? report.renderTelegramSummary()
     )
   }
 
   /// A fresh scan on every request keeps the owner view aligned with the workspace on disk. The
   /// router only renders it; scanning and presentation remain owned by their existing seams.
-  func sendSkills(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
+  func sendSkills(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async -> HandleOutcome {
     let scan = await doctor.scanSkills()
     let diagnostics = SkillDiagnostics(scan: scan, skillsCap: ContextBudget.default.skillsCap)
     return await replies.sendCanned(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .reply(to: message, mode: mode),
       text: diagnostics.render()
     )
   }

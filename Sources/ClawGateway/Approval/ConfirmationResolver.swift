@@ -29,7 +29,7 @@ struct ConfirmationResolver: Sendable {
     let existing = try await replies.perform(
       "pending lookup",
       updateId: rawUpdate.updateId,
-      chatId: message.chatId
+      target: .chat(message.chatId)
     ) {
       try sessionMessages.findSession(
         sessionKey: SessionKey.telegramDM(chatId: message.chatId)
@@ -100,7 +100,7 @@ private extension ConfirmationResolver {
         scheduleArmNext: scheduleArmNext
       )
     } catch StoreError.diskFull {
-      throw RoutingHalt(outcome: await replies.storageFull(chatId: message.chatId))
+      throw RoutingHalt(outcome: await replies.storageFull(target: .chat(message.chatId)))
     } catch {
       // A non-disk commit failure is terminal for the parked entry — recovery is claim + clear
       // + per-entry ack, which `perform`'s retry/ack options don't express.
@@ -121,7 +121,7 @@ private extension ConfirmationResolver {
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .chat(message.chatId),
       text: ackText
     )
   }
@@ -176,13 +176,13 @@ private extension ConfirmationResolver {
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, chatId: message.chatId)
+    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
 
     await pendingConfirmations.clear(sessionId: sessionId)
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .chat(message.chatId),
       text: ScheduleReplies.armExpired
     )
   }
@@ -195,7 +195,7 @@ private extension ConfirmationResolver {
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, chatId: message.chatId)
+    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
 
     await pendingConfirmations.clear(sessionId: sessionId)
 
@@ -211,7 +211,7 @@ private extension ConfirmationResolver {
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .chat(message.chatId),
       text: errorText
     )
   }
@@ -222,13 +222,13 @@ private extension ConfirmationResolver {
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, chatId: message.chatId)
+    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
 
     await pendingConfirmations.clear(sessionId: sessionId)
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .chat(message.chatId),
       text: MemoryReplies.cancelled
     )
   }

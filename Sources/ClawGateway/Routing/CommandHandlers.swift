@@ -28,7 +28,7 @@ struct CommandHandlers: Sendable {
     let result = try await replies.perform(
       "stop command",
       updateId: rawUpdate.updateId,
-      chatId: message.chatId
+      target: .reply(to: message, mode: mode)
     ) {
       try commands.applyStop(
         updateId: rawUpdate.updateId,
@@ -61,7 +61,7 @@ struct CommandHandlers: Sendable {
       result.cancelledRunIds.isEmpty ? CommandReplies.nothingToStop : CommandReplies.stopped
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .reply(to: message, mode: mode),
       text: reply
     )
   }
@@ -74,7 +74,7 @@ struct CommandHandlers: Sendable {
     let result = try await replies.perform(
       "new command",
       updateId: rawUpdate.updateId,
-      chatId: message.chatId
+      target: .reply(to: message, mode: mode)
     ) {
       try commands.applyNew(
         updateId: rawUpdate.updateId,
@@ -103,7 +103,7 @@ struct CommandHandlers: Sendable {
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .reply(to: message, mode: mode),
       text: CommandReplies.freshConversation
     )
   }
@@ -120,7 +120,7 @@ struct CommandHandlers: Sendable {
     guard case .save(let kind, let text) = command else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: MemoryReplies.rememberUsage
       )
     }
@@ -128,7 +128,7 @@ struct CommandHandlers: Sendable {
     let claim = try await replies.perform(
       "remember claim",
       updateId: rawUpdate.updateId,
-      chatId: message.chatId
+      target: .reply(to: message, mode: mode)
     ) {
       try sessionMessages.claimCommandUpdate(
         updateId: rawUpdate.updateId,
@@ -147,7 +147,7 @@ struct CommandHandlers: Sendable {
     } catch {
       return await replies.sendCommandAck(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: MemoryReplies.nothingToSave
       )
     }
@@ -156,7 +156,7 @@ struct CommandHandlers: Sendable {
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .reply(to: message, mode: mode),
       text: request.confirmationText
     )
   }
@@ -167,24 +167,25 @@ struct CommandHandlers: Sendable {
     command: MemoryCommand,
     mode: ChatMode = .direct
   ) async throws(RoutingHalt) -> HandleOutcome {
-    switch command {
+    let target = DeliveryTarget.reply(to: message, mode: mode)
+    return switch command {
     case .review:
-      try await memoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: nil)
+      try await memoryReview(rawUpdate: rawUpdate, target: target, kind: nil)
     case .filter(let kind):
-      try await memoryReview(rawUpdate: rawUpdate, chatId: message.chatId, kind: kind)
+      try await memoryReview(rawUpdate: rawUpdate, target: target, kind: kind)
     case .show(let id):
-      try await memoryShow(rawUpdate: rawUpdate, chatId: message.chatId, id: id)
+      try await memoryShow(rawUpdate: rawUpdate, target: target, id: id)
     case .delete(let id):
       try await memoryDelete(
         rawUpdate: rawUpdate,
-        chatId: message.chatId,
+        target: target,
         sessionKey: SessionKey.telegram(for: message, mode: mode),
         id: id
       )
     case .invalid:
       await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: MemoryReplies.memoryUsage
       )
     }
@@ -196,13 +197,13 @@ struct CommandHandlers: Sendable {
 private extension CommandHandlers {
   func memoryReview(
     rawUpdate: RawUpdate,
-    chatId: Int64,
+    target: DeliveryTarget,
     kind: MemoryKind?
   ) async throws(RoutingHalt) -> HandleOutcome {
     let items = try await replies.perform(
       "memory review",
       updateId: rawUpdate.updateId,
-      chatId: chatId
+      target: target
     ) {
       try memory.list(kind: kind, limit: MemoryReplies.reviewListLimit)
     }
@@ -212,36 +213,36 @@ private extension CommandHandlers {
       ? MemoryReplies.emptyReview(kind: kind)
       : MemoryReplies.reviewList(items: items)
 
-    return await replies.sendCanned(updateId: rawUpdate.updateId, chatId: chatId, text: text)
+    return await replies.sendCanned(updateId: rawUpdate.updateId, target: target, text: text)
   }
 
   func memoryShow(
     rawUpdate: RawUpdate,
-    chatId: Int64,
+    target: DeliveryTarget,
     id: Int64
   ) async throws(RoutingHalt) -> HandleOutcome {
     let item = try await replies.perform(
       "memory show",
       updateId: rawUpdate.updateId,
-      chatId: chatId
+      target: target
     ) {
       try memory.get(id: id)
     }
 
     let text = item.map(MemoryReplies.showItem) ?? MemoryReplies.notFound(id: id)
-    return await replies.sendCanned(updateId: rawUpdate.updateId, chatId: chatId, text: text)
+    return await replies.sendCanned(updateId: rawUpdate.updateId, target: target, text: text)
   }
 
   func memoryDelete(
     rawUpdate: RawUpdate,
-    chatId: Int64,
+    target: DeliveryTarget,
     sessionKey: String,
     id: Int64
   ) async throws(RoutingHalt) -> HandleOutcome {
     let existing = try await replies.perform(
       "memory delete lookup",
       updateId: rawUpdate.updateId,
-      chatId: chatId
+      target: target
     ) {
       try memory.get(id: id)
     }
@@ -249,7 +250,7 @@ private extension CommandHandlers {
     guard let item = existing else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: chatId,
+        target: target,
         text: MemoryReplies.notFound(id: id)
       )
     }
@@ -257,7 +258,7 @@ private extension CommandHandlers {
     let claim = try await replies.perform(
       "memory delete claim",
       updateId: rawUpdate.updateId,
-      chatId: chatId
+      target: target
     ) {
       try sessionMessages.claimCommandUpdate(
         updateId: rawUpdate.updateId,
@@ -274,7 +275,7 @@ private extension CommandHandlers {
 
     return await replies.sendCommandAck(
       updateId: rawUpdate.updateId,
-      chatId: chatId,
+      target: target,
       text: MemoryReplies.deleteConfirmPrompt(item: item)
     )
   }
