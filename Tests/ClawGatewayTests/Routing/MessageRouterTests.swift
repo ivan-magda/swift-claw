@@ -9,41 +9,6 @@ import Testing
 
 @testable import ClawGateway
 
-/// A `SessionMessageStore` whose persist reports a full disk, to drive the storage-full path.
-struct FullSessions: SessionMessageStore {
-  func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64 {
-    throw StoreError.diskFull
-  }
-  func claimCommandUpdate(
-    updateId: Int64,
-    sessionKey: String,
-    now: Date
-  ) throws(StoreError) -> CommandClaim {
-    throw StoreError.diskFull
-  }
-  func findSession(sessionKey: String) throws(StoreError) -> Int64? {
-    throw StoreError.diskFull
-  }
-  func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
-    throw StoreError.diskFull
-  }
-  func loadContextSnapshot(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> SessionContextSnapshot {
-    SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
-      history: [],
-      historyMessageIds: [],
-      windowStartMessageId: nil,
-      isTainted: false,
-      hasPrivateData: false
-    )
-  }
-  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {}
-}
-
 @Suite struct MessageRouterTests {
   private struct Harness {
     let router: MessageRouter
@@ -599,7 +564,7 @@ struct FullSessions: SessionMessageStore {
     let transport = RecordingTransport()
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
-      sessionMessages: FullSessions(),
+      sessionMessages: FakeSessionMessageStore.failingEverything(with: .diskFull),
       commands: CommandStoreGRDB(writer: queue),
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),

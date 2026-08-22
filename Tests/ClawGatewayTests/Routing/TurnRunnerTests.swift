@@ -491,42 +491,6 @@ struct TurnRunnerWorkspace: WorkspaceReading {
   }
 }
 
-struct SnapshotFailingSessionMessages: SessionMessageStore {
-  func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64 { 0 }
-
-  func claimCommandUpdate(
-    updateId: Int64,
-    sessionKey: String,
-    now: Date
-  ) throws(StoreError) -> CommandClaim {
-    .duplicate
-  }
-
-  func findSession(sessionKey: String) throws(StoreError) -> Int64? {
-    nil
-  }
-
-  func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
-    ClaimResult(
-      newlyClaimed: false,
-      sessionId: nil,
-      messageId: nil,
-      runId: nil,
-      triggerMessageId: nil
-    )
-  }
-
-  func loadContextSnapshot(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> SessionContextSnapshot {
-    throw StoreError.unexpected("snapshot read failed")
-  }
-
-  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {}
-}
-
 /// Shared `TurnRunner` test fixture, hoisted to file scope (out of `TurnRunnerTests`' body) so the
 /// suite's own body stays under the project's type-length gate as its test count grows.
 /// File-internal (not `private`) so the sibling `TurnRunnerBudgetTests` reuses it without duplication.
@@ -1115,7 +1079,9 @@ private func okResponse(content: String) -> ChatResponse {
     // given
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "must not call provider")),
-      sessionMessagesForRunner: SnapshotFailingSessionMessages()
+      sessionMessagesForRunner: FakeSessionMessageStore(
+        failures: [.loadContextSnapshot: .unexpected("snapshot read failed")]
+      )
     )
 
     // when
