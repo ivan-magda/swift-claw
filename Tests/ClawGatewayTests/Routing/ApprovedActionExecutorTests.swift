@@ -665,6 +665,8 @@ import Testing
       throw StoreError.unexpected("unused in this fixture")
     }
     func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? { nil }
+    func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool { false }
+    func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool { false }
     func failRunStalePolicy(
       runId: Int64,
       sessionId: Int64,

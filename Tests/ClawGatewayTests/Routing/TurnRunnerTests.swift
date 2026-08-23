@@ -171,6 +171,14 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.runOrigin(runId: runId)
   }
 
+  func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool {
+    try base.openAutoApproveWindow(runId: runId, now: now)
+  }
+
+  func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool {
+    try base.isAutoApproveWindowOpen(runId: runId)
+  }
+
   func failRunStalePolicy(
     runId: Int64,
     sessionId: Int64,
@@ -336,6 +344,14 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.runOrigin(runId: runId)
   }
 
+  func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool {
+    try base.openAutoApproveWindow(runId: runId, now: now)
+  }
+
+  func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool {
+    try base.isAutoApproveWindowOpen(runId: runId)
+  }
+
   func failRunStalePolicy(
     runId: Int64,
     sessionId: Int64,
@@ -449,6 +465,12 @@ struct DiskFullRuns: RunStore {
     throw StoreError.diskFull
   }
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
+    throw StoreError.diskFull
+  }
+  func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool {
+    throw StoreError.diskFull
+  }
+  func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool {
     throw StoreError.diskFull
   }
   func failRunStalePolicy(

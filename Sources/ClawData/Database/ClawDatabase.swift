@@ -252,6 +252,11 @@ public enum ClawDatabase {
       try rebuildMessagesWithProviderState(db)
       try rebuildProviderUsageWithCallIdentity(db)
     }
+    migrator.registerMigration("v10") { db in
+      try db.alter(table: "runs") { table in
+        table.add(column: "auto_approve_window", .boolean).notNull().defaults(to: false)
+      }
+    }
     return migrator
   }
 
