@@ -18,9 +18,14 @@ public protocol ApprovalStore: Sendable {
   /// `ApprovalArgsHash.sha256Hex(canonicalArgsJSON)`, and storedPolicyVersion ==
   /// `currentPolicyVersion`. All satisfied → APPROVED + `approvalGranted`. Hash/version mismatch
   /// → REJECTED + decision `stale_policy` + `approvalDenied`, returns `.stalePolicy`.
+  ///
+  /// `openTurnWindow` opens the run's auto-approve window in the SAME transaction as the CAS, so
+  /// the owner can never end up with a window over an approval that did not commit — or with an
+  /// approval whose widening silently did not.
   func approve(
     id: Int64,
     currentPolicyVersion: String,
+    openTurnWindow: Bool,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome
   /// CAS PENDING→(EXPIRED when decision is `.expired`, else REJECTED) + `approvalDenied` audit in

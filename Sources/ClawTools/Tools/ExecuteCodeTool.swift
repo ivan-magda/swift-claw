@@ -123,7 +123,8 @@ public struct ExecuteCodeTool: Tool {
           canonicalArgsJSON: canonicalArgsJSON,
           presentation: approvalPresentation(raw: raw, recorded: recorded),
           guardTexts: [raw.code] + loaded.map(\.guardText),
-          canExfiltrate: network
+          canExfiltrate: network,
+          approvalReason: .codeExec
         )
       )
     }

@@ -165,7 +165,8 @@ private struct DefaultPrepareTool: Tool {
       canonicalArgsJSON: #"{"code":"print('hello')"}"#,
       presentation: presentation,
       guardTexts: ["print('hello')", "staged text"],
-      canExfiltrate: true
+      canExfiltrate: true,
+      approvalReason: .codeExec
     )
 
     // then
@@ -174,6 +175,7 @@ private struct DefaultPrepareTool: Tool {
     #expect(action.presentation == presentation)
     #expect(action.guardTexts == ["print('hello')", "staged text"])
     #expect(action.canExfiltrate)
+    #expect(action.approvalReason == .codeExec)
     #expect(PreparedActionResolution.prepared(action) == .prepared(action))
     #expect(PreparedActionResolution.refused(reason: "no") == .refused(reason: "no"))
   }

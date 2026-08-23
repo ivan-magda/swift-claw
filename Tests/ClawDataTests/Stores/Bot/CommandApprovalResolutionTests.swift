@@ -81,6 +81,40 @@ import Testing
     }
   }
 
+  @Test func stopLeavesNoOpenAutoApproveWindow() throws {
+    // given — the owner had widened the parked approval to the whole turn
+    let env = try makeParkedFixture()
+    let runs = RunStoreGRDB(writer: env.queue)
+    #expect(try runs.openAutoApproveWindow(runId: env.runId, now: Date()))
+
+    // when
+    _ = try env.commands.applyStop(
+      updateId: 2,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
+      now: Date()
+    )
+
+    // then — cancelling the run ends the window with it; no later call rides the old grant
+    #expect(try runs.isAutoApproveWindowOpen(runId: env.runId) == false)
+  }
+
+  @Test func newLeavesNoOpenAutoApproveWindow() throws {
+    // given
+    let env = try makeParkedFixture()
+    let runs = RunStoreGRDB(writer: env.queue)
+    #expect(try runs.openAutoApproveWindow(runId: env.runId, now: Date()))
+
+    // when
+    _ = try env.commands.applyNew(
+      updateId: 2,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
+      now: Date()
+    )
+
+    // then — a superseded run's window is closed by the same rule
+    #expect(try runs.isAutoApproveWindowOpen(runId: env.runId) == false)
+  }
+
   @Test func stopResolvesTheParkedApprovalToRejectedCancelled() throws {
     // given
     let env = try makeParkedFixture()

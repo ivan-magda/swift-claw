@@ -149,6 +149,19 @@ import Testing
     #expect(action.canExfiltrate)
   }
 
+  @Test func preparedActionAsksUnderTheHostShellReason() async throws {
+    // given
+    let tool = makeTool()
+
+    // when
+    let action = try prepared(await tool.prepareAction(arguments: arguments(command: "ls")))
+
+    // then — the reason is what the prompt keys its copy and its turn-scoped button on: host
+    // execution must never borrow the sandbox's
+    #expect(action.approvalReason == .hostShell)
+    #expect(action.approvalReason.offersTurnScopedWindow)
+  }
+
   @Test func canonicalArgumentsAreSortedKeyJSON() async throws {
     // given
     let tool = makeTool(defaultTimeoutSeconds: 30)

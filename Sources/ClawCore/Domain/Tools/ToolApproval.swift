@@ -22,6 +22,19 @@ public enum ApprovalReason: String, Sendable, Equatable {
   case exfilTrifecta = "exfil_trifecta"
   case askTier = "ask_tier"
   case codeExec = "code_exec"
+  case hostShell = "host_shell"
+
+  /// Whether the prompt may offer to widen this approval to the rest of the turn. Exhaustive, so a
+  /// new reason has to decide; the reason is the only part of the offer that survives on the
+  /// durable row, which is what lets the callback path refuse a widening verdict it never offered.
+  public var offersTurnScopedWindow: Bool {
+    switch self {
+    case .exfilTrifecta, .askTier, .codeExec:
+      false
+    case .hostShell:
+      true
+    }
+  }
 }
 
 /// The tool-specific prompt inputs, produced at gate time by the tool that will act. The gate
@@ -51,19 +64,24 @@ public struct PreparedToolAction: Sendable, Equatable {
   public let presentation: ToolApprovalPresentation
   public let guardTexts: [String]
   public let canExfiltrate: Bool
+  /// The prompt copy this action asks under. The acting tool names it — the gate cannot tell a
+  /// disposable sandbox from the owner's own machine, and the two need different owner-facing copy.
+  public let approvalReason: ApprovalReason
 
   public init(
     canonicalTarget: String,
     canonicalArgsJSON: String,
     presentation: ToolApprovalPresentation,
     guardTexts: [String],
-    canExfiltrate: Bool
+    canExfiltrate: Bool,
+    approvalReason: ApprovalReason
   ) {
     self.canonicalTarget = canonicalTarget
     self.canonicalArgsJSON = canonicalArgsJSON
     self.presentation = presentation
     self.guardTexts = guardTexts
     self.canExfiltrate = canExfiltrate
+    self.approvalReason = approvalReason
   }
 }
 

@@ -110,7 +110,8 @@ public struct BashTool: Tool {
         guardTexts: [command],
         // The host keeps its network, so any command can reach outward; the trifecta tier has to
         // assume it will.
-        canExfiltrate: true
+        canExfiltrate: true,
+        approvalReason: .hostShell
       )
     )
   }

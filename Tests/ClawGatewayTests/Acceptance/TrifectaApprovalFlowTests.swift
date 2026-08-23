@@ -76,7 +76,7 @@ import Testing
         from: 7,
         data: ApprovalKeyboard.callbackData(
           nonce: approval.nonce,
-          verdict: ApprovalKeyboard.approveVerdict
+          verdict: ApprovalKeyboard.Verdict.approve
         )
       )
     )

@@ -424,7 +424,7 @@ private extension ToolPolicyGate {
       canonicalArgsJSON: prepared.canonicalArgsJSON,
       argsHash: ApprovalArgsHash.sha256Hex(prepared.canonicalArgsJSON),
       canonicalTarget: prepared.canonicalTarget,
-      reason: .codeExec,
+      reason: prepared.approvalReason,
       presentation: prepared.presentation
     )
     return .requireApproval(recorded: recorded)

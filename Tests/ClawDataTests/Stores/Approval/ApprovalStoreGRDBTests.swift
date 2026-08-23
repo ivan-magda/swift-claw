@@ -167,7 +167,12 @@ import Testing
     )
 
     // when
-    let outcome = try env.store.approve(id: id, currentPolicyVersion: "pv16", now: now)
+    let outcome = try env.store.approve(
+      id: id,
+      currentPolicyVersion: "pv16",
+      openTurnWindow: false,
+      now: now
+    )
 
     // then — PENDING→APPROVED, resolved_ts stamped, approvalGranted audited in the same txn
     guard case .approved(let approved) = outcome else {
@@ -205,7 +210,12 @@ import Testing
     }
 
     // when
-    let outcome = try env.store.approve(id: id, currentPolicyVersion: "pv16", now: now)
+    let outcome = try env.store.approve(
+      id: id,
+      currentPolicyVersion: "pv16",
+      openTurnWindow: false,
+      now: now
+    )
 
     // then — PENDING→REJECTED, decision stale_policy, approvalDenied audited
     guard case .stalePolicy(let rejected) = outcome else {
@@ -241,7 +251,12 @@ import Testing
     )
 
     // when
-    let outcome = try env.store.approve(id: id, currentPolicyVersion: "pv99", now: now)
+    let outcome = try env.store.approve(
+      id: id,
+      currentPolicyVersion: "pv99",
+      openTurnWindow: false,
+      now: now
+    )
 
     // then
     guard case .stalePolicy = outcome else {
@@ -263,7 +278,12 @@ import Testing
     #expect(try env.store.deny(id: id, decision: .rejected, now: now))
 
     // when
-    let outcome = try env.store.approve(id: id, currentPolicyVersion: "pv16", now: now)
+    let outcome = try env.store.approve(
+      id: id,
+      currentPolicyVersion: "pv16",
+      openTurnWindow: false,
+      now: now
+    )
 
     // then — the second tap is a no-op the caller answers "already handled"
     #expect(outcome == .notPending)
@@ -285,12 +305,104 @@ import Testing
     )
 
     // when
-    let outcome = try env.store.approve(id: id, currentPolicyVersion: "pv16", now: now)
+    let outcome = try env.store.approve(
+      id: id,
+      currentPolicyVersion: "pv16",
+      openTurnWindow: false,
+      now: now
+    )
 
     // then — the caller routes to the deny path; the row stays PENDING and nothing is audited
     #expect(outcome == .expiredRow)
     #expect(try env.store.approval(id: id)?.state == .pending)
     #expect(try audits(env.queue).isEmpty)
+  }
+
+  @Test func approveOpensTheTurnWindowInTheSameTransaction() throws {
+    // given — a parked run whose approval the owner will widen to the whole turn
+    let env = try makeFixture()
+    let runId = try seedRun(env.queue, state: .awaitingApproval)
+    let now = Date()
+    let id = try insert(
+      env.queue,
+      makeNewApproval(runId: runId, createdTs: now, expiresTs: now.addingTimeInterval(3600))
+    )
+
+    // when
+    let outcome = try env.store.approve(
+      id: id,
+      currentPolicyVersion: "pv16",
+      openTurnWindow: true,
+      now: now
+    )
+
+    // then — the grant and the window landed together
+    guard case .approved = outcome else {
+      Issue.record("expected .approved, got \(outcome)")
+      return
+    }
+    #expect(try RunStoreGRDB(writer: env.queue).isAutoApproveWindowOpen(runId: runId))
+  }
+
+  @Test func aPlainApproveLeavesTheTurnWindowClosed() throws {
+    // given
+    let env = try makeFixture()
+    let runId = try seedRun(env.queue, state: .awaitingApproval)
+    let now = Date()
+    let id = try insert(
+      env.queue,
+      makeNewApproval(runId: runId, createdTs: now, expiresTs: now.addingTimeInterval(3600))
+    )
+
+    // when
+    _ = try env.store.approve(
+      id: id,
+      currentPolicyVersion: "pv16",
+      openTurnWindow: false,
+      now: now
+    )
+
+    // then — approving one action never widens the turn
+    #expect(try RunStoreGRDB(writer: env.queue).isAutoApproveWindowOpen(runId: runId) == false)
+  }
+
+  @Test(arguments: ["pv99", "tampered-hash", "expired"])
+  func aGuardFailureLeavesTheTurnWindowClosed(_ failure: String) throws {
+    // given — the widening verdict rides a row that fails one of the CAS guards
+    let env = try makeFixture()
+    let runId = try seedRun(env.queue, state: .awaitingApproval)
+    let now = Date()
+    let expired = failure == "expired"
+    let id = try insert(
+      env.queue,
+      makeNewApproval(
+        runId: runId,
+        createdTs: now.addingTimeInterval(expired ? -7200 : 0),
+        expiresTs: now.addingTimeInterval(expired ? -3600 : 3600)
+      )
+    )
+    if failure == "tampered-hash" {
+      try env.queue.write { db in
+        try db.execute(
+          sql: "UPDATE approvals SET args_hash = 'tampered' WHERE id = ?",
+          arguments: [id]
+        )
+      }
+    }
+
+    // when
+    let outcome = try env.store.approve(
+      id: id,
+      currentPolicyVersion: failure == "pv99" ? "pv99" : "pv16",
+      openTurnWindow: true,
+      now: now
+    )
+
+    // then — no grant, so no window: the widening cannot outlive the guard that refused it
+    if case .approved = outcome {
+      Issue.record("expected the guard to refuse the grant, got \(outcome)")
+    }
+    #expect(try RunStoreGRDB(writer: env.queue).isAutoApproveWindowOpen(runId: runId) == false)
   }
 
   @Test func denyCommitsRejectedAndAudits() throws {

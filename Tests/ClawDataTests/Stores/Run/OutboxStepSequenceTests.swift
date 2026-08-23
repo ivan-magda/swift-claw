@@ -108,6 +108,7 @@ import Testing
     let outcome = try fixture.approvals.approve(
       id: receipt.approvalId,
       currentPolicyVersion: "",
+      openTurnWindow: false,
       now: Date()
     )
     guard case .approved = outcome else {

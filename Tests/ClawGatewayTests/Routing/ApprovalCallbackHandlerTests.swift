@@ -54,7 +54,8 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
   private let denyResult: Bool
   private let throwOnResolve: Bool
 
-  private var recordedApproveCalls: [(id: Int64, policyVersion: String)] = []
+  private var recordedApproveCalls: [(id: Int64, policyVersion: String, openTurnWindow: Bool)] =
+    []
   private var recordedDenyCalls: [(id: Int64, decision: ApprovalDecision)] = []
 
   init(
@@ -70,7 +71,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     self.throwOnResolve = throwOnResolve
   }
 
-  var approveCalls: [(id: Int64, policyVersion: String)] {
+  var approveCalls: [(id: Int64, policyVersion: String, openTurnWindow: Bool)] {
     lock.lock()
     defer { lock.unlock() }
     return recordedApproveCalls
@@ -88,12 +89,13 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
   func approve(
     id: Int64,
     currentPolicyVersion: String,
+    openTurnWindow: Bool,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome {
     if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
     lock.lock()
     defer { lock.unlock() }
-    recordedApproveCalls.append((id, currentPolicyVersion))
+    recordedApproveCalls.append((id, currentPolicyVersion, openTurnWindow))
     return approveOutcome
   }
 
@@ -128,7 +130,12 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
   private static let nonce = "NONCE22CHARSEXAMPLE00"
   private static let fixedNow = Date(timeIntervalSince1970: 1_000_000)
 
-  private static func makeApproval(id: Int64, nonce: String, ownerUserId: Int64) -> Approval {
+  private static func makeApproval(
+    id: Int64,
+    nonce: String,
+    ownerUserId: Int64,
+    reason: ApprovalReason = .askTier
+  ) -> Approval {
     Approval(
       id: id,
       runId: 100,
@@ -143,7 +150,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
       nonce: nonce,
       observationMessageId: 300,
       toolCallId: "call-1",
-      reason: .askTier,
+      reason: reason,
       promptMessageId: nil,
       createdTs: Date(timeIntervalSince1970: 999_000),
       expiresTs: Date(timeIntervalSince1970: 1_003_600),
@@ -152,27 +159,37 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
   }
 
   private func approveData() -> String {
-    ApprovalKeyboard.callbackData(nonce: Self.nonce, verdict: ApprovalKeyboard.approveVerdict)
+    ApprovalKeyboard.callbackData(nonce: Self.nonce, verdict: .approve)
   }
 
   private func denyData() -> String {
-    ApprovalKeyboard.callbackData(nonce: Self.nonce, verdict: ApprovalKeyboard.denyVerdict)
+    ApprovalKeyboard.callbackData(nonce: Self.nonce, verdict: .deny)
   }
 
-  private func makeHarness(
+  private func approveForTurnData() -> String {
+    ApprovalKeyboard.callbackData(nonce: Self.nonce, verdict: .approveForTurn)
+  }
+
+  private func makeHarness(  // swiftlint:disable:this function_parameter_count
     allowed: [Int64] = [ownerId],
     approveOutcome: ApprovalApproveOutcome? = nil,
     denyResult: Bool = true,
     knownNonce: Bool = true,
     wireHandler: Bool = true,
-    resolveThrows: Bool = false
+    resolveThrows: Bool = false,
+    reason: ApprovalReason = .askTier
   ) throws -> Harness {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: allowed)
 
-    let approval = Self.makeApproval(id: 7, nonce: Self.nonce, ownerUserId: Self.ownerId)
+    let approval = Self.makeApproval(
+      id: 7,
+      nonce: Self.nonce,
+      ownerUserId: Self.ownerId,
+      reason: reason
+    )
     let approvals = ScriptedApprovals(
       byNonce: knownNonce ? [Self.nonce: approval] : [:],
       approveOutcome: approveOutcome ?? .approved(approval),
@@ -332,9 +349,99 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     #expect(harness.approvals.approveCalls.count == 1)
     #expect(harness.approvals.approveCalls.first?.id == 7)
     #expect(harness.approvals.approveCalls.first?.policyVersion == "POLICYV1")
+    #expect(harness.approvals.approveCalls.first?.openTurnWindow == false)
     #expect(harness.audit.events.isEmpty)
     #expect(await harness.coordinator.awaitResolution(approvalId: 7) == .approved)
     #expect(await harness.callbacks.answers.count == 1)
+  }
+
+  @Test func theTurnScopedTapCarriesTheWindowIntoTheApproveCAS() async throws {
+    // given — a host-shell approval, the one reason whose prompt draws the third button
+    let harness = try makeHarness(
+      approveOutcome: .approved(
+        Self.makeApproval(id: 7, nonce: Self.nonce, ownerUserId: Self.ownerId, reason: .hostShell)
+      ),
+      reason: .hostShell
+    )
+    let update = callbackUpdate(id: 20, from: Self.ownerId, data: approveForTurnData())
+
+    // when
+    let callback = try #require(update.callback)
+    let outcome = await harness.handler.handle(callback, updateId: update.updateId)
+
+    // then — one CAS, carrying the window flag the store commits alongside the grant
+    #expect(outcome == .processed)
+    #expect(harness.approvals.approveCalls.count == 1)
+    #expect(harness.approvals.approveCalls.first?.openTurnWindow == true)
+    #expect(harness.approvals.approveCalls.first?.policyVersion == "POLICYV1")
+    #expect(await harness.coordinator.awaitResolution(approvalId: 7) == .approved)
+    #expect(await harness.callbacks.answers.count == 1)
+  }
+
+  @Test func aTurnScopedTapOnAPromptThatNeverOfferedItApprovesOnce() async throws {
+    // given — an ask-tier approval, whose keyboard has no third button to tap
+    let harness = try makeHarness(reason: .askTier)
+    let update = callbackUpdate(id: 21, from: Self.ownerId, data: approveForTurnData())
+
+    // when
+    let callback = try #require(update.callback)
+    let outcome = await harness.handler.handle(callback, updateId: update.updateId)
+
+    // then — the grant still commits, but no window opens off an offer that was never made
+    #expect(outcome == .processed)
+    #expect(harness.approvals.approveCalls.count == 1)
+    #expect(harness.approvals.approveCalls.first?.openTurnWindow == false)
+  }
+
+  @Test(arguments: [9_999 as Int64, 43 as Int64])
+  func theTurnScopedButtonIsBoundByTheSameAuthChain(_ sender: Int64) async throws {
+    // given — a stranger and an allowlisted non-owner tap the widening button
+    let harness = try makeHarness(allowed: [Self.ownerId, 43], reason: .hostShell)
+    let update = callbackUpdate(id: 22, from: sender, data: approveForTurnData())
+
+    // when
+    let callback = try #require(update.callback)
+    let outcome = await harness.handler.handle(callback, updateId: update.updateId)
+
+    // then — the allowlist and owner-binding guards refuse it exactly as they refuse Approve
+    #expect(outcome == .processed)
+    #expect(harness.approvals.approveCalls.isEmpty)
+    #expect(harness.audit.events.first?.decision == "forbidden")
+  }
+
+  @Test func theTurnScopedButtonOnAnUnknownNonceIsDenied() async throws {
+    // given
+    let harness = try makeHarness(knownNonce: false, reason: .hostShell)
+    let update = callbackUpdate(id: 23, from: Self.ownerId, data: approveForTurnData())
+
+    // when
+    let callback = try #require(update.callback)
+    let outcome = await harness.handler.handle(callback, updateId: update.updateId)
+
+    // then — the nonce guard runs before any verdict is acted on
+    #expect(outcome == .processed)
+    #expect(harness.approvals.approveCalls.isEmpty)
+    #expect(harness.audit.events.first?.decision == "forbidden")
+  }
+
+  @Test func aStalePolicyCASUnderTheTurnScopedButtonStillDenies() async throws {
+    // given — the args-hash / policy_version guard rejects the row the owner tried to widen
+    let rejected = Self.makeApproval(
+      id: 7,
+      nonce: Self.nonce,
+      ownerUserId: Self.ownerId,
+      reason: .hostShell
+    )
+    let harness = try makeHarness(approveOutcome: .stalePolicy(rejected), reason: .hostShell)
+    let update = callbackUpdate(id: 24, from: Self.ownerId, data: approveForTurnData())
+
+    // when
+    let callback = try #require(update.callback)
+    let outcome = await harness.handler.handle(callback, updateId: update.updateId)
+
+    // then — the widening changes nothing about how a stale row resolves
+    #expect(outcome == .processed)
+    #expect(await harness.coordinator.awaitResolution(approvalId: 7) == .denied(.stalePolicy))
   }
 
   @Test func validDenyCASesAndSignalsRejected() async throws {

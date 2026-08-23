@@ -222,7 +222,8 @@ private struct ProbedDangerousTool: Tool {
       #"{"code":"print('hello')","language":"python","network":false,"#
       + #""readsPrivateData":false,"stage":[]}"#,
     guardTexts: [String] = ["print('hello')"],
-    canExfiltrate: Bool = false
+    canExfiltrate: Bool = false,
+    approvalReason: ApprovalReason = .codeExec
   ) -> PreparedToolAction {
     PreparedToolAction(
       canonicalTarget: "code_exec:python:0123456789abcdef",
@@ -233,7 +234,8 @@ private struct ProbedDangerousTool: Tool {
         warnings: []
       ),
       guardTexts: guardTexts,
-      canExfiltrate: canExfiltrate
+      canExfiltrate: canExfiltrate,
+      approvalReason: approvalReason
     )
   }
 
@@ -742,6 +744,25 @@ private struct ProbedDangerousTool: Tool {
     #expect(recorded.canonicalTarget == action.canonicalTarget)
     #expect(recorded.reason == .codeExec)
     #expect(recorded.presentation == action.presentation)
+  }
+
+  @Test func theRecordedReasonIsTheOneTheToolPrepared() async {
+    // given — a dangerous tool that acts on the host, not in the sandbox
+    let action = dangerousAction(approvalReason: .hostShell)
+    let tool = PreparedDangerousTool(resolution: .prepared(action), name: "bash")
+    let gate = makeGate(enabledDangerousTools: ["bash"])
+    let call = ToolCall(id: "b1", name: "bash", argumentsJSON: #"{"command":"ls"}"#)
+
+    // when
+    let verdict = await gate.evaluate(call: call, tool: tool, context: makeContext())
+
+    // then — the gate carries the tool's reason through, so the prompt copy and its buttons
+    // follow the action rather than the tier
+    guard case .requireApproval(let recorded) = verdict else {
+      Issue.record("expected dangerous approval, got \(verdict)")
+      return
+    }
+    #expect(recorded.reason == .hostShell)
   }
 
   @Test func disabledDangerousGateBlocksBeforeApproval() async {

@@ -367,7 +367,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
         from: 7,
         data: ApprovalKeyboard.callbackData(
           nonce: approval.nonce,
-          verdict: ApprovalKeyboard.approveVerdict
+          verdict: ApprovalKeyboard.Verdict.approve
         )
       )
     )
@@ -498,7 +498,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
         from: 7,
         data: ApprovalKeyboard.callbackData(
           nonce: parked.nonce,
-          verdict: ApprovalKeyboard.approveVerdict
+          verdict: ApprovalKeyboard.Verdict.approve
         )
       )
     )
@@ -577,7 +577,7 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
         from: 7,
         data: ApprovalKeyboard.callbackData(
           nonce: approval.nonce,
-          verdict: ApprovalKeyboard.denyVerdict
+          verdict: ApprovalKeyboard.Verdict.deny
         )
       )
     )

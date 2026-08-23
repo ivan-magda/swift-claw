@@ -52,7 +52,7 @@ public enum ToolApprovalPrompt {
       lines.append("⚠ \(warning)")
     }
 
-    lines.append("Tap Approve to allow this one action, or Deny to cancel.")
+    lines.append(tapInstruction(reason: recorded.reason))
 
     return lines.joined(separator: "\n")
   }
@@ -72,7 +72,11 @@ public enum ToolApprovalPrompt {
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload),
         approvalId: nil,
-        replyMarkup: index == parts.count - 1 ? ApprovalKeyboard.markup(nonce: nonce) : nil
+        replyMarkup: index == parts.count - 1
+          ? ApprovalKeyboard.markup(
+            nonce: nonce,
+            offersTurnWindow: input.recorded.reason.offersTurnScopedWindow
+          ) : nil
       )
     }
   }
@@ -94,6 +98,19 @@ private extension ToolApprovalPrompt {
       "⚠ I want to run \(tool) while this session holds private data after reading external content."
     case .codeExec:
       "⚠ I want to run \(tool) in a disposable sandbox. Review the complete script and staged inputs before approving."
+    case .hostShell:
+      "⚠ I want to run \(tool) on your machine, outside any sandbox. Read the exact command before approving."
     }
+  }
+
+  /// The closing instruction names every button the keyboard actually draws, so the copy and the
+  /// markup cannot disagree about what a tap does.
+  static func tapInstruction(reason: ApprovalReason) -> String {
+    guard reason.offersTurnScopedWindow else {
+      return "Tap Approve to allow this one action, or Deny to cancel."
+    }
+    return
+      "Tap Approve to allow this one action, Approve for this turn to stop asking until this "
+      + "turn ends, or Deny to cancel."
   }
 }
