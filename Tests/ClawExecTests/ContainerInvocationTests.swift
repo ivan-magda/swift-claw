@@ -76,7 +76,8 @@ import Testing
       arguments: ["system", "status"],
       timeout: .seconds(5),
       captureLimit: 1024,
-      teardownGracePeriod: .seconds(2)
+      teardownGracePeriod: .seconds(2),
+      environment: .inherit()
     )
 
     // when

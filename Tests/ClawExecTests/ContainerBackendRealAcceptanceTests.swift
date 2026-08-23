@@ -229,7 +229,8 @@ struct ContainerBackendRealAcceptanceTests {
         ),
         timeout: .seconds(30),
         captureLimit: ContainerBackend.maxControlStreamBytes,
-        teardownGracePeriod: .seconds(2)
+        teardownGracePeriod: .seconds(2),
+        environment: ContainerBackend.commandEnvironment
       )
     )
     guard case .exited(0) = launch.termination else {

@@ -6,6 +6,16 @@ public actor ContainerBackend {
   /// Absolute path of the Apple `container` CLI this backend drives.
   public static let cliPath = "/usr/local/bin/container"
 
+  /// Ambient host values the container CLI must never receive: a forwarded agent socket, and
+  /// two knobs that would rewrite how the sandbox itself launches.
+  static let commandEnvironment = LocalCommandEnvironment.inherit(
+    removingKeys: [
+      "SSH_AUTH_SOCK",
+      "CONTAINER_DEBUG",
+      "CONTAINER_DEFAULT_PLATFORM",
+    ]
+  )
+
   public static let maxRawStreamBytes = 1024 * 1024
   public static let maxControlStreamBytes = 1024 * 1024
 

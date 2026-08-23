@@ -144,7 +144,8 @@ extension ContainerBackend {
       ),
       timeout: request.timeout,
       captureLimit: Self.maxRawStreamBytes,
-      teardownGracePeriod: Self.commandTeardownGrace
+      teardownGracePeriod: Self.commandTeardownGrace,
+      environment: Self.commandEnvironment
     )
   }
 

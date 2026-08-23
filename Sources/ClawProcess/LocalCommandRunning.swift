@@ -9,23 +9,53 @@ import Synchronization
   import SystemPackage
 #endif
 
+/// What the child process inherits from this process: everything, minus the named keys and
+/// minus every key carrying one of the named prefixes.
+public struct LocalCommandEnvironment: Sendable, Equatable {
+  public let removedKeys: Set<String>
+  public let removedPrefixes: Set<String>
+
+  public static func inherit(
+    removingKeys removedKeys: Set<String> = [],
+    removingPrefixes removedPrefixes: Set<String> = []
+  ) -> LocalCommandEnvironment {
+    LocalCommandEnvironment(removedKeys: removedKeys, removedPrefixes: removedPrefixes)
+  }
+
+  private init(removedKeys: Set<String>, removedPrefixes: Set<String>) {
+    self.removedKeys = removedKeys
+    self.removedPrefixes = removedPrefixes
+  }
+
+  func removes(_ key: String) -> Bool {
+    removedKeys.contains(key) || removedPrefixes.contains { key.hasPrefix($0) }
+  }
+}
+
 public struct LocalCommand: Sendable, Equatable {
   public let arguments: [String]
   public let timeout: Duration
   public let captureLimit: Int
   public let teardownGracePeriod: Duration
+  /// Absolute path the child starts in; `nil` keeps this process's own working directory.
+  public let workingDirectory: String?
+  public let environment: LocalCommandEnvironment
 
   public init(
     arguments: [String],
     timeout: Duration,
     captureLimit: Int,
-    teardownGracePeriod: Duration
+    teardownGracePeriod: Duration,
+    workingDirectory: String? = nil,
+    environment: LocalCommandEnvironment
   ) {
     precondition(captureLimit >= 0)
     self.arguments = arguments
     self.timeout = timeout
     self.captureLimit = captureLimit
     self.teardownGracePeriod = teardownGracePeriod
+    self.workingDirectory = workingDirectory
+    self.environment = environment
   }
 }
 
@@ -78,12 +108,6 @@ public protocol LocalCommandRunning: Sendable {
 }
 
 public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
-  private static let removedEnvironmentKeys = [
-    "SSH_AUTH_SOCK",
-    "CONTAINER_DEBUG",
-    "CONTAINER_DEFAULT_PLATFORM",
-  ]
-
   private let executablePath: String
   private let environmentForTesting: [String: String]
   private let onSpawnForTesting: @Sendable (Int32) -> Void
@@ -149,8 +173,8 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
       let result = try await Subprocess.run(
         .path(FilePath(executablePath)),
         arguments: Arguments(command.arguments),
-        environment: environment(),
-        workingDirectory: nil,
+        environment: environment(for: command),
+        workingDirectory: command.workingDirectory.map { FilePath($0) },
         platformOptions: Self.platformOptions(teardownSequence: teardownSequence),
         input: .none,
         output: .sequence,
@@ -222,14 +246,20 @@ private extension SwiftSubprocessLocalCommandRunner {
 // MARK: - Environment
 
 private extension SwiftSubprocessLocalCommandRunner {
-  func environment() -> Environment {
+  func environment(for command: LocalCommand) -> Environment {
     var updates: [Environment.Key: String?] = [:]
 
     for (key, value) in environmentForTesting {
       updates[Environment.Key(stringLiteral: key)] = value
     }
 
-    for key in Self.removedEnvironmentKeys {
+    // A prefix names no key on its own, so the deletions have to be resolved against the set of
+    // keys the child would otherwise inherit.
+    let inheritedKeys = Set(ProcessInfo.processInfo.environment.keys)
+      .union(environmentForTesting.keys)
+      .union(command.environment.removedKeys)
+
+    for key in inheritedKeys where command.environment.removes(key) {
       updates[Environment.Key(stringLiteral: key)] = String?.none
     }
 

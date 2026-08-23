@@ -142,7 +142,8 @@ extension ContainerBackend {
       arguments: arguments,
       timeout: timeout,
       captureLimit: maxControlStreamBytes,
-      teardownGracePeriod: commandTeardownGrace
+      teardownGracePeriod: commandTeardownGrace,
+      environment: commandEnvironment
     )
 
     let allowance = command.timeout + command.teardownGracePeriod + hostWatchdogSlack

@@ -47,31 +47,60 @@ import Testing
     #expect(result.stderr.truncated)
   }
 
-  @Test func adapterDeletesAmbientSecuritySensitiveEnvironment() async {
+  @Test func inheritPolicyDeletesNamedKeysAndPrefixMatchesOnly() async {
     // given
     let runner = SwiftSubprocessLocalCommandRunner(
       executablePath: "/bin/sh",
       environmentForTesting: [
         "SSH_AUTH_SOCK": "/tmp/agent.sock",
-        "CONTAINER_DEBUG": "1",
-        "CONTAINER_DEFAULT_PLATFORM": "linux/amd64",
-        "CLAW_RUNNER_SENTINEL": "present",
+        "CLAW_LLM_API_KEY": "secret",
+        "CLAWFOOT": "present",
+        "RUNNER_SENTINEL": "present",
       ]
     )
     let script = """
       printf '%s|%s|%s|%s' \
         "${SSH_AUTH_SOCK-unset}" \
-        "${CONTAINER_DEBUG-unset}" \
-        "${CONTAINER_DEFAULT_PLATFORM-unset}" \
-        "${CLAW_RUNNER_SENTINEL-unset}"
+        "${CLAW_LLM_API_KEY-unset}" \
+        "${CLAWFOOT-unset}" \
+        "${RUNNER_SENTINEL-unset}"
       """
+    let command = testCommand(
+      ["-c", script],
+      environment: .inherit(removingKeys: ["SSH_AUTH_SOCK"], removingPrefixes: ["CLAW_"])
+    )
 
     // when
-    let result = await runner.run(testCommand(["-c", script]))
+    let result = await runner.run(command)
 
     // then
     #expect(result.termination == .exited(0))
-    #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "unset|unset|unset|present")
+    #expect(
+      String(bytes: result.stdout.bytes, encoding: .utf8) == "unset|unset|present|present"
+    )
+  }
+
+  @Test func adapterRunsTheProgramInTheRequestedWorkingDirectory() async throws {
+    // given
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("claw-cwd-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
+    let command = testCommand(["-c", "pwd -P"], workingDirectory: directory.path)
+
+    // when
+    let result = await runner.run(command)
+
+    // then
+    #expect(result.termination == .exited(0))
+    let printed = try #require(String(bytes: result.stdout.bytes, encoding: .utf8))
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    // `pwd -P` reports the physical path, so the expectation has to resolve the temporary
+    // directory's own symlinks the same way.
+    let resolved = try #require(realpath(directory.path, nil))
+    defer { free(resolved) }
+    #expect(printed == String(cString: resolved))
   }
 
   @Test func programBudgetStartsAfterSpawnAndReturnsTypedTimeout() async throws {
@@ -152,13 +181,17 @@ import Testing
 private func testCommand(
   _ arguments: [String],
   captureLimit: Int = 1024,
-  timeout: Duration = .seconds(2)
+  timeout: Duration = .seconds(2),
+  workingDirectory: String? = nil,
+  environment: LocalCommandEnvironment = .inherit()
 ) -> LocalCommand {
   LocalCommand(
     arguments: arguments,
     timeout: timeout,
     captureLimit: captureLimit,
-    teardownGracePeriod: .milliseconds(50)
+    teardownGracePeriod: .milliseconds(50),
+    workingDirectory: workingDirectory,
+    environment: environment
   )
 }
 
