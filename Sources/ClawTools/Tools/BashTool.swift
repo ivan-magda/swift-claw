@@ -5,6 +5,10 @@ import Foundation
 /// Runs one shell command on the owner's own machine, outside the sandbox. Every call starts a
 /// fresh shell at the workspace root, so nothing survives a call except what it wrote to disk.
 public struct BashTool: Tool {
+  /// The registry name, exposed so the composition root can enable this tool's dangerous-tier
+  /// backstop without repeating the literal.
+  public static let toolName = "bash"
+
   /// Slack over the per-call ceiling, so the launcher's own deadline is what reports a timeout
   /// and the dispatcher's is only a backstop.
   static let dispatchGrace = Duration.seconds(20)
@@ -34,7 +38,7 @@ public struct BashTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "bash",
+      name: Self.toolName,
       description: """
         Run one shell command on the host machine, with its real toolchain and filesystem (owner \
         approval required). Each call is a fresh shell whose working directory is always the \

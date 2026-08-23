@@ -245,7 +245,7 @@ func makeSC3Harness(
     gate: ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: secretValues),
       privateFileLoader: privateFileLoader,
-      execEnabled: execEnabled
+      enabledDangerousTools: execEnabled ? [ExecuteCodeTool.toolName] : []
     )
   )
 

@@ -18,16 +18,18 @@ public struct ToolPolicyGate: Sendable {
 
   private let argGuard: ExfilArgGuard
   private let privateFileLoader: @Sendable () -> [String]
-  private let execEnabled: Bool
+  /// One switch per dangerous tool, keyed by tool name: the owner enables host execution and the
+  /// sandbox independently, so neither config flag can turn the other tool on.
+  private let enabledDangerousTools: Set<String>
 
   public init(
     argGuard: ExfilArgGuard,
     privateFileLoader: @escaping @Sendable () -> [String],
-    execEnabled: Bool
+    enabledDangerousTools: Set<String>
   ) {
     self.argGuard = argGuard
     self.privateFileLoader = privateFileLoader
-    self.execEnabled = execEnabled
+    self.enabledDangerousTools = enabledDangerousTools
   }
 
   public func evaluate(
@@ -328,7 +330,7 @@ private extension ToolPolicyGate {
 // MARK: - Dangerous-tier Approval
 
 private extension ToolPolicyGate {
-  /// Dangerous tools park ONLY over a tool-prepared canonical action. The `execEnabled` backstop
+  /// Dangerous tools park ONLY over a tool-prepared canonical action. The per-tool backstop
   /// fails closed; the arg-guard scans run over the prepared `guardTexts` (never the model's raw
   /// arguments), and the recorded action binds the prepared canonical JSON verbatim.
   func evaluateDangerousTier(
@@ -336,8 +338,8 @@ private extension ToolPolicyGate {
     tool: any Tool,
     context: ToolDispatchContext
   ) async -> Verdict {
-    guard execEnabled else {
-      return dangerousBlock(reason: "Code execution is disabled.", call: call)
+    guard enabledDangerousTools.contains(tool.definition.name) else {
+      return dangerousBlock(reason: "\(tool.definition.name) is disabled.", call: call)
     }
     // A dangerous action can never take the second approval slot, and it cannot park or execute
     // while one is pending, so refuse here before the expensive staging and content scans run.

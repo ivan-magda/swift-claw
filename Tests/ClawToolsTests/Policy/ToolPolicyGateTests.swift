@@ -121,10 +121,11 @@ struct WriteLikeTool: Tool {
 /// over prepared canonical values without any sandbox plumbing.
 private struct PreparedDangerousTool: Tool {
   let resolution: PreparedActionResolution?
+  var name = "execute_code"
 
   var definition: ToolDefinition {
     ToolDefinition(
-      name: "execute_code",
+      name: name,
       description: "test dangerous tool",
       parameters: .object(["type": .string("object")]),
       metadataProvenance: .trusted,
@@ -203,12 +204,12 @@ private struct ProbedDangerousTool: Tool {
 
   private func makeGate(
     privateFiles: [String] = [ToolPolicyGateTests.memoryText],
-    execEnabled: Bool = false
+    enabledDangerousTools: Set<String> = []
   ) -> ToolPolicyGate {
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
       privateFileLoader: { privateFiles },
-      execEnabled: execEnabled
+      enabledDangerousTools: enabledDangerousTools
     )
   }
 
@@ -719,7 +720,7 @@ private struct ProbedDangerousTool: Tool {
     // given
     let action = dangerousAction()
     let tool = PreparedDangerousTool(resolution: .prepared(action))
-    let gate = makeGate(execEnabled: true)
+    let gate = makeGate(enabledDangerousTools: ["execute_code"])
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: #"{"raw":true}"#)
 
     // when
@@ -743,7 +744,7 @@ private struct ProbedDangerousTool: Tool {
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
 
     // when
-    let verdict = await makeGate(execEnabled: false).evaluate(
+    let verdict = await makeGate().evaluate(
       call: call,
       tool: tool,
       context: makeContext()
@@ -758,10 +759,71 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.content.contains("disabled"))
   }
 
+  @Test func enablingOneDangerousToolDoesNotEnableAnother() async {
+    // given — the sandbox is on, the host shell is not
+    let bash = PreparedDangerousTool(resolution: .prepared(dangerousAction()), name: "bash")
+    let gate = makeGate(enabledDangerousTools: ["execute_code"])
+
+    // when
+    let verdict = await gate.evaluate(
+      call: ToolCall(id: "b1", name: "bash", argumentsJSON: "{}"),
+      tool: bash,
+      context: makeContext()
+    )
+
+    // then
+    guard case .block(let payload, _) = verdict else {
+      Issue.record("expected bash to be blocked, got \(verdict)")
+      return
+    }
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("bash"))
+  }
+
+  @Test func executeCodeStaysBlockedWhileOnlyBashIsEnabled() async {
+    // given — the host shell is on, the sandbox is not
+    let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()))
+    let gate = makeGate(enabledDangerousTools: ["bash"])
+
+    // when
+    let verdict = await gate.evaluate(
+      call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
+      tool: tool,
+      context: makeContext()
+    )
+
+    // then
+    guard case .block(let payload, _) = verdict else {
+      Issue.record("expected execute_code to be blocked, got \(verdict)")
+      return
+    }
+    #expect(payload.content.contains("execute_code"))
+  }
+
+  @Test(arguments: ["execute_code", "bash"])
+  func disabledDangerousRefusalNamesTheToolItRefused(name: String) async {
+    // given — nothing is enabled, so every dangerous tool takes the backstop
+    let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()), name: name)
+
+    // when
+    let verdict = await makeGate().evaluate(
+      call: ToolCall(id: "d1", name: name, argumentsJSON: "{}"),
+      tool: tool,
+      context: makeContext()
+    )
+
+    // then
+    guard case .block(let payload, _) = verdict else {
+      Issue.record("expected disabled block, got \(verdict)")
+      return
+    }
+    #expect(payload.content == "\(name) is disabled.")
+  }
+
   @Test func dangerousNilAndRefusedPreparationFailClosed() async {
     // given
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
-    let gate = makeGate(execEnabled: true)
+    let gate = makeGate(enabledDangerousTools: ["execute_code"])
 
     // when
     let missing = await gate.evaluate(
@@ -797,7 +859,7 @@ private struct ProbedDangerousTool: Tool {
     let tool = PreparedDangerousTool(resolution: .prepared(action))
 
     // when
-    let verdict = await makeGate(execEnabled: true).evaluate(
+    let verdict = await makeGate(enabledDangerousTools: ["execute_code"]).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
       context: makeContext()
@@ -822,7 +884,7 @@ private struct ProbedDangerousTool: Tool {
     let networked = PreparedDangerousTool(
       resolution: .prepared(dangerousAction(guardTexts: guardTexts, canExfiltrate: true))
     )
-    let gate = makeGate(execEnabled: true)
+    let gate = makeGate(enabledDangerousTools: ["execute_code"])
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
 
     // when
@@ -844,7 +906,7 @@ private struct ProbedDangerousTool: Tool {
     let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()))
 
     // when
-    let verdict = await makeGate(execEnabled: true).evaluate(
+    let verdict = await makeGate(enabledDangerousTools: ["execute_code"]).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
       context: makeContext(approvalPending: true)
@@ -864,7 +926,7 @@ private struct ProbedDangerousTool: Tool {
     let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
 
     // when — an approval already holds the single slot
-    let verdict = await makeGate(execEnabled: true).evaluate(
+    let verdict = await makeGate(enabledDangerousTools: ["execute_code"]).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
       context: makeContext(approvalPending: true)
@@ -886,7 +948,7 @@ private struct ProbedDangerousTool: Tool {
     let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
 
     // when
-    let verdict = await makeGate(execEnabled: true).evaluate(
+    let verdict = await makeGate(enabledDangerousTools: ["execute_code"]).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
       context: makeContext()
@@ -913,7 +975,7 @@ private struct ProbedDangerousTool: Tool {
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: []),
         privateFileLoader: { privateFiles },
-        execEnabled: false
+        enabledDangerousTools: []
       ),
       clock: clock
     )

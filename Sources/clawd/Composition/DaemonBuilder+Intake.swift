@@ -172,7 +172,7 @@ extension DaemonBuilder {
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: secretValues),
         privateFileLoader: privateFileLoader,
-        execEnabled: config.exec.enabled
+        enabledDangerousTools: enabledDangerousTools
       )
     )
   }
@@ -191,5 +191,22 @@ extension DaemonBuilder {
         exec: config.exec
       )
     )
+  }
+}
+
+// MARK: - Dangerous-tier Backstop
+
+private extension DaemonBuilder {
+  /// The sandbox and host execution are separate owner decisions, so each dangerous tool carries
+  /// its own switch — enabling one must never open the other.
+  var enabledDangerousTools: Set<String> {
+    var names: Set<String> = []
+    if config.exec.enabled {
+      names.insert(ExecuteCodeTool.toolName)
+    }
+    if config.bash.enabled {
+      names.insert(BashTool.toolName)
+    }
+    return names
   }
 }

@@ -16,6 +16,10 @@ public struct ExecuteCodeSettings: Sendable, Equatable {
 }
 
 public struct ExecuteCodeTool: Tool {
+  /// The registry name, exposed so the composition root can enable this tool's dangerous-tier
+  /// backstop without repeating the literal.
+  public static let toolName = "execute_code"
+
   public static let maxCodeBytes = ExecStagingLimits.standard.maxCodeBytes
   public static let maxStagedFileBytes = ExecStagingLimits.standard.maxStagedFileBytes
   public static let maxStagedTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes
@@ -40,7 +44,7 @@ public struct ExecuteCodeTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "execute_code",
+      name: Self.toolName,
       description:
         "Run a short Python or shell script in a locked-down, throwaway sandbox (owner approval required; no network unless explicitly requested).",
       parameters: .object([
