@@ -58,8 +58,9 @@ public enum PolicyFingerprint {
   /// Hashes the static inputs: the tool surface sorted by name (each tool contributes name,
   /// canonical `.sortedKeys` parameter JSON, metadata provenance, `riskLevel.rawValue`, its fence
   /// label — a trust declaration on par with risk, since it selects the prompt carve-out its output
-  /// renders under — the egress label, and any declared invocation identity), then the remaining
-  /// config identity with the exec block normalized (enabled state, pinned image, sorted registry
+  /// renders under — the egress label, any declared invocation identity, and whether the tool needs
+  /// an interactive run), then the remaining config identity with the exec block normalized
+  /// (enabled state, pinned image, sorted registry
   /// allowlist, caps, timeout, and egress switch). Sorted lists mean config order cannot move the
   /// hash; a change to any egress-policy input voids an outstanding approval. Computed once at the
   /// composition root and injected into `ContextBuilder`.
@@ -84,6 +85,7 @@ public enum PolicyFingerprint {
       parts.append(tool.fenceLabel)
       parts.append(egressLabel(tool.egressClass))
       parts.append(tool.invocationIdentity ?? "")
+      parts.append(tool.requiresInteractiveRun ? "interactive_only" : "any_origin")
     }
     parts.append(egressIdentityLabel(inputs.llmEgress))
     parts.append(inputs.searchEndpointPresent ? "search:present" : "search:absent")

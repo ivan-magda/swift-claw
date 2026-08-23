@@ -150,6 +150,31 @@ import Testing
     #expect(outcome.ingestedUntrusted)
   }
 
+  @Test(arguments: [RunOrigin.interactive, RunOrigin.scheduled, RunOrigin.heartbeat])
+  func everyDispatchCarriesTheRunsOrigin(origin: RunOrigin) async throws {
+    // given
+    let definition = ToolDefinition(
+      name: "web_fetch",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .safe
+    )
+    let provider = SequenceProvider([
+      toolCallResponse([ToolCall(id: "c1", name: definition.name, argumentsJSON: "{}")]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    _ = try await run(runtime, origin: origin)
+
+    // then
+    #expect(await dispatcher.records.first?.context.runOrigin == origin)
+  }
+
   @Test func liveObservationsFenceUnderTheToolsDeclaredLabel() async throws {
     // given — skill_load declares the "skills" label; its body must reach the wire under it
     let definition = ToolDefinition(

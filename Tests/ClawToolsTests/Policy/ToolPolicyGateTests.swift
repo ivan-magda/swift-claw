@@ -11,7 +11,8 @@ private func makeDispatchContext(
   assemblyPrivate: Bool = false,
   runPrivate: Bool = false,
   sessionHasPrivate: Bool = false,
-  approvalPending: Bool = false
+  approvalPending: Bool = false,
+  origin: RunOrigin = .interactive
 ) -> ToolDispatchContext {
   ToolDispatchContext(
     sessionTainted: tainted,
@@ -19,7 +20,8 @@ private func makeDispatchContext(
     assemblyPrivateData: assemblyPrivate,
     runPrivateData: runPrivate,
     sessionHasPrivateData: sessionHasPrivate,
-    approvalAlreadyPending: approvalPending
+    approvalAlreadyPending: approvalPending,
+    runOrigin: origin
   )
 }
 
@@ -122,6 +124,7 @@ struct WriteLikeTool: Tool {
 private struct PreparedDangerousTool: Tool {
   let resolution: PreparedActionResolution?
   var name = "execute_code"
+  var requiresInteractiveRun = false
 
   var definition: ToolDefinition {
     ToolDefinition(
@@ -130,7 +133,8 @@ private struct PreparedDangerousTool: Tool {
       parameters: .object(["type": .string("object")]),
       metadataProvenance: .trusted,
       egressClass: .none,
-      riskLevel: .dangerous
+      riskLevel: .dangerous,
+      requiresInteractiveRun: requiresInteractiveRun
     )
   }
 
@@ -239,7 +243,8 @@ private struct ProbedDangerousTool: Tool {
     assemblyPrivate: Bool = false,
     runPrivate: Bool = false,
     sessionHasPrivate: Bool = false,
-    approvalPending: Bool = false
+    approvalPending: Bool = false,
+    origin: RunOrigin = .interactive
   ) -> ToolDispatchContext {
     makeDispatchContext(
       tainted: tainted,
@@ -247,7 +252,8 @@ private struct ProbedDangerousTool: Tool {
       assemblyPrivate: assemblyPrivate,
       runPrivate: runPrivate,
       sessionHasPrivate: sessionHasPrivate,
-      approvalPending: approvalPending
+      approvalPending: approvalPending,
+      origin: origin
     )
   }
 
@@ -942,6 +948,77 @@ private struct ProbedDangerousTool: Tool {
     #expect(prepareCalls == 0)
   }
 
+  @Test(arguments: [RunOrigin.scheduled, RunOrigin.heartbeat])
+  func interactiveOnlyToolIsRefusedInABackgroundRun(origin: RunOrigin) async {
+    // given — the host shell is enabled, but no owner is watching this run
+    let bash = PreparedDangerousTool(
+      resolution: .prepared(dangerousAction()),
+      name: "bash",
+      requiresInteractiveRun: true
+    )
+    let gate = makeGate(enabledDangerousTools: ["bash"])
+
+    // when
+    let verdict = await gate.evaluate(
+      call: ToolCall(id: "b1", name: "bash", argumentsJSON: "{}"),
+      tool: bash,
+      context: makeContext(origin: origin)
+    )
+
+    // then
+    guard case .block(let payload, _) = verdict else {
+      Issue.record("expected a background-run refusal, got \(verdict)")
+      return
+    }
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("bash"))
+    #expect(payload.content.contains(origin.rawValue))
+    #expect(payload.content.contains("owner is present"))
+  }
+
+  @Test func interactiveOnlyToolStillParksInAnInteractiveRun() async {
+    // given — the same tool, this time proposed while the owner is there to answer
+    let bash = PreparedDangerousTool(
+      resolution: .prepared(dangerousAction()),
+      name: "bash",
+      requiresInteractiveRun: true
+    )
+    let gate = makeGate(enabledDangerousTools: ["bash"])
+
+    // when
+    let verdict = await gate.evaluate(
+      call: ToolCall(id: "b1", name: "bash", argumentsJSON: "{}"),
+      tool: bash,
+      context: makeContext(origin: .interactive)
+    )
+
+    // then
+    guard case .requireApproval(let recorded) = verdict else {
+      Issue.record("expected the approval path, got \(verdict)")
+      return
+    }
+    #expect(recorded.tool == "bash")
+  }
+
+  @Test func aBackgroundRunLeavesToolsThatDoNotNeedTheOwnerAlone() async {
+    // given — execute_code makes no interactive-run claim, so a scheduled run still parks it
+    let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()))
+    let gate = makeGate(enabledDangerousTools: ["execute_code"])
+
+    // when
+    let verdict = await gate.evaluate(
+      call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
+      tool: tool,
+      context: makeContext(origin: .scheduled)
+    )
+
+    // then
+    guard case .requireApproval = verdict else {
+      Issue.record("expected the approval path, got \(verdict)")
+      return
+    }
+  }
+
   @Test func openApprovalSlotStillPreparesTheDangerousAction() async {
     // given — the control: with the slot open, preparation must run so the action can park
     let probe = PrepareCallProbe()
@@ -987,7 +1064,8 @@ private struct ProbedDangerousTool: Tool {
     assemblyPrivateData: false,
     runPrivateData: false,
     sessionHasPrivateData: false,
-    approvalAlreadyPending: false
+    approvalAlreadyPending: false,
+    runOrigin: .interactive
   )
 
   @Test func unknownToolIsAnErrorObservationNeverACrash() async {

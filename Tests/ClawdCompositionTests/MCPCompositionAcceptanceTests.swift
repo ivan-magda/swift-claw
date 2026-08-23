@@ -363,7 +363,8 @@ private extension MCPCompositionAcceptanceTests {
     assemblyPrivateData: false,
     runPrivateData: false,
     sessionHasPrivateData: false,
-    approvalAlreadyPending: false
+    approvalAlreadyPending: false,
+    runOrigin: .interactive
   )
 
   func serverConfig(

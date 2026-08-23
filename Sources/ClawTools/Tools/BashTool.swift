@@ -64,7 +64,8 @@ public struct BashTool: Tool {
       ]),
       metadataProvenance: .trusted,
       egressClass: .none,
-      riskLevel: .dangerous
+      riskLevel: .dangerous,
+      requiresInteractiveRun: true
     )
   }
 

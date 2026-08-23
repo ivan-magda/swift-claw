@@ -142,7 +142,8 @@ private struct DefaultPrepareTool: Tool {
       assemblyPrivateData: true,
       runPrivateData: false,
       sessionHasPrivateData: false,
-      approvalAlreadyPending: false
+      approvalAlreadyPending: false,
+      runOrigin: .interactive
     )
 
     // then

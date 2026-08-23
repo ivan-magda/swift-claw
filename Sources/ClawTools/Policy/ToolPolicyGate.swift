@@ -37,6 +37,10 @@ public struct ToolPolicyGate: Sendable {
     tool: any Tool,
     context: ToolDispatchContext
   ) async -> Verdict {
+    if let refusal = ownerAbsentRefusal(call: call, tool: tool, context: context) {
+      return refusal
+    }
+
     // Total over RiskLevel. Ask-tier resolves before the egress fast-path so a `.none`-egress
     // ask tool (file_write) still parks; dangerous consumes only a tool-prepared action; safe
     // egress falls through to the unconditional/trifecta tiers below.
@@ -158,6 +162,32 @@ public struct ToolPolicyGate: Sendable {
         ingestedUntrusted: false
       ),
       argsRedacted: argsRedacted
+    )
+  }
+}
+
+// MARK: - Owner Presence
+
+private extension ToolPolicyGate {
+  /// A tool that acts only under the owner's eye is refused outright in a proactive run: parking
+  /// an approval there would leave a host action queued against an owner who is not reading.
+  func ownerAbsentRefusal(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) -> Verdict? {
+    guard tool.definition.requiresInteractiveRun, context.runOrigin.isProactive else {
+      return nil
+    }
+    return .block(
+      payload: ToolPayload(
+        content:
+          "\(tool.definition.name) is unavailable in a \(context.runOrigin.rawValue) run: "
+          + "it runs only while the owner is present.",
+        status: .error,
+        ingestedUntrusted: false
+      ),
+      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
     )
   }
 }

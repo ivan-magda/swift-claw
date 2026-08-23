@@ -210,6 +210,10 @@ public struct ToolDefinition: Sendable, Equatable {
   /// not fully identify what will run (for example, an adapter backed by a configured endpoint).
   /// NOT advertised on the wire.
   public let invocationIdentity: String?
+  /// Declares that the tool may act only while the owner is watching the run. The gate refuses the
+  /// call outright in a scheduled or heartbeat run rather than parking an approval nobody is
+  /// present to answer. NOT advertised on the wire.
+  public let requiresInteractiveRun: Bool
 
   public init(
     name: String,
@@ -219,7 +223,8 @@ public struct ToolDefinition: Sendable, Equatable {
     egressClass: ToolEgressClass,
     riskLevel: RiskLevel,
     fenceLabel: String? = nil,
-    invocationIdentity: String? = nil
+    invocationIdentity: String? = nil,
+    requiresInteractiveRun: Bool = false
   ) {
     self.name = name
     self.description = description
@@ -230,6 +235,7 @@ public struct ToolDefinition: Sendable, Equatable {
     self.riskLevel = riskLevel
     self.fenceLabel = fenceLabel ?? name
     self.invocationIdentity = invocationIdentity
+    self.requiresInteractiveRun = requiresInteractiveRun
   }
 }
 

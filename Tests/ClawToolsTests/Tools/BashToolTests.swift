@@ -81,6 +81,7 @@ import Testing
     #expect(definition.egressClass == .none)
     #expect(definition.metadataProvenance == .trusted)
     #expect(definition.fenceLabel == "bash")
+    #expect(definition.requiresInteractiveRun)
   }
 
   @Test func definitionSchemaTakesCommandAndOptionalTimeout() {

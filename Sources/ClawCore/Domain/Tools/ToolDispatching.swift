@@ -12,6 +12,9 @@ public struct ToolDispatchContext: Sendable, Equatable {
   /// the context window rolls past the private read that first set it.
   public let sessionHasPrivateData: Bool
   public let approvalAlreadyPending: Bool
+  /// Which pathway created the run, so the gate can refuse a tool that needs the owner present
+  /// (`ToolDefinition.requiresInteractiveRun`) instead of parking an approval nobody will answer.
+  public let runOrigin: RunOrigin
 
   public init(
     sessionTainted: Bool,
@@ -19,7 +22,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
     sessionHasPrivateData: Bool,
-    approvalAlreadyPending: Bool
+    approvalAlreadyPending: Bool,
+    runOrigin: RunOrigin
   ) {
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
@@ -27,6 +31,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.runPrivateData = runPrivateData
     self.sessionHasPrivateData = sessionHasPrivateData
     self.approvalAlreadyPending = approvalAlreadyPending
+    self.runOrigin = runOrigin
   }
 }
 
