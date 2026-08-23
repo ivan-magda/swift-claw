@@ -1,7 +1,11 @@
 import ClawCore
+import ClawProcess
 import Foundation
 
 public actor ContainerBackend {
+  /// Absolute path of the Apple `container` CLI this backend drives.
+  public static let cliPath = "/usr/local/bin/container"
+
   public static let maxRawStreamBytes = 1024 * 1024
   public static let maxControlStreamBytes = 1024 * 1024
 
@@ -17,7 +21,7 @@ public actor ContainerBackend {
 
   let settings: ExecSandboxSettings
   let stateRoot: URL
-  let commands: any ContainerCommandRunning
+  let commands: any LocalCommandRunning
 
   let sanitizeReason: @Sendable (String) -> String
   let now: @Sendable () -> ContinuousClock.Instant
@@ -38,7 +42,7 @@ public actor ContainerBackend {
   public init(
     settings: ExecSandboxSettings,
     stateRoot: URL,
-    commands: any ContainerCommandRunning,
+    commands: any LocalCommandRunning,
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
   ) {
@@ -56,7 +60,7 @@ public actor ContainerBackend {
   init(
     settings: ExecSandboxSettings,
     stateRoot: URL,
-    commands: any ContainerCommandRunning,
+    commands: any LocalCommandRunning,
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant,
     supportedHost: @escaping @Sendable () -> Bool,
@@ -79,7 +83,7 @@ public actor ContainerBackend {
       stateRoot.path,
       stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
       FileManager.default.homeDirectoryForCurrentUser.path,
-      "/usr/local/bin/container",
+      Self.cliPath,
     ]
     .filter { !$0.isEmpty }
     .sorted { $0.count > $1.count }

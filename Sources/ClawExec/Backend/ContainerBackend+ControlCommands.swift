@@ -1,4 +1,5 @@
 import ClawCore
+import ClawProcess
 import Foundation
 
 // MARK: - Typed Control Evidence
@@ -57,7 +58,7 @@ extension ContainerBackend {
     _ arguments: [String],
     limit: Duration,
     deadline: ContinuousClock.Instant
-  ) async -> ContainerCommandResult? {
+  ) async -> LocalCommandResult? {
     if let timeout = clampedTimeout(limit: limit, deadline: deadline) {
       return await Self.runControlCommand(
         arguments,
@@ -108,7 +109,7 @@ extension ContainerBackend {
   // swiftlint:disable discouraged_optional_collection
   static func fetchContainerList(
     timeout: Duration,
-    commands: any ContainerCommandRunning,
+    commands: any LocalCommandRunning,
     watchdogSleep: @escaping @Sendable (Duration) async throws -> Void
   ) async -> [ListedContainer]? {
     let result = await runControlCommand(
@@ -134,10 +135,10 @@ extension ContainerBackend {
   static func runControlCommand(
     _ arguments: [String],
     timeout: Duration,
-    commands: any ContainerCommandRunning,
+    commands: any LocalCommandRunning,
     watchdogSleep: @escaping @Sendable (Duration) async throws -> Void
-  ) async -> ContainerCommandResult {
-    let command = ContainerCommand(
+  ) async -> LocalCommandResult {
+    let command = LocalCommand(
       arguments: arguments,
       timeout: timeout,
       captureLimit: maxControlStreamBytes,
@@ -165,10 +166,10 @@ extension ContainerBackend {
   // Synthesized when the runner never reported: every consumer treats it fail-closed
   // (successOutput → nil, lifecycle/absence checks → false, bounded helpers → nil).
   private static func failClosedResult(
-    _ termination: ContainerCommandTermination
-  ) -> ContainerCommandResult {
+    _ termination: LocalCommandTermination
+  ) -> LocalCommandResult {
     let empty = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
-    return ContainerCommandResult(
+    return LocalCommandResult(
       termination: termination,
       stdout: empty,
       stderr: empty,
@@ -176,7 +177,7 @@ extension ContainerBackend {
     )
   }
 
-  static func successOutput(of result: ContainerCommandResult) -> Data? {
+  static func successOutput(of result: LocalCommandResult) -> Data? {
     guard
       case .exited(0) = result.termination,
       !result.stdout.truncated,

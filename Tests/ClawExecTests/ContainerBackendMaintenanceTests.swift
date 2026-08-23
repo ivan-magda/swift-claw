@@ -1,4 +1,5 @@
 import ClawCore
+import ClawProcess
 import Foundation
 import Testing
 
@@ -309,7 +310,7 @@ private final class MaintenanceFixture: @unchecked Sendable {
     self.guestProbe = guestProbe
   }
 
-  func backend(commands: any ContainerCommandRunning) -> ContainerBackend {
+  func backend(commands: any LocalCommandRunning) -> ContainerBackend {
     ContainerBackend(
       settings: settings,
       stateRoot: root,
@@ -321,9 +322,9 @@ private final class MaintenanceFixture: @unchecked Sendable {
   }
 
   func response(
-    for command: ContainerCommand,
-    history _: [ContainerCommand]
-  ) -> ContainerCommandResult {
+    for command: LocalCommand,
+    history _: [LocalCommand]
+  ) -> LocalCommandResult {
     let arguments = command.arguments
     if arguments == ContainerInvocation.systemStatus() {
       return jsonCommandResult(#"{"status":"running"}"#)

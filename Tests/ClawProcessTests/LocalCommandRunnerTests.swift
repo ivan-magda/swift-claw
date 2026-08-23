@@ -1,12 +1,12 @@
 import Foundation
 import Testing
 
-@testable import ClawExec
+@testable import ClawProcess
 
-@Suite struct ContainerCommandRunnerTests {
+@Suite struct LocalCommandRunnerTests {
   @Test func adapterPreservesRawBytesAndExitStatus() async {
     // given
-    let runner = SwiftSubprocessContainerCommandRunner(executablePath: "/bin/sh")
+    let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
     let command = testCommand(["-c", "printf '\\001out'; printf '\\377err' >&2; exit 7"])
 
     // when
@@ -23,7 +23,7 @@ import Testing
 
   @Test func adapterDrainsBothFloodedStreamsAndKeepsIndependentPrefixes() async {
     // given
-    let runner = SwiftSubprocessContainerCommandRunner(executablePath: "/bin/sh")
+    let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
     let script = """
       count=0
       while [ "$count" -lt 4096 ]; do
@@ -49,7 +49,7 @@ import Testing
 
   @Test func adapterDeletesAmbientSecuritySensitiveEnvironment() async {
     // given
-    let runner = SwiftSubprocessContainerCommandRunner(
+    let runner = SwiftSubprocessLocalCommandRunner(
       executablePath: "/bin/sh",
       environmentForTesting: [
         "SSH_AUTH_SOCK": "/tmp/agent.sock",
@@ -77,7 +77,7 @@ import Testing
   @Test func programBudgetStartsAfterSpawnAndReturnsTypedTimeout() async throws {
     // given
     let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
-    let runner = SwiftSubprocessContainerCommandRunner(
+    let runner = SwiftSubprocessLocalCommandRunner(
       executablePath: "/bin/sh",
       onSpawnForTesting: { processIdentifier in
         continuation.yield(processIdentifier)
@@ -103,7 +103,7 @@ import Testing
   @Test func callerCancellationTearsDownTheCreatedProcessGroup() async throws {
     // given
     let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
-    let runner = SwiftSubprocessContainerCommandRunner(
+    let runner = SwiftSubprocessLocalCommandRunner(
       executablePath: "/bin/sh",
       onSpawnForTesting: { processIdentifier in
         continuation.yield(processIdentifier)
@@ -130,7 +130,7 @@ import Testing
 
   @Test func childExitDoesNotWaitForGrandchildHoldingThePipe() async throws {
     // given
-    let runner = SwiftSubprocessContainerCommandRunner(executablePath: "/bin/sh")
+    let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
     // The backgrounded sleep inherits stdout (the asserted pipe); stderr only publishes its
     // PID so the test can reap the grandchild instead of orphaning a real 30-second sleep.
     let command = testCommand(["-c", "sleep 30 & echo $! >&2; printf child"], timeout: .seconds(2))
@@ -153,8 +153,8 @@ private func testCommand(
   _ arguments: [String],
   captureLimit: Int = 1024,
   timeout: Duration = .seconds(2)
-) -> ContainerCommand {
-  ContainerCommand(
+) -> LocalCommand {
+  LocalCommand(
     arguments: arguments,
     timeout: timeout,
     captureLimit: captureLimit,

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawProcess
 import Foundation
 import Testing
 
@@ -71,7 +72,7 @@ import Testing
       totalBytes: 9,
       truncated: true
     )
-    let command = ContainerCommand(
+    let command = LocalCommand(
       arguments: ["system", "status"],
       timeout: .seconds(5),
       captureLimit: 1024,
@@ -79,7 +80,7 @@ import Testing
     )
 
     // when
-    let result = ContainerCommandResult(
+    let result = LocalCommandResult(
       termination: .exited(7),
       stdout: output,
       stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),

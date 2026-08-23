@@ -9,7 +9,7 @@ import Synchronization
   import SystemPackage
 #endif
 
-public struct ContainerCommand: Sendable, Equatable {
+public struct LocalCommand: Sendable, Equatable {
   public let arguments: [String]
   public let timeout: Duration
   public let captureLimit: Int
@@ -29,7 +29,7 @@ public struct ContainerCommand: Sendable, Equatable {
   }
 }
 
-public enum ContainerCommandTermination: Sendable, Equatable {
+public enum LocalCommandTermination: Sendable, Equatable {
   case exited(Int32)
   case signaled(Int32)
   case timedOut
@@ -50,8 +50,8 @@ public struct CapturedCommandStream: Sendable, Equatable {
   }
 }
 
-public struct ContainerCommandResult: Sendable, Equatable {
-  public let termination: ContainerCommandTermination
+public struct LocalCommandResult: Sendable, Equatable {
+  public let termination: LocalCommandTermination
 
   public let stdout: CapturedCommandStream
   public let stderr: CapturedCommandStream
@@ -59,7 +59,7 @@ public struct ContainerCommandResult: Sendable, Equatable {
   public let processIdentifier: Int32?
 
   public init(
-    termination: ContainerCommandTermination,
+    termination: LocalCommandTermination,
     stdout: CapturedCommandStream,
     stderr: CapturedCommandStream,
     processIdentifier: Int32?
@@ -73,11 +73,11 @@ public struct ContainerCommandResult: Sendable, Equatable {
   }
 }
 
-public protocol ContainerCommandRunning: Sendable {
-  func run(_ command: ContainerCommand) async -> ContainerCommandResult
+public protocol LocalCommandRunning: Sendable {
+  func run(_ command: LocalCommand) async -> LocalCommandResult
 }
 
-public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
+public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
   private static let removedEnvironmentKeys = [
     "SSH_AUTH_SOCK",
     "CONTAINER_DEBUG",
@@ -88,7 +88,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
   private let environmentForTesting: [String: String]
   private let onSpawnForTesting: @Sendable (Int32) -> Void
 
-  public init(executablePath: String = "/usr/local/bin/container") {
+  public init(executablePath: String) {
     self.executablePath = executablePath
     self.environmentForTesting = [:]
     self.onSpawnForTesting = { _ in }
@@ -104,7 +104,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
     self.onSpawnForTesting = onSpawnForTesting
   }
 
-  public func run(_ command: ContainerCommand) async -> ContainerCommandResult {
+  public func run(_ command: LocalCommand) async -> LocalCommandResult {
     let clock = ContinuousClock()
     let spawnedProcessIdentifier = SpawnedProcessIdentifierBox()
 
@@ -123,14 +123,14 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
     case .operationReturned(let result):
       return result
     case .deadlineExpired:
-      return ContainerCommandResult(
+      return LocalCommandResult(
         termination: .timedOut,
         stdout: Self.emptyStream,
         stderr: Self.emptyStream,
         processIdentifier: spawnedProcessIdentifier.value
       )
     case .callerCancelled:
-      return ContainerCommandResult(
+      return LocalCommandResult(
         termination: .cancelled,
         stdout: Self.emptyStream,
         stderr: Self.emptyStream,
@@ -140,9 +140,9 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
   }
 
   private func spawnAndCapture(
-    _ command: ContainerCommand,
+    _ command: LocalCommand,
     spawnedProcessIdentifier: SpawnedProcessIdentifierBox
-  ) async -> ContainerCommandResult {
+  ) async -> LocalCommandResult {
     let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
 
     do {
@@ -167,19 +167,19 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
         return CommandClosureResult(stdout: streams.0, stderr: streams.1)
       }
 
-      return ContainerCommandResult(
+      return LocalCommandResult(
         termination: Self.classifyTermination(status: result.terminationStatus),
         stdout: result.closureResult.stdout,
         stderr: result.closureResult.stderr,
         processIdentifier: Int32(result.processIdentifier.value)
       )
     } catch {
-      let termination: ContainerCommandTermination =
+      let termination: LocalCommandTermination =
         Task.isCancelled || error is CancellationError
         ? .cancelled
         : .startFailed(String(describing: error))
 
-      return ContainerCommandResult(
+      return LocalCommandResult(
         termination: termination,
         stdout: Self.emptyStream,
         stderr: Self.emptyStream,
@@ -191,7 +191,7 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
 
 // MARK: - Launch & Termination
 
-private extension SwiftSubprocessContainerCommandRunner {
+private extension SwiftSubprocessLocalCommandRunner {
   static func teardownSequence(gracePeriod: Duration) -> [TeardownStep] {
     [.gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: gracePeriod)]
   }
@@ -205,7 +205,7 @@ private extension SwiftSubprocessContainerCommandRunner {
 
   static func classifyTermination(
     status: TerminationStatus
-  ) -> ContainerCommandTermination {
+  ) -> LocalCommandTermination {
     if Task.isCancelled {
       return .cancelled
     }
@@ -221,7 +221,7 @@ private extension SwiftSubprocessContainerCommandRunner {
 
 // MARK: - Environment
 
-private extension SwiftSubprocessContainerCommandRunner {
+private extension SwiftSubprocessLocalCommandRunner {
   func environment() -> Environment {
     var updates: [Environment.Key: String?] = [:]
 
@@ -239,7 +239,7 @@ private extension SwiftSubprocessContainerCommandRunner {
 
 // MARK: - Raw Capture
 
-private extension SwiftSubprocessContainerCommandRunner {
+private extension SwiftSubprocessLocalCommandRunner {
   static let emptyStream = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
 
   static func capture(

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawProcess
 import Foundation
 import Testing
 
@@ -210,14 +211,14 @@ struct ContainerBackendRealAcceptanceTests {
     let backend = try await host.readyBackend()
     defer { Task { await backend.shutdown() } }
     let initImage = try #require(await backend.preparedInitImageForTesting)
-    let runner = SwiftSubprocessContainerCommandRunner()
+    let runner = SwiftSubprocessLocalCommandRunner(executablePath: ContainerBackend.cliPath)
     let identity = ExecutionIdentity()
     let orphanScratch = host.root.appendingPathComponent("orphan-scratch", isDirectory: true)
     try FileManager.default.createDirectory(at: orphanScratch, withIntermediateDirectories: true)
 
     // when — launch a detached owned container that outlives the launching call
     let launch = await runner.run(
-      ContainerCommand(
+      LocalCommand(
         arguments: ContainerInvocation.detachedCanary(
           context: ContainerLaunchContext(
             identity: identity,
@@ -272,7 +273,7 @@ private struct RealSandboxHost {
     return ContainerBackend(
       settings: resolved,
       stateRoot: root,
-      commands: SwiftSubprocessContainerCommandRunner(),
+      commands: SwiftSubprocessLocalCommandRunner(executablePath: ContainerBackend.cliPath),
       sanitizeReason: { $0 }
     )
   }
