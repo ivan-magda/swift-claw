@@ -84,7 +84,7 @@ let package = Package(
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
-    .target(name: "ClawTools", dependencies: ["ClawCore"]),
+    .target(name: "ClawTools", dependencies: ["ClawCore", "ClawProcess"]),
     .target(
       name: "ClawMCP",
       dependencies: [
@@ -111,7 +111,7 @@ let package = Package(
     .target(
       name: "ClawTestSupport",
       dependencies: [
-        "ClawCore", "ClawTools",
+        "ClawCore", "ClawTools", "ClawProcess",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
@@ -191,7 +191,7 @@ let package = Package(
     ),
     .testTarget(
       name: "ClawExecTests",
-      dependencies: ["ClawExec", "ClawProcess", "ClawCore"]
+      dependencies: ["ClawExec", "ClawProcess", "ClawCore", "ClawTestSupport"]
     ),
     .testTarget(name: "ClawProcessTests", dependencies: ["ClawProcess", "ClawCore"]),
     .testTarget(

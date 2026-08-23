@@ -1,4 +1,5 @@
 import ClawCore
+import ClawProcess
 import Foundation
 
 /// Runs one shell command on the owner's own machine, outside the sandbox. Every call starts a
@@ -10,13 +11,24 @@ public struct BashTool: Tool {
 
   static let hostWarning = "this command runs on the host machine, outside the sandbox"
 
+  /// Every daemon secret arrives through a `CLAW_`-prefixed variable, so stripping the prefix is
+  /// what keeps a command from reading the bot token or an API key out of its own environment.
+  static let strippedEnvironmentPrefix = "CLAW_"
+
   let workspaceRoot: URL
   let config: BashConfig
+  let runner: any LocalCommandRunning
   let redactor: SecretRedactor
 
-  public init(workspaceRoot: URL, config: BashConfig, redactor: SecretRedactor) {
+  public init(
+    workspaceRoot: URL,
+    config: BashConfig,
+    runner: any LocalCommandRunning,
+    redactor: SecretRedactor
+  ) {
     self.workspaceRoot = workspaceRoot
     self.config = config
+    self.runner = runner
     self.redactor = redactor
   }
 
@@ -87,7 +99,7 @@ public struct BashTool: Tool {
 
     return .prepared(
       PreparedToolAction(
-        canonicalTarget: canonicalTarget(),
+        canonicalTarget: canonicalActionTarget(),
         canonicalArgsJSON: canonicalArgsJSON,
         presentation: approvalPresentation(recorded: recorded),
         guardTexts: [command],
@@ -99,7 +111,43 @@ public struct BashTool: Tool {
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    DangerousToolSupport.errorPayload("bash cannot run commands yet.", redactor: redactor)
+    guard let approvedTarget = canonicalTarget else {
+      return errorPayload("bash was dispatched without its approved target.")
+    }
+    guard let recorded = DangerousToolSupport.decode(RecordedArguments.self, from: arguments) else {
+      return errorPayload("The recorded bash action is unreadable; nothing ran.")
+    }
+    guard recorded.command.isEmpty == false else {
+      return errorPayload("The recorded bash action carries no command; nothing ran.")
+    }
+    // The shell and the working directory are what the owner approved; a config change between
+    // approval and resume must not silently move the command onto a different one.
+    guard canonicalActionTarget() == approvedTarget else {
+      return errorPayload(
+        "The recorded bash action no longer matches its approved target; nothing ran."
+      )
+    }
+
+    let timeoutSeconds: Int
+    switch resolveTimeout(recorded.timeoutSeconds) {
+    case .refused:
+      return errorPayload("The recorded bash timeout is no longer within its bound; nothing ran.")
+    case .resolved(let resolved):
+      timeoutSeconds = resolved
+    }
+
+    let result = await runner.run(
+      LocalCommand(
+        arguments: ["-c", recorded.command],
+        timeout: .seconds(timeoutSeconds),
+        captureLimit: LocalCommandLimits.maxRawStreamBytes,
+        teardownGracePeriod: LocalCommandLimits.teardownGracePeriod,
+        workingDirectory: workspaceRoot.path,
+        environment: .inherit(removingPrefixes: [Self.strippedEnvironmentPrefix])
+      )
+    )
+
+    return map(result: result, timeoutSeconds: timeoutSeconds)
   }
 }
 
@@ -149,7 +197,7 @@ private extension BashTool {
 private extension BashTool {
   /// Every bash call acts on the same thing — one shell, one working directory — so the target
   /// pins that pair and the args hash alone distinguishes one command from the next.
-  func canonicalTarget() -> String {
+  func canonicalActionTarget() -> String {
     "host_exec:\(config.shellPath):\(workspaceRoot.path)"
   }
 
@@ -164,5 +212,59 @@ private extension BashTool {
         """,
       warnings: [Self.hostWarning]
     )
+  }
+}
+
+// MARK: - Result Mapping
+
+private extension BashTool {
+  func map(result: LocalCommandResult, timeoutSeconds: Int) -> ToolPayload {
+    switch result.termination {
+    case .exited(let code):
+      return outcomePayload(result, statusLine: DangerousToolSupport.exitStatusLine(code))
+    case .signaled(let signal):
+      return outcomePayload(result, statusLine: "killed by signal \(signal)")
+    case .timedOut:
+      return outcomePayload(
+        result,
+        statusLine: "timed out after \(timeoutSeconds)s",
+        notes: ["The command was killed at its timeout; anything above is partial output."],
+        status: .error
+      )
+    case .cancelled:
+      return errorPayload("The bash command was cancelled before it finished.")
+    case .startFailed(let reason):
+      return errorPayload("bash could not start \(config.shellPath): \(reason)")
+    }
+  }
+
+  func outcomePayload(
+    _ result: LocalCommandResult,
+    statusLine: String,
+    notes: [String] = [],
+    status: ToolObservationStatus = .ok
+  ) -> ToolPayload {
+    DangerousToolSupport.outcomePayload(
+      DangerousToolSupport.CommandOutcome(
+        statusLine: statusLine,
+        stdout: Self.text(result.stdout),
+        stderr: Self.text(result.stderr),
+        notes: notes,
+        truncatedRawStreams: result.stdout.truncated || result.stderr.truncated,
+        status: status
+      ),
+      redactor: redactor
+    )
+  }
+
+  // Lossy on purpose: a command is free to emit bytes that are not UTF-8, and dropping the whole
+  // stream over one of them would hide the output the model was asked to read.
+  static func text(_ stream: CapturedCommandStream) -> String {
+    // swiftlint:disable:next optional_data_string_conversion
+    String(decoding: stream.bytes, as: UTF8.self)
+  }
+
+  func errorPayload(_ reason: String) -> ToolPayload {
+    DangerousToolSupport.errorPayload(reason, redactor: redactor)
   }
 }

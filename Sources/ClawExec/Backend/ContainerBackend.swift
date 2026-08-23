@@ -16,7 +16,7 @@ public actor ContainerBackend {
     ]
   )
 
-  public static let maxRawStreamBytes = 1024 * 1024
+  public static let maxRawStreamBytes = LocalCommandLimits.maxRawStreamBytes
   public static let maxControlStreamBytes = 1024 * 1024
 
   public static let teardownAllowance: Duration = .seconds(20)
@@ -24,7 +24,7 @@ public actor ContainerBackend {
   public static let ordinaryCommandTimeout: Duration = .seconds(15)
   public static let pullTimeout: Duration = .seconds(120)
   public static let prepareTimeout: Duration = .seconds(300)
-  static let commandTeardownGrace: Duration = .seconds(2)
+  static let commandTeardownGrace = LocalCommandLimits.teardownGracePeriod
   // Head start the host watchdog grants the runner's own timeout + teardown, so in the
   // cooperative case the runner always reports its typed outcome before the watchdog fires.
   static let hostWatchdogSlack: Duration = .seconds(2)

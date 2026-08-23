@@ -637,7 +637,8 @@ extension ExecuteCodeToolTests {
 
     // then
     #expect(
-      payload.content.components(separatedBy: ExecuteCodeTool.rawOutputTruncationNotice).count - 1
+      payload.content.components(separatedBy: DangerousToolSupport.rawOutputTruncationNotice).count
+        - 1
         == 1
     )
     #expect(payload.content.contains(ToolOutputCap.truncationMarker) == false)

@@ -1,4 +1,6 @@
 import ClawCore
+import ClawProcess
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -12,7 +14,8 @@ import Testing
     shellPath: String = "/bin/zsh",
     defaultTimeoutSeconds: Int = 30,
     maxTimeoutSeconds: Int = 300,
-    secrets: [String] = []
+    secrets: [String] = [],
+    runner: any LocalCommandRunning = NoopCommandRunner()
   ) -> BashTool {
     BashTool(
       workspaceRoot: URL(fileURLWithPath: root, isDirectory: true),
@@ -22,8 +25,23 @@ import Testing
         defaultTimeoutSeconds: defaultTimeoutSeconds,
         maxTimeoutSeconds: maxTimeoutSeconds
       ),
+      runner: runner,
       redactor: SecretRedactor(secretValues: secrets)
     )
+  }
+
+  private func recordedInvocation(
+    tool: BashTool,
+    command: String,
+    timeoutSeconds: Int? = nil
+  ) async throws -> (JSONValue, String) {
+    let action = try prepared(
+      await tool.prepareAction(
+        arguments: arguments(command: command, timeoutSeconds: timeoutSeconds)
+      )
+    )
+    let recorded = try #require(JSONValue.parse(action.canonicalArgsJSON))
+    return (recorded, action.canonicalTarget)
   }
 
   private func arguments(command: String, timeoutSeconds: Int? = nil) -> JSONValue {
@@ -275,5 +293,189 @@ import Testing
 
     // then
     #expect(timeout > .seconds(120))
+  }
+}
+
+extension BashToolTests {
+  @Test func aSuccessfulCommandReportsItsExitCodeAndBothStreams() async throws {
+    // given
+    let runner = ScriptedCommandRunner(
+      result: commandResult(.exited(0), stdout: "listing", stderr: "warning")
+    )
+    let tool = makeTool(runner: runner)
+    let (recorded, target) = try await recordedInvocation(tool: tool, command: "ls")
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.ingestedUntrusted)
+    #expect(payload.readPrivateData == false)
+    #expect(payload.content.contains("exit 0"))
+    #expect(payload.content.contains("listing"))
+    #expect(payload.content.contains("warning"))
+  }
+
+  @Test func theLaunchedCommandRunsTheShellAtTheWorkspaceRootWithoutClawVariables() async throws {
+    // given
+    let runner = ScriptedCommandRunner(result: commandResult(.exited(0)))
+    let tool = makeTool(root: "/tmp/claw-root", runner: runner)
+    let (recorded, target) = try await recordedInvocation(
+      tool: tool,
+      command: "env",
+      timeoutSeconds: 12
+    )
+
+    // when
+    _ = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    let launched = try #require(await runner.recorded().first)
+    #expect(launched.arguments == ["-c", "env"])
+    #expect(launched.workingDirectory == "/tmp/claw-root")
+    #expect(launched.timeout == .seconds(12))
+    #expect(launched.environment.removes("CLAW_TELEGRAM_BOT_TOKEN"))
+    #expect(launched.environment.removes("CLAW_LLM_API_KEY"))
+    #expect(launched.environment.removes("PATH") == false)
+  }
+
+  @Test func aFailingCommandIsAnObservationNotAToolFault() async throws {
+    // given
+    let runner = ScriptedCommandRunner(
+      result: commandResult(.exited(2), stdout: "", stderr: "no such file")
+    )
+    let tool = makeTool(runner: runner)
+    let (recorded, target) = try await recordedInvocation(tool: tool, command: "cat missing")
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.content.contains("exit 2"))
+    #expect(payload.content.contains("no such file"))
+  }
+
+  @Test func aTimeoutKeepsThePartialOutputAndStatesTheReason() async throws {
+    // given
+    let runner = ScriptedCommandRunner(
+      result: commandResult(.timedOut, stdout: "first line", stderr: "")
+    )
+    let tool = makeTool(runner: runner)
+    let (recorded, target) = try await recordedInvocation(
+      tool: tool,
+      command: "sleep 999",
+      timeoutSeconds: 5
+    )
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("timed out after 5s"))
+    #expect(payload.content.contains("first line"))
+    #expect(payload.content.contains("partial output"))
+  }
+
+  @Test func aMissingShellReportsOwnerFacingCopy() async throws {
+    // given
+    let runner = ScriptedCommandRunner(
+      result: commandResult(.startFailed("executable not found"))
+    )
+    let tool = makeTool(shellPath: "/opt/nowhere/zsh", runner: runner)
+    let (recorded, target) = try await recordedInvocation(tool: tool, command: "ls")
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("could not start"))
+    #expect(payload.content.contains("/opt/nowhere/zsh"))
+  }
+
+  @Test func aCancelledCommandReportsOwnerFacingCopy() async throws {
+    // given
+    let runner = ScriptedCommandRunner(result: commandResult(.cancelled))
+    let tool = makeTool(runner: runner)
+    let (recorded, target) = try await recordedInvocation(tool: tool, command: "sleep 5")
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("cancelled"))
+  }
+
+  @Test func aTargetThatNoLongerMatchesTheApprovedShellRunsNothing() async throws {
+    // given
+    let runner = ScriptedCommandRunner(result: commandResult(.exited(0)))
+    let approvingTool = makeTool(shellPath: "/bin/zsh", runner: runner)
+    let (recorded, target) = try await recordedInvocation(tool: approvingTool, command: "ls")
+    let executingTool = makeTool(shellPath: "/bin/bash", runner: runner)
+
+    // when
+    let payload = await executingTool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("no longer matches"))
+    #expect(await runner.recorded().isEmpty)
+  }
+
+  @Test func rawStreamOverflowCarriesOneNoticeAndTheOutputCapAppliesOnce() async throws {
+    // given
+    let secret = String(repeating: "boundary-secret-value-", count: 20)
+    let overflowing =
+      String(repeating: "x", count: ToolOutputCap.maxGraphemes - 100) + secret
+      + String(repeating: "y", count: 1_000)
+    let runner = ScriptedCommandRunner(
+      result: commandResult(
+        .exited(0),
+        stdout: Data(overflowing.utf8),
+        stdoutTotal: overflowing.utf8.count + 1,
+        stdoutTruncated: true
+      )
+    )
+    let tool = makeTool(secrets: [secret], runner: runner)
+    let (recorded, target) = try await recordedInvocation(tool: tool, command: "cat big.log")
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.content.contains(secret) == false)
+    #expect(payload.content.contains(SecretRedactor.replacement))
+    #expect(
+      payload.content.components(separatedBy: ToolOutputCap.truncationMarker).count - 1 == 1
+    )
+    #expect(payload.content.count <= ToolOutputCap.maxGraphemes)
+  }
+
+  @Test func theRawTruncationNoticeIsAddedOnlyWhenAStreamWasCut() async throws {
+    // given
+    let runner = ScriptedCommandRunner(
+      result: commandResult(
+        .exited(0),
+        stdout: Data("short".utf8),
+        stdoutTotal: 4_096,
+        stdoutTruncated: true
+      )
+    )
+    let tool = makeTool(runner: runner)
+    let (recorded, target) = try await recordedInvocation(tool: tool, command: "cat big.log")
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(
+      payload.content.components(separatedBy: DangerousToolSupport.rawOutputTruncationNotice)
+        .count - 1 == 1
+    )
+    #expect(payload.content.contains(ToolOutputCap.truncationMarker) == false)
   }
 }

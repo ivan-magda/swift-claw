@@ -1,45 +1,11 @@
 import ClawCore
 import ClawProcess
+import ClawTestSupport
 import Foundation
 import Synchronization
 import Testing
 
 @testable import ClawExec
-
-/// Records every command it receives and answers each one through the scripted handler,
-/// which also sees the history recorded so far (including the current command).
-actor ScriptedCommandRunner: LocalCommandRunning {
-  typealias Handler =
-    @Sendable (LocalCommand, [LocalCommand]) async -> LocalCommandResult
-
-  private let handler: Handler
-  private var commands: [LocalCommand] = []
-  private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
-
-  init(handler: @escaping Handler) {
-    self.handler = handler
-  }
-
-  func run(_ command: LocalCommand) async -> LocalCommandResult {
-    commands.append(command)
-    let history = commands
-    let ready = waiters.filter { history.count >= $0.0 }
-    waiters.removeAll { history.count >= $0.0 }
-    for waiter in ready {
-      waiter.1.resume()
-    }
-    return await handler(command, history)
-  }
-
-  func recorded() -> [LocalCommand] { commands }
-
-  func waitForCount(_ count: Int) async {
-    if commands.count >= count { return }
-    await withCheckedContinuation { continuation in
-      waiters.append((count, continuation))
-    }
-  }
-}
 
 /// Parks callers until released; `wait()` deliberately never observes cancellation so tests
 /// can wedge a scripted runner, and `open()` is synchronous so a test's `defer` can always
@@ -72,31 +38,6 @@ final class WedgeGate: @unchecked Sendable {
       waiter.resume()
     }
   }
-}
-
-func commandResult(
-  _ termination: LocalCommandTermination,
-  stdout: Data = Data(),
-  stderr: Data = Data(),
-  stdoutTotal: Int? = nil,
-  stderrTotal: Int? = nil,
-  stdoutTruncated: Bool = false,
-  stderrTruncated: Bool = false
-) -> LocalCommandResult {
-  LocalCommandResult(
-    termination: termination,
-    stdout: CapturedCommandStream(
-      bytes: stdout,
-      totalBytes: stdoutTotal ?? stdout.count,
-      truncated: stdoutTruncated
-    ),
-    stderr: CapturedCommandStream(
-      bytes: stderr,
-      totalBytes: stderrTotal ?? stderr.count,
-      truncated: stderrTruncated
-    ),
-    processIdentifier: 42
-  )
 }
 
 func jsonCommandResult(_ json: String) -> LocalCommandResult {
@@ -234,17 +175,6 @@ final class SteppingNowSource: @unchecked Sendable {
     defer { lock.unlock() }
     calls += 1
     return calls == 1 ? base : base.advanced(by: .seconds(3600))
-  }
-}
-
-struct NoopCommandRunner: LocalCommandRunning {
-  func run(_ command: LocalCommand) async -> LocalCommandResult {
-    LocalCommandResult(
-      termination: .exited(0),
-      stdout: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
-      stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
-      processIdentifier: 1
-    )
   }
 }
 

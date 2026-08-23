@@ -27,9 +27,21 @@ public struct LocalCommandEnvironment: Sendable, Equatable {
     self.removedPrefixes = removedPrefixes
   }
 
-  func removes(_ key: String) -> Bool {
+  /// Whether this policy drops `key` from the child's environment.
+  public func removes(_ key: String) -> Bool {
     removedKeys.contains(key) || removedPrefixes.contains { key.hasPrefix($0) }
   }
+}
+
+/// Launcher-side bounds every caller shares, so a capture limit or a teardown grace cannot drift
+/// between the sandbox and a host tool.
+public enum LocalCommandLimits {
+  /// Bytes kept per stream before the launcher stops appending; the counter keeps running so the
+  /// caller can still tell the output was cut.
+  public static let maxRawStreamBytes = 1024 * 1024
+  public static let maxRawStreamMiB = maxRawStreamBytes / (1024 * 1024)
+  /// How long a terminating process group has to leave on its own before the launcher stops waiting.
+  public static let teardownGracePeriod: Duration = .seconds(2)
 }
 
 public struct LocalCommand: Sendable, Equatable {

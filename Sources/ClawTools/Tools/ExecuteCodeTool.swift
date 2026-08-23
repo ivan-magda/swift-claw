@@ -20,8 +20,6 @@ public struct ExecuteCodeTool: Tool {
   public static let maxStagedFileBytes = ExecStagingLimits.standard.maxStagedFileBytes
   public static let maxStagedTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes
   public static let maxStagedFiles = ExecStagingLimits.standard.maxStagedFiles
-  public static let rawOutputTruncationNotice =
-    "[raw output truncated after the first 1 MiB of one or more streams]"
 
   let workspaceRoot: URL
   let backend: any ExecutionBackend
@@ -643,25 +641,15 @@ private extension ExecuteCodeTool {
   func map(result: ExecutionResult, readsPrivateData: Bool) -> ToolPayload {
     switch result.terminationReason {
     case .exited(let code):
-      let stdout = redactor.redact(result.stdout)
-      let stderr = redactor.redact(result.stderr)
-      var content = """
-        exit \(code)
-        --- stdout ---
-        \(stdout)
-        --- stderr ---
-        \(stderr)
-        """
-      if code == 137 {
-        content += "\n" + Self.memoryCapHint
-      }
-      if result.truncatedRawBytes {
-        content += "\n" + Self.rawOutputTruncationNotice
-      }
-      return ToolPayload(
-        content: ToolOutputCap.cap(content),
-        status: .ok,
-        ingestedUntrusted: true,
+      return DangerousToolSupport.outcomePayload(
+        DangerousToolSupport.CommandOutcome(
+          statusLine: DangerousToolSupport.exitStatusLine(code),
+          stdout: result.stdout,
+          stderr: result.stderr,
+          notes: code == 137 ? [Self.memoryCapHint] : [],
+          truncatedRawStreams: result.truncatedRawBytes
+        ),
+        redactor: redactor,
         readPrivateData: readsPrivateData
       )
     case .timedOutKilled:
