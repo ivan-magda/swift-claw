@@ -220,6 +220,9 @@ public struct AgentRuntime: Sendable {
     buildResult: BuildResult,
     sessionTainted: Bool,
     sessionHasPrivateData: Bool,
+    // Defaults CLOSED: a caller that carries no window state must let the gate park its approval,
+    // never widen one it cannot vouch for.
+    autoApproveWindowOpen: Bool = false,
     todayTokens: Int,
     todayUSD: Double,
     origin: RunOrigin = .interactive,
@@ -478,7 +481,8 @@ public struct AgentRuntime: Sendable {
           runPrivateData: runPrivateData,
           sessionHasPrivateData: sessionHasPrivateData,
           approvalAlreadyPending: pendingSuspension != nil,
-          runOrigin: origin
+          runOrigin: origin,
+          autoApproveWindowOpen: autoApproveWindowOpen
         )
 
         guard let toolDispatcher else {

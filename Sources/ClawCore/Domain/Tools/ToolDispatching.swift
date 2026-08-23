@@ -15,6 +15,10 @@ public struct ToolDispatchContext: Sendable, Equatable {
   /// Which pathway created the run, so the gate can refuse a tool that needs the owner present
   /// (`ToolDefinition.requiresInteractiveRun`) instead of parking an approval nobody will answer.
   public let runOrigin: RunOrigin
+  /// Whether the run carries an open turn-scoped auto-approve window. The owner opened it on one
+  /// approval prompt, so only an action whose `ApprovalReason.offersTurnScopedWindow` is true may
+  /// ride it, and only after the same argument scans a parked call takes.
+  public let autoApproveWindowOpen: Bool
 
   public init(
     sessionTainted: Bool,
@@ -23,7 +27,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
     runPrivateData: Bool,
     sessionHasPrivateData: Bool,
     approvalAlreadyPending: Bool,
-    runOrigin: RunOrigin
+    runOrigin: RunOrigin,
+    autoApproveWindowOpen: Bool
   ) {
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
@@ -32,6 +37,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.sessionHasPrivateData = sessionHasPrivateData
     self.approvalAlreadyPending = approvalAlreadyPending
     self.runOrigin = runOrigin
+    self.autoApproveWindowOpen = autoApproveWindowOpen
   }
 }
 

@@ -156,6 +156,7 @@ public struct TurnRunner: TurnDispatching {
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
       sessionHasPrivateData: inputs.snapshot.hasPrivateData,
+      autoApproveWindowOpen: autoApproveWindowOpen(runId: runId),
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
       origin: origin,
@@ -189,15 +190,7 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let origin: RunOrigin
-    do {
-      guard let resolvedOrigin = try runs.runOrigin(runId: runId) else {
-        logger.debug("run \(runId) has no origin at resume; skipping")
-        return
-      }
-      origin = resolvedOrigin
-    } catch {
-      logger.error("resume origin read failed for run \(runId): \(error)")
+    guard let origin = resumeOrigin(runId: runId) else {
       return
     }
 
@@ -226,6 +219,7 @@ public struct TurnRunner: TurnDispatching {
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
         sessionHasPrivateData: inputs.snapshot.hasPrivateData,
+        autoApproveWindowOpen: autoApproveWindowOpen(runId: runId),
         todayTokens: inputs.todayTokens,
         todayUSD: inputs.todayUSD,
         origin: origin,
@@ -248,6 +242,38 @@ public struct TurnRunner: TurnDispatching {
       )
     } catch {
       logger.error("resume commit failed for run \(runId): \(error)")
+    }
+  }
+}
+
+// MARK: - Per-Run Turn Inputs
+
+private extension TurnRunner {
+  /// The run's origin, read without a re-pick-up. A missing or unreadable origin ends the resume:
+  /// the prompt wording, the budget pool, and the gate's owner-present check all key on it, so
+  /// guessing one would resume the turn under the wrong policy.
+  func resumeOrigin(runId: Int64) -> RunOrigin? {
+    do {
+      guard let origin = try runs.runOrigin(runId: runId) else {
+        logger.debug("run \(runId) has no origin at resume; skipping")
+        return nil
+      }
+      return origin
+    } catch {
+      logger.error("resume origin read failed for run \(runId): \(error)")
+      return nil
+    }
+  }
+
+  /// Reads the run's turn-scoped window for the gate. Both entry points ask, so the widening is a
+  /// property of the run rather than of how the turn started; a read that fails reports closed,
+  /// which costs the owner one more prompt and never one fewer.
+  func autoApproveWindowOpen(runId: Int64) -> Bool {
+    do {
+      return try runs.isAutoApproveWindowOpen(runId: runId)
+    } catch {
+      logger.error("auto-approve window read failed for run \(runId): \(error)")
+      return false
     }
   }
 }

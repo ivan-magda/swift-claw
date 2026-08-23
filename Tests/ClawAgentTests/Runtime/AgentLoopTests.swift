@@ -11,7 +11,8 @@ import Testing
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
     origin: RunOrigin = .interactive,
-    proactiveTodayUSD: Double = 0
+    proactiveTodayUSD: Double = 0,
+    autoApproveWindowOpen: Bool = false
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
       runId: 1,
@@ -20,6 +21,7 @@ import Testing
       buildResult: buildResult,
       sessionTainted: sessionTainted,
       sessionHasPrivateData: false,
+      autoApproveWindowOpen: autoApproveWindowOpen,
       todayTokens: 0,
       todayUSD: 0,
       origin: origin,
@@ -173,6 +175,32 @@ import Testing
 
     // then
     #expect(await dispatcher.records.first?.context.runOrigin == origin)
+  }
+
+  @Test(arguments: [true, false])
+  func everyDispatchCarriesTheRunsAutoApproveWindow(windowOpen: Bool) async throws {
+    // given
+    let definition = ToolDefinition(
+      name: "bash",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .dangerous,
+      requiresInteractiveRun: true
+    )
+    let provider = SequenceProvider([
+      toolCallResponse([ToolCall(id: "c1", name: definition.name, argumentsJSON: "{}")]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    _ = try await run(runtime, autoApproveWindowOpen: windowOpen)
+
+    // then — the gate decides whether to widen, but only the run can say the window is open
+    #expect(await dispatcher.records.first?.context.autoApproveWindowOpen == windowOpen)
   }
 
   @Test func liveObservationsFenceUnderTheToolsDeclaredLabel() async throws {

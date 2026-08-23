@@ -588,6 +588,7 @@ private func makeContextBuilder(
 
 func makeEnv(
   agentOutcome: StubLLMProvider.Outcome,
+  toolDispatcher: (any ToolDispatching)? = nil,
   runs: (any RunStore)? = nil,
   runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
   contextBuilder: ContextBuilder? = nil,
@@ -640,6 +641,7 @@ func makeEnv(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: budget,
+    toolDispatcher: toolDispatcher,
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()
@@ -1292,6 +1294,73 @@ private func okResponse(content: String) -> ChatResponse {
     let counts = try heartbeatAuditCounts(env.queue)
     #expect(counts.suppressed == 0)
     #expect(counts.fired == 0)
+  }
+
+  @Test func resumeCarriesTheRunsOpenAutoApproveWindowIntoDispatch() async throws {
+    // given — a run the owner approved with the turn-scoped window, resuming into a tool call
+    let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
+    let definition = ToolDefinition(
+      name: "bash",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .dangerous,
+      requiresInteractiveRun: true
+    )
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let env = try makeEnv(
+      agentOutcome: .respond(
+        toolCallResponse([ToolCall(id: "b1", name: "bash", argumentsJSON: "{}")])
+      ),
+      toolDispatcher: dispatcher,
+      now: { fixedNow }
+    )
+    let observationMessageId = try await suspendOnAGatedFetchThenApprove(env: env, now: fixedNow)
+    let runs = RunStoreGRDB(writer: env.queue)
+    #expect(try runs.openAutoApproveWindow(runId: env.runId, now: fixedNow))
+
+    // when
+    await env.runner.resume(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      contextBoundMessageId: observationMessageId
+    )
+
+    // then — the durable window reached the gate's inputs, so the turn's later host calls widen
+    #expect(await dispatcher.records.first?.context.autoApproveWindowOpen == true)
+  }
+
+  @Test func aFreshRunDispatchesWithTheWindowClosed() async throws {
+    // given — a pick-up carries no approval of its own, so nothing may ride a window
+    let definition = ToolDefinition(
+      name: "bash",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .dangerous,
+      requiresInteractiveRun: true
+    )
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let env = try makeEnv(
+      agentOutcome: .respond(
+        toolCallResponse([ToolCall(id: "b1", name: "bash", argumentsJSON: "{}")])
+      ),
+      toolDispatcher: dispatcher
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    #expect(await dispatcher.records.first?.context.autoApproveWindowOpen == false)
   }
 
   @Test func scheduledRunResumesUnderTheProactivePromptWithoutRecall() async throws {

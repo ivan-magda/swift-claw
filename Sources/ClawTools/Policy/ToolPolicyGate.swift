@@ -10,6 +10,9 @@ public struct ToolPolicyGate: Sendable {
     /// dispatcher hands its target into `execute` so the tool acts on exactly the form the gate
     /// authorized; `nil` for the other classes.
     case allow(argsRedacted: String, action: ToolAction?)
+    /// A dangerous action the run's open turn-scoped window already authorized: it runs now, on
+    /// the canonical args the tool prepared and the guards scanned, never on the model's raw ones.
+    case allowPrepared(recorded: RecordedToolAction, argsRedacted: String)
     case block(payload: ToolPayload, argsRedacted: String)
     /// An ask-tier action parked for the owner's durable approval. Carries the recorded
     /// canonical args the suspend commit persists and the resume replays.
@@ -427,7 +430,16 @@ private extension ToolPolicyGate {
       reason: prepared.approvalReason,
       presentation: prepared.presentation
     )
-    return .requireApproval(recorded: recorded)
+
+    // The window widens only the reason the owner was offered it on, and only past the scans
+    // above: the guards run on a window-approved command exactly as they do on a parked one.
+    guard context.autoApproveWindowOpen, prepared.approvalReason.offersTurnScopedWindow else {
+      return .requireApproval(recorded: recorded)
+    }
+    return .allowPrepared(
+      recorded: recorded,
+      argsRedacted: argGuard.renderRedacted(argsJSON: prepared.canonicalArgsJSON)
+    )
   }
 
   func dangerousBlock(reason: String, call: ToolCall) -> Verdict {
@@ -496,6 +508,21 @@ public struct GatedToolDispatcher: ToolDispatching {
         ),
         argsRedacted: gate.renderRedacted(argsJSON: recorded.canonicalArgsJSON),
         requiresApproval: recorded
+      )
+    case .allowPrepared(let recorded, let argsRedacted):
+      // (4) the same execution an approval resume would replay: the recorded canonical args on
+      // the recorded target, so a widened call and an approved one act on identical inputs.
+      guard let preparedArguments = JSONValue.parse(recorded.canonicalArgsJSON) else {
+        return errorOutcome(call: call, reason: "The prepared \(call.name) action is unreadable.")
+      }
+      let payload = await executeWithTimeout(
+        tool: tool,
+        arguments: preparedArguments,
+        canonicalTarget: recorded.canonicalTarget
+      )
+      return ToolDispatchOutcome(
+        observation: ToolObservation(call: call, payload: payload),
+        argsRedacted: argsRedacted
       )
     case .allow(let argsRedacted, let action):
       // (4) execute under the tool's own timeout, on the gate-resolved canonical target
