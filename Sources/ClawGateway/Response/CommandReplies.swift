@@ -1,3 +1,5 @@
+import ClawCore
+
 public enum CommandReplies {
   public static let stopped = "Stopped."
   public static let nothingToStop = "Nothing to stop."
@@ -30,4 +32,25 @@ public enum CommandReplies {
     draft. /stop and /new act on this chat only, never on scheduled job sessions. \
     Stop a job's future fires with /cancel <id>.
     """
+
+  /// The room's manual. It lists only what a topic can actually use: the owner-scoped families are
+  /// refused here, and no confirmation can park in a room, so printing either would document a
+  /// surface an attendee is then told off for touching.
+  static let groupHelp = """
+    Commands:
+    /new: fresh conversation in this topic · /stop: stop the current run
+    /status: daemon health (also /doctor) · /mcp: MCP server status
+    /skills: accepted and rejected workspace skills
+
+    Mention me or reply to me to ask something; I read the topic either way.
+    Memory and schedules live in my owner's direct chat, not here.
+    """
+
+  /// The manual this conversation can act on.
+  static func help(mode: ChatMode) -> String {
+    switch mode {
+    case .direct: help
+    case .group: groupHelp
+    }
+  }
 }

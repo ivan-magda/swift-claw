@@ -225,20 +225,26 @@ extension ProviderDeadlineCoordinator {
   /// send outlives its turn: whichever finishes first wins, the loser is cancelled, and the group
   /// drains it before returning. The send must observe cancellation for the abandon to be prompt —
   /// production sinks do; a sink that ignores it is bounded only by `timeout` having already elapsed.
-  static func sendBounded(
+  ///
+  /// Returns what the send reported, or nil when the deadline won — so a caller that acts on the
+  /// send's own answer can tell "it said no" from "it never answered".
+  @discardableResult
+  static func sendBounded<Value: Sendable>(
     timeout: Duration,
     clock: any Clock<Duration>,
-    send: @escaping @Sendable () async -> Void
-  ) async {
-    await withTaskGroup(of: Void.self) { group in
+    send: @escaping @Sendable () async -> Value
+  ) async -> Value? {
+    await withTaskGroup(of: Value?.self) { group in
       group.addTask {
         await send()
       }
       group.addTask {
         try? await clock.sleep(for: timeout)
+        return nil
       }
-      _ = await group.next()
+      let first = await group.next() ?? nil
       group.cancelAll()
+      return first
     }
   }
 }

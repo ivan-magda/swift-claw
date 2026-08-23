@@ -30,9 +30,4 @@ public enum ChatKind: Sendable, Equatable {
     case .other(let value): value
     }
   }
-
-  /// True for the two shapes a human conversation can take outside a DM.
-  public var isGroupChat: Bool {
-    self == .group || self == .supergroup
-  }
 }

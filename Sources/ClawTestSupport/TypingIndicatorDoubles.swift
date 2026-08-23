@@ -69,3 +69,23 @@ public actor GatingTyping: TypingIndicator {
     await gate.release()
   }
 }
+
+/// Records typing pulses and releases `gate` once the requested count has been reached.
+public actor CountingReleaseTyping: TypingIndicator {
+  public private(set) var pulses: [RecordingTyping.Pulse] = []
+
+  private let releaseAfter: Int
+  private let gate: TypingReleaseGate
+
+  public init(releaseAfter: Int, gate: TypingReleaseGate) {
+    self.releaseAfter = releaseAfter
+    self.gate = gate
+  }
+
+  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
+    pulses.append(RecordingTyping.Pulse(chatId: chatId, messageThreadId: messageThreadId))
+    if pulses.count >= releaseAfter {
+      await gate.release()
+    }
+  }
+}

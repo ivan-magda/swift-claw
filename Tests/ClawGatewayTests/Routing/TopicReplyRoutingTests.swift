@@ -37,7 +37,7 @@ import Testing
     // then
     #expect(outcome == .processed)
     let sent = try #require(await harness.transport.sent.first)
-    #expect(sent.text == CommandReplies.help)
+    #expect(sent.text == CommandReplies.help(mode: .group))
     #expect(
       sent.target
         == DeliveryTarget(

@@ -18,15 +18,6 @@ import Testing
     // then — it keeps the raw string and stays out of the DM case
     #expect(kind == .other("hyperforum"))
     #expect(kind != .private)
-    #expect(kind.isGroupChat == false)
-  }
-
-  @Test func onlyGroupAndSupergroupCountAsGroupChats() {
-    // given / when / then
-    #expect(ChatKind.group.isGroupChat)
-    #expect(ChatKind.supergroup.isGroupChat)
-    #expect(ChatKind.private.isGroupChat == false)
-    #expect(ChatKind.channel.isGroupChat == false)
   }
 
   @Test func apiValueRoundTrips() {

@@ -95,8 +95,7 @@ struct TurnDispatch: Sendable {
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     text: String,
-    mode: ChatMode,
-    source: Provenance = .trusted
+    mode: ChatMode
   ) async -> HandleOutcome {
     let inbound = InboundMessage(
       updateId: rawUpdate.updateId,
@@ -105,7 +104,7 @@ struct TurnDispatch: Sendable {
       userId: message.userId,
       text: mode.transcriptText(text, author: TranscriptAuthor(message: message)),
       isEdited: message.isEdited,
-      provenance: mode.storedProvenance(of: source),
+      provenance: mode.storedProvenance(of: .trusted),
       telegramMessageId: message.messageId,
       ts: now()
     )

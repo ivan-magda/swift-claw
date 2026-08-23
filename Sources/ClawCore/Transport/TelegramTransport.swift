@@ -104,22 +104,16 @@ extension MessageDelivery {
 }
 
 public protocol RichDraftStreaming: Sendable {
-  /// `messageThreadId` names the forum topic the draft belongs to, absent in a DM.
-  func sendDraft(
-    chatId: Int64,
-    messageThreadId: Int64?,
-    draftId: Int64,
-    markdown: String
-  ) async
+  /// Returns whether the draft actually reached the chat. The caller uses that to decide whether
+  /// the draft bubble has taken over as the turn's progress signal — a sink that drops the draft
+  /// (Telegram accepts one only in a private chat) must not silence the typing pulse behind it.
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool
 }
 
 public struct NoopRichDraftStreaming: RichDraftStreaming {
   public init() {}
 
-  public func sendDraft(
-    chatId: Int64,
-    messageThreadId: Int64?,
-    draftId: Int64,
-    markdown: String
-  ) async {}
+  public func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool {
+    false
+  }
 }

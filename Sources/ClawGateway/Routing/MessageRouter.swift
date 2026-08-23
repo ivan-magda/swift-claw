@@ -340,7 +340,8 @@ private extension MessageRouter {
     // After both guards, so neither a stranger nor a disabled service is ever told the bot is
     // awake. Whether the pulse lands is not checked and cannot be: the action auto-expires
     // server-side, so one that never arrives is no reason to fail a photo the owner is waiting on.
-    await typing?.sendTyping(chatId: message.chatId)
+    let target = DeliveryTarget.reply(to: message, mode: mode)
+    await typing?.sendTyping(chatId: target.chatId, messageThreadId: target.messageThreadId)
 
     switch await images.materialize(attachment) {
     case .success(let image):
@@ -472,7 +473,7 @@ private extension MessageRouter {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
         target: .reply(to: message, mode: mode),
-        text: CommandReplies.help
+        text: CommandReplies.help(mode: mode)
       )
     case .doctor:
       return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: nil)
