@@ -318,6 +318,69 @@ exit immediately (lock guard).
 
 ---
 
+## Group mode (Telegram forum supergroup)
+
+Off by default. One variable turns it on — a comma-separated list of the chat ids `clawd` should
+serve as a shared room instead of the owner's DM:
+
+```bash
+CLAW_GROUP_CHATS=-1001234567890
+```
+
+**One id covers a whole forum.** Every topic in a forum supergroup shares the supergroup's chat id
+and differs only by `message_thread_id`, so you never list topics — `clawd` keeps one session per
+topic on its own.
+
+In a group the bot reads every message in a topic but answers only when addressed: an `@handle`
+mention, a slash command, or a reply to something it said. Everything else is stored as part of the
+topic's transcript and nothing runs. Tools execute without approval prompts, `/remember`,
+`/memory`, `/schedule`, `/pause`, `/resume`, `/run` and `/cancel` are refused, and recall stays
+inside the topic that asked. `docs/ARCHITECTURE.md` §12.1 is the normative description, including
+what the mode trades away — **use a separate state root from your personal install**, because the
+owner's `MEMORY.md`, `USER.md` and durable facts assemble into a group topic just as they do into
+a DM.
+
+### Onboarding order
+
+The order matters — step 1 cannot be fixed later without removing and re-adding the bot.
+
+1. **Turn privacy mode OFF at BotFather** — `/mybots` → your bot → *Bot Settings* → *Group Privacy*
+   → *Turn off*. With privacy mode on, Telegram delivers only commands and replies, so the bot
+   cannot follow a conversation. Changing this **after** the bot has joined does not take effect
+   until it is removed and added again. (Making the bot a group administrator is the alternative,
+   and grants far more than reading.)
+2. **Add the bot to the group.** It stays silent: an unlisted chat is ignored without a reply, so
+   it never announces itself to a room it was added to uninvited.
+3. **Read the chat id from the log.** Being added logs a line naming the room and its id:
+
+   ```
+   someone added the bot to chat -1001234567890 "iOS Crew" (supergroup): left → member
+   ```
+
+   A message sent in the room before it is configured logs the id too:
+
+   ```
+   ignoring update 42 from unlisted chat -1001234567890 "iOS Crew" (supergroup)
+   ```
+
+4. **Put the id in `CLAW_GROUP_CHATS`** in `~/.swift-claw/clawd.env`.
+5. **Restart the daemon.** The list is read at boot only.
+
+Verify with `doctor` — the `group.mode` row reports `off`, or `on (1 chat)` / `on (N chats)`:
+
+```bash
+.build/debug/clawd doctor --check-config | grep group.mode
+```
+
+A daemon configured with group chats **refuses to start** if it cannot resolve its own `@handle`
+from Telegram, since that name is how it recognizes being addressed.
+
+If Telegram upgrades the group to a supergroup, the chat id changes and the old one stops existing.
+The daemon logs an error naming the new id and goes quiet in that room; edit `CLAW_GROUP_CHATS` and
+restart. It will never re-point an access grant on its own.
+
+---
+
 ## ChatGPT subscription auth
 
 An optional route that runs an eligible OpenAI model against a ChatGPT

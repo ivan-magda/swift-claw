@@ -412,7 +412,7 @@ private extension MessageRouter {
       let title = message.chatTitle ?? "(untitled)"
       logger.info(
         """
-        ignoring update \(rawUpdate.updateId) from unlisted chat \(message.chatId)         "\(title)" (\(message.chatKind.apiValue))
+        ignoring update \(rawUpdate.updateId) from unlisted chat \(message.chatId) "\(title)" (\(message.chatKind.apiValue))
         """
       )
       return .skipped
