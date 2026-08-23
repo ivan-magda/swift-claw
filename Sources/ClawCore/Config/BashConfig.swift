@@ -12,6 +12,18 @@ public struct BashConfig: Sendable, Equatable {
   public let defaultTimeoutSeconds: Int
   public let maxTimeoutSeconds: Int
 
+  public init(
+    enabled: Bool,
+    shellPath: String,
+    defaultTimeoutSeconds: Int,
+    maxTimeoutSeconds: Int
+  ) {
+    self.enabled = enabled
+    self.shellPath = shellPath
+    self.defaultTimeoutSeconds = defaultTimeoutSeconds
+    self.maxTimeoutSeconds = maxTimeoutSeconds
+  }
+
   public static let disabledDefault = BashConfig(
     enabled: false,
     shellPath: AppConfig.EnvDefaults.bashShell,

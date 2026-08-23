@@ -79,7 +79,7 @@ public struct ExecuteCodeTool: Tool {
   }
 
   public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
-    guard let raw = Self.decode(RawArguments.self, from: arguments) else {
+    guard let raw = DangerousToolSupport.decode(RawArguments.self, from: arguments) else {
       return .refused(
         reason: "execute_code needs language, code, stage, and network in their declared types."
       )
@@ -111,7 +111,7 @@ public struct ExecuteCodeTool: Tool {
         readsPrivateData: readsPrivateData(in: loaded),
         stage: loaded.map(\.record)
       )
-      guard let canonicalArgsJSON = Self.canonicalJSON(recorded) else {
+      guard let canonicalArgsJSON = DangerousToolSupport.canonicalJSON(recorded) else {
         return .refused(reason: "The prepared code action could not be encoded safely.")
       }
       let target = Self.canonicalTarget(language: language, canonicalArgsJSON: canonicalArgsJSON)
@@ -131,10 +131,10 @@ public struct ExecuteCodeTool: Tool {
     guard let approvedTarget = canonicalTarget else {
       return errorPayload("execute_code was dispatched without its approved target.")
     }
-    guard let recorded = Self.decode(RecordedArguments.self, from: arguments) else {
+    guard let recorded = DangerousToolSupport.decode(RecordedArguments.self, from: arguments) else {
       return errorPayload("The recorded code action is unreadable; nothing ran.")
     }
-    guard let canonicalArgsJSON = Self.canonicalJSON(recorded) else {
+    guard let canonicalArgsJSON = DangerousToolSupport.canonicalJSON(recorded) else {
       return errorPayload("The recorded code action cannot be re-encoded safely; nothing ran.")
     }
 
@@ -463,17 +463,6 @@ private extension ExecuteCodeTool {
 // MARK: - Canonical Encoding
 
 private extension ExecuteCodeTool {
-  static func decode<Value: Decodable>(_ type: Value.Type, from arguments: JSONValue) -> Value? {
-    guard let data = try? JSONEncoder().encode(arguments) else {
-      return nil
-    }
-    return try? JSONDecoder().decode(type, from: data)
-  }
-
-  static func canonicalJSON<Value: Encodable>(_ value: Value) -> String? {
-    CanonicalJSON.encode(value)
-  }
-
   static func canonicalTarget(language: ExecLanguage, canonicalArgsJSON: String) -> String {
     "code_exec:\(language.rawValue):"
       + String(SHA256Digest.hex(Data(canonicalArgsJSON.utf8)).prefix(16))
@@ -687,11 +676,6 @@ private extension ExecuteCodeTool {
   }
 
   func errorPayload(_ reason: String) -> ToolPayload {
-    ToolPayload(
-      content: redactor.redact(reason),
-      status: .error,
-      ingestedUntrusted: false,
-      readPrivateData: false
-    )
+    DangerousToolSupport.errorPayload(reason, redactor: redactor)
   }
 }
