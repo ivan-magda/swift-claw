@@ -182,7 +182,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     let audit = RecordingAuditLog()
     let callbacks = RecordingCallbacks()
     let coordinator = ApprovalCoordinator()
-    let accessControl = AccessControl(allowlist: allowlist)
+    let accessControl = AccessControl(allowlist: allowlist, groupChats: [])
     let replies = ReplySender(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       delivery: RecordingTransport(),

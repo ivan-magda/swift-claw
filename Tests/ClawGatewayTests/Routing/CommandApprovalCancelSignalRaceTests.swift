@@ -183,7 +183,7 @@ private extension CommandApprovalCancelSignalRaceTests {
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
       botIdentity: BotIdentity(id: 900, username: "claw_bot"),
-      accessControl: AccessControl(allowlist: allowlist),
+      accessControl: AccessControl(allowlist: allowlist, groupChats: []),
       delivery: RecordingTransport(),
       turnRunner: FakeTurnRunner(),
       imageCache: ImageCache(),

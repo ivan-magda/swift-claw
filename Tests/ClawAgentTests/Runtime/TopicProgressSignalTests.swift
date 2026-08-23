@@ -5,6 +5,31 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
+private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
+  private(set) var drafts: [String] = []
+  private(set) var postDraftTypingCount = 0
+  private var postDraftTicks = 0
+
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool {
+    drafts.append(markdown)
+    return true
+  }
+
+  func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
+    if drafts.isEmpty == false {
+      postDraftTypingCount += 1
+    }
+  }
+
+  func advanceProbeTick() -> Bool {
+    guard drafts.isEmpty == false else {
+      return false
+    }
+    postDraftTicks += 1
+    return postDraftTicks >= 20
+  }
+}
+
 /// A turn's cosmetic progress signals have to reach the topic that asked, not the supergroup's
 /// General feed. Telegram takes a draft only in a private chat, so in a topic that leaves the
 /// "typing…" action carrying the whole job — and it has to keep carrying it.
@@ -14,22 +39,6 @@ import Testing
       messages: [ChatMessage(role: .user, content: "hi")],
       ownerNotices: [],
       hasPrivateDataAccess: false
-    )
-  }
-
-  private func streamingProvider(replying content: String) -> StreamingProvider {
-    StreamingProvider(
-      streamScript: .events([
-        .delta(content),
-        .finished(
-          ChatResponse(
-            content: content,
-            finishReason: "stop",
-            usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
-            costFromProvider: 0.001
-          )
-        ),
-      ])
     )
   }
 
@@ -148,14 +157,41 @@ import Testing
   /// The DM counterpart: a delivered draft is the bubble, so it takes the typing action's place
   /// rather than pulsing alongside it.
   @Test func aDirectStreamingDraftSilencesTheTypingPulse() async throws {
-    // given
-    let drafts = RecordingDrafts()
-    let typing = RecordingTyping()
+    // given — hold the stream open for a full typing interval after the first draft lands
+    let terminalGate = TypingReleaseGate()
+    let progress = DirectDraftProgressProbe()
+    let provider = StreamingProvider(
+      streamScript: .gatedBetween(
+        [.delta("hello")],
+        terminalGate,
+        [
+          .finished(
+            ChatResponse(
+              content: "hello",
+              finishReason: "stop",
+              usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
+              costFromProvider: 0.001
+            )
+          )
+        ]
+      )
+    )
+    let clock = ScriptedClock { delay in
+      guard delay == .milliseconds(250) else {
+        try await Task.sleep(for: .seconds(3600))
+        return
+      }
+      if await progress.advanceProbeTick() {
+        await terminalGate.release()
+      }
+      await Task.yield()
+    }
     let runtime = makeRuntime(
-      provider: streamingProvider(replying: "hello"),
-      typing: typing,
-      drafts: drafts,
-      streamingEnabled: true
+      provider: provider,
+      typing: progress,
+      drafts: progress,
+      streamingEnabled: true,
+      clock: clock
     )
 
     // when
@@ -171,9 +207,8 @@ import Testing
     )
 
     // then
-    let sent = await drafts.drafts
+    let sent = await progress.drafts
     #expect(!sent.isEmpty)
-    #expect(sent.allSatisfy { $0.chatId == 42 })
-    #expect(await typing.pulses.allSatisfy { $0.messageThreadId == nil })
+    #expect(await progress.postDraftTypingCount == 0)
   }
 }

@@ -103,10 +103,10 @@ private final class InvocationFlag: @unchecked Sendable {
     #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 
-  @Test func groupModeWithoutABotIdentityFailsTheBootAndClosesAll() async throws {
-    // given — group mode configured, and a `getMe` that answered nothing
+  @Test func groupModeWithAUsernameLessBotIdentityFailsTheBootAndClosesAll() async throws {
+    // given — group mode configured, and `getMe` returned a bot with no username
     let recorder = CloseRecorder()
-    let composition = try composition(
+    var composition = try composition(
       config: config(
         model: "gpt-4o",
         baseURL: "https://api.test/v1",
@@ -119,6 +119,7 @@ private final class InvocationFlag: @unchecked Sendable {
         throw BuildStopped()
       }
     )
+    composition.fetchBotIdentity = { _, _ in BotIdentity(id: 900, username: nil) }
 
     // when / then — the boot fails loudly rather than sitting in a group deaf to every mention,
     // and every already-created client is closed

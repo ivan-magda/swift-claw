@@ -268,7 +268,7 @@ func makeSC7Harness(
     memoryCommands: stores.memoryCommands,
     pendingConfirmations: registry,
     botIdentity: nil,
-    accessControl: AccessControl(allowlist: stores.allowlist),
+    accessControl: AccessControl(allowlist: stores.allowlist, groupChats: []),
     delivery: transport,
     turnRunner: runner,
     imageCache: imageCache,

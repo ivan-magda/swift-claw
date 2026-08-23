@@ -331,9 +331,10 @@ CLAW_GROUP_CHATS=-1001234567890
 and differs only by `message_thread_id`, so you never list topics — `clawd` keeps one session per
 topic on its own.
 
-In a group the bot reads every message in a topic but answers only when addressed: an `@handle`
-mention, a slash command, or a reply to something it said. Everything else is stored as part of the
-topic's transcript and nothing runs. Tools execute without approval prompts, `/remember`,
+In a group the bot follows the text in a topic but answers only when addressed: an `@handle`
+mention, a slash command, or a reply to something it said. Unaddressed text joins the topic's
+transcript without starting a run. The bot does not download, transcribe, or store unaddressed
+media. Tools execute without approval prompts, `/remember`,
 `/memory`, `/schedule`, `/pause`, `/resume`, `/run` and `/cancel` are refused, and recall stays
 inside the topic that asked. `docs/ARCHITECTURE.md` §12.1 is the normative description, including
 what the mode trades away — **use a separate state root from your personal install**, because the

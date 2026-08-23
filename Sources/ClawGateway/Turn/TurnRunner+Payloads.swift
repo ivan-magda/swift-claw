@@ -21,6 +21,7 @@ extension TurnRunner {
     let runId: Int64
     let sessionId: Int64
     let chatId: Int64
+    let mode: ChatMode
     let ownerNotices: [String]
     let origin: RunOrigin
     let committedAt: Date

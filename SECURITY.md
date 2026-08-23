@@ -17,9 +17,13 @@ or the report is declined, with reasoning either way.
 Reports in these areas matter most:
 
 - Bypassing the Telegram allowlist (getting a conversation, or any action, without being allowlisted).
-- Bypassing the approval fabric: a forged or third-party callback that approves an action, or a consequential action that runs without approval.
+- Bypassing the approval fabric in direct mode: a forged or third-party callback that approves an
+  action, or a consequential action that runs without the approval required for its resolved chat
+  mode.
 - Escaping the code-execution sandbox through clawd's integration (host paths, network, or secrets reachable from guest code without the documented opt-ins).
-- Defeating the exfiltration gate or the SSRF blocklist.
+- Defeating the argument scanners, the direct-mode exfiltration approval gate, or the SSRF
+  blocklist. Group mode skips the exfiltration approval round-trip by policy; its argument scanners
+  and SSRF blocklist remain security boundaries.
 - Secret exposure: plaintext at rest where encryption is promised, or secrets surviving log redaction.
 - Prompt injection that crosses a policy enforced in code. Odd or unhelpful model output is not a vulnerability.
 

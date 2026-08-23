@@ -13,7 +13,7 @@ import Testing
   )
   func allowlistMembership(userId: Int64, expected: Bool) {
     // given
-    let access = AccessControl(allowlist: StubAllowlist(allowed: [42]))
+    let access = AccessControl(allowlist: StubAllowlist(allowed: [42]), groupChats: [])
 
     // then
     #expect(access.isAllowed(userId: userId) == expected)
@@ -21,7 +21,7 @@ import Testing
 
   @Test func storeErrorFailsClosed() {
     // given
-    let access = AccessControl(allowlist: ThrowingAllowlist())
+    let access = AccessControl(allowlist: ThrowingAllowlist(), groupChats: [])
 
     // then
     #expect(access.isAllowed(userId: 42) == false)
@@ -63,7 +63,7 @@ import Testing
 
   @Test func groupModeOffDeniesAnAllowlistedOwnersGroupMessage() {
     // given — no CLAW_GROUP_CHATS configured
-    let access = AccessControl(allowlist: StubAllowlist(allowed: [42]))
+    let access = AccessControl(allowlist: StubAllowlist(allowed: [42]), groupChats: [])
 
     // when
     let decision = access.decide(chatKind: .supergroup, chatId: -100, userId: 42)

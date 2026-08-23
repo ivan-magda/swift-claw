@@ -242,6 +242,7 @@ extension ProviderDeadlineCoordinator {
         try? await clock.sleep(for: timeout)
         return nil
       }
+      // swiftlint:disable:next redundant_nil_coalescing
       let first = await group.next() ?? nil
       group.cancelAll()
       return first

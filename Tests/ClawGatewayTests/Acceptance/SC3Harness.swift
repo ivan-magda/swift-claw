@@ -329,7 +329,7 @@ func makeSC3Harness(
   let approvalCallbacks = ApprovalCallbackHandler.make(
     processed: stores.processed,
     delivery: transport,
-    accessControl: AccessControl(allowlist: stores.allowlist),
+    accessControl: AccessControl(allowlist: stores.allowlist, groupChats: []),
     approvals: stores.approvals,
     audit: stores.audit,
     coordinator: coordinator,
@@ -349,7 +349,7 @@ func makeSC3Harness(
     memoryCommands: stores.memoryCommands,
     pendingConfirmations: registry,
     botIdentity: nil,
-    accessControl: AccessControl(allowlist: stores.allowlist),
+    accessControl: AccessControl(allowlist: stores.allowlist, groupChats: []),
     delivery: transport,
     turnRunner: runner,
     imageCache: imageCache,

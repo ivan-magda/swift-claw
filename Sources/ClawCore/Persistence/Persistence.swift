@@ -495,6 +495,7 @@ public struct DegradedTurn: Sendable, Equatable {
 /// typo'd actor; persisted via `rawValue` at the store seam.
 public enum AuditActor: String, Sendable, Equatable {
   case owner
+  case groupMember = "group_member"
   case assistant
   case system
 }

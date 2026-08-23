@@ -530,6 +530,7 @@ private func makeContextBuilder(
 
 func makeEnv(
   agentOutcome: StubLLMProvider.Outcome,
+  providerOverride: (any LLMProvider)? = nil,
   runs: (any RunStore)? = nil,
   runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
   contextBuilder: ContextBuilder? = nil,
@@ -537,6 +538,10 @@ func makeEnv(
   budget: RunBudget = .default,
   breaker: BudgetBreaker? = nil,
   transport: (any TelegramTransport)? = nil,
+  chatId: Int64 = 42,
+  sessionKey: String? = nil,
+  typing: any TypingIndicator = NoopTyping(),
+  ownerChatId: Int64? = nil,
   now: @escaping @Sendable () -> Date = { Date() }
 ) throws -> Env {
   let queue = try ClawDatabase.makeInMemoryQueue()
@@ -548,11 +553,10 @@ func makeEnv(
   let audit = AuditLogGRDB(writer: queue)
 
   // Seed a session + a user message via the real fused claim, so history is realistic.
-  let chatId: Int64 = 42
   let claim = try sessionMessages.claimAndPersistInbound(
     InboundMessage(
       updateId: 1,
-      sessionKey: SessionKey.telegramDM(chatId: chatId),
+      sessionKey: sessionKey ?? SessionKey.telegramDM(chatId: chatId),
       chatId: chatId,
       userId: chatId,
       text: "hi",
@@ -573,8 +577,8 @@ func makeEnv(
 
   let provider = StubLLMProvider(agentOutcome)
   let agent = AgentRuntime(
-    roster: makeSingleRouteRoster(provider: provider, wireModel: "gpt-4o"),
-    typingIndicator: NoopTyping(),
+    roster: makeSingleRouteRoster(provider: providerOverride ?? provider, wireModel: "gpt-4o"),
+    typingIndicator: typing,
     draftStreamer: NoopRichDraftStreaming(),
     streamingEnabled: false,
     costResolver: CostResolver(
@@ -600,6 +604,7 @@ func makeEnv(
     notifyOutbox: {},
     breaker: breaker,
     delivery: transport,
+    ownerChatId: ownerChatId,
     now: now,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
@@ -713,6 +718,72 @@ private func okResponse(content: String) -> ChatResponse {
 }
 
 @Suite struct TurnRunnerTests {
+  @Test func topicSessionDrivesGroupProgressThroughTheRealTurnRunner() async throws {
+    // given — the provider cannot answer until the first typing pulse opens its gate
+    let gate = TypingReleaseGate()
+    let typing = CountingReleaseTyping(releaseAfter: 1, gate: gate)
+    let provider = GatedProvider(gate: gate, response: okResponse(content: "done"))
+    let groupChatId: Int64 = -1_001
+    let threadId: Int64 = 77
+    let env = try makeEnv(
+      agentOutcome: .respond(okResponse(content: "unused")),
+      providerOverride: provider,
+      chatId: groupChatId,
+      sessionKey: SessionKey.telegramTopic(chatId: groupChatId, threadId: threadId),
+      typing: typing
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then — TurnRunner derived both values from the persisted session key
+    #expect(
+      await typing.pulses
+        == [RecordingTyping.Pulse(chatId: groupChatId, messageThreadId: threadId)]
+    )
+  }
+
+  @Test func groupTurnDailyCapNoticeGoesToTheOwnerDM() async throws {
+    // given — this reply crosses the process-wide cap from a topic session
+    let transport = RecordingTransport()
+    let ownerChatId: Int64 = 42
+    let groupChatId: Int64 = -1_001
+    let response = ChatResponse(
+      content: "done",
+      finishReason: "stop",
+      usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+      costFromProvider: RunBudget.default.perDayUSD + 1
+    )
+    let env = try makeEnv(
+      agentOutcome: .respond(response),
+      breaker: BudgetBreaker(budget: .default),
+      transport: transport,
+      chatId: groupChatId,
+      sessionKey: SessionKey.telegramTopic(chatId: groupChatId, threadId: 77),
+      ownerChatId: ownerChatId
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    #expect(await env.provider.callCount == 1)
+    let totals = try UsageStoreGRDB(writer: env.queue).todayTokensAndCost(now: Date())
+    #expect(totals.costUSD >= RunBudget.default.perDayUSD)
+    #expect(await transport.sent.map(\.target) == [.chat(ownerChatId)])
+    #expect(await transport.sent.map(\.text) == [Degradation.dailyCapTripped])
+  }
+
   @Test func scheduledRunAtTheProactiveCapIsDeniedDMedOnceAndAudited() async throws {
     // given — a scheduled-origin run whose proactive pool already spent 2.50 today
     let transport = RecordingTransport()

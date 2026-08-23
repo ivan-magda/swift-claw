@@ -19,7 +19,7 @@ public struct AccessControl: Sendable {
   private let allowlist: any AllowlistStore
   private let groupChats: Set<Int64>
 
-  public init(allowlist: any AllowlistStore, groupChats: Set<Int64> = []) {
+  public init(allowlist: any AllowlistStore, groupChats: Set<Int64>) {
     self.allowlist = allowlist
     self.groupChats = groupChats
   }
