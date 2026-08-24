@@ -211,6 +211,86 @@ error row rather than silently degrading.
 
 ---
 
+## Running bash (host shell)
+
+`bash` runs one command **on this machine**, as the user running `clawd`, with your real
+toolchain and your real files. This is not the sandbox. Nothing isolates the command, so the
+approval you tap is the only check on it. It ships off, and while it is off the tool is absent
+from the registry — the model cannot see it or call it.
+
+**Enable it.** One line in `~/.swift-claw/clawd.env`; the other three keys have defaults
+(`/bin/zsh`, 30 s default timeout, 300 s ceiling):
+
+```bash
+CLAW_BASH_ENABLED=true
+```
+
+**Confirm it registered.** `clawd doctor --check-config` renders a `Host Shell` group without
+booting anything:
+
+```bash
+clawd doctor --check-config
+```
+
+Enabled with a usable shell:
+
+```
+Host Shell ............................. ok
+    bash.available  true
+    bash.shell      /bin/zsh
+    bash.timeout    30s default (maximum 300s)
+```
+
+Left off, the group states which flag turns it on — the tool is absent, and the row says so
+rather than staying silent:
+
+```
+Host Shell ............................. ok
+    bash  disabled by CLAW_BASH_ENABLED
+```
+
+**Two failure shapes, and they fail at different times.** A shell that is not there is a
+registration failure: the daemon boots, the tool is absent, and the group fails the run.
+
+```
+Host Shell ............................. FAIL
+  ✗ bash.available   false
+  ✗ bash.shell       /bin/nope
+  ✗ bash.last_error  no file at /bin/nope
+```
+
+A *relative* `CLAW_BASH_SHELL` is a config failure instead — it never reaches a row, and no
+daemon starts:
+
+```
+Config ................................. FAIL
+  ✗ config  FAIL: invalidBashShell("zsh")
+```
+
+**Exercise it from Telegram.** Ask for something that needs the host, e.g. "run `git status` in
+the workspace". The first call parks the turn and sends a card carrying the shell, the working
+directory, the timeout, and the exact redacted command, with three buttons: **Approve**,
+**Approve for this turn**, **Deny**. Approve, and the daemon echoes the command to you before
+it runs, then replies with the combined output and the exit code. A non-zero exit comes back as
+ordinary output the model reads — only a timeout or a shell that would not start is an error.
+
+**The turn-scoped window.** *Approve for this turn* opens a window on the run that suppresses
+later `bash` prompts until the turn ends; each command is still echoed before it runs, and each
+one still passes the arg guard. `/stop` and `/new` end the run and therefore the window, and the
+next turn prompts again. The window widens `bash` only — an ask-tier or sandbox action inside it
+still parks.
+
+**Scheduled and heartbeat runs cannot use it.** They refuse before preparing an action. You
+are not there to read the card, and that is the worst time for a host command to run.
+
+**Secrets never enter the command's environment.** The child inherits the daemon's environment
+minus the whole `CLAW_` prefix, so `env | grep CLAW_` inside a call returns nothing. The
+invariant is pinned by `prefixPolicyDropsAKeyThisProcessReallyInherited` in `ClawProcessTests`,
+which launches `/usr/bin/env` directly rather than through a shell — `sh` regenerates a default
+`PATH` when the variable is absent, which would hide the removal.
+
+---
+
 ## Voice-message transcription (macOS 26)
 
 Telegram voice notes are transcribed **on-device** with Apple's `SpeechAnalyzer` stack and the

@@ -122,8 +122,8 @@ other context leaves less room; `fits_cap` does not predict that residual budget
 
 clawd shows an approval card for two reasons.
 
-**The tool's own risk tier.** File writes, memory writes, and code execution park the run
-every time, whatever else the session did.
+**The tool's own risk tier.** File writes, memory writes, and code or host shell execution
+park the run every time, whatever else the session did.
 
 **Exfiltration risk.** clawd holds an arbitrary-destination tool call, including `web_fetch`
 and MCP calls, for your approval once the session has done *both* of these:
@@ -137,6 +137,14 @@ and MCP calls, for your approval once the session has done *both* of these:
 
 One leg alone does not trigger the gate, so the first `web_fetch` or safe MCP call of a clean
 session runs unprompted. `/new` clears both legs.
+
+**Approving for a whole turn.** A host shell card carries a third button, *Approve for this
+turn*, next to Approve and Deny. It approves the command in front of you and stops the asking
+for the rest of that turn, so a task that needs six commands costs one tap instead of six. The
+window closes when the turn ends, and `/stop` and `/new` close it on the spot; the next turn
+asks again. It widens nothing else. Another tool still parks, and clawd still scans each
+widened command for secret-shaped values and for text from your private files. Only host
+shell cards offer the button.
 
 Your LLM provider and the search backend are pinned destinations, so they never park for
 approval: no injected instruction can aim clawd at an attacker's URL instead. clawd also
@@ -281,6 +289,44 @@ VM per request, behind an exact-action approval. Resource limits
 (`CLAW_EXEC_MEMORY_MIB`, `CLAW_EXEC_CPUS`, `CLAW_EXEC_TIMEOUT`), the digest-pinned
 workload image, and the network opt-in (`CLAW_EXEC_ALLOW_EGRESS`) are documented in
 [`.env.example`](../.env.example) and [LOCAL_DEV.md](LOCAL_DEV.md).
+
+## Host shell commands
+
+Off by default, and not the sandbox above. `CLAW_BASH_ENABLED=true` adds a `bash` tool that
+runs one command on this machine, as the user running `clawd`, with your real toolchain and
+your real files. That is the point of it — the agent can edit a file and see what happened,
+use the compiler you have installed, and keep working in your workspace instead of a copy.
+
+It also moves the blast radius from a disposable VM to your account. Read the trade before
+you turn it on:
+
+- **Every command needs your approval**, and the exact command is in the card. Nothing runs
+  that you have not read.
+- **clawd sends you each command in Telegram before running it**, including the ones a
+  turn-scoped window auto-approved, so you can `/stop` it.
+- **The command's environment carries no `CLAW_*` variable**, so nothing it runs can read your
+  bot token or an API key out of it.
+- **clawd scans each command for secrets first** — exact secret values, secret-shaped tokens,
+  and substrings of `MEMORY.md` and `USER.md` — and a match blocks it.
+- **Scheduled jobs and the heartbeat cannot use it at all.** Those runs happen while you are
+  away from your phone, which is when you should not be approving host commands.
+- **Nothing contains the command itself.** A command you approve can do whatever you could do.
+
+Each call is a fresh shell whose working directory is always your workspace root. A `cd`, an
+exported variable, or a background job does not carry into the next command; files it writes
+do.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `CLAW_BASH_ENABLED` | `false` | The switch. Off means the tool does not exist — the model cannot see it or call it. |
+| `CLAW_BASH_SHELL` | `/bin/zsh` | Absolute path to the shell. Must exist and be executable, or the tool stays absent. |
+| `CLAW_BASH_TIMEOUT_DEFAULT` | `30` | Seconds a command gets when the model names no timeout. |
+| `CLAW_BASH_TIMEOUT_MAX` | `300` | Seconds no command may exceed, whatever the model asks for. Ceiling 3600. |
+
+`clawd doctor` reports a **Host Shell** group: `bash disabled by CLAW_BASH_ENABLED`, or
+`bash.available`, `bash.shell`, and `bash.timeout` when it is ready. If you enabled the tool
+and it never appears in a reply, that group says why — usually a `CLAW_BASH_SHELL` pointing at
+a file that is not there. A relative path fails config load outright and `clawd` exits 10.
 
 ## MCP servers
 

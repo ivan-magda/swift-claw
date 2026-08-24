@@ -185,9 +185,10 @@ Send `/skills` to the bot. The Accepted section should contain
 workspace-boundary problem that kept a skill out.
 
 [CUSTOMIZATION.md](CUSTOMIZATION.md) covers every file and its trust tier, the skill
-authoring rules, the environment knobs for budgets, schedules, voice locales, and the
-code sandbox, and how to [connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their
-tools show up in chat.
+authoring rules, the environment knobs for budgets, schedules, voice locales, the code
+sandbox, and [host shell commands](CUSTOMIZATION.md#host-shell-commands) — off by default,
+and the one setting that lets the agent run on your real machine — plus how to
+[connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their tools show up in chat.
 
 ## 7. Keep it running
 

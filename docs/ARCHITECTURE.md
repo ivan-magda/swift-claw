@@ -128,11 +128,12 @@ form `ARCHITECTURE.md §N` is used, sparingly.
 | §8.5 Provider replay state | `ProviderExchangeState` (ClawCore); `ChatGPTProviderStateCodec` (ClawLLM) |
 | §8.6 Reliability & cost | `ProviderCallID`, `ProviderCallIDGenerating`, `LLMCostPolicy`, `LLMInputReservationPolicy` (ClawCore); `OpenAICompatibleProvider`, `SSEParser`, `PriceFileLoader` (ClawLLM) |
 | §9 Memory & context | `ContextBuilder`, `BudgetFitter`, `DropMarker`, `MemoryRanker`, `CandidateCapRecallCutoff`, `HistoryHygiene`, `LabeledContextFactory` (ClawAgent); `WorkspaceReading`, `WorkspaceSkills`, `SkillDescriptor`, `SkillScanResult`, `WorkspaceWarning`, `FrontmatterFence` (ClawCore); `FileSystemWorkspace` (ClawWorkspace); `SkillDiagnostics` (ClawGateway) |
-| §10 Tool system & policy | `ToolRegistry`, `FileReadTool`, `FileWriteTool`, `MemoryWriteTool`, `WebFetchTool`, `WebSearchTool`, `SkillLoadTool` (ClawTools); `Tool`, `ToolDefinition`, `RiskLevel`, `ToolDispatching`, `ToolFenceLabels`, `WorkspacePathContainment` (ClawCore) |
+| §10 Tool system & policy | `ToolRegistry`, `FileReadTool`, `FileWriteTool`, `MemoryWriteTool`, `WebFetchTool`, `WebSearchTool`, `SkillLoadTool`, `BashTool`, `DangerousToolSupport` (ClawTools); `Tool`, `ToolDefinition`, `RiskLevel`, `ToolDispatching`, `ToolFenceLabels`, `WorkspacePathContainment` (ClawCore) |
 | §10.3 MCP client | `MCPStreamableHTTPTransport`, `MCPServerSession`, `MCPCatalogResolver`, `ResolvedMCPCatalog`, `MCPServerOutcome`, `MCPMetadataSanitizer`, `MCPTool`, `MCPToolNamer`, `MCPSchemaNormalizer`, `MCPDescriptionCap`, `MCPValueBridge`, `MCPDiscoveryLimits`, `MCPTransportLimits` (ClawMCP); `MCPConfig`, `MCPServerConfig`, `MCPToolFilter`, `MCPHTTPHeader`, `MCPLimits`, `MCPNaming`, `MCPConfigError` (ClawCore); `MCPConfigLoader` (ClawWorkspace); `EncryptedMCPCredentialStore`, `MCPCredentialLoad`, `SealedCredentialFile` (ClawSecrets); `MCPBootInputs`, `MCPProbe`, `MCPSessionFactory`, `MCPDoctorRows`, `MCPCommand`, `MCPSessionLifecycleService`, `DaemonBuilder.resolveMCPStack` (clawd) |
-| §11 Approval system | `Approval`, `ApprovalFSM`, `PendingToolAction`, `RecordedToolAction` (ClawCore); `ApprovalStoreGRDB` (ClawData); the §6.2/§6.5 gateway symbols above |
+| §11 Approval system | `Approval`, `ApprovalFSM`, `ApprovalReason`, `PendingToolAction`, `RecordedToolAction` (ClawCore); `ApprovalStoreGRDB`, `RunStoreGRDB.openAutoApproveWindow` / `isAutoApproveWindowOpen` (ClawData); `ApprovalKeyboard`, `ToolApprovalPrompt`, plus the §6.2/§6.5 gateway symbols above |
 | §12 Security & trust | `SecretRedactor`, `SSRFGuard`, `FakeIPDetector`, `ExfilArgGuard`, `CanonicalURL` (ClawTools); `ToolOutputCap`, `SSEFraming`, `ContextTier` provenance labels, `LabeledContext`, and the `ResolvedAddress`/`CIDR` address vocabulary (ClawCore) |
 | §13 Execution / sandbox | `ExecutionBackend`, `SandboxMaintenance`, execution value types, `PreparedToolAction` (ClawCore); `ExecuteCodeTool`, `ExfilArgGuard`, `ToolPolicyGate` dangerous arm (ClawTools); `ContainerBackend`, `ExecSandboxSettings` (ClawExec); `SwiftSubprocessLocalCommandRunner` (ClawProcess); `SandboxBootstrapper`, `SandboxLifecycleService`, `SandboxHealthRows`, `ApprovedActionExecutor` fill (ClawGateway); `DaemonBuilder.prepareSandbox` (clawd) |
+| §13.1 Host shell execution | `BashConfig`, `BashLimits`, `HostShellProbe`, `Tool.invocationEcho`, `ToolDefinition.requiresInteractiveRun` (ClawCore); `BashTool` (ClawTools); `LocalCommandEnvironment`, `LocalCommandLimits` (ClawProcess); `BashDoctorStatus`, `BashHealthRows`, `DoctorRowShape` (ClawGateway) |
 | §15 Config & secrets | `AppConfig`, `MCPConfigSource`, `MCPServerConfig`, `QuietHours`, `StateRootResolver`, `SecretStore` + `LLMCredentialStore` seams (ClawCore); `MCPConfigLoader` (ClawWorkspace); `EncryptedFileSecretStore`, `EnvSecretStore`, `SecretStoreResolver`, `EncryptedLLMCredentialStore`, `EncryptedMCPCredentialStore`, `SecretStatePaths`, `SecureFilePublisher`, `RuntimeSecretPreparer` (ClawSecrets); `AuthBootstrap` (ClawAuth) |
 | §16 Observability | `DoctorReport`, `DoctorReporting`, `HealthValue`, `HealthRowsBuilder`, `SkillDiagnostics`, `SchedulerHealth`, `ApprovalsHealthRows` (ClawGateway); `ApprovalsHealth`, `RunsHealth`, `AuditLog` (ClawCore); `AuditLogGRDB` (ClawData); `LLMAuthDoctor` (ClawSecrets); `DoctorHealth`, `MCPDoctorRows`, `MCPProbe` (clawd) |
 | §19 Error taxonomy | `ClawCore/Errors/` (`ClawExitCode`, `ConfigError`, `TelegramError`, `StoreError`, `ProviderError`, `ProviderFailure`, `CredentialStoreError` — aliased `LLMCredentialStoreError`); `ClawDatabase.classifyError` → `throws(StoreError)` seam (ClawData); `AuthCommandResultMapper` (ClawAuth) |
@@ -392,7 +393,7 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `update_cursor` | 0 | last *confirmed* `lastUpdateId` (advanced last, §6.1) | — |
 | `sessions` | 1 | session key, created/updated, rolling-summary ref, `tainted` | — |
 | `messages` | 1 | role, content (un-redacted by design), session, ts, token counts; provenance marker (trusted/untrusted); **FTS5 external-content index added Inc 3a (not Inc 1)**; **`tool_calls` TEXT (JSON `[ToolCall]`, assistant proposals) and `tool_call_id` TEXT (set iff `role='tool'`), migration `v5`; `role` gains `tool`; tool rows persist with `provenance='untrusted'`**; **P-auth: nullable `provider_state_issuer` TEXT + `provider_state` BLOB under a CHECK that they are both null or both non-null, migration `v9` — opaque replay state (§8.5), never FTS-indexed, never prompt content; existing rows stay valid** | `messages.run_id → runs.id`, `messages.session_id → sessions.id` |
-| `runs` | 1 | RunState FSM, budgets used, `updated_ts` lease; **Inc 4: `origin` `'interactive' \| 'scheduled' \| 'heartbeat'` (default `'interactive'` — drives reduced privilege, the proactive budget, and doctor metrics) + nullable `job_id`** | `runs.session_id → sessions.id`, `runs.job_id → scheduled_jobs.id` |
+| `runs` | 1 | RunState FSM, budgets used, `updated_ts` lease; **Inc 4: `origin` `'interactive' \| 'scheduled' \| 'heartbeat'` (default `'interactive'` — drives reduced privilege, the proactive budget, and doctor metrics) + nullable `job_id`**; **`auto_approve_window` BOOLEAN NOT NULL DEFAULT 0, migration `v10` — the turn-scoped auto-approve window (§11); pre-upgrade rows read as closed, and both accessors are scoped to `RunState.liveStates`, so a terminal run always reads closed** | `runs.session_id → sessions.id`, `runs.job_id → scheduled_jobs.id` |
 | `provider_usage` | 1 | model (the **qualified `configuredReference`**, §8.1), tokens (incl. cached/uncached where reported), computed USD, `cost_source`, `is_estimated`; **P-auth: non-null `provider_call_id` TEXT + a UNIQUE index, migration `v9` (existing rows get deterministic `legacy:<rowid>` values); `cost_source` admits `included_plan`** | `run_id → runs.id`, `session_id → sessions.id` |
 | `outbound_deliveries` | 1 | transactional outbox (§6.4) | `run_id → runs.id` |
 | `audit_events` | 1 | **ordinary append-only** audit (actor, action, tool, args-redacted, result-size, decision, ts) | carries `run_id`, `session_id` |
@@ -647,6 +648,7 @@ v1 ships **read-only tools only**: `web_search`, `web_fetch`, workspace **file R
 | Owner-authored workspace procedure | `skill_load` (no egress; does **not** taint) | `safe` | none |
 | Writes | file write, memory write | `ask` | per-action approval (Inc 5a) |
 | Shell / exec | `execute_code` | `dangerous` | approval + sandbox (Inc 5b) |
+| Host shell | `bash` — absent from the registry unless the owner enables it | `dangerous` | approval + interactive-run-only; **no sandbox**, and the approval is the containment (§13.1) |
 | Egress-from-sandbox | opted-in network in an exec run | `dangerous` | approval; run is `canExfiltrate=true` |
 | Remote / MCP | every `mcp__<server>__<tool>` | `ask` by default; named `safe` override allowed | default per-action approval; egress is `arbitraryDestination`, the trifecta can still force approval, and the result is untrusted (§10.3) |
 
@@ -686,6 +688,8 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **`ownerUserId` resolution:** the run's **delivery chat id** — the DM chat id for interactive runs, `scheduled_jobs.owner_chat_id` for job runs, the config-resolved owner DM for heartbeat runs — under the Telegram private-chat-id ≡ user-id identity; group chats are out of scope for v1 (single-owner DM bot).
 - **Approval prompt contract:** show the **fully-resolved canonical target** (absolute path after symlink/`..` resolution; full URL incl. query/body, **never model-truncated**), a **TAINT banner** when the originating turn ingested untrusted content, and human-meaningful **blast radius** (create vs overwrite; egress yes/no). Redaction hides **secrets**, not the destination fields the owner needs to judge risk. Workspace-contained **privileged files** are **writable via `file_write` behind an explicit ⚠ privileged-file banner** in the prompt (owner decision, 2026-07-09) — flagged, not refused in code, because they steer a later turn. The set is every fixed prompt file (`SOUL.md`/`AGENTS.md`/`TOOLS.md`/`USER.md`/`MEMORY.md`/`HEARTBEAT.md`) plus any `SKILL.md`, whose body `skill_load` serves back untainted as guidance to follow; matching is by **basename** on the resolved canonical target, so a skill manifest is covered wherever under `skills/` it sits, and is **case-insensitive** — a case-insensitive filesystem indexes `skill.md` as a skill, while a creating write carries the caller's own spelling rather than an on-disk one.
 
+- **Turn-scoped auto-approve window.** A prompt whose `ApprovalReason` declares `offersTurnScopedWindow` draws a third button beside approve and deny. Tapping it approves that action **and** opens a window on the run **inside the same resolution CAS**, so every guard that can fail an approval — nonce, args-hash, `policy_version`, expiry, already-resolved — leaves the window closed. The window widens only actions carrying that same reason: the reason is the one part of the offer persisted on the approval row, so it is the only thing the callback path can re-check, and a widening verdict against a prompt that never drew the button resolves as a plain approval. A widened call is **not** an unchecked call — the arg guard still runs, and the tool executes its **prepared** canonical args on its recorded target (the same inputs an approval resume replays), never the model's raw arguments. Scope is one run: the flag is `runs.auto_approve_window` (§7.1) and both accessors are restricted to `RunState.liveStates`, so `/stop`, `/new`, and ordinary completion close the window **by construction** rather than by a clearing write that a crash could skip. A failed store read reports the window closed — costing the owner one extra prompt and never one fewer.
+
 ## 12. Security & trust model
 
 **Defense in independent layers — none of which is "the model behaved."** Security rests on four layers that each hold even if the model is fully subverted by prompt injection: (1) the **numeric-ID default-deny boundary** — untrusted senders never reach the model; (2) **untrusted-data labeling + the in-code instruction hierarchy** — inbound/tool/retrieved content, remote tool metadata, and durable memory are treated as data and cannot claim authority; (3) the **in-code policy gate + risk tiers** — every side effect is authorized by deterministic code at the dispatch site, never by the prompt; (4) the **enforced lethal-trifecta gate + approvals + blast-radius caps + the VM sandbox** — consequential actions are gated and contained. A successful injection therefore yields, at most, what an *unprivileged* turn could already do.
@@ -701,6 +705,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **Secrets:** never in replies or logs. **Exact-value redaction** of the loaded secret values (bot token, api keys, age-decrypted material) is the **PRIMARY** mechanism at both the log boundary and the outbound-reply boundary (the values are already in memory — cheap, deterministic); pattern-based scanning is **secondary** defense-in-depth. The gateway owns the destination chat id; outbound controls strip auto-fetching image/link elements.
 - **Rotating credentials extend exact-value redaction to a dynamic set.** A static key is redactable once at load; an OAuth pair is not. The credential actor therefore keeps a bounded exact-value set covering the current token pair **and the prior pair during rotation** — the window in which a stale value can still surface — and each authorization carries the relevant set to the provider. OAuth and store code redact **before constructing any error**; inference redacts response heads, bounded error bodies, transport errors, and logs before they leave `ClawLLM`. **Never logged, even at debug level:** access/refresh tokens; device-auth IDs, user codes after the prompt, authorization codes, PKCE verifiers; the ChatGPT account ID; request/response bodies; provider replay payloads; owner prompt or model output text. **Safe diagnostics** are provider ID, qualified model, status code, attempt number, bounded retry delay, event/byte counts, credential freshness class, and generation number. Control characters and terminal escape sequences are stripped from remote text before it reaches stderr or Telegram — a remote string is never trusted with a terminal.
 - **Opaque provider state is data with no reader** (§8.5). Replay payloads are never rendered into prompts, FTS-indexed, recall-eligible, or exposed to tools, audit arguments, logs, Telegram, or memory files, and are never sent to any provider but the issuer that produced them. They are the one context-carrying value with **no untrusted-tier wrapper**, and that is sound only because nothing outside the owning adapter ever interprets them: the moment anything else reads one, it needs the wrapper.
+- **Host execution moves the trust boundary, and only the owner may move it.** `bash` (§13.1) runs on the owner's machine with the owner's own privileges, so layer (4)'s VM containment simply does not apply to it: an injection that reaches an approved `bash` call reaches the owner's account, not a disposable VM. That is why the tool is **absent from the registry** unless the owner sets the flag, why it is `dangerous`-tier, and why it refuses every non-interactive run — a scheduled or heartbeat run has no owner watching the prompt it would park on. Four controls survive the move: the dangerous-tier approval; `ExfilArgGuard` scanning every command, window-widened ones included; a child environment stripped of the whole `CLAW_*` prefix, so no command can read a secret out of its own environment; and a Telegram echo of each command **before** it runs, so the owner can `/stop` it. None of the four contains the command itself. For host execution the honest containment claim is owner attention, not isolation, and the feature is off by default because that is a trade only the owner can accept.
 - **Accepted v1 limitation — `file_write` symlink TOCTOU.** `file_write` re-validates the approved path against the live filesystem at execution time (§10.2), but the directory creation, staging, and rename that follow are path-based, so a process racing the daemon on the same host could swap a parent directory for a symlink inside that window and redirect the write outside the workspace. This is **out of the v1 threat model** for the same reason §7 drops in-DB hash-chaining: a same-host attacker running as the daemon's user does not need the race — they can already write anywhere the daemon can. The four layers above defend against a subverted *model*, not a hostile co-resident process. If hardening is added later, bind the containment validation and the write to the same filesystem object (descriptor-relative, no-follow traversal; `openat2` + `RESOLVE_BENEATH` is Linux-only, Darwin needs a manual `O_NOFOLLOW` ancestor walk) — do not claim the race is closed without that.
 
 ## 13. Execution / sandbox architecture (Inc 5b macOS; Inc 6 Linux)
@@ -758,6 +763,51 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - `sandbox-exec`/Seatbelt may wrap the launcher only as optional defense-in-depth; it is never the
   isolation boundary.
 
+### 13.1 Host shell execution (`bash`) — outside the sandbox
+
+The sandbox and the host shell are opposites that happen to both spawn a process. Everything below
+exists to keep them from being confused for one another, in code and in the owner's head.
+
+- **A separate tool behind a separate switch.** `bash` is not a sandbox mode. The dangerous-tier
+  backstop is a **set of enabled tool names**, not one `exec` boolean, so enabling the sandbox
+  never enables host execution and neither one's failure withdraws the other.
+- **One command per call, and no session.** Each call spawns `<shell> -c <command>` at the
+  workspace root. Nothing survives the call except what it wrote to disk — a `cd`, a variable, an
+  export, or a background job does not reach the next call. The tool description states this,
+  because a model that assumes otherwise writes commands that silently do nothing.
+- **The child environment is inherit-minus-prefix.** Every daemon secret arrives through a
+  `CLAW_`-prefixed variable, so the launcher drops the **prefix** rather than a list of known keys:
+  a secret added later is covered without anyone remembering to extend a denylist. The policy is a
+  `LocalCommand` field, so the sandbox's own key removals and this one are one mechanism.
+- **`canExfiltrate` is unconditionally true.** The host keeps its network and nothing in the tool
+  can take it away, so the trifecta tier assumes any command can reach outward.
+- **The shell is configuration; its availability is not.** The configured shell must be an absolute
+  path or config load fails. Whether that path exists and is executable is settled at registration
+  by one probe that doctor reads too, so an absent tool always has a row saying why. A shell that
+  disappears after boot leaves the daemon running with the tool missing — not a boot failure.
+- **The timeout is the model's choice inside the owner's bound.** The model may name a timeout; the
+  config supplies the default and the ceiling, and the prepared action **clamps** rather than
+  refuses. The bound is re-checked at execution, because a recorded action outlives the config that
+  prepared it.
+- **The canonical target is the shell and the working directory, not the command.** One pair, so
+  the args hash alone distinguishes one command from the next. Execution re-derives that pair and
+  runs nothing when it no longer matches what the owner approved — a shell or workspace-root change
+  between approval and resume must not silently relocate the command.
+- **Interactive runs only, declared by the tool.** The requirement is a `ToolDefinition` capability
+  flag folded into `policy_version`'s static sub-hash and checked once at the top of the gate —
+  never a tool-name literal in the gate — so a future tool that declares it cannot be ignored.
+- **Every executing call is announced before it runs.** A tool declares the text it wants echoed to
+  the owner (nothing, by default). The dispatcher emits it **after** the gate verdict and before
+  execution, so a blocked or parked call is never announced, and the button-approved path — which
+  has no dispatcher — emits it after its own claim. The notice rides the transactional outbox on an
+  extension of the run's delivery sequence; a literal step index would collide with the run's own
+  replies under the outbox dedup key and be dropped silently.
+- **A non-zero exit is data, not a tool fault.** A command that ran to completion reports `ok` with
+  its combined output and exit code — the model must read a failure, not be told the tool broke.
+  Only a timeout or a failed start is an `error`, and the timeout still carries the partial output.
+  Output is captured to the launcher's shared raw limit, secret-redacted, then capped like any
+  other tool's; every result is untrusted and taints the session.
+
 ## 14. Scheduler architecture (Inc 4)
 
 - **`Calendar.RecurrenceRule`** (in-toolchain, DST/TZ-correct, `Sendable`/`Codable`) + a ~150-line custom 60s ticker.
@@ -813,6 +863,7 @@ empty healthy state.
 | runs | `in_flight`, `oldest_run_age`, `last_FAILED` |
 | spend | `today_usd`, `remaining_budget` (per-run + per-day) |
 | sandbox | `available`, `os_ok`, `engine_version`, `version_ok`, `image_digest_ok`, `caps_empty`, `net_isolated`, `caps_match`, `reaper_ok`, `rootfs_ro`, `staging_ro`, `interpreters_ok`, `last_error` |
+| host shell | `available`, `shell`, `timeout`, `last_error`; disabled renders a single row naming the flag that turns it on. Its **own doctor group**, not rows under `sandbox` — host execution is the sandbox's opposite, and filing it there would read as a sandbox feature |
 | MCP | per server: `enabled`, `token` (`set` \| `absent` \| `bound-to-a-different-url`), effective include/exclude, and — where the boot snapshot or a live probe is available — `tool_count` or the recorded `skip_reason`; never a token value |
 | context skills | `accepted`, `rejected`, `fits_cap`; headline row from a fresh scan in full doctor and `/status`; unhealthy when `rejected > 0` or `fits_cap = false` |
 | config/secret | validation result — **printed first** if it errored |

@@ -40,6 +40,9 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   code and treats inbound content as data, never as instructions.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
+- **Or your own machine, if you say so.** Turning on `CLAW_BASH_ENABLED` adds a `bash` tool
+  that runs one command at a time on the host, with your real toolchain and files. Off by
+  default. You approve each command, and clawd shows it to you again before it runs.
 - **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
   the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
   named tool safe, but the exfiltration gate can still require approval. Only you can add a
@@ -110,9 +113,11 @@ swift-claw assumes you are the only person it serves.
 - **Secrets encrypted at rest.** `clawd secrets seal` wraps the bot token and API keys in
   an AES-GCM envelope. Plaintext env secrets remain available as a dev fallback that
   warns on every boot.
-- **Approvals are durable and unforgeable.** File writes, memory writes, and code
-  execution suspend into a durable state machine until you tap Approve in Telegram. A
-  forged or third-party callback cannot approve, and pending approvals expire to deny.
+- **Approvals are durable and unforgeable.** File writes, memory writes, and code or host
+  shell execution suspend into a durable state machine until you tap Approve in Telegram. A
+  forged or third-party callback cannot approve, and pending approvals expire to deny. You
+  can widen a host shell approval to cover the rest of one turn; a scheduled or heartbeat
+  run cannot use that tool at all, since you are not there to read the card.
 - **Prompt injection contained.** Messages, web content, tool output, and stored memory
   enter the context as untrusted data. Once a session has both ingested untrusted content
   and pulled your private files into context, fetching an arbitrary URL also needs your
@@ -138,7 +143,8 @@ Persona and behavior live in Markdown files under `~/.swift-claw/workspace/`:
 MCP servers go in `~/.swift-claw/mcp.yaml`, with their tokens stored encrypted by
 `clawd mcp set-token`. Other runtime knobs are environment variables: the model route
 (`CLAW_LLM_MODEL`), an optional fallback route (`CLAW_LLM_FALLBACK_MODEL`, off unless you
-set it), USD budgets, schedules and quiet hours, voice locales, sandbox limits.
+set it), USD budgets, schedules and quiet hours, voice locales, sandbox limits, host
+shell execution.
 [`.env.example`](.env.example) documents every variable;
 [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) is the guide.
 
