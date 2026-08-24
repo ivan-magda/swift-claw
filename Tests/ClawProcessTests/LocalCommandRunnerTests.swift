@@ -80,6 +80,33 @@ import Testing
     )
   }
 
+  @Test func prefixPolicyDropsAKeyThisProcessReallyInherited() async throws {
+    // given — a key nothing injected, so the deletion has to come from enumerating the parent's
+    // own environment. `env` is launched directly: a shell would regenerate a default PATH and
+    // hide the removal.
+    let parent = ProcessInfo.processInfo.environment
+    #expect(parent["PATH"] != nil)
+    let survivor = try #require(parent.keys.sorted().first { !$0.hasPrefix("PAT") })
+    let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/usr/bin/env")
+    let command = testCommand(
+      [],
+      captureLimit: 64 * 1024,
+      environment: .inherit(removingPrefixes: ["PAT"])
+    )
+
+    // when
+    let result = await runner.run(command)
+
+    // then
+    #expect(result.termination == .exited(0))
+    let printed = try #require(String(bytes: result.stdout.bytes, encoding: .utf8))
+    let names = printed.split(separator: "\n").map { line in
+      String(line.prefix { character in character != "=" })
+    }
+    #expect(!names.contains("PATH"))
+    #expect(names.contains(survivor))
+  }
+
   @Test func adapterRunsTheProgramInTheRequestedWorkingDirectory() async throws {
     // given
     let directory = FileManager.default.temporaryDirectory

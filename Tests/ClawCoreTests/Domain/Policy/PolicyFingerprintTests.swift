@@ -105,6 +105,16 @@ import Testing
     )
   }
 
+  @Test func registryMembershipIsAnInputClass() {
+    // given — the surface with and without one conditionally registered dangerous tool
+    let base = [tool(name: "execute_code", risk: .dangerous)]
+    let widened =
+      base + [tool(name: "bash", risk: .dangerous, requiresInteractiveRun: true)]
+
+    // when / then — a tool joining or leaving the registry voids every parked approval
+    #expect(subhash(tools: base) != subhash(tools: widened))
+  }
+
   @Test func toolNameIsAnInputClass() {
     // given / when / then — the sorted tool name is a hashed surface class (§3.2)
     #expect(subhash(tools: [tool(name: "a")]) != subhash(tools: [tool(name: "b")]))
