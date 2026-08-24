@@ -81,6 +81,8 @@ struct DaemonDoctorReporter: DoctorReporting {
       )
     )
 
+    report.add(contentsOf: DoctorHealth.bashChecks(config: config))
+
     report.add(contentsOf: MCPDoctorRows.rows(config: mcp.config, credentials: mcp.credentials))
     report.add(contentsOf: MCPDoctorRows.bootRows(outcomes: mcpOutcomes))
 

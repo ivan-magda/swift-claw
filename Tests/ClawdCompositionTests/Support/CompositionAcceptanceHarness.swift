@@ -269,6 +269,8 @@ enum AcceptanceEnv {
   static let fallbackBaseURL = "CLAW_LLM_FALLBACK_BASE_URL"
   static let primaryCooldownSeconds = "CLAW_LLM_PRIMARY_COOLDOWN_SECONDS"
   static let voiceTranscription = "CLAW_VOICE_TRANSCRIPTION"
+  static let bashEnabled = "CLAW_BASH_ENABLED"
+  static let bashShell = "CLAW_BASH_SHELL"
 }
 
 /// A daemon composed through the **production `RunComposition`**: the real config parse, the real

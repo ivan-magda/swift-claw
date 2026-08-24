@@ -1,6 +1,7 @@
 import ClawAppleSpeech
 import ClawCore
 import ClawGateway
+import ClawProcess
 import ClawTelegram
 import ClawTools
 import ClawWorkspace
@@ -157,6 +158,10 @@ extension DaemonBuilder {
       )
     }
 
+    if let bash = makeBashTool(workspace: workspace, redactor: redactor) {
+      tools.append(bash)
+    }
+
     tools.append(contentsOf: mcpTools)
 
     let privateFileLoader: @Sendable () -> [String] = {
@@ -192,6 +197,35 @@ extension DaemonBuilder {
         webFetchExemptCIDRs: config.webFetchExemptCIDRs,
         exec: config.exec
       )
+    )
+  }
+}
+
+// MARK: - Host Shell
+
+private extension DaemonBuilder {
+  /// Nil unless the owner turned host execution on AND the shell they named is one the daemon can
+  /// launch: a tool that would refuse every call is worse than an absent one, since the model would
+  /// keep proposing it and the owner would keep being asked to approve it.
+  func makeBashTool(workspace: FileSystemWorkspace, redactor: SecretRedactor) -> BashTool? {
+    guard config.bash.enabled else {
+      return nil
+    }
+    guard HostShellProbe.availability(shellPath: config.bash.shellPath).isAvailable else {
+      logger.warning(
+        """
+        host shell execution is enabled but \(config.bash.shellPath) cannot be launched; \
+        the bash tool is absent
+        """
+      )
+      return nil
+    }
+
+    return BashTool(
+      workspaceRoot: workspace.root,
+      config: config.bash,
+      runner: SwiftSubprocessLocalCommandRunner(executablePath: config.bash.shellPath),
+      redactor: redactor
     )
   }
 }
