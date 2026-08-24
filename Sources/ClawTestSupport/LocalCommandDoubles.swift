@@ -63,7 +63,8 @@ public func commandResult(
   stdoutTotal: Int? = nil,
   stderrTotal: Int? = nil,
   stdoutTruncated: Bool = false,
-  stderrTruncated: Bool = false
+  stderrTruncated: Bool = false,
+  processIdentifier: Int32? = 42
 ) -> LocalCommandResult {
   LocalCommandResult(
     termination: termination,
@@ -77,14 +78,20 @@ public func commandResult(
       totalBytes: stderrTotal ?? stderr.count,
       truncated: stderrTruncated
     ),
-    processIdentifier: 42
+    processIdentifier: processIdentifier
   )
 }
 
 public func commandResult(
   _ termination: LocalCommandTermination,
   stdout: String,
-  stderr: String = ""
+  stderr: String = "",
+  processIdentifier: Int32? = 42
 ) -> LocalCommandResult {
-  commandResult(termination, stdout: Data(stdout.utf8), stderr: Data(stderr.utf8))
+  commandResult(
+    termination,
+    stdout: Data(stdout.utf8),
+    stderr: Data(stderr.utf8),
+    processIdentifier: processIdentifier
+  )
 }

@@ -458,7 +458,7 @@ extension BashToolTests {
   @Test func aMissingShellReportsOwnerFacingCopy() async throws {
     // given
     let runner = ScriptedCommandRunner(
-      result: commandResult(.startFailed("executable not found"))
+      result: commandResult(.startFailed("executable not found"), processIdentifier: nil)
     )
     let tool = makeTool(shellPath: "/opt/nowhere/zsh", runner: runner)
     let (recorded, target) = try await recordedInvocation(tool: tool, command: "ls")
@@ -470,6 +470,31 @@ extension BashToolTests {
     #expect(payload.status == .error)
     #expect(payload.content.contains("could not start"))
     #expect(payload.content.contains("/opt/nowhere/zsh"))
+  }
+
+  @Test func aFailureAfterLaunchKeepsPartialOutputAndTrustSignals() async throws {
+    // given
+    let runner = ScriptedCommandRunner(
+      result: commandResult(
+        .startFailed("output stream failed"),
+        stdout: "first line",
+        stderr: "stream error"
+      )
+    )
+    let tool = makeTool(runner: runner)
+    let (recorded, target) = try await recordedInvocation(tool: tool, command: "build")
+
+    // when
+    let payload = await tool.execute(arguments: recorded, canonicalTarget: target)
+
+    // then
+    #expect(payload.status == .error)
+    #expect(payload.ingestedUntrusted)
+    #expect(payload.readPrivateData)
+    #expect(payload.content.contains("failed after launch"))
+    #expect(payload.content.contains("first line"))
+    #expect(payload.content.contains("stream error"))
+    #expect(payload.content.contains("partial output"))
   }
 
   @Test func aCancelledCommandReportsOwnerFacingCopy() async throws {

@@ -257,7 +257,15 @@ private extension BashTool {
         status: .error
       )
     case .startFailed(let reason):
-      return errorPayload("bash could not start \(config.shellPath): \(reason)")
+      guard result.processIdentifier != nil else {
+        return errorPayload("bash could not start \(config.shellPath): \(reason)")
+      }
+      return outcomePayload(
+        result,
+        statusLine: "failed after launch: \(reason)",
+        notes: ["The command failed before it finished; anything above is partial output."],
+        status: .error
+      )
     }
   }
 
