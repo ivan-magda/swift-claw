@@ -465,6 +465,10 @@ public struct AgentRuntime: Sendable {
       await typingIndicator.sendTyping(chatId: chatId)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
+        guard Task.isCancelled == false else {
+          return outcome(.degraded(.providerUnavailable, usage: nil))
+        }
+
         proposedToolCalls += 1
         guard proposedToolCalls <= budget.maxToolCalls else {
           return outcome(.budgetStopped(cap: "per-run tool-call"))

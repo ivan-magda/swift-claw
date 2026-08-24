@@ -203,6 +203,32 @@ import Testing
     #expect(await dispatcher.records.first?.context.autoApproveWindowOpen == windowOpen)
   }
 
+  @Test func cancellationDuringAToolBatchStopsBeforeTheNextDispatch() async throws {
+    // given — the first host call observes `/stop` cancellation and returns; the second must never
+    // reach a stale turn-scoped approval window from this provider response
+    let firstDispatchStarted = AsyncGate()
+    let dispatcher = CancellationGatedDispatcher(firstDispatchStarted: firstDispatchStarted)
+    let provider = SequenceProvider([
+      toolCallResponse([
+        ToolCall(id: "c1", name: "bash", argumentsJSON: #"{"command":"first"}"#),
+        ToolCall(id: "c2", name: "bash", argumentsJSON: #"{"command":"second"}"#),
+      ])
+    ])
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+    let turn = Task {
+      try await run(runtime, autoApproveWindowOpen: true)
+    }
+
+    // when
+    await firstDispatchStarted.waitIgnoringCancellation()
+    turn.cancel()
+    let outcome = try await turn.value
+
+    // then
+    #expect(outcome.result == .degraded(.providerUnavailable, usage: nil))
+    #expect(await dispatcher.dispatchedCallIds == ["c1"])
+  }
+
   @Test func liveObservationsFenceUnderTheToolsDeclaredLabel() async throws {
     // given — skill_load declares the "skills" label; its body must reach the wire under it
     let definition = ToolDefinition(
@@ -524,5 +550,34 @@ import Testing
     // then — the run recovers with the error observation in history
     #expect(try requireCompleted(outcome.result).content == "recovered")
     #expect(outcome.exchanges[0].observations[0].status == .error)
+  }
+}
+
+private actor CancellationGatedDispatcher: ToolDispatching {
+  nonisolated let definitions: [ToolDefinition] = []
+  private let firstDispatchStarted: AsyncGate
+  private let cancellationHold = AsyncGate()
+  private(set) var dispatchedCallIds: [String] = []
+
+  init(firstDispatchStarted: AsyncGate) {
+    self.firstDispatchStarted = firstDispatchStarted
+  }
+
+  func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
+    dispatchedCallIds.append(call.id)
+    if dispatchedCallIds.count == 1 {
+      firstDispatchStarted.open()
+      await cancellationHold.wait()
+    }
+    return ToolDispatchOutcome(
+      observation: ToolObservation(
+        callId: call.id,
+        toolName: call.name,
+        content: "cancelled",
+        status: .error,
+        ingestedUntrusted: false
+      ),
+      argsRedacted: call.argumentsJSON
+    )
   }
 }
