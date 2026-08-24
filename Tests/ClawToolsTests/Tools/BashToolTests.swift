@@ -104,6 +104,7 @@ import Testing
     #expect(definition.egressClass == .none)
     #expect(definition.metadataProvenance == .trusted)
     #expect(definition.fenceLabel == "bash")
+    #expect(definition.invocationIdentity == "shell:/bin/zsh")
     #expect(definition.requiresInteractiveRun)
   }
 
@@ -294,6 +295,23 @@ import Testing
     #expect(action.guardTexts == ["curl -H 'token: hunter2' example.com"])
   }
 
+  @Test func theApprovalPreviewRendersHostileControlsVisibly() async throws {
+    // given
+    let tool = makeTool()
+    let command = "printf safe\u{202E}hidden\u{001B}[2J"
+
+    // when
+    let action = try prepared(await tool.prepareAction(arguments: arguments(command: command)))
+    let preview = try #require(action.presentation.contentPreview)
+
+    // then
+    #expect(preview.contains("\u{202E}") == false)
+    #expect(preview.contains("\u{001B}") == false)
+    #expect(preview.contains("<U+202E>"))
+    #expect(preview.contains("<U+001B>"))
+    #expect(action.guardTexts == [command])
+  }
+
   @Test func theApprovalBlastRadiusStatesTheShellCwdAndTimeout() async throws {
     // given
     let tool = makeTool(root: "/tmp/claw-root", shellPath: "/bin/zsh")
@@ -348,7 +366,7 @@ extension BashToolTests {
     // then
     #expect(payload.status == .ok)
     #expect(payload.ingestedUntrusted)
-    #expect(payload.readPrivateData == false)
+    #expect(payload.readPrivateData)
     #expect(payload.content.contains("exit 0"))
     #expect(payload.content.contains("listing"))
     #expect(payload.content.contains("warning"))

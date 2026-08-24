@@ -274,6 +274,7 @@ import Testing
   /// announcements had landed by the time it ran.
   private struct AnnouncingHostTool: Tool {
     let recorder: RecordingInvocationEcho
+    var probe: ExecutionProbe?
 
     var definition: ToolDefinition {
       ToolDefinition(
@@ -296,7 +297,8 @@ import Testing
     }
 
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-      ToolPayload(
+      await probe?.mark()
+      return ToolPayload(
         content: "echoes=\(await recorder.landed())",
         status: .ok,
         ingestedUntrusted: true
@@ -310,7 +312,7 @@ import Testing
     let recorder = RecordingInvocationEcho()
     let executor = makeExecutor(
       env,
-      tools: [AnnouncingHostTool(recorder: recorder)],
+      tools: [AnnouncingHostTool(recorder: recorder, probe: nil)],
       echo: recorder
     )
 
@@ -333,6 +335,33 @@ import Testing
     #expect(echoes.first?.chatId == 7)
     #expect(echoes.first?.tool == "bash")
     #expect(echoes.first?.detail == "swift build")
+  }
+
+  @Test func aButtonApprovedCommandDoesNotRunWhenItsAnnouncementFails() async throws {
+    // given
+    let env = try makeSuspendedFixture()
+    let recorder = RecordingInvocationEcho(succeeds: false)
+    let probe = ExecutionProbe()
+    let executor = makeExecutor(
+      env,
+      tools: [AnnouncingHostTool(recorder: recorder, probe: probe)],
+      echo: recorder
+    )
+
+    // when
+    let commit = await executor.executeApproved(
+      approval(
+        env,
+        tool: "bash",
+        argsJSON: #"{"command":"swift build","timeoutSeconds":30}"#,
+        target: "host_exec:/bin/zsh:/w"
+      )
+    )
+
+    // then
+    #expect(commit == .committed)
+    #expect(await probe.executed == false)
+    #expect(try messageContent(env)?.contains("nothing ran") == true)
   }
 
   @Test func aToolThatAnnouncesNothingIsNotEchoed() async throws {

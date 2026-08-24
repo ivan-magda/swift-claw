@@ -28,7 +28,7 @@ public struct OutboxInvocationEcho: ToolInvocationEchoing {
     self.logger = logger
   }
 
-  public func echo(_ invocation: ToolInvocationEcho) async {
+  public func echo(_ invocation: ToolInvocationEcho) async -> Bool {
     let text = Self.text(for: invocation, redactor: redactor)
     do {
       guard
@@ -38,16 +38,17 @@ public struct OutboxInvocationEcho: ToolInvocationEchoing {
           text: text
         )
       else {
-        return
+        logger.error("could not enqueue the \(invocation.tool) echo for run \(invocation.runId)")
+        return false
       }
     } catch {
-      // Best-effort by contract: the command still runs, and the owner still has `/stop`.
       logger.error(
         "could not enqueue the \(invocation.tool) echo for run \(invocation.runId): \(error)"
       )
-      return
+      return false
     }
     notifyOutbox()
+    return true
   }
 
   /// The owner-visible line: a fixed headline naming the tool and the interrupt, then the command
@@ -55,7 +56,7 @@ public struct OutboxInvocationEcho: ToolInvocationEchoing {
   /// recognize the command, not to audit a long script.
   static func text(for invocation: ToolInvocationEcho, redactor: SecretRedactor) -> String {
     let detail = ToolOutputCap.cap(
-      redactor.redact(invocation.detail),
+      OwnerDisplaySanitizer.renderUnsafeScalars(in: redactor.redact(invocation.detail)),
       maxGraphemes: ToolOutputCap.approvalPreviewGraphemes
     )
     return """

@@ -34,7 +34,7 @@ import Testing
           ts: Self.now
         )
       )
-      sessionId = try #require(claim.sessionId)
+      sessionId = claim.sessionId
       runIds.append(try #require(claim.runId))
     }
     return Fixture(

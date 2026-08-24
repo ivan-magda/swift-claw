@@ -3,6 +3,12 @@ import Testing
 
 @testable import ClawProcess
 
+#if canImport(Glibc)
+  import Glibc
+#elseif canImport(Darwin)
+  import Darwin
+#endif
+
 @Suite struct LocalCommandRunnerTests {
   @Test func adapterPreservesRawBytesAndExitStatus() async {
     // given
@@ -130,7 +136,7 @@ import Testing
     #expect(printed == String(cString: resolved))
   }
 
-  @Test func programBudgetStartsAfterSpawnAndReturnsTypedTimeout() async throws {
+  @Test func timeoutReturnsCapturedPrefixesAfterTearingDownTheProcessGroup() async throws {
     // given
     let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
     let runner = SwiftSubprocessLocalCommandRunner(
@@ -141,7 +147,14 @@ import Testing
     )
     let task = Task {
       await runner.run(
-        testCommand(["-c", "trap '' TERM; while :; do :; done"], timeout: .milliseconds(50))
+        testCommand(
+          [
+            "-c",
+            "printf before-timeout; printf before-timeout-error >&2; "
+              + "trap '' TERM; while :; do :; done",
+          ],
+          timeout: .milliseconds(200)
+        )
       )
     }
 
@@ -154,10 +167,18 @@ import Testing
     #expect(processIdentifier > 0)
     #expect(result.termination == .timedOut)
     #expect(result.processIdentifier == processIdentifier)
+    #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "before-timeout")
+    #expect(String(bytes: result.stderr.bytes, encoding: .utf8) == "before-timeout-error")
+    #expect(processDoesNotExist(processIdentifier))
   }
 
   @Test func callerCancellationTearsDownTheCreatedProcessGroup() async throws {
     // given
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("claw-cancel-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let childFile = directory.appendingPathComponent("child-pid")
     let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
     let runner = SwiftSubprocessLocalCommandRunner(
       executablePath: "/bin/sh",
@@ -168,12 +189,19 @@ import Testing
     let task = Task {
       await runner.run(
         testCommand(
-          ["-c", "trap '' TERM; (trap '' TERM; while :; do :; done) & wait"],
+          [
+            "-c",
+            "trap '' TERM; (trap '' TERM; while :; do :; done) & "
+              + "child=$!; echo $child > '\(childFile.path)'; wait",
+          ],
           timeout: .seconds(30)
         )
       )
     }
-    _ = try await firstValue(from: spawned)
+    let processIdentifier = try await firstValue(from: spawned)
+    let childText = try await waitForFileContents(at: childFile)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let childIdentifier = try #require(Int32(childText))
 
     // when
     task.cancel()
@@ -182,13 +210,17 @@ import Testing
 
     // then
     #expect(result.termination == .cancelled)
+    let parentExited = await processEventuallyDoesNotExist(processIdentifier)
+    let childExited = await processEventuallyDoesNotExist(childIdentifier)
+    #expect(parentExited)
+    #expect(childExited)
   }
 
-  @Test func childExitDoesNotWaitForGrandchildHoldingThePipe() async throws {
+  @Test func childExitTerminatesAGrandchildHoldingThePipe() async throws {
     // given
     let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
-    // The backgrounded sleep inherits stdout (the asserted pipe); stderr only publishes its
-    // PID so the test can reap the grandchild instead of orphaning a real 30-second sleep.
+    // The backgrounded sleep inherits stdout (the asserted pipe); stderr publishes its PID so the
+    // test can prove the process group is empty when the runner returns.
     let command = testCommand(["-c", "sleep 30 & echo $! >&2; printf child"], timeout: .seconds(2))
 
     // when
@@ -200,8 +232,7 @@ import Testing
     let pidText = try #require(String(bytes: result.stderr.bytes, encoding: .utf8))
       .trimmingCharacters(in: .whitespacesAndNewlines)
     let grandchild = try #require(Int32(pidText))
-    // ESRCH just means the grandchild already exited; anything else is equally moot here.
-    _ = kill(grandchild, SIGKILL)
+    #expect(processDoesNotExist(grandchild))
   }
 }
 
@@ -230,3 +261,33 @@ private func firstValue(from stream: AsyncStream<Int32>) async throws -> Int32 {
 }
 
 private struct MissingSpawnError: Error {}
+
+private struct MissingFileContentsError: Error {}
+
+private func waitForFileContents(at file: URL) async throws -> String {
+  let clock = ContinuousClock()
+  let deadline = clock.now.advanced(by: .seconds(1))
+  while clock.now < deadline {
+    if let contents = try? String(contentsOf: file, encoding: .utf8), !contents.isEmpty {
+      return contents
+    }
+    try await clock.sleep(for: .milliseconds(10))
+  }
+  throw MissingFileContentsError()
+}
+
+private func processDoesNotExist(_ processIdentifier: Int32) -> Bool {
+  kill(processIdentifier, 0) == -1 && errno == ESRCH
+}
+
+private func processEventuallyDoesNotExist(_ processIdentifier: Int32) async -> Bool {
+  let clock = ContinuousClock()
+  let deadline = clock.now.advanced(by: .seconds(1))
+  while clock.now < deadline {
+    if processDoesNotExist(processIdentifier) {
+      return true
+    }
+    try? await clock.sleep(for: .milliseconds(10))
+  }
+  return processDoesNotExist(processIdentifier)
+}

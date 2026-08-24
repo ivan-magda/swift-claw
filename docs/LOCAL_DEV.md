@@ -270,15 +270,16 @@ Config ................................. FAIL
 **Exercise it from Telegram.** Ask for something that needs the host, e.g. "run `git status` in
 the workspace". The first call parks the turn and sends a card carrying the shell, the working
 directory, the timeout, and the exact redacted command, with three buttons: **Approve**,
-**Approve for this turn**, **Deny**. Approve, and the daemon echoes the command to you before
-it runs, then replies with the combined output and the exit code. A non-zero exit comes back as
-ordinary output the model reads — only a timeout or a shell that would not start is an error.
+**Approve for this turn**, **Deny**. Approve, and the daemon durably queues the command notice
+before starting the process, then replies with the combined output and the exit code. Telegram
+delivery drains asynchronously. A non-zero exit comes back as ordinary output the model reads —
+only a timeout or a shell that would not start is an error.
 
 **The turn-scoped window.** *Approve for this turn* opens a window on the run that suppresses
-later `bash` prompts until the turn ends; each command is still echoed before it runs, and each
-one still passes the arg guard. `/stop` and `/new` end the run and therefore the window, and the
-next turn prompts again. The window widens `bash` only — an ask-tier or sandbox action inside it
-still parks.
+later `bash` prompts until the turn ends; each command still passes the arg guard and must be
+durably queued for delivery before its process starts. `/stop` and `/new` end the run and therefore
+the window, and the next turn prompts again. The window widens `bash` only — an ask-tier or sandbox
+action inside it still parks.
 
 **Scheduled and heartbeat runs cannot use it.** They refuse before preparing an action. You
 are not there to read the card, and that is the worst time for a host command to run.
@@ -288,6 +289,9 @@ minus the whole `CLAW_` prefix, so `env | grep CLAW_` inside a call returns noth
 invariant is pinned by `prefixPolicyDropsAKeyThisProcessReallyInherited` in `ClawProcessTests`,
 which launches `/usr/bin/env` directly rather than through a shell — `sh` regenerates a default
 `PATH` when the variable is absent, which would hide the removal.
+
+Every non-`CLAW_*` variable is inherited. Keep the daemon environment minimal: variables such as
+`GH_TOKEN`, cloud credentials, and `SSH_AUTH_SOCK` remain available to an approved command.
 
 ---
 

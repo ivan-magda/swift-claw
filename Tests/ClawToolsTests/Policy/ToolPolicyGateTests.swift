@@ -1337,6 +1337,23 @@ private struct ProbedDangerousTool: Tool {
     #expect(echoes.first?.detail == "ls -la")
   }
 
+  @Test func aWindowWidenedCallDoesNotRunWhenItsAnnouncementFails() async {
+    // given — durable echo persistence refused the command notice
+    let recorder = RecordingInvocationEcho(succeeds: false)
+    let dispatcher = makeAnnouncingDispatcher(recorder: recorder)
+
+    // when
+    let outcome = await dispatcher.dispatch(
+      call: ToolCall(id: "b1", name: "bash", argumentsJSON: #"{"command":"ls -la"}"#),
+      context: makeDispatchContext(windowOpen: true)
+    )
+
+    // then — the tool body would return `echoes=1`; the gateway-authored error proves it never ran
+    #expect(outcome.observation.status == .error)
+    #expect(outcome.observation.content.contains("nothing ran"))
+    #expect(outcome.observation.content.contains("echoes=") == false)
+  }
+
   @Test func aParkedCallIsNeverAnnounced() async {
     // given — no window, so the same call suspends onto the approval fabric instead
     let recorder = RecordingInvocationEcho()

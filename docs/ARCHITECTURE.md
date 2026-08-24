@@ -652,7 +652,7 @@ v1 ships **read-only tools only**: `web_search`, `web_fetch`, workspace **file R
 | Egress-from-sandbox | opted-in network in an exec run | `dangerous` | approval; run is `canExfiltrate=true` |
 | Remote / MCP | every `mcp__<server>__<tool>` | `ask` by default; named `safe` override allowed | default per-action approval; egress is `arbitraryDestination`, the trifecta can still force approval, and the result is untrusted (§10.3) |
 
-(Inc 5a) **Registry** of < 20 narrow, typed tools (not a generic shell), each with input/output schemas, declared `RiskLevel`, timeout, sandbox requirement, audit behavior. The **`PolicyGate`** evaluates every proposed call before dispatch, independent of the model, and re-validates the approved action against the originally-approved canonical action + `policy_version` at execution. File tools are workspace-scoped: every path is resolved to its **canonical real path** (`realpath`, after `..` and symlink resolution) and **asserted to lie within the workspace root** — a tested invariant covering both the link and its final target — with size-capped output and secret redaction. Tool annotations are non-authoritative UX hints; the code gate is authoritative. (Batch approval + a time-boxed auto-approve toggle are deferred to the P-tools phase.)
+(Inc 5a) **Registry** of < 20 narrow, typed tools, with one deliberate generic exception: the owner-enabled host `bash` tool in §13.1. Each tool has input/output schemas, declared `RiskLevel`, timeout, sandbox requirement, and audit behavior. The **`PolicyGate`** evaluates every proposed call before dispatch, independent of the model, and re-validates the approved action against the originally-approved canonical action + `policy_version` at execution. File tools are workspace-scoped: every path is resolved to its **canonical real path** (`realpath`, after `..` and symlink resolution) and **asserted to lie within the workspace root** — a tested invariant covering both the link and its final target — with size-capped output and secret redaction. Tool annotations are non-authoritative UX hints; the code gate is authoritative. Host `bash` alone offers the turn-scoped approval window described in §11.
 
 ### 10.3 MCP client
 
@@ -705,7 +705,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **Secrets:** never in replies or logs. **Exact-value redaction** of the loaded secret values (bot token, api keys, age-decrypted material) is the **PRIMARY** mechanism at both the log boundary and the outbound-reply boundary (the values are already in memory — cheap, deterministic); pattern-based scanning is **secondary** defense-in-depth. The gateway owns the destination chat id; outbound controls strip auto-fetching image/link elements.
 - **Rotating credentials extend exact-value redaction to a dynamic set.** A static key is redactable once at load; an OAuth pair is not. The credential actor therefore keeps a bounded exact-value set covering the current token pair **and the prior pair during rotation** — the window in which a stale value can still surface — and each authorization carries the relevant set to the provider. OAuth and store code redact **before constructing any error**; inference redacts response heads, bounded error bodies, transport errors, and logs before they leave `ClawLLM`. **Never logged, even at debug level:** access/refresh tokens; device-auth IDs, user codes after the prompt, authorization codes, PKCE verifiers; the ChatGPT account ID; request/response bodies; provider replay payloads; owner prompt or model output text. **Safe diagnostics** are provider ID, qualified model, status code, attempt number, bounded retry delay, event/byte counts, credential freshness class, and generation number. Control characters and terminal escape sequences are stripped from remote text before it reaches stderr or Telegram — a remote string is never trusted with a terminal.
 - **Opaque provider state is data with no reader** (§8.5). Replay payloads are never rendered into prompts, FTS-indexed, recall-eligible, or exposed to tools, audit arguments, logs, Telegram, or memory files, and are never sent to any provider but the issuer that produced them. They are the one context-carrying value with **no untrusted-tier wrapper**, and that is sound only because nothing outside the owning adapter ever interprets them: the moment anything else reads one, it needs the wrapper.
-- **Host execution moves the trust boundary, and only the owner may move it.** `bash` (§13.1) runs on the owner's machine with the owner's own privileges, so layer (4)'s VM containment simply does not apply to it: an injection that reaches an approved `bash` call reaches the owner's account, not a disposable VM. That is why the tool is **absent from the registry** unless the owner sets the flag, why it is `dangerous`-tier, and why it refuses every non-interactive run — a scheduled or heartbeat run has no owner watching the prompt it would park on. Four controls survive the move: the dangerous-tier approval; `ExfilArgGuard` scanning every command, window-widened ones included; a child environment stripped of the whole `CLAW_*` prefix, so no command can read a secret out of its own environment; and a Telegram echo of each command **before** it runs, so the owner can `/stop` it. None of the four contains the command itself. For host execution the honest containment claim is owner attention, not isolation, and the feature is off by default because that is a trade only the owner can accept.
+- **Host execution moves the trust boundary, and only the owner may move it.** `bash` (§13.1) runs on the owner's machine with the owner's own privileges, so layer (4)'s VM containment simply does not apply to it: an injection that reaches an approved `bash` call reaches the owner's account, not a disposable VM. That is why the tool is **absent from the registry** unless the owner sets the flag, why it is `dangerous`-tier, and why it refuses every non-interactive run — a scheduled or heartbeat run has no owner watching the prompt it would park on. Four controls survive the move: the dangerous-tier approval; `ExfilArgGuard` scanning every command, window-widened ones included; a child environment stripped of the whole `CLAW_*` prefix, so no command can read a clawd secret out of its own environment; and a fail-closed durable Telegram notice queued before each process starts. Notice delivery itself is asynchronous. None of the four contains the command itself, and non-`CLAW_*` environment credentials remain reachable. For host execution the honest containment claim is owner attention, not isolation, and the feature is off by default because that is a trade only the owner can accept.
 - **Accepted v1 limitation — `file_write` symlink TOCTOU.** `file_write` re-validates the approved path against the live filesystem at execution time (§10.2), but the directory creation, staging, and rename that follow are path-based, so a process racing the daemon on the same host could swap a parent directory for a symlink inside that window and redirect the write outside the workspace. This is **out of the v1 threat model** for the same reason §7 drops in-DB hash-chaining: a same-host attacker running as the daemon's user does not need the race — they can already write anywhere the daemon can. The four layers above defend against a subverted *model*, not a hostile co-resident process. If hardening is added later, bind the containment validation and the write to the same filesystem object (descriptor-relative, no-follow traversal; `openat2` + `RESOLVE_BENEATH` is Linux-only, Darwin needs a manual `O_NOFOLLOW` ancestor walk) — do not claim the race is closed without that.
 
 ## 13. Execution / sandbox architecture (Inc 5b macOS; Inc 6 Linux)
@@ -773,18 +773,22 @@ exists to keep them from being confused for one another, in code and in the owne
   never enables host execution and neither one's failure withdraws the other.
 - **One command per call, and no session.** Each call spawns `<shell> -c <command>` at the
   workspace root. Nothing survives the call except what it wrote to disk — a `cd`, a variable, an
-  export, or a background job does not reach the next call. The tool description states this,
+  export, or a background job does not reach the next call. The launcher terminates remaining
+  members of the command's process group after the shell exits. The tool description states this,
   because a model that assumes otherwise writes commands that silently do nothing.
 - **The child environment is inherit-minus-prefix.** Every daemon secret arrives through a
   `CLAW_`-prefixed variable, so the launcher drops the **prefix** rather than a list of known keys:
   a secret added later is covered without anyone remembering to extend a denylist. The policy is a
-  `LocalCommand` field, so the sandbox's own key removals and this one are one mechanism.
+  `LocalCommand` field, so the sandbox's own key removals and this one are one mechanism. Every
+  non-`CLAW_*` variable remains inherited, including credentials and `SSH_AUTH_SOCK`; the public
+  operator guidance therefore requires a minimal daemon environment.
 - **`canExfiltrate` is unconditionally true.** The host keeps its network and nothing in the tool
   can take it away, so the trifecta tier assumes any command can reach outward.
 - **The shell is configuration; its availability is not.** The configured shell must be an absolute
   path or config load fails. Whether that path exists and is executable is settled at registration
-  by one probe that doctor reads too, so an absent tool always has a row saying why. A shell that
-  disappears after boot leaves the daemon running with the tool missing — not a boot failure.
+  by one probe that doctor reads too, so an absent tool always has a row saying why. If a registered
+  shell disappears after boot, the tool remains visible and calls fail to start until restart;
+  a separately run doctor reports the path's current unavailable state.
 - **The timeout is the model's choice inside the owner's bound.** The model may name a timeout; the
   config supplies the default and the ceiling, and the prepared action **clamps** rather than
   refuses. The bound is re-checked at execution, because a recorded action outlives the config that
@@ -792,21 +796,28 @@ exists to keep them from being confused for one another, in code and in the owne
 - **The canonical target is the shell and the working directory, not the command.** One pair, so
   the args hash alone distinguishes one command from the next. Execution re-derives that pair and
   runs nothing when it no longer matches what the owner approved — a shell or workspace-root change
-  between approval and resume must not silently relocate the command.
+  between approval and resume must not silently relocate the command. The configured shell also
+  contributes the tool's invocation identity to `policy_version`, so a restart under another shell
+  invalidates the parked approval before a turn-scoped window can open.
 - **Interactive runs only, declared by the tool.** The requirement is a `ToolDefinition` capability
   flag folded into `policy_version`'s static sub-hash and checked once at the top of the gate —
   never a tool-name literal in the gate — so a future tool that declares it cannot be ignored.
-- **Every executing call is announced before it runs.** A tool declares the text it wants echoed to
-  the owner (nothing, by default). The dispatcher emits it **after** the gate verdict and before
-  execution, so a blocked or parked call is never announced, and the button-approved path — which
-  has no dispatcher — emits it after its own claim. The notice rides the transactional outbox on an
-  extension of the run's delivery sequence; a literal step index would collide with the run's own
-  replies under the outbox dedup key and be dropped silently.
+- **Every executing call is durably announced before its process starts.** A tool declares the text
+  it wants echoed to the owner (nothing, by default). The dispatcher enqueues it **after** the gate
+  verdict and before execution, so a blocked or parked call is never announced, and the
+  button-approved path — which has no dispatcher — enqueues it after its own claim. A failed enqueue
+  runs nothing. The notice rides the transactional outbox on an extension of the run's delivery
+  sequence; actual Telegram delivery is asynchronous. Model-authored controls and Unicode format
+  scalars render visibly in both the approval preview and the notice while the raw recorded command
+  remains unchanged for scanning, hashing, and execution.
 - **A non-zero exit is data, not a tool fault.** A command that ran to completion reports `ok` with
   its combined output and exit code — the model must read a failure, not be told the tool broke.
   Only a timeout or a failed start is an `error`, and the timeout still carries the partial output.
   Output is captured to the launcher's shared raw limit, secret-redacted, then capped like any
-  other tool's; every result is untrusted and taints the session.
+  other tool's; every launched command's result is untrusted, taints the session, and arms the
+  private-data leg because the process could read any file available to the daemon account. A
+  window-approved command is awaited through its bounded process-group teardown and is never
+  abandoned by the dispatcher's generic read-only-tool deadline race.
 
 ## 14. Scheduler architecture (Inc 4)
 

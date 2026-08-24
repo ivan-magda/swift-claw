@@ -122,8 +122,9 @@ other context leaves less room; `fits_cap` does not predict that residual budget
 
 clawd shows an approval card for two reasons.
 
-**The tool's own risk tier.** File writes, memory writes, and code or host shell execution
-park the run every time, whatever else the session did.
+**The tool's own risk tier.** File writes, memory writes, and code execution park the run every
+time. Host shell execution parks unless you already chose *Approve for this turn* on a host shell
+card in the current turn.
 
 **Exfiltration risk.** clawd holds an arbitrary-destination tool call, including `web_fetch`
 and MCP calls, for your approval once the session has done *both* of these:
@@ -300,12 +301,15 @@ use the compiler you have installed, and keep working in your workspace instead 
 It also moves the blast radius from a disposable VM to your account. Read the trade before
 you turn it on:
 
-- **Every command needs your approval**, and the exact command is in the card. Nothing runs
-  that you have not read.
-- **clawd sends you each command in Telegram before running it**, including the ones a
-  turn-scoped window auto-approved, so you can `/stop` it.
-- **The command's environment carries no `CLAW_*` variable**, so nothing it runs can read your
-  bot token or an API key out of it.
+- **The first command needs your approval**, and the exact command is in the card. Choose
+  *Approve* for one command or *Approve for this turn* to let later host commands in that turn
+  run without individual cards after scanning.
+- **clawd durably queues each executing command for Telegram delivery before starting its
+  process**, including commands covered by a turn-scoped window. If that queue write fails, the
+  command does not run. Delivery is asynchronous, so use `/stop` as soon as the notice arrives.
+- **The command's environment carries no `CLAW_*` variable**, so it cannot read clawd's bot token
+  or API keys from that namespace. Every non-`CLAW_*` variable is still inherited. Run clawd with
+  a minimal environment: `GH_TOKEN`, cloud credentials, and `SSH_AUTH_SOCK` remain usable if set.
 - **clawd scans each command for secrets first** — exact secret values, secret-shaped tokens,
   and substrings of `MEMORY.md` and `USER.md` — and a match blocks it.
 - **Scheduled jobs and the heartbeat cannot use it at all.** Those runs happen while you are
@@ -320,8 +324,8 @@ do.
 |---|---|---|
 | `CLAW_BASH_ENABLED` | `false` | The switch. Off means the tool does not exist — the model cannot see it or call it. |
 | `CLAW_BASH_SHELL` | `/bin/zsh` | Absolute path to the shell. Must exist and be executable, or the tool stays absent. |
-| `CLAW_BASH_TIMEOUT_DEFAULT` | `30` | Seconds a command gets when the model names no timeout. |
-| `CLAW_BASH_TIMEOUT_MAX` | `300` | Seconds no command may exceed, whatever the model asks for. Ceiling 3600. |
+| `CLAW_BASH_TIMEOUT_DEFAULT` | `30` | Seconds a command gets when the model names no timeout. An explicit value above `CLAW_BASH_TIMEOUT_MAX` is invalid. |
+| `CLAW_BASH_TIMEOUT_MAX` | `300` | Seconds no command may exceed, whatever the model asks for. Ceiling 3600. If only this value is lowered below 30, the unset default follows it down. |
 
 `clawd doctor` reports a **Host Shell** group: `bash disabled by CLAW_BASH_ENABLED`, or
 `bash.available`, `bash.shell`, and `bash.timeout` when it is ready. If you enabled the tool

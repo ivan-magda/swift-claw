@@ -4,11 +4,15 @@ import ClawCore
 /// the owner would have been told.
 public actor RecordingInvocationEcho: ToolInvocationEchoing {
   public private(set) var echoes: [ToolInvocationEcho] = []
+  private let succeeds: Bool
 
-  public init() {}
+  public init(succeeds: Bool = true) {
+    self.succeeds = succeeds
+  }
 
-  public func echo(_ invocation: ToolInvocationEcho) async {
+  public func echo(_ invocation: ToolInvocationEcho) async -> Bool {
     echoes.append(invocation)
+    return succeeds
   }
 
   /// How many announcements have landed. A tool double reads this from inside its own `execute` to

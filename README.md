@@ -42,7 +42,10 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   (macOS 26 arm64, off by default).
 - **Or your own machine, if you say so.** Turning on `CLAW_BASH_ENABLED` adds a `bash` tool
   that runs one command at a time on the host, with your real toolchain and files. Off by
-  default. You approve each command, and clawd shows it to you again before it runs.
+  default. The first command parks for approval; you can approve just that command or widen
+  approval to the rest of the turn. Each executing command is durably queued for Telegram
+  delivery before its process starts. `CLAW_*` variables are removed from the child, but other
+  daemon environment credentials remain available to it.
 - **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
   the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
   named tool safe, but the exfiltration gate can still require approval. Only you can add a

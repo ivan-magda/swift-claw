@@ -114,7 +114,8 @@ log out. Configure and seal first ([GETTING_STARTED.md](GETTING_STARTED.md)) —
 Neither unit sandboxes the daemon, so the account you install it under is the account
 `clawd` acts as. That only matters if you turn on
 [host shell commands](CUSTOMIZATION.md#host-shell-commands), where it decides exactly what
-an approved command can reach.
+an approved command can reach. Those commands drop `CLAW_*` variables but inherit the service's
+other credentials and `SSH_AUTH_SOCK`, so keep that environment minimal.
 
 ### Script install (`~/.swift-claw` layout)
 

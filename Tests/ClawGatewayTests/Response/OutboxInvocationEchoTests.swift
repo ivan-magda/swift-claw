@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Logging
 import Synchronization
@@ -31,8 +32,8 @@ private final class EchoProbe: Sendable {
   }
 }
 
-/// An outbox that records every notice, or refuses them all — so the best-effort contract is
-/// observable: a store that cannot take the line must not stop the command it announces.
+/// An outbox that records every notice, or refuses them all, so the fail-closed echo result is
+/// observable without a real database.
 private struct ProbeOutbox: OutboxStore {
   let probe: EchoProbe
   var failing = false
@@ -95,6 +96,23 @@ private struct ProbeOutbox: OutboxStore {
     #expect(text.contains("curl"))
   }
 
+  @Test func theEchoRendersHostileControlsVisibly() {
+    // given — bidi and terminal controls that could reorder or repaint the command for the owner
+    let command = "printf safe\u{202E}hidden\u{001B}[2J"
+
+    // when
+    let text = OutboxInvocationEcho.text(
+      for: invocation(detail: command),
+      redactor: SecretRedactor(secretValues: [])
+    )
+
+    // then
+    #expect(text.contains("\u{202E}") == false)
+    #expect(text.contains("\u{001B}") == false)
+    #expect(text.contains("<U+202E>"))
+    #expect(text.contains("<U+001B>"))
+  }
+
   @Test func theEchoIsLengthBounded() {
     // given — a command far longer than the owner-facing preview cap
     let command = String(repeating: "x", count: ToolOutputCap.approvalPreviewGraphemes * 3)
@@ -117,11 +135,11 @@ private struct ProbeOutbox: OutboxStore {
       outbox: ProbeOutbox(probe: probe),
       redactor: SecretRedactor(secretValues: []),
       notifyOutbox: { probe.poke() },
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
     // when
-    await echo.echo(invocation(detail: "ls -la", runId: 31, chatId: 64))
+    let accepted = await echo.echo(invocation(detail: "ls -la", runId: 31, chatId: 64))
 
     // then — one line, addressed to the run's own delivery sequence, and drained straight away
     #expect(probe.recorded.count == 1)
@@ -129,23 +147,25 @@ private struct ProbeOutbox: OutboxStore {
     #expect(probe.recorded.first?.chatId == 64)
     #expect(probe.recorded.first?.text.contains("ls -la") == true)
     #expect(probe.pokeCount == 1)
+    #expect(accepted)
   }
 
-  @Test func aStoreFailureNeitherThrowsNorPokes() async {
+  @Test func aStoreFailureReportsFailureAndDoesNotPoke() async {
     // given — an outbox that refuses the line
     let probe = EchoProbe()
     let echo = OutboxInvocationEcho(
       outbox: ProbeOutbox(probe: probe, failing: true),
       redactor: SecretRedactor(secretValues: []),
       notifyOutbox: { probe.poke() },
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
 
-    // when — best-effort by contract: the caller runs the command regardless
-    await echo.echo(invocation(detail: "ls -la"))
+    // when
+    let accepted = await echo.echo(invocation(detail: "ls -la"))
 
     // then
     #expect(probe.recorded.isEmpty)
     #expect(probe.pokeCount == 0)
+    #expect(accepted == false)
   }
 }

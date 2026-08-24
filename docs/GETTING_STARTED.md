@@ -200,6 +200,10 @@ your machine — run that.
 install and manual `/usr/local/bin`), plus the linger/auto-login notes for a machine
 that should stay on after you log out, log locations, and the exit codes.
 
+If you later enable host shell commands, keep the service environment minimal. The child drops
+`CLAW_*` variables but inherits other credentials and `SSH_AUTH_SOCK`; see
+[CUSTOMIZATION.md](CUSTOMIZATION.md#host-shell-commands).
+
 ## 8. ChatGPT subscription instead of an API key
 
 This route replaces `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY`. **Stop `clawd` first**:

@@ -91,6 +91,22 @@ struct BashToolRegistrationTests {
     // then
     #expect(without != with)
   }
+
+  @Test("changing the configured shell changes the policy fingerprint")
+  func shellPathMovesThePolicyVersion() throws {
+    // given
+    let shell = try Self.config(environment: [
+      AcceptanceEnv.bashEnabled: "true",
+      AcceptanceEnv.bashShell: "/bin/sh",
+    ])
+    let bash = try Self.config(environment: [
+      AcceptanceEnv.bashEnabled: "true",
+      AcceptanceEnv.bashShell: "/bin/bash",
+    ])
+
+    // when / then
+    #expect(try Self.staticSubhash(config: shell) != Self.staticSubhash(config: bash))
+  }
 }
 
 // MARK: - Composition

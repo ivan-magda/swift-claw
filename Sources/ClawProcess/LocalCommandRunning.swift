@@ -3,6 +3,12 @@ import Foundation
 import Subprocess
 import Synchronization
 
+#if canImport(Glibc)
+  import Glibc
+#elseif canImport(Darwin)
+  import Darwin
+#endif
+
 #if canImport(System)
   import System
 #else
@@ -143,15 +149,22 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
   public func run(_ command: LocalCommand) async -> LocalCommandResult {
     let clock = ContinuousClock()
     let spawnedProcessIdentifier = SpawnedProcessIdentifierBox()
+    let stdoutCapture = CommandStreamCapture(limit: command.captureLimit)
+    let stderrCapture = CommandStreamCapture(limit: command.captureLimit)
+    let executionTask = Task {
+      await self.spawnAndCapture(
+        command,
+        spawnedProcessIdentifier: spawnedProcessIdentifier,
+        stdoutCapture: stdoutCapture,
+        stderrCapture: stderrCapture
+      )
+    }
 
     let outcome = await DeadlineRace.race(
       allowance: command.timeout,
       sleep: { try await clock.sleep(for: $0) },
       operation: {
-        await self.spawnAndCapture(
-          command,
-          spawnedProcessIdentifier: spawnedProcessIdentifier
-        )
+        await executionTask.value
       }
     )
 
@@ -159,17 +172,21 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
     case .operationReturned(let result):
       return result
     case .deadlineExpired:
+      executionTask.cancel()
+      _ = await executionTask.value
       return LocalCommandResult(
         termination: .timedOut,
-        stdout: Self.emptyStream,
-        stderr: Self.emptyStream,
+        stdout: stdoutCapture.snapshot(),
+        stderr: stderrCapture.snapshot(),
         processIdentifier: spawnedProcessIdentifier.value
       )
     case .callerCancelled:
+      executionTask.cancel()
+      _ = await executionTask.value
       return LocalCommandResult(
         termination: .cancelled,
-        stdout: Self.emptyStream,
-        stderr: Self.emptyStream,
+        stdout: stdoutCapture.snapshot(),
+        stderr: stderrCapture.snapshot(),
         processIdentifier: spawnedProcessIdentifier.value
       )
     }
@@ -177,7 +194,9 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
 
   private func spawnAndCapture(
     _ command: LocalCommand,
-    spawnedProcessIdentifier: SpawnedProcessIdentifierBox
+    spawnedProcessIdentifier: SpawnedProcessIdentifierBox,
+    stdoutCapture: CommandStreamCapture,
+    stderrCapture: CommandStreamCapture
   ) async -> LocalCommandResult {
     let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
 
@@ -196,18 +215,24 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
         spawnedProcessIdentifier.value = processIdentifier
         onSpawnForTesting(processIdentifier)
 
-        async let stdout = Self.capture(execution.standardOutput, limit: command.captureLimit)
-        async let stderr = Self.capture(execution.standardError, limit: command.captureLimit)
+        async let stdout = Self.capture(execution.standardOutput, into: stdoutCapture)
+        async let stderr = Self.capture(execution.standardError, into: stderrCapture)
         let streams = try await (stdout, stderr)
 
         return CommandClosureResult(stdout: streams.0, stderr: streams.1)
       }
 
+      let processIdentifier = Int32(result.processIdentifier.value)
+      await Self.terminateRemainingProcessGroup(
+        processIdentifier,
+        gracePeriod: command.teardownGracePeriod
+      )
+
       return LocalCommandResult(
         termination: Self.classifyTermination(status: result.terminationStatus),
         stdout: result.closureResult.stdout,
         stderr: result.closureResult.stderr,
-        processIdentifier: Int32(result.processIdentifier.value)
+        processIdentifier: processIdentifier
       )
     } catch {
       let termination: LocalCommandTermination =
@@ -217,8 +242,8 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
 
       return LocalCommandResult(
         termination: termination,
-        stdout: Self.emptyStream,
-        stderr: Self.emptyStream,
+        stdout: stdoutCapture.snapshot(),
+        stderr: stderrCapture.snapshot(),
         processIdentifier: spawnedProcessIdentifier.value
       )
     }
@@ -253,6 +278,40 @@ private extension SwiftSubprocessLocalCommandRunner {
       return .signaled(Int32(signal))
     }
   }
+
+  /// The direct child has already been reaped when this runs, so its session identifier names a
+  /// live process group only when descendants remain. Terminate that group before returning to the
+  /// caller; a background job must never outlive the command that created it.
+  static func terminateRemainingProcessGroup(
+    _ processIdentifier: Int32,
+    gracePeriod: Duration
+  ) async {
+    guard processIdentifier > 0, kill(-processIdentifier, SIGTERM) == 0 else {
+      return
+    }
+
+    let clock = ContinuousClock()
+    let gracefulDeadline = clock.now.advanced(by: gracePeriod)
+    while clock.now < gracefulDeadline {
+      guard processGroupExists(processIdentifier) else {
+        return
+      }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+
+    _ = kill(-processIdentifier, SIGKILL)
+    let forcefulDeadline = clock.now.advanced(by: gracePeriod)
+    while clock.now < forcefulDeadline, processGroupExists(processIdentifier) {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+  }
+
+  static func processGroupExists(_ processIdentifier: Int32) -> Bool {
+    if kill(-processIdentifier, 0) == 0 {
+      return true
+    }
+    return errno != ESRCH
+  }
 }
 
 // MARK: - Environment
@@ -282,39 +341,14 @@ private extension SwiftSubprocessLocalCommandRunner {
 // MARK: - Raw Capture
 
 private extension SwiftSubprocessLocalCommandRunner {
-  static let emptyStream = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
-
   static func capture(
     _ sequence: SubprocessOutputSequence,
-    limit: Int
+    into capture: CommandStreamCapture
   ) async throws -> CapturedCommandStream {
-    var prefix = Data()
-    prefix.reserveCapacity(min(limit, 64 * 1024))
-
-    var totalBytes = 0
-    var overflowedCounter = false
-
     for try await buffer in sequence {
-      let addition = totalBytes.addingReportingOverflow(buffer.count)
-
-      totalBytes = addition.overflow ? Int.max : addition.partialValue
-      overflowedCounter = overflowedCounter || addition.overflow
-
-      let remaining = max(0, limit - prefix.count)
-      guard remaining > 0 else {
-        continue
-      }
-
-      buffer.withUnsafeBytes { bytes in
-        prefix.append(contentsOf: bytes.prefix(remaining))
-      }
+      capture.append(Data(buffer: buffer))
     }
-
-    return CapturedCommandStream(
-      bytes: prefix,
-      totalBytes: totalBytes,
-      truncated: overflowedCounter || totalBytes > prefix.count
-    )
+    return capture.snapshot()
   }
 }
 
@@ -334,6 +368,49 @@ private final class SpawnedProcessIdentifierBox: Sendable {
       storage.withLock {
         $0 = newValue
       }
+    }
+  }
+}
+
+private final class CommandStreamCapture: Sendable {
+  private struct State {
+    var prefix: Data
+    var totalBytes = 0
+    var overflowedCounter = false
+  }
+
+  private let limit: Int
+  private let storage: Mutex<State>
+
+  init(limit: Int) {
+    self.limit = limit
+    var prefix = Data()
+    prefix.reserveCapacity(min(limit, 64 * 1024))
+    storage = Mutex(State(prefix: prefix))
+  }
+
+  func append<Bytes: Sequence>(_ buffer: Bytes) where Bytes.Element == UInt8 {
+    let bytes = Data(buffer)
+    storage.withLock { state in
+      let addition = state.totalBytes.addingReportingOverflow(bytes.count)
+      state.totalBytes = addition.overflow ? Int.max : addition.partialValue
+      state.overflowedCounter = state.overflowedCounter || addition.overflow
+
+      let remaining = max(0, limit - state.prefix.count)
+      guard remaining > 0 else {
+        return
+      }
+      state.prefix.append(contentsOf: bytes.prefix(remaining))
+    }
+  }
+
+  func snapshot() -> CapturedCommandStream {
+    storage.withLock { state in
+      CapturedCommandStream(
+        bytes: state.prefix,
+        totalBytes: state.totalBytes,
+        truncated: state.overflowedCounter || state.totalBytes > state.prefix.count
+      )
     }
   }
 }

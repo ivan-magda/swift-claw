@@ -520,9 +520,15 @@ public struct GatedToolDispatcher: ToolDispatching {
       guard let preparedArguments = JSONValue.parse(recorded.canonicalArgsJSON) else {
         return errorOutcome(call: call, reason: "The prepared \(call.name) action is unreadable.")
       }
-      await announce(tool: tool, arguments: preparedArguments, context: context)
-      let payload = await executeWithTimeout(
-        tool: tool,
+      guard await announce(tool: tool, arguments: preparedArguments, context: context) else {
+        return errorOutcome(
+          call: call,
+          reason: "The \(call.name) call could not be announced safely; nothing ran."
+        )
+      }
+      // A prepared call reached this arm only through a dangerous tool's turn-scoped window. Its
+      // host side effects must stay owned until the tool's bounded teardown has completed.
+      let payload = await tool.execute(
         arguments: preparedArguments,
         canonicalTarget: recorded.canonicalTarget
       )
@@ -532,7 +538,12 @@ public struct GatedToolDispatcher: ToolDispatching {
       )
     case .allow(let argsRedacted, let action):
       // (4) execute under the tool's own timeout, on the gate-resolved canonical target
-      await announce(tool: tool, arguments: arguments, context: context)
+      guard await announce(tool: tool, arguments: arguments, context: context) else {
+        return errorOutcome(
+          call: call,
+          reason: "The \(call.name) call could not be announced safely; nothing ran."
+        )
+      }
       let payload = await executeWithTimeout(
         tool: tool,
         arguments: arguments,
@@ -552,11 +563,14 @@ public struct GatedToolDispatcher: ToolDispatching {
     tool: any Tool,
     arguments: JSONValue,
     context: ToolDispatchContext
-  ) async {
-    guard let echo, let detail = tool.invocationEcho(arguments: arguments) else {
-      return
+  ) async -> Bool {
+    guard let detail = tool.invocationEcho(arguments: arguments) else {
+      return true
     }
-    await echo.echo(
+    guard let echo else {
+      return false
+    }
+    return await echo.echo(
       ToolInvocationEcho(
         runId: context.runId,
         chatId: context.chatId,
@@ -571,8 +585,8 @@ public struct GatedToolDispatcher: ToolDispatching {
   /// documents), so a wedged tool — a blocking syscall, hung I/O — would otherwise hold the
   /// strict-FIFO session lane hostage far past its declared timeout, beyond `/stop`'s reach.
   /// The abandoned execute task keeps running detached until its I/O returns; today's tools are
-  /// read-only, so a post-timeout side effect is harmless — write tools must revisit this
-  /// contract explicitly.
+  /// admitted through this path have no host-side effects; dangerous window-widened execution is
+  /// awaited directly above so it cannot outlive its turn.
   private func executeWithTimeout(
     tool: any Tool,
     arguments: JSONValue,

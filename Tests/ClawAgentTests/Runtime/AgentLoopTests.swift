@@ -339,11 +339,11 @@ import Testing
     #expect(outcome.ingestedUntrusted == false)  // blocked observations do not taint (§10)
   }
 
-  @Test func inRunTaintAndPrivateFlagsFeedTheVeryNextGateContext() async throws {
-    // given (rev.1 H1) — call 1 reads MEMORY.md (private), call 2's context must see BOTH flags
+  @Test func bashPrivateDataAndTaintFlagsFeedTheVeryNextGateContext() async throws {
+    // given — a host command can read any private file, so call 2 must see both security flags
     let provider = SequenceProvider([
       toolCallResponse([
-        ToolCall(id: "c1", name: "file_read", argumentsJSON: #"{"path":"MEMORY.md"}"#),
+        ToolCall(id: "c1", name: "bash", argumentsJSON: #"{"command":"cat private.txt"}"#),
         fetchProposal(id: "c2"),
       ]),
       okResponse(content: "done"),

@@ -144,15 +144,22 @@ private extension ApprovedActionExecutor {
     }
     // Announced after the claim: a run `/stop` drove terminal never reaches here, so the owner is
     // never told about a command that will not run.
-    if let echo, let detail = tool.invocationEcho(arguments: arguments) {
-      await echo.echo(
-        ToolInvocationEcho(
-          runId: approval.runId,
-          chatId: approval.ownerUserId,
-          tool: approval.tool,
-          detail: detail
+    if let detail = tool.invocationEcho(arguments: arguments) {
+      guard let echo else {
+        return announcementFailurePayload(tool: approval.tool)
+      }
+      guard
+        await echo.echo(
+          ToolInvocationEcho(
+            runId: approval.runId,
+            chatId: approval.ownerUserId,
+            tool: approval.tool,
+            detail: detail
+          )
         )
-      )
+      else {
+        return announcementFailurePayload(tool: approval.tool)
+      }
     }
     // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
     // abandon-on-timeout race, so the observation is always truthful (file_write is atomic).
@@ -168,6 +175,14 @@ private extension ApprovedActionExecutor {
     ApprovedExecutionAudit(
       tool: approval.tool,
       argsRedacted: redactArguments(approval.canonicalArgsJSON)
+    )
+  }
+
+  func announcementFailurePayload(tool: String) -> ToolPayload {
+    ToolPayload(
+      content: "The \(tool) call could not be announced safely; nothing ran.",
+      status: .error,
+      ingestedUntrusted: false
     )
   }
 }

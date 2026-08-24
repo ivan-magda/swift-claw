@@ -65,6 +65,7 @@ public struct BashTool: Tool {
       metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .dangerous,
+      invocationIdentity: "shell:\(config.shellPath)",
       requiresInteractiveRun: true
     )
   }
@@ -219,7 +220,7 @@ private extension BashTool {
         "run \(config.shellPath) -c · cwd: \(workspaceRoot.path) · timeout \(recorded.timeoutSeconds)s",
       contentPreview: """
         ```bash
-        \(redactor.redact(recorded.command))
+        \(OwnerDisplaySanitizer.renderUnsafeScalars(in: redactor.redact(recorded.command)))
         ```
         """,
       warnings: [Self.hostWarning]
@@ -244,7 +245,15 @@ private extension BashTool {
         status: .error
       )
     case .cancelled:
-      return errorPayload("The bash command was cancelled before it finished.")
+      guard result.processIdentifier != nil else {
+        return errorPayload("The bash command was cancelled before it started.")
+      }
+      return outcomePayload(
+        result,
+        statusLine: "cancelled",
+        notes: ["The command was cancelled before it finished; anything above is partial output."],
+        status: .error
+      )
     case .startFailed(let reason):
       return errorPayload("bash could not start \(config.shellPath): \(reason)")
     }
@@ -265,7 +274,10 @@ private extension BashTool {
         truncatedRawStreams: result.stdout.truncated || result.stderr.truncated,
         status: status
       ),
-      redactor: redactor
+      redactor: redactor,
+      // A launched host command can read any private file reachable by the daemon account. Its
+      // result therefore arms the private-data leg even when the captured output does not reveal it.
+      readPrivateData: true
     )
   }
 

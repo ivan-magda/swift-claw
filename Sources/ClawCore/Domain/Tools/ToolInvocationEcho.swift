@@ -20,8 +20,8 @@ public struct ToolInvocationEcho: Sendable, Equatable {
 /// dangerous tool has — the dispatcher's window-widened call and the approved-action executor's
 /// resume — announce through this one seam.
 ///
-/// Best-effort by contract: an announcement that cannot be enqueued is logged and dropped, never
-/// raised, so a delivery fault can neither cancel the call nor stall the lane behind it.
+/// Returns whether the announcement was durably accepted. A tool that declares an echo must not
+/// execute when this seam reports failure.
 public protocol ToolInvocationEchoing: Sendable {
-  func echo(_ invocation: ToolInvocationEcho) async
+  func echo(_ invocation: ToolInvocationEcho) async -> Bool
 }
