@@ -475,6 +475,8 @@ public struct AgentRuntime: Sendable {
         }
 
         let context = ToolDispatchContext(
+          runId: runId,
+          chatId: chatId,
           sessionTainted: sessionTainted,
           runIngestedUntrusted: ingestedUntrusted,
           assemblyPrivateData: buildResult.hasPrivateDataAccess,

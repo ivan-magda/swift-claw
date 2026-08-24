@@ -6,6 +6,8 @@ import Testing
 @testable import ClawTools
 
 private func makeDispatchContext(
+  runId: Int64 = 77,
+  chatId: Int64 = 42,
   tainted: Bool = false,
   runIngested: Bool = false,
   assemblyPrivate: Bool = false,
@@ -16,6 +18,8 @@ private func makeDispatchContext(
   windowOpen: Bool = false
 ) -> ToolDispatchContext {
   ToolDispatchContext(
+    runId: runId,
+    chatId: chatId,
     sessionTainted: tainted,
     runIngestedUntrusted: runIngested,
     assemblyPrivateData: assemblyPrivate,
@@ -1238,6 +1242,155 @@ private struct ProbedDangerousTool: Tool {
   }
 
   private let openContext = makeDispatchContext()
+
+  /// A dangerous tool that announces its command and then reports how many announcements had
+  /// landed by the time it ran — the ordering pin the echo contract needs. Its prepared action is
+  /// derived from the call, so the arg guard scans the command a test actually passed.
+  private struct AnnouncingDangerousTool: Tool {
+    let recorder: RecordingInvocationEcho
+
+    var definition: ToolDefinition {
+      ToolDefinition(
+        name: "bash",
+        description: "test host shell",
+        parameters: .object(["type": .string("object")]),
+        metadataProvenance: .trusted,
+        egressClass: .none,
+        riskLevel: .dangerous,
+        requiresInteractiveRun: true
+      )
+    }
+
+    var timeout: Duration { .seconds(30) }
+
+    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
+    func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
+      guard let command = arguments.objectValue?["command"]?.stringValue else {
+        return .refused(reason: "bash needs a command.")
+      }
+      let canonical = CanonicalJSON.encode(
+        JSONValue.object(["command": .string(command), "timeoutSeconds": .integer(30)])
+      )
+      return .prepared(
+        PreparedToolAction(
+          canonicalTarget: "host_exec:/bin/zsh:/workspace",
+          canonicalArgsJSON: canonical ?? "{}",
+          presentation: ToolApprovalPresentation(
+            blastRadius: "run /bin/zsh -c",
+            contentPreview: command,
+            warnings: []
+          ),
+          guardTexts: [command],
+          canExfiltrate: true,
+          approvalReason: .hostShell
+        )
+      )
+    }
+
+    func invocationEcho(arguments: JSONValue) -> String? {
+      arguments.objectValue?["command"]?.stringValue
+    }
+
+    func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+      ToolPayload(
+        content: "echoes=\(await recorder.landed())",
+        status: .ok,
+        ingestedUntrusted: true
+      )
+    }
+  }
+
+  private func makeAnnouncingDispatcher(
+    recorder: RecordingInvocationEcho
+  ) -> GatedToolDispatcher {
+    GatedToolDispatcher(
+      registry: ToolRegistry(tools: [AnnouncingDangerousTool(recorder: recorder)]),
+      gate: ToolPolicyGate(
+        argGuard: ExfilArgGuard(secretValues: ["hunter2"]),
+        privateFileLoader: { [] },
+        enabledDangerousTools: ["bash"]
+      ),
+      echo: recorder
+    )
+  }
+
+  @Test func aWindowWidenedCallIsAnnouncedBeforeItRuns() async {
+    // given — an open turn-scoped window, so the call executes without parking
+    let recorder = RecordingInvocationEcho()
+    let dispatcher = makeAnnouncingDispatcher(recorder: recorder)
+
+    // when
+    let outcome = await dispatcher.dispatch(
+      call: ToolCall(id: "b1", name: "bash", argumentsJSON: #"{"command":"ls -la"}"#),
+      context: makeDispatchContext(runId: 31, chatId: 64, windowOpen: true)
+    )
+
+    // then — exactly one line, addressed to the run's chat, carrying the prepared command, and
+    // already enqueued by the time the command itself ran
+    #expect(outcome.observation.content == "echoes=1")
+    let echoes = await recorder.echoes
+    #expect(echoes.count == 1)
+    #expect(echoes.first?.runId == 31)
+    #expect(echoes.first?.chatId == 64)
+    #expect(echoes.first?.tool == "bash")
+    #expect(echoes.first?.detail == "ls -la")
+  }
+
+  @Test func aParkedCallIsNeverAnnounced() async {
+    // given — no window, so the same call suspends onto the approval fabric instead
+    let recorder = RecordingInvocationEcho()
+    let dispatcher = makeAnnouncingDispatcher(recorder: recorder)
+
+    // when
+    let outcome = await dispatcher.dispatch(
+      call: ToolCall(id: "b1", name: "bash", argumentsJSON: #"{"command":"ls -la"}"#),
+      context: makeDispatchContext()
+    )
+
+    // then — nothing ran, so nothing was announced
+    #expect(outcome.requiresApproval != nil)
+    #expect(await recorder.echoes.isEmpty)
+  }
+
+  @Test func aBlockedCallIsNeverAnnounced() async {
+    // given — a command carrying an exact secret, which the arg guard blocks inside the window
+    let recorder = RecordingInvocationEcho()
+    let dispatcher = makeAnnouncingDispatcher(recorder: recorder)
+
+    // when
+    let outcome = await dispatcher.dispatch(
+      call: ToolCall(id: "b1", name: "bash", argumentsJSON: #"{"command":"echo hunter2"}"#),
+      context: makeDispatchContext(windowOpen: true)
+    )
+
+    // then
+    #expect(outcome.observation.status == .blockedArgs)
+    #expect(await recorder.echoes.isEmpty)
+  }
+
+  @Test func aToolThatAnnouncesNothingIsNotEchoed() async {
+    // given — an ordinary safe tool, which takes the default nil `invocationEcho`
+    let recorder = RecordingInvocationEcho()
+    let dispatcher = GatedToolDispatcher(
+      registry: ToolRegistry(tools: [StubTool(name: "file_read")]),
+      gate: ToolPolicyGate(
+        argGuard: ExfilArgGuard(secretValues: []),
+        privateFileLoader: { [] },
+        enabledDangerousTools: []
+      ),
+      echo: recorder
+    )
+
+    // when
+    _ = await dispatcher.dispatch(
+      call: ToolCall(id: "c1", name: "file_read", argumentsJSON: #"{"path":"a.md"}"#),
+      context: openContext
+    )
+
+    // then
+    #expect(await recorder.echoes.isEmpty)
+  }
 
   @Test func unknownToolIsAnErrorObservationNeverACrash() async {
     // given

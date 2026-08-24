@@ -18,18 +18,20 @@ extension DaemonBuilder {
     let contextBuilder: ContextBuilder
   }
 
-  func makeAgentStack(
+  func makeAgentStack(  // swiftlint:disable:this function_parameter_count
     roster: ProviderRoster,
     cooldown: any PrimaryRouteCooldownTracking,
     workspace: FileSystemWorkspace,
     costResolver: CostResolver,
     sandbox: SandboxStack,
-    mcpTools: [any Tool]
+    mcpTools: [any Tool],
+    echo: any ToolInvocationEchoing
   ) -> AgentStack {
     let toolDispatcher = makeToolDispatcher(
       workspace: workspace,
       sandbox: sandbox,
-      mcpTools: mcpTools
+      mcpTools: mcpTools,
+      echo: echo
     )
     let staticSubhash = policyStaticSubhash(toolDispatcher: toolDispatcher, workspace: workspace)
     let agent = makeAgent(

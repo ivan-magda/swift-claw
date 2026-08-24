@@ -15,6 +15,10 @@ private struct MarkSentFailingOutbox: OutboxStore {
     try base.claimOutbound(runId: runId, chunk: chunk)
   }
 
+  func enqueueNotice(runId: Int64, chatId: Int64, text: String) throws(StoreError) -> Bool {
+    try base.enqueueNotice(runId: runId, chatId: chatId, text: text)
+  }
+
   func markSent(
     runId: Int64,
     stepIndex: Int,

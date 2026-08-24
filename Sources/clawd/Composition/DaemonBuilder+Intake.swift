@@ -112,7 +112,8 @@ extension DaemonBuilder {
   func makeToolDispatcher(
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
-    mcpTools: [any Tool]
+    mcpTools: [any Tool],
+    echo: any ToolInvocationEchoing
   ) -> GatedToolDispatcher {
     let secretValues = redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)
@@ -173,7 +174,8 @@ extension DaemonBuilder {
         argGuard: ExfilArgGuard(secretValues: secretValues),
         privateFileLoader: privateFileLoader,
         enabledDangerousTools: enabledDangerousTools
-      )
+      ),
+      echo: echo
     )
   }
 

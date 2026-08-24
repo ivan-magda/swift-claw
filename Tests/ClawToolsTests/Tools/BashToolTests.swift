@@ -60,6 +60,29 @@ import Testing
     return action
   }
 
+  @Test func theInvocationEchoIsTheRecordedCommand() async throws {
+    // given — the recorded action both execution paths hand to `execute`
+    let tool = makeTool()
+    let (recorded, _) = try await recordedInvocation(tool: tool, command: "swift build")
+
+    // when
+    let echo = tool.invocationEcho(arguments: recorded)
+
+    // then — the command alone: the framing around it is the gateway's to author
+    #expect(echo == "swift build")
+  }
+
+  @Test func anUnreadableActionAnnouncesNothing() {
+    // given — arguments that are not a recorded bash action
+    let tool = makeTool()
+
+    // when
+    let echo = tool.invocationEcho(arguments: .object(["command": .integer(7)]))
+
+    // then
+    #expect(echo == nil)
+  }
+
   private func refusalReason(_ resolution: PreparedActionResolution?) throws -> String {
     guard case .refused(let reason) = resolution else {
       Issue.record("expected refusal, got \(String(describing: resolution))")

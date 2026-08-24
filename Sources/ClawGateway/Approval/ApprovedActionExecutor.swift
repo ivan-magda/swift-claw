@@ -46,6 +46,9 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 
   private let redactArguments: @Sendable (String) -> String
   private let now: @Sendable () -> Date
+  /// Announces the approved action before it runs — the same seam the dispatcher uses, so a
+  /// button-approved command and a window-widened one are echoed identically.
+  private let echo: (any ToolInvocationEchoing)?
 
   private let logger: Logger
 
@@ -54,6 +57,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
     runs: any RunStore,
     redactArguments: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> Date = { Date() },
+    echo: (any ToolInvocationEchoing)? = nil,
     logger: Logger
   ) {
     self.tools = tools
@@ -61,6 +65,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 
     self.redactArguments = redactArguments
     self.now = now
+    self.echo = echo
 
     self.logger = logger
   }
@@ -135,6 +140,18 @@ private extension ApprovedActionExecutor {
         content: "That action could not run because its tool is no longer available.",
         status: .error,
         ingestedUntrusted: false
+      )
+    }
+    // Announced after the claim: a run `/stop` drove terminal never reaches here, so the owner is
+    // never told about a command that will not run.
+    if let echo, let detail = tool.invocationEcho(arguments: arguments) {
+      await echo.echo(
+        ToolInvocationEcho(
+          runId: approval.runId,
+          chatId: approval.ownerUserId,
+          tool: approval.tool,
+          detail: detail
+        )
       )
     }
     // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s

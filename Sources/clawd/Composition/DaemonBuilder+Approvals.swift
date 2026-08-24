@@ -29,6 +29,19 @@ extension DaemonBuilder {
     let expiry: ApprovalExpiryService
   }
 
+  /// The one announcement seam both dangerous-tool execution paths share: the dispatcher's
+  /// window-widened call and the waiter's approved resume enqueue onto the same outbox and poke
+  /// the same signal, so the owner reads one line per command whichever path ran it.
+  func makeInvocationEcho(coordination: TurnCoordination) -> OutboxInvocationEcho {
+    let outboxSignal = coordination.outboxSignal
+    return OutboxInvocationEcho(
+      outbox: stores.outbox,
+      redactor: SecretRedactor(secretValues: redactionValues),
+      notifyOutbox: { outboxSignal.poke() },
+      logger: logger
+    )
+  }
+
   func makeTurnRunner(
     coordination: TurnCoordination,
     agentStack: AgentStack,
@@ -93,6 +106,7 @@ extension DaemonBuilder {
         argumentGuard.renderRedacted(argsJSON: arguments)
       },
       now: { Date() },
+      echo: makeInvocationEcho(coordination: coordination),
       logger: logger
     )
     let approvalWaiter = ApprovalWaiter(

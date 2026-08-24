@@ -81,6 +81,27 @@ import Testing
     #expect(try env.outbox.pendingOutbound().count == 1)
   }
 
+  @Test func aNoticeExtendsTheRunsDeliverySequence() throws {
+    // given — a run that already committed a chunk at step 0
+    let env = try fixture()
+    _ = try env.outbox.claimOutbound(
+      runId: env.runId,
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "prompt", payloadHash: "h")
+    )
+
+    // when — two mid-run notices land afterwards
+    let first = try env.outbox.enqueueNotice(runId: env.runId, chatId: 42, text: "running ls")
+    let second = try env.outbox.enqueueNotice(runId: env.runId, chatId: 42, text: "running pwd")
+
+    // then — each took the next free step rather than colliding with step 0 and being dropped
+    #expect(first)
+    #expect(second)
+    let rows = try env.outbox.pendingOutbound()
+    #expect(rows.map(\.stepIndex) == [0, 1, 2])
+    #expect(rows.map(\.payload) == ["prompt", "running ls", "running pwd"])
+    #expect(rows.allSatisfy { $0.chatId == 42 })
+  }
+
   @Test func markSentRemovesRowFromPending() throws {
     // given
     let env = try fixture()

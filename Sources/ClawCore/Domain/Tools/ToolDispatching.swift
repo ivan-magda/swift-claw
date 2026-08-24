@@ -1,8 +1,14 @@
 import Foundation
 
-/// The per-call policy inputs the gate reads. Taint and private-data are each the OR of the
-/// persisted/assembly flag and the run-local flag (`(session ∪ run)` / `(assembly ∪ run)`).
+/// The per-call policy inputs the gate reads, plus the identity of the run that made the call.
+/// Taint and private-data are each the OR of the persisted/assembly flag and the run-local flag
+/// (`(session ∪ run)` / `(assembly ∪ run)`).
 public struct ToolDispatchContext: Sendable, Equatable {
+  /// The run the call belongs to, and the chat that reads its delivery sequence. Not policy: this
+  /// is what a pre-execution announcement (`ToolInvocationEchoing`) is addressed to, and the
+  /// dispatcher is the only place that knows a call will execute before it does.
+  public let runId: Int64
+  public let chatId: Int64
   public let sessionTainted: Bool
   public let runIngestedUntrusted: Bool
   public let assemblyPrivateData: Bool
@@ -21,6 +27,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
   public let autoApproveWindowOpen: Bool
 
   public init(
+    runId: Int64,
+    chatId: Int64,
     sessionTainted: Bool,
     runIngestedUntrusted: Bool,
     assemblyPrivateData: Bool,
@@ -30,6 +38,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
     runOrigin: RunOrigin,
     autoApproveWindowOpen: Bool
   ) {
+    self.runId = runId
+    self.chatId = chatId
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
     self.assemblyPrivateData = assemblyPrivateData

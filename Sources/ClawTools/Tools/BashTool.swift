@@ -116,6 +116,12 @@ public struct BashTool: Tool {
     )
   }
 
+  /// The command itself, read from the recorded action both execution paths carry. A call the
+  /// model malformed never reaches an announcement — it refuses at `prepareAction` instead.
+  public func invocationEcho(arguments: JSONValue) -> String? {
+    DangerousToolSupport.decode(RecordedArguments.self, from: arguments)?.command
+  }
+
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     guard let approvedTarget = canonicalTarget else {
       return errorPayload("bash was dispatched without its approved target.")

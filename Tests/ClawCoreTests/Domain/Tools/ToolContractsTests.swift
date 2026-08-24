@@ -137,6 +137,8 @@ private struct DefaultPrepareTool: Tool {
   @Test func dispatchContextIsAValueType() {
     // given / when — the per-call policy inputs are a Sendable value type (no grant since Inc 5a)
     let context = ToolDispatchContext(
+      runId: 5,
+      chatId: 9,
       sessionTainted: true,
       runIngestedUntrusted: false,
       assemblyPrivateData: true,
@@ -148,6 +150,8 @@ private struct DefaultPrepareTool: Tool {
     )
 
     // then
+    #expect(context.runId == 5)
+    #expect(context.chatId == 9)
     #expect(context.sessionTainted)
     #expect(context.approvalAlreadyPending == false)
   }

@@ -457,15 +457,20 @@ public struct GatedToolDispatcher: ToolDispatching {
   private let gate: ToolPolicyGate
   /// Injected so tests drive the timeout race deterministically (same seam as `AgentRuntime`).
   private let clock: any Clock<Duration>
+  /// Announces a call the gate cleared, before it runs. Absent wherever nothing delivers to the
+  /// owner (a probe, a test), in which case a tool that would announce simply runs unannounced.
+  private let echo: (any ToolInvocationEchoing)?
 
   public init(
     registry: ToolRegistry,
     gate: ToolPolicyGate,
-    clock: any Clock<Duration> = ContinuousClock()
+    clock: any Clock<Duration> = ContinuousClock(),
+    echo: (any ToolInvocationEchoing)? = nil
   ) {
     self.registry = registry
     self.gate = gate
     self.clock = clock
+    self.echo = echo
   }
 
   public var definitions: [ToolDefinition] {
@@ -515,6 +520,7 @@ public struct GatedToolDispatcher: ToolDispatching {
       guard let preparedArguments = JSONValue.parse(recorded.canonicalArgsJSON) else {
         return errorOutcome(call: call, reason: "The prepared \(call.name) action is unreadable.")
       }
+      await announce(tool: tool, arguments: preparedArguments, context: context)
       let payload = await executeWithTimeout(
         tool: tool,
         arguments: preparedArguments,
@@ -526,6 +532,7 @@ public struct GatedToolDispatcher: ToolDispatching {
       )
     case .allow(let argsRedacted, let action):
       // (4) execute under the tool's own timeout, on the gate-resolved canonical target
+      await announce(tool: tool, arguments: arguments, context: context)
       let payload = await executeWithTimeout(
         tool: tool,
         arguments: arguments,
@@ -536,6 +543,27 @@ public struct GatedToolDispatcher: ToolDispatching {
         argsRedacted: argsRedacted
       )
     }
+  }
+
+  /// The pre-execution announcement, on the exact arguments `execute` is about to receive. It
+  /// sits after the gate and before the side effect, so a blocked or parked call is never
+  /// announced and an announced one is always still interruptible.
+  private func announce(
+    tool: any Tool,
+    arguments: JSONValue,
+    context: ToolDispatchContext
+  ) async {
+    guard let echo, let detail = tool.invocationEcho(arguments: arguments) else {
+      return
+    }
+    await echo.echo(
+      ToolInvocationEcho(
+        runId: context.runId,
+        chatId: context.chatId,
+        tool: tool.definition.name,
+        detail: detail
+      )
+    )
   }
 
   /// Bounded by the shared `DeadlineRace`, whose loser is cancelled and ABANDONED, never
