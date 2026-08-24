@@ -2,11 +2,25 @@
 /// approval or execution notice. The original text remains unchanged for validation and execution.
 public enum OwnerDisplaySanitizer {
   public static func renderUnsafeScalars(in text: String) -> String {
+    render(in: text, renderingBackticks: false)
+  }
+
+  /// Also makes Markdown fence delimiters visible, so model-authored text cannot escape the
+  /// gateway's code fence and become owner-visible formatting.
+  public static func renderMarkdownCodeFenceContent(in text: String) -> String {
+    render(in: text, renderingBackticks: true)
+  }
+}
+
+// MARK: - Rendering
+
+private extension OwnerDisplaySanitizer {
+  static func render(in text: String, renderingBackticks: Bool) -> String {
     var rendered = ""
     rendered.reserveCapacity(text.count)
 
     for scalar in text.unicodeScalars {
-      if isUnsafeForDisplay(scalar) {
+      if isUnsafeForDisplay(scalar) || (renderingBackticks && scalar.value == 0x60) {
         rendered.append(visibleScalarCode(for: scalar))
       } else {
         rendered.unicodeScalars.append(scalar)

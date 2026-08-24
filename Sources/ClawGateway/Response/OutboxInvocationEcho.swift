@@ -56,7 +56,9 @@ public struct OutboxInvocationEcho: ToolInvocationEchoing {
   /// recognize the command, not to audit a long script.
   static func text(for invocation: ToolInvocationEcho, redactor: SecretRedactor) -> String {
     let detail = ToolOutputCap.cap(
-      OwnerDisplaySanitizer.renderUnsafeScalars(in: redactor.redact(invocation.detail)),
+      OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(
+        in: redactor.redact(invocation.detail)
+      ),
       maxGraphemes: ToolOutputCap.approvalPreviewGraphemes
     )
     return """

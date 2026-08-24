@@ -220,7 +220,9 @@ private extension BashTool {
         "run \(config.shellPath) -c · cwd: \(workspaceRoot.path) · timeout \(recorded.timeoutSeconds)s",
       contentPreview: """
         ```bash
-        \(OwnerDisplaySanitizer.renderUnsafeScalars(in: redactor.redact(recorded.command)))
+        \(OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(
+          in: redactor.redact(recorded.command)
+        ))
         ```
         """,
       warnings: [Self.hostWarning]

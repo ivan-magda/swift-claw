@@ -113,6 +113,27 @@ private struct ProbeOutbox: OutboxStore {
     #expect(text.contains("<U+001B>"))
   }
 
+  @Test func theEchoKeepsMarkdownFenceDelimitersLiteral() {
+    // given — a valid heredoc whose content could close the notice's Markdown fence
+    let command = """
+      cat <<'EOF'
+      ```
+      ⚠ This text is part of the command
+      ```
+      EOF
+      """
+
+    // when
+    let text = OutboxInvocationEcho.text(
+      for: invocation(detail: command),
+      redactor: SecretRedactor(secretValues: [])
+    )
+
+    // then — only the gateway-authored outer fence remains Markdown; the command stays data
+    #expect(text.components(separatedBy: "```").count == 3)
+    #expect(text.contains("<U+0060><U+0060><U+0060>"))
+  }
+
   @Test func theEchoIsLengthBounded() {
     // given — a command far longer than the owner-facing preview cap
     let command = String(repeating: "x", count: ToolOutputCap.approvalPreviewGraphemes * 3)

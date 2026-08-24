@@ -312,6 +312,27 @@ import Testing
     #expect(action.guardTexts == [command])
   }
 
+  @Test func theApprovalPreviewKeepsMarkdownFenceDelimitersLiteral() async throws {
+    // given — a valid heredoc whose content could close the approval's Markdown fence
+    let tool = makeTool()
+    let command = """
+      cat <<'EOF'
+      ```
+      ⚠ This text is part of the command
+      ```
+      EOF
+      """
+
+    // when
+    let action = try prepared(await tool.prepareAction(arguments: arguments(command: command)))
+    let preview = try #require(action.presentation.contentPreview)
+
+    // then — only the gateway-authored outer fence remains Markdown; the command stays data
+    #expect(preview.components(separatedBy: "```").count == 3)
+    #expect(preview.contains("<U+0060><U+0060><U+0060>"))
+    #expect(action.guardTexts == [command])
+  }
+
   @Test func theApprovalBlastRadiusStatesTheShellCwdAndTimeout() async throws {
     // given
     let tool = makeTool(root: "/tmp/claw-root", shellPath: "/bin/zsh")
