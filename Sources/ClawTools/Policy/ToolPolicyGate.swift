@@ -493,7 +493,9 @@ public struct GatedToolDispatcher: ToolDispatching {
       return errorOutcome(call: call, reason: "Malformed arguments for \(call.name).")
     }
     // (2)/(3) the gate
-    switch await gate.evaluate(call: call, tool: tool, context: context) {
+    let verdict = await gate.evaluate(call: call, tool: tool, context: context)
+    guard Task.isCancelled == false else { return cancellationOutcome(call: call) }
+    switch verdict {
     case .block(let payload, let argsRedacted):
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
@@ -521,11 +523,9 @@ public struct GatedToolDispatcher: ToolDispatching {
         return errorOutcome(call: call, reason: "The prepared \(call.name) action is unreadable.")
       }
       guard await announce(tool: tool, arguments: preparedArguments, context: context) else {
-        return errorOutcome(
-          call: call,
-          reason: "The \(call.name) call could not be announced safely; nothing ran."
-        )
+        return announcementFailureOutcome(call: call)
       }
+      guard Task.isCancelled == false else { return cancellationOutcome(call: call) }
       // A prepared call reached this arm only through a dangerous tool's turn-scoped window. Its
       // host side effects must stay owned until the tool's bounded teardown has completed.
       let payload = await tool.execute(
@@ -539,11 +539,9 @@ public struct GatedToolDispatcher: ToolDispatching {
     case .allow(let argsRedacted, let action):
       // (4) execute under the tool's own timeout, on the gate-resolved canonical target
       guard await announce(tool: tool, arguments: arguments, context: context) else {
-        return errorOutcome(
-          call: call,
-          reason: "The \(call.name) call could not be announced safely; nothing ran."
-        )
+        return announcementFailureOutcome(call: call)
       }
+      guard Task.isCancelled == false else { return cancellationOutcome(call: call) }
       let payload = await executeWithTimeout(
         tool: tool,
         arguments: arguments,
@@ -624,6 +622,17 @@ public struct GatedToolDispatcher: ToolDispatching {
         ingestedUntrusted: false
       ),
       argsRedacted: gate.renderRedacted(argsJSON: call.argumentsJSON)
+    )
+  }
+
+  private func cancellationOutcome(call: ToolCall) -> ToolDispatchOutcome {
+    errorOutcome(call: call, reason: "The \(call.name) call was cancelled; nothing ran.")
+  }
+
+  private func announcementFailureOutcome(call: ToolCall) -> ToolDispatchOutcome {
+    errorOutcome(
+      call: call,
+      reason: "The \(call.name) call could not be announced safely; nothing ran."
     )
   }
 }

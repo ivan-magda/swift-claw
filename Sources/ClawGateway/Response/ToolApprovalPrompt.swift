@@ -64,7 +64,7 @@ public enum ToolApprovalPrompt {
   /// and the suspend commit stamps `approval_id` onto exactly that keyboard-carrying chunk
   /// (`enqueuePromptChunks`), so button disarm keeps working across a split.
   public static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
-    let parts = ReplySplitter.split(text: text(for: input))
+    let parts = chunkPayloads(for: text(for: input))
     return parts.enumerated().map { index, payload in
       OutboxChunk(
         stepIndex: index,
@@ -89,6 +89,25 @@ private extension ToolApprovalPrompt {
     "⚠ TAINT: this turn read external/untrusted content — inspect the target before approving."
   static let privilegedFileBannerText =
     "⚠ PRIVILEGED FILE: this path feeds my system prompt / private-data tier."
+  static let splitFencePrefix = "```\n"
+  static let splitFenceSuffix = "\n```"
+
+  /// Telegram renders every outbox row as an independent Markdown document. An overlong prompt
+  /// containing a fenced preview therefore becomes plain fenced text per row, with command-authored
+  /// backticks made visible before splitting; no middle row can inherit an opening fence from the
+  /// previous message or expose preview text as active Markdown.
+  static func chunkPayloads(for text: String) -> [String] {
+    let ordinaryParts = ReplySplitter.split(text: text)
+    guard ordinaryParts.count > 1, text.contains("```") else {
+      return ordinaryParts
+    }
+
+    let visibleText = OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(in: text)
+    let contentLimit = ReplySplitter.limit - splitFencePrefix.count - splitFenceSuffix.count
+    return ReplySplitter.split(text: visibleText, limit: contentLimit).map { part in
+      splitFencePrefix + part + splitFenceSuffix
+    }
+  }
 
   static func headline(tool: String, reason: ApprovalReason) -> String {
     switch reason {

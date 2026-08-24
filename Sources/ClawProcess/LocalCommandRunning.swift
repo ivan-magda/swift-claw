@@ -151,8 +151,22 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
     let spawnedProcessIdentifier = SpawnedProcessIdentifierBox()
     let stdoutCapture = CommandStreamCapture(limit: command.captureLimit)
     let stderrCapture = CommandStreamCapture(limit: command.captureLimit)
+    guard Task.isCancelled == false else {
+      return Self.cancelledResult(
+        spawnedProcessIdentifier: spawnedProcessIdentifier,
+        stdoutCapture: stdoutCapture,
+        stderrCapture: stderrCapture
+      )
+    }
     let executionTask = Task {
-      await self.spawnAndCapture(
+      guard Task.isCancelled == false else {
+        return Self.cancelledResult(
+          spawnedProcessIdentifier: spawnedProcessIdentifier,
+          stdoutCapture: stdoutCapture,
+          stderrCapture: stderrCapture
+        )
+      }
+      return await self.spawnAndCapture(
         command,
         spawnedProcessIdentifier: spawnedProcessIdentifier,
         stdoutCapture: stdoutCapture,
@@ -253,6 +267,19 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
 // MARK: - Launch & Termination
 
 private extension SwiftSubprocessLocalCommandRunner {
+  static func cancelledResult(
+    spawnedProcessIdentifier: SpawnedProcessIdentifierBox,
+    stdoutCapture: CommandStreamCapture,
+    stderrCapture: CommandStreamCapture
+  ) -> LocalCommandResult {
+    LocalCommandResult(
+      termination: .cancelled,
+      stdout: stdoutCapture.snapshot(),
+      stderr: stderrCapture.snapshot(),
+      processIdentifier: spawnedProcessIdentifier.value
+    )
+  }
+
   static func teardownSequence(gracePeriod: Duration) -> [TeardownStep] {
     [.gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: gracePeriod)]
   }

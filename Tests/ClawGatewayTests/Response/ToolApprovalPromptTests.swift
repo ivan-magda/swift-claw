@@ -334,13 +334,70 @@ import Testing
 
     // then
     #expect(chunks.count > 1)
-    #expect(chunks.map(\.payload).joined() == ToolApprovalPrompt.text(for: input))
-    #expect(chunks.map(\.payload).joined().contains(code))
+    #expect(chunks.allSatisfy { $0.payload.count <= ReplySplitter.limit })
+    #expect(
+      chunks.allSatisfy { chunk in
+        chunk.payload.hasPrefix("```\n")
+          && chunk.payload.hasSuffix("\n```")
+          && chunk.payload.components(separatedBy: "```").count == 3
+      }
+    )
+    let deliveredText = chunks.map { chunk in
+      String(chunk.payload.dropFirst("```\n".count).dropLast("\n```".count))
+    }.joined()
+    #expect(
+      deliveredText
+        == OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(
+          in: ToolApprovalPrompt.text(for: input)
+        )
+    )
+    #expect(deliveredText.contains(code))
     #expect(
       chunks.dropLast().allSatisfy { chunk in
         chunk.replyMarkup == nil
       }
     )
+    #expect(chunks.last?.replyMarkup != nil)
+  }
+
+  @Test func everyChunkOfAnOverlongFencedPreviewKeepsItsContentInsideAFence() {
+    // given
+    let command = String(repeating: "printf safe-output\n", count: 2_000)
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "bash",
+        target: "/bin/zsh · /workspace",
+        reason: .hostShell,
+        blastRadius: "run on the host",
+        preview: "```bash\n\(command)```"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "nonce")
+
+    // then
+    #expect(chunks.count > 1)
+    #expect(chunks.allSatisfy { $0.payload.count <= ReplySplitter.limit })
+    #expect(
+      chunks.allSatisfy { chunk in
+        chunk.payload.hasPrefix("```\n")
+          && chunk.payload.hasSuffix("\n```")
+          && chunk.payload.components(separatedBy: "```").count == 3
+      }
+    )
+    let deliveredText = chunks.map { chunk in
+      String(chunk.payload.dropFirst("```\n".count).dropLast("\n```".count))
+    }.joined()
+    #expect(
+      deliveredText
+        == OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(
+          in: ToolApprovalPrompt.text(for: input)
+        )
+    )
+    #expect(deliveredText.contains(command))
     #expect(chunks.last?.replyMarkup != nil)
   }
 

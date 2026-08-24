@@ -411,6 +411,22 @@ extension ExecuteCodeToolTests {
     #expect(preview.contains(ToolOutputCap.truncationMarker) == false)
   }
 
+  @Test func approvalPreviewKeepsMarkdownFenceDelimitersLiteral() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    let code = "print('safe')\n# ```\nprint('still code')"
+    let tool = makeTool(workspace: workspace)
+
+    // when
+    let action = try await prepared(tool.prepareAction(arguments: arguments(code: code)))
+    let preview = try #require(action.presentation.contentPreview)
+
+    // then
+    #expect(preview.components(separatedBy: "```").count == 3)
+    #expect(preview.contains("<U+0060><U+0060><U+0060>"))
+    #expect(action.guardTexts.contains(code))
+  }
+
   @Test func networkedPresentationNamesEgressAndWarning() async throws {
     // given
     let workspace = try makeWorkspace()

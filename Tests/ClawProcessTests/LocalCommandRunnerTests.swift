@@ -1,3 +1,4 @@
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -10,6 +11,35 @@ import Testing
 #endif
 
 @Suite struct LocalCommandRunnerTests {
+  @Test func aCallCancelledBeforeRunStartsSpawnsNoProcess() async {
+    // given
+    let ready = AsyncGate()
+    let release = AsyncGate()
+    let spawned = AsyncGate()
+    let runner = SwiftSubprocessLocalCommandRunner(
+      executablePath: "/bin/sh",
+      onSpawnForTesting: { _ in
+        spawned.open()
+      }
+    )
+    let task = Task {
+      ready.open()
+      await release.waitIgnoringCancellation()
+      return await runner.run(testCommand(["-c", "printf should-not-run"]))
+    }
+    await ready.wait()
+
+    // when
+    task.cancel()
+    release.open()
+    let result = await task.value
+
+    // then
+    #expect(result.termination == .cancelled)
+    #expect(result.processIdentifier == nil)
+    #expect(spawned.isOpen == false)
+  }
+
   @Test func adapterPreservesRawBytesAndExitStatus() async {
     // given
     let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")

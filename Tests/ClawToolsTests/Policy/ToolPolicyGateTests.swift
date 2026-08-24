@@ -1224,6 +1224,17 @@ private struct ProbedDangerousTool: Tool {
 }
 
 @Suite struct GatedToolDispatcherTests {
+  private struct BlockingInvocationEcho: ToolInvocationEchoing {
+    let started: AsyncGate
+    let release: AsyncGate
+
+    func echo(_ invocation: ToolInvocationEcho) async -> Bool {
+      started.open()
+      await release.waitIgnoringCancellation()
+      return true
+    }
+  }
+
   private func makeDispatcher(
     tools: [any Tool],
     privateFiles: [String] = [],
@@ -1349,6 +1360,40 @@ private struct ProbedDangerousTool: Tool {
     )
 
     // then — the tool body would return `echoes=1`; the gateway-authored error proves it never ran
+    #expect(outcome.observation.status == .error)
+    #expect(outcome.observation.content.contains("nothing ran"))
+    #expect(outcome.observation.content.contains("echoes=") == false)
+  }
+
+  @Test func aWindowWidenedCallCancelledDuringItsAnnouncementDoesNotRun() async {
+    // given
+    let started = AsyncGate()
+    let release = AsyncGate()
+    let executionRecorder = RecordingInvocationEcho()
+    let dispatcher = GatedToolDispatcher(
+      registry: ToolRegistry(tools: [AnnouncingDangerousTool(recorder: executionRecorder)]),
+      gate: ToolPolicyGate(
+        argGuard: ExfilArgGuard(secretValues: []),
+        privateFileLoader: { [] },
+        enabledDangerousTools: ["bash"]
+      ),
+      echo: BlockingInvocationEcho(started: started, release: release)
+    )
+    let task = Task {
+      await dispatcher.dispatch(
+        call: ToolCall(id: "b1", name: "bash", argumentsJSON: #"{"command":"ls -la"}"#),
+        context: makeDispatchContext(windowOpen: true)
+      )
+    }
+    defer { release.open() }
+    await started.wait()
+
+    // when
+    task.cancel()
+    release.open()
+    let outcome = await task.value
+
+    // then
     #expect(outcome.observation.status == .error)
     #expect(outcome.observation.content.contains("nothing ran"))
     #expect(outcome.observation.content.contains("echoes=") == false)

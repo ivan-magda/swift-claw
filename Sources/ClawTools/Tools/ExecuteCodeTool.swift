@@ -479,9 +479,12 @@ private extension ExecuteCodeTool {
     let totalBytes = recorded.stage.reduce(0) { partial, stage in
       partial + stage.bytes
     }
+    let visibleCode = OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(
+      in: redactor.redact(raw.code)
+    )
     let preview = """
       ```\(recorded.language.rawValue)
-      \(redactor.redact(raw.code))
+      \(visibleCode)
       ```
       \(stagedInputsSummary(recorded.stage))
       """
