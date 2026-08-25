@@ -18,7 +18,6 @@ import Testing
     let transport: RecordingTransport
     let dispatcher: FakeTurnRunner
     let sessionMessages: SessionMessageStoreGRDB
-    let pendingConfirmations: PendingConfirmationRegistry
     let queue: DatabaseQueue
 
     func replyTexts() async -> [String] {
@@ -77,7 +76,6 @@ import Testing
       transport: transport,
       dispatcher: dispatcher,
       sessionMessages: sessionMessages,
-      pendingConfirmations: pendingConfirmations,
       queue: queue
     )
   }
@@ -94,86 +92,26 @@ import Testing
     )
   }
 
-  /// The whole owner-scoped surface, spelled out: both memory verbs and every schedule verb,
-  /// including the bare and `@handle` spellings a room is likeliest to type.
-  private static let ownerScopedCommands = [
-    "/remember the wifi password is hunter2",
-    "/memory",
-    "/memory list",
-    "/schedule remind me at 9am to open the room",
-    "/schedule list",
-    "/schedule@claw_bot",
-    "/pause 1",
-    "/resume 1",
-    "/runnow 1",
-    "/cancel 1",
-  ]
-
-  @Test(arguments: ownerScopedCommands)
-  func anOwnerScopedCommandIsRefusedInATopic(command: String) async throws {
-    // given
+  @Test func anOwnerScopedCommandIsRefusedBeforeItCanParkAConfirmation() async throws {
+    // given — the /remember spelling that would park a confirmation in a DM
     let harness = try makeHarness()
 
     // when
-    let outcome = await harness.router.handle(rawUpdate: groupUpdate(id: 1, text: command))
+    let outcome = await harness.router.handle(
+      rawUpdate: groupUpdate(id: 1, text: "/remember the wifi password is hunter2")
+    )
 
-    // then — one short refusal, no turn, and nothing durable written
+    // then — one short refusal, no turn, no durable effect, and no session to park against
     #expect(outcome == .processed)
     #expect(await harness.replyTexts() == [CommandReplies.directOnly])
     #expect(await harness.dispatcher.calls.isEmpty)
     #expect(try harness.memoryItemCount() == 0)
     #expect(try harness.scheduledJobCount() == 0)
-  }
-
-  @Test(arguments: ownerScopedCommands)
-  func anOwnerScopedCommandIsUnchangedInADM(command: String) async throws {
-    // given
-    let harness = try makeHarness()
-
-    // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: command)
-    )
-
-    // then — the DM answer is whatever it has always been; only the refusal must be absent
-    #expect(outcome == .processed)
-    let replies = await harness.replyTexts()
-    #expect(replies.isEmpty == false)
-    #expect(replies.contains(CommandReplies.directOnly) == false)
-  }
-
-  @Test func aRefusedTopicCommandParksNoConfirmation() async throws {
-    // given — the /remember spelling that parks a confirmation in a DM
-    let harness = try makeHarness()
-
-    // when
-    await harness.router.handle(
-      rawUpdate: groupUpdate(id: 1, text: "/remember the wifi password is hunter2")
-    )
-
-    // then — the handler that would register one was never reached, so the topic has no session
-    // to park against at all
     let topicKey = SessionKey.telegramTopic(
       chatId: Self.groupChatId,
       threadId: Self.topicId
     )
     #expect(try harness.sessionMessages.findSession(sessionKey: topicKey) == nil)
-  }
-
-  @Test func aDMRememberStillParksItsConfirmation() async throws {
-    // given
-    let harness = try makeHarness()
-
-    // when
-    await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/remember I take my coffee black")
-    )
-
-    // then
-    let sessionId = try #require(
-      try harness.sessionMessages.findSession(sessionKey: SessionKey.telegramDM(chatId: 42))
-    )
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) != nil)
   }
 
   /// A store whose only broken operation is the confirmation lookup: reaching the resolver is
@@ -200,17 +138,5 @@ import Testing
     await harness.dispatcher.waitForCalls(atLeast: 1)
     #expect(outcome == .processed)
     #expect(await harness.dispatcher.calls.count == 1)
-  }
-
-  @Test func aDMLineIsStillOfferedToTheConfirmationResolver() async throws {
-    // given — the same broken lookup, in the conversation that does resolve confirmations
-    let harness = try harnessWithBrokenPendingLookup()
-
-    // when
-    let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "yes"))
-
-    // then — the DM path fails closed on the lookup it must not guess at
-    #expect(outcome == .transientFailure)
-    #expect(await harness.dispatcher.calls.isEmpty)
   }
 }

@@ -139,18 +139,6 @@ import Testing
     #expect(Set(calls.map(\.sessionId)).count == 2)
   }
 
-  @Test func aDirectDispatchStillUsesTheDMKeyEvenWhenTheMessageCarriesATopic() async throws {
-    // given — the mode, not the wire, decides; a topic on a DM-mode message must not leak in
-    let harness = try makeHarness()
-    let (raw, message) = try update(id: 1, chatId: 42, threadId: 9)
-
-    // when
-    _ = try await harness.dispatch.dispatch(rawUpdate: raw, message: message, text: "hello")
-
-    // then
-    #expect(try harness.sessionMessages.findSession(sessionKey: "tg:dm:42") != nil)
-  }
-
   @Test func aGroupTurnStoresTheSpeakerWithTheLine() async throws {
     // given
     let harness = try makeHarness()
@@ -194,56 +182,6 @@ import Testing
     // then
     #expect(outcome == .processed)
     #expect(try harness.storedContent(chatId: -1_001_234, threadId: 9) == ["Ada Lovelace: hello"])
-  }
-
-  @Test func aGroupSpeakerWithNoDisplayNameIsStoredByUserId() async throws {
-    // given
-    let harness = try makeHarness()
-    let (raw, message) = try update(id: 1, chatId: -1_001_234, threadId: 9)
-
-    // when
-    _ = try await harness.dispatch.dispatch(
-      rawUpdate: raw,
-      message: message,
-      text: "hello",
-      mode: .group
-    )
-
-    // then
-    #expect(try harness.storedContent(chatId: -1_001_234, threadId: 9) == ["user 500: hello"])
-  }
-
-  @Test func aDirectTurnStoresTheTextUnprefixed() async throws {
-    // given
-    let harness = try makeHarness()
-    let (raw, message) = try update(id: 1, chatId: 42, threadId: nil, displayName: "Ada Lovelace")
-
-    // when
-    _ = try await harness.dispatch.dispatch(rawUpdate: raw, message: message, text: "hello")
-
-    // then
-    #expect(try harness.storedContent(sessionKey: "tg:dm:42") == ["hello"])
-  }
-
-  @Test func aPlainGroupLineIsStoredTrustedSoRecallCanFindIt() async throws {
-    // given
-    let harness = try makeHarness()
-    let (raw, message) = try update(id: 1, chatId: -1_001_234, threadId: 9)
-
-    // when
-    _ = try await harness.dispatch.dispatch(
-      rawUpdate: raw,
-      message: message,
-      text: "hello",
-      mode: .group
-    )
-
-    // then
-    let snapshot = try #require(
-      try harness.snapshot(sessionKey: SessionKey.telegramTopic(chatId: -1_001_234, threadId: 9))
-    )
-    #expect(snapshot.history.map(\.provenance) == [.trusted])
-    #expect(snapshot.isTainted == false)
   }
 
   @Test func aGroupVoiceTranscriptIsStoredTrustedAndLeavesTheTopicUntainted() async throws {

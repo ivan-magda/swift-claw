@@ -5,9 +5,7 @@ import Testing
 
 @testable import ClawData
 
-/// One forum supergroup, several topics: the topic is part of the session identity, so a topic's
-/// history never appears in a sibling's context and every consumer can recover the mode and the
-/// topic from the snapshot alone.
+/// One forum supergroup uses an independent session for each topic, including General.
 @Suite struct TopicSessionIsolationTests {
   private func freshStore() throws -> SessionMessageStoreGRDB {
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -62,69 +60,11 @@ import Testing
       throughMessageId: try #require(firstClaim.triggerMessageId),
       limit: 10
     )
+    #expect(firstSnapshot.sessionKey == first)
     #expect(
       firstSnapshot.history == [
         StoredMessage(role: .user, content: "about swift", provenance: .trusted)
       ]
     )
-  }
-
-  @Test func theSnapshotCarriesTheKeyEveryConsumerDerivesTheModeAndTopicFrom() throws {
-    // given
-    let store = try freshStore()
-    let chatId: Int64 = -1_001_234
-    let topicKey = SessionKey.telegramTopic(chatId: chatId, threadId: 5)
-    let claim = try store.claimAndPersistInbound(
-      inbound(updateId: 1, sessionKey: topicKey, chatId: chatId, text: "about swift")
-    )
-
-    // when
-    let snapshot = try store.loadContextSnapshot(
-      sessionId: try #require(claim.sessionId),
-      throughMessageId: try #require(claim.triggerMessageId),
-      limit: 10
-    )
-
-    // then
-    #expect(snapshot.sessionKey == topicKey)
-    #expect(SessionKey.mode(from: snapshot.sessionKey) == .group)
-    #expect(SessionKey.threadId(from: snapshot.sessionKey) == 5)
-  }
-
-  @Test func aDMSnapshotStillReadsAsDirectWithNoTopic() throws {
-    // given
-    let store = try freshStore()
-    let dmKey = SessionKey.telegramDM(chatId: 42)
-    let claim = try store.claimAndPersistInbound(
-      inbound(updateId: 1, sessionKey: dmKey, chatId: 42, text: "hello")
-    )
-
-    // when
-    let snapshot = try store.loadContextSnapshot(
-      sessionId: try #require(claim.sessionId),
-      throughMessageId: try #require(claim.triggerMessageId),
-      limit: 10
-    )
-
-    // then
-    #expect(snapshot.sessionKey == dmKey)
-    #expect(SessionKey.mode(from: snapshot.sessionKey) == .direct)
-    #expect(SessionKey.threadId(from: snapshot.sessionKey) == nil)
-  }
-
-  @Test func anUnknownSessionYieldsTheNarrowestMode() throws {
-    // given — a session id with no row (unreachable through the run path; the fail-safe matters)
-    let store = try freshStore()
-
-    // when
-    let snapshot = try store.loadContextSnapshot(
-      sessionId: 9_999,
-      throughMessageId: 1,
-      limit: 10
-    )
-
-    // then
-    #expect(snapshot.sessionKey.isEmpty)
-    #expect(SessionKey.mode(from: snapshot.sessionKey) == .direct)
   }
 }

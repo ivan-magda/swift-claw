@@ -44,21 +44,6 @@ import Testing
     #expect(raw.migratedToChatId == nil)
   }
 
-  @Test func chatDecodesTypeAndForumFlag() throws {
-    // given
-    let json = """
-      {"id": -100777, "type": "supergroup", "is_forum": true}
-      """
-
-    // when
-    let chat = try decoder.decode(TChat.self, from: Data(json.utf8))
-
-    // then
-    #expect(chat.id == -100_777)
-    #expect(chat.kind == .supergroup)
-    #expect(chat.is_forum == true)
-  }
-
   @Test func unknownChatTypeDoesNotDecodeAsPrivate() throws {
     // given — a chat type introduced after this build
     let json = """

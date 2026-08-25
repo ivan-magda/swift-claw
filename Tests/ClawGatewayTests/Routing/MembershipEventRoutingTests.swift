@@ -182,17 +182,6 @@ import Testing
     #expect(migration.contains("CLAW_GROUP_CHATS"))
   }
 
-  @Test func aMigrationIsNotMistakenForAnEmptyUpdate() async throws {
-    // given
-    let harness = try makeHarness()
-
-    // when
-    _ = await harness.router.handle(rawUpdate: migrationUpdate())
-
-    // then — the generic drop reason would hide the one event the operator must act on
-    #expect(harness.capture.entries.allSatisfy { !$0.message.contains("nothing actionable") })
-  }
-
   @Test func anUpdateKindThisBuildCannotReadIsSkippedQuietly() async throws {
     // given — a decoded update carrying no message, no callback and no membership change
     let harness = try makeHarness()

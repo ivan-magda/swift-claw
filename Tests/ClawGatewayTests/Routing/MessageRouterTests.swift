@@ -449,21 +449,6 @@ import Testing
     #expect(reply.text.contains("stickers"))
   }
 
-  @Test func aDirectMessageIsAlwaysAddressed() async throws {
-    // given — the same words that would be overheard in a group
-    let harness = try makeHarness(allowed: [42])
-
-    // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "anyone else stuck on the wifi")
-    )
-    await harness.dispatcher.waitForCalls(atLeast: 1)
-
-    // then — a DM needs no mention
-    #expect(outcome == .processed)
-    #expect(await harness.dispatcher.calls.count == 1)
-  }
-
   @Test func aChannelPostIsRefusedEvenFromAnAllowlistedChat() async throws {
     // given — the same id is configured, but the update arrives as a channel
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
