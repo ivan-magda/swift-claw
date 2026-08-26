@@ -4,7 +4,7 @@
 **Parent:** [#115](https://github.com/ivan-magda/swift-claw/issues/115)
 **Milestone:** M0: Scenario validation and evaluation contract
 **Status:** In progress
-**Current task:** 1. Validation protocol 0.2 revision and audit
+**Current task:** 1. Hash-bound approval for frozen validation protocol 0.2
 **Last updated:** 26 August 2026
 
 This file tracks working detail for #118. The dashboard comment in #115 remains the canonical project status.
@@ -54,11 +54,22 @@ This file tracks working detail for #118. The dashboard comment in #115 remains 
   outbound model checks, optional terminal-model validation, and an attempt-wide output cap.
 - [x] Complete independent methodology, metrics, and runtime audits of version 0.2 with no remaining
   blockers.
-- [ ] Commit or otherwise freeze the exact protocol bytes, compute SHA-256, and obtain D1-D4.
+- [x] Receive owner content approval: `Approve protocol version 0.2 as written`.
+- [x] Freeze the exact protocol bytes and verify their SHA-256 inside the freeze commit.
+- [ ] Obtain hash-bound D1-D4 confirmation citing the protocol SHA-256 and freeze commit below.
 
 ### Deliverable
 
 [`docs/research/118-validation-protocol.md`](118-validation-protocol.md)
+
+### Freeze record
+
+- Protocol version: `0.2`
+- Protocol SHA-256: `796aeadc62abac0ccf551fb444e054d33973549c6dc158f2d7be6b4727d75948`
+- Freeze commit: `fbecff4f6fe13bff19f7ec05e20218e0ed02849a`
+- Independent audits: methodology, metrics, and runtime passed with no remaining blockers
+- Content approval: received before freeze
+- Hash-bound D1-D4 confirmation: pending
 
 ## Task 2: page benchmark and experimental harness
 
@@ -201,10 +212,10 @@ Final decision record and evaluation contract linked from #118.
 
 | ID | Decision | Needed by | Recommended default | Status |
 |---|---|---|---|---|
-| D1 | Benchmark route and credential boundary | End of task 1 | `openai-chatgpt/gpt-5.6-sol`, streaming-only, outbound model assertion plus terminal validation when supplied, no client fallback, isolated OAuth | OPEN |
-| D2 | Protocol 0.2 hash and prospective gates | End of task 1 | Approve exact SHA-256 and commit; deterministic endpoints and safety gates only | OPEN |
-| D3 | Staged execution budget | End of task 1 | Hard caps of 194 task/synthesis attempts and 388 Responses sends; 4.35M accounted-token stopping threshold with a fixed missing-usage proxy and possible unknown one-send usage overshoot | OPEN |
-| D4 | Dependency learning target | End of task 1 | Harness supplies canonical facts; lessons affect actionability and policy decisions only | OPEN |
+| D1 | Benchmark route and credential boundary | End of task 1 | `openai-chatgpt/gpt-5.6-sol`, streaming-only, outbound model assertion plus terminal validation when supplied, no client fallback, isolated OAuth | PENDING HASH CONFIRMATION |
+| D2 | Protocol 0.2 hash and prospective gates | End of task 1 | Approve exact SHA-256 and commit; deterministic endpoints and safety gates only | PENDING HASH CONFIRMATION |
+| D3 | Staged execution budget | End of task 1 | Hard caps of 194 task/synthesis attempts and 388 Responses sends; 4.35M accounted-token stopping threshold with a fixed missing-usage proxy and possible unknown one-send usage overshoot | PENDING HASH CONFIRMATION |
+| D4 | Dependency learning target | End of task 1 | Harness supplies canonical facts; lessons affect actionability and policy decisions only | PENDING HASH CONFIRMATION |
 | D5 | Exact dependency ranking grades | Before Task 4 artifacts | Reachability, runtime scope, and compatible remediation outrank raw severity | OPEN |
 | D6 | Page experiment manifest | End of task 2 | Approve canonical manifest SHA-256 and commit before canary | OPEN |
 | D7 | Dependency experiment manifest | End of task 4 | Approve canonical manifest SHA-256 and commit before any dependency call | OPEN |
@@ -234,4 +245,5 @@ The owner needs to:
 - make D8 after the decision matrix fixes the experimental outcome;
 - approve D9 and D10 before the decision becomes canonical on GitHub.
 
-Protocol 0.2 is under independent audit. No fixture build or model run has started.
+Protocol 0.2 is frozen and its independent audits passed. No fixture build or model run has started.
+Task 1 awaits the hash-bound D1-D4 confirmation recorded in the freeze section above.
