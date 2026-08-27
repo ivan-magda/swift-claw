@@ -265,7 +265,8 @@ private func processBecameUnreachable(_ processIdentifier: Int32) async -> Bool 
         encoding: .utf8
       ),
         let commandEnd = stat.lastIndex(of: ")"),
-        stat[stat.index(after: commandEnd)...].split(separator: " ").first == "Z" {
+        stat[stat.index(after: commandEnd)...].split(separator: " ").first == "Z"
+      {
         return true
       }
     #endif

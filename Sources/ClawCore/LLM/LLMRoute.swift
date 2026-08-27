@@ -169,13 +169,10 @@ private extension LLMProviderRegistry {
   static let maximumQualifiedSuffixScalars = 200
 
   static func strippingPrefix(_ prefix: String, from reference: String) -> String? {
-    if reference.utf8.starts(with: prefix.utf8) {
-      return String(
-        decoding: reference.utf8.dropFirst(prefix.utf8.count),
-        as: UTF8.self
-      )
+    guard reference.hasPrefix(prefix) else {
+      return nil
     }
-    return nil
+    return String(reference.dropFirst(prefix.count))
   }
 }
 

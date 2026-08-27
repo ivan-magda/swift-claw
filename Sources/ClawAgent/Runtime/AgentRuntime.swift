@@ -120,7 +120,7 @@ public struct AgentRuntime: Sendable {
 }
 
 extension AgentRuntime {
-  // swiftlint:disable function_parameter_count function_body_length cyclomatic_complexity
+  // swiftlint:disable file_length function_parameter_count function_body_length cyclomatic_complexity
   /// The bounded agentic loop: one context assembly, then up to `maxTurns` round-trips
   /// with per-round-trip budget preflight, gated tool dispatch, and immediate usage/audit writes.
   /// A DELIBERATE SOFTENING of "no persistence here": `usageStore`/`auditLog` are injected
