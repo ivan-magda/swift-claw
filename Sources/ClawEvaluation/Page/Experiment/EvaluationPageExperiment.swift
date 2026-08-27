@@ -209,7 +209,7 @@ private extension EvaluationPageExperiment {
       )
     else {
       return try finish(
-        outcome: "page_task_specific_failure",
+        outcome: .pageTaskSpecificFailure,
         canary: canary,
         page: page,
         journal: journal,

@@ -5,7 +5,7 @@ import Foundation
 
 struct EvaluationPagePipelineResult: Codable, Sendable, Equatable {
   package let schemaVersion: Int
-  package let outcome: String
+  package let outcome: EvaluationPageTerminalClassification
   package let incomplete: Bool
   package let stopReason: String?
   package let canarySummary: EvaluationControllerSummary
@@ -21,7 +21,7 @@ struct EvaluationPagePipelineResult: Codable, Sendable, Equatable {
   package let synthesisRejectionReportSHA256: String?
 
   package init(
-    outcome: String,
+    outcome: EvaluationPageTerminalClassification,
     incomplete: Bool,
     stopReason: String?,
     canarySummary: EvaluationControllerSummary,
