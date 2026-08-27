@@ -203,16 +203,22 @@ actor EvaluationHTTPRecorder: HTTPExecuting, HTTPStreaming {
     guard
       let body,
       let object = try? JSONSerialization.jsonObject(with: body)
-    else { return nil }
+    else {
+      return nil
+    }
     let pattern =
       #"<claw-untrusted nonce="([0-9a-f]{32})"(?: label="[^"]+")?>\n([\s\S]*)\n</claw-untrusted nonce="\1">"#
-    guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+    guard let expression = try? NSRegularExpression(pattern: pattern) else {
+      return nil
+    }
     for value in strings(in: object) {
       let range = NSRange(value.startIndex..<value.endIndex, in: value)
       guard
         let match = expression.firstMatch(in: value, range: range),
         let contentRange = Range(match.range(at: 2), in: value)
-      else { continue }
+      else {
+        continue
+      }
       return Data(value[contentRange].utf8)
     }
     return nil

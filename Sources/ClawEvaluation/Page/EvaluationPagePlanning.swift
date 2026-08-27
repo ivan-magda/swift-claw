@@ -20,19 +20,23 @@ struct EvaluationPageFixtureCatalog: Sendable {
     guard let splits = freeze.manifest.artifact(role: "splits", category: "splits") else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     let repository = URL(fileURLWithPath: freeze.repositoryRoot, isDirectory: true)
     let splitData = try EvaluationManifestBoundArtifactReader.read(
       splits,
       repositoryRoot: repository
     ).data
+
     guard
       let root = try JSONSerialization.jsonObject(with: splitData) as? [String: Any],
       let splitObject = root["splits"] as? [String: [[String: Any]]]
     else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     var entries: [String: EvaluationPageFixture] = [:]
     var ordered: [EvaluationPageFixture] = []
+
     for (split, fixtures) in splitObject {
       for fixture in fixtures {
         guard
@@ -43,18 +47,22 @@ struct EvaluationPageFixtureCatalog: Sendable {
         else {
           throw EvaluationPagePipelineError.invalidManifestContract
         }
+
         let sourceRelative = "\(EvaluationController.pageRootPath)/\(sourceSuffix)"
         let goldRelative = "\(EvaluationController.pageRootPath)/\(goldSuffix)"
+
         guard
           let sourceArtifact = freeze.manifest.artifact(relativePath: sourceRelative),
           freeze.manifest.artifact(relativePath: goldRelative) != nil
         else {
           throw EvaluationPagePipelineError.invalidManifestContract
         }
+
         let sourceData = try EvaluationManifestBoundArtifactReader.read(
           sourceArtifact,
           repositoryRoot: repository
         ).data
+
         guard
           let source = try JSONSerialization.jsonObject(with: sourceData) as? [String: Any],
           source["fixture_id"] as? String == fixtureID,
@@ -65,6 +73,7 @@ struct EvaluationPageFixtureCatalog: Sendable {
         else {
           throw EvaluationPagePipelineError.invalidManifestContract
         }
+
         let entry = EvaluationPageFixture(
           fixtureID: fixtureID,
           split: split,
@@ -77,9 +86,11 @@ struct EvaluationPageFixtureCatalog: Sendable {
         ordered.append(entry)
       }
     }
+
     guard entries.count == PageEvaluationContract.fixtureCount else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     return Self(fixtures: ordered.sorted { $0.fixtureID < $1.fixtureID }, byID: entries)
   }
 }
@@ -91,6 +102,7 @@ struct EvaluationPageLessonBinding: Sendable {
   let digest: String
   let promotionReceiptURL: URL?
   let promotionReceiptSHA256: String?
+  let promotionReceipt: EvaluationPagePromotionReceipt?
 
   static func clean() throws -> Self {
     let data = try EvaluationCanonicalJSON.data(fromJSONObject: [
@@ -102,7 +114,8 @@ struct EvaluationPageLessonBinding: Sendable {
       data: data,
       digest: SHA256Digest.hex(data),
       promotionReceiptURL: nil,
-      promotionReceiptSHA256: nil
+      promotionReceiptSHA256: nil,
+      promotionReceipt: nil
     )
   }
 
@@ -110,16 +123,18 @@ struct EvaluationPageLessonBinding: Sendable {
     source: EvaluationLessonSource,
     artifactURL: URL,
     promotionReceiptURL: URL,
-    promotionReceiptSHA256: String
+    promotionReceipt: EvaluationPagePromotionReceipt
   ) throws -> Self {
     let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: artifactURL)
+    let digest = try promotionReceipt.validatedActiveLessonSetDigest(data)
     return Self(
       source: source,
       artifactURL: source == .artifact ? artifactURL : nil,
       data: data,
-      digest: SHA256Digest.hex(data),
+      digest: digest,
       promotionReceiptURL: promotionReceiptURL,
-      promotionReceiptSHA256: promotionReceiptSHA256
+      promotionReceiptSHA256: try promotionReceipt.sha256(),
+      promotionReceipt: promotionReceipt
     )
   }
 }
@@ -138,6 +153,7 @@ struct EvaluationPageConfigurationFactory {
     publishOrderKey: String? = nil
   ) throws -> [EvaluationReplicateBlock] {
     var blocks: [EvaluationReplicateBlock] = []
+
     for slot in slots {
       let original = try configuration(
         for: slot,
@@ -145,6 +161,7 @@ struct EvaluationPageConfigurationFactory {
         publish: slot.orderKey == publishOrderKey,
         replacementOf: nil
       )
+
       let replacement = try configuration(
         for: slot,
         lesson: slot.lessonSource == .clean ? .clean() : lesson,
@@ -155,12 +172,15 @@ struct EvaluationPageConfigurationFactory {
       let replacementURL = configurationDirectory.appendingPathComponent(
         "\(replacement.attemptID).json"
       )
+
       try EvaluationJSONFile.write(original, to: originalURL)
       try EvaluationJSONFile.write(replacement, to: replacementURL)
+
       let planned = EvaluationPlannedAttempt(
         configurationPath: originalURL.path,
         replacementConfigurationPath: replacementURL.path
       )
+
       if blocks.last?.blockID == slot.blockOrderKey {
         let prior = blocks.removeLast()
         blocks.append(
@@ -170,6 +190,7 @@ struct EvaluationPageConfigurationFactory {
         blocks.append(EvaluationReplicateBlock(blockID: slot.blockOrderKey, attempts: [planned]))
       }
     }
+
     return blocks
   }
 
@@ -181,11 +202,14 @@ struct EvaluationPageConfigurationFactory {
     let sourceData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: synthesisInputURL)
     let clean = try EvaluationPageLessonBinding.clean()
     let prompt = try artifact(role: "synthesis", category: "prompts")
+
     guard prompt.record.path == slot.promptPath else {
       throw EvaluationPagePipelineError.invalidRunOrder
     }
+
     let baseID = "page-synthesis-\(slot.orderKey.prefix(16))"
     let attemptID = replacementOf == nil ? baseID : "\(baseID)-r1"
+
     return EvaluationAttemptConfiguration(
       attemptID: attemptID,
       fixtureID: "pc-synthesis-01",
@@ -226,7 +250,10 @@ struct EvaluationPageConfigurationFactory {
       guard
         let sourceRecord = freeze.manifest.artifact(relativePath: slot.sourcePath),
         let contractRecord = freeze.manifest.artifact(relativePath: slot.configurationPath)
-      else { throw EvaluationPagePipelineError.invalidManifestContract }
+      else {
+        throw EvaluationPagePipelineError.invalidManifestContract
+      }
+
       let source = try EvaluationManifestBoundArtifactReader.read(
         sourceRecord,
         repositoryRoot: repository
@@ -237,6 +264,7 @@ struct EvaluationPageConfigurationFactory {
         contractRecord,
         repositoryRoot: repository
       ).data
+
       guard
         let source = try JSONSerialization.jsonObject(with: sourceData) as? [String: Any],
         source["fixture_id"] as? String == slot.fixtureID,
@@ -246,7 +274,9 @@ struct EvaluationPageConfigurationFactory {
         contract["fixture_id"] as? String == slot.fixtureID,
         contract["task_id"] as? String == slot.taskID,
         let expectedInputs = contract["expected_input_sha256"] as? [String: String]
-      else { throw EvaluationPagePipelineError.invalidManifestContract }
+      else {
+        throw EvaluationPagePipelineError.invalidManifestContract
+      }
 
       let lessonData: Data
       let lessonURL: URL?
@@ -254,10 +284,12 @@ struct EvaluationPageConfigurationFactory {
         guard let record = freeze.manifest.artifact(relativePath: relative) else {
           throw EvaluationPagePipelineError.invalidManifestContract
         }
+
         let artifact = try EvaluationManifestBoundArtifactReader.read(
           record,
           repositoryRoot: repository
         )
+
         lessonData = artifact.data
         lessonURL = slot.lessonSource == .artifact ? artifact.url : nil
       } else {
@@ -267,13 +299,17 @@ struct EvaluationPageConfigurationFactory {
             role: "canary_nonempty_lessons",
             category: "configuration"
           )
-        else { throw EvaluationPagePipelineError.invalidManifestContract }
+        else {
+          throw EvaluationPagePipelineError.invalidManifestContract
+        }
+
         lessonData = try EvaluationManifestBoundArtifactReader.read(
           record,
           repositoryRoot: repository
         ).data
         lessonURL = nil
       }
+
       let lessonObject = try JSONSerialization.jsonObject(with: lessonData)
       let input = try EvaluationCanonicalJSON.data(fromJSONObject: [
         "active_lessons": lessonObject,
@@ -282,10 +318,13 @@ struct EvaluationPageConfigurationFactory {
         "task_id": slot.taskID,
       ])
       let expectedKey = slot.lessonSource == .clean ? "clean" : "nonempty"
+
       guard expectedInputs[expectedKey] == SHA256Digest.hex(input) else {
         throw EvaluationPagePipelineError.invalidManifestContract
       }
+
       let attemptID = "page-canary-\(process.process.lowercased())-\(slot.condition)"
+
       return EvaluationAttemptConfiguration(
         attemptID: attemptID,
         fixtureID: slot.fixtureID,
@@ -326,9 +365,14 @@ struct EvaluationPageConfigurationFactory {
     guard let fixture = catalog.byID[slot.fixtureID] else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     let repository = URL(fileURLWithPath: freeze.repositoryRoot, isDirectory: true)
+
     guard let sourceRecord = freeze.manifest.artifact(relativePath: fixture.sourceRelativePath)
-    else { throw EvaluationPagePipelineError.invalidManifestContract }
+    else {
+      throw EvaluationPagePipelineError.invalidManifestContract
+    }
+
     let sourceArtifact = try EvaluationManifestBoundArtifactReader.read(
       sourceRecord,
       repositoryRoot: repository
@@ -336,24 +380,29 @@ struct EvaluationPageConfigurationFactory {
     let sourceURL = sourceArtifact.url
     let sourceData = sourceArtifact.data
     let lessonObject = try JSONSerialization.jsonObject(with: lesson.data)
+
     guard
       let sourceObject = try JSONSerialization.jsonObject(with: sourceData) as? [String: Any],
       let task = sourceObject["task"] as? [String: Any]
     else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     let input = try EvaluationCanonicalJSON.data(fromJSONObject: [
       "active_lessons": lessonObject,
       "schema_version": 1,
       "task": task,
       "task_id": fixture.taskID,
     ])
+
     guard let condition = EvaluationCondition(runOrderValue: slot.condition) else {
       throw EvaluationPagePipelineError.invalidRunOrder
     }
+
     let baseID = "page-\(slot.stage)-\(slot.orderKey.prefix(16))"
     let attemptID = replacementOf == nil ? baseID : "\(baseID)-r1"
     let prompt = try artifact(role: "task", category: "prompts")
+
     return EvaluationAttemptConfiguration(
       attemptID: attemptID,
       fixtureID: fixture.fixtureID,
@@ -394,10 +443,12 @@ struct EvaluationPageConfigurationFactory {
     guard let record = freeze.manifest.artifact(role: role, category: category) else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     let artifact = try EvaluationManifestBoundArtifactReader.read(
       record,
       repositoryRoot: URL(fileURLWithPath: freeze.repositoryRoot, isDirectory: true)
     )
+
     return (record, artifact.url)
   }
 
@@ -415,6 +466,7 @@ struct EvaluationPageConfigurationFactory {
       }
       return value
     }
+
     return EvaluationFrozenProvenance(
       freezeCommit: freeze.receipt.freezeCommit,
       executableSHA256: freeze.receipt.executable.sha256,

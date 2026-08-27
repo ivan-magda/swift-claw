@@ -358,7 +358,9 @@ private extension ChatGPTResponsesAccumulator {
 
   var currentOutputFields: [AttemptOutputField] {
     order.sorted().flatMap { index -> [AttemptOutputField] in
-      guard let item = items[index] else { return [] }
+      guard let item = items[index] else {
+        return []
+      }
       var fields: [AttemptOutputField] = []
       let visible = item.visibleText
       if visible.isEmpty == false {

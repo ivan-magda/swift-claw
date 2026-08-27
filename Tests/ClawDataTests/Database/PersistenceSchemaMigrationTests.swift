@@ -44,7 +44,9 @@ import Testing
         )
       }
     } throws: { error in
-      guard let dbErr = error as? DatabaseError else { return false }
+      guard let dbErr = error as? DatabaseError else {
+        return false
+      }
       return dbErr.resultCode.primaryResultCode == .SQLITE_CONSTRAINT
         && (dbErr.message?.contains("FOREIGN KEY") ?? false)
     }

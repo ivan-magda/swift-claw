@@ -299,7 +299,9 @@ private final class MaintenanceFixture: @unchecked Sendable {
       let workloadImage = PinnedImageReference.parse(
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       )
-    else { throw MaintenanceFixtureError.missingIdentity }
+    else {
+      throw MaintenanceFixtureError.missingIdentity
+    }
     settings = ExecSandboxSettings(
       workloadImage: workloadImage,
       memoryMiB: 1024,

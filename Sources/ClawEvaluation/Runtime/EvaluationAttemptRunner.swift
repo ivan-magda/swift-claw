@@ -85,7 +85,9 @@ struct EvaluationAttemptRunner: Sendable {
         expectedWireModel: configuration.wireModel,
         roundTripAdmission: { context in
           let budgetAdmission = sendBudget.admission(context)
-          guard budgetAdmission == .allow else { return budgetAdmission }
+          guard budgetAdmission == .allow else {
+            return budgetAdmission
+          }
           return await integrityAdmission()
         }
       ),

@@ -105,7 +105,9 @@ final class StreamTerminationOwner<Element: Sendable, Termination: Sendable>: Se
   /// Runs once, as the producer's last act, so a resumed joiner knows the transfer has stopped and
   /// every transfer nested inside it with it.
   func finish(reporting termination: Termination) {
-    guard let commit = commit(termination) else { return }
+    guard let commit = commit(termination) else {
+      return
+    }
     // Caching before closing is what resolves the terminal-versus-cancellation race: a consumer that
     // sees the channel end can always read whatever a completed commit reserved before the close, so
     // the outcome — never the timing of the last element — decides what it saw.
@@ -135,7 +137,9 @@ private extension StreamTerminationOwner {
   /// Returns nil for a second report, which is how the first outcome stays the only one.
   func commit(_ termination: Termination) -> Commit? {
     state.withLock { current -> Commit? in
-      guard current.terminal == nil else { return nil }
+      guard current.terminal == nil else {
+        return nil
+      }
       let decided = resolve(termination, current.isCancelRequested)
       current.terminal = decided
       let parked = current.joiners

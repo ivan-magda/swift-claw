@@ -138,7 +138,9 @@ package struct EvaluationRuntimeConfiguration: Codable, Sendable, Equatable {
   }
 
   private static func isSafeRepositoryRelativePath(_ path: String) -> Bool {
-    guard path.hasPrefix("/") == false else { return false }
+    guard path.hasPrefix("/") == false else {
+      return false
+    }
     let components = URL(fileURLWithPath: path).pathComponents
     return path.isEmpty == false && components.contains("..") == false
   }
@@ -237,7 +239,9 @@ package enum EvaluationPolicyInspector {
       wireModel: configuration.wireModel,
       allowedFileName: configuration.expectedInputFileName
     )
-    guard observed != configuration.expectedPolicyVersion else { return nil }
+    guard observed != configuration.expectedPolicyVersion else {
+      return nil
+    }
     return .policyMismatch(
       expected: configuration.expectedPolicyVersion,
       observed: observed

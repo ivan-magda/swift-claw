@@ -5,7 +5,7 @@ import Foundation
 
 struct EvaluationPagePipelineResult: Codable, Sendable, Equatable {
   package let schemaVersion: Int
-  package let outcome: String
+  package let outcome: EvaluationPageTerminalClassification
   package let incomplete: Bool
   package let stopReason: String?
   package let canarySummary: EvaluationControllerSummary
@@ -21,7 +21,7 @@ struct EvaluationPagePipelineResult: Codable, Sendable, Equatable {
   package let synthesisRejectionReportSHA256: String?
 
   package init(
-    outcome: String,
+    outcome: EvaluationPageTerminalClassification,
     incomplete: Bool,
     stopReason: String?,
     canarySummary: EvaluationControllerSummary,
@@ -163,7 +163,9 @@ enum EvaluationProtectedClosure {
       freeze.manifest.protectedArtifacts.isEmpty == false,
       Set(freeze.manifest.protectedArtifacts.map(\.path)).count
         == freeze.manifest.protectedArtifacts.count
-    else { throw EvaluationPagePipelineError.invalidManifestContract }
+    else {
+      throw EvaluationPagePipelineError.invalidManifestContract
+    }
     for artifact in freeze.manifest.protectedArtifacts.sorted(by: { $0.path < $1.path }) {
       do {
         _ = try EvaluationManifestBoundArtifactReader.read(

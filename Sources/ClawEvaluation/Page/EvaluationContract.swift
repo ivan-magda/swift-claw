@@ -63,6 +63,11 @@ enum PageEvaluationContract {
   package static let globalMaximumFileReads = 194
   package static let globalAccountedTokenThreshold = 4_350_000
   package static let feedbackGeneratorVersion = "page-feedback-v1"
+  package static let targetClasses = Set([
+    "noise.volatile_value",
+    "noise.time_or_build_metadata",
+    "noise.structure_or_order",
+  ])
   package static let terminalValidationPolicy = StreamingTerminalValidationPolicy.throughStreamEnd
   static let canaryLimits = StageLimits(
     maximumAttempts: canaryPlannedAttempts,

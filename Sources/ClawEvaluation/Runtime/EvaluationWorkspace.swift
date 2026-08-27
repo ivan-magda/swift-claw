@@ -46,6 +46,18 @@ struct EvaluationCarrierReceipt: Codable, Sendable, Equatable {
     case inputSHA256 = "input_sha256"
     case promotionReceiptSHA256 = "promotion_receipt_sha256"
   }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(sourceSHA256, forKey: .sourceSHA256)
+    try container.encode(taskID, forKey: .taskID)
+    try container.encode(lessonSource, forKey: .lessonSource)
+    try container.encode(lessonSetSHA256, forKey: .lessonSetSHA256)
+    try container.encode(lessonSetID, forKey: .lessonSetID)
+    try container.encode(lessonIDs, forKey: .lessonIDs)
+    try container.encode(inputSHA256, forKey: .inputSHA256)
+    try container.encode(promotionReceiptSHA256, forKey: .promotionReceiptSHA256)
+  }
 }
 
 struct EvaluationWorkspaceMaterialization: Codable, Sendable, Equatable {
@@ -149,13 +161,16 @@ enum EvaluationWorkspaceMaterializer {
     let optionalLesson = configuration.lessonArtifactPath.map {
       URL(fileURLWithPath: $0).standardizedFileURL
     }
+
     try EvaluationPathSecurity.rejectSymlinkComponents(
       in: [configuration.evaluationRootURL, configuration.stateRootURL, workspace, source]
         + [optionalLesson].compactMap { $0 }
     )
+
     guard EvaluationPathSecurity.isStrictlyContained(source, under: workspace) == false else {
       throw EvaluationWorkspaceError.sourceArtifactInsideWorkspace
     }
+
     if let optionalLesson {
       let lessonIsInsideWorkspace = EvaluationPathSecurity.isStrictlyContained(
         optionalLesson,
@@ -174,6 +189,7 @@ enum EvaluationWorkspaceMaterializer {
         observed: observedSourceDigest
       )
     }
+
     if configuration.stage == EvaluationPageStage.synthesis.rawValue {
       return try resetSynthesis(
         configuration: configuration,
@@ -184,6 +200,7 @@ enum EvaluationWorkspaceMaterializer {
         fileManager: fileManager
       )
     }
+
     let sourceObject = try object(from: sourceData, source: true)
     guard
       Set(sourceObject.keys)
@@ -214,6 +231,7 @@ enum EvaluationWorkspaceMaterializer {
         observed: digest
       )
     }
+
     guard let inputText = String(data: input, encoding: .utf8) else {
       throw EvaluationWorkspaceError.inputIsNotUTF8
     }
@@ -243,7 +261,8 @@ enum EvaluationWorkspaceMaterializer {
       inputSHA256: digest,
       promotionReceiptSHA256: configuration.promotionReceiptSHA256
     )
-    let receiptData = try canonicalJSONData(receipt)
+    let receiptPublication = try EvaluationFrozenArtifactPublication(encoding: receipt)
+
     return EvaluationWorkspaceMaterialization(
       workspaceWasEmptyAtStart: workspaceWasEmptyAtStart,
       inputWasRegenerated: true,
@@ -259,7 +278,7 @@ enum EvaluationWorkspaceMaterializer {
       lessonSetID: resolvedLessonSetID,
       lessonIDs: resolvedLessonIDs,
       carrierReceipt: receipt,
-      carrierReceiptSHA256: SHA256Digest.hex(receiptData)
+      carrierReceiptSHA256: receiptPublication.sha256
     )
   }
 
@@ -268,16 +287,19 @@ enum EvaluationWorkspaceMaterializer {
   /// the designated publisher attempt later atomically writes `active.json` before process exit.
   package static func installPromotedLessonSet(
     _ data: Data,
-    expectedDigest: String,
+    receipt: EvaluationPagePromotionReceipt,
     stateRoot: URL,
     fileManager: FileManager = .default
   ) throws -> URL {
+    let expectedDigest = try receipt.validatedActiveLessonSetDigest(data)
     let sets = stateRoot.appendingPathComponent(
       PageEvaluationContract.lessonSetsDirectoryName,
       isDirectory: true
     )
+
     try prepareDirectory(stateRoot)
     try prepareDirectory(sets)
+
     let destination = sets.appendingPathComponent("\(expectedDigest).json", isDirectory: false)
     _ = try verifiedLessonSet(
       data: data,
@@ -285,6 +307,7 @@ enum EvaluationWorkspaceMaterializer {
       expectedDigest: expectedDigest
     )
     try installImmutable(data, at: destination, fileManager: fileManager)
+
     return destination
   }
 }
@@ -317,6 +340,7 @@ private extension EvaluationWorkspaceMaterializer {
     else {
       throw EvaluationWorkspaceError.invalidSynthesisInput
     }
+
     let emptyLessons: [String: Any] = [
       "lesson_set_id": "empty", "lessons": [], "schema_version": 1,
     ]
@@ -333,10 +357,12 @@ private extension EvaluationWorkspaceMaterializer {
       PageEvaluationContract.synthesisInputFileName
     )
     try durableReplace(sourceData, at: destination)
+
     let finalNames = try fileManager.contentsOfDirectory(atPath: workspace.path).sorted()
     guard finalNames == [PageEvaluationContract.synthesisInputFileName] else {
       throw EvaluationWorkspaceError.unexpectedWorkspaceContents(finalNames)
     }
+
     let receipt = EvaluationCarrierReceipt(
       sourceSHA256: sourceDigest,
       taskID: configuration.taskID,
@@ -347,6 +373,7 @@ private extension EvaluationWorkspaceMaterializer {
       inputSHA256: sourceDigest,
       promotionReceiptSHA256: nil
     )
+
     return EvaluationWorkspaceMaterialization(
       workspaceWasEmptyAtStart: workspaceWasEmptyAtStart,
       inputWasRegenerated: true,
@@ -362,7 +389,7 @@ private extension EvaluationWorkspaceMaterializer {
       lessonSetID: "empty",
       lessonIDs: [],
       carrierReceipt: receipt,
-      carrierReceiptSHA256: SHA256Digest.hex(try canonicalJSONData(receipt))
+      carrierReceiptSHA256: try EvaluationFrozenArtifactPublication(encoding: receipt).sha256
     )
   }
 
@@ -379,18 +406,21 @@ private extension EvaluationWorkspaceMaterializer {
         "schema_version": 1,
       ]
       let digest = SHA256Digest.hex(try canonicalJSONData(object))
+
       guard digest == configuration.lessonSetDigest else {
         throw EvaluationWorkspaceError.lessonDigestMismatch(
           expected: configuration.lessonSetDigest,
           observed: digest
         )
       }
+
       return ResolvedLessonSet(object: object, path: nil, digest: digest)
 
     case .artifact:
       guard let artifactPath = configuration.lessonArtifactPath else {
         throw EvaluationWorkspaceError.missingLessonArtifact
       }
+
       let artifact = URL(fileURLWithPath: artifactPath).standardizedFileURL
       let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: artifact)
       let resolved = try verifiedLessonSet(
@@ -398,14 +428,17 @@ private extension EvaluationWorkspaceMaterializer {
         path: artifact,
         expectedDigest: configuration.lessonSetDigest
       )
+
       if configuration.publishLessonAsActive {
         try publish(resolved, stateRoot: configuration.stateRootURL, fileManager: fileManager)
       }
+
       return resolved
 
     case .durableActive:
       let activeURL = configuration.stateRootURL
         .appendingPathComponent(PageEvaluationContract.activeLessonFileName)
+
       let pointerData: Data
       do {
         try EvaluationPathSecurity.rejectSymlinkComponents(in: [activeURL])
@@ -413,24 +446,28 @@ private extension EvaluationWorkspaceMaterializer {
       } catch {
         throw EvaluationWorkspaceError.invalidActiveLessonPointer
       }
+
       let pointer: EvaluationActiveLessonPointer
       do {
         pointer = try JSONDecoder().decode(EvaluationActiveLessonPointer.self, from: pointerData)
       } catch {
         throw EvaluationWorkspaceError.invalidActiveLessonPointer
       }
+
       guard
         pointer.schemaVersion == 1,
         try canonicalJSONData(pointer) == pointerData
       else {
         throw EvaluationWorkspaceError.invalidActiveLessonPointer
       }
+
       guard pointer.lessonSetSHA256 == configuration.lessonSetDigest else {
         throw EvaluationWorkspaceError.activeLessonDigestMismatch(
           expected: configuration.lessonSetDigest,
           observed: pointer.lessonSetSHA256
         )
       }
+
       let immutableURL = configuration.stateRootURL
         .appendingPathComponent(PageEvaluationContract.lessonSetsDirectoryName, isDirectory: true)
         .appendingPathComponent("\(pointer.lessonSetSHA256).json")
@@ -441,6 +478,7 @@ private extension EvaluationWorkspaceMaterializer {
       } catch {
         throw EvaluationWorkspaceError.invalidActiveLessonPointer
       }
+
       let resolved = try verifiedLessonSet(
         data: immutableData,
         path: immutableURL,
@@ -449,6 +487,7 @@ private extension EvaluationWorkspaceMaterializer {
       guard lessonSetID(in: resolved.object) == pointer.lessonSetID else {
         throw EvaluationWorkspaceError.activeLessonIdentityMismatch
       }
+
       return resolved
     }
   }
@@ -465,10 +504,12 @@ private extension EvaluationWorkspaceMaterializer {
         observed: digest
       )
     }
+
     let object = try object(from: data, source: false)
     guard try validatedLessonIdentity(in: object), try canonicalJSONData(object) == data else {
       throw EvaluationWorkspaceError.invalidLessonArtifact
     }
+
     return ResolvedLessonSet(object: object, path: path, digest: digest)
   }
 
@@ -490,6 +531,7 @@ private extension EvaluationWorkspaceMaterializer {
     guard let identifier = lessonSetID(in: lesson.object) else {
       throw EvaluationWorkspaceError.invalidLessonArtifact
     }
+
     let pointer = EvaluationActiveLessonPointer(
       lessonSetID: identifier,
       lessonSetSHA256: lesson.digest
@@ -504,7 +546,9 @@ private extension EvaluationWorkspaceMaterializer {
   }
 
   static func lessonIDs(in object: [String: Any]) -> [String] {
-    guard let lessons = object["lessons"] as? [[String: Any]] else { return [] }
+    guard let lessons = object["lessons"] as? [[String: Any]] else {
+      return []
+    }
     return lessons.compactMap { $0["lesson_id"] as? String }
   }
 
@@ -519,14 +563,11 @@ private extension EvaluationWorkspaceMaterializer {
     else {
       return false
     }
-    let allowedClasses = Set([
-      "noise.volatile_value",
-      "noise.time_or_build_metadata",
-      "noise.structure_or_order",
-    ])
+
     var ids = Set<String>()
     var classes = Set<String>()
     var textScalars = 0
+
     for lesson in lessons {
       guard
         Set(lesson.keys) == Set(["lesson_id", "target_class", "text"]),
@@ -534,20 +575,24 @@ private extension EvaluationWorkspaceMaterializer {
         validToken(identifier),
         ids.insert(identifier).inserted,
         let targetClass = lesson["target_class"] as? String,
-        allowedClasses.contains(targetClass),
+        PageEvaluationContract.targetClasses.contains(targetClass),
         classes.insert(targetClass).inserted,
         let text = lesson["text"] as? String,
         (1...400).contains(text.unicodeScalars.count)
       else {
         return false
       }
+
       textScalars += text.unicodeScalars.count
     }
+
     return textScalars <= 1_000
   }
 
   static func validToken(_ value: String) -> Bool {
-    guard (1...64).contains(value.unicodeScalars.count) else { return false }
+    guard (1...64).contains(value.unicodeScalars.count) else {
+      return false
+    }
     return value.unicodeScalars.allSatisfy { scalar in
       (0x61...0x7A).contains(scalar.value)
         || (0x30...0x39).contains(scalar.value)
@@ -596,6 +641,7 @@ private extension EvaluationWorkspaceMaterializer {
 
   static func resetWorkspace(at workspace: URL, fileManager: FileManager) throws -> Bool {
     try EvaluationPathSecurity.rejectSymlinkComponents(in: [workspace])
+
     var isDirectory: ObjCBool = false
     let existed = fileManager.fileExists(atPath: workspace.path, isDirectory: &isDirectory)
     let wasEmpty =
@@ -604,7 +650,9 @@ private extension EvaluationWorkspaceMaterializer {
       } else {
         false
       }
+
     try prepareDirectory(workspace)
+
     for child in try fileManager.contentsOfDirectory(
       at: workspace,
       includingPropertiesForKeys: nil,
@@ -612,10 +660,12 @@ private extension EvaluationWorkspaceMaterializer {
     ) {
       try fileManager.removeItem(at: child)
     }
+
     let remaining = try fileManager.contentsOfDirectory(atPath: workspace.path).sorted()
     guard remaining.isEmpty else {
       throw EvaluationWorkspaceError.unexpectedWorkspaceContents(remaining)
     }
+
     return wasEmpty
   }
 
@@ -655,7 +705,9 @@ package enum EvaluationJSONFile {
   package static func write<Value: Encodable>(_ value: Value, to url: URL) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+
     let data = try encoder.encode(value)
+
     try EvaluationPathSecurity.ensurePrivateDirectory(at: url.deletingLastPathComponent())
     try EvaluationDurablePublication.publish(data, to: url)
   }

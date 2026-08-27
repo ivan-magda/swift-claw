@@ -37,7 +37,9 @@ struct EvaluationPageRecordBuilder: Sendable {
       "\(outputURL.deletingPathExtension().lastPathComponent)-parts",
       isDirectory: true
     )
+
     try EvaluationPathSecurity.ensurePrivateDirectory(at: scratch)
+
     var records: [[String: Any]] = []
     for attempt in attempts {
       let result = attempt.result
@@ -46,14 +48,19 @@ struct EvaluationPageRecordBuilder: Sendable {
         let fixture = catalog.byID[result.fixtureID],
         let lockAcquisitionID = result.lockAcquisitionID,
         slot.fixtureID == result.fixtureID
-      else { throw EvaluationPagePipelineError.recordConstructionFailed(result.attemptID) }
+      else {
+        throw EvaluationPagePipelineError.recordConstructionFailed(result.attemptID)
+      }
+
       let attemptURL = scratch.appendingPathComponent("\(result.attemptID)-attempt.json")
       let carrierURL = scratch.appendingPathComponent("\(result.attemptID)-carrier.json")
       let skeletonURL = scratch.appendingPathComponent("\(result.attemptID)-skeleton.json")
       let recordURL = scratch.appendingPathComponent("\(result.attemptID)-record.json")
+
       let replacedAttempt: Any = result.replacementOfAttemptID.map { $0 as Any } ?? NSNull()
       let originalEvidence: Any =
         attempt.originalAttemptEvidenceSHA256.map { $0 as Any } ?? NSNull()
+
       guard
         (result.replacementOrdinal == 0
           && result.replacementOfAttemptID == nil
@@ -62,10 +69,22 @@ struct EvaluationPageRecordBuilder: Sendable {
             && result.replacementOfAttemptID != nil
             && attempt.originalAttemptEvidenceSHA256.map { SHA256Digest.isCanonicalHex($0) }
               == true)
-      else { throw EvaluationPagePipelineError.recordConstructionFailed(result.attemptID) }
+      else {
+        throw EvaluationPagePipelineError.recordConstructionFailed(result.attemptID)
+      }
+
       try writeAttempt(result, to: attemptURL)
-      try EvaluationJSONFile.write(result.carrierReceipt, to: carrierURL)
+      let carrierPublication = try EvaluationFrozenArtifactPublication(
+        encoding: result.carrierReceipt
+      )
+
+      guard carrierPublication.sha256 == result.carrierReceiptSHA256 else {
+        throw EvaluationPagePipelineError.recordConstructionFailed(result.attemptID)
+      }
+
+      try carrierPublication.publish(to: carrierURL)
       let condition = result.condition.runOrderValue
+
       try EvaluationDurablePublication.publish(
         EvaluationCanonicalJSON.data(fromJSONObject: [
           "attempt_id": result.attemptID,
@@ -90,6 +109,7 @@ struct EvaluationPageRecordBuilder: Sendable {
         ]),
         to: skeletonURL
       )
+
       try EvaluationPathSecurity.rejectSymlinkComponents(in: [scratch, recordURL])
       _ = try await artifacts.run(
         relativeExecutablePath: "\(EvaluationController.pageRootPath)/artifacts/page-record",
@@ -108,21 +128,28 @@ struct EvaluationPageRecordBuilder: Sendable {
         freeze: freeze,
         captureLimit: 128 * 1_024
       )
+
       try EvaluationPathSecurity.rejectSymlinkComponents(in: [scratch, recordURL])
       let recordData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: recordURL)
+
       guard
         let record = try JSONSerialization.jsonObject(with: recordData) as? [String: Any],
         record["attempt_id"] as? String == result.attemptID,
         record["carrier_receipt_sha256"] as? String == result.carrierReceiptSHA256
-      else { throw EvaluationPagePipelineError.recordConstructionFailed(result.attemptID) }
+      else {
+        throw EvaluationPagePipelineError.recordConstructionFailed(result.attemptID)
+      }
+
       records.append(record)
     }
+
     try EvaluationDurablePublication.publish(
       EvaluationCanonicalJSON.data(fromJSONObject: [
         "records": records, "schema_version": 1,
       ]),
       to: outputURL
     )
+
     return records
   }
 
@@ -139,9 +166,11 @@ struct EvaluationPageRecordBuilder: Sendable {
     guard development.count == PageEvaluationContract.developmentFixtureCount else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     var sources: [[String: Any]] = []
     var golds: [[String: Any]] = []
     var taskIDs: [String: String] = [:]
+
     for fixture in development {
       let source = try protectedObject(
         relativePath: fixture.sourceRelativePath,
@@ -151,13 +180,18 @@ struct EvaluationPageRecordBuilder: Sendable {
         relativePath: fixture.goldRelativePath,
         freeze: freeze
       )
+
       guard source["fixture_id"] as? String == fixture.fixtureID,
         source["task_id"] as? String == fixture.taskID
-      else { throw EvaluationPagePipelineError.invalidManifestContract }
+      else {
+        throw EvaluationPagePipelineError.invalidManifestContract
+      }
+
       sources.append(source)
       golds.append(gold)
       taskIDs[fixture.fixtureID] = fixture.taskID
     }
+
     let runs: [[String: Any]] = try records.map { record in
       guard
         let fixtureID = record["fixture_id"] as? String,
@@ -165,8 +199,12 @@ struct EvaluationPageRecordBuilder: Sendable {
         let taskID = taskIDs[fixtureID],
         let attempt = record["attempt"],
         let score = record["score_result"]
-      else { throw EvaluationPagePipelineError.invalidManifestContract }
+      else {
+        throw EvaluationPagePipelineError.invalidManifestContract
+      }
+
       let runDigest = SHA256Digest.hex(Data("\(taskID):\(replicate)".utf8))
+
       return [
         "attempt": attempt,
         "fixture_id": fixtureID,
@@ -176,6 +214,7 @@ struct EvaluationPageRecordBuilder: Sendable {
         "score_result": score,
       ]
     }
+
     try EvaluationDurablePublication.publish(
       EvaluationCanonicalJSON.data(fromJSONObject: ["runs": runs]),
       to: runsURL
@@ -200,6 +239,7 @@ struct EvaluationPageRecordBuilder: Sendable {
     default:
       throw EvaluationPagePipelineError.resultUnavailable(result.attemptID)
     }
+
     let toolEvents: [[String: Any]] = result.tools.map { event in
       let path: Any = event.path.map { $0 as Any } ?? NSNull()
       return [
@@ -210,6 +250,7 @@ struct EvaluationPageRecordBuilder: Sendable {
           ? EvaluationToolContract.succeededStatus : EvaluationToolContract.failedStatus,
       ]
     }
+
     let rawOutput: Any = result.rawOutput.map { $0 as Any } ?? NSNull()
     let requests: [[String: Any]] = result.http.responsesSends.map { request in
       [
@@ -222,6 +263,7 @@ struct EvaluationPageRecordBuilder: Sendable {
         "untrusted_payload_sha256": request.untrustedPayloadSHA256.map { $0 as Any } ?? NSNull(),
       ]
     }
+
     try EvaluationDurablePublication.publish(
       EvaluationCanonicalJSON.data(fromJSONObject: [
         "raw_output": rawOutput,
@@ -240,6 +282,7 @@ struct EvaluationPageRecordBuilder: Sendable {
     guard let record = freeze.manifest.artifact(relativePath: relativePath) else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     let data: Data
     do {
       data = try EvaluationManifestBoundArtifactReader.read(
@@ -251,9 +294,13 @@ struct EvaluationPageRecordBuilder: Sendable {
     } catch {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     guard
       let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { throw EvaluationPagePipelineError.invalidManifestContract }
+    else {
+      throw EvaluationPagePipelineError.invalidManifestContract
+    }
+
     return object
   }
 }

@@ -1,0 +1,6 @@
+# Apple swift-format owns general layout. This pass supplies only the guard-body
+# rule that Apple swift-format cannot express.
+--rules wrapGuardStatementBodies
+--indent 2
+--linebreaks lf
+--swift-version 6.3

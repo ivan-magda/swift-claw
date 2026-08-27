@@ -402,7 +402,9 @@ private extension EvaluationLiveFreezeVerifier {
     guard
       executablePath.isEmpty == false,
       hasUnsafeExecutableComponent == false
-    else { throw EvaluationFreezeError.runtimeConfigurationPathMismatch }
+    else {
+      throw EvaluationFreezeError.runtimeConfigurationPathMismatch
+    }
     let rawRunningExecutable =
       executablePath.hasPrefix("/")
       ? URL(fileURLWithPath: executablePath)
@@ -426,12 +428,16 @@ private extension EvaluationLiveFreezeVerifier {
       let executable = manifest.artifact(role: "executable", category: "executable"),
       executable.path == runtime.executablePath,
       let runtimeRecord = manifest.artifact(role: "runtime", category: "configuration")
-    else { throw EvaluationFreezeError.missingProtectedBinding }
+    else {
+      throw EvaluationFreezeError.missingProtectedBinding
+    }
     let modules = manifest.artifacts(role: "freeze_verifier_source", category: "configuration")
       .sorted { $0.path < $1.path }
     guard modules.count == 8,
       let verifier = modules.first(where: { $0.path == runtime.freezeVerifierPath })
-    else { throw EvaluationFreezeError.missingProtectedBinding }
+    else {
+      throw EvaluationFreezeError.missingProtectedBinding
+    }
     let verifierModuleURLs = try modules.map { try Self.artifactURL($0, under: root) }
     guard let verifierIndex = modules.firstIndex(where: { $0.path == verifier.path }) else {
       throw EvaluationFreezeError.missingProtectedBinding
@@ -442,7 +448,9 @@ private extension EvaluationLiveFreezeVerifier {
     guard runtimeURL == protectedRuntimeURL,
       rawRunningExecutable.resolvingSymlinksInPath()
         == executableURL.resolvingSymlinksInPath()
-    else { throw EvaluationFreezeError.runtimeConfigurationPathMismatch }
+    else {
+      throw EvaluationFreezeError.runtimeConfigurationPathMismatch
+    }
     try EvaluationPathSecurity.rejectSymlinkComponents(
       in: [receiptURL.deletingLastPathComponent(), receiptURL]
     )
@@ -580,7 +588,9 @@ private extension EvaluationLiveFreezeVerifier {
   ) throws {
     let observed = observed.sorted { $0.path < $1.path }
     let expected = expected.sorted { $0.path < $1.path }
-    guard observed.count == expected.count else { throw error }
+    guard observed.count == expected.count else {
+      throw error
+    }
     for (binding, artifact) in zip(observed, expected) {
       guard
         binding.path == artifact.path,
@@ -588,7 +598,9 @@ private extension EvaluationLiveFreezeVerifier {
         binding.sha256 == artifact.sha256,
         binding.gitMode == "100644",
         binding.format == nil
-      else { throw error }
+      else {
+        throw error
+      }
     }
   }
 
@@ -696,7 +708,9 @@ private extension EvaluationLiveFreezeVerifier {
     } catch {
       throw error
     }
-    guard (try? EvaluationCanonicalJSON.data(encoding: value)) == data else { throw error }
+    guard (try? EvaluationCanonicalJSON.data(encoding: value)) == data else {
+      throw error
+    }
     return value
   }
 }

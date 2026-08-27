@@ -336,7 +336,9 @@ actor BlockingFinalDrafts: RichDraftStreaming {
   }
 
   func waitUntilFinalBlocked() async {
-    guard !finalBlocked else { return }
+    guard !finalBlocked else {
+      return
+    }
     await withCheckedContinuation { continuation in
       observeWaiters.append(continuation)
     }
@@ -398,7 +400,9 @@ actor BlockingDrafts: RichDraftStreaming {
   }
 
   func waitUntilFirstSendBlocked() async {
-    guard !firstSendBlocked else { return }
+    guard !firstSendBlocked else {
+      return
+    }
     await withCheckedContinuation { continuation in
       blockedWaiters.append(continuation)
     }
@@ -435,14 +439,18 @@ actor NonCooperativeStreamGate {
     }
     startedWaiters.removeAll()
 
-    guard !released else { return }
+    guard !released else {
+      return
+    }
     await withCheckedContinuation { continuation in
       releaseWaiters.append(continuation)
     }
   }
 
   func waitUntilStarted() async {
-    guard !started else { return }
+    guard !started else {
+      return
+    }
     await withCheckedContinuation { continuation in
       startedWaiters.append(continuation)
     }
@@ -467,7 +475,9 @@ actor TurnResultBox {
   private var waiters: [CheckedContinuation<TimedTurnResult, Never>] = []
 
   func resolve(_ result: TimedTurnResult) {
-    guard self.result == nil else { return }
+    guard self.result == nil else {
+      return
+    }
     self.result = result
     for waiter in waiters {
       waiter.resume(returning: result)

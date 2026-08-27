@@ -250,7 +250,9 @@ final class EvaluationAttemptProgressRecorder: @unchecked Sendable {
     configurations: [EvaluationAttemptConfiguration]
   ) throws -> EvaluationAttemptProgressRecord? {
     let url = try url(invocationID: invocationID, configurations: configurations)
-    guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      return nil
+    }
     let record = try EvaluationJSONFile.decode(EvaluationAttemptProgressRecord.self, from: url)
     try record.validate(
       invocationID: invocationID,

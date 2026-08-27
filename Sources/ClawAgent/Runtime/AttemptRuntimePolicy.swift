@@ -104,7 +104,9 @@ struct AttemptRuntimeState {
     priorRecordedTokens: Int,
     priorResponsesSends: Int
   ) async -> ProviderRoundTripAdmission? {
-    guard let admission = policy.roundTripAdmission else { return nil }
+    guard let admission = policy.roundTripAdmission else {
+      return nil
+    }
     return await admission(
       ProviderRoundTripAdmissionContext(
         roundTripIndex: roundTripIndex,

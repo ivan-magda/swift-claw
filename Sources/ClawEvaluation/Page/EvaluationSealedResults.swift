@@ -158,16 +158,16 @@ struct EvaluationJointUnsealReceipt: Codable, Sendable, Equatable {
   }
 }
 
-struct EvaluationPageRestartLifecycleReceipt: Codable, Sendable, Equatable {
+struct EvaluationPageRestartLifecycleReceipt: Sendable, Equatable {
   let schemaVersion: Int
   let publisherAttemptID: String
   let publisherFrozenOrderKey: String
-  let publisherProcessUUID: UUID
-  let publisherLockAcquisitionID: UUID
+  let publisherProcessUUID: String
+  let publisherLockAcquisitionID: String
   let firstReloadAttemptID: String
   let firstReloadFrozenOrderKey: String
-  let firstReloadProcessUUID: UUID
-  let firstReloadLockAcquisitionID: UUID
+  let firstReloadProcessUUID: String
+  let firstReloadLockAcquisitionID: String
   let durableLessonDigest: String
   let durableLessonSetID: String
   let durableLessonIDs: [String]
@@ -201,16 +201,19 @@ struct EvaluationPageRestartLifecycleReceipt: Codable, Sendable, Equatable {
       lockWasReleased,
       firstReload.workspaceWasEmptyAtStart,
       firstReload.inputWasRegenerated
-    else { throw EvaluationPagePipelineError.restartBoundaryFailed }
+    else {
+      throw EvaluationPagePipelineError.restartBoundaryFailed
+    }
+
     schemaVersion = PageEvaluationContract.schemaVersion
     publisherAttemptID = publisher.attemptID
     publisherFrozenOrderKey = publisher.frozenOrderKey
-    publisherProcessUUID = publisher.processUUID
-    publisherLockAcquisitionID = publisher.lockAcquisitionID
+    publisherProcessUUID = publisher.processUUID.uuidString.lowercased()
+    publisherLockAcquisitionID = publisher.lockAcquisitionID.uuidString.lowercased()
     firstReloadAttemptID = firstReload.attemptID
     firstReloadFrozenOrderKey = firstReload.frozenOrderKey
-    firstReloadProcessUUID = firstReload.processUUID
-    firstReloadLockAcquisitionID = firstReload.lockAcquisitionID
+    firstReloadProcessUUID = firstReload.processUUID.uuidString.lowercased()
+    firstReloadLockAcquisitionID = firstReload.lockAcquisitionID.uuidString.lowercased()
     durableLessonDigest = firstReload.lessonSetDigest
     durableLessonSetID = firstReload.lessonSetID
     durableLessonIDs = firstReload.lessonIDs
@@ -220,23 +223,26 @@ struct EvaluationPageRestartLifecycleReceipt: Codable, Sendable, Equatable {
     lockWasReacquired = true
   }
 
-  enum CodingKeys: String, CodingKey {
-    case schemaVersion = "schema_version"
-    case publisherAttemptID = "publisher_attempt_id"
-    case publisherFrozenOrderKey = "publisher_frozen_order_key"
-    case publisherProcessUUID = "publisher_process_uuid"
-    case publisherLockAcquisitionID = "publisher_lock_acquisition_id"
-    case firstReloadAttemptID = "first_reload_attempt_id"
-    case firstReloadFrozenOrderKey = "first_reload_frozen_order_key"
-    case firstReloadProcessUUID = "first_reload_process_uuid"
-    case firstReloadLockAcquisitionID = "first_reload_lock_acquisition_id"
-    case durableLessonDigest = "durable_lesson_digest"
-    case durableLessonSetID = "durable_lesson_set_id"
-    case durableLessonIDs = "durable_lesson_ids"
-    case workspaceWasEmpty = "workspace_was_empty"
-    case inputWasRegenerated = "input_was_regenerated"
-    case lockWasReleased = "lock_was_released"
-    case lockWasReacquired = "lock_was_reacquired"
+  @discardableResult
+  func publish(to url: URL) throws -> String {
+    try EvaluationFrozenArtifactPublication(jsonObject: [
+      "durable_lesson_digest": durableLessonDigest,
+      "durable_lesson_ids": durableLessonIDs,
+      "durable_lesson_set_id": durableLessonSetID,
+      "first_reload_attempt_id": firstReloadAttemptID,
+      "first_reload_frozen_order_key": firstReloadFrozenOrderKey,
+      "first_reload_lock_acquisition_id": firstReloadLockAcquisitionID,
+      "first_reload_process_uuid": firstReloadProcessUUID,
+      "input_was_regenerated": inputWasRegenerated,
+      "lock_was_reacquired": lockWasReacquired,
+      "lock_was_released": lockWasReleased,
+      "publisher_attempt_id": publisherAttemptID,
+      "publisher_frozen_order_key": publisherFrozenOrderKey,
+      "publisher_lock_acquisition_id": publisherLockAcquisitionID,
+      "publisher_process_uuid": publisherProcessUUID,
+      "schema_version": schemaVersion,
+      "workspace_was_empty": workspaceWasEmpty,
+    ]).publish(to: url)
   }
 
   private static func receipt(
@@ -284,6 +290,7 @@ enum EvaluationSealedResultStore {
     guard let lockAcquisitionID = result.lockAcquisitionID else {
       throw EvaluationSealedResultError.missingLockEvidence
     }
+
     guard
       FileManager.default.fileExists(atPath: resultURL.path) == false,
       FileManager.default.fileExists(atPath: envelopeURL(for: resultURL).path) == false,
@@ -291,8 +298,10 @@ enum EvaluationSealedResultStore {
     else {
       throw EvaluationSealedResultError.staleArtifact
     }
+
     let plaintext = try EvaluationCanonicalJSON.data(encoding: result)
     let key = SymmetricKey(data: keyData)
+
     let envelope: Data
     do {
       envelope = try codec(
@@ -302,8 +311,10 @@ enum EvaluationSealedResultStore {
     } catch {
       throw EvaluationSealedResultError.encryptionFailed
     }
+
     let envelopeURL = envelopeURL(for: resultURL)
     try writeOpaque(envelope, to: envelopeURL)
+
     let receipt = EvaluationSealedAttemptReceipt(
       result: result,
       lockAcquisitionID: lockAcquisitionID,
@@ -312,6 +323,7 @@ enum EvaluationSealedResultStore {
       plaintext: plaintext
     )
     try EvaluationJSONFile.write(receipt, to: receiptURL(for: resultURL))
+
     return receipt
   }
 
@@ -332,11 +344,13 @@ enum EvaluationSealedResultStore {
     else {
       throw EvaluationSealedResultError.receiptIdentityMismatch
     }
+
     let envelopeURL = URL(fileURLWithPath: receipt.envelopePath)
     try EvaluationPathSecurity.rejectSymlinkComponents(
       in: [envelopeURL.deletingLastPathComponent(), envelopeURL]
     )
     let envelope = try EvaluationPathSecurity.readRegularSingleLinkFile(at: envelopeURL)
+
     guard
       SHA256Digest.hex(envelope) == receipt.envelopeSHA256,
       let plaintext = try? codec(
@@ -349,6 +363,7 @@ enum EvaluationSealedResultStore {
     else {
       throw EvaluationSealedResultError.authenticationFailed
     }
+
     return result
   }
 
@@ -364,7 +379,10 @@ enum EvaluationSealedResultStore {
     guard
       accepted.count == slots.count,
       Set(slots.map(\.orderKey)).count == slots.count
-    else { throw EvaluationSealedResultError.incompleteJointUnseal }
+    else {
+      throw EvaluationSealedResultError.incompleteJointUnseal
+    }
+
     let acceptedBySlot = try Dictionary(
       uniqueKeysWithValues: accepted.map { item -> (String, EvaluationController.AcceptedAttempt) in
         let original = try EvaluationJSONFile.decode(
@@ -374,6 +392,7 @@ enum EvaluationSealedResultStore {
         return (original.frozenOrderKey, item)
       }
     )
+
     guard Set(acceptedBySlot.keys) == Set(slots.map(\.orderKey)) else {
       throw EvaluationSealedResultError.incompleteJointUnseal
     }
@@ -390,11 +409,15 @@ enum EvaluationSealedResultStore {
       guard
         let item = acceptedBySlot[slot.orderKey],
         case .sealed(let sealed) = item.payload
-      else { throw EvaluationSealedResultError.incompleteJointUnseal }
+      else {
+        throw EvaluationSealedResultError.incompleteJointUnseal
+      }
+
       let configuration = try EvaluationJSONFile.decode(
         EvaluationAttemptConfiguration.self,
         from: URL(fileURLWithPath: item.actualConfigurationPath)
       )
+
       guard
         let original = try? EvaluationJSONFile.decode(
           EvaluationAttemptConfiguration.self,
@@ -418,19 +441,26 @@ enum EvaluationSealedResultStore {
           || (configuration.replacementOrdinal == 1
             && configuration.replacementOfAttemptID == original.attemptID),
         FileManager.default.fileExists(atPath: configuration.resultURL.path) == false
-      else { throw EvaluationSealedResultError.incompleteJointUnseal }
+      else {
+        throw EvaluationSealedResultError.incompleteJointUnseal
+      }
+
       let result = try unseal(
         receipt: sealed,
         keyData: keyData,
         expectedConfiguration: configuration
       )
+
       if let originalSealed = item.originalSealedReceipt {
         guard
           configuration.replacementOrdinal == 1,
           item.originalAttemptEvidenceSHA256 == originalSealed.envelopeSHA256,
           originalSealed.replacementDisposition == .eligible,
           FileManager.default.fileExists(atPath: original.resultURL.path) == false
-        else { throw EvaluationSealedResultError.incompleteJointUnseal }
+        else {
+          throw EvaluationSealedResultError.incompleteJointUnseal
+        }
+
         let originalResult = try unseal(
           receipt: originalSealed,
           keyData: keyData,
@@ -442,6 +472,7 @@ enum EvaluationSealedResultStore {
           throw EvaluationSealedResultError.incompleteJointUnseal
         }
       }
+
       verified.append(
         JointlyUnsealedAttempt(
           result: result,
@@ -451,6 +482,7 @@ enum EvaluationSealedResultStore {
         )
       )
     }
+
     let receipt = EvaluationJointUnsealReceipt(
       manifestSHA256: manifestSHA256,
       conditions: verified.map { $0.result.condition.runOrderValue },
@@ -461,13 +493,16 @@ enum EvaluationSealedResultStore {
       supersededEnvelopeSHA256s: superseded.map { $0.1.envelopeSHA256 },
       supersededPlaintextSHA256s: superseded.map { $0.1.plaintextSHA256 }
     )
+
     for (result, _, configuration) in superseded {
       try EvaluationJSONFile.write(result, to: configuration.resultURL)
     }
     for attempt in verified {
       try EvaluationJSONFile.write(attempt.result, to: attempt.configuration.resultURL)
     }
+
     try EvaluationJSONFile.write(receipt, to: receiptURL)
+
     return (
       verified.map { attempt in
         EvaluationRecordedAttempt(
@@ -481,7 +516,9 @@ enum EvaluationSealedResultStore {
   }
 
   private static func validate(keyData: Data) throws {
-    guard keyData.count == 32 else { throw EvaluationSealedResultError.invalidKey }
+    guard keyData.count == 32 else {
+      throw EvaluationSealedResultError.invalidKey
+    }
   }
 
   private static func associatedData(manifestSHA256: String, attemptID: String) -> Data {

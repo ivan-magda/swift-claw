@@ -60,7 +60,9 @@ import Testing
       execEnabled: true,
       executionBackend: executionBackend,
       beforeCompletion: { completion, request in
-        guard completion == 1 else { return }
+        guard completion == 1 else {
+          return
+        }
         #expect(request.messages.allSatisfy { $0.content.text.contains(privateText) == false })
         try privateText.write(
           to: privateFile,

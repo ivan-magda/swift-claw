@@ -557,7 +557,9 @@ extension AgentRuntimeTests {
     let runtime = makeRuntime(
       provider: provider,
       providerRoundTripAdmission: { context in
-        guard context.roundTripIndex == 2 else { return .allow }
+        guard context.roundTripIndex == 2 else {
+          return .allow
+        }
         guard
           context.priorMissingUsageResponsesSends == 1,
           context.priorMissingUsageRecordedTokens > 0

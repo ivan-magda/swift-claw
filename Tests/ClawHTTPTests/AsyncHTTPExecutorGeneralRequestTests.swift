@@ -120,7 +120,9 @@ private final class ScriptedHandler: ChannelInboundHandler, @unchecked Sendable 
         body.append(contentsOf: bytes)
       }
     case .end:
-      guard let requestHead = head else { return }
+      guard let requestHead = head else {
+        return
+      }
       var collected: [String: [String]] = [:]
       for header in requestHead.headers {
         collected[header.name.lowercased(), default: []].append(header.value)
@@ -189,7 +191,9 @@ private final class CloseAfterRequestHandler: ChannelInboundHandler, @unchecked 
   typealias InboundIn = HTTPServerRequestPart
 
   func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-    guard case .end = unwrapInboundIn(data) else { return }
+    guard case .end = unwrapInboundIn(data) else {
+      return
+    }
     context.close(promise: nil)
   }
 }

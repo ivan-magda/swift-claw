@@ -218,7 +218,9 @@ struct EvaluationWorkerInvocationCore: Codable, Sendable, Equatable {
   }
 
   package var sha256: String {
-    guard let data = try? EvaluationCanonicalJSON.data(encoding: self) else { return "" }
+    guard let data = try? EvaluationCanonicalJSON.data(encoding: self) else {
+      return ""
+    }
     return SHA256Digest.hex(data)
   }
 

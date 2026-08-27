@@ -103,7 +103,9 @@ struct EvaluationPageRunOrder: Sendable, Equatable {
       let firstReload = postRestart.first,
       firstReload.condition == EvaluationCondition.postRestartLessonConditioned.runOrderValue,
       firstReload.lessonSource == .durableActive
-    else { throw EvaluationPagePipelineError.invalidRunOrder }
+    else {
+      throw EvaluationPagePipelineError.invalidRunOrder
+    }
     return (publisher, firstReload)
   }
 
@@ -122,7 +124,9 @@ struct EvaluationPageRunOrder: Sendable, Equatable {
       let stage = EvaluationPageStage(rawValue: name),
       let typedSplit = EvaluationPageSplit(rawValue: split),
       stage.split == typedSplit
-    else { throw EvaluationPagePipelineError.invalidRunOrder }
+    else {
+      throw EvaluationPagePipelineError.invalidRunOrder
+    }
     let expectations = try taskStageExpectations(stage, counterbalancePhase: counterbalancePhase)
     try validateTaskSlots(slots, split: split, expectations: expectations)
     try validateTaskBlocks(
@@ -414,7 +418,9 @@ private extension EvaluationPageRunOrder {
       guard
         let phase = CanonicalJSON.integer(stage["counterbalance_phase"]),
         (0...1).contains(phase)
-      else { throw EvaluationPagePipelineError.invalidRunOrder }
+      else {
+        throw EvaluationPagePipelineError.invalidRunOrder
+      }
       return phase
     case .canary, .synthesis:
       throw EvaluationPagePipelineError.invalidRunOrder
@@ -580,7 +586,9 @@ private extension EvaluationPageRunOrder {
       slots.allSatisfy({ SHA256Digest.isCanonicalHex($0.orderKey) }),
       slots.allSatisfy({ SHA256Digest.isCanonicalHex($0.blockOrderKey) }),
       slots.allSatisfy({ SHA256Digest.isCanonicalHex($0.workerProcessKey) })
-    else { throw EvaluationPagePipelineError.invalidRunOrder }
+    else {
+      throw EvaluationPagePipelineError.invalidRunOrder
+    }
   }
 
   static func validateTaskBlocks(
@@ -599,7 +607,9 @@ private extension EvaluationPageRunOrder {
         Set(block.map(\.replicate)).count == 1,
         Set(block.map(\.blockOrderKey)).count == 1,
         identities.insert("\(block[0].fixtureID):\(block[0].replicate)").inserted
-      else { throw EvaluationPagePipelineError.invalidRunOrder }
+      else {
+        throw EvaluationPagePipelineError.invalidRunOrder
+      }
 
       let conditions = counterbalancedConditions(
         expectations.conditions,
@@ -644,7 +654,9 @@ private extension EvaluationPageRunOrder {
 
   static func validFixtureID(_ value: String, split: String) -> Bool {
     let prefix = "pc-\(split)-"
-    guard value.hasPrefix(prefix), value.count == prefix.count + 2 else { return false }
+    guard value.hasPrefix(prefix), value.count == prefix.count + 2 else {
+      return false
+    }
     return value.dropFirst(prefix.count).allSatisfy { "0123456789".contains($0) }
   }
 }
