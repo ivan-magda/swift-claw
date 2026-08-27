@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import copy
-import hashlib
-from pathlib import Path
 import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+from typing import Any, ClassVar
+
+from page_benchmark.aggregate import build_gate_receipt
+from page_benchmark.canonical import canonical_sha256, dumps, load_object, loads_object, write
+from page_benchmark.conformance import run as run_conformance
+from page_benchmark.execution import stage_attempts, validate_record_order
+from page_benchmark.manifest_artifacts import load_manifest, scorer_digest
+from page_benchmark.records import SKELETON_KEYS, seal_score_receipts
 
 from aggregate_test_support import (
     FREEZE_COMMIT,
@@ -26,15 +33,20 @@ from aggregate_test_support import (
     _records,
     _rescore,
 )
-from page_benchmark.aggregate import build_gate_receipt
-from page_benchmark.canonical import canonical_sha256, dumps, load_object, loads_object, write
-from page_benchmark.conformance import run as run_conformance
-from page_benchmark.execution import stage_attempts, validate_record_order
-from page_benchmark.manifest_artifacts import load_manifest, scorer_digest
-from page_benchmark.records import SKELETON_KEYS, seal_score_receipts
 
 
 class AggregateCliTests(unittest.TestCase):
+    _temporary: ClassVar[tempfile.TemporaryDirectory[str]]
+    temporary: ClassVar[Path]
+    manifest_path: ClassVar[Path]
+    manifest: ClassVar[dict[str, Any]]
+    manifest_sha256: ClassVar[str]
+    scorer_digest: ClassVar[str]
+    run_order: ClassVar[dict[str, Any]]
+    run_order_path: ClassVar[Path]
+    conformance_receipt: ClassVar[dict[str, Any]]
+    conformance_path: ClassVar[Path]
+
     @staticmethod
     def _restore_python_globals(path: list[str], dont_write_bytecode: bool) -> None:
         sys.path[:] = path
@@ -56,10 +68,16 @@ class AggregateCliTests(unittest.TestCase):
         if repository_path not in sys.path:
             sys.path.append(repository_path)
         sys.dont_write_bytecode = True
-        from tools.page_change_freeze import artifacts as freeze_artifacts
-        from tools.page_change_freeze import manifest as freeze_manifest
-        from tools.page_change_freeze import run_order as freeze_run_order
-        from tools.page_change_freeze.contract import (
+        from tools.page_change_freeze import (  # type: ignore[import-not-found]  # noqa: PLC0415
+            artifacts as freeze_artifacts,
+        )
+        from tools.page_change_freeze import (  # noqa: PLC0415
+            manifest as freeze_manifest,
+        )
+        from tools.page_change_freeze import (  # noqa: PLC0415
+            run_order as freeze_run_order,
+        )
+        from tools.page_change_freeze.contract import (  # type: ignore[import-not-found]  # noqa: PLC0415
             EXECUTABLE_PATH,
             PROTOCOL_PATH,
             canonical_json_bytes,
@@ -90,9 +108,7 @@ class AggregateCliTests(unittest.TestCase):
                 )
             )
             executable.chmod(0o755)
-        package_description = freeze_artifacts.run_swift_package_describe(
-            REPOSITORY_ROOT
-        )
+        package_description = freeze_artifacts.run_swift_package_describe(REPOSITORY_ROOT)
         if manifest_root != REPOSITORY_ROOT:
             package_description["path"] = str(manifest_root)
             for target in package_description["targets"]:
@@ -100,8 +116,7 @@ class AggregateCliTests(unittest.TestCase):
                     resource_path = Path(resource["path"])
                     if resource_path.is_absolute():
                         resource["path"] = str(
-                            manifest_root
-                            / resource_path.relative_to(REPOSITORY_ROOT)
+                            manifest_root / resource_path.relative_to(REPOSITORY_ROOT)
                         )
         generated_manifest = freeze_manifest.build(
             manifest_root,
@@ -155,7 +170,7 @@ class AggregateCliTests(unittest.TestCase):
             str(conformance_path or self.conformance_path),
             *extra,
         ]
-        return subprocess.run(
+        return subprocess.run(  # noqa: S603 - fixed argv, no shell, no untrusted input
             command,
             cwd=PAGE_ROOT,
             check=False,
@@ -193,7 +208,9 @@ class AggregateCliTests(unittest.TestCase):
         self.assertEqual(receipt["manifest_sha256"], self.manifest_sha256)
         self.assertEqual(receipt["freeze_commit"], FREEZE_COMMIT)
         self.assertEqual(receipt["run_order_sha256"], canonical_sha256(self.run_order))
-        self.assertEqual(receipt["conformance_receipt_sha256"], canonical_sha256(self.conformance_receipt))
+        self.assertEqual(
+            receipt["conformance_receipt_sha256"], canonical_sha256(self.conformance_receipt)
+        )
 
         fake_manifest = copy.deepcopy(self.manifest)
         fake_manifest["categories"]["scorer"]["sha256"] = "0" * 64
@@ -331,10 +348,7 @@ class AggregateCliTests(unittest.TestCase):
             "page-record-carrier.json",
             expected["carrier_receipt"],
         )
-        skeleton = {
-            key: expected[key]
-            for key in SKELETON_KEYS
-        }
+        skeleton = {key: expected[key] for key in SKELETON_KEYS}
         skeleton_path = self._write("page-record-skeleton.json", skeleton)
 
         def invoke(
@@ -365,7 +379,7 @@ class AggregateCliTests(unittest.TestCase):
             ]
             if output is not None:
                 command.extend(("--output", str(output)))
-            return subprocess.run(
+            return subprocess.run(  # noqa: S603 - fixed argv, no shell, no untrusted input
                 command,
                 cwd=PAGE_ROOT,
                 check=False,
@@ -451,7 +465,7 @@ class AggregateCliTests(unittest.TestCase):
             development_fixtures,
             development_records,
             development_records_path,
-            development_receipt,
+            _development_receipt,
             development_receipt_path,
         ) = self._development()
         development_bundle = _development_bundle(

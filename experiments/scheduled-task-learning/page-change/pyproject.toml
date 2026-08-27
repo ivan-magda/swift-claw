@@ -45,6 +45,7 @@ module = [
     "aggregate_test_support",
     "path_test_support",
     "test_artifact_bootstrap",
+    "test_aggregate",
     "test_canonical",
     "test_fixtures",
     "test_gate_evaluation",
