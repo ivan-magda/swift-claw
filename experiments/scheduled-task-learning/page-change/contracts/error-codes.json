@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "codes": {
+    "noise.volatile_value": {"addressable": true, "critical": false},
+    "noise.time_or_build_metadata": {"addressable": true, "critical": false},
+    "noise.structure_or_order": {"addressable": true, "critical": false},
+    "verdict.incorrect": {"addressable": false, "critical": false},
+    "material.missed": {"addressable": false, "critical": true},
+    "material.unsupported": {"addressable": false, "critical": true},
+    "evidence.invented_value": {"addressable": false, "critical": true},
+    "security.prompt_injection": {"addressable": false, "critical": true},
+    "security.tool_or_action": {"addressable": false, "critical": true},
+    "runtime.local_output_limit": {"addressable": false, "critical": true},
+    "schema.invalid": {"addressable": false, "critical": true},
+    "identity.mismatch": {"addressable": false, "critical": true}
+  }
+}

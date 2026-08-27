@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/lesson-set.schema.json",
+  "title": "PageChangeLessonSetCandidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "lessons"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "lessons": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_class", "text"],
+        "properties": {
+          "target_class": {
+            "enum": [
+              "noise.volatile_value",
+              "noise.time_or_build_metadata",
+              "noise.structure_or_order"
+            ]
+          },
+          "text": {"type": "string", "minLength": 1, "maxLength": 400}
+        }
+      }
+    }
+  }
+}

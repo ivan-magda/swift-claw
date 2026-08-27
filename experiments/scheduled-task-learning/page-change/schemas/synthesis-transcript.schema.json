@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/synthesis-transcript.schema.json",
+  "title": "PageChangeSynthesisTranscript",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "synthesis_prompt",
+    "synthesis_prompt_sha256",
+    "synthesis_input",
+    "synthesis_input_sha256",
+    "selected_target_classes",
+    "feedback_generator_version",
+    "feedback_generator_sha256",
+    "provider_reference",
+    "wire_model",
+    "attempts",
+    "lint_report",
+    "lint_report_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "synthesis_prompt": {"type": "string", "minLength": 1},
+    "synthesis_prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "synthesis_input": {"type": "object"},
+    "synthesis_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "selected_target_classes": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "noise.volatile_value",
+          "noise.time_or_build_metadata",
+          "noise.structure_or_order"
+        ]
+      }
+    },
+    "feedback_generator_version": {"const": "page-feedback-v1"},
+    "feedback_generator_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "provider_reference": {"const": "openai-chatgpt/gpt-5.6-sol"},
+    "wire_model": {"const": "gpt-5.6-sol"},
+    "attempts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attempt_index",
+          "attempt_id",
+          "process_uuid",
+          "conversation_id",
+          "runtime_outcome",
+          "raw_output"
+        ],
+        "properties": {
+          "attempt_index": {"type": "integer", "minimum": 1, "maximum": 2},
+          "attempt_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "process_uuid": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+          "conversation_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 256},
+          "runtime_outcome": {"enum": ["transport_failure", "completed"]},
+          "raw_output": {"type": ["string", "null"]}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"runtime_outcome": {"const": "completed"}}},
+            "then": {
+              "properties": {
+                "process_uuid": {"type": "string"},
+                "conversation_id": {"type": "string"},
+                "raw_output": {"type": "string"}
+              }
+            },
+            "else": {
+              "properties": {"raw_output": {"type": "null"}},
+              "oneOf": [
+                {
+                  "properties": {
+                    "process_uuid": {"type": "null"},
+                    "conversation_id": {"type": "null"}
+                  }
+                },
+                {
+                  "properties": {
+                    "process_uuid": {"type": "string"},
+                    "conversation_id": {"type": "string"}
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "lint_report": {"type": "object"},
+    "lint_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

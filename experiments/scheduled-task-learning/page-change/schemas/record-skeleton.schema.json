@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/record-skeleton.schema.json",
+  "title": "PageChangeRecordSkeleton",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "attempt_id",
+    "stage",
+    "frozen_order_index",
+    "frozen_order_key",
+    "block_index",
+    "block_order_key",
+    "condition",
+    "replicate",
+    "process_uuid",
+    "lock_acquisition_id",
+    "conversation_id",
+    "lifecycle_generation",
+    "lifecycle_receipt_digest",
+    "result_or_envelope_sha256",
+    "replacement_of_attempt_id",
+    "replacement_ordinal",
+    "original_attempt_evidence_sha256"
+  ],
+  "properties": {
+    "attempt_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "stage": {
+      "enum": [
+        "development",
+        "regression",
+        "sealed-pre-restart",
+        "sealed-post-restart"
+      ]
+    },
+    "frozen_order_index": {"type": "integer", "minimum": 0},
+    "frozen_order_key": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "block_index": {"type": "integer", "minimum": 0},
+    "block_order_key": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "condition": {
+      "enum": [
+        "clean",
+        "lesson-conditioned",
+        "post-restart lesson-conditioned"
+      ]
+    },
+    "replicate": {"type": "integer", "minimum": 1, "maximum": 3},
+    "process_uuid": {"type": "string", "minLength": 1, "maxLength": 128},
+    "lock_acquisition_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "conversation_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "lifecycle_generation": {"enum": ["pre-restart", "post-restart"]},
+    "lifecycle_receipt_digest": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{64})?$"
+    },
+    "result_or_envelope_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "replacement_of_attempt_id": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "replacement_ordinal": {"enum": [0, 1]},
+    "original_attempt_evidence_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"replacement_ordinal": {"const": 0}}},
+      "then": {
+        "properties": {
+          "replacement_of_attempt_id": {"type": "null"},
+          "original_attempt_evidence_sha256": {"type": "null"}
+        }
+      },
+      "else": {
+        "properties": {
+          "replacement_of_attempt_id": {"type": "string"},
+          "original_attempt_evidence_sha256": {"type": "string"}
+        }
+      }
+    }
+  ]
+}
