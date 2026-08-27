@@ -152,7 +152,7 @@ import Testing
     )
     let script = """
       trap '' TERM
-      (trap '' TERM; while :; do :; done) &
+      (trap '' TERM; exec sleep 30) &
       grandchild=$!
       printf '%s\n' "$grandchild" > "$1"
       wait
@@ -255,6 +255,17 @@ private func readProcessIdentifier(from file: URL) async -> Int32? {
 
 private func processBecameUnreachable(_ processIdentifier: Int32) async -> Bool {
   await pollUntil(timeout: .seconds(5)) {
+    #if canImport(Glibc)
+      if let stat = try? String(
+        contentsOfFile: "/proc/\(processIdentifier)/stat",
+        encoding: .utf8
+      ),
+        let commandEnd = stat.lastIndex(of: ")"),
+        stat[stat.index(after: commandEnd)...].split(separator: " ").first == "Z"
+      {
+        return true
+      }
+    #endif
     errno = 0
     return kill(processIdentifier, 0) == -1 && errno == ESRCH ? true : nil
   } ?? false
