@@ -71,10 +71,8 @@ package struct SubprocessResult: Sendable, Equatable {
     processIdentifier: Int32?
   ) {
     self.termination = termination
-
     self.stdout = stdout
     self.stderr = stderr
-
     self.processIdentifier = processIdentifier
   }
 }
@@ -113,6 +111,7 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
         guard await iterator.next() != nil else {
           throw CancellationError()
         }
+
         try Task.checkCancellation()
         try await clock.sleep(for: allowance)
       },
@@ -151,7 +150,9 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
     spawnedProcessIdentifier: SpawnedProcessIdentifierBox,
     didSpawn: @escaping @Sendable () -> Void
   ) async -> SubprocessResult {
-    let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
+    let teardownSequence = Self.teardownSequence(
+      gracePeriod: command.teardownGracePeriod
+    )
 
     do {
       let result = try await Subprocess.run(
@@ -202,7 +203,12 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
 
 private extension SwiftSubprocessRunner {
   static func teardownSequence(gracePeriod: Duration) -> [TeardownStep] {
-    [.gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: gracePeriod)]
+    [
+      .gracefulShutDown(
+        toProcessGroup: true,
+        allowedDurationToNextStep: gracePeriod
+      )
+    ]
   }
 
   static func platformOptions(teardownSequence: [TeardownStep]) -> PlatformOptions {
