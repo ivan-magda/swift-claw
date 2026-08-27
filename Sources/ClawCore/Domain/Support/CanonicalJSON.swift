@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 public enum CanonicalJSON {
@@ -38,7 +39,11 @@ public enum CanonicalJSON {
     guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
       return nil
     }
-    let cfNumber = number as CFNumber
+    #if canImport(ObjectiveC)
+      let cfNumber = number as CFNumber
+    #else
+      let cfNumber = unsafeBitCast(number, to: CFNumber.self)
+    #endif
     guard CFNumberIsFloatType(cfNumber) == false else { return nil }
     var raw: Int64 = 0
     guard
