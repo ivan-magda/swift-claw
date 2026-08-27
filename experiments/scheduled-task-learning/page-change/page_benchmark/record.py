@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 from .canonical import SHA256_HEX, StrictJSONError, dumps, write
@@ -66,15 +66,9 @@ def seal_record(arguments: argparse.Namespace) -> dict[str, Any]:
         or stage not in STAGE_CONDITIONS
         or not isinstance(condition, str)
         or condition not in STAGE_CONDITIONS[stage]
-        or source.get("split") != (
-            "sealed" if stage.startswith("sealed-") else stage
-        )
+        or source.get("split") != ("sealed" if stage.startswith("sealed-") else stage)
         or skeleton.get("lifecycle_generation")
-        != (
-            "post-restart"
-            if stage == "sealed-post-restart"
-            else "pre-restart"
-        )
+        != ("post-restart" if stage == "sealed-post-restart" else "pre-restart")
     ):
         raise ValueError("record skeleton stage, split, condition, or lifecycle is invalid")
     expected_scorer_digest = scorer_digest(manifest)

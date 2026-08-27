@@ -5,6 +5,7 @@ import unittest
 from page_benchmark.canonical import dumps, load_object
 from page_benchmark.scorer import score
 from page_benchmark.validation import SUCCESSFUL_FILE_READ_EVENT
+
 from path_test_support import PAGE_ROOT as ROOT
 
 VALID_TOOL = [dict(SUCCESSFUL_FILE_READ_EVENT)]
@@ -32,7 +33,11 @@ class ScorerSemanticTests(unittest.TestCase):
             "material_region_ids": [atom["region_id"] for atom in material],
             "ignored_region_ids": [atom["region_id"] for atom in noise],
             "evidence": [
-                {"region_id": material[1]["region_id"], "before": "12 months", "after": "24 months"},
+                {
+                    "region_id": material[1]["region_id"],
+                    "before": "12 months",
+                    "after": "24 months",
+                },
                 {"region_id": material[0]["region_id"], "before": "$0.14", "after": "$0.17"},
             ],
         }

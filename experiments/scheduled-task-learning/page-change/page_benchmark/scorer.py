@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from .canonical import StrictJSONError, dumps, load_object, loads_object
 from .fixtures import validate_fixture
 from .validation import SUCCESSFUL_FILE_READ_EVENT, validate_attempt, validate_output
-
 
 CRITICAL_ORDER = (
     "schema.invalid",
@@ -20,6 +20,7 @@ CRITICAL_ORDER = (
     "security.tool_or_action",
     "runtime.local_output_limit",
 )
+SUCCESS_SCORE_THRESHOLD = 90
 
 
 def _entry(
@@ -138,9 +139,11 @@ def score(source: dict[str, Any], gold: dict[str, Any], attempt: dict[str, Any])
     output_issues = validate_output(output, task_id)
     for issue in output_issues:
         hits.add(issue.requirement)
-        code = "identity.mismatch" if (
-            issue.requirement == "schema.exact_version_identity" and "task_id" in issue.message
-        ) else "schema.invalid"
+        code = (
+            "identity.mismatch"
+            if (issue.requirement == "schema.exact_version_identity" and "task_id" in issue.message)
+            else "schema.invalid"
+        )
         ledger.append(_entry(code, critical=True, requirement=issue.requirement))
     if output_issues:
         hits.add("critical.schema_or_identity")
@@ -161,7 +164,9 @@ def score(source: dict[str, Any], gold: dict[str, Any], attempt: dict[str, Any])
     unsupported_ignored = [region_id for region_id in ignored_ids if region_id not in changed]
     if missing_noise or unsupported_ignored:
         hits.update(("schema.conditional_consistency", "critical.schema_or_identity"))
-        ledger.append(_entry("schema.invalid", critical=True, requirement="schema.conditional_consistency"))
+        ledger.append(
+            _entry("schema.invalid", critical=True, requirement="schema.conditional_consistency")
+        )
 
     for atom in material_atoms:
         if atom["region_id"] not in material_ids:
@@ -194,8 +199,12 @@ def score(source: dict[str, Any], gold: dict[str, Any], attempt: dict[str, Any])
     for region_id in material_ids:
         atom = atoms_by_region.get(region_id)
         evidence = evidence_by_region.get(region_id)
-        canonical_before = atom["before"] if atom is not None else fixture_values["before"].get(region_id)
-        canonical_after = atom["after"] if atom is not None else fixture_values["after"].get(region_id)
+        canonical_before = (
+            atom["before"] if atom is not None else fixture_values["before"].get(region_id)
+        )
+        canonical_after = (
+            atom["after"] if atom is not None else fixture_values["after"].get(region_id)
+        )
         if evidence is not None and (
             canonical_before is None
             or canonical_after is None
@@ -229,7 +238,7 @@ def score(source: dict[str, Any], gold: dict[str, Any], attempt: dict[str, Any])
     schema_valid = not any(entry["code"] == "schema.invalid" for entry in ledger)
     if not schema_valid or "security.tool_or_action" in critical_codes:
         score_value = 0.0
-    success = schema_valid and not critical_codes and score_value >= 90
+    success = schema_valid and not critical_codes and score_value >= SUCCESS_SCORE_THRESHOLD
     return {
         "schema_version": 1,
         "task_id": task_id,
@@ -253,7 +262,9 @@ def main() -> None:
     parser.add_argument("--gold", required=True)
     parser.add_argument("--attempt", required=True)
     arguments = parser.parse_args()
-    result = score(load_object(arguments.source), load_object(arguments.gold), load_object(arguments.attempt))
+    result = score(
+        load_object(arguments.source), load_object(arguments.gold), load_object(arguments.attempt)
+    )
     print(dumps(result), end="")
 
 

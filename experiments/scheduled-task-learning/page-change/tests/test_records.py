@@ -3,6 +3,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import unittest
+from collections.abc import Callable
+from typing import Any
+
+from page_benchmark.canonical import dumps, load_object
+from page_benchmark.records import seal_score_receipts
+from page_benchmark.validation import TARGET_CLASSES
 
 from aggregate_test_support import (
     PAGE_ROOT,
@@ -15,9 +21,6 @@ from aggregate_test_support import (
     evaluate_development,
     evaluate_regression,
 )
-from page_benchmark.canonical import dumps, load_object
-from page_benchmark.records import seal_score_receipts
-from page_benchmark.validation import TARGET_CLASSES
 
 
 class RecordContractTests(unittest.TestCase):
@@ -50,9 +53,7 @@ class RecordContractTests(unittest.TestCase):
             "attempt_digest": records[0]["attempt_digest"],
             "condition": records[0]["condition"],
             "fixture_id": records[0]["fixture_id"],
-            "original_attempt_evidence_sha256": records[0][
-                "original_attempt_evidence_sha256"
-            ],
+            "original_attempt_evidence_sha256": records[0]["original_attempt_evidence_sha256"],
             "parsed_output": records[0]["parsed_output"],
             "replicate": records[0]["replicate"],
             "replacement_of_attempt_id": records[0]["replacement_of_attempt_id"],
@@ -61,7 +62,9 @@ class RecordContractTests(unittest.TestCase):
             "score_result": records[0]["score_result"],
             "scorer_digest": records[0]["scorer_digest"],
         }
-        records[0]["score_receipt_digest"] = hashlib.sha256(dumps(payload).encode("utf-8")).hexdigest()
+        records[0]["score_receipt_digest"] = hashlib.sha256(
+            dumps(payload).encode("utf-8")
+        ).hexdigest()
 
         # When
         forged = _evaluate_regression(
@@ -97,7 +100,16 @@ class RecordContractTests(unittest.TestCase):
         development_fixtures = _actual_fixtures("development")
         regression_fixtures = _actual_fixtures("regression")
 
-        mutants = []
+        mutants: list[
+            tuple[
+                str,
+                Callable[..., dict],
+                list[dict],
+                dict[str, dict],
+                tuple[Any, ...],
+                str,
+            ]
+        ] = []
         empty_development_process = _records(development_fixtures, ("clean",))
         empty_development_process[0]["process_uuid"] = ""
         mutants.append(
@@ -169,9 +181,9 @@ class RecordContractTests(unittest.TestCase):
     def test_tool_path_deviations_reach_security_scoring(self) -> None:
         # Given
         fixtures = _actual_fixtures("development")
-        tool_event_schema = load_object(
-            PAGE_ROOT / "schemas/attempt.schema.json"
-        )["properties"]["tool_events"]["items"]
+        tool_event_schema = load_object(PAGE_ROOT / "schemas/attempt.schema.json")["properties"][
+            "tool_events"
+        ]["items"]
         deviations = (
             {"name": "web_fetch", "path": None, "status": "proposed"},
             {"name": "file_read", "path": None, "status": "failed"},
@@ -183,9 +195,9 @@ class RecordContractTests(unittest.TestCase):
                 records = _records(fixtures, ("clean",))
                 unsafe = records[0]
                 unsafe["attempt"]["tool_events"] = [deviation]
-                unsafe["attempt"]["responses_requests"] = unsafe["attempt"][
-                    "responses_requests"
-                ][:1]
+                unsafe["attempt"]["responses_requests"] = unsafe["attempt"]["responses_requests"][
+                    :1
+                ]
 
                 # When
                 result = evaluate_development(records, fixtures)
@@ -207,7 +219,7 @@ class RecordContractTests(unittest.TestCase):
         # Given
         fixtures = _actual_fixtures("regression")
 
-        mutations = (
+        mutations: tuple[tuple[str, Callable[[list[dict]], object], str, str], ...] = (
             (
                 "malformed_metadata",
                 lambda records: records[0]["attempt"]["responses_requests"][0].update(

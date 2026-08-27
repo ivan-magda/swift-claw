@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from page_benchmark.canonical import (
     StrictJSONError,
@@ -13,7 +13,9 @@ from page_benchmark.canonical import (
     loads_object,
     write,
 )
+
 from path_test_support import PAGE_ROOT as ROOT
+
 
 class StrictJSONTests(unittest.TestCase):
     def test_canonical_serializer_matches_cross_language_vector(self) -> None:

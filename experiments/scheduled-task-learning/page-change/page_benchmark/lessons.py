@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import argparse
-from collections import defaultdict
-from pathlib import Path
 import re
 import unicodedata
+from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
-from .canonical import dumps, load_object, loads_object, StrictJSONError
+from .canonical import StrictJSONError, dumps, load_object, loads_object
 from .fixtures import model_visible_html_terms
 from .validation import TARGET_CLASSES, validate_lesson_candidate
-
 
 _DEFAULT_IGNORABLE_RANGES = (
     (0x00AD, 0x00AD),
@@ -49,6 +48,11 @@ def _contains_bounded_term(text: str, term: str) -> bool:
     return re.search(prefix + re.escape(normalized_term) + suffix, normalized_text) is not None
 
 
+_MINIMUM_REPLICATES_FOR_QUALIFYING_FIXTURE = 2
+_MINIMUM_QUALIFYING_FIXTURES = 2
+_MINIMUM_QUALIFYING_FAMILIES = 2
+
+
 def support_by_class(
     runs: list[dict[str, Any]],
     sources: list[dict[str, Any]],
@@ -68,13 +72,14 @@ def support_by_class(
         qualifying = sorted(
             fixture_id
             for fixture_id, indexes in replicates[target_class].items()
-            if len(indexes) >= 2
+            if len(indexes) >= _MINIMUM_REPLICATES_FOR_QUALIFYING_FIXTURE
         )
         families = sorted({source_by_fixture[fixture_id]["family_id"] for fixture_id in qualifying})
         result[target_class] = {
             "qualifying_fixture_ids": qualifying,
             "qualifying_family_ids": families,
-            "supported": len(qualifying) >= 2 and len(families) >= 2,
+            "supported": len(qualifying) >= _MINIMUM_QUALIFYING_FIXTURES
+            and len(families) >= _MINIMUM_QUALIFYING_FAMILIES,
         }
     return result
 
@@ -84,7 +89,9 @@ _DYNAMIC_TERM_CATEGORIES = (
     "urls_and_html_selector_values",
     "before_after_literals_and_derived_proper_phrases",
 )
-_WORD = re.compile(r"[^\W\d_]+(?:['’\-][^\W\d_]+)*", flags=re.UNICODE)
+_WORD = re.compile(r"[^\W\d_]+(?:['’\-][^\W\d_]+)*", flags=re.UNICODE)  # noqa: RUF001
+_MINIMUM_PROPER_TERM_LENGTH = 2
+_MINIMUM_PROPER_PHRASE_RUN_LENGTH = 2
 
 
 def _proper_terms(literal: str) -> set[str]:
@@ -92,18 +99,15 @@ def _proper_terms(literal: str) -> set[str]:
     terms = {
         token
         for token in tokens
-        if len(token) >= 2
-        and (
-            token.isupper()
-            or any(character.isupper() for character in token[1:])
-        )
+        if len(token) >= _MINIMUM_PROPER_TERM_LENGTH
+        and (token.isupper() or any(character.isupper() for character in token[1:]))
     }
     run: list[str] = []
-    for token in tokens + [""]:
+    for token in [*tokens, ""]:
         if token and token[0].isupper():
             run.append(token)
             continue
-        if len(run) >= 2:
+        if len(run) >= _MINIMUM_PROPER_PHRASE_RUN_LENGTH:
             terms.update(run)
             for width in range(2, len(run) + 1):
                 for start in range(len(run) - width + 1):
@@ -122,12 +126,15 @@ def _string_values(value: Any) -> list[str]:
     return []
 
 
+_MINIMUM_CAPITALIZED_TOKEN_LENGTH = 3
+
+
 def _dynamic_forbidden_terms(
     runs: list[dict[str, Any]],
     sources: list[dict[str, Any]],
     golds: list[dict[str, Any]],
 ) -> dict[str, list[str]]:
-    terms = {category: set() for category in _DYNAMIC_TERM_CATEGORIES}
+    terms: dict[str, set[str]] = {category: set() for category in _DYNAMIC_TERM_CATEGORIES}
 
     def add_literal(literal: str) -> None:
         literal_terms = terms[_DYNAMIC_TERM_CATEGORIES[2]]
@@ -142,7 +149,8 @@ def _dynamic_forbidden_terms(
         literal_terms.update(
             token
             for token in tokens
-            if len(token) >= 3 and any(character.isupper() for character in token)
+            if len(token) >= _MINIMUM_CAPITALIZED_TOKEN_LENGTH
+            and any(character.isupper() for character in token)
         )
 
     identifier_terms = terms[_DYNAMIC_TERM_CATEGORIES[0]]
@@ -156,9 +164,7 @@ def _dynamic_forbidden_terms(
             visible, selectors = model_visible_html_terms(document)
             selector_terms.update(selectors)
             selector_terms.update(
-                selector.split("=", 1)[1]
-                for selector in selectors
-                if "=" in selector
+                selector.split("=", 1)[1] for selector in selectors if "=" in selector
             )
             for literal in visible:
                 add_literal(literal)
@@ -189,10 +195,12 @@ def _dynamic_forbidden_terms(
         for entry in run["score_result"]["error_ledger"]:
             for field in ("atom_id", "region_id"):
                 identifier_terms.update(_string_values(entry.get(field)))
-    return {
-        category: sorted(term for term in values if term)
-        for category, values in terms.items()
-    }
+    return {category: sorted(term for term in values if term) for category, values in terms.items()}
+
+
+_EXPECTED_MAXIMUM_LESSONS = 3
+_EXPECTED_MAXIMUM_SCALARS_PER_LESSON = 400
+_EXPECTED_MAXIMUM_TOTAL_SCALARS = 1000
 
 
 def _validated_rule_grammar(rules: dict[str, Any]) -> dict[str, Any]:
@@ -208,7 +216,11 @@ def _validated_rule_grammar(rules: dict[str, Any]) -> dict[str, Any]:
         "required_rule_terms",
         "class_concept_terms",
     }
-    if not isinstance(rules, dict) or set(rules) != expected_rule_keys or rules.get("schema_version") != 1:
+    if (
+        not isinstance(rules, dict)
+        or set(rules) != expected_rule_keys
+        or rules.get("schema_version") != 1
+    ):
         raise ValueError("lesson lint rules have unknown, missing, or invalid top-level fields")
     grammar = rules["rule_grammar"]
     grammar_keys = {
@@ -227,9 +239,9 @@ def _validated_rule_grammar(rules: dict[str, Any]) -> dict[str, Any]:
     expected_dynamic_categories = list(_DYNAMIC_TERM_CATEGORIES)
     class_terms = rules.get("class_concept_terms")
     if (
-        rules["maximum_lessons"] != 3
-        or rules["maximum_scalars_per_lesson"] != 400
-        or rules["maximum_total_scalars"] != 1000
+        rules["maximum_lessons"] != _EXPECTED_MAXIMUM_LESSONS
+        or rules["maximum_scalars_per_lesson"] != _EXPECTED_MAXIMUM_SCALARS_PER_LESSON
+        or rules["maximum_total_scalars"] != _EXPECTED_MAXIMUM_TOTAL_SCALARS
         or grammar["style"] != "single_imperative_sentence"
         or not isinstance(verbs, list)
         or not verbs
@@ -277,10 +289,13 @@ def _matches_rule_grammar(text: str, grammar: dict[str, Any]) -> bool:
     if matched_verb is None:
         return False
     body = stem[len(matched_verb) + 1 :]
-    return (
-        grammar["minimum_body_scalars"] <= len(body) <= grammar["maximum_body_scalars"]
-        and not any(character in body for character in grammar["forbidden_body_characters"])
-    )
+    return grammar["minimum_body_scalars"] <= len(body) <= grammar[
+        "maximum_body_scalars"
+    ] and not any(character in body for character in grammar["forbidden_body_characters"])
+
+
+_DEVELOPMENT_SOURCE_COUNT = 6
+_DEVELOPMENT_GOLD_COUNT = 6
 
 
 def lint_candidate(
@@ -293,10 +308,15 @@ def lint_candidate(
 ) -> dict[str, Any]:
     errors: list[dict[str, Any]] = []
     grammar = _validated_rule_grammar(rules)
-    if len(sources) != 6 or any(source.get("split") != "development" for source in sources):
+    if len(sources) != _DEVELOPMENT_SOURCE_COUNT or any(
+        source.get("split") != "development" for source in sources
+    ):
         raise ValueError("lesson linter may inspect only the six development sources")
     expected_task_ids = {source["task_id"] for source in sources}
-    if len(golds) != 6 or {gold.get("task_id") for gold in golds} != expected_task_ids:
+    if (
+        len(golds) != _DEVELOPMENT_GOLD_COUNT
+        or {gold.get("task_id") for gold in golds} != expected_task_ids
+    ):
         raise ValueError("lesson linter may inspect only the six development gold records")
     for issue in validate_lesson_candidate(candidate):
         errors.append({"code": "lesson.schema", "message": issue.message})
@@ -318,15 +338,24 @@ def lint_candidate(
                 {
                     "code": "lesson.unsupported_class",
                     "target_class": target_class,
-                    "message": "target class lacks errors in two replicates of two unrelated development fixtures",
+                    "message": (
+                        "target class lacks errors in two replicates of two unrelated "
+                        "development fixtures"
+                    ),
                 }
             )
 
-    total_scalars = sum(len(lesson.get("text", "")) for lesson in lessons if isinstance(lesson, dict))
+    total_scalars = sum(
+        len(lesson.get("text", "")) for lesson in lessons if isinstance(lesson, dict)
+    )
     if total_scalars > rules["maximum_total_scalars"]:
-        errors.append({"code": "lesson.total_length", "message": "lesson set exceeds the total scalar limit"})
+        errors.append(
+            {"code": "lesson.total_length", "message": "lesson set exceeds the total scalar limit"}
+        )
 
-    compiled_patterns = [re.compile(pattern, flags=re.IGNORECASE) for pattern in rules["forbidden_patterns"]]
+    compiled_patterns = [
+        re.compile(pattern, flags=re.IGNORECASE) for pattern in rules["forbidden_patterns"]
+    ]
     static_terms = [term.casefold() for term in rules["forbidden_terms"]]
     dynamic_terms = _dynamic_forbidden_terms(runs, sources, golds)
     for index, lesson in enumerate(lessons):
@@ -334,7 +363,7 @@ def lint_candidate(
             continue
         text = lesson["text"]
         normalized_text = unicodedata.normalize("NFKC", text)
-        target_class = lesson.get("target_class")
+        lesson_target_class = lesson.get("target_class")
         if normalized_text != text:
             errors.append(
                 {
@@ -344,14 +373,17 @@ def lint_candidate(
                 }
             )
         if any(
-            unicodedata.category(character).startswith("C") or _contains_default_ignorable(character)
+            unicodedata.category(character).startswith("C")
+            or _contains_default_ignorable(character)
             for character in text
         ):
             errors.append(
                 {
                     "code": "lesson.invisible_or_control",
                     "lesson_index": index,
-                    "message": "lesson text contains a control, format, or default-ignorable scalar",
+                    "message": (
+                        "lesson text contains a control, format, or default-ignorable scalar"
+                    ),
                 }
             )
         if not _matches_rule_grammar(normalized_text, grammar):
@@ -391,10 +423,15 @@ def lint_candidate(
                     "code": "lesson.example_leakage",
                     "lesson_index": index,
                     "category": leakage_category,
-                    "message": "lesson contains an identifier, proper name, selector, or literal development value",
+                    "message": (
+                        "lesson contains an identifier, proper name, selector, or literal "
+                        "development value"
+                    ),
                 }
             )
-        if not any(_contains_bounded_term(normalized_text, term) for term in rules["required_rule_terms"]):
+        if not any(
+            _contains_bounded_term(normalized_text, term) for term in rules["required_rule_terms"]
+        ):
             errors.append(
                 {
                     "code": "lesson.not_rule",
@@ -402,7 +439,7 @@ def lint_candidate(
                     "message": "lesson does not state a general decision rule",
                 }
             )
-        concept_terms = rules["class_concept_terms"].get(target_class, [])
+        concept_terms = rules["class_concept_terms"].get(lesson_target_class, [])
         if not any(_contains_bounded_term(normalized_text, term) for term in concept_terms):
             errors.append(
                 {
@@ -439,7 +476,16 @@ def main() -> None:
     try:
         candidate = loads_object(Path(arguments.candidate).read_text(encoding="utf-8"))
     except StrictJSONError as error:
-        print(dumps({"schema_version": 1, "accepted": False, "errors": [{"code": "lesson.parse", "message": str(error)}]}), end="")
+        print(
+            dumps(
+                {
+                    "schema_version": 1,
+                    "accepted": False,
+                    "errors": [{"code": "lesson.parse", "message": str(error)}],
+                }
+            ),
+            end="",
+        )
         return
     synthesis_input = load_object(arguments.synthesis_input)
     bundle = load_object(arguments.development_bundle)

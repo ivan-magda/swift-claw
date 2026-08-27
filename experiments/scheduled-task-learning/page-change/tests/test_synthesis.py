@@ -4,6 +4,12 @@ import copy
 import hashlib
 import unittest
 
+from page_benchmark.canonical import canonical_sha256, dumps, load_object
+from page_benchmark.feedback import normalize_feedback
+from page_benchmark.lessons import lint_candidate
+from page_benchmark.promotion import promote_candidate
+from page_benchmark.synthesis import build_synthesis_input
+
 from aggregate_test_support import (
     FEEDBACK_GENERATOR_DIGEST,
     _actual_fixtures,
@@ -12,12 +18,12 @@ from aggregate_test_support import (
     _synthesis_transcript,
     _valid_lesson_candidate,
 )
-from page_benchmark.canonical import canonical_sha256, dumps, load_object
-from page_benchmark.feedback import normalize_feedback
-from page_benchmark.lessons import lint_candidate
-from page_benchmark.promotion import promote_candidate
-from page_benchmark.synthesis import build_synthesis_input
 from path_test_support import PAGE_ROOT as ROOT
+
+# Padding target per lesson text: three lessons at this length exceed the linter's
+# 1000-scalar total length limit (lesson.total_length).
+LESSON_TEXT_LENGTH_TO_EXCEED_TOTAL_SCALAR_LIMIT = 340
+
 
 class SynthesisContractTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -57,7 +63,9 @@ class SynthesisContractTests(unittest.TestCase):
         )
         self.assertEqual(len(synthesis_input["development_runs"]), 18)
         self.assertNotIn("before_html", rendered)
-        self.assertNotIn("pc-development", " ".join(run["run_id"] for run in synthesis_input["development_runs"]))
+        self.assertNotIn(
+            "pc-development", " ".join(run["run_id"] for run in synthesis_input["development_runs"])
+        )
         self.assertEqual(dumps(self._build()), rendered)
 
     def test_feedback_is_only_frozen_code_specific_text(self) -> None:
@@ -89,7 +97,9 @@ class SynthesisContractTests(unittest.TestCase):
         candidate = _valid_lesson_candidate(selected)
 
         # When
-        report = lint_candidate(candidate, selected, self.runs, self.sources, self.golds, self.rules)
+        report = lint_candidate(
+            candidate, selected, self.runs, self.sources, self.golds, self.rules
+        )
 
         # Then
         self.assertTrue(report["accepted"], report["errors"])
@@ -108,7 +118,9 @@ class SynthesisContractTests(unittest.TestCase):
         }
 
         # When
-        report = lint_candidate(candidate, selected, self.runs, self.sources, self.golds, self.rules)
+        report = lint_candidate(
+            candidate, selected, self.runs, self.sources, self.golds, self.rules
+        )
 
         # Then
         self.assertFalse(report["accepted"])
@@ -121,9 +133,23 @@ class SynthesisContractTests(unittest.TestCase):
         baseline = {
             "schema_version": 1,
             "lessons": [
-                {"target_class": selected[0], "text": "Treat vola\u200btile counters as cosmetic when meaning is unchanged."},
-                {"target_class": selected[1], "text": "Mistreat generated timestamp metadata when user-facing state is unchanged."},
-                {"target_class": selected[2], "text": "Classify counterfeit layout reorderings as cosmetic when meaning is unchanged."},
+                {
+                    "target_class": selected[0],
+                    "text": "Treat vola\u200btile counters as cosmetic when meaning is unchanged.",
+                },
+                {
+                    "target_class": selected[1],
+                    "text": (
+                        "Mistreat generated timestamp metadata when user-facing state is unchanged."
+                    ),
+                },
+                {
+                    "target_class": selected[2],
+                    "text": (
+                        "Classify counterfeit layout reorderings as cosmetic when meaning "
+                        "is unchanged."
+                    ),
+                },
             ],
         }
 
@@ -181,7 +207,9 @@ class SynthesisContractTests(unittest.TestCase):
         synthesis_input = self._build()
         selected = synthesis_input["selected_target_classes"]
         candidate = _valid_lesson_candidate(selected)
-        lint_report = lint_candidate(candidate, selected, self.runs, self.sources, self.golds, self.rules)
+        lint_report = lint_candidate(
+            candidate, selected, self.runs, self.sources, self.golds, self.rules
+        )
         development_bundle = {
             "runs": self.runs,
             "sources": self.sources,
@@ -211,11 +239,15 @@ class SynthesisContractTests(unittest.TestCase):
         )
         self.assertEqual([lesson["target_class"] for lesson in artifact["lessons"]], selected)
         self.assertTrue(artifact["lesson_set_id"].startswith("set-"))
-        self.assertTrue(all(lesson["lesson_id"].startswith("lesson-") for lesson in artifact["lessons"]))
+        self.assertTrue(
+            all(lesson["lesson_id"].startswith("lesson-") for lesson in artifact["lessons"])
+        )
 
         receipt = results[0]["promotion_receipt"]
         self.assertEqual(receipt["active_lesson_set_id"], artifact["lesson_set_id"])
-        self.assertEqual(receipt["lesson_ids"], [lesson["lesson_id"] for lesson in artifact["lessons"]])
+        self.assertEqual(
+            receipt["lesson_ids"], [lesson["lesson_id"] for lesson in artifact["lessons"]]
+        )
         self.assertEqual(receipt["synthesis_input_sha256"], canonical_sha256(synthesis_input))
         self.assertEqual(receipt["lint_report_sha256"], canonical_sha256(lint_report))
 
@@ -247,14 +279,10 @@ class SynthesisContractTests(unittest.TestCase):
         )
         removed_fixture_id = self.sources[-1]["fixture_id"]
         held_out_fixture_id = regression_bundle["sources"][0]["fixture_id"]
-        sources = self.sources[:-1] + [regression_bundle["sources"][0]]
-        golds = self.golds[:-1] + [regression_bundle["golds"][0]]
-        runs = [
-            run for run in self.runs if run["fixture_id"] != removed_fixture_id
-        ] + [
-            run
-            for run in regression_bundle["runs"]
-            if run["fixture_id"] == held_out_fixture_id
+        sources = [*self.sources[:-1], regression_bundle["sources"][0]]
+        golds = [*self.golds[:-1], regression_bundle["golds"][0]]
+        runs = [run for run in self.runs if run["fixture_id"] != removed_fixture_id] + [
+            run for run in regression_bundle["runs"] if run["fixture_id"] == held_out_fixture_id
         ]
         self.assertEqual((len(runs), len(sources), len(golds)), (18, 6, 6))
 
@@ -277,9 +305,7 @@ class SynthesisContractTests(unittest.TestCase):
     def test_promotion_requires_complete_exact_synthesis_provenance(self) -> None:
         # Given
         synthesis_input = self._build()
-        candidate = _valid_lesson_candidate(
-            synthesis_input["selected_target_classes"]
-        )
+        candidate = _valid_lesson_candidate(synthesis_input["selected_target_classes"])
         lint_report = lint_candidate(
             candidate,
             synthesis_input["selected_target_classes"],
@@ -346,15 +372,47 @@ class SynthesisContractTests(unittest.TestCase):
             ]
 
         mutations = (
-            ("unknown_field", lambda value: value.update(human_edited=False), "unknown or missing fields"),
-            ("prompt", lambda value: value.update(synthesis_prompt="changed"), "identity or attempt count"),
+            (
+                "unknown_field",
+                lambda value: value.update(human_edited=False),
+                "unknown or missing fields",
+            ),
+            (
+                "prompt",
+                lambda value: value.update(synthesis_prompt="changed"),
+                "identity or attempt count",
+            ),
             ("input", lambda value: value.update(synthesis_input={}), "identity or attempt count"),
-            ("selected_classes", lambda value: value.update(selected_target_classes=[]), "identity or attempt count"),
-            ("feedback_version", lambda value: value.update(feedback_generator_version="other"), "identity or attempt count"),
-            ("feedback_digest", lambda value: value.update(feedback_generator_sha256="0" * 64), "identity or attempt count"),
-            ("provider", lambda value: value.update(provider_reference="other"), "identity or attempt count"),
-            ("wire_model", lambda value: value.update(wire_model="other"), "identity or attempt count"),
-            ("attempt_identity", lambda value: value["attempts"][0].update(process_uuid=None), "transport_failure or completed"),
+            (
+                "selected_classes",
+                lambda value: value.update(selected_target_classes=[]),
+                "identity or attempt count",
+            ),
+            (
+                "feedback_version",
+                lambda value: value.update(feedback_generator_version="other"),
+                "identity or attempt count",
+            ),
+            (
+                "feedback_digest",
+                lambda value: value.update(feedback_generator_sha256="0" * 64),
+                "identity or attempt count",
+            ),
+            (
+                "provider",
+                lambda value: value.update(provider_reference="other"),
+                "identity or attempt count",
+            ),
+            (
+                "wire_model",
+                lambda value: value.update(wire_model="other"),
+                "identity or attempt count",
+            ),
+            (
+                "attempt_identity",
+                lambda value: value["attempts"][0].update(process_uuid=None),
+                "transport_failure or completed",
+            ),
             ("retry_identity_reuse", reuse_retry_identity, "fresh process"),
             ("lint", lambda value: value.update(lint_report={}), "identity or attempt count"),
             ("no_candidate", lambda value: value.update(attempts=[]), "identity or attempt count"),
@@ -387,7 +445,7 @@ class SynthesisContractTests(unittest.TestCase):
         long_candidate = copy.deepcopy(valid)
         for lesson in long_candidate["lessons"]:
             stem = lesson["text"][:-1]
-            while len(stem) < 340:
+            while len(stem) < LESSON_TEXT_LENGTH_TO_EXCEED_TOTAL_SCALAR_LIMIT:
                 stem += " and context remains stable"
             lesson["text"] = stem + "."
         self.assertGreater(
@@ -404,7 +462,10 @@ class SynthesisContractTests(unittest.TestCase):
                     "lessons": [
                         {
                             **copy.deepcopy(valid["lessons"][0]),
-                            "text": valid["lessons"][0]["text"].replace("volatile", "ｖolatile"),
+                            "text": valid["lessons"][0]["text"].replace(
+                                "volatile",
+                                "ｖolatile",  # noqa: RUF001 -- intentional homoglyph fixture
+                            ),
                         },
                         *copy.deepcopy(valid["lessons"][1:]),
                     ],
@@ -460,9 +521,7 @@ class SynthesisContractTests(unittest.TestCase):
                 )
 
                 # Then
-                matching = [
-                    error for error in report["errors"] if error["code"] == expected_code
-                ]
+                matching = [error for error in report["errors"] if error["code"] == expected_code]
                 self.assertTrue(matching, report["errors"])
                 if expected_category is not None:
                     self.assertIn(
@@ -473,9 +532,7 @@ class SynthesisContractTests(unittest.TestCase):
     @staticmethod
     def _candidate_with_suffix(candidate: dict, suffix: str) -> dict:
         mutated = copy.deepcopy(candidate)
-        mutated["lessons"][0]["text"] = (
-            mutated["lessons"][0]["text"][:-1] + suffix + "."
-        )
+        mutated["lessons"][0]["text"] = mutated["lessons"][0]["text"][:-1] + suffix + "."
         return mutated
 
     @staticmethod
@@ -503,6 +560,7 @@ class SynthesisContractTests(unittest.TestCase):
 
         # Then
         self.assertRegex(str(raised.exception), "exactly 18")
+
 
 if __name__ == "__main__":
     unittest.main()

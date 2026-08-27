@@ -3,6 +3,11 @@ from __future__ import annotations
 import copy
 import hashlib
 import unittest
+from collections.abc import Callable
+
+from page_benchmark.canonical import canonical_sha256, load_object
+from page_benchmark.gate_evaluation import RESTART_LIFECYCLE_RECEIPT_KEYS
+from page_benchmark.validation import TARGET_CLASSES
 
 from aggregate_test_support import (
     LESSON_DIGEST,
@@ -21,17 +26,12 @@ from aggregate_test_support import (
     evaluate_regression,
     evaluate_sealed,
 )
-from page_benchmark.canonical import canonical_sha256, load_object
-from page_benchmark.gate_evaluation import RESTART_LIFECYCLE_RECEIPT_KEYS
-from page_benchmark.validation import TARGET_CLASSES
 
 
 class GateEvaluationTests(unittest.TestCase):
     def test_restart_lifecycle_schema_matches_closed_validator_contract(self) -> None:
         # Given
-        schema = load_object(
-            PAGE_ROOT / "schemas/restart-lifecycle-receipt.schema.json"
-        )
+        schema = load_object(PAGE_ROOT / "schemas/restart-lifecycle-receipt.schema.json")
 
         # When
         required_keys = set(schema["required"])
@@ -63,15 +63,11 @@ class GateEvaluationTests(unittest.TestCase):
             "publisher_attempt_id": alternate_publisher["attempt_id"],
             "publisher_frozen_order_key": alternate_publisher["frozen_order_key"],
             "publisher_process_uuid": alternate_publisher["process_uuid"],
-            "publisher_lock_acquisition_id": alternate_publisher[
-                "lock_acquisition_id"
-            ],
+            "publisher_lock_acquisition_id": alternate_publisher["lock_acquisition_id"],
             "first_reload_attempt_id": alternate_reload["attempt_id"],
             "first_reload_frozen_order_key": alternate_reload["frozen_order_key"],
             "first_reload_process_uuid": alternate_reload["process_uuid"],
-            "first_reload_lock_acquisition_id": alternate_reload[
-                "lock_acquisition_id"
-            ],
+            "first_reload_lock_acquisition_id": alternate_reload["lock_acquisition_id"],
         }
 
         # When
@@ -180,9 +176,7 @@ class GateEvaluationTests(unittest.TestCase):
         records = _records(fixtures, ("clean", "lesson-conditioned"))
         unsafe = _condition(records, "lesson-conditioned")[0]
         unsafe["attempt"]["tool_events"] = []
-        unsafe["attempt"]["responses_requests"] = unsafe["attempt"][
-            "responses_requests"
-        ][:1]
+        unsafe["attempt"]["responses_requests"] = unsafe["attempt"]["responses_requests"][:1]
 
         # When
         result = evaluate_regression(records, fixtures, list(TARGET_CLASSES))
@@ -194,20 +188,16 @@ class GateEvaluationTests(unittest.TestCase):
     def test_identity_reuse_is_a_carrier_failure(self) -> None:
         # Given
         fixtures = _actual_fixtures("regression")
-        mutations = (
+        mutations: tuple[tuple[str, str, Callable[[list[dict]], None]], ...] = (
             (
                 "process",
                 "carrier.process_uuid_reused",
-                lambda records: records[1].update(
-                    process_uuid=records[0]["process_uuid"]
-                ),
+                lambda records: records[1].update(process_uuid=records[0]["process_uuid"]),
             ),
             (
                 "conversation",
                 "carrier.conversation_reused",
-                lambda records: records[1].update(
-                    conversation_id=records[0]["conversation_id"]
-                ),
+                lambda records: records[1].update(conversation_id=records[0]["conversation_id"]),
             ),
         )
 
@@ -305,7 +295,10 @@ class GateEvaluationTests(unittest.TestCase):
         material_failure = copy.deepcopy(baseline)
         lesson = _condition(material_failure, "lesson-conditioned")[0]
         _classify(lesson, fixtures[lesson["fixture_id"]], include_material=False)
-        self.assertIn("regression.material_recall", evaluate_regression(material_failure, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "regression.material_recall",
+            evaluate_regression(material_failure, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         efficacy_failure = copy.deepcopy(baseline)
         for record in _condition(efficacy_failure, "lesson-conditioned"):
@@ -320,7 +313,9 @@ class GateEvaluationTests(unittest.TestCase):
     def test_sealed_carrier_and_security_precedence(self) -> None:
         # Given
         fixtures = _actual_fixtures("sealed")
-        records = _records(fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned"))
+        records = _records(
+            fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned")
+        )
         for record in _condition(records, "clean"):
             _classify(record, fixtures[record["fixture_id"]])
         records[0]["attempt"]["tool_events"] = []
@@ -347,7 +342,10 @@ class GateEvaluationTests(unittest.TestCase):
 
         for mutator, expected in (
             (wrong_clean_ids, "carrier.clean_not_canonical_empty"),
-            (lambda values: values[-1].update(lifecycle_generation="pre-restart"), "restart.post_generation"),
+            (
+                lambda values: values[-1].update(lifecycle_generation="pre-restart"),
+                "restart.post_generation",
+            ),
             (
                 lambda values: values[-1]["carrier_receipt"].update(lesson_source="artifact"),
                 "carrier.lesson_promotion_identity",
@@ -357,20 +355,31 @@ class GateEvaluationTests(unittest.TestCase):
                 "carrier.input_digest",
             ),
         ):
-            candidate = _records(fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned"))
+            candidate = _records(
+                fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned")
+            )
             mutator(candidate)
-            self.assertIn(expected, evaluate_sealed(candidate, fixtures, list(TARGET_CLASSES))["gate_failures"])
+            self.assertIn(
+                expected,
+                evaluate_sealed(candidate, fixtures, list(TARGET_CLASSES))["gate_failures"],
+            )
 
-        records = _records(fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned"))
+        records = _records(
+            fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned")
+        )
         malformed_contract = _carrier_contract(records)
         malformed_contract = copy.deepcopy(malformed_contract)
         malformed_contract["active_lesson_set"]["lessons"][0]["text"] = "tampered"
-        result = _evaluate_sealed(records, fixtures, list(TARGET_CLASSES), SCORER_DIGEST, malformed_contract)
+        result = _evaluate_sealed(
+            records, fixtures, list(TARGET_CLASSES), SCORER_DIGEST, malformed_contract
+        )
         self.assertIn("carrier.promotion_artifacts", result["gate_failures"])
 
         forged_receipt = copy.deepcopy(_carrier_contract(records))
         forged_receipt["lifecycle_receipt"]["input_was_regenerated"] = False
-        result = _evaluate_sealed(records, fixtures, list(TARGET_CLASSES), SCORER_DIGEST, forged_receipt)
+        result = _evaluate_sealed(
+            records, fixtures, list(TARGET_CLASSES), SCORER_DIGEST, forged_receipt
+        )
         self.assertIn("restart.lifecycle_receipt", result["gate_failures"])
 
         for field in ("durable_lesson_set_id", "durable_lesson_ids"):
@@ -420,9 +429,7 @@ class GateEvaluationTests(unittest.TestCase):
 
         clean_publisher = copy.deepcopy(_carrier_contract(records))
         clean_publisher["lifecycle_receipt"]["publisher_process_uuid"] = next(
-            record["process_uuid"]
-            for record in records
-            if record["condition"] == "clean"
+            record["process_uuid"] for record in records if record["condition"] == "clean"
         )
         clean_publisher["lifecycle_receipt_digest"] = canonical_sha256(
             clean_publisher["lifecycle_receipt"]
@@ -439,7 +446,9 @@ class GateEvaluationTests(unittest.TestCase):
     def test_sealed_headroom_and_full_validation_with_diagnostics(self) -> None:
         # Given
         fixtures = _actual_fixtures("sealed")
-        baseline = _records(fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned"))
+        baseline = _records(
+            fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned")
+        )
 
         # When
         validated = evaluate_sealed(baseline, fixtures, list(TARGET_CLASSES))
@@ -512,26 +521,38 @@ class GateEvaluationTests(unittest.TestCase):
     def test_all_lesson_sealed_acceptance_gates_are_enforced(self) -> None:
         # Given
         fixtures = _actual_fixtures("sealed")
-        baseline = _records(fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned"))
+        baseline = _records(
+            fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned")
+        )
 
         # When
         verdict = copy.deepcopy(baseline)
         noise_only_id = _fixture_id_for_verdict(fixtures, "cosmetic")
-        for record in [item for item in _condition(verdict, "lesson-conditioned") if item["fixture_id"] == noise_only_id][:2]:
+        for record in [
+            item
+            for item in _condition(verdict, "lesson-conditioned")
+            if item["fixture_id"] == noise_only_id
+        ][:2]:
             fixture = fixtures[record["fixture_id"]]
             _classify(record, fixture, selected_noise=fixture["gold"]["atoms"])
         # Then
-        self.assertIn("sealed.lesson.verdict_accuracy", evaluate_sealed(verdict, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.lesson.verdict_accuracy",
+            evaluate_sealed(verdict, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         task_success = copy.deepcopy(baseline)
         for record in _condition(task_success, "lesson-conditioned")[:4]:
             fixture = fixtures[record["fixture_id"]]
             noise = _noise_atoms(fixture)
             _classify(record, fixture, selected_noise=noise[:3])
-        self.assertIn("sealed.lesson.task_success", evaluate_sealed(task_success, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.lesson.task_success",
+            evaluate_sealed(task_success, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         success_nonregression = copy.deepcopy(baseline)
-        selected_fixture = list(fixtures)[0]
+        selected_fixture = next(iter(fixtures))
         for record in _condition(success_nonregression, "clean"):
             if record["fixture_id"] == selected_fixture:
                 _classify(record, fixtures[record["fixture_id"]])
@@ -553,7 +574,10 @@ class GateEvaluationTests(unittest.TestCase):
             elif record["fixture_id"] == fixture_id and record["condition"] == "lesson-conditioned":
                 noise = _noise_atoms(fixtures[fixture_id])
                 _classify(record, fixtures[fixture_id], selected_noise=noise[:2])
-        self.assertIn("sealed.lesson.fixture_medians", evaluate_sealed(median_failure, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.lesson.fixture_medians",
+            evaluate_sealed(median_failure, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         exact_five = copy.deepcopy(baseline)
         for record in exact_five:
@@ -562,7 +586,10 @@ class GateEvaluationTests(unittest.TestCase):
             elif record["fixture_id"] == fixture_id and record["condition"] == "lesson-conditioned":
                 noise = _noise_atoms(fixtures[fixture_id])
                 _classify(record, fixtures[fixture_id], selected_noise=noise[:1])
-        self.assertIn("sealed.lesson.fixture_medians", evaluate_sealed(exact_five, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.lesson.fixture_medians",
+            evaluate_sealed(exact_five, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         no_transfer = copy.deepcopy(baseline)
         for record in _condition(no_transfer, "lesson-conditioned"):
@@ -593,15 +620,15 @@ class GateEvaluationTests(unittest.TestCase):
         _classify(record, fixtures[record["fixture_id"]], include_material=False)
         self.assertIn(
             "sealed.lesson.material_recall",
-            evaluate_sealed(material_loss, fixtures, list(TARGET_CLASSES))[
-                "gate_failures"
-            ],
+            evaluate_sealed(material_loss, fixtures, list(TARGET_CLASSES))["gate_failures"],
         )
 
     def test_all_restart_acceptance_gates_are_enforced(self) -> None:
         # Given
         fixtures = _actual_fixtures("sealed")
-        baseline = _records(fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned"))
+        baseline = _records(
+            fixtures, ("clean", "lesson-conditioned", "post-restart lesson-conditioned")
+        )
 
         # When
         drift = copy.deepcopy(baseline)
@@ -610,7 +637,10 @@ class GateEvaluationTests(unittest.TestCase):
             noise = _noise_atoms(fixture)
             _classify(record, fixture, selected_noise=noise[:1])
         # Then
-        self.assertIn("sealed.restart.fpr_drift", evaluate_sealed(drift, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.restart.fpr_drift",
+            evaluate_sealed(drift, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         no_restart_transfer = copy.deepcopy(baseline)
         for record in _condition(no_restart_transfer, "post-restart lesson-conditioned"):
@@ -620,7 +650,9 @@ class GateEvaluationTests(unittest.TestCase):
                 excluding_target_class=TARGET_CLASSES[0],
             )
             _classify(record, fixture, selected_noise=selected_noise)
-        restart_transfer_result = evaluate_sealed(no_restart_transfer, fixtures, list(TARGET_CLASSES))
+        restart_transfer_result = evaluate_sealed(
+            no_restart_transfer, fixtures, list(TARGET_CLASSES)
+        )
         self.assertIn("sealed.restart.fpr_reduction", restart_transfer_result["gate_failures"])
         self.assertIn("sealed.restart.class_transfer", restart_transfer_result["gate_failures"])
 
@@ -638,10 +670,17 @@ class GateEvaluationTests(unittest.TestCase):
 
         verdict = copy.deepcopy(baseline)
         noise_only_id = _fixture_id_for_verdict(fixtures, "cosmetic")
-        for record in [item for item in _condition(verdict, "post-restart lesson-conditioned") if item["fixture_id"] == noise_only_id][:2]:
+        for record in [
+            item
+            for item in _condition(verdict, "post-restart lesson-conditioned")
+            if item["fixture_id"] == noise_only_id
+        ][:2]:
             fixture = fixtures[record["fixture_id"]]
             _classify(record, fixture, selected_noise=fixture["gold"]["atoms"])
-        self.assertIn("sealed.restart.verdict_accuracy", evaluate_sealed(verdict, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.restart.verdict_accuracy",
+            evaluate_sealed(verdict, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         medians = copy.deepcopy(baseline)
         fixture_id = next(iter(fixtures))
@@ -649,14 +688,20 @@ class GateEvaluationTests(unittest.TestCase):
             if record["fixture_id"] == fixture_id:
                 noise = _noise_atoms(fixtures[fixture_id])
                 _classify(record, fixtures[fixture_id], selected_noise=noise[:2])
-        self.assertIn("sealed.restart.fixture_medians", evaluate_sealed(medians, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.restart.fixture_medians",
+            evaluate_sealed(medians, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         exact_five = copy.deepcopy(baseline)
         for record in _condition(exact_five, "post-restart lesson-conditioned"):
             if record["fixture_id"] == fixture_id:
                 noise = _noise_atoms(fixtures[fixture_id])
                 _classify(record, fixtures[fixture_id], selected_noise=noise[:1])
-        self.assertIn("sealed.restart.fixture_medians", evaluate_sealed(exact_five, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.restart.fixture_medians",
+            evaluate_sealed(exact_five, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
         success = copy.deepcopy(baseline)
         improved_clean = next(
@@ -674,7 +719,10 @@ class GateEvaluationTests(unittest.TestCase):
             fixture = fixtures[record["fixture_id"]]
             noise = _noise_atoms(fixture)
             _classify(record, fixture, selected_noise=noise[:3])
-        self.assertIn("sealed.restart.task_success", evaluate_sealed(success, fixtures, list(TARGET_CLASSES))["gate_failures"])
+        self.assertIn(
+            "sealed.restart.task_success",
+            evaluate_sealed(success, fixtures, list(TARGET_CLASSES))["gate_failures"],
+        )
 
 
 if __name__ == "__main__":

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
 import hashlib
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +14,13 @@ from .lessons import support_by_class
 from .scorer import score
 from .validation import MODEL_SPLIT_MARKER, TARGET_CLASSES, validate_output
 
+DEVELOPMENT_RUN_COUNT = 18
+DEVELOPMENT_FIXTURE_COUNT = 6
+MINIMUM_ELIGIBLE_TARGET_CLASSES = 2
+
 
 def canonical_run_id(task_id: str, replicate: int) -> str:
-    value = hashlib.sha256(f"{task_id}:{replicate}".encode("utf-8")).hexdigest()[:12]
+    value = hashlib.sha256(f"{task_id}:{replicate}".encode()).hexdigest()[:12]
     return f"run-{value}"
 
 
@@ -26,12 +30,14 @@ def _validate_development_runs(
     golds: list[dict[str, Any]],
     error_codes: dict[str, Any],
 ) -> None:
-    if len(runs) != 18:
+    if len(runs) != DEVELOPMENT_RUN_COUNT:
         raise ValueError("page synthesis requires exactly 18 development runs")
-    if len(sources) != 6 or any(source.get("split") != "development" for source in sources):
+    if len(sources) != DEVELOPMENT_FIXTURE_COUNT or any(
+        source.get("split") != "development" for source in sources
+    ):
         raise ValueError("source bundle may contain only the six development fixtures")
     development_ids = {source["fixture_id"] for source in sources}
-    if len(development_ids) != 6:
+    if len(development_ids) != DEVELOPMENT_FIXTURE_COUNT:
         raise ValueError("development source bundle must contain exactly six fixtures")
     gold_by_fixture = {gold["fixture_id"]: gold for gold in golds}
     if set(gold_by_fixture) != development_ids:
@@ -60,7 +66,9 @@ def _validate_development_runs(
             raise ValueError("parsed development output does not match the strict output contract")
         if loads_object(run["attempt"]["raw_output"]) != run["parsed_output"]:
             raise ValueError("parsed output does not match the attempt raw output")
-        recomputed = score(source_by_fixture[fixture_id], gold_by_fixture[fixture_id], run["attempt"])
+        recomputed = score(
+            source_by_fixture[fixture_id], gold_by_fixture[fixture_id], run["attempt"]
+        )
         if recomputed != run["score_result"]:
             raise ValueError("stored score result does not match deterministic recomputation")
         score_result = run["score_result"]
@@ -80,9 +88,21 @@ def _validate_development_runs(
         if score_result["schema_version"] != 1 or score_result["task_id"] != model_task_id:
             raise ValueError("score result identity mismatch")
         allowed_codes = set(error_codes["codes"])
-        ledger_keys = {"code", "critical", "points_lost", "requirement", "atom_id", "region_id", "target_class"}
+        ledger_keys = {
+            "code",
+            "critical",
+            "points_lost",
+            "requirement",
+            "atom_id",
+            "region_id",
+            "target_class",
+        }
         for entry in score_result["error_ledger"]:
-            if not isinstance(entry, dict) or not {"code", "critical", "points_lost"}.issubset(entry) or not set(entry).issubset(ledger_keys):
+            if (
+                not isinstance(entry, dict)
+                or not {"code", "critical", "points_lost"}.issubset(entry)
+                or not set(entry).issubset(ledger_keys)
+            ):
                 raise ValueError("score ledger contains unknown or missing fields")
             if entry["code"] not in allowed_codes:
                 raise ValueError("score ledger contains an unknown error code")
@@ -102,9 +122,16 @@ def select_target_classes(
         for entry in run["score_result"]["error_ledger"]:
             if entry["code"] in TARGET_CLASSES:
                 recoverable_points[entry["code"]] += entry["points_lost"]
-    eligible = [target_class for target_class in TARGET_CLASSES if support[target_class]["supported"]]
-    eligible.sort(key=lambda target_class: (-recoverable_points[target_class], TARGET_CLASSES.index(target_class)))
-    if len(eligible) < 2:
+    eligible = [
+        target_class for target_class in TARGET_CLASSES if support[target_class]["supported"]
+    ]
+    eligible.sort(
+        key=lambda target_class: (
+            -recoverable_points[target_class],
+            TARGET_CLASSES.index(target_class),
+        )
+    )
+    if len(eligible) < MINIMUM_ELIGIBLE_TARGET_CLASSES:
         raise ValueError("inconclusive: insufficient development headroom")
     return eligible[:3]
 
@@ -123,8 +150,7 @@ def build_synthesis_input(
     selected = select_target_classes(runs, sources)
     ordered_runs = sorted(runs, key=lambda item: item["run_id"])
     development_runs = [
-        {"run_id": run["run_id"], "output": run["parsed_output"]}
-        for run in ordered_runs
+        {"run_id": run["run_id"], "output": run["parsed_output"]} for run in ordered_runs
     ]
     flattened_ledger: list[dict[str, Any]] = []
     for run in ordered_runs:

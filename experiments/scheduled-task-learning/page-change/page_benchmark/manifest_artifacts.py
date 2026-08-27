@@ -9,7 +9,6 @@ from typing import Any
 from .canonical import SHA256_HEX, dumps, loads_object
 from .fixtures import validate_fixture
 
-
 PAGE_ROOT = Path("experiments/scheduled-task-learning/page-change")
 
 

@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import copy
 import json
-from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
+from typing import Any
 
 from page_benchmark.canonical import load_object
 from page_benchmark.fixtures import validate_fixture, validate_repository
 from page_benchmark.materialize import materialize
 from page_benchmark.validation import ContractError
+
 from path_test_support import PAGE_ROOT as ROOT
+
 
 class FixtureContractTests(unittest.TestCase):
     def _copy_root(self, directory: str) -> Path:
@@ -112,8 +115,16 @@ class FixtureContractTests(unittest.TestCase):
             "schema_version": 1,
             "lesson_set_id": "candidate",
             "lessons": [
-                {"lesson_id": "one", "target_class": "noise.volatile_value", "text": "Treat volatile counters as cosmetic."},
-                {"lesson_id": "two", "target_class": "noise.volatile_value", "text": "Ignore rotating telemetry."},
+                {
+                    "lesson_id": "one",
+                    "target_class": "noise.volatile_value",
+                    "text": "Treat volatile counters as cosmetic.",
+                },
+                {
+                    "lesson_id": "two",
+                    "target_class": "noise.volatile_value",
+                    "text": "Ignore rotating telemetry.",
+                },
             ],
         }
 
@@ -127,7 +138,7 @@ class FixtureContractTests(unittest.TestCase):
     def test_materializer_rejects_non_string_lesson_identity_without_crashing(self) -> None:
         # Given
         source = load_object(ROOT / "sources/development/pc-development-01.source.json")
-        lessons = {
+        lessons: dict[str, Any] = {
             "schema_version": 1,
             "lesson_set_id": "set-example",
             "lessons": [
@@ -195,18 +206,31 @@ class FixtureContractTests(unittest.TestCase):
                 elif mutation == "template":
                     atoms = {atom["region_id"]: atom for atom in gold["atoms"]}
                     region_ids = source["task"]["region_ids"]
-                    def render(side: str) -> str:
+
+                    def render(
+                        side: str,
+                        atoms: dict[str, Any] = atoms,
+                        region_ids: list[str] = region_ids,
+                    ) -> str:
                         values = [atoms[region_id][side] for region_id in region_ids]
                         return (
-                            f'<main class="unrelated"><h1>Rail</h1><section data-region-id="{region_ids[0]}"><span>{values[0]}</span></section>'
-                            f'<aside data-region-id="{region_ids[1]}">{values[1]}</aside><footer data-region-id="{region_ids[2]}">{values[2]}</footer>'
+                            f'<main class="unrelated"><h1>Rail</h1>'
+                            f'<section data-region-id="{region_ids[0]}">'
+                            f"<span>{values[0]}</span></section>"
+                            f'<aside data-region-id="{region_ids[1]}">{values[1]}</aside>'
+                            f'<footer data-region-id="{region_ids[2]}">{values[2]}</footer>'
                             f'<p data-region-id="{region_ids[3]}">{values[3]}</p></main>'
                         )
+
                     source["task"]["before_html"] = render("before")
                     source["task"]["after_html"] = render("after")
                 elif mutation == "selector":
-                    source["task"]["before_html"] = source["task"]["before_html"].replace("<table>", '<table class="docs-grid">')
-                    source["task"]["after_html"] = source["task"]["after_html"].replace("<table>", '<table class="docs-grid">')
+                    source["task"]["before_html"] = source["task"]["before_html"].replace(
+                        "<table>", '<table class="docs-grid">'
+                    )
+                    source["task"]["after_html"] = source["task"]["after_html"].replace(
+                        "<table>", '<table class="docs-grid">'
+                    )
                 elif mutation == "literal":
                     atom = gold["atoms"][0]
                     source["task"]["before_html"] = source["task"]["before_html"].replace(

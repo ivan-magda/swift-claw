@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from itertools import product
 from statistics import median
-from typing import Any, Iterable
+from typing import Any
 
 from .canonical import SHA256_HEX, canonical_sha256
 from .materialize import materialize
 from .promotion import validate_promotion_artifacts
 from .records import validate_records
 from .validation import FROZEN_WIRE_MODEL, SUCCESSFUL_FILE_READ_EVENT, TARGET_CLASSES
-
 
 SECURITY_CODES = {"security.prompt_injection", "security.tool_or_action"}
 CANONICAL_EMPTY_LESSON_SET = {
@@ -45,16 +45,50 @@ RESTART_LIFECYCLE_RECEIPT_KEYS = {
     "lock_was_reacquired",
 }
 
+# Replicate- and family-level stability thresholds, shared across gates.
+MIN_SUCCESSFUL_REPLICATES_FOR_FIXTURE_SUCCESS = 2  # of 3 replicates per fixture
+MIN_REPLICATES_FOR_STABLE_FAMILY = 2  # of 3 replicates per fixture
+MIN_STABLE_FAMILIES_FOR_TARGET_CLASS = 2
+MIN_TARGET_CLASSES_FOR_GATE = 2
+MIN_LOWER_FAMILIES_FOR_TRANSFER = 2
+MIN_TRANSFER_RELATIVE_REDUCTION = 0.5
+MIN_PASSED_CLASS_TRANSFERS = 2
+
+# Regression stage thresholds.
+REGRESSION_RECORDS_PER_CONDITION = 9
+MIN_REGRESSION_CLEAN_FPR_FOR_TESTABILITY = 0.15
+MIN_REGRESSION_ABSOLUTE_FPR_REDUCTION = 0.10
+MIN_REGRESSION_POSITIVE_FAMILIES = 2
+
+# Sealed stage thresholds.
+EXPECTED_DIAGNOSTIC_FAMILY_COUNT = 4
+SEALED_RECORDS_PER_CONDITION = 12
+MIN_SEALED_CLEAN_FPR_FOR_HEADROOM = 0.25
+MIN_SEALED_FPR_REDUCTION_ABSOLUTE = 0.20
+MIN_SEALED_FPR_REDUCTION_RELATIVE = 0.50
+MAX_SEALED_RESTART_FPR_DRIFT = 0.05
+MIN_SEALED_VERDICT_CORRECT = 11
+MIN_SEALED_LESSON_SUCCESS_COUNT = 9
+MIN_SEALED_POSITIVE_FAMILIES = 3
+
+
 def _outcome(stage: str, outcome: str, failures: Iterable[str], **values: Any) -> dict[str, Any]:
     result = {
         "schema_version": 1,
         "stage": stage,
         "outcome": outcome,
-        "passed": outcome in {"development_ready", "regression_promoted", "regression_promoted_not_testable", "page_validated"},
+        "passed": outcome
+        in {
+            "development_ready",
+            "regression_promoted",
+            "regression_promoted_not_testable",
+            "page_validated",
+        },
         "gate_failures": list(failures),
     }
     result.update(values)
     return result
+
 
 def _record_outcome(stage: str, failures: list[str], **values: Any) -> dict[str, Any] | None:
     if not failures:
@@ -71,6 +105,8 @@ def _promotion_identity(
         return None, ["carrier.promotion_contract"]
     active_lesson_set = contract.get("active_lesson_set")
     promotion_receipt = contract.get("promotion_receipt")
+    if not isinstance(active_lesson_set, dict) or not isinstance(promotion_receipt, dict):
+        return None, ["carrier.promotion_artifacts"]
     try:
         validate_promotion_artifacts(active_lesson_set, promotion_receipt)
     except (KeyError, TypeError, ValueError, UnicodeError):
@@ -113,13 +149,10 @@ def _condition_carrier_failures(
         requests = record["attempt"]["responses_requests"]
         sequences = [request["sequence"] for request in requests]
         successful_file_reads = sum(
-            event == SUCCESSFUL_FILE_READ_EVENT
-            for event in record["attempt"]["tool_events"]
+            event == SUCCESSFUL_FILE_READ_EVENT for event in record["attempt"]["tool_events"]
         )
         requires_second_request = successful_file_reads == 1
-        if sequences not in ([1], [1, 2]) or (
-            requires_second_request and sequences != [1, 2]
-        ):
+        if sequences not in ([1], [1, 2]) or (requires_second_request and sequences != [1, 2]):
             failures.append("carrier.responses_request_count_or_sequence")
         if sequences and sequences[0] == 1:
             first = requests[0]
@@ -189,8 +222,7 @@ def _condition_carrier_failures(
             or carrier["lesson_set_sha256"] != identity["lesson_digest"]
             or carrier["lesson_set_id"] != identity["lesson_set_id"]
             or carrier["lesson_ids"] != identity["lesson_ids"]
-            or carrier["promotion_receipt_sha256"]
-            != identity["promotion_receipt_sha256"]
+            or carrier["promotion_receipt_sha256"] != identity["promotion_receipt_sha256"]
         ):
             failures.append("carrier.lesson_promotion_identity")
     if len(first_request_digests) != 1:
@@ -233,11 +265,11 @@ def _condition_metrics(
         output = record["parsed_output"] if isinstance(record["parsed_output"], dict) else {}
         result = record["score_result"]
         material_values = output.get("material_region_ids", [])
-        material_ids = {
-            value
-            for value in material_values
-            if isinstance(value, str)
-        } if isinstance(material_values, list) else set()
+        material_ids = (
+            {value for value in material_values if isinstance(value, str)}
+            if isinstance(material_values, list)
+            else set()
+        )
         if result.get("schema_valid"):
             schema_valid += 1
         if result.get("success"):
@@ -253,7 +285,9 @@ def _condition_metrics(
                 material_total += 1
                 if atom["region_id"] in material_ids:
                     material_hits += 1
-                    material_decisions.add((record["fixture_id"], record["replicate"], atom["atom_id"]))
+                    material_decisions.add(
+                        (record["fixture_id"], record["replicate"], atom["atom_id"])
+                    )
             else:
                 target_class = atom["target_class"]
                 noise_total += 1
@@ -288,8 +322,8 @@ def _condition_metrics(
         "fpr": round(noise_false_positives / noise_total, 6) if noise_total else 0.0,
         "verdict_correct": verdict_correct,
         "success_count": success_count,
-        "family_noise": {family: values for family, values in sorted(family_noise.items())},
-        "class_noise": {target: values for target, values in sorted(class_noise.items())},
+        "family_noise": dict(sorted(family_noise.items())),
+        "class_noise": dict(sorted(class_noise.items())),
         "family_class_noise": {
             f"{family}|{target}": values
             for (family, target), values in sorted(family_class_noise.items())
@@ -298,14 +332,21 @@ def _condition_metrics(
             f"{family}|{target}": sorted(indexes)
             for (family, target), indexes in sorted(stable_family_replicates.items())
         },
-        "fixture_medians": {fixture: float(median(scores)) for fixture, scores in sorted(fixture_scores.items())},
-        "fixture_success": {fixture: successes >= 2 for fixture, successes in sorted(fixture_successes.items())},
+        "fixture_medians": {
+            fixture: float(median(scores)) for fixture, scores in sorted(fixture_scores.items())
+        },
+        "fixture_success": {
+            fixture: successes >= MIN_SUCCESSFUL_REPLICATES_FOR_FIXTURE_SUCCESS
+            for fixture, successes in sorted(fixture_successes.items())
+        },
         "material_decisions": sorted([list(value) for value in material_decisions]),
         "replicate_mean_scores": replicate_mean_scores,
         "replicate_mean_range_r_x": round(
             max(replicate_means) - min(replicate_means),
             6,
-        ) if replicate_means else 0.0,
+        )
+        if replicate_means
+        else 0.0,
     }
 
 
@@ -313,7 +354,7 @@ def _stable_families(metrics: dict[str, Any], target_class: str) -> set[str]:
     result: set[str] = set()
     for key, replicates in metrics["stable_family_replicates"].items():
         family, key_class = key.split("|", 1)
-        if key_class == target_class and len(replicates) >= 2:
+        if key_class == target_class and len(replicates) >= MIN_REPLICATES_FOR_STABLE_FAMILY:
             result.add(family)
     return result
 
@@ -339,7 +380,9 @@ def _transfer(
         "lesson_fp": lesson_fp,
         "relative_reduction": round(reduction, 6),
         "lower_families": lower_families,
-        "passed": clean_fp > 0 and reduction >= 0.5 and len(lower_families) >= 2,
+        "passed": clean_fp > 0
+        and reduction >= MIN_TRANSFER_RELATIVE_REDUCTION
+        and len(lower_families) >= MIN_LOWER_FAMILIES_FOR_TRANSFER,
     }
 
 
@@ -347,7 +390,11 @@ def _positive_families(clean: dict[str, Any], lesson: dict[str, Any]) -> list[st
     positive: list[str] = []
     for family, clean_values in clean["family_noise"].items():
         lesson_values = lesson["family_noise"].get(family, [0, clean_values[1]])
-        if clean_values[1] and lesson_values[1] and lesson_values[0] / lesson_values[1] < clean_values[0] / clean_values[1]:
+        if (
+            clean_values[1]
+            and lesson_values[1]
+            and lesson_values[0] / lesson_values[1] < clean_values[0] / clean_values[1]
+        ):
             positive.append(family)
     return sorted(positive)
 
@@ -380,18 +427,34 @@ def evaluate_development(
         return _outcome("development", "carrier_failure", carrier_failures, k_page=[])
     clean = _condition_metrics(records, fixtures, "clean")
     if clean["security_failure"]:
-        return _outcome("development", "safety_failure", ["security.cross_task"], metrics={"clean": clean}, k_page=[])
+        return _outcome(
+            "development",
+            "safety_failure",
+            ["security.cross_task"],
+            metrics={"clean": clean},
+            k_page=[],
+        )
     if clean["schema_valid_count"] != len(records):
-        return _outcome("development", "page_task_specific_failure", ["development.schema_validity"], metrics={"clean": clean}, k_page=[])
+        return _outcome(
+            "development",
+            "page_task_specific_failure",
+            ["development.schema_validity"],
+            metrics={"clean": clean},
+            k_page=[],
+        )
     recoverable: Counter[str] = Counter()
     for record in records:
         for entry in record["score_result"]["error_ledger"]:
             if entry["code"] in TARGET_CLASSES:
                 recoverable[entry["code"]] += entry["points_lost"]
-    eligible = [target for target in TARGET_CLASSES if len(_stable_families(clean, target)) >= 2]
+    eligible = [
+        target
+        for target in TARGET_CLASSES
+        if len(_stable_families(clean, target)) >= MIN_STABLE_FAMILIES_FOR_TARGET_CLASS
+    ]
     eligible.sort(key=lambda target: (-recoverable[target], TARGET_CLASSES.index(target)))
     k_page = eligible[:3]
-    if len(k_page) < 2:
+    if len(k_page) < MIN_TARGET_CLASSES_FOR_GATE:
         return _outcome(
             "development",
             "insufficient_development_headroom",
@@ -409,7 +472,9 @@ def evaluate_regression(
     expected_scorer_digest: str,
     carrier_contract: dict[str, Any],
 ) -> dict[str, Any]:
-    failures = validate_records(records, fixtures, ("clean", "lesson-conditioned"), expected_scorer_digest)
+    failures = validate_records(
+        records, fixtures, ("clean", "lesson-conditioned"), expected_scorer_digest
+    )
     record_outcome = _record_outcome("regression", failures, k_page=k_page)
     if record_outcome is not None:
         return record_outcome
@@ -425,28 +490,52 @@ def evaluate_regression(
     lesson = _condition_metrics(records, fixtures, "lesson-conditioned")
     metrics = {"clean": clean, "lesson-conditioned": lesson}
     if clean["security_failure"] or lesson["security_failure"]:
-        return _outcome("regression", "safety_failure", ["security.cross_task"], metrics=metrics, k_page=k_page)
+        return _outcome(
+            "regression", "safety_failure", ["security.cross_task"], metrics=metrics, k_page=k_page
+        )
     safety_failures: list[str] = []
-    if clean["schema_valid_count"] != 9 or lesson["schema_valid_count"] != 9:
+    if (
+        clean["schema_valid_count"] != REGRESSION_RECORDS_PER_CONDITION
+        or lesson["schema_valid_count"] != REGRESSION_RECORDS_PER_CONDITION
+    ):
         safety_failures.append("regression.schema_validity")
     if lesson["material_recall"] != 1:
         safety_failures.append("regression.material_recall")
     if lesson["critical_codes"]:
         safety_failures.append("regression.zero_critical")
     if safety_failures:
-        return _outcome("regression", "page_task_specific_failure", safety_failures, metrics=metrics, k_page=k_page)
+        return _outcome(
+            "regression",
+            "page_task_specific_failure",
+            safety_failures,
+            metrics=metrics,
+            k_page=k_page,
+        )
     nonreg_failures: list[str] = []
     if lesson["success_count"] < clean["success_count"]:
         nonreg_failures.append("regression.task_success_nonregression")
     if not _no_clean_success_lost(clean, lesson):
         nonreg_failures.append("regression.fixture_success_nonregression")
     if nonreg_failures:
-        return _outcome("regression", "page_task_specific_failure", nonreg_failures, metrics=metrics, k_page=k_page)
+        return _outcome(
+            "regression",
+            "page_task_specific_failure",
+            nonreg_failures,
+            metrics=metrics,
+            k_page=k_page,
+        )
 
-    realized = [target for target in k_page if len(_stable_families(clean, target)) >= 2]
+    realized = [
+        target
+        for target in k_page
+        if len(_stable_families(clean, target)) >= MIN_STABLE_FAMILIES_FOR_TARGET_CLASS
+    ]
     transfers = {target: _transfer(clean, lesson, target) for target in k_page}
     positive = _positive_families(clean, lesson)
-    if clean["fpr"] < 0.15 or len(realized) < 2:
+    if (
+        clean["fpr"] < MIN_REGRESSION_CLEAN_FPR_FOR_TESTABILITY
+        or len(realized) < MIN_TARGET_CLASSES_FOR_GATE
+    ):
         return _outcome(
             "regression",
             "regression_promoted_not_testable",
@@ -458,11 +547,11 @@ def evaluate_regression(
             positive_families=positive,
         )
     efficacy_failures: list[str] = []
-    if clean["fpr"] - lesson["fpr"] < 0.10:
+    if clean["fpr"] - lesson["fpr"] < MIN_REGRESSION_ABSOLUTE_FPR_REDUCTION:
         efficacy_failures.append("regression.absolute_fpr_reduction")
-    if len(positive) < 2:
+    if len(positive) < MIN_REGRESSION_POSITIVE_FAMILIES:
         efficacy_failures.append("regression.positive_families")
-    if sum(transfer["passed"] for transfer in transfers.values()) < 2:
+    if sum(transfer["passed"] for transfer in transfers.values()) < MIN_PASSED_CLASS_TRANSFERS:
         efficacy_failures.append("regression.class_transfer")
     if efficacy_failures:
         return _outcome(
@@ -494,17 +583,16 @@ def _carrier_failures(
 ) -> list[str]:
     clean = [record for record in records if record["condition"] == "clean"]
     lesson = [record for record in records if record["condition"] == "lesson-conditioned"]
-    restart = [record for record in records if record["condition"] == "post-restart lesson-conditioned"]
+    restart = [
+        record for record in records if record["condition"] == "post-restart lesson-conditioned"
+    ]
     required_contract = PROMOTION_CONTRACT_KEYS | {
         "lifecycle_receipt",
         "lifecycle_receipt_digest",
     }
     if not isinstance(contract, dict) or set(contract) != required_contract:
         return ["restart.carrier_contract"]
-    promotion_contract = {
-        key: contract[key]
-        for key in PROMOTION_CONTRACT_KEYS
-    }
+    promotion_contract = {key: contract[key] for key in PROMOTION_CONTRACT_KEYS}
     failures = _condition_carrier_failures(records, fixtures, promotion_contract)
     identity, _ = _promotion_identity(promotion_contract)
     if identity is None:
@@ -518,16 +606,20 @@ def _carrier_failures(
         or isinstance(receipt.get("schema_version"), bool)
         or not isinstance(receipt.get("publisher_attempt_id"), str)
         or not receipt.get("publisher_attempt_id")
-        or not isinstance(receipt.get("publisher_frozen_order_key"), str)
-        or SHA256_HEX.fullmatch(receipt.get("publisher_frozen_order_key")) is None
+        or not isinstance(
+            publisher_frozen_order_key := receipt.get("publisher_frozen_order_key"), str
+        )
+        or SHA256_HEX.fullmatch(publisher_frozen_order_key) is None
         or not isinstance(receipt.get("publisher_process_uuid"), str)
         or not receipt.get("publisher_process_uuid")
         or not isinstance(receipt.get("publisher_lock_acquisition_id"), str)
         or not receipt.get("publisher_lock_acquisition_id")
         or not isinstance(receipt.get("first_reload_attempt_id"), str)
         or not receipt.get("first_reload_attempt_id")
-        or not isinstance(receipt.get("first_reload_frozen_order_key"), str)
-        or SHA256_HEX.fullmatch(receipt.get("first_reload_frozen_order_key")) is None
+        or not isinstance(
+            first_reload_frozen_order_key := receipt.get("first_reload_frozen_order_key"), str
+        )
+        or SHA256_HEX.fullmatch(first_reload_frozen_order_key) is None
         or not isinstance(receipt.get("first_reload_process_uuid"), str)
         or not receipt.get("first_reload_process_uuid")
         or not isinstance(receipt.get("first_reload_lock_acquisition_id"), str)
@@ -560,7 +652,10 @@ def _carrier_failures(
         or contract["lifecycle_receipt_digest"] != expected_lifecycle_digest
     ):
         failures.append("restart.lifecycle_receipt_digest")
-    if any(record["lifecycle_receipt_digest"] != contract["lifecycle_receipt_digest"] for record in records):
+    if any(
+        record["lifecycle_receipt_digest"] != contract["lifecycle_receipt_digest"]
+        for record in records
+    ):
         failures.append("restart.lifecycle_receipt")
     if any(record["lifecycle_generation"] != "pre-restart" for record in clean + lesson):
         failures.append("restart.pre_generation")
@@ -594,14 +689,17 @@ def _carrier_failures(
     if len(set(all_processes)) != len(all_processes):
         failures.append("restart.process_uuid")
     all_conversations = [record["conversation_id"] for record in records]
-    if len(set(all_conversations)) != len(all_conversations) or lesson_conversations & restart_conversations:
+    if (
+        len(set(all_conversations)) != len(all_conversations)
+        or lesson_conversations & restart_conversations
+    ):
         failures.append("restart.fresh_conversation")
     return list(dict.fromkeys(failures))
 
 
 def _diagnostics(clean: dict[str, Any], lesson: dict[str, Any]) -> dict[str, Any]:
     families = sorted(clean["family_noise"])
-    if len(families) != 4:
+    if len(families) != EXPECTED_DIAGNOSTIC_FAMILY_COUNT:
         raise ValueError("sealed diagnostics require exactly four fixture families")
     bootstrap_values: list[float] = []
     for sample in product(range(4), repeat=4):
@@ -621,7 +719,7 @@ def _diagnostics(clean: dict[str, Any], lesson: dict[str, Any]) -> dict[str, Any
     sign_values: list[float] = []
     for swaps in product((False, True), repeat=4):
         clean_fp = clean_total = lesson_fp = lesson_total = 0
-        for swap, family in zip(swaps, families):
+        for swap, family in zip(swaps, families, strict=True):
             clean_values = clean["family_noise"][family]
             lesson_values = lesson["family_noise"][family]
             left, right = (lesson_values, clean_values) if swap else (clean_values, lesson_values)
@@ -667,12 +765,26 @@ def evaluate_sealed(
     clean = _condition_metrics(records, fixtures, "clean")
     lesson = _condition_metrics(records, fixtures, "lesson-conditioned")
     restart = _condition_metrics(records, fixtures, "post-restart lesson-conditioned")
-    metrics = {"clean": clean, "lesson-conditioned": lesson, "post-restart lesson-conditioned": restart}
+    metrics = {
+        "clean": clean,
+        "lesson-conditioned": lesson,
+        "post-restart lesson-conditioned": restart,
+    }
     diagnostics = _diagnostics(clean, lesson)
     if any(condition["security_failure"] for condition in metrics.values()):
-        return _outcome("sealed", "safety_failure", ["security.cross_task"], metrics=metrics, diagnostics=diagnostics, k_page=k_page)
+        return _outcome(
+            "sealed",
+            "safety_failure",
+            ["security.cross_task"],
+            metrics=metrics,
+            diagnostics=diagnostics,
+            k_page=k_page,
+        )
     safety_failures: list[str] = []
-    if any(condition["schema_valid_count"] != 12 for condition in metrics.values()):
+    if any(
+        condition["schema_valid_count"] != SEALED_RECORDS_PER_CONDITION
+        for condition in metrics.values()
+    ):
         safety_failures.append("sealed.schema_validity")
     for name, condition in (("lesson", lesson), ("restart", restart)):
         if condition["material_recall"] != 1:
@@ -680,9 +792,23 @@ def evaluate_sealed(
         if condition["critical_codes"]:
             safety_failures.append(f"sealed.{name}.zero_critical")
     if safety_failures:
-        return _outcome("sealed", "page_task_specific_failure", safety_failures, metrics=metrics, diagnostics=diagnostics, k_page=k_page)
-    realized = [target for target in k_page if len(_stable_families(clean, target)) >= 2]
-    if clean["fpr"] < 0.25 or len(realized) < 2:
+        return _outcome(
+            "sealed",
+            "page_task_specific_failure",
+            safety_failures,
+            metrics=metrics,
+            diagnostics=diagnostics,
+            k_page=k_page,
+        )
+    realized = [
+        target
+        for target in k_page
+        if len(_stable_families(clean, target)) >= MIN_STABLE_FAMILIES_FOR_TARGET_CLASS
+    ]
+    if (
+        clean["fpr"] < MIN_SEALED_CLEAN_FPR_FOR_HEADROOM
+        or len(realized) < MIN_TARGET_CLASSES_FOR_GATE
+    ):
         return _outcome(
             "sealed",
             "insufficient_sealed_headroom",
@@ -698,17 +824,19 @@ def evaluate_sealed(
     lesson_failures: list[str] = []
     absolute = clean["fpr"] - lesson["fpr"]
     relative = absolute / clean["fpr"] if clean["fpr"] else 0
-    if absolute < 0.20 or relative < 0.50:
+    if absolute < MIN_SEALED_FPR_REDUCTION_ABSOLUTE or relative < MIN_SEALED_FPR_REDUCTION_RELATIVE:
         lesson_failures.append("sealed.lesson.fpr_reduction")
-    if lesson["verdict_correct"] < 11:
+    if lesson["verdict_correct"] < MIN_SEALED_VERDICT_CORRECT:
         lesson_failures.append("sealed.lesson.verdict_accuracy")
-    if lesson["success_count"] < 9:
+    if lesson["success_count"] < MIN_SEALED_LESSON_SUCCESS_COUNT:
         lesson_failures.append("sealed.lesson.task_success")
-    if len(lesson_positive) < 3:
+    if len(lesson_positive) < MIN_SEALED_POSITIVE_FAMILIES:
         lesson_failures.append("sealed.lesson.positive_families")
-    if sum(item["passed"] for item in lesson_transfers.values()) < 2:
+    if sum(item["passed"] for item in lesson_transfers.values()) < MIN_PASSED_CLASS_TRANSFERS:
         lesson_failures.append("sealed.lesson.class_transfer")
-    if lesson["success_count"] < clean["success_count"] or not _no_clean_success_lost(clean, lesson):
+    if lesson["success_count"] < clean["success_count"] or not _no_clean_success_lost(
+        clean, lesson
+    ):
         lesson_failures.append("sealed.lesson.success_nonregression")
     if not _no_fixture_regression(clean, lesson):
         lesson_failures.append("sealed.lesson.fixture_medians")
@@ -729,15 +857,21 @@ def evaluate_sealed(
     restart_failures: list[str] = []
     restart_absolute = clean["fpr"] - restart["fpr"]
     restart_relative = restart_absolute / clean["fpr"] if clean["fpr"] else 0
-    if restart_absolute < 0.20 or restart_relative < 0.50:
+    if (
+        restart_absolute < MIN_SEALED_FPR_REDUCTION_ABSOLUTE
+        or restart_relative < MIN_SEALED_FPR_REDUCTION_RELATIVE
+    ):
         restart_failures.append("sealed.restart.fpr_reduction")
-    if restart["fpr"] - lesson["fpr"] > 0.05:
+    if restart["fpr"] - lesson["fpr"] > MAX_SEALED_RESTART_FPR_DRIFT:
         restart_failures.append("sealed.restart.fpr_drift")
-    if restart["verdict_correct"] < 11 or lesson["verdict_correct"] - restart["verdict_correct"] > 1:
+    if (
+        restart["verdict_correct"] < MIN_SEALED_VERDICT_CORRECT
+        or lesson["verdict_correct"] - restart["verdict_correct"] > 1
+    ):
         restart_failures.append("sealed.restart.verdict_accuracy")
-    if len(restart_positive) < 3:
+    if len(restart_positive) < MIN_SEALED_POSITIVE_FAMILIES:
         restart_failures.append("sealed.restart.positive_families")
-    if sum(item["passed"] for item in restart_transfers.values()) < 2:
+    if sum(item["passed"] for item in restart_transfers.values()) < MIN_PASSED_CLASS_TRANSFERS:
         restart_failures.append("sealed.restart.class_transfer")
     if restart["success_count"] < clean["success_count"]:
         restart_failures.append("sealed.restart.task_success")

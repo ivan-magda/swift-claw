@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from collections import Counter
 import json
 import re
-from typing import Any, Iterable
+from collections import Counter
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any
 
 from .canonical import SHA256_HEX
-
 
 FIXTURE_ID = re.compile(r"^pc-(development|regression|sealed)-[0-9]{2}$")
 TASK_ID = re.compile(r"^page-[0-9a-f]{12}$")
@@ -39,6 +39,8 @@ SUCCESSFUL_FILE_READ_EVENT = {
 }
 FROZEN_PROVIDER_REFERENCE = "openai-chatgpt/gpt-5.6-sol"
 FROZEN_WIRE_MODEL = "gpt-5.6-sol"
+_UTF16_SURROGATE_LOW = 0xD800
+_UTF16_SURROGATE_HIGH = 0xDFFF
 
 
 @dataclass(frozen=True)
@@ -83,7 +85,7 @@ def _is_integer(value: Any) -> bool:
 
 
 def _scalar_count(value: str) -> int:
-    if any(0xD800 <= ord(character) <= 0xDFFF for character in value):
+    if any(_UTF16_SURROGATE_LOW <= ord(character) <= _UTF16_SURROGATE_HIGH for character in value):
         return -1
     return len(value)
 
@@ -185,7 +187,9 @@ def validate_attempt(
             _bounded_string(event.get("name"), 1, 64, f"{path}.name", issues)
             if event_path is not None:
                 _bounded_string(event_path, 1, 256, f"{path}.path", issues)
-            _closed_enum(event.get("status"), ("proposed", "succeeded", "failed"), f"{path}.status", issues)
+            _closed_enum(
+                event.get("status"), ("proposed", "succeeded", "failed"), f"{path}.status", issues
+            )
 
     requests = value.get("responses_requests")
     if requests is not None and _bounded_list(
@@ -250,8 +254,13 @@ def validate_output(value: Any, expected_task_id: str) -> list[ValidationIssue]:
     if not _is_integer(value.get("schema_version")) or value.get("schema_version") != 1:
         _issue(issues, "schema.exact_version_identity", "$.schema_version must equal integer 1")
     task_id = value.get("task_id")
-    if not _bounded_string(task_id, 1, 32, "$.task_id", issues, TASK_ID) or task_id != expected_task_id:
-        _issue(issues, "schema.exact_version_identity", "$.task_id does not match the expected task")
+    if (
+        not _bounded_string(task_id, 1, 32, "$.task_id", issues, TASK_ID)
+        or task_id != expected_task_id
+    ):
+        _issue(
+            issues, "schema.exact_version_identity", "$.task_id does not match the expected task"
+        )
     _closed_enum(value.get("verdict"), ("material", "cosmetic", "none"), "$.verdict", issues)
 
     for field in ("material_region_ids", "ignored_region_ids"):
@@ -281,12 +290,15 @@ def validate_output(value: Any, expected_task_id: str) -> list[ValidationIssue]:
         isinstance(item, str) for item in ignored
     )
     evidence_is_valid_list = isinstance(evidence, list) and all(
-        isinstance(item, dict) and isinstance(item.get("region_id"), str)
-        for item in evidence
+        isinstance(item, dict) and isinstance(item.get("region_id"), str) for item in evidence
     )
     if material_is_string_list and ignored_is_string_list:
         if set(material) & set(ignored):
-            _issue(issues, "schema.conditional_consistency", "material and ignored IDs must be disjoint")
+            _issue(
+                issues,
+                "schema.conditional_consistency",
+                "material and ignored IDs must be disjoint",
+            )
         evidence_ids = [item["region_id"] for item in evidence] if evidence_is_valid_list else []
         if evidence_is_valid_list and Counter(evidence_ids) != Counter(material):
             _issue(
@@ -295,11 +307,23 @@ def validate_output(value: Any, expected_task_id: str) -> list[ValidationIssue]:
                 "evidence must contain exactly one object for every material ID",
             )
         if verdict == "material" and not material:
-            _issue(issues, "schema.conditional_consistency", "material verdict requires a material region")
+            _issue(
+                issues,
+                "schema.conditional_consistency",
+                "material verdict requires a material region",
+            )
         if verdict == "cosmetic" and (material or not ignored or evidence):
-            _issue(issues, "schema.conditional_consistency", "cosmetic verdict requires only ignored changes")
+            _issue(
+                issues,
+                "schema.conditional_consistency",
+                "cosmetic verdict requires only ignored changes",
+            )
         if verdict == "none" and (material or ignored or evidence):
-            _issue(issues, "schema.conditional_consistency", "none verdict requires empty classifications")
+            _issue(
+                issues,
+                "schema.conditional_consistency",
+                "none verdict requires empty classifications",
+            )
     return issues
 
 
@@ -309,7 +333,9 @@ def validate_source(value: Any) -> list[ValidationIssue]:
     if not _exact_keys(value, keys, keys, "$", issues):
         return issues
     if value.get("schema_version") != 1 or not _is_integer(value.get("schema_version")):
-        _issue(issues, "schema.exact_version_identity", "source schema_version must equal integer 1")
+        _issue(
+            issues, "schema.exact_version_identity", "source schema_version must equal integer 1"
+        )
     _bounded_string(value.get("fixture_id"), 1, 32, "$.fixture_id", issues, FIXTURE_ID)
     _bounded_string(value.get("task_id"), 1, 32, "$.task_id", issues, TASK_ID)
     _bounded_string(value.get("family_id"), 3, 64, "$.family_id", issues, TOKEN)
@@ -328,14 +354,26 @@ def validate_source(value: Any) -> list[ValidationIssue]:
 
 def validate_gold(value: Any) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
-    keys = {"schema_version", "fixture_id", "task_id", "expected_verdict", "atoms", "injection_markers"}
+    keys = {
+        "schema_version",
+        "fixture_id",
+        "task_id",
+        "expected_verdict",
+        "atoms",
+        "injection_markers",
+    }
     if not _exact_keys(value, keys, keys, "$", issues):
         return issues
     if value.get("schema_version") != 1 or not _is_integer(value.get("schema_version")):
         _issue(issues, "schema.exact_version_identity", "gold schema_version must equal integer 1")
     _bounded_string(value.get("fixture_id"), 1, 32, "$.fixture_id", issues, FIXTURE_ID)
     _bounded_string(value.get("task_id"), 1, 32, "$.task_id", issues, TASK_ID)
-    _closed_enum(value.get("expected_verdict"), ("material", "cosmetic", "none"), "$.expected_verdict", issues)
+    _closed_enum(
+        value.get("expected_verdict"),
+        ("material", "cosmetic", "none"),
+        "$.expected_verdict",
+        issues,
+    )
     atoms = value.get("atoms")
     if _bounded_list(atoms, 0, 32, "$.atoms", issues):
         atom_ids: list[str] = []
@@ -370,9 +408,15 @@ def validate_gold(value: Any) -> list[ValidationIssue]:
             kind = atom.get("kind")
             _closed_enum(kind, ("material", "noise"), f"{path}.kind", issues)
             if kind == "noise":
-                _closed_enum(atom.get("target_class"), TARGET_CLASSES, f"{path}.target_class", issues)
+                _closed_enum(
+                    atom.get("target_class"), TARGET_CLASSES, f"{path}.target_class", issues
+                )
             elif "target_class" in atom:
-                _issue(issues, "schema.conditional_consistency", f"{path} material atom cannot have target_class")
+                _issue(
+                    issues,
+                    "schema.conditional_consistency",
+                    f"{path} material atom cannot have target_class",
+                )
             if atom_id_is_valid:
                 atom_ids.append(atom_id)
             if region_id_is_valid:
@@ -383,7 +427,9 @@ def validate_gold(value: Any) -> list[ValidationIssue]:
     marker_keys = {"task_ids", "region_ids", "phrases"}
     if _exact_keys(markers, marker_keys, marker_keys, "$.injection_markers", issues):
         for field in marker_keys:
-            _bounded_list(markers.get(field), 0, 32, f"$.injection_markers.{field}", issues, unique=True)
+            _bounded_list(
+                markers.get(field), 0, 32, f"$.injection_markers.{field}", issues, unique=True
+            )
             if isinstance(markers.get(field), list):
                 for index, item in enumerate(markers[field]):
                     _bounded_string(item, 1, 200, f"$.injection_markers.{field}[{index}]", issues)
@@ -396,7 +442,9 @@ def validate_lesson_candidate(value: Any) -> list[ValidationIssue]:
     if not _exact_keys(value, keys, keys, "$", issues):
         return issues
     if value.get("schema_version") != 1 or not _is_integer(value.get("schema_version")):
-        _issue(issues, "schema.exact_version_identity", "lesson schema_version must equal integer 1")
+        _issue(
+            issues, "schema.exact_version_identity", "lesson schema_version must equal integer 1"
+        )
     lessons = value.get("lessons")
     if _bounded_list(lessons, 1, 3, "$.lessons", issues):
         classes: list[str] = []

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
 from .canonical import SHA256_HEX, StrictJSONError, canonical_sha256, dumps, write
@@ -28,9 +28,10 @@ from .records import load_record_bundle
 from .synthesis import build_synthesis_input, canonical_run_id
 from .validation import TARGET_CLASSES
 
-
 GIT_OBJECT_ID = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
 _GATE_DOMAIN = b"swift-claw/scheduled-task-learning/page-change/aggregate-gate/v1\x00"
+MIN_K_PAGE_SIZE = 2
+MAX_K_PAGE_SIZE = 3
 
 
 def build_gate_receipt(
@@ -56,9 +57,7 @@ def build_gate_receipt(
         "conformance_receipt_sha256": conformance_receipt_sha256,
         "result": result,
     }
-    gate_sha256 = hashlib.sha256(
-        _GATE_DOMAIN + dumps(bindings).encode("utf-8")
-    ).hexdigest()
+    gate_sha256 = hashlib.sha256(_GATE_DOMAIN + dumps(bindings).encode("utf-8")).hexdigest()
     return {
         **bindings,
         "gate_id": f"gate-{gate_sha256[:12]}",
@@ -102,7 +101,8 @@ def _development_run_projection(
 
     runs: list[dict[str, Any]] = []
     for record in records:
-        fixture = fixtures.get(record.get("fixture_id"))
+        fixture_id = record.get("fixture_id")
+        fixture = fixtures.get(fixture_id) if isinstance(fixture_id, str) else None
         if not isinstance(fixture, dict) or not isinstance(fixture.get("source"), dict):
             raise ValueError("development record references an unknown fixture")
         source = fixture["source"]
@@ -214,8 +214,7 @@ def _promotion_contract_from_artifacts(
         synthesis_transcript.get("synthesis_prompt") != synthesis_prompt
         or synthesis_transcript.get("feedback_generator_sha256")
         != category_digest(manifest, "feedback")
-        or synthesis_transcript.get("provider_reference")
-        != model_values.get("provider_route")
+        or synthesis_transcript.get("provider_reference") != model_values.get("provider_route")
         or synthesis_transcript.get("wire_model") != model_values.get("wire_model")
         or synthesis_transcript.get("lint_report") != lint_report
     ):
@@ -324,10 +323,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, Any]:
         repository_root,
         manifest,
         manifest_sha256,
-        {
-            split: set(split_fixtures)
-            for split, split_fixtures in fixtures_by_split.items()
-        },
+        {split: set(split_fixtures) for split, split_fixtures in fixtures_by_split.items()},
         run_order,
     )
     expected_scorer_digest = scorer_digest(manifest)
@@ -373,7 +369,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, Any]:
         k_page = development_result.get("k_page")
         if (
             not isinstance(k_page, list)
-            or not 2 <= len(k_page) <= 3
+            or not MIN_K_PAGE_SIZE <= len(k_page) <= MAX_K_PAGE_SIZE
             or any(target not in TARGET_CLASSES for target in k_page)
             or len(set(k_page)) != len(k_page)
         ):

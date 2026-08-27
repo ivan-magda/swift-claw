@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 import hashlib
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from .canonical import canonical_sha256, dumps, load_object
 from .scorer import score
 
-
 _CONFORMANCE_DOMAIN = b"swift-claw/scheduled-task-learning/page-change/conformance/v1\x00"
+_FROZEN_CASE_COUNT = 24
 
 
 def run(root: str | Path) -> dict[str, Any]:
     root = Path(root)
     corpus = load_object(root / "conformance/cases.json")
-    if corpus.get("schema_version") != 1 or len(corpus.get("cases", [])) != 24:
+    if corpus.get("schema_version") != 1 or len(corpus.get("cases", [])) != _FROZEN_CASE_COUNT:
         raise ValueError("the frozen conformance corpus must contain exactly 24 cases")
     split_contract = load_object(root / "contracts/splits.json")
     lookup = {
@@ -62,7 +62,9 @@ def run(root: str | Path) -> dict[str, Any]:
     coverage_contract = load_object(root / "contracts/conformance-coverage.json")
     required = set(coverage_contract["requirements"])
     minimum = coverage_contract["minimum_cases_per_requirement"]
-    if set(coverage) != required or any(coverage[requirement] < minimum for requirement in required):
+    if set(coverage) != required or any(
+        coverage[requirement] < minimum for requirement in required
+    ):
         raise ValueError("conformance coverage contract is not satisfied")
     bindings = {
         "schema_version": 1,

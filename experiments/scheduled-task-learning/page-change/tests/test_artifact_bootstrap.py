@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 from path_test_support import PAGE_ROOT
 
@@ -35,11 +35,10 @@ class ArtifactBootstrapTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def _run_scorer(self) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
+        return subprocess.run(  # noqa: S603 - fixed argv, no shell, no untrusted input
             ["/usr/bin/python3", "-I", str(self.bootstrap), "scorer", "--help"],
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
 
@@ -67,12 +66,11 @@ class ArtifactBootstrapTests(unittest.TestCase):
         )
 
         # when
-        isolated = subprocess.run(
+        isolated = subprocess.run(  # noqa: S603 - fixed argv, no shell, no untrusted input
             [str(wrapper), "--help"],
             cwd=self.page_root,
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
         mutant = artifacts / "page-feedback-without-isolation"
@@ -81,12 +79,11 @@ class ArtifactBootstrapTests(unittest.TestCase):
             encoding="utf-8",
         )
         mutant.chmod(0o755)
-        unisolated = subprocess.run(
+        unisolated = subprocess.run(  # noqa: S603 - fixed argv, no shell, no untrusted input
             [str(mutant), "--help"],
             cwd=self.page_root,
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
 
@@ -113,7 +110,7 @@ class ArtifactBootstrapTests(unittest.TestCase):
             (
                 wrapper,
                 distinctive_help,
-                subprocess.run(
+                subprocess.run(  # noqa: S603 - fixed argv, no shell, no untrusted input
                     [str(PAGE_ROOT / "artifacts" / wrapper), "--help"],
                     cwd=PAGE_ROOT,
                     check=False,

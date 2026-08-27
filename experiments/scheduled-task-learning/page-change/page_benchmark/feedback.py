@@ -7,7 +7,6 @@ from typing import Any
 
 from .canonical import SHA256_HEX, canonical_sha256, dumps, load_object, write
 
-
 FEEDBACK_GENERATOR_VERSION = "page-feedback-v1"
 
 
@@ -23,10 +22,7 @@ def feedback_generator_identity(
         or not isinstance(templates_contract.get("templates"), dict)
     ):
         raise ValueError("feedback templates contract is malformed")
-    if (
-        not isinstance(category_sha256, str)
-        or SHA256_HEX.fullmatch(category_sha256) is None
-    ):
+    if not isinstance(category_sha256, str) or SHA256_HEX.fullmatch(category_sha256) is None:
         raise ValueError("feedback generator category digest is malformed")
     return {
         "version": FEEDBACK_GENERATOR_VERSION,
@@ -71,7 +67,10 @@ def main() -> None:
     payload = load_object(arguments.runs)
     if set(payload) != {"runs"} or not isinstance(payload["runs"], list):
         raise ValueError("runs input must contain only a runs array")
-    result = {"schema_version": 1, "feedback": normalize_feedback(payload["runs"], load_object(arguments.templates))}
+    result = {
+        "schema_version": 1,
+        "feedback": normalize_feedback(payload["runs"], load_object(arguments.templates)),
+    }
     if arguments.output:
         write(arguments.output, result)
     else:

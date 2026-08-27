@@ -10,11 +10,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import tempfile
-from typing import Any, Iterable
-
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any
 
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
@@ -90,13 +90,16 @@ def load_object(path: str | Path) -> dict[str, Any]:
 def dumps(value: Any) -> str:
     """Serialize canonical, byte-stable UTF-8 JSON with a final newline."""
 
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        allow_nan=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ) + "\n"
+    return (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
 
 
 def canonical_sha256(value: Any) -> str:
@@ -107,6 +110,7 @@ def canonical_sha256(value: Any) -> str:
 
 def write(path: str | Path, value: Any) -> None:
     target = Path(path)
+    descriptor: int | None
     descriptor, temporary_name = tempfile.mkstemp(
         dir=target.parent,
         prefix=f".{target.name}.",

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-from pathlib import Path
 import sys
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 from .canonical import canonical_sha256
 from .manifest_artifacts import verified_manifest_artifact
-
 
 _FREEZE_PACKAGE_ROOT = Path("tools/page_change_freeze")
 _FREEZE_INIT_PATH = str(_FREEZE_PACKAGE_ROOT / "__init__.py")
@@ -27,12 +26,8 @@ _REQUIRED_DERIVATION_MODULES = {
 
 def _freeze_source_records(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     categories = manifest.get("categories")
-    configuration = (
-        categories.get("configuration") if isinstance(categories, dict) else None
-    )
-    artifacts = (
-        configuration.get("artifacts") if isinstance(configuration, dict) else None
-    )
+    configuration = categories.get("configuration") if isinstance(categories, dict) else None
+    artifacts = configuration.get("artifacts") if isinstance(configuration, dict) else None
     if not isinstance(artifacts, list):
         raise ValueError("manifest configuration artifacts are absent or malformed")
     records = [
@@ -41,11 +36,12 @@ def _freeze_source_records(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         if isinstance(item, dict) and item.get("role") == _FREEZE_SOURCE_ROLE
     ]
     paths = [item.get("path") for item in records]
+    string_paths = [path for path in paths if isinstance(path, str)]
     if (
-        any(not isinstance(path, str) for path in paths)
+        len(string_paths) != len(paths)
         or len(paths) != len(set(paths))
         or not _REQUIRED_DERIVATION_MODULES.issubset(set(paths))
-        or any(Path(path).parent != _FREEZE_PACKAGE_ROOT for path in paths)
+        or any(Path(path).parent != _FREEZE_PACKAGE_ROOT for path in string_paths)
     ):
         raise ValueError("manifest freeze verifier source closure is incomplete")
     return sorted(records, key=lambda item: item["path"])
@@ -67,15 +63,9 @@ def _load_canonical_run_order(
             _FREEZE_SOURCE_ROLE,
         )
     closure_digest = canonical_sha256(
-        [
-            {"path": item["path"], "sha256": item["sha256"]}
-            for item in records
-        ]
+        [{"path": item["path"], "sha256": item["sha256"]} for item in records]
     )
-    package_name = (
-        "_swift_claw_page_change_freeze_for_page_benchmark_"
-        f"{closure_digest[:16]}"
-    )
+    package_name = f"_swift_claw_page_change_freeze_for_page_benchmark_{closure_digest[:16]}"
     module_name = f"{package_name}.run_order"
     cached = sys.modules.get(module_name)
     if isinstance(cached, ModuleType):
@@ -119,10 +109,7 @@ def _validate_fixture_projection(
     if (
         not isinstance(blocks, list)
         or not isinstance(replicates, list)
-        or any(
-            not isinstance(item, int) or isinstance(item, bool)
-            for item in replicates
-        )
+        or any(not isinstance(item, int) or isinstance(item, bool) for item in replicates)
     ):
         raise ValueError("manifest run-order fixture projection is malformed")
     expected = [
@@ -186,12 +173,11 @@ def validate_record_order(
     expected = stage_attempts(run_order, stage)
     if len(records) != len(expected):
         raise ValueError(f"{stage} records differ from the frozen attempt count")
-    for index, (record, attempt) in enumerate(zip(records, expected)):
+    for index, (record, attempt) in enumerate(zip(records, expected, strict=True)):
         expected_fields = {
             "stage": (
                 "sealed-pre-restart"
-                if stage == "sealed"
-                and attempt["condition"] != "post-restart lesson-conditioned"
+                if stage == "sealed" and attempt["condition"] != "post-restart lesson-conditioned"
                 else "sealed-post-restart"
                 if stage == "sealed"
                 else stage
@@ -205,14 +191,10 @@ def validate_record_order(
             "replicate": attempt["replicate_index"],
         }
         if any(record.get(key) != value for key, value in expected_fields.items()):
-            raise ValueError(
-                f"{stage} record {index} differs from its frozen order identity"
-            )
+            raise ValueError(f"{stage} record {index} differs from its frozen order identity")
         carrier = record.get("carrier_receipt")
         if (
             not isinstance(carrier, dict)
             or carrier.get("lesson_source") != attempt["lesson_source"]
         ):
-            raise ValueError(
-                f"{stage} record {index} differs from its frozen lesson source"
-            )
+            raise ValueError(f"{stage} record {index} differs from its frozen lesson source")

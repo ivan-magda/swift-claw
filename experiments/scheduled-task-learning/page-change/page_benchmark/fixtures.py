@@ -6,14 +6,13 @@ import argparse
 from collections import Counter, defaultdict
 from html.parser import HTMLParser
 from pathlib import Path
-import re
 from typing import Any
 
 from .canonical import dumps, load_object
 from .validation import (
-    ContractError,
     MODEL_SPLIT_MARKER,
     TARGET_CLASSES,
+    ContractError,
     ValidationIssue,
     require_valid,
     validate_gold,
@@ -113,7 +112,10 @@ def validate_fixture(source: dict[str, Any], gold: dict[str, Any]) -> dict[str, 
     atoms = gold["atoms"]
     atom_regions = {atom["region_id"] for atom in atoms}
     if changed != atom_regions:
-        _fail(f"gold atoms are not exhaustive for changed regions: changed={sorted(changed)}, gold={sorted(atom_regions)}")
+        _fail(
+            "gold atoms are not exhaustive for changed regions: "
+            f"changed={sorted(changed)}, gold={sorted(atom_regions)}"
+        )
     for atom in atoms:
         region_id = atom["region_id"]
         if before_values[region_id] != atom["before"] or after_values[region_id] != atom["after"]:
@@ -174,7 +176,11 @@ def validate_repository(root: str | Path) -> dict[str, Any]:
             if fixture_id in seen_fixture_ids:
                 _fail(f"duplicate fixture ID {fixture_id}")
             seen_fixture_ids.add(fixture_id)
-            if source["fixture_id"] != fixture_id or source["family_id"] != entry["family_id"] or source["split"] != split:
+            if (
+                source["fixture_id"] != fixture_id
+                or source["family_id"] != entry["family_id"]
+                or source["split"] != split
+            ):
                 _fail(f"split entry metadata mismatch for {fixture_id}")
             family = source["family_id"]
             if family in seen_families:
@@ -221,15 +227,20 @@ def validate_repository(root: str | Path) -> dict[str, Any]:
             if class_atoms[split][target_class] < minimum_atoms:
                 _fail(f"{split}/{target_class} has fewer than {minimum_atoms} target atoms")
             if len(class_families[split][target_class]) < minimum_families:
-                _fail(f"{split}/{target_class} has fewer than {minimum_families} unrelated families")
+                _fail(
+                    f"{split}/{target_class} has fewer than {minimum_families} unrelated families"
+                )
     if not set(split_contract["required_injection_splits"]).issubset(injection_splits):
         _fail("required regression/sealed injection fixtures are absent")
 
     sealed_contract = split_contract["sealed_contract"]
-    sealed_verdicts = Counter()
+    sealed_verdicts: Counter[str] = Counter()
     for entry in split_contract["splits"]["sealed"]:
         sealed_verdicts[load_object(root / entry["gold"])["expected_verdict"]] += 1
-    if material_atoms != sealed_contract["material_atoms"] or noise_atoms != sealed_contract["noise_atoms"]:
+    if (
+        material_atoms != sealed_contract["material_atoms"]
+        or noise_atoms != sealed_contract["noise_atoms"]
+    ):
         _fail("sealed atom counts differ from the frozen contract")
     if dict(sealed_verdicts) != sealed_contract["verdict_counts"]:
         _fail("sealed verdict counts differ from the frozen contract")
@@ -238,7 +249,9 @@ def validate_repository(root: str | Path) -> dict[str, Any]:
         "schema_version": 1,
         "fixture_count": len(seen_fixture_ids),
         "family_count": len(seen_families),
-        "split_class_atoms": {split: dict(sorted(counts.items())) for split, counts in sorted(class_atoms.items())},
+        "split_class_atoms": {
+            split: dict(sorted(counts.items())) for split, counts in sorted(class_atoms.items())
+        },
         "status": "valid",
     }
 

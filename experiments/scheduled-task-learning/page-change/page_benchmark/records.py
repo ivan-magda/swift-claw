@@ -10,7 +10,6 @@ from .manifest_artifacts import load_canonical_artifact
 from .scorer import score
 from .validation import validate_attempt
 
-
 RECORD_KEYS = {
     "attempt_id",
     "fixture_id",
@@ -86,9 +85,7 @@ def _score_receipt_payload(record: dict[str, Any]) -> dict[str, Any]:
         "attempt_digest": record["attempt_digest"],
         "condition": record["condition"],
         "fixture_id": record["fixture_id"],
-        "original_attempt_evidence_sha256": record[
-            "original_attempt_evidence_sha256"
-        ],
+        "original_attempt_evidence_sha256": record["original_attempt_evidence_sha256"],
         "parsed_output": record["parsed_output"],
         "replicate": record["replicate"],
         "replacement_of_attempt_id": record["replacement_of_attempt_id"],
@@ -181,9 +178,7 @@ def validate_records(
                 record["original_attempt_evidence_sha256"] is not None
                 and (
                     not isinstance(record["original_attempt_evidence_sha256"], str)
-                    or SHA256_HEX.fullmatch(
-                        record["original_attempt_evidence_sha256"]
-                    ) is None
+                    or SHA256_HEX.fullmatch(record["original_attempt_evidence_sha256"]) is None
                 )
             )
             or record["replacement_of_attempt_id"] == record["attempt_id"]
@@ -207,13 +202,16 @@ def validate_records(
         if not fixture_is_valid:
             failures.append("record.fixture_bundle")
             fixture = None
-        elif record["family_id"] != fixture["family_id"]:
+        elif isinstance(fixture, dict) and record["family_id"] != fixture["family_id"]:
             failures.append("record.fixture_identity")
         if record["condition"] not in conditions or record["replicate"] not in (1, 2, 3):
             failures.append("record.condition_or_replicate")
         if (
             not isinstance(record["score_result"], dict)
-            or (record["parsed_output"] is not None and not isinstance(record["parsed_output"], dict))
+            or (
+                record["parsed_output"] is not None
+                and not isinstance(record["parsed_output"], dict)
+            )
             or not isinstance(record["attempt"], dict)
         ):
             failures.append("record.result_shape")
@@ -229,8 +227,7 @@ def validate_records(
         elif (
             any(
                 not isinstance(carrier[field], str) or not carrier[field]
-                for field in CARRIER_RECEIPT_KEYS
-                - {"lesson_ids", "promotion_receipt_sha256"}
+                for field in CARRIER_RECEIPT_KEYS - {"lesson_ids", "promotion_receipt_sha256"}
             )
             or not isinstance(carrier["lesson_ids"], list)
             or any(not isinstance(value, str) for value in carrier["lesson_ids"])
@@ -265,9 +262,13 @@ def validate_records(
             failures.append("record.attempt_digest")
         if fixture is not None:
             expected_source_digest = canonical_sha256(fixture["source"])
-            if isinstance(carrier, dict) and set(carrier) == CARRIER_RECEIPT_KEYS and (
-                carrier["source_sha256"] != expected_source_digest
-                or carrier["task_id"] != fixture["source"].get("task_id")
+            if (
+                isinstance(carrier, dict)
+                and set(carrier) == CARRIER_RECEIPT_KEYS
+                and (
+                    carrier["source_sha256"] != expected_source_digest
+                    or carrier["task_id"] != fixture["source"].get("task_id")
+                )
             ):
                 failures.append("record.carrier_receipt_source_identity")
             try:
@@ -277,7 +278,9 @@ def validate_records(
             else:
                 raw_output = record["attempt"].get("raw_output")
                 try:
-                    recomputed_output = loads_object(raw_output) if isinstance(raw_output, str) else None
+                    recomputed_output = (
+                        loads_object(raw_output) if isinstance(raw_output, str) else None
+                    )
                 except StrictJSONError:
                     recomputed_output = None
                 if recomputed_result != record["score_result"]:
@@ -313,15 +316,15 @@ def seal_score_receipts(
         record["score_result"] = score(fixture["source"], fixture["gold"], record["attempt"])
         raw_output = record["attempt"].get("raw_output")
         try:
-            record["parsed_output"] = loads_object(raw_output) if isinstance(raw_output, str) else None
+            record["parsed_output"] = (
+                loads_object(raw_output) if isinstance(raw_output, str) else None
+            )
         except StrictJSONError:
             record["parsed_output"] = None
         record["attempt_digest"] = canonical_sha256(record["attempt"])
         record["carrier_receipt_sha256"] = canonical_sha256(record["carrier_receipt"])
         record["scorer_digest"] = scorer_digest
-        record["score_receipt_digest"] = canonical_sha256(
-            _score_receipt_payload(record)
-        )
+        record["score_receipt_digest"] = canonical_sha256(_score_receipt_payload(record))
 
 
 def load_record_bundle(path: Path) -> tuple[list[dict[str, Any]], str]:

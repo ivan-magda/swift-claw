@@ -7,8 +7,14 @@ from page_benchmark.canonical import canonical_sha256, dumps, load_object
 from page_benchmark.execution import stage_attempts
 from page_benchmark.gate_evaluation import (
     CANONICAL_EMPTY_LESSON_DIGEST,
+)
+from page_benchmark.gate_evaluation import (
     evaluate_development as _evaluate_development,
+)
+from page_benchmark.gate_evaluation import (
     evaluate_regression as _evaluate_regression,
+)
+from page_benchmark.gate_evaluation import (
     evaluate_sealed as _evaluate_sealed,
 )
 from page_benchmark.lessons import lint_candidate
@@ -22,13 +28,20 @@ from page_benchmark.validation import (
     FROZEN_WIRE_MODEL,
     SUCCESSFUL_FILE_READ_EVENT,
 )
+
 from path_test_support import PAGE_ROOT
 
+# Re-exported for other test modules; mypy's strict reexport check requires this
+# to be explicit since the aliases above rename their source symbols.
+__all__ = [
+    "PAGE_ROOT",
+    "_evaluate_development",
+    "_evaluate_regression",
+    "_evaluate_sealed",
+]
 
 SCORER_DIGEST = hashlib.sha256(b"page-change-test-scorer").hexdigest()
-FEEDBACK_GENERATOR_DIGEST = hashlib.sha256(
-    b"page-change-test-feedback-generator"
-).hexdigest()
+FEEDBACK_GENERATOR_DIGEST = hashlib.sha256(b"page-change-test-feedback-generator").hexdigest()
 REPOSITORY_ROOT = PAGE_ROOT.parents[2]
 FREEZE_COMMIT = "f" * 40
 VALID_LESSON_TEXTS = {
@@ -42,6 +55,7 @@ VALID_LESSON_TEXTS = {
         "Classify layout or reorder changes as cosmetic when items and meaning are preserved."
     ),
 }
+
 
 def evaluate_development(records: list[dict], fixtures: dict[str, dict]) -> dict:
     _rescore(records, fixtures)
@@ -68,8 +82,7 @@ def _noise_atoms(fixture: dict, *, excluding_target_class: str | None = None) ->
     return [
         atom
         for atom in fixture["gold"]["atoms"]
-        if atom["kind"] == "noise"
-        and atom["target_class"] != excluding_target_class
+        if atom["kind"] == "noise" and atom["target_class"] != excluding_target_class
     ]
 
 
@@ -82,10 +95,7 @@ def _fixture_id_for_verdict(fixtures: dict[str, dict], verdict: str) -> str:
 
 
 def _first_family_ids(fixtures: dict[str, dict], count: int) -> set[str]:
-    return {
-        fixture["family_id"]
-        for fixture in list(fixtures.values())[:count]
-    }
+    return {fixture["family_id"] for fixture in list(fixtures.values())[:count]}
 
 
 def _valid_lesson_candidate(target_classes: list[str]) -> dict:
@@ -108,10 +118,7 @@ def _records(
     stage_order_indexes: dict[str, int] = {}
     stage_blocks: dict[str, dict[tuple[str, int], int]] = {}
     for fixture_id, fixture in fixtures.items():
-        material = [
-            atom for atom in fixture["gold"]["atoms"]
-            if atom["kind"] == "material"
-        ]
+        material = [atom for atom in fixture["gold"]["atoms"] if atom["kind"] == "material"]
         noise = _noise_atoms(fixture)
         for replicate in (1, 2, 3):
             for condition in conditions:
@@ -119,21 +126,24 @@ def _records(
                 stage = {
                     "development": "development",
                     "regression": "regression",
-                }.get(split, (
-                    "sealed-post-restart"
-                    if condition == "post-restart lesson-conditioned"
-                    else "sealed-pre-restart"
-                ))
+                }.get(
+                    split,
+                    (
+                        "sealed-post-restart"
+                        if condition == "post-restart lesson-conditioned"
+                        else "sealed-pre-restart"
+                    ),
+                )
                 order_index = stage_order_indexes.get(stage, 0)
                 stage_order_indexes[stage] = order_index + 1
                 blocks = stage_blocks.setdefault(stage, {})
                 block_identity = (fixture_id, replicate)
                 block_index = blocks.setdefault(block_identity, len(blocks))
                 block_order_key = hashlib.sha256(
-                    f"block:{stage}:{fixture_id}:{replicate}".encode("utf-8")
+                    f"block:{stage}:{fixture_id}:{replicate}".encode()
                 ).hexdigest()
                 frozen_order_key = hashlib.sha256(
-                    f"attempt:{stage}:{block_index}:{condition}".encode("utf-8")
+                    f"attempt:{stage}:{block_index}:{condition}".encode()
                 ).hexdigest()
                 attempt_id = f"attempt-{frozen_order_key[:12]}"
                 false_positives = noise if condition == "clean" else []
@@ -143,13 +153,23 @@ def _records(
                     "task_id": fixture["gold"]["task_id"],
                     "verdict": "material" if selected else fixture["gold"]["expected_verdict"],
                     "material_region_ids": [atom["region_id"] for atom in selected],
-                    "ignored_region_ids": [atom["region_id"] for atom in noise if atom not in false_positives],
+                    "ignored_region_ids": [
+                        atom["region_id"] for atom in noise if atom not in false_positives
+                    ],
                     "evidence": [
-                        {"region_id": atom["region_id"], "before": atom["before"], "after": atom["after"]}
+                        {
+                            "region_id": atom["region_id"],
+                            "before": atom["before"],
+                            "after": atom["after"],
+                        }
                         for atom in selected
                     ],
                 }
-                lesson_source = {"clean": "clean", "lesson-conditioned": "artifact", "post-restart lesson-conditioned": "durable_active"}[condition]
+                lesson_source = {
+                    "clean": "clean",
+                    "lesson-conditioned": "artifact",
+                    "post-restart lesson-conditioned": "durable_active",
+                }[condition]
                 if condition == "clean":
                     lesson_digest = CANONICAL_EMPTY_LESSON_DIGEST
                     lesson_ids = []
@@ -166,14 +186,14 @@ def _records(
                     lesson_ids = receipt["lesson_ids"]
                     lesson_set_id = receipt["active_lesson_set_id"]
                     active_lesson_set = PROMOTION_CONTRACT["active_lesson_set"]
-                    promotion_receipt_sha256 = PROMOTION_CONTRACT[
-                        "promotion_receipt_sha256"
-                    ]
+                    promotion_receipt_sha256 = PROMOTION_CONTRACT["promotion_receipt_sha256"]
                 process_uuid = f"process-{condition}-{fixture_id}-{replicate}"
                 lock_acquisition_id = f"lock-{condition}-{fixture_id}-{replicate}"
                 conversation_id = f"conversation-{condition}-{fixture_id}-{replicate}"
                 carrier_receipt = {
-                    "source_sha256": hashlib.sha256(dumps(fixture["source"]).encode("utf-8")).hexdigest(),
+                    "source_sha256": hashlib.sha256(
+                        dumps(fixture["source"]).encode("utf-8")
+                    ).hexdigest(),
                     "task_id": fixture["source"]["task_id"],
                     "lesson_source": lesson_source,
                     "lesson_set_sha256": lesson_digest,
@@ -193,9 +213,7 @@ def _records(
                             "sequence": 1,
                             "requested_model": FROZEN_WIRE_MODEL,
                             "body_byte_count": 1_024,
-                            "body_sha256": hashlib.sha256(
-                                b"page-change-first-request"
-                            ).hexdigest(),
+                            "body_sha256": hashlib.sha256(b"page-change-first-request").hexdigest(),
                             "normalized_structure_sha256": hashlib.sha256(
                                 b"page-change-first-request"
                             ).hexdigest(),
@@ -207,14 +225,10 @@ def _records(
                             "requested_model": FROZEN_WIRE_MODEL,
                             "body_byte_count": 2_048,
                             "body_sha256": hashlib.sha256(
-                                f"page-change-second-request:{condition}:{fixture_id}:{replicate}".encode(
-                                    "utf-8"
-                                )
+                                f"page-change-second-request:{condition}:{fixture_id}:{replicate}".encode()
                             ).hexdigest(),
                             "normalized_structure_sha256": hashlib.sha256(
-                                f"page-change-second-structure:{condition}:{fixture_id}".encode(
-                                    "utf-8"
-                                )
+                                f"page-change-second-structure:{condition}:{fixture_id}".encode()
                             ).hexdigest(),
                             "untrusted_fence_present": True,
                             "untrusted_payload_sha256": carrier_receipt["input_sha256"],
@@ -248,7 +262,9 @@ def _records(
                         "attempt_digest": "",
                         "scorer_digest": "",
                         "score_receipt_digest": "",
-                        "lifecycle_generation": "post-restart" if condition.startswith("post-restart") else "pre-restart",
+                        "lifecycle_generation": "post-restart"
+                        if condition.startswith("post-restart")
+                        else "pre-restart",
                         "lifecycle_receipt_digest": "",
                         "carrier_receipt": carrier_receipt,
                         "carrier_receipt_sha256": "",
@@ -286,40 +302,28 @@ def _bind_lifecycle_receipt(
 ) -> tuple[dict, str]:
     if durable_lesson_digest is None:
         lesson_digests = {
-            record["lesson_digest"]
-            for record in records
-            if record["condition"] != "clean"
+            record["lesson_digest"] for record in records if record["condition"] != "clean"
         }
         if len(lesson_digests) != 1:
             raise AssertionError("test lifecycle requires one lesson digest")
         durable_lesson_digest = next(iter(lesson_digests))
     if durable_lesson_set_id is None:
         lesson_set_ids = {
-            record["lesson_set_id"]
-            for record in records
-            if record["condition"] != "clean"
+            record["lesson_set_id"] for record in records if record["condition"] != "clean"
         }
         if len(lesson_set_ids) != 1:
             raise AssertionError("test lifecycle requires one lesson-set ID")
         durable_lesson_set_id = next(iter(lesson_set_ids))
     if durable_lesson_ids is None:
         ordered_lesson_ids = {
-            tuple(record["lesson_ids"])
-            for record in records
-            if record["condition"] != "clean"
+            tuple(record["lesson_ids"]) for record in records if record["condition"] != "clean"
         }
         if len(ordered_lesson_ids) != 1:
             raise AssertionError("test lifecycle requires one ordered lesson-ID list")
         durable_lesson_ids = list(next(iter(ordered_lesson_ids)))
-    lesson_records = [
-        record
-        for record in records
-        if record["condition"] == "lesson-conditioned"
-    ]
+    lesson_records = [record for record in records if record["condition"] == "lesson-conditioned"]
     restart_records = [
-        record
-        for record in records
-        if record["condition"] == "post-restart lesson-conditioned"
+        record for record in records if record["condition"] == "post-restart lesson-conditioned"
     ]
     publisher = max(lesson_records, key=lambda record: record["frozen_order_index"])
     first_reload = min(restart_records, key=lambda record: record["frozen_order_index"])
@@ -574,7 +578,6 @@ def _classify(
     include_material: bool = True,
 ) -> None:
     material = [atom for atom in fixture["gold"]["atoms"] if atom["kind"] == "material"]
-    noise = _noise_atoms(fixture)
     selected = (material if include_material else []) + (selected_noise or [])
     ignored = [atom for atom in fixture["gold"]["atoms"] if atom not in selected]
     record["parsed_output"].update(

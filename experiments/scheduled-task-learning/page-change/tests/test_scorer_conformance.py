@@ -1,20 +1,26 @@
 from __future__ import annotations
 
-from collections import Counter
 import copy
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from collections import Counter
+from pathlib import Path
+from typing import Any, ClassVar
 
-from page_benchmark.canonical import dumps, load_object, write
+from page_benchmark.canonical import load_object, write
 from page_benchmark.conformance import run
 from page_benchmark.scorer import score
+
 from path_test_support import PAGE_ROOT as ROOT
 
+
 class ScorerConformanceTests(unittest.TestCase):
+    corpus: ClassVar[dict[str, Any]]
+    fixture_paths: ClassVar[dict[str, Any]]
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.corpus = load_object(ROOT / "conformance/cases.json")
@@ -35,7 +41,9 @@ class ScorerConformanceTests(unittest.TestCase):
             )
             expected = case["expected"]
             self.assertEqual(result, expected, case["case_id"])
-            self.assertTrue(set(case["covers"]).issubset(result["requirement_hits"]), case["case_id"])
+            self.assertTrue(
+                set(case["covers"]).issubset(result["requirement_hits"]), case["case_id"]
+            )
 
     @staticmethod
     def _copy_contract_root(directory: str) -> Path:
@@ -59,12 +67,16 @@ class ScorerConformanceTests(unittest.TestCase):
         coverage_contract = load_object(ROOT / "contracts/conformance-coverage.json")
 
         # When
-        counts = Counter(requirement for case in self.corpus["cases"] for requirement in case["covers"])
+        counts = Counter(
+            requirement for case in self.corpus["cases"] for requirement in case["covers"]
+        )
 
         # Then
         self.assertEqual(set(counts), set(coverage_contract["requirements"]))
         minimum = coverage_contract["minimum_cases_per_requirement"]
-        self.assertTrue(all(counts[requirement] >= minimum for requirement in coverage_contract["requirements"]))
+        self.assertTrue(
+            all(counts[requirement] >= minimum for requirement in coverage_contract["requirements"])
+        )
 
     def test_three_complete_scorer_executions_are_byte_identical(self) -> None:
         # Given
@@ -94,9 +106,7 @@ class ScorerConformanceTests(unittest.TestCase):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
                 temporary_root = self._copy_contract_root(directory)
                 corpus = copy.deepcopy(self.corpus)
-                corpus["cases"][1][mutation] = copy.deepcopy(
-                    corpus["cases"][0][mutation]
-                )
+                corpus["cases"][1][mutation] = copy.deepcopy(corpus["cases"][0][mutation])
                 write(temporary_root / "conformance/cases.json", corpus)
 
                 # When
@@ -114,9 +124,7 @@ class ScorerConformanceTests(unittest.TestCase):
             omitted = "critical.local_output_limit"
             for case in corpus["cases"]:
                 case["covers"] = [
-                    requirement
-                    for requirement in case["covers"]
-                    if requirement != omitted
+                    requirement for requirement in case["covers"] if requirement != omitted
                 ]
             write(temporary_root / "conformance/cases.json", corpus)
 

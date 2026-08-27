@@ -65,6 +65,9 @@ logs/
 # Python tooling (freeze/benchmark helpers)
 __pycache__/
 *.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
 
 # ─────────────────── Claude Code (personal, local) ───────────────────
 .claude/settings.local.json

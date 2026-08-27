@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Any
 
 from .canonical import SHA256_HEX, canonical_sha256, dumps, load_object, loads_object, write
 from .lessons import lint_candidate
 from .validation import FROZEN_PROVIDER_REFERENCE, FROZEN_WIRE_MODEL, TARGET_CLASSES
-
 
 _CANDIDATE_DOMAIN = b"swift-claw/scheduled-task-learning/page-change/candidate/v1\x00"
 _LESSON_DOMAIN = b"swift-claw/scheduled-task-learning/page-change/lesson/v1\x00"
@@ -72,6 +71,9 @@ PROMOTION_RECEIPT_KEYS = {
     "canonical_byte_count",
 }
 _CONTENT_ID = re.compile(r"^(?:promotion|set|lesson)-[0-9a-f]{12}$")
+_MAX_ACTIVE_LESSONS = 3
+_MAX_LESSON_TEXT_LENGTH = 400
+_MAX_SYNTHESIS_ATTEMPTS = 2
 
 
 def _domain_sha256(domain: bytes, value: Any) -> str:
@@ -97,7 +99,7 @@ def validate_promotion_artifacts(
         or not isinstance(active_lesson_set.get("lesson_set_id"), str)
         or _CONTENT_ID.fullmatch(active_lesson_set["lesson_set_id"]) is None
         or not isinstance(lessons, list)
-        or not 1 <= len(lessons) <= 3
+        or not 1 <= len(lessons) <= _MAX_ACTIVE_LESSONS
     ):
         raise ValueError("active lesson set identity or lesson count is invalid")
 
@@ -117,7 +119,7 @@ def validate_promotion_artifacts(
             or target_class not in TARGET_CLASSES
             or target_class in seen_classes
             or not isinstance(text, str)
-            or not 1 <= len(text) <= 400
+            or not 1 <= len(text) <= _MAX_LESSON_TEXT_LENGTH
         ):
             raise ValueError("active lesson fields are invalid")
         seen_classes.add(target_class)
@@ -161,9 +163,8 @@ def validate_promotion_artifacts(
         or not isinstance(promotion_receipt.get("wire_model"), str)
         or not promotion_receipt["wire_model"]
         or not isinstance(promotion_receipt.get("selected_target_classes"), list)
-        or promotion_receipt["selected_target_classes"] != [
-            lesson["target_class"] for lesson in lessons
-        ]
+        or promotion_receipt["selected_target_classes"]
+        != [lesson["target_class"] for lesson in lessons]
         or not isinstance(promotion_receipt.get("canonical_byte_count"), int)
         or isinstance(promotion_receipt.get("canonical_byte_count"), bool)
     ):
@@ -175,16 +176,13 @@ def validate_promotion_artifacts(
     if (
         promotion_receipt["candidate_sha256"] != candidate_sha256
         or active_lesson_set["lesson_set_id"] != f"set-{candidate_sha256[:12]}"
-        or promotion_receipt["active_lesson_set_sha256"]
-        != hashlib.sha256(active_bytes).hexdigest()
+        or promotion_receipt["active_lesson_set_sha256"] != hashlib.sha256(active_bytes).hexdigest()
         or promotion_receipt["canonical_byte_count"] != len(active_bytes)
     ):
         raise ValueError("promotion receipt does not bind the active artifact")
 
     receipt_bindings = {
-        key: value
-        for key, value in promotion_receipt.items()
-        if key != "promotion_id"
+        key: value for key, value in promotion_receipt.items() if key != "promotion_id"
     }
     promotion_sha256 = _domain_sha256(_PROMOTION_DOMAIN, receipt_bindings)
     if promotion_receipt["promotion_id"] != f"promotion-{promotion_sha256[:12]}":
@@ -222,14 +220,13 @@ def _candidate_from_transcript(
         )
         or synthesis_transcript.get("feedback_generator_version")
         != feedback_generator.get("version")
-        or synthesis_transcript.get("feedback_generator_sha256")
-        != feedback_generator.get("sha256")
+        or synthesis_transcript.get("feedback_generator_sha256") != feedback_generator.get("sha256")
         or synthesis_transcript.get("provider_reference") != FROZEN_PROVIDER_REFERENCE
         or synthesis_transcript.get("wire_model") != FROZEN_WIRE_MODEL
         or synthesis_transcript.get("lint_report") != lint_report
         or synthesis_transcript.get("lint_report_sha256") != canonical_sha256(lint_report)
         or not isinstance(attempts, list)
-        or not 1 <= len(attempts) <= 2
+        or not 1 <= len(attempts) <= _MAX_SYNTHESIS_ATTEMPTS
     ):
         raise ValueError("synthesis transcript identity or attempt count is invalid")
 
@@ -265,10 +262,7 @@ def _candidate_from_transcript(
                 raise ValueError("synthesis replacement must use a fresh conversation")
             seen_conversation_ids.add(conversation_id)
         if runtime_outcome == "transport_failure":
-            identities_are_valid = (
-                process_uuid is None
-                and conversation_id is None
-            ) or (
+            identities_are_valid = (process_uuid is None and conversation_id is None) or (
                 isinstance(process_uuid, str)
                 and bool(process_uuid)
                 and isinstance(conversation_id, str)
@@ -310,7 +304,10 @@ def promote_candidate(
         bool,
     ):
         raise ValueError("synthesis input schema_version must equal integer 1")
-    if not isinstance(development_bundle, dict) or set(development_bundle) != _DEVELOPMENT_BUNDLE_KEYS:
+    if (
+        not isinstance(development_bundle, dict)
+        or set(development_bundle) != _DEVELOPMENT_BUNDLE_KEYS
+    ):
         raise ValueError("development bundle has unknown or missing fields")
     if synthesis_input.get("lint_rules") != lint_rules:
         raise ValueError("lint rules differ from the synthesis input")

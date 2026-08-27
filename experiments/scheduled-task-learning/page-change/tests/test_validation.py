@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import unittest
+from typing import Any
 
 from page_benchmark.validation import (
     validate_gold,
@@ -33,7 +34,7 @@ class OutputValidationTests(unittest.TestCase):
 
     def test_protected_gold_and_lesson_ids_fail_as_schema_issues(self) -> None:
         # Given
-        gold = {
+        gold: dict[str, Any] = {
             "schema_version": 1,
             "fixture_id": "pc-development-01",
             "task_id": "page-0123456789ab",
