@@ -79,7 +79,7 @@ def parse_descriptor(value: Any) -> dict[str, dict[str, Any]]:
     protocol = require_object(root["protocol"], location="descriptor.protocol")
     require_keys(protocol, {"version", "path", "sha256"}, location="descriptor.protocol")
     if protocol != {"version": PROTOCOL_VERSION, "path": PROTOCOL_PATH, "sha256": PROTOCOL_SHA256}:
-        fail("descriptor.protocol must name the exact approved protocol 0.2 path and SHA-256")
+        fail("descriptor.protocol must name the exact approved protocol version, path, and SHA-256")
     package = require_object(root["swift_package"], location="descriptor.swift_package")
     require_keys(package, {"executable_target"}, location="descriptor.swift_package")
     if package["executable_target"] != SWIFT_EXECUTABLE_TARGET:

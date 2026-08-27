@@ -51,9 +51,9 @@ Generate and verify locally:
 
 `verify-record-consistency` checks the stored approval record/body and committed snapshot without claiming to contact GitHub.
 
-`verify-live-freeze` is the one-shot batch authorization preflight. It validates the stored D6 binding and then fetches the public issue comment once to check the exact repository, issue, immutable comment and owner IDs, body hash, timestamps, and `updated_at == created_at`. Only after that approval succeeds may the verifier execute SwiftPM or the protected conformance wrapper and validate the commit snapshot, complete verifier closure, and executable binding. The receipt file and stdout contain the same canonical JSON bytes terminated by exactly one LF.
+`verify-live-freeze` performs a fail-closed live approval and complete freeze verification. Each invocation validates the stored D6 binding, fetches the public issue comment once, checks the exact repository, issue, immutable comment and owner IDs, body hash, timestamps, and `updated_at == created_at`, then verifies the commit snapshot, complete verifier closure, protected conformance wrapper, and executable binding. The controller invokes it at initial admission and before every worker launch; each worker invokes it before every outbound Responses send. Any failed live verification stops execution before launch or send. The receipt file and stdout contain the same canonical JSON bytes terminated by exactly one LF.
 
-`verify-runtime-binding` is strictly local. Workers use it to bind the approved manifest digest, protected bytes, verifier module closure, executable path/mode/format, and executable hash. It performs no GitHub request and does not repeat the 24-case conformance run.
+`verify-runtime-binding` is strictly local. Workers use it at startup to bind the approved manifest digest, protected bytes, verifier module closure, executable path/mode/format, and executable hash. It does not authorize a model send, perform a GitHub request, or repeat the 24-case conformance run.
 
 Derive the realized order:
 
