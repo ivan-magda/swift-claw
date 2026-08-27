@@ -147,6 +147,13 @@ let package = Package(
       ]
     ),
     .executableTarget(
+      name: "claw-eval",
+      dependencies: [
+        "ClawEvaluation",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ]
+    ),
+    .executableTarget(
       name: "clawd",
       dependencies: [
         "ClawCore", "ClawData", "ClawSecrets", "ClawHTTP", "ClawTelegram", "ClawGateway", "ClawLLM",
