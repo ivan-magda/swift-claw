@@ -1,12 +1,12 @@
 # Issue #118: scenario validation protocol
 
 - Status: Proposed; owner approval required before scored runs
-- Protocol version: 0.2
-- Supersedes: version 0.1, which the owner did not approve
-- Date: 2026-08-26
+- Protocol version: 0.3
+- Supersedes: version 0.2; no canary, synthesis, or scored model call ran under version 0.2
+- Date: 2026-08-28
 - Decision issue: [#118](https://github.com/ivan-magda/swift-claw/issues/118)
 - Parent project: [#115](https://github.com/ivan-magda/swift-claw/issues/115)
-- Inspected base revision: `e91907f804d620309c5d0b1ab73a9a4a1adf582c`
+- Inspected implementation revision: `fb55cc7736658557ec9cd373e89b30e10ea066e2`
 
 ## Purpose
 
@@ -24,6 +24,12 @@ The protocol must answer three separate questions:
 
 No scored model call may run until the owner approves the content hash of this version, the model
 route, execution budget, learning target, and gates.
+
+Version 0.3 changes protocol semantics only for the second-round request-parity projection, which
+now excludes provider-minted replay values that vary across otherwise equivalent replicates. It
+also makes the existing live-approval recheck boundaries explicit. The decision matrix, model
+route, budgets, run order, primary endpoints, gates, scorer rules, fixture requirements, learning
+target, and approval boundaries are unchanged from version 0.2.
 
 ## Claim boundaries
 
@@ -44,7 +50,7 @@ The lesson artifact must not be embedded in `ScheduledJob.prompt`, a system prom
 `MEMORY.md`. Doing so would either turn it into trusted owner text or exercise global memory rather
 than the intended job-scoped boundary.
 
-Version 0.2 does not include an irrelevant same-length lesson control because it would require more
+Version 0.3 does not include an irrelevant same-length lesson control because it would require more
 decision-bearing attempts than the staged budget permits. A positive result therefore supports the
 frozen lesson intervention, but does not separately quantify a generic extra-context or attention
 effect. Adding that control requires a new protocol version, budget, and sealed manifest.
@@ -232,9 +238,28 @@ tool observation inside a `claw-untrusted` fence. It may also exist in the in-me
 and the final answer may quote bounded evidence; neither is falsely treated as a fence violation.
 
 The manifest prompt hash covers the frozen scheduled task prompt and system-prompt inputs. The first
-assembled provider request must match across conditions after the fixed timestamp is applied.
-Second-round requests contain a fresh production fence nonce, so their comparison uses a normalized
-structural hash with only that nonce removed rather than claiming byte identity.
+assembled provider request must have the same raw-body SHA-256 across all conditions and replicates
+after the fixed timestamp is applied.
+
+A second-round request replays model/provider output from round one and contains a fresh production
+fence nonce. For `carrier.second_request_structure_parity`, the recorder parses the request as JSON,
+recursively applies a closed projection, serializes the projected object with sorted keys, and
+hashes those bytes. The projection replaces only:
+
+- a 32-lowercase-hex nonce inside an opening or closing `claw-untrusted` fence tag with `<fresh>`;
+- `call_id` in `function_call` or `function_call_output` with `<provider-call-id>`;
+- `encrypted_content` and `summary` in `reasoning` with `<provider-encrypted-content>` and
+  `<provider-reasoning-summary>`;
+- `content` in an assistant-role `message` with `<provider-assistant-content>`.
+
+The projection preserves array order, key presence, object type, assistant role and status, the wire
+model, tool names and arguments, function-call output except for the fenced nonce, the untrusted
+payload, and every unlisted value. All replicates for each condition-and-fixture pair must have one
+projected second-request SHA-256. Any unlisted difference fails
+`carrier.second_request_structure_parity`. If parsing, JSON validity, or sorted-key serialization
+fails, the recorder hashes the original request bytes. The harness checks the exact untrusted-
+payload SHA-256 independently. The projection affects only this parity comparison; it does not alter
+the outbound request, task scoring, tool policy, raw request-body SHA-256, or any safety gate.
 
 Durable lesson state uses canonical JSON:
 
@@ -880,7 +905,7 @@ the runtime and harness content independently.
 
 Approvals are staged:
 
-- `D1` through `D4` cite protocol version 0.2, protocol SHA-256, and the external protocol
+- `D1` through `D4` cite protocol version 0.3, protocol SHA-256, and the external protocol
   `freeze_commit`;
 - `D5` cites the ranking-policy digest before dependency fixtures, labels, and scorer are finalized;
 - `D6` cites the page manifest SHA-256 and external `freeze_commit` before page canary or any page
@@ -889,9 +914,12 @@ Approvals are staged:
   model call.
 
 The owner records each approval in #118 with the exact hashes. Provenance stores the comment ID and
-URL, GitHub login, `createdAt`, `updatedAt`, and SHA-256 of the full comment body. Before every batch,
-the harness verifies the approved hashes and confirms that protected files match the approved commit
-and manifest. An edited approval or changed protected artifact stops the batch before the next send.
+URL, GitHub login, `createdAt`, `updatedAt`, and SHA-256 of the full comment body. Before initial
+admission, before every worker launch, and before every outbound Responses send, the harness reruns
+live approval verification and compares the complete approved binding, including comment identity,
+timestamps, and full-body SHA-256, with the initial freeze context. A changed, deleted, mismatched,
+or unreachable approval, a changed protected artifact, or any verifier failure stops the batch
+before launch or send; a local receipt alone cannot authorize a send.
 
 ## Invalidation procedure
 
@@ -942,7 +970,7 @@ The owner must approve these decisions before any scored call:
    verify the requested model in every outbound request and any terminal model field the backend
    supplies, disable client-side fallback, leave unsupported sampling controls unset, use three
    replicates, and use an isolated credential state.
-2. `D2`: approve the hash of protocol 0.2, its decision matrix, primary endpoints, safety gates,
+2. `D2`: approve the hash of protocol 0.3, its decision matrix, primary endpoints, safety gates,
    scorer reliability rules, and restart conditions without post-result changes.
 3. `D3`: approve the hard caps of 194 task or synthesis attempts and 388 outbound Responses sends,
    plus the 4.35 million accounted-token stopping threshold, the fixed missing-usage proxy, and the

@@ -1,6 +1,6 @@
 # Page-change learning benchmark
 
-This directory contains the frozen-data candidate for the page-change preflight in protocol 0.2.
+This directory contains the frozen-data candidate for the page-change preflight in protocol 0.3.
 It does not call a model or modify the Swift runtime.
 
 `claw-eval` is an internal SwiftPM executable target. The package does not declare it in

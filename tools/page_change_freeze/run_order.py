@@ -126,7 +126,7 @@ def validate_manifest_values(value: Any) -> dict[str, Any]:
     require_keys(root, set(RUN_ORDER_VALUES) | {"blocks"},
                  location="manifest.categories.run_order.values")
     if not exactly_equal({key: root[key] for key in RUN_ORDER_VALUES}, RUN_ORDER_VALUES):
-        fail("manifest run-order derivation controls differ from protocol 0.2")
+        fail("manifest run-order derivation controls differ from the frozen protocol")
     blocks = root["blocks"]
     if not isinstance(blocks, list):
         fail("manifest run-order blocks must be an array")
@@ -278,7 +278,7 @@ def derive(manifest: dict[str, Any], manifest_sha256: str) -> dict[str, Any]:
         fail("derived run-order stage sequence differs from its frozen contract")
     task_count = sum(len(stage["attempts"]) for stage in stages if stage["kind"] == "task-attempts")
     if task_count != _PLANNED_ATTEMPTS["page_task"]:
-        fail("derived run-order attempt counts differ from protocol 0.2")
+        fail("derived run-order attempt counts differ from the frozen protocol")
     return {"schema_version": 2, "algorithm": values["algorithm"],
             "algorithm_version": values["algorithm_version"], "manifest_sha256": manifest_sha256,
             "planned_attempts": dict(_PLANNED_ATTEMPTS), "stages": stages}
