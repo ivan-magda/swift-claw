@@ -145,16 +145,20 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
       guard current.exceeded == false else {
         return true
       }
+
       var round = current.rounds[roundID] ?? RoundState()
       Self.merge(fields: fields, into: &round.fieldHighWater)
       current.rounds[roundID] = round
+
       let totals = Self.totals(current.rounds.values.map(\.counts))
       let exceedsLimits =
         totals.utf8Bytes > limits.maximumUTF8Bytes
         || totals.graphemes > limits.maximumGraphemes
+
       if exceedsLimits {
         current.exceeded = true
       }
+
       return current.exceeded
     }
 
@@ -170,23 +174,32 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
   ) throws {
     let snapshot = Self.counts(for: visibleText + toolArguments)
     let exceeded = state.withLock { current -> Bool in
-      guard current.exceeded == false else { return true }
+      guard current.exceeded == false else {
+        return true
+      }
+
       var round = current.rounds[roundID] ?? RoundState()
       round.terminalSnapshotHighWater = Counts(
         utf8Bytes: max(round.terminalSnapshotHighWater.utf8Bytes, snapshot.utf8Bytes),
         graphemes: max(round.terminalSnapshotHighWater.graphemes, snapshot.graphemes)
       )
       current.rounds[roundID] = round
+
       let totals = Self.totals(current.rounds.values.map(\.counts))
       let exceedsLimits =
         totals.utf8Bytes > limits.maximumUTF8Bytes
         || totals.graphemes > limits.maximumGraphemes
+
       if exceedsLimits {
         current.exceeded = true
       }
+
       return current.exceeded
     }
-    if exceeded { throw ProviderError.localOutputLimit }
+
+    if exceeded {
+      throw ProviderError.localOutputLimit
+    }
   }
 
   private static func merge(
