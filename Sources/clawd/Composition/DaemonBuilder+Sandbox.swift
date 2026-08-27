@@ -11,7 +11,11 @@ extension DaemonBuilder {
   typealias SandboxStack = SandboxBootstrapResult
 
   func prepareSandbox() async -> SandboxStack {
-    let backend = SandboxBackendFactory.make(config: config, redactionValues: redactionValues)
+    let backend = SandboxBackendFactory.make(
+      config: config,
+      redactionValues: redactionValues
+    )
+
     return await SandboxBootstrapper(
       enabled: config.exec.enabled,
       backend: backend,
@@ -24,10 +28,16 @@ extension DaemonBuilder {
 // MARK: - Backend Factory
 
 enum SandboxBackendFactory {
-  /// `redactionValues` is empty for the offline `doctor` path, which has no daemon's redaction set
-  /// to inherit and reports no secret-bearing text.
-  static func make(config: AppConfig, redactionValues: [String]) -> ContainerBackend? {
-    guard config.exec.enabled, let image = config.exec.image else {
+  private static let containerExecutablePath = "/usr/local/bin/container"
+
+  static func make(
+    config: AppConfig,
+    redactionValues: [String]
+  ) -> ContainerBackend? {
+    guard
+      config.exec.enabled,
+      let image = config.exec.image
+    else {
       return nil
     }
 
@@ -41,7 +51,7 @@ enum SandboxBackendFactory {
     return ContainerBackend(
       settings: settings,
       stateRoot: config.stateRoot,
-      commands: SwiftSubprocessRunner(executablePath: "/usr/local/bin/container"),
+      commands: SwiftSubprocessRunner(executablePath: Self.containerExecutablePath),
       sanitizeReason: { text in
         redactor.redact(text)
       }
