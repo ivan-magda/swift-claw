@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 import Synchronization
 import Testing
@@ -7,19 +8,19 @@ import Testing
 
 /// Records every command it receives and answers each one through the scripted handler,
 /// which also sees the history recorded so far (including the current command).
-actor ScriptedCommandRunner: ContainerCommandRunning {
+actor ScriptedCommandRunner: SubprocessRunning {
   typealias Handler =
-    @Sendable (ContainerCommand, [ContainerCommand]) async -> ContainerCommandResult
+    @Sendable (SubprocessCommand, [SubprocessCommand]) async -> SubprocessResult
 
   private let handler: Handler
-  private var commands: [ContainerCommand] = []
+  private var commands: [SubprocessCommand] = []
   private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
 
   init(handler: @escaping Handler) {
     self.handler = handler
   }
 
-  func run(_ command: ContainerCommand) async -> ContainerCommandResult {
+  func run(_ command: SubprocessCommand) async -> SubprocessResult {
     commands.append(command)
     let history = commands
     let ready = waiters.filter { history.count >= $0.0 }
@@ -30,7 +31,7 @@ actor ScriptedCommandRunner: ContainerCommandRunning {
     return await handler(command, history)
   }
 
-  func recorded() -> [ContainerCommand] { commands }
+  func recorded() -> [SubprocessCommand] { commands }
 
   func waitForCount(_ count: Int) async {
     if commands.count >= count { return }
@@ -74,15 +75,15 @@ final class WedgeGate: @unchecked Sendable {
 }
 
 func commandResult(
-  _ termination: ContainerCommandTermination,
+  _ termination: SubprocessTermination,
   stdout: Data = Data(),
   stderr: Data = Data(),
   stdoutTotal: Int? = nil,
   stderrTotal: Int? = nil,
   stdoutTruncated: Bool = false,
   stderrTruncated: Bool = false
-) -> ContainerCommandResult {
-  ContainerCommandResult(
+) -> SubprocessResult {
+  SubprocessResult(
     termination: termination,
     stdout: CapturedCommandStream(
       bytes: stdout,
@@ -98,7 +99,7 @@ func commandResult(
   )
 }
 
-func jsonCommandResult(_ json: String) -> ContainerCommandResult {
+func jsonCommandResult(_ json: String) -> SubprocessResult {
   commandResult(.exited(0), stdout: Data(json.utf8))
 }
 
@@ -195,7 +196,7 @@ struct BackendFixture {
   }
 
   func backend(
-    commands: any ContainerCommandRunning = NoopCommandRunner(),
+    commands: any SubprocessRunning = NoopCommandRunner(),
     sanitizeReason: @escaping @Sendable (String) -> String = { $0 },
     now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
     supportedHost: @escaping @Sendable () -> Bool = { true },
@@ -236,9 +237,9 @@ final class SteppingNowSource: @unchecked Sendable {
   }
 }
 
-struct NoopCommandRunner: ContainerCommandRunning {
-  func run(_ command: ContainerCommand) async -> ContainerCommandResult {
-    ContainerCommandResult(
+struct NoopCommandRunner: SubprocessRunning {
+  func run(_ command: SubprocessCommand) async -> SubprocessResult {
+    SubprocessResult(
       termination: .exited(0),
       stdout: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
       stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),

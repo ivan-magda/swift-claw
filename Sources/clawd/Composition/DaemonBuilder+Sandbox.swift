@@ -1,6 +1,7 @@
 import ClawCore
 import ClawExec
 import ClawGateway
+import ClawSubprocess
 import ClawTools
 import Foundation
 
@@ -40,7 +41,7 @@ enum SandboxBackendFactory {
     return ContainerBackend(
       settings: settings,
       stateRoot: config.stateRoot,
-      commands: SwiftSubprocessContainerCommandRunner(),
+      commands: SwiftSubprocessRunner(executablePath: "/usr/local/bin/container"),
       sanitizeReason: { text in
         redactor.redact(text)
       }

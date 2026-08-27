@@ -8,7 +8,7 @@ import NIOPosix
 import Synchronization
 import Testing
 
-@testable import ClawTelegram
+@testable import ClawHTTP
 
 // MARK: - Streaming loopback server
 

@@ -3,7 +3,7 @@ import ClawCore
 import Foundation
 import Testing
 
-@testable import ClawTelegram
+@testable import ClawHTTP
 
 /// The `get` convenience, which is the one request path the fetch tool takes. The loopback harness
 /// it shares with the other wire suites lives in `AsyncHTTPExecutorGeneralRequestTests`.

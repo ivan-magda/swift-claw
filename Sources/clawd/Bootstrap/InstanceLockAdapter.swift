@@ -2,6 +2,7 @@ import ClawAuth
 import ClawCore
 import ClawGateway
 import ClawSecrets
+import ClawSubprocess
 import Foundation
 
 /// The daemon's own single-instance `flock`, as the lock every mutating command asks for.

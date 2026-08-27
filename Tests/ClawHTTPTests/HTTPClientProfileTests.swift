@@ -4,7 +4,7 @@ import Foundation
 import NIOHTTP1
 import Testing
 
-@testable import ClawTelegram
+@testable import ClawHTTP
 
 /// A credential on the outbound request, so the refusal below is measured on the kind of request
 /// that actually has something to lose. AsyncHTTPClient strips `Authorization` on a hop that leaves
@@ -30,7 +30,7 @@ private func probe(_ url: String) -> HTTPRequest {
   )
 }
 
-@Suite struct HTTPClientProfileTests {
+@Suite(.serialized) struct HTTPClientProfileTests {
   /// The property the profile exists for. A redirect is an answer, not an instruction: following
   /// one would send this daemon's next request to a host the *response* named.
   @Test func refusesToFollowARedirectToAnotherOrigin() async throws {

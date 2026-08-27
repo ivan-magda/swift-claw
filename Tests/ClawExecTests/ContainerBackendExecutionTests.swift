@@ -224,6 +224,11 @@ import Testing
     #expect(
       commands.dropFirst().allSatisfy { $0.timeout <= ContainerBackend.lifecycleCommandTimeout }
     )
+    #expect(
+      commands.allSatisfy {
+        $0.environmentKeysToRemove == ContainerBackend.environmentKeysToRemove
+      }
+    )
     let name = try #require(value(after: "--name", in: commands[0].arguments))
     #expect(commands.map(\.arguments).contains(ContainerInvocation.stop(name)))
     #expect(commands.map(\.arguments).contains(ContainerInvocation.kill(name)))

@@ -4,7 +4,9 @@ import ClawCore
 import ClawData
 import ClawExec
 import ClawGateway
+import ClawHTTP
 import ClawSecrets
+import ClawSubprocess
 import ClawTelegram
 import ClawTools
 import Foundation

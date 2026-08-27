@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 
 public actor ContainerBackend {
@@ -11,13 +12,18 @@ public actor ContainerBackend {
   public static let pullTimeout: Duration = .seconds(120)
   public static let prepareTimeout: Duration = .seconds(300)
   static let commandTeardownGrace: Duration = .seconds(2)
+  static let environmentKeysToRemove = [
+    "SSH_AUTH_SOCK",
+    "CONTAINER_DEBUG",
+    "CONTAINER_DEFAULT_PLATFORM",
+  ]
   // Head start the host watchdog grants the runner's own timeout + teardown, so in the
   // cooperative case the runner always reports its typed outcome before the watchdog fires.
   static let hostWatchdogSlack: Duration = .seconds(2)
 
   let settings: ExecSandboxSettings
   let stateRoot: URL
-  let commands: any ContainerCommandRunning
+  let commands: any SubprocessRunning
 
   let sanitizeReason: @Sendable (String) -> String
   let now: @Sendable () -> ContinuousClock.Instant
@@ -35,10 +41,10 @@ public actor ContainerBackend {
   var cleanupTasks: [UUID: Task<Bool, Never>] = [:]
   var shuttingDown = false
 
-  public init(
+  package init(
     settings: ExecSandboxSettings,
     stateRoot: URL,
-    commands: any ContainerCommandRunning,
+    commands: any SubprocessRunning,
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
   ) {
@@ -56,7 +62,7 @@ public actor ContainerBackend {
   init(
     settings: ExecSandboxSettings,
     stateRoot: URL,
-    commands: any ContainerCommandRunning,
+    commands: any SubprocessRunning,
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant,
     supportedHost: @escaping @Sendable () -> Bool,

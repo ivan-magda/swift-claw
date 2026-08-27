@@ -11,7 +11,7 @@ import NIOPosix
   import Darwin
 #endif
 
-/// AHC-backed executor injected at the `clawd` root into both Telegram and LLM clients. Opts into
+/// Shared AHC-backed executor injected into Telegram, LLM, and evaluation clients. Opts into
 /// gzip (decompression is enabled on the shared `HTTPClient` configuration — see `clawd`) and holds
 /// only what the request's body policy allows. Response headers are collected case-as-received;
 /// `HTTPResult.getHeader` matches case-insensitively.

@@ -1,7 +1,7 @@
 import AsyncHTTPClient
 import Foundation
 
-/// The egress posture for a client this daemon points at a third party.
+/// The egress posture for an AsyncHTTPClient-backed client.
 ///
 /// It is a profile rather than a line at each call site because the two settings below are decided
 /// per *client* in AsyncHTTPClient, not per request: whoever builds the client is the only code that
@@ -10,12 +10,8 @@ import Foundation
 /// role→profile mapping back — a bare `HTTPClient.Configuration` exposes no redirect posture it could
 /// assert on.
 public enum HTTPClientProfile: Sendable, Equatable {
-  /// The Telegram transport's profile: bounded decompression, but redirects left at the library
-  /// default. Telegram's Bot API answers a moved method with a redirect this client is expected to
-  /// follow, and the token it carries is a bot token bound to Telegram's own hosts — not a bearer a
-  /// redirect could walk onto a third party. Kept a named profile of its own so the redirect posture
-  /// that separates it from `protectedEgress` is a deliberate choice rather than an omission.
-  case telegram
+  /// Bounds decompression while retaining the library's redirect-following default.
+  case redirectFollowing
   /// Refuses redirects and bounds decompression; everything else, TLS included, stays at the
   /// library's default, which already verifies certificates in full. Restating that default here
   /// would only create a second place for it to be switched off.
