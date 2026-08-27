@@ -128,8 +128,7 @@ extension EvaluationController {
           < PageEvaluationContract.globalAccountedTokenThreshold
     }
 
-    func sendBudget(for limits: PageEvaluationContract.StageLimits) -> EvaluationSendBudgetSnapshot
-    {
+    func sendBudget(for limits: PageEvaluationContract.StageLimits) -> EvaluationSendBudgetSnapshot {
       EvaluationSendBudgetSnapshot(
         stageAccountedTokens: accountedTokens,
         globalAccountedTokens: SaturatingArithmetic.sum(

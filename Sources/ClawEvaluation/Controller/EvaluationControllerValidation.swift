@@ -127,8 +127,7 @@ extension EvaluationController {
   ) throws {
     guard configuration.lessonSource != .clean else { return }
     if configuration.stage == EvaluationPageStage.canary.rawValue,
-      configuration.lessonSource == .durableActive
-    {
+      configuration.lessonSource == .durableActive {
       guard
         let protected = manifest.artifact(
           role: "canary_nonempty_lessons",
@@ -157,8 +156,7 @@ extension EvaluationController {
         .standardizedFileURL
     }
     if let relative = EvaluationPathSecurity.relativePath(of: lesson, under: root),
-      let artifact = manifest.artifact(relativePath: relative)
-    {
+      let artifact = manifest.artifact(relativePath: relative) {
       guard
         configuration.stage == EvaluationPageStage.canary.rawValue,
         artifact.sha256 == configuration.lessonSetDigest
@@ -549,5 +547,4 @@ extension EvaluationController {
       path: url.path
     )
   }
-
 }

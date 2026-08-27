@@ -68,8 +68,7 @@ public enum CanonicalJSON {
 
   package static func boolean(_ value: Any?) -> Bool? {
     if let number = value as? NSNumber,
-      CFGetTypeID(number) == CFBooleanGetTypeID()
-    {
+      CFGetTypeID(number) == CFBooleanGetTypeID() {
       return number.boolValue
     }
     return nil

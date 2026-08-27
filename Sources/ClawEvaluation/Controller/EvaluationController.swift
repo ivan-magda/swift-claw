@@ -12,7 +12,6 @@ struct EvaluationController: Sendable {
     self.launcher = launcher
     self.freezeVerifier = freezeVerifier
   }
-
 }
 
 extension EvaluationController {

@@ -154,8 +154,7 @@ enum EvaluationWorkspaceMaterializer {
       throw EvaluationWorkspaceError.sourceArtifactInsideWorkspace
     }
     if let optionalLesson,
-      EvaluationPathSecurity.isStrictlyContained(optionalLesson, under: workspace)
-    {
+      EvaluationPathSecurity.isStrictlyContained(optionalLesson, under: workspace) {
       throw EvaluationWorkspaceError.lessonArtifactInsideWorkspace
     }
 
@@ -613,7 +612,6 @@ private extension EvaluationWorkspaceMaterializer {
   static func durableReplace(_ data: Data, at destination: URL) throws {
     try EvaluationDurablePublication.publish(data, to: destination)
   }
-
 }
 
 enum EvaluationWorkspaceError: Error, Sendable, Equatable {

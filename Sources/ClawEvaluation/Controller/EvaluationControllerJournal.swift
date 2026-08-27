@@ -326,7 +326,6 @@ struct EvaluationControllerJournal: Sendable {
     try EvaluationPathSecurity.appendAndSynchronize(data, toRegularSingleLinkFileAt: url)
     return event
   }
-
 }
 
 enum EvaluationControllerJournalError: Error, Sendable, Equatable {

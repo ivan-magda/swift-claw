@@ -285,6 +285,5 @@ extension EvaluationController {
       summary = receipts.appendingPathComponent("page-summary.json")
       result = receipts.appendingPathComponent("page-pipeline-result.json")
     }
-
   }
 }

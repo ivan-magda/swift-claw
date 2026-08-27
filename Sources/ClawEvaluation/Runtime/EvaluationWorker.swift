@@ -92,7 +92,6 @@ enum EvaluationWorkerLifecycle {
     }
     return value
   }
-
 }
 
 enum EvaluationWorkerLifecycleError: Error, Sendable, Equatable {
