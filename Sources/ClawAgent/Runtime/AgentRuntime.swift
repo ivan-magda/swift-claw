@@ -361,9 +361,10 @@ extension AgentRuntime {
           }
           break attempts
         } catch {
-          if firstFailureKind == nil {
-            firstFailureKind = Self.degradationKind(for: error)
-          }
+          let failure = AgentFailureClassification(error: error)
+          let reportedKind = firstFailureKind ?? failure.degradationKind
+          firstFailureKind = reportedKind
+
           guard
             let persistence = RouteSwitch.permits(error),
             let next = roster.failover(from: active.position)
@@ -377,9 +378,9 @@ extension AgentRuntime {
                 runId: runId,
                 sessionId: sessionId,
                 accountant: active.accountant,
-                overrideKind: firstFailureKind
+                degradationKind: reportedKind
               ),
-              failureCause: Self.attemptFailureCause(for: error)
+              failureCause: failure.attemptFailureCause
             )
           }
 
@@ -394,7 +395,7 @@ extension AgentRuntime {
             costResolver: costResolver,
             usageResolver: usageResolver
           )
-          let reason = Self.degradationKind(for: error).auditDecision
+          let reason = failure.degradationKind.auditDecision
           let successor = active.binding.configuredReference
           turnLog.notice(
             "route switch from=\(previous) to=\(successor) reason=\(reason) cooldown=\(persistence)"

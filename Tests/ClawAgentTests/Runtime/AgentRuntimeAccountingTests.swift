@@ -29,9 +29,9 @@ import Testing
 
     // when
     let observed = providerCases.map { cause, _ in
-      AgentRuntime.attemptFailureCause(
-        for: ProviderFailure(cause: cause, accounting: .notStarted)
-      )
+      AgentFailureClassification(
+        error: ProviderFailure(cause: cause, accounting: .notStarted)
+      ).attemptFailureCause
     }
 
     // then — provider causes remain descriptive and payload-free; retry policy belongs to the caller
@@ -42,12 +42,13 @@ import Testing
 
     // and — lifecycle/deadline signals remain distinct from provider causes.
     #expect(
-      AgentRuntime.attemptFailureCause(for: CancellationError()) == .processInterruption
+      AgentFailureClassification(error: CancellationError()).attemptFailureCause
+        == .processInterruption
     )
     #expect(
-      AgentRuntime.attemptFailureCause(
-        for: ProviderInferenceCancellation(observing: 1)
-      ) == .deadline
+      AgentFailureClassification(
+        error: ProviderInferenceCancellation(observing: 1)
+      ).attemptFailureCause == .deadline
     )
     let racedResponse = ChatResponse(
       content: "finished",
@@ -56,12 +57,12 @@ import Testing
       costFromProvider: nil
     )
     #expect(
-      AgentRuntime.attemptFailureCause(
-        for: RacedDeadlineSuccess(response: racedResponse)
-      ) == .deadline
+      AgentFailureClassification(
+        error: RacedDeadlineSuccess(response: racedResponse)
+      ).attemptFailureCause == .deadline
     )
 
     struct ForeignFailure: Error {}
-    #expect(AgentRuntime.attemptFailureCause(for: ForeignFailure()) == nil)
+    #expect(AgentFailureClassification(error: ForeignFailure()).attemptFailureCause == nil)
   }
 }
