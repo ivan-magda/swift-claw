@@ -190,6 +190,8 @@ private extension ChatGPTResponsesProvider {
       identity: selection.identity,
       profileID: profileID,
       wireModel: wireModel,
+      outputScope: request.outputScope,
+      terminalValidationPolicy: request.terminalValidationPolicy,
       encodeRequest: { authorization, includePriorState, beginHandoff in
         let headers = try Self.headers(
           for: authorization,

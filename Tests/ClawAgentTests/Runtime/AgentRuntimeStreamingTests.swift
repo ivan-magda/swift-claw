@@ -10,6 +10,45 @@ struct TimedStreamEvent: Sendable {
   let event: StreamEvent
 }
 
+@Test func terminalResponseIsReconciledAgainstTheAttemptOutputLimit() async throws {
+  // given — this provider never observes the scope incrementally, so only the runtime's terminal
+  // reconciliation can catch the oversized authoritative response
+  let provider = StubProvider(
+    .respond(
+      ChatResponse(
+        content: "12345",
+        finishReason: "stop",
+        usage: ChatUsage(promptTokens: 2, completionTokens: 2, totalTokens: 4),
+        costFromProvider: nil
+      )
+    )
+  )
+  let runtime = makeRuntime(
+    provider: provider,
+    attemptOutputLimits: AttemptOutputLimits(maximumUTF8Bytes: 4, maximumGraphemes: 4)
+  )
+
+  // when
+  let outcome = try await runtime.runTurn(
+    runId: 1,
+    sessionId: 2,
+    chatId: 3,
+    buildResult: makeBuildResult(),
+    sessionTainted: false,
+    sessionHasPrivateData: false,
+    todayTokens: 0,
+    todayUSD: 0
+  )
+
+  // then
+  let degraded = try requireDegraded(outcome.result)
+  #expect(degraded.kind == .providerUnavailable)
+  #expect(degraded.usage != nil)
+  #expect(outcome.attemptDiagnostics.failureCause == .localOutputLimit)
+  #expect(outcome.attemptDiagnostics.outputCounts?.limitExceeded == true)
+  #expect(outcome.attemptDiagnostics.outputCounts?.utf8Bytes == 5)
+}
+
 actor StreamingProvider: LLMProvider {
   enum StreamScript: Sendable {
     case events([StreamEvent])
@@ -786,6 +825,69 @@ func waitForTurnResult(
     #expect(await provider.requests.count == 2)
   }
 
+  @Test func twoRoundToolExchangeSharesOneAttemptOutputLimit() async throws {
+    // given — each terminal response fits under ten bytes in isolation. Their combined emitted
+    // output does not, so this only fails when the runtime carries one limiter across both calls.
+    let toolCall = ToolCall(id: "c1", name: "web_fetch", argumentsJSON: "{}")
+    let provider = RecordingStreamingProvider(rounds: [
+      [
+        .finished(
+          ChatResponse(
+            content: "aaaaaa",
+            finishReason: "tool_calls",
+            usage: nil,
+            costFromProvider: nil,
+            toolCalls: [toolCall]
+          )
+        )
+      ],
+      [
+        .finished(
+          ChatResponse(
+            content: "bbbbbb",
+            finishReason: "stop",
+            usage: nil,
+            costFromProvider: nil
+          )
+        )
+      ],
+    ])
+    let runtime = makeRuntime(
+      provider: provider,
+      streamingEnabled: true,
+      attemptOutputLimits: AttemptOutputLimits(maximumUTF8Bytes: 10, maximumGraphemes: 10),
+      toolDispatcher: ScriptedDispatcher(respond: okOutcome(content: "page text"))
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 11,
+      sessionId: 22,
+      chatId: 33,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — round one charged six visible bytes plus two argument bytes; round two's six bytes
+    // cross the shared cap. A fresh limiter per round would incorrectly complete.
+    let degraded = try requireDegraded(outcome.result)
+    #expect(degraded.kind == .providerUnavailable)
+    #expect(outcome.attemptDiagnostics.failureCause == .localOutputLimit)
+    #expect(
+      outcome.attemptDiagnostics.outputCounts
+        == AttemptOutputCounts(
+          utf8Bytes: 14,
+          graphemes: 14,
+          limitExceeded: true
+        )
+    )
+    #expect(await provider.requests.count == 2)
+    #expect(await provider.requests.allSatisfy { $0.outputScope != nil })
+  }
+
   @Test func streamingDisabledUsesBlockingCompletePath() async throws {
     // given
     let provider = StreamingProvider(streamScript: .events([.delta("ignored")]))
@@ -833,7 +935,7 @@ func waitForTurnResult(
     // then
     let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
-    #expect(try #require(usage).isEstimated)
+    #expect(usage == nil)
     #expect(await provider.completeCalls == 1)
     #expect(await provider.streamCalls == 0)
   }
@@ -898,6 +1000,176 @@ func waitForTurnResult(
     #expect(content == "blocking fallback")
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)
+  }
+
+  @Test func disabledStreamingReattemptDoesNotSwitchTransportMode() async throws {
+    // given — the caller owns any later attempt-level retry, so disabling the in-round reattempt
+    // must leave a clean stream refusal as one provider send instead of changing transport mode
+    let provider = StreamingProvider(
+      streamScript: .fail(
+        ProviderFailure(cause: .connectFailed(message: "refused"), accounting: .notStarted)
+      )
+    )
+    let runtime = makeRuntime(
+      provider: provider,
+      streamingEnabled: true,
+      streamingReattemptPolicy: .disabled
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    let (kind, _) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(await provider.streamCalls == 1)
+    #expect(await provider.completeCalls == 0)
+    #expect(outcome.attemptDiagnostics.failureCause == .transportFailure)
+  }
+
+  @Test func expectedWireModelRejectsUnexpectedOutboundModelBeforeDispatch() async throws {
+    // given
+    let provider = StreamingProvider(streamScript: .events([]))
+    let runtime = makeRuntime(
+      provider: provider,
+      model: "unexpected-wire-model",
+      streamingEnabled: true,
+      expectedWireModel: "gpt-5.6-sol"
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(outcome.attemptDiagnostics.failureCause == .modelIdentityMismatch)
+    #expect(usage == nil)
+    #expect(await provider.streamCalls == 0)
+    #expect(
+      outcome.attemptDiagnostics.modelObservations == [
+        ModelRoundTripObservation(outboundModel: "unexpected-wire-model", terminalModel: nil)
+      ]
+    )
+  }
+
+  @Test func expectedWireModelRejectsUnexpectedTerminalModel() async throws {
+    // given
+    let provider = StreamingProvider(
+      streamScript: .events([
+        .finished(
+          ChatResponse(
+            content: "oversized",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 2, completionTokens: 1, totalTokens: 3),
+            costFromProvider: nil,
+            reportedModel: "different-model"
+          )
+        )
+      ])
+    )
+    let runtime = makeRuntime(
+      provider: provider,
+      model: "gpt-5.6-sol",
+      configuredReference: "openai-chatgpt/gpt-5.6-sol",
+      costPolicy: .includedPlan,
+      streamingEnabled: true,
+      attemptOutputLimits: AttemptOutputLimits(maximumUTF8Bytes: 1, maximumGraphemes: 1),
+      expectedWireModel: "gpt-5.6-sol"
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then — identity is a batch-integrity invariant, so it wins even though terminal output also
+    // crosses both local limits. Reordering the checks would misclassify this as localOutputLimit.
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(outcome.attemptDiagnostics.failureCause == .modelIdentityMismatch)
+    #expect(usage != nil)
+    #expect(
+      outcome.attemptDiagnostics.modelObservations == [
+        ModelRoundTripObservation(
+          outboundModel: "gpt-5.6-sol",
+          terminalModel: "different-model"
+        )
+      ]
+    )
+  }
+
+  @Test func expectedWireModelAcceptsAbsentTerminalModel() async throws {
+    // given
+    let provider = RecordingStreamingProvider(rounds: [
+      [
+        .finished(
+          ChatResponse(
+            content: "validated",
+            finishReason: "stop",
+            usage: ChatUsage(promptTokens: 2, completionTokens: 1, totalTokens: 3),
+            costFromProvider: nil,
+            reportedModel: nil
+          )
+        )
+      ]
+    ])
+    let runtime = makeRuntime(
+      provider: provider,
+      model: "gpt-5.6-sol",
+      streamingEnabled: true,
+      terminalValidationPolicy: .throughStreamEnd,
+      expectedWireModel: "gpt-5.6-sol"
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: singleUserBuildResult("hi"),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    let completed = try requireCompleted(outcome.result)
+    #expect(completed.content == "validated")
+    #expect(outcome.attemptDiagnostics.failureCause == nil)
+    #expect(
+      outcome.attemptDiagnostics.modelObservations == [
+        ModelRoundTripObservation(outboundModel: "gpt-5.6-sol", terminalModel: nil)
+      ]
+    )
+    let request = try #require(await provider.requests.first)
+    #expect(request.terminalValidationPolicy == .throughStreamEnd)
   }
 
   @Test func preStreamRejectionFallsBackToBlockingCompleteOnce() async throws {
@@ -983,12 +1255,12 @@ func waitForTurnResult(
   }
 
   @Test func postSendStreamFailureDegradesWithoutBlockingFallback() async throws {
-    // given — a mid-stream drop that may already have generated tokens, so a conservative row is owed
-    // and the retryable cause is not re-attempted on the buffered path
+    // given — a typed mid-stream transport drop may already have generated tokens, so a conservative
+    // row is owed and the cause is not re-attempted on the buffered path
     let provider = StreamingProvider(
       streamScript: .fail(
         ProviderFailure(
-          cause: .retryable(status: nil, message: "drop"),
+          cause: .transportFailure(message: "drop"),
           accounting: .mayHaveStarted(observing: 0)
         )
       )
@@ -1012,6 +1284,7 @@ func waitForTurnResult(
     #expect(kind == .providerUnavailable)
     #expect(try #require(usage).isEstimated)
     #expect(await provider.completeCalls == 0)
+    #expect(outcome.attemptDiagnostics.failureCause == .transportFailure)
   }
 
   @Test func terminalStreamFailureDegradesWithoutDebit() async throws {

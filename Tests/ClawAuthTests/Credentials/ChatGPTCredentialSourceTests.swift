@@ -6,149 +6,10 @@ import Testing
 
 @testable import ClawAuth
 
-// MARK: - Doubles
+// MARK: - Shared doubles
 
-/// A credential store that records every write and answers with whatever behavior the test last set.
-/// Lock-backed rather than an actor because the seam is synchronous: the source must be able to save
-/// without opening a suspension point, and a double that forced one would hide that.
-final class RecordingCredentialStore: LLMCredentialStore, Sendable {
-  private struct Ledger {
-    var saved: [StoredOAuthCredential] = []
-    var failure: LLMCredentialStoreError?
-    var deletions = 0
-  }
-
-  private let ledger = Mutex(Ledger())
-
-  init(failing failure: LLMCredentialStoreError? = nil) {
-    ledger.withLock { current in
-      current.failure = failure
-    }
-  }
-
-  var saved: [StoredOAuthCredential] {
-    ledger.withLock { current in
-      current.saved
-    }
-  }
-
-  /// Every accepted write, including the ones that later failed. `saved` counts attempts, not
-  /// successes, which is what a retry-only-the-write assertion needs to see.
-  var saveAttempts: Int { saved.count }
-
-  func stopFailing() {
-    ledger.withLock { current in
-      current.failure = nil
-    }
-  }
-
-  func startFailing(_ failure: LLMCredentialStoreError) {
-    ledger.withLock { current in
-      current.failure = failure
-    }
-  }
-
-  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
-    nil
-  }
-
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {
-    let failure = ledger.withLock { current -> LLMCredentialStoreError? in
-      current.saved.append(credential)
-      return current.failure
-    }
-    if let failure {
-      throw failure
-    }
-  }
-
-  func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {
-    ledger.withLock { current in
-      current.deletions += 1
-    }
-  }
-}
-
-/// A scripted refresh seam. The script is finite on purpose: past its last entry the double stops the
-/// flight with a failure no test scripts, so a caller that refreshes more often than it should shows
-/// up as a red assertion instead of spinning the suite.
-actor ScriptedRefresh: ChatGPTOAuthRefreshing {
-  /// Where a scripted call parks, which is how a test places shutdown either side of the point where
-  /// the worker has a complete pair in hand.
-  enum Hold: Sendable {
-    case none
-    /// Parks until released, cancelled, or a backstop expires, then reports any cancellation: a
-    /// flight stopped before it decoded anything.
-    case reportingCancellation(AsyncGate)
-    /// Parks until released, cancelled, or a backstop expires, and answers either way: the commit
-    /// point, reached exactly when cancellation is racing the handoff.
-    case answeringAfterCancellation(AsyncGate)
-    /// Parks until released, cancellation or not: network work a shutdown must wait out.
-    case ignoringCancellation(AsyncGate)
-  }
-
-  private var script: [Result<ChatGPTTokenPair, ChatGPTOAuthFailure>]
-  private let hold: Hold
-  private(set) var tokensSeen: [String] = []
-  /// Latches once a flight has reached the seam, so a test can sequence on real network work.
-  let started = AsyncGate()
-
-  init(_ script: [Result<ChatGPTTokenPair, ChatGPTOAuthFailure>] = [], hold: Hold = .none) {
-    self.script = script
-    self.hold = hold
-  }
-
-  var callCount: Int { tokensSeen.count }
-
-  func refresh(refreshToken: String, timeout: Duration) async throws -> ChatGPTTokenPair {
-    tokensSeen.append(refreshToken)
-    started.open()
-    switch hold {
-    case .none:
-      break
-    case .reportingCancellation(let gate):
-      await Self.waitWithBackstop(on: gate)
-      try Task.checkCancellation()
-    case .answeringAfterCancellation(let gate):
-      await Self.waitWithBackstop(on: gate)
-    case .ignoringCancellation(let gate):
-      await gate.waitIgnoringCancellation()
-    }
-    guard script.isEmpty == false else {
-      throw ChatGPTOAuthFailure.grantRejected(detail: "unscripted refresh")
-    }
-    return try script.removeFirst().get()
-  }
-
-  /// How long a park waits for a cancellation that a correct shutdown delivers at once. Sized to
-  /// lose every race on the correct path, and to be far inside the suite's time limit on the
-  /// broken one.
-  private static let backstop = Duration.seconds(5)
-
-  /// Parks until the gate opens, the task is cancelled, or `backstop` expires — first to land wins.
-  ///
-  /// The sleep orders nothing, and on correct code it never fires: cancellation releases the gate
-  /// instantly and wins the race every time. It exists only so that code which never cancels ends
-  /// the park anyway, letting the flight run on and trip a real assertion. Without it such a bug
-  /// wedges the caller until the suite's time limit, which can name a hang but cannot fail it — and
-  /// a test that hangs under a mutation is worth less than one that goes red. Do not "simplify"
-  /// this back to a bare `wait()`.
-  private static func waitWithBackstop(on gate: AsyncGate) async {
-    await withTaskGroup(of: Void.self) { group in
-      group.addTask {
-        await gate.wait()
-      }
-      group.addTask {
-        try? await ContinuousClock().sleep(for: backstop)
-      }
-      await group.next()
-      group.cancelAll()
-    }
-  }
-}
+typealias RecordingCredentialStore = RecordingLLMCredentialStore
+typealias ScriptedRefresh = ScriptedChatGPTOAuthRefresh
 
 /// Counts callers as they enter `authorization()` and latches a gate on the nth.
 ///
@@ -733,20 +594,81 @@ struct ChatGPTCredentialSourceTests {
     #expect(await oauth.callCount == 0)
   }
 
-  @Test func aMatchingFirstRejectionForcesARefreshOfAnOtherwiseFreshToken() async throws {
+  @Test func aMatchingFirstRejectionDurablyForcesRefreshAfterRestart() async throws {
+    // given
+    let store = RecordingCredentialStore()
+    let source = CredentialFixture.source(
+      credential: CredentialFixture.stored(expiresIn: 3600),
+      store: store
+    )
+
+    // when — the worker records the rejected generation, then exits before another authorization.
+    await source.reject(generation: CredentialFixture.firstGeneration, disposition: .refresh)
+    try await source.shutdown()
+
+    // then — a fresh source sees an expired durable snapshot and cannot reuse the rejected access.
+    let persisted = try #require(store.saved.first)
+    #expect(
+      ChatGPTCredentialFreshness.classify(
+        expiresAt: persisted.expiresAt,
+        now: CredentialFixture.wallNow
+      ) == .expired
+    )
+    let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
+    let restarted = CredentialFixture.source(
+      credential: persisted,
+      store: store,
+      oauth: oauth
+    )
+    let authorization = try await restarted.authorization()
+    #expect(await oauth.callCount == 1)
+    #expect(authorization.generation == CredentialFixture.secondGeneration)
+    #expect(authorization.headers["Authorization"] == "Bearer \(CredentialFixture.rotatedAccess)")
+  }
+
+  @Test func aMatchingFirstRejectionImmediatelyRefreshesTheLiveSource() async throws {
     // given
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
     let source = CredentialFixture.source(
       credential: CredentialFixture.stored(expiresIn: 3600),
       oauth: oauth
     )
+    let rejected = try await source.authorization()
 
     // when
-    await source.reject(generation: CredentialFixture.firstGeneration, disposition: .refresh)
+    await source.reject(generation: rejected.generation, disposition: .refresh)
     let authorization = try await source.authorization()
 
-    // then
+    // then — persisting a marker without replacing the actor's live snapshot would resend the
+    // rejected access token here even though the separate restart proof still passed.
     #expect(await oauth.callCount == 1)
+    #expect(authorization.generation == CredentialFixture.secondGeneration)
+    #expect(authorization.headers["Authorization"] == "Bearer \(CredentialFixture.rotatedAccess)")
+  }
+
+  @Test func aRejectedTokenMarkerWriteFailureRetriesTheMarkerBeforeRefreshing() async throws {
+    // given
+    let store = RecordingCredentialStore(failing: .publicationFailed)
+    let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
+    let source = CredentialFixture.source(
+      credential: CredentialFixture.stored(expiresIn: 3600),
+      store: store,
+      oauth: oauth
+    )
+    await source.reject(generation: CredentialFixture.firstGeneration, disposition: .refresh)
+    #expect(store.saveAttempts == 1)
+    store.stopFailing()
+
+    // when
+    let authorization = try await source.authorization()
+
+    // then — the pending force-refresh path first makes the marker durable, then performs exactly
+    // one refresh and publishes its rotation. Installing the marker itself would reuse the token.
+    #expect(await oauth.callCount == 1)
+    #expect(store.saveAttempts == 3)
+    #expect(store.saved[0].expiresAt == Date(timeIntervalSince1970: 0))
+    #expect(store.saved[1].expiresAt == Date(timeIntervalSince1970: 0))
+    #expect(store.saved[2].accessToken == CredentialFixture.rotatedAccess)
     #expect(authorization.generation == CredentialFixture.secondGeneration)
     #expect(authorization.headers["Authorization"] == "Bearer \(CredentialFixture.rotatedAccess)")
   }

@@ -46,8 +46,7 @@ struct TypingTurnRuntime: Sendable {
       case .failed(let error):
         throw error
       case .timedOut(.notStarted):
-        // Nothing was generated, so nothing is billed: a bare cancel writes no row.
-        throw CancellationError()
+        throw ProviderNoStartDeadline()
       case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
         throw ProviderInferenceCancellation(observing: observedCompletionTokens)
       case .timedOut(.completed(let response)):

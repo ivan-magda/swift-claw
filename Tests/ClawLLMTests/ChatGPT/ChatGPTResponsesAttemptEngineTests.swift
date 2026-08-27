@@ -47,7 +47,7 @@ import Testing
 
     // then — one refresh rejection carrying the first request's generation, then a second attempt
     #expect(await harness.attemptCount == 2)
-    let rejections = await harness.credentials.rejections
+    let rejections = await harness.credentialRejections
     #expect(rejections == [.init(generation: .init(value: 1), disposition: .refresh)])
     _ = try requireCompleted(outcome)
   }
@@ -67,7 +67,7 @@ import Testing
 
     // then — refresh on the first generation, then a terminal latch on the second
     #expect(await harness.attemptCount == 2)
-    let rejections = await harness.credentials.rejections
+    let rejections = await harness.credentialRejections
     #expect(
       rejections == [
         .init(generation: .init(value: 1), disposition: .refresh),
@@ -79,25 +79,81 @@ import Testing
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func aFirstClean401WithNoBudgetLeftRefreshesWithoutLatching() async throws {
-    // given — a clean 401 arrives on the only attempt the budget allows
+  func clean401SettlesRefreshForLaterWithoutSecondInference() async throws {
+    // given — a real credential source can rotate successfully after the only Responses attempt
+    let store = RecordingLLMCredentialStore()
+    let oauth = ScriptedChatGPTOAuthRefresh([.success(refreshedCredentialPair())])
+    let credentials = makeManagedCredentialSource(store: store, oauth: oauth)
     let harness = Harness(
       steps: [.stream(Support.head(401), Fixtures.errorBody("expired"))],
-      retryBudget: 1
+      retryBudget: 1,
+      credentialSource: credentials
     )
 
     // when
     let outcome = await harness.run()
 
-    // then — the credential is still advanced to .refresh, and the turn ends transiently rather than
-    // latching authentication or resending the stale token
+    // then — refresh completes and both the rejection marker and rotation are durable before the
+    // nonreplaceable terminal returns; no second Responses inference spends the rotated credential
     #expect(await harness.attemptCount == 1)
-    let rejections = await harness.credentials.rejections
-    #expect(rejections == [.init(generation: .init(value: 1), disposition: .refresh)])
-    #expect(
-      failureCause(outcome)
-        == .retryable(status: nil, message: "the ChatGPT credential is being refreshed")
+    #expect(await oauth.callCount == 1)
+    #expect(store.saveAttempts == 2)
+    #expect(store.saved.first?.expiresAt == Date(timeIntervalSince1970: 0))
+    #expect(failureCause(outcome) == .credentialRefreshCompleted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func clean401ExhaustsRefreshPolicyBeforeReplacementWithoutSecondInference() async throws {
+    // given — all three attempts in the real credential policy fail transiently after one 401
+    let store = RecordingLLMCredentialStore()
+    let oauth = ScriptedChatGPTOAuthRefresh(
+      Array(
+        repeating: .failure(.transport(detail: "reset")),
+        count: ChatGPTRefreshPolicy.attemptBudget
+      )
     )
+    let credentials = makeManagedCredentialSource(store: store, oauth: oauth)
+    let harness = Harness(
+      steps: [.stream(Support.head(401), Fixtures.errorBody("expired"))],
+      retryBudget: 1,
+      credentialSource: credentials
+    )
+
+    // when
+    let outcome = await harness.run()
+
+    // then — the source spends its whole OAuth acquisition budget before returning the typed fact;
+    // the provider still issued exactly one Responses inference and persisted only the reject marker
+    #expect(await oauth.callCount == ChatGPTRefreshPolicy.attemptBudget)
+    #expect(await harness.attemptCount == 1)
+    #expect(store.saveAttempts == 1)
+    #expect(store.saved.first?.expiresAt == Date(timeIntervalSince1970: 0))
+    #expect(failureCause(outcome) == .credentialRefreshExhausted)
+    #expect(Support.accounting(of: outcome) == .notStarted)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func aRejectedTokenMarkerFailureCannotBecomeAReplacementThatReusesTheToken() async throws {
+    // given — neither the reject path nor its one publication retry can persist the expired marker
+    let store = RecordingLLMCredentialStore(failing: .publicationFailed)
+    let oauth = ScriptedChatGPTOAuthRefresh([.success(refreshedCredentialPair())])
+    let credentials = makeManagedCredentialSource(store: store, oauth: oauth)
+    let harness = Harness(
+      steps: [.stream(Support.head(401), Fixtures.errorBody("expired"))],
+      retryBudget: 1,
+      credentialSource: credentials
+    )
+
+    // when
+    let outcome = await harness.run()
+
+    // then — no OAuth or second inference starts, and the distinct non-replaceable cause prevents a
+    // new worker from loading the still-fresh rejected credential left on disk
+    #expect(await harness.attemptCount == 1)
+    #expect(await oauth.callCount == 0)
+    #expect(store.saveAttempts == 2)
+    #expect(failureCause(outcome) == .credentialStateUnavailable)
     #expect(Support.accounting(of: outcome) == .notStarted)
   }
 
@@ -113,7 +169,7 @@ import Testing
 
     // then — one attempt, no credential rejection, and no re-login prompt
     #expect(await harness.attemptCount == 1)
-    #expect(await harness.credentials.rejections.isEmpty)
+    #expect(await harness.credentialRejections.isEmpty)
     #expect(failureCause(outcome) == .accessDenied)
     #expect(Support.accounting(of: outcome) == .notStarted)
   }
@@ -250,10 +306,14 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func aMayHaveBeenSentTransportFailureIsNotRetried() async throws {
     // given — an ambiguous send that a retry could double-charge
+    let token = GenerationRecordingCredentialSource.accessToken
     let harness = Harness(
       steps: [
         .transportFailure(
-          HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "dropped")
+          HTTPTransportFailure(
+            disposition: .mayHaveBeenSent,
+            safeMessage: "dropped \(token)"
+          )
         ),
         .stream(okHead, Fixtures.basicSuccess()),
       ]
@@ -265,6 +325,12 @@ import Testing
     // then — a single attempt, conservative accounting, and no second dispatch of the success step
     #expect(await harness.attemptCount == 1)
     #expect(await harness.delays.isEmpty)
+    let failure = try #require(failureCause(outcome))
+    #expect(
+      failure
+        == .transportFailure(message: "dropped \(SecretRedactor.replacement)")
+    )
+    #expect(Support.message(of: failure)?.contains(token) == false)
     #expect(Support.accounting(of: outcome) == .mayHaveStarted(observedCompletionTokens: 0))
   }
 
@@ -291,8 +357,61 @@ import Testing
     // then — a budget that reset between classes would reach the 4th step and complete; a shared one
     // stops at three wire attempts and fails
     #expect(await harness.attemptCount == 3)
-    #expect(failureCause(outcome) == .retryable(status: nil, message: "refused"))
+    #expect(failureCause(outcome) == .connectFailed(message: "refused"))
     #expect(Support.accounting(of: outcome) == .notStarted)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func strictTerminalValidationAcceptsRestatingAliasesThroughStreamEnd() async throws {
+    // given — the first terminal omits its model and a later alias supplies it in a separate chunk.
+    // Production does not wait for that alias; strict evaluation must retain and reconcile it.
+    let body =
+      Fixtures.basicSuccess() + [
+        Fixtures.event(
+          #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-5.6-sol"}}"#
+        )
+      ]
+    let harness = Harness(
+      steps: [.stream(okHead, body)],
+      terminalValidationPolicy: .throughStreamEnd
+    )
+
+    // when
+    let outcome = await harness.run()
+
+    // then — returning the first terminal immediately would lose the authoritative model alias;
+    // treating strict EOF as ambiguous would fail instead of completing.
+    #expect(await harness.attemptCount == 1)
+    let response = try requireCompleted(outcome)
+    #expect(response.content == "Hello")
+    #expect(response.reportedModel == "gpt-5.6-sol")
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func strictTerminalValidationRejectsAConflictingAliasInALaterChunk() async throws {
+    // given — the production default may finish on the first terminal, but an evaluation must drain
+    // the stream and reconcile a later alias even when the transport delivers it separately.
+    let body =
+      Array(Fixtures.basicSuccess().dropLast()) + [
+        Fixtures.completedTerminal(),
+        Fixtures.event(
+          #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-5.6-sol"}}"#
+        ),
+        Fixtures.event(
+          #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"different-model"}}"#
+        ),
+      ]
+    let harness = Harness(
+      steps: [.stream(okHead, body)],
+      terminalValidationPolicy: .throughStreamEnd
+    )
+
+    // when
+    let outcome = await harness.run()
+
+    // then — stopping at the first chunk would incorrectly return a completed response.
+    #expect(await harness.attemptCount == 1)
+    #expect(failureCause(outcome) == .modelIdentityMismatch)
   }
 
   // MARK: - Invalid encrypted content recovery
@@ -397,12 +516,13 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func aFailureAfterTheFirstDataByteIsNeverReplayed() async throws {
     // given — a 2xx stream that emits a data event and then drops the connection
+    let token = GenerationRecordingCredentialSource.accessToken
     let harness = Harness(
       steps: [
         .streamFailure(
           okHead,
           Fixtures.slowSuccess(),
-          ScriptedTransportFailure(message: "dropped mid-stream")
+          ScriptedTransportFailure(message: "dropped mid-stream \(token)")
         ),
         .stream(okHead, Fixtures.basicSuccess()),
       ]
@@ -414,6 +534,12 @@ import Testing
     // then — the boundary closed on the first data byte, so the drop is not retried, and the
     // generated deltas are carried as a conservative lower bound
     #expect(await harness.attemptCount == 1)
+    let failure = try #require(failureCause(outcome))
+    #expect(
+      failure
+        == .transportFailure(message: "dropped mid-stream \(SecretRedactor.replacement)")
+    )
+    #expect(Support.message(of: failure)?.contains(token) == false)
     #expect(Support.isConservative(Support.accounting(of: outcome)))
   }
 
@@ -451,6 +577,7 @@ import Testing
 
     // then
     #expect(await harness.attemptCount == 1)
+    #expect(failureCause(outcome) == .partialStreamWithoutCompletedTerminal)
     #expect(Support.isConservative(Support.accounting(of: outcome)))
   }
 
@@ -502,9 +629,9 @@ import Testing
     // when
     let outcome = await harness.run()
 
-    // then — the model may have been asked, so cancellation is conservative rather than raw no-debit
+    // then — the model may have been asked, so cancellation retains the observed completion debit
     if case .cancelled(let disposition) = outcome {
-      #expect(disposition == .mayHaveStarted(observedCompletionTokens: 0))
+      #expect(disposition == .mayHaveStarted(observedCompletionTokens: 3))
     } else {
       Issue.record("expected a conservative cancellation, got \(outcome)")
     }
@@ -527,7 +654,7 @@ import Testing
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func aTransientCredentialOutageIsRetryableNotAReLoginPrompt() async {
+  func aTransientCredentialOutageIsTypedRefreshExhaustionNotAReLoginPrompt() async {
     // given — the refresh flight could not complete for a reason that may not recur
 
     // when
@@ -535,10 +662,11 @@ import Testing
       .temporarilyUnavailable(retryAfter: .seconds(5), detail: "the refresh did not complete")
     )
 
-    // then — a transient outage of an intact credential is retryable, not a login failure
-    guard case .retryable = failureCause(outcome) else {
+    // then — a transient outage of an intact credential is explicitly replacement-eligible, not a
+    // generic inference retry or login failure
+    guard case .credentialRefreshExhausted = failureCause(outcome) else {
       Issue.record(
-        "expected a retryable transient cause, got \(String(describing: failureCause(outcome)))"
+        "expected credential refresh exhaustion, got \(String(describing: failureCause(outcome)))"
       )
       return
     }
@@ -597,6 +725,8 @@ private func runCredentialFailure(_ error: ChatGPTCredentialError) async -> LLMS
     identity: identity,
     profileID: profileID,
     wireModel: "gpt-5",
+    outputScope: nil,
+    terminalValidationPolicy: .firstTerminal,
     encodeRequest: { _, _, _ in
       Issue.record("no request should be encoded when authorization fails")
       throw CancellationError()
@@ -605,16 +735,37 @@ private func runCredentialFailure(_ error: ChatGPTCredentialError) async -> LLMS
   return await engine.run(plan: plan) { _ in }
 }
 
+private func refreshedCredentialPair() -> ChatGPTTokenPair {
+  ChatGPTTokenPair(
+    accessToken: "rotated-access-token",
+    refreshToken: "rotated-refresh-token",
+    expiresAt: Date().addingTimeInterval(3_600)
+  )
+}
+
+private func makeManagedCredentialSource(
+  store: RecordingLLMCredentialStore,
+  oauth: ScriptedChatGPTOAuthRefresh
+) -> ChatGPTCredentialSource<ScriptedClock> {
+  ChatGPTCredentialSource(
+    initialCredential: storedCredential(),
+    store: store,
+    oauth: oauth,
+    clock: ScriptedClock { _ in },
+    wallDate: Date.init
+  )
+}
+
 // MARK: - Harness
 
 /// Wires the engine to a scripted transport, a recording credential source, and a manual clock, so a
 /// test states an HTTP script and reads back attempt counts, credential rejections, honored delays,
 /// and emitted deltas.
 private struct Harness: Sendable {
-  let credentials: GenerationRecordingCredentialSource
   let normalIdentity: ChatGPTReplayIdentity
   let recoveryIdentity: ChatGPTReplayIdentity
 
+  private let recordingCredentials: GenerationRecordingCredentialSource?
   private let engine: ChatGPTResponsesAttemptEngine
   private let http: ScriptedHTTPExecutor
   private let sleeps: SleepRecorder
@@ -626,8 +777,10 @@ private struct Harness: Sendable {
     retryBudget: Int = 3,
     requestTimeoutSeconds: Int = 30,
     treatsQuotaAsTerminal: Bool = false,
+    terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal,
     cancelDuringSleep: Bool = false,
-    failOnFirstDelta: (any Error)? = nil
+    failOnFirstDelta: (any Error)? = nil,
+    credentialSource: (any LLMCredentialSource)? = nil
   ) {
     let profileID = Support.fixedUUID("00000000-0000-0000-0000-0000000000AA")
     let wireModel = "gpt-5"
@@ -646,8 +799,15 @@ private struct Harness: Sendable {
       epoch: recoveryEpoch
     )
 
-    let credentials = GenerationRecordingCredentialSource()
-    self.credentials = credentials
+    let resolvedCredentials: any LLMCredentialSource
+    if let credentialSource {
+      recordingCredentials = nil
+      resolvedCredentials = credentialSource
+    } else {
+      let credentials = GenerationRecordingCredentialSource()
+      recordingCredentials = credentials
+      resolvedCredentials = credentials
+    }
     let http = ScriptedHTTPExecutor(steps)
     self.http = http
     let sleeps = SleepRecorder()
@@ -660,6 +820,8 @@ private struct Harness: Sendable {
       identity: normalIdentity,
       profileID: profileID,
       wireModel: wireModel,
+      outputScope: nil,
+      terminalValidationPolicy: terminalValidationPolicy,
       encodeRequest: { authorization, includePriorState, beginHandoff in
         stateLog.record(includePriorState)
         return HTTPRequest(
@@ -685,7 +847,7 @@ private struct Harness: Sendable {
       await sleeps.record(delay / .seconds(1))
     }
     self.engine = ChatGPTResponsesAttemptEngine(
-      credentials: credentials,
+      credentials: resolvedCredentials,
       http: http,
       clock: clock,
       jitter: { $0 },
@@ -718,6 +880,13 @@ private struct Harness: Sendable {
   var includePriorStateLog: [Bool] {
     stateLog.values
   }
+
+  var credentialRejections: [GenerationRecordingCredentialSource.Rejection] {
+    get async {
+      guard let recordingCredentials else { return [] }
+      return await recordingCredentials.rejections
+    }
+  }
 }
 
 // MARK: - Test doubles
@@ -725,6 +894,8 @@ private struct Harness: Sendable {
 /// Records the credential-generation rejections the engine issues, and rotates the live generation on
 /// a refresh the way a refreshable source does, so a stale-generation reject cannot rotate twice.
 private actor GenerationRecordingCredentialSource: LLMCredentialSource {
+  static let accessToken = "secret-token"
+
   struct Rejection: Sendable, Equatable {
     let generation: LLMCredentialGeneration
     let disposition: LLMCredentialRejection
@@ -735,8 +906,8 @@ private actor GenerationRecordingCredentialSource: LLMCredentialSource {
 
   func authorization() async throws -> LLMRequestAuthorization {
     LLMRequestAuthorization(
-      headers: ["Authorization": "Bearer secret-token"],
-      redactionValues: ["secret-token"],
+      headers: ["Authorization": "Bearer \(Self.accessToken)"],
+      redactionValues: [Self.accessToken],
       generation: LLMCredentialGeneration(value: generationValue)
     )
   }

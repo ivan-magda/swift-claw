@@ -145,12 +145,19 @@ func makeRuntime(
   costPolicy: LLMCostPolicy = .metered,
   reservationPolicy: LLMInputReservationPolicy = .textOnly,
   streamingEnabled: Bool = false,
+  streamingReattemptPolicy: StreamingReattemptPolicy = .bufferedWhenSafe,
+  terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal,
+  attemptOutputLimits: AttemptOutputLimits? = nil,
+  expectedWireModel: String? = nil,
+  providerRoundTripAdmission:
+    (@Sendable (ProviderRoundTripAdmissionContext) async -> ProviderRoundTripAdmission)? = nil,
   toolDispatcher: (any ToolDispatching)? = nil,
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
   providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
   logger: Logger = Logger(label: "test.silent", factory: { _ in SwiftLogNoOpLogHandler() }),
-  clock: any Clock<Duration> = ContinuousClock()
+  clock: any Clock<Duration> = ContinuousClock(),
+  now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
 ) -> AgentRuntime {
   AgentRuntime(
     roster: makeSingleRouteRoster(
@@ -163,6 +170,13 @@ func makeRuntime(
     typingIndicator: typing,
     draftStreamer: drafts,
     streamingEnabled: streamingEnabled,
+    attemptPolicy: AttemptRuntimePolicy(
+      streamingReattemptPolicy: streamingReattemptPolicy,
+      terminalValidationPolicy: terminalValidationPolicy,
+      outputLimits: attemptOutputLimits,
+      expectedWireModel: expectedWireModel,
+      roundTripAdmission: providerRoundTripAdmission
+    ),
     costResolver: costResolver,
     budget: budget,
     toolDispatcher: toolDispatcher,
@@ -170,7 +184,8 @@ func makeRuntime(
     auditLog: auditLog,
     providerCallIDGenerator: providerCallIDGenerator,
     logger: logger,
-    clock: clock
+    clock: clock,
+    now: now
   )
 }
 

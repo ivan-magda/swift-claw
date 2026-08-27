@@ -1,5 +1,6 @@
 import ClawTestSupport
 import Foundation
+import Synchronization
 import Testing
 
 @testable import ClawAgent
@@ -373,9 +374,8 @@ struct AgentRuntimeTests {
 
   @Test("a proven-no-start deadline loser writes no usage row")
   func deadlineWithAProvenNoStartWritesNoRow() async throws {
-    // given — the provider hangs and is cancelled before it reaches transport, so its `complete`
-    // surfaces the bare CancellationError that proves no start. A no-start owes nothing, exactly as
-    // the non-deadline raw-cancellation path books it.
+    // given — the provider hangs and is cancelled before it reaches transport. The typed deadline
+    // marker proves both that this was a timeout and that no inference started.
     let store = RecordingUsageStore()
     let runtime = makeRuntime(
       provider: HangingProvider(),
@@ -404,6 +404,7 @@ struct AgentRuntimeTests {
     #expect(kind == .providerUnavailable)
     #expect(usage == nil)
     #expect(store.recorded.isEmpty)
+    #expect(outcome.attemptDiagnostics.failureCause == .deadline)
   }
 
   @Test("a raced success under a won deadline books authoritative usage, not an estimate")
@@ -537,6 +538,144 @@ extension AgentRuntimeTests {
         request.messages.allSatisfy { message in message.providerState == nil }
       }
     )
+  }
+
+  @Test("a custom admission gate receives missing-usage accounting before the second send")
+  func roundTripAdmissionGateStopsBetweenProviderRoundTrips() async throws {
+    // given
+    let deniedCap = "test-accounted-token-threshold"
+    let provider = SequenceProvider([
+      ChatResponse(
+        content: "checking",
+        finishReason: "tool_calls",
+        usage: nil,
+        costFromProvider: nil,
+        toolCalls: [fetchProposal()]
+      ),
+      okResponse(content: "must not be sent"),
+    ])
+    let runtime = makeRuntime(
+      provider: provider,
+      providerRoundTripAdmission: { context in
+        guard context.roundTripIndex == 2 else { return .allow }
+        guard
+          context.priorMissingUsageResponsesSends == 1,
+          context.priorMissingUsageRecordedTokens > 0
+        else {
+          return .allow
+        }
+        return .deny(cap: deniedCap)
+      },
+      toolDispatcher: ScriptedDispatcher(respond: okOutcome(content: "page text"))
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: makeBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    #expect(
+      outcome.result
+        == .budgetStopped(cap: deniedCap)
+    )
+    #expect(await provider.requests.count == 1)
+  }
+
+  @Test(
+    "an admission that leaves no representable send deadline cannot start a provider send",
+    arguments: [Duration.zero, .milliseconds(500)]
+  )
+  func admissionDeadlineStopsBeforeProviderSend(remaining: Duration) async throws {
+    // given
+    let provider = StubProvider(.respond(okResponse(content: "must not be sent")))
+    let expired = Mutex(false)
+    let start = ContinuousClock.now
+    let runtime = makeRuntime(
+      provider: provider,
+      providerRoundTripAdmission: { _ in
+        expired.withLock { value in
+          value = true
+        }
+        return .allow
+      },
+      now: {
+        expired.withLock { value in
+          value
+            ? start.advanced(
+              by: .seconds(RunBudget.default.wallClockDeadlineSeconds) - remaining
+            ) : start
+        }
+      }
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 2,
+      chatId: 3,
+      buildResult: makeBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0
+    )
+
+    // then
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(outcome.attemptDiagnostics.failureCause == .deadline)
+    #expect(await provider.calls == 0)
+  }
+
+  @Test("cancellation during admission cannot start a provider send")
+  func admissionCancellationStopsBeforeProviderSend() async throws {
+    // given
+    let provider = StubProvider(.respond(okResponse(content: "must not be sent")))
+    let admissionStarted = AsyncGate()
+    let releaseAdmission = AsyncGate()
+    defer { releaseAdmission.open() }
+    let runtime = makeRuntime(
+      provider: provider,
+      providerRoundTripAdmission: { _ in
+        admissionStarted.open()
+        await releaseAdmission.waitIgnoringCancellation()
+        return .allow
+      }
+    )
+    let turn = Task {
+      try await runtime.runTurn(
+        runId: 1,
+        sessionId: 2,
+        chatId: 3,
+        buildResult: makeBuildResult(),
+        sessionTainted: false,
+        sessionHasPrivateData: false,
+        todayTokens: 0,
+        todayUSD: 0
+      )
+    }
+    await admissionStarted.wait()
+
+    // when
+    turn.cancel()
+    releaseAdmission.open()
+    let outcome = try await turn.value
+
+    // then
+    let (kind, usage) = try requireDegraded(outcome.result)
+    #expect(kind == .providerUnavailable)
+    #expect(usage == nil)
+    #expect(outcome.attemptDiagnostics.failureCause == .processInterruption)
+    #expect(await provider.calls == 0)
   }
 
   @Test("tool observations never carry replay state onto the wire")

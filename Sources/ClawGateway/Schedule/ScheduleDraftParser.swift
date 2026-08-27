@@ -426,8 +426,10 @@ private extension ScheduleDraftParser {
       return .accessDenied
     case .quotaLimited(let retryAfterSeconds):
       return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
-    case .terminal, .cleanRejection, .retryable, .connectFailed, .rejected, .invalidProviderState,
-      .visionUnsupported, .none:
+    case .terminal, .cleanRejection, .transportFailure, .retryable, .connectFailed, .rejected,
+      .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable,
+      .invalidProviderState, .visionUnsupported,
+      .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch, .none:
       // A draft parse sends no images, so a vision refusal here could only be a mislabelled
       // rejection; it stays generic rather than telling the owner to change models over a schedule.
       return .providerUnavailable

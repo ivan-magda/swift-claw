@@ -21,13 +21,14 @@ extension ProviderError {
   /// `retryable` is excluded deliberately: the exchange may already owe tokens, which is also why
   /// the buffered reattempt refuses it.
   public var routeSwitchPersistence: RouteFailurePersistence? {
+    if allowsPreInferenceReissue {
+      return .short
+    }
     switch self {
     case .quotaLimited, .authenticationRequired, .accessDenied:
-      .long
-    case .connectFailed, .rejected:
-      .short
-    case .retryable, .terminal, .cleanRejection, .invalidProviderState, .visionUnsupported:
-      nil
+      return .long
+    default:
+      return nil
     }
   }
 }
