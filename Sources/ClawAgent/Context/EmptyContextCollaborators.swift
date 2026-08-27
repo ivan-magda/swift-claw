@@ -4,12 +4,17 @@ import Foundation
 package struct EmptyMemoryStore: MemoryStore {
   package init() {}
 
-  package func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
+  package func append(
+    _ newItem: NewMemoryItem,
+    now: Date
+  ) throws(StoreError) -> MemoryItem {
     throw StoreError.unexpected("empty memory store does not accept appends")
   }
 
   package func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
+
   package func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
+
   package func delete(id: Int64) throws(StoreError) -> Bool { false }
 
   package func fetchRanked(
