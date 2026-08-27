@@ -78,6 +78,10 @@ final class ProviderRaceBox: Sendable {
 /// coordinator's drain and the streaming runtime read one type rather than two copies.
 struct AccumulatedStreamContentTooLarge: Error {}
 
+/// The wall-clock deadline won before the provider could start inference. Kept distinct from task
+/// cancellation so attempt diagnostics can record a deadline while accounting still books no row.
+struct ProviderNoStartDeadline: Error, Sendable {}
+
 // MARK: - Child results
 
 /// A buffered `complete` call's own outcome, captured as a value so the provider child never throws

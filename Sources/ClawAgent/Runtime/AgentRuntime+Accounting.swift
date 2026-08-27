@@ -60,7 +60,7 @@ extension AgentRuntime {
         )
       )
     }
-    if error is CancellationError {
+    if error is ProviderNoStartDeadline || error is CancellationError {
       return .degraded(.providerUnavailable, usage: nil)
     }
 
@@ -102,8 +102,45 @@ extension AgentRuntime {
       return .invalidProviderState
     case .visionUnsupported:
       return .visionUnsupported
-    case .terminal, .cleanRejection, .retryable, .connectFailed, .rejected, .none:
+    case .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable:
       return .providerUnavailable
+    case .terminal, .cleanRejection, .transportFailure, .retryable, .connectFailed, .rejected,
+      .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch, .none:
+      return .providerUnavailable
+    }
+  }
+
+  static func attemptFailureCause(
+    for error: any Error
+  ) -> AttemptFailureCause? {
+    let isDeadline =
+      error is ProviderNoStartDeadline
+      || error is RacedDeadlineSuccess
+      || error is ProviderInferenceCancellation
+    if isDeadline {
+      return .deadline
+    }
+    if error is CancellationError {
+      return .processInterruption
+    }
+    switch ProviderError.cause(of: error) {
+    case .connectFailed, .transportFailure:
+      return .transportFailure
+    case .credentialRefreshCompleted:
+      return .credentialRefreshCompleted
+    case .credentialRefreshExhausted:
+      return .credentialRefreshExhausted
+    case .credentialStateUnavailable:
+      return .credentialStateUnavailable
+    case .partialStreamWithoutCompletedTerminal:
+      return .partialStreamWithoutCompletedTerminal
+    case .localOutputLimit:
+      return .localOutputLimit
+    case .modelIdentityMismatch:
+      return .modelIdentityMismatch
+    case .retryable, .quotaLimited, .authenticationRequired, .accessDenied,
+      .invalidProviderState, .visionUnsupported, .terminal, .cleanRejection, .rejected, .none:
+      return nil
     }
   }
 
