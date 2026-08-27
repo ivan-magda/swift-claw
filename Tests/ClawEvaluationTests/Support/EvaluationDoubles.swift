@@ -140,3 +140,72 @@ actor ScriptedEvaluationProtectedArtifactRunner: EvaluationProtectedArtifactRunn
     return output
   }
 }
+
+enum EvaluationHarnessTestError: Error {
+  case unexpectedFreezeCall
+  case unexpectedCanaryInvocation
+}
+
+actor FailingStreamingProvider: LLMProvider {
+  let cause: ProviderError
+  let accounting: ProviderFailureAccounting
+  private(set) var streamCalls = 0
+
+  init(
+    cause: ProviderError,
+    accounting: ProviderFailureAccounting = .mayHaveStarted(observing: 1)
+  ) {
+    self.cause = cause
+    self.accounting = accounting
+  }
+
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    Issue.record("evaluation streaming must not fall back to a buffered provider call")
+    throw cause
+  }
+
+  nonisolated func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { _ in
+      await self.recordStreamCall()
+      return .failed(
+        ProviderFailure(
+          cause: self.cause,
+          accounting: self.accounting
+        )
+      )
+    }
+  }
+
+  private func recordStreamCall() {
+    streamCalls += 1
+  }
+}
+
+func scriptedTwoRoundResponses(
+  requestedPath: String = PageEvaluationContract.inputFileName,
+  firstUsage: ChatUsage? = .zero
+) -> [ChatResponse] {
+  [
+    ChatResponse(
+      content: "",
+      finishReason: "tool_calls",
+      usage: firstUsage,
+      costFromProvider: nil,
+      toolCalls: [
+        ToolCall(
+          id: "read-input",
+          name: EvaluationToolContract.requiredToolName,
+          argumentsJSON: #"{"path":"\#(requestedPath)"}"#
+        )
+      ],
+      reportedModel: PageEvaluationContract.wireModel
+    ),
+    ChatResponse(
+      content: #"{"schema_version":1}"#,
+      finishReason: "stop",
+      usage: .zero,
+      costFromProvider: nil,
+      reportedModel: PageEvaluationContract.wireModel
+    ),
+  ]
+}
