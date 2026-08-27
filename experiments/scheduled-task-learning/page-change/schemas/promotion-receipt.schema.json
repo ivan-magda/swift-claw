@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/promotion-receipt.schema.json",
+  "title": "PageChangePromotionReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "promotion_id",
+    "development_bundle_sha256",
+    "synthesis_input_sha256",
+    "synthesis_transcript_sha256",
+    "synthesis_prompt_sha256",
+    "feedback_generator_version",
+    "feedback_generator_sha256",
+    "provider_reference",
+    "wire_model",
+    "selected_target_classes",
+    "lint_rules_sha256",
+    "lint_report_sha256",
+    "candidate_sha256",
+    "active_lesson_set_sha256",
+    "active_lesson_set_id",
+    "lesson_ids",
+    "canonical_byte_count"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "promotion_id": {"type": "string", "pattern": "^promotion-[0-9a-f]{12}$"},
+    "development_bundle_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "synthesis_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "synthesis_transcript_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "synthesis_prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "feedback_generator_version": {"const": "page-feedback-v1"},
+    "feedback_generator_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "provider_reference": {"const": "openai-chatgpt/gpt-5.6-sol"},
+    "wire_model": {"const": "gpt-5.6-sol"},
+    "selected_target_classes": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "noise.volatile_value",
+          "noise.time_or_build_metadata",
+          "noise.structure_or_order"
+        ]
+      }
+    },
+    "lint_rules_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "lint_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "active_lesson_set_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "active_lesson_set_id": {"type": "string", "pattern": "^set-[0-9a-f]{12}$"},
+    "lesson_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^lesson-[0-9a-f]{12}$"}
+    },
+    "canonical_byte_count": {"type": "integer", "minimum": 1}
+  }
+}

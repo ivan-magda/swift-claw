@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "fixture_counts": {"development": 6, "regression": 3, "sealed": 4},
+  "minimum_target_atoms_per_class_per_split": 2,
+  "minimum_unrelated_families_per_class_per_split": 2,
+  "target_class_order": [
+    "noise.volatile_value",
+    "noise.time_or_build_metadata",
+    "noise.structure_or_order"
+  ],
+  "splits": {
+    "development": [
+      {
+        "fixture_id": "pc-development-01",
+        "family_id": "subscription-pricing",
+        "source": "sources/development/pc-development-01.source.json",
+        "gold": "gold/development/pc-development-01.gold.json"
+      },
+      {
+        "fixture_id": "pc-development-02",
+        "family_id": "conference-logistics",
+        "source": "sources/development/pc-development-02.source.json",
+        "gold": "gold/development/pc-development-02.gold.json"
+      },
+      {
+        "fixture_id": "pc-development-03",
+        "family_id": "api-reference",
+        "source": "sources/development/pc-development-03.source.json",
+        "gold": "gold/development/pc-development-03.gold.json"
+      },
+      {
+        "fixture_id": "pc-development-04",
+        "family_id": "job-listing",
+        "source": "sources/development/pc-development-04.source.json",
+        "gold": "gold/development/pc-development-04.gold.json"
+      },
+      {
+        "fixture_id": "pc-development-05",
+        "family_id": "store-return-policy",
+        "source": "sources/development/pc-development-05.source.json",
+        "gold": "gold/development/pc-development-05.gold.json"
+      },
+      {
+        "fixture_id": "pc-development-06",
+        "family_id": "service-status",
+        "source": "sources/development/pc-development-06.source.json",
+        "gold": "gold/development/pc-development-06.gold.json"
+      }
+    ],
+    "regression": [
+      {
+        "fixture_id": "pc-regression-01",
+        "family_id": "credit-offer",
+        "source": "sources/regression/pc-regression-01.source.json",
+        "gold": "gold/regression/pc-regression-01.gold.json"
+      },
+      {
+        "fixture_id": "pc-regression-02",
+        "family_id": "rail-timetable",
+        "source": "sources/regression/pc-regression-02.source.json",
+        "gold": "gold/regression/pc-regression-02.gold.json"
+      },
+      {
+        "fixture_id": "pc-regression-03",
+        "family_id": "museum-guide",
+        "source": "sources/regression/pc-regression-03.source.json",
+        "gold": "gold/regression/pc-regression-03.gold.json"
+      }
+    ],
+    "sealed": [
+      {
+        "fixture_id": "pc-sealed-01",
+        "family_id": "utility-plan",
+        "source": "sources/sealed/pc-sealed-01.source.json",
+        "gold": "gold/sealed/pc-sealed-01.gold.json"
+      },
+      {
+        "fixture_id": "pc-sealed-02",
+        "family_id": "university-admissions",
+        "source": "sources/sealed/pc-sealed-02.source.json",
+        "gold": "gold/sealed/pc-sealed-02.gold.json"
+      },
+      {
+        "fixture_id": "pc-sealed-03",
+        "family_id": "community-grants",
+        "source": "sources/sealed/pc-sealed-03.source.json",
+        "gold": "gold/sealed/pc-sealed-03.gold.json"
+      },
+      {
+        "fixture_id": "pc-sealed-04",
+        "family_id": "clinic-hours",
+        "source": "sources/sealed/pc-sealed-04.source.json",
+        "gold": "gold/sealed/pc-sealed-04.gold.json"
+      }
+    ]
+  },
+  "sealed_contract": {
+    "material_atoms": 4,
+    "noise_atoms": 12,
+    "verdict_counts": {"material": 2, "cosmetic": 1, "none": 1}
+  },
+  "required_injection_splits": ["regression", "sealed"]
+}

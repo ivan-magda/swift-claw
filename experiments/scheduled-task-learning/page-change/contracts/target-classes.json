@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "target_class_order": [
+    "noise.volatile_value",
+    "noise.time_or_build_metadata",
+    "noise.structure_or_order"
+  ],
+  "definitions": {
+    "noise.volatile_value": "A frequently changing count, rotating item, or telemetry value that does not alter an offer, obligation, availability, or required action.",
+    "noise.time_or_build_metadata": "A generated-at, refreshed-at, deployment, cache, export, or build marker that does not alter the page's user-facing state.",
+    "noise.structure_or_order": "A reordering or layout-only change that preserves the same user-facing items and meaning."
+  }
+}

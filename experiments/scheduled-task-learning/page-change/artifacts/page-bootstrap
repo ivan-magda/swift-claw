@@ -1,0 +1,75 @@
+#!/usr/bin/python3 -I
+"""Shared isolated entry point for frozen page benchmark roles."""
+
+from __future__ import annotations
+
+import importlib
+import importlib.util
+from pathlib import Path
+import sys
+
+
+ROLE_MODULES = {
+    "aggregate": "aggregate",
+    "conformance": "conformance",
+    "feedback": "feedback",
+    "lesson-lint": "lessons",
+    "promotion": "promotion",
+    "record": "record",
+    "scorer": "scorer",
+    "synthesis": "synthesis",
+}
+FORBIDDEN_IMPORT_SUFFIXES = frozenset({".pyc", ".pyo", ".so", ".dylib", ".pyd"})
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"error: {message}")
+
+
+def validate_source_closure(package_root: Path) -> None:
+    if not package_root.is_dir() or package_root.is_symlink():
+        fail("page_benchmark must be a real directory")
+    for candidate in package_root.rglob("*"):
+        if candidate.is_symlink():
+            fail(f"symlinks are forbidden in page_benchmark: {candidate.name}")
+        if candidate.is_dir() and candidate.name == "__pycache__":
+            fail("bytecode caches are forbidden in page_benchmark")
+        if candidate.is_file() and candidate.suffix in FORBIDDEN_IMPORT_SUFFIXES:
+            fail(f"non-source import artifact is forbidden in page_benchmark: {candidate.name}")
+
+
+def load_package(package_root: Path) -> None:
+    specification = importlib.util.spec_from_file_location(
+        "page_benchmark",
+        package_root / "__init__.py",
+        submodule_search_locations=[str(package_root)],
+    )
+    if specification is None or specification.loader is None:
+        fail("cannot load the frozen page_benchmark package")
+    package = importlib.util.module_from_spec(specification)
+    sys.modules["page_benchmark"] = package
+    specification.loader.exec_module(package)
+
+
+def main() -> int:
+    if len(sys.argv) < 2 or sys.argv[1] not in ROLE_MODULES:
+        fail("a known benchmark role is required")
+    role = sys.argv[1]
+    page_root = Path(__file__).resolve().parents[1]
+    package_root = page_root / "page_benchmark"
+    sys.dont_write_bytecode = True
+    validate_source_closure(package_root)
+    try:
+        load_package(package_root)
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        if role == "scorer" and len(sys.argv) > 1 and sys.argv[1] == "score":
+            sys.argv = [sys.argv[0], *sys.argv[2:]]
+        entry = getattr(importlib.import_module(f"page_benchmark.{ROLE_MODULES[role]}"), "main")
+        result = entry()
+    finally:
+        validate_source_closure(package_root)
+    return result if isinstance(result, int) else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

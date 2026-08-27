@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "maximum_lessons": 3,
+  "maximum_scalars_per_lesson": 400,
+  "maximum_total_scalars": 1000,
+  "rule_grammar": {
+    "style": "single_imperative_sentence",
+    "allowed_initial_verbs": ["Classify", "Consider", "Ignore", "Report", "Treat"],
+    "minimum_body_scalars": 20,
+    "maximum_body_scalars": 398,
+    "terminal": ".",
+    "forbidden_body_characters": ["\r", "\n", ".", "!", "?"],
+    "case_sensitive_initial": true
+  },
+  "forbidden_patterns": [
+    "https?://",
+    "www\\.",
+    "data-region-id",
+    "</?[a-zA-Z][^>]*>",
+    "#[a-zA-Z_][a-zA-Z0-9_-]*",
+    "\\.[a-zA-Z_][a-zA-Z0-9_-]*",
+    "[0-9]"
+  ],
+  "forbidden_terms": [],
+  "dynamic_forbidden_term_categories": [
+    "fixture_task_region_atom_mechanism_and_family_ids",
+    "urls_and_html_selector_values",
+    "before_after_literals_and_derived_proper_phrases"
+  ],
+  "required_rule_terms": [
+    "classify",
+    "consider",
+    "ignore",
+    "report",
+    "treat"
+  ],
+  "class_concept_terms": {
+    "noise.volatile_value": ["counter", "frequent", "rotating", "telemetry", "volatile"],
+    "noise.time_or_build_metadata": ["build", "deploy", "generated", "metadata", "refresh", "timestamp"],
+    "noise.structure_or_order": ["layout", "order", "position", "reorder", "structure"]
+  }
+}
