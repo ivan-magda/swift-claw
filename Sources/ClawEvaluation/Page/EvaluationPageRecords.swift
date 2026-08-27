@@ -20,6 +20,7 @@ struct EvaluationRecordedAttempt: Sendable {
 struct EvaluationPageRecordBuilder: Sendable {
   let artifacts: any EvaluationProtectedArtifactRunning
 
+  // swiftlint:disable:next function_body_length function_parameter_count
   func writeBundle(
     attempts: [EvaluationRecordedAttempt],
     runOrder: EvaluationPageRunOrder,

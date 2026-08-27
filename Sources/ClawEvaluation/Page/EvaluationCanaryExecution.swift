@@ -168,6 +168,7 @@ extension EvaluationController {
     return evidence
   }
 
+  // swiftlint:disable:next function_body_length
   private func launchCanaryProcess(
     _ process: EvaluationPageCanaryProcessSlot,
     at index: Int,

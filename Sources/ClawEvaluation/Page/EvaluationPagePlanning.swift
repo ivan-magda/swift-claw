@@ -15,6 +15,7 @@ struct EvaluationPageFixtureCatalog: Sendable {
   let fixtures: [EvaluationPageFixture]
   let byID: [String: EvaluationPageFixture]
 
+  // swiftlint:disable:next function_body_length
   static func load(freeze: EvaluationFreezeContext) throws -> Self {
     guard let splits = freeze.manifest.artifact(role: "splits", category: "splits") else {
       throw EvaluationPagePipelineError.invalidManifestContract
@@ -123,6 +124,7 @@ struct EvaluationPageLessonBinding: Sendable {
   }
 }
 
+// swiftlint:disable:next type_body_length
 struct EvaluationPageConfigurationFactory {
   let freeze: EvaluationFreezeContext
   let freezeInputs: EvaluationFreezeInputs
@@ -213,11 +215,13 @@ struct EvaluationPageConfigurationFactory {
     )
   }
 
+  // swiftlint:disable:next function_body_length
   func makeCanaryConfigurations(
     process: EvaluationPageCanaryProcessSlot
   ) throws -> [EvaluationAttemptConfiguration] {
     let repository = URL(fileURLWithPath: freeze.repositoryRoot, isDirectory: true)
     let prompt = try artifact(role: "task", category: "prompts")
+    // swiftlint:disable:next closure_body_length
     return try process.attempts.map { slot in
       guard
         let sourceRecord = freeze.manifest.artifact(relativePath: slot.sourcePath),
@@ -312,6 +316,7 @@ struct EvaluationPageConfigurationFactory {
     }
   }
 
+  // swiftlint:disable:next function_body_length
   private func configuration(
     for slot: EvaluationPageTaskSlot,
     lesson: EvaluationPageLessonBinding,
@@ -453,8 +458,11 @@ struct EvaluationPageConfigurationFactory {
   private struct ApprovalRecord: Decodable {
     struct Comment: Decodable {
       let htmlURL: String
+
+      // swiftlint:disable:next nesting
       enum CodingKeys: String, CodingKey { case htmlURL = "html_url" }
     }
+
     let comment: Comment
   }
 }

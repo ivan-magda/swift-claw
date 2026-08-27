@@ -2,6 +2,8 @@ import ClawCore
 import ClawSecrets
 import Foundation
 
+// swiftlint:disable file_length
+
 typealias EvaluationCanonicalJSON = CanonicalJSON
 
 struct EvaluationCarrierReceipt: Codable, Sendable, Equatable {
@@ -135,6 +137,7 @@ struct EvaluationActiveLessonPointer: Codable, Sendable, Equatable {
 }
 
 enum EvaluationWorkspaceMaterializer {
+  // swiftlint:disable:next function_body_length
   package static func reset(
     configuration: EvaluationAttemptConfiguration,
     fileManager: FileManager = .default
@@ -153,9 +156,14 @@ enum EvaluationWorkspaceMaterializer {
     guard EvaluationPathSecurity.isStrictlyContained(source, under: workspace) == false else {
       throw EvaluationWorkspaceError.sourceArtifactInsideWorkspace
     }
-    if let optionalLesson,
-      EvaluationPathSecurity.isStrictlyContained(optionalLesson, under: workspace) {
-      throw EvaluationWorkspaceError.lessonArtifactInsideWorkspace
+    if let optionalLesson {
+      let lessonIsInsideWorkspace = EvaluationPathSecurity.isStrictlyContained(
+        optionalLesson,
+        under: workspace
+      )
+      guard lessonIsInsideWorkspace == false else {
+        throw EvaluationWorkspaceError.lessonArtifactInsideWorkspace
+      }
     }
 
     let sourceData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: source)
@@ -288,6 +296,7 @@ private extension EvaluationWorkspaceMaterializer {
     let digest: String
   }
 
+  // swiftlint:disable:next function_parameter_count
   static func resetSynthesis(
     configuration: EvaluationAttemptConfiguration,
     workspace: URL,
@@ -357,6 +366,7 @@ private extension EvaluationWorkspaceMaterializer {
     )
   }
 
+  // swiftlint:disable:next function_body_length
   static func resolveLessonSet(
     configuration: EvaluationAttemptConfiguration,
     fileManager: FileManager

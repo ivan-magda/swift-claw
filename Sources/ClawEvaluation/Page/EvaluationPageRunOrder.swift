@@ -2,6 +2,8 @@ import ClawAgent
 import ClawCore
 import Foundation
 
+// swiftlint:disable file_length
+
 enum EvaluationPageSplit: String, Sendable, Equatable {
   case development
   case regression

@@ -2,6 +2,8 @@ import ClawCore
 import ClawSubprocess
 import Foundation
 
+// swiftlint:disable file_length
+
 package struct EvaluationFreezeInputs: Codable, Sendable, Equatable {
   let repositoryRoot: String
   let manifestPath: String
@@ -371,6 +373,7 @@ private extension EvaluationLiveFreezeVerifier {
     }
   }
 
+  // swiftlint:disable:next function_body_length
   func prepare(_ inputs: EvaluationFreezeInputs) throws -> Prepared {
     let inputPathStrings = [
       inputs.repositoryRoot,

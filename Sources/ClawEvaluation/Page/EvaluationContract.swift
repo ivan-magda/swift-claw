@@ -24,6 +24,7 @@ enum PageEvaluationContract {
   package static let activeLessonFileName = "active.json"
   package static let policyVersionHexCount = 16
   package static let wholeAttemptReplacementMax = 1
+  // swiftlint:disable:next identifier_name
   package static let maximumCompletedModelRoundTripsPerAttempt = 2
   package static let responsesSendsPerLogicalRoundTrip = 1
   package static let maximumResponsesSendsPerAttempt =

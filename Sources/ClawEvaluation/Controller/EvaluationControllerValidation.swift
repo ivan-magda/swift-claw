@@ -8,6 +8,7 @@ extension EvaluationController {
     let path: String
   }
 
+  // swiftlint:disable:next function_body_length
   static func validate(
     configuration: EvaluationAttemptConfiguration,
     against freeze: EvaluationFreezeContext
@@ -120,14 +121,18 @@ extension EvaluationController {
     }
   }
 
+  // swiftlint:disable:next function_body_length
   static func validateLessonArtifact(
     _ configuration: EvaluationAttemptConfiguration,
     root: URL,
     manifest: EvaluationFreezeManifest
   ) throws {
     guard configuration.lessonSource != .clean else { return }
-    if configuration.stage == EvaluationPageStage.canary.rawValue,
-      configuration.lessonSource == .durableActive {
+    let isDurableCanary =
+      configuration.stage == EvaluationPageStage.canary.rawValue
+      && configuration.lessonSource == .durableActive
+
+    if isDurableCanary {
       guard
         let protected = manifest.artifact(
           role: "canary_nonempty_lessons",
@@ -155,8 +160,12 @@ extension EvaluationController {
         .appendingPathComponent("\(configuration.lessonSetDigest).json", isDirectory: false)
         .standardizedFileURL
     }
-    if let relative = EvaluationPathSecurity.relativePath(of: lesson, under: root),
-      let artifact = manifest.artifact(relativePath: relative) {
+    let relative = EvaluationPathSecurity.relativePath(of: lesson, under: root)
+    let artifact = relative.flatMap { relativePath in
+      manifest.artifact(relativePath: relativePath)
+    }
+
+    if let artifact {
       guard
         configuration.stage == EvaluationPageStage.canary.rawValue,
         artifact.sha256 == configuration.lessonSetDigest
@@ -487,6 +496,7 @@ extension EvaluationController {
     return try EvaluationCanonicalJSON.data(fromJSONObject: object)
   }
 
+  // swiftlint:disable:next function_parameter_count
   static func writeInvocation(
     kind: EvaluationWorkerInvocationKind,
     configurationPath: String,

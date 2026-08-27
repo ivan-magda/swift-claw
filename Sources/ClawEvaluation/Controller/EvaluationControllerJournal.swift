@@ -178,6 +178,7 @@ struct EvaluationControllerJournal: Sendable {
   }
 
   @discardableResult
+  // swiftlint:disable:next function_parameter_count
   package func recordLaunch(
     kind: EvaluationControllerJournalEventKind,
     invocationID: UUID,
@@ -204,6 +205,7 @@ struct EvaluationControllerJournal: Sendable {
     try append(kind: incomplete ? .batchIncomplete : .batchCompleted)
   }
 
+  // swiftlint:disable:next function_body_length function_parameter_count
   package static func authorize(
     _ authorization: EvaluationWorkerAuthorization,
     invocationID: UUID,

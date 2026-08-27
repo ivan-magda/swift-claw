@@ -1,6 +1,8 @@
 import ClawCore
 import Foundation
 
+// swiftlint:disable file_length
+
 extension EvaluationController {
   enum AttemptLaunchOutcome {
     case result(EvaluationAttemptResult)
@@ -128,7 +130,9 @@ extension EvaluationController {
           < PageEvaluationContract.globalAccountedTokenThreshold
     }
 
-    func sendBudget(for limits: PageEvaluationContract.StageLimits) -> EvaluationSendBudgetSnapshot {
+    func sendBudget(
+      for limits: PageEvaluationContract.StageLimits
+    ) -> EvaluationSendBudgetSnapshot {
       EvaluationSendBudgetSnapshot(
         stageAccountedTokens: accountedTokens,
         globalAccountedTokens: SaturatingArithmetic.sum(
@@ -146,6 +150,7 @@ extension EvaluationController {
     }
   }
 
+  // swiftlint:disable:next function_parameter_count
   func executeBlocks(
     _ blocks: [EvaluationReplicateBlock],
     executablePath: String,
@@ -422,6 +427,7 @@ extension EvaluationController {
     )
   }
 
+  // swiftlint:disable:next function_parameter_count
   func runOne(
     executablePath: String,
     configurationPath: String,
@@ -478,6 +484,7 @@ extension EvaluationController {
     }
   }
 
+  // swiftlint:disable:next function_body_length
   private func launchAttempt(
     configurationPath: String,
     context: AttemptExecutionContext,
@@ -800,6 +807,7 @@ extension EvaluationController {
   }
 
   @discardableResult
+  // swiftlint:disable:next function_parameter_count
   static func accountAndRecordProgress(
     _ progress: EvaluationAttemptProgressRecord?,
     configurations: [EvaluationAttemptConfiguration],

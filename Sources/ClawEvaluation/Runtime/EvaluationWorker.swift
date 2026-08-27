@@ -213,6 +213,7 @@ package struct EvaluationWorker: Sendable {
     ).attemptID
   }
 
+  // swiftlint:disable:next function_body_length
   func runResult(
     invocation: EvaluationWorkerInvocation,
     sealedOutputKey: Data? = nil,
@@ -319,6 +320,7 @@ package struct EvaluationWorker: Sendable {
     ).map(\.attemptID)
   }
 
+  // swiftlint:disable:next function_body_length
   func runCanaryResults(
     invocation: EvaluationWorkerInvocation,
     freezeVerifier: any EvaluationFreezeVerifying

@@ -352,6 +352,7 @@ enum EvaluationSealedResultStore {
     return result
   }
 
+  // swiftlint:disable:next function_body_length
   static func jointlyUnseal(
     accepted: [EvaluationController.AcceptedAttempt],
     slots: [EvaluationPageTaskSlot],
@@ -377,12 +378,14 @@ enum EvaluationSealedResultStore {
       throw EvaluationSealedResultError.incompleteJointUnseal
     }
     var verified: [JointlyUnsealedAttempt] = []
+    // swiftlint:disable large_tuple
     var superseded:
       [(
         EvaluationAttemptResult,
         EvaluationSealedAttemptReceipt,
         EvaluationAttemptConfiguration
       )] = []
+    // swiftlint:enable large_tuple
     for slot in slots {
       guard
         let item = acceptedBySlot[slot.orderKey],

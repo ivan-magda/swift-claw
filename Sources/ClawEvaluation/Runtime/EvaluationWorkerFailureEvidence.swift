@@ -1,6 +1,13 @@
 import Foundation
 
-enum EvaluationWorkspaceFailureReason: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
+enum EvaluationWorkspaceFailureReason:
+  String,
+  Codable,
+  Sendable,
+  Equatable,
+  Hashable,
+  CaseIterable
+{
   case sourceArtifactInsideWorkspace = "source_artifact_inside_workspace"
   case lessonArtifactInsideWorkspace = "lesson_artifact_inside_workspace"
   case sourceDigestMismatch = "source_digest_mismatch"
