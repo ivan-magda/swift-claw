@@ -8,7 +8,11 @@ struct ClawEvalCommand: AsyncParsableCommand {
     commandName: "claw-eval",
     abstract: "Frozen controller/worker harness for scheduled-task learning experiments.",
     subcommands: [
-      Page.self, Worker.self, CanaryProcess.self, InspectPolicy.self, AuthLogin.self,
+      Page.self,
+      Worker.self,
+      CanaryProcess.self,
+      InspectPolicy.self,
+      AuthLogin.self,
     ]
   )
 
@@ -50,6 +54,7 @@ struct ClawEvalCommand: AsyncParsableCommand {
         EvaluationFreezeInputs.self,
         from: URL(fileURLWithPath: freezeInputs)
       )
+
       let result = try await EvaluationAuthLogin().run(
         EvaluationAuthLoginRequest(
           freeze: freeze,
@@ -58,6 +63,7 @@ struct ClawEvalCommand: AsyncParsableCommand {
           wireModel: model
         )
       )
+
       let exitCode = result.exit.processExitCode
       guard exitCode == ExitCode.success.rawValue else {
         throw ExitCode(exitCode)
@@ -77,11 +83,16 @@ struct ClawEvalCommand: AsyncParsableCommand {
     mutating func run() async throws {
       let url = URL(fileURLWithPath: invocation)
       let authorized = try EvaluationJSONFile.decode(EvaluationWorkerInvocation.self, from: url)
-      let key = sealedOutputKeyStdin ? FileHandle.standardInput.readDataToEndOfFile() : nil
+
+      let key =
+        sealedOutputKeyStdin
+        ? FileHandle.standardInput.readDataToEndOfFile()
+        : nil
       let attemptID = try await EvaluationWorker().run(
         invocation: authorized,
         sealedOutputKey: key
       )
+
       print(attemptID)
     }
   }
