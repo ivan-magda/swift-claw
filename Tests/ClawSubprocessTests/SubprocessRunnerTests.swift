@@ -32,7 +32,11 @@ import Testing
     // given
     let runner = SwiftSubprocessRunner(executablePath: "/bin/cat")
     let standardInput = Data([0x00, 0x01, 0x7f, 0x80, 0xff])
-    let command = testCommand([], standardInput: standardInput)
+    let command = testCommand(
+      [],
+      timeout: .seconds(30),
+      standardInput: standardInput
+    )
 
     // when
     let result = await runner.run(command)
