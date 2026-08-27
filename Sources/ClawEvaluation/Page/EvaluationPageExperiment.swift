@@ -32,19 +32,27 @@ package struct EvaluationPageExperiment: Sendable {
       from: URL(fileURLWithPath: freezeInputsPath)
     )
     let freeze = try await freezeVerifier.verify(inputs)
+
     guard
       freeze.manifest.schemaVersion == PageEvaluationContract.schemaVersion,
       freeze.manifest.decision == "D6",
       freeze.manifest.experiment == "page-change"
-    else { throw EvaluationPagePipelineError.invalidManifestContract }
+    else {
+      throw EvaluationPagePipelineError.invalidManifestContract
+    }
+
     let paths = EvaluationController.PagePipelinePaths(
       evaluationRoot: freeze.runtime.evaluationRootURL
     )
     guard
       FileManager.default.fileExists(atPath: paths.root.path) == false,
       FileManager.default.fileExists(atPath: paths.result.path) == false
-    else { throw EvaluationPagePipelineError.resultUnavailable("pipeline_state_exists") }
+    else {
+      throw EvaluationPagePipelineError.resultUnavailable("pipeline_state_exists")
+    }
+
     try prepare(paths)
+
     let journal = try EvaluationControllerJournal.startNew(
       evaluationRoot: freeze.runtime.evaluationRootURL,
       manifestSHA256: freeze.receipt.manifest.sha256,
@@ -52,12 +60,15 @@ package struct EvaluationPageExperiment: Sendable {
       fixedTimestamp: freeze.runtime.fixedTimestamp,
       journalName: "page-\(freeze.receipt.manifest.sha256).jsonl"
     )
+
     do {
       let runOrder = try EvaluationPageRunOrder.decode(
         freeze.runOrderJSON,
         approvedManifestSHA256: freeze.receipt.manifest.sha256
       )
+
       try EvaluationDurablePublication.publish(freeze.runOrderJSON, to: paths.runOrder)
+
       let conformance = try await runConformance(freeze: freeze, receiptURL: paths.conformance)
       guard
         conformance.passed == PageEvaluationContract.conformanceCaseCount,
@@ -65,6 +76,7 @@ package struct EvaluationPageExperiment: Sendable {
       else {
         throw EvaluationPagePipelineError.stageGateFailed("conformance")
       }
+
       return try await runVerified(
         inputs: inputs,
         freeze: freeze,
@@ -87,6 +99,7 @@ package struct EvaluationPageExperiment: Sendable {
     receiptURL: URL
   ) async throws -> EvaluationConformanceReceiptBinding {
     try EvaluationProtectedOutputGuard.prepare(outputs: [receiptURL])
+
     let pageRoot = URL(fileURLWithPath: freeze.repositoryRoot, isDirectory: true)
       .appendingPathComponent(EvaluationController.pageRootPath, isDirectory: true)
     let output = try await artifacts.run(
@@ -96,15 +109,20 @@ package struct EvaluationPageExperiment: Sendable {
       freeze: freeze,
       captureLimit: 2 * 1_024 * 1_024
     )
+
     guard
       let object = try JSONSerialization.jsonObject(with: output) as? [String: Any],
       CanonicalJSON.integer(object["schema_version"]) == 1,
       CanonicalJSON.integer(object["passed"]) == PageEvaluationContract.conformanceCaseCount,
       CanonicalJSON.integer(object["total"]) == PageEvaluationContract.conformanceCaseCount,
       object["conformance_id"] is String
-    else { throw EvaluationPagePipelineError.stageGateFailed("conformance") }
+    else {
+      throw EvaluationPagePipelineError.stageGateFailed("conformance")
+    }
+
     try EvaluationProtectedOutputGuard.prepare(outputs: [receiptURL])
     try EvaluationDurablePublication.publish(output, to: receiptURL)
+
     return EvaluationConformanceReceiptBinding(
       passed: PageEvaluationContract.conformanceCaseCount,
       total: PageEvaluationContract.conformanceCaseCount
@@ -127,7 +145,7 @@ private struct EvaluationPageRunContext {
 private struct EvaluationPromotedPageLesson {
   let binding: EvaluationPageLessonBinding
   let installedURL: URL
-  let promotionReceiptSHA256: String
+  let promotionReceipt: EvaluationPagePromotionReceipt
 }
 
 private struct EvaluationSealedStageRun {
@@ -160,14 +178,19 @@ private extension EvaluationPageExperiment {
     )
     var canary = EvaluationController.Accumulator()
     var page = EvaluationController.Accumulator()
+
     defer {
       _ = try? EvaluationJSONFile.write(canary.summary, to: paths.canarySummary)
       _ = try? EvaluationJSONFile.write(page.summary, to: paths.summary)
     }
+
     try await executeCanary(context: context, accumulator: &canary)
     inheritCanaryUsage(canary, into: &page)
 
-    let developmentGate = try await executeDevelopment(context: context, accumulator: &page)
+    let developmentGate = try await executeDevelopment(
+      context: context,
+      accumulator: &page
+    )
     guard developmentGate.passed else {
       return try finish(
         outcome: developmentGate.outcome,
@@ -220,6 +243,7 @@ private extension EvaluationPageExperiment {
       lesson: promoted,
       accumulator: &page
     )
+
     return try await finishSealed(
       context: context,
       run: sealed,
@@ -243,8 +267,10 @@ private extension EvaluationPageExperiment {
       configurationDirectory: paths.configurations,
       resultDirectory: paths.results
     )
+
     let executable = URL(fileURLWithPath: freeze.repositoryRoot, isDirectory: true)
       .appendingPathComponent(freeze.runtime.executablePath).path
+
     return EvaluationPageRunContext(
       inputs: inputs,
       freeze: freeze,
@@ -310,12 +336,14 @@ private extension EvaluationPageExperiment {
       journal: context.journal,
       accumulator: &accumulator
     )
+
     guard
       accumulator.stopReason == nil,
       development.count == PageEvaluationContract.pageDevelopmentPlannedAttempts
     else {
       throw EvaluationPagePipelineError.resultUnavailable("development")
     }
+
     let developmentRecords = try await context.records.writeBundle(
       attempts: try unsealed(development),
       runOrder: context.runOrder,
@@ -324,6 +352,7 @@ private extension EvaluationPageExperiment {
       lifecycleReceiptSHA256: "",
       outputURL: context.paths.developmentRecords
     )
+
     try context.records.writeDevelopmentInputs(
       records: developmentRecords,
       catalog: context.catalog,
@@ -331,6 +360,7 @@ private extension EvaluationPageExperiment {
       runsURL: context.paths.developmentRuns,
       bundleURL: context.paths.developmentBundle
     )
+
     return try await aggregate(
       stage: .development,
       records: context.paths.developmentRecords,
@@ -356,38 +386,41 @@ private extension EvaluationPageExperiment {
       page: &accumulator,
       paths: context.paths
     )
-    guard
-      try await promote(
-        synthesis: synthesis,
-        freeze: context.freeze,
-        paths: context.paths
-      ) == .promoted
-    else { return nil }
+
+    let promotion = try await promote(
+      synthesis: synthesis,
+      freeze: context.freeze,
+      paths: context.paths
+    )
+
+    guard case .promoted(let receipt) = promotion else {
+      return nil
+    }
+
     let promotedData = try EvaluationPathSecurity.readRegularSingleLinkFile(
       at: context.paths.promotedTemporary
     )
-    let promotedDigest = SHA256Digest.hex(promotedData)
+
     let installed = try EvaluationWorkspaceMaterializer.installPromotedLessonSet(
       promotedData,
-      expectedDigest: promotedDigest,
+      receipt: receipt,
       stateRoot: context.freeze.runtime.evaluationRootURL.appendingPathComponent(
         PageEvaluationContract.stateDirectoryName,
         isDirectory: true
       )
     )
-    let receiptDigest = SHA256Digest.hex(
-      try EvaluationPathSecurity.readRegularSingleLinkFile(at: context.paths.promotionReceipt)
-    )
+
     let binding = try EvaluationPageLessonBinding.promoted(
       source: .artifact,
       artifactURL: installed,
       promotionReceiptURL: context.paths.promotionReceipt,
-      promotionReceiptSHA256: receiptDigest
+      promotionReceipt: receipt
     )
+
     return EvaluationPromotedPageLesson(
       binding: binding,
       installedURL: installed,
-      promotionReceiptSHA256: receiptDigest
+      promotionReceipt: receipt
     )
   }
 }
@@ -404,6 +437,7 @@ private extension EvaluationPageExperiment {
       $0.stage == EvaluationPageStage.regression.rawValue
     }
     let key = EvaluationSealedResultStore.makeEphemeralKey()
+
     let attempts = try await controller.executeBlocks(
       context.factory.makeBlocks(slots: slots, lesson: lesson),
       executablePath: context.executable,
@@ -414,12 +448,14 @@ private extension EvaluationPageExperiment {
       journal: context.journal,
       accumulator: &accumulator
     )
+
     guard
       accumulator.stopReason == nil,
       attempts.count == PageEvaluationContract.pageRegressionPlannedAttempts
     else {
       throw EvaluationPagePipelineError.resultUnavailable("regression")
     }
+
     let unsealed = try EvaluationSealedResultStore.jointlyUnseal(
       accepted: attempts,
       slots: slots,
@@ -427,6 +463,7 @@ private extension EvaluationPageExperiment {
       manifestSHA256: context.freeze.receipt.manifest.sha256,
       receiptURL: context.paths.regressionJointUnsealReceipt
     )
+
     _ = try await context.records.writeBundle(
       attempts: unsealed.attempts,
       runOrder: context.runOrder,
@@ -435,6 +472,7 @@ private extension EvaluationPageExperiment {
       lifecycleReceiptSHA256: "",
       outputURL: context.paths.regressionRecords
     )
+
     return try await aggregate(
       stage: .regression,
       records: context.paths.regressionRecords,
@@ -473,27 +511,31 @@ private extension EvaluationPageExperiment {
       journal: context.journal,
       accumulator: &accumulator
     )
+
     guard
       accumulator.stopReason == nil,
       preAttempts.count == PageEvaluationContract.pageSealedPreRestartPlannedAttempts
     else {
       throw EvaluationPagePipelineError.resultUnavailable("sealed_pre_restart")
     }
+
     let lockWasReleased = try EvaluationWorkerLifecycle.proveProductionLockIsFree(
       stateRoot: context.freeze.runtime.evaluationRootURL.appendingPathComponent(
         PageEvaluationContract.stateDirectoryName,
         isDirectory: true
       )
     )
+
     try EvaluationController.rotateToEmptyWorkspace(
       context.freeze.runtime.workspaceRootURL,
       evaluationRoot: context.freeze.runtime.evaluationRootURL
     )
+
     let durableLesson = try EvaluationPageLessonBinding.promoted(
       source: .durableActive,
       artifactURL: lesson.installedURL,
       promotionReceiptURL: context.paths.promotionReceipt,
-      promotionReceiptSHA256: lesson.promotionReceiptSHA256
+      promotionReceipt: lesson.promotionReceipt
     )
     let postSlots = context.runOrder.taskSlots.filter {
       $0.stage == EvaluationPageStage.sealedPostRestart.rawValue
@@ -508,12 +550,14 @@ private extension EvaluationPageExperiment {
       journal: context.journal,
       accumulator: &accumulator
     )
+
     guard
       accumulator.stopReason == nil,
       postAttempts.count == PageEvaluationContract.pageSealedPostRestartPlannedAttempts
     else {
       throw EvaluationPagePipelineError.resultUnavailable("sealed_post_restart")
     }
+
     return EvaluationSealedStageRun(
       key: key,
       preSlots: preSlots,
@@ -539,10 +583,8 @@ private extension EvaluationPageExperiment {
       firstReloadSlot: run.firstReloadSlot,
       lockWasReleased: run.lockWasReleased
     )
-    try EvaluationJSONFile.write(lifecycle, to: context.paths.lifecycleReceipt)
-    let lifecycleDigest = SHA256Digest.hex(
-      try EvaluationPathSecurity.readRegularSingleLinkFile(at: context.paths.lifecycleReceipt)
-    )
+    let lifecycleDigest = try lifecycle.publish(to: context.paths.lifecycleReceipt)
+
     let unsealed = try EvaluationSealedResultStore.jointlyUnseal(
       accepted: run.preAttempts + run.postAttempts,
       slots: run.preSlots + run.postSlots,
@@ -550,6 +592,7 @@ private extension EvaluationPageExperiment {
       manifestSHA256: context.freeze.receipt.manifest.sha256,
       receiptURL: context.paths.jointUnsealReceipt
     )
+
     _ = try await context.records.writeBundle(
       attempts: unsealed.attempts,
       runOrder: context.runOrder,
@@ -558,6 +601,7 @@ private extension EvaluationPageExperiment {
       lifecycleReceiptSHA256: lifecycleDigest,
       outputURL: context.paths.sealedRecords
     )
+
     let gate = try await aggregate(
       stage: .sealed,
       records: context.paths.sealedRecords,
@@ -566,6 +610,7 @@ private extension EvaluationPageExperiment {
       freeze: context.freeze,
       paths: context.paths
     )
+
     return try finish(
       outcome: gate.outcome,
       canary: canary,

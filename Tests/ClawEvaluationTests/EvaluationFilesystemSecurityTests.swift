@@ -172,11 +172,8 @@ import Testing
       isDirectory: true
     )
     try FileManager.default.createDirectory(at: sets, withIntermediateDirectories: true)
-    let lesson = try EvaluationCanonicalJSON.data(fromJSONObject: [
-      "lesson_set_id": "candidate",
-      "lessons": [],
-      "schema_version": 1,
-    ])
+    let promotion = try makeEvaluationPromotionFixture()
+    let lesson = promotion.activeLessonData
     let digest = SHA256Digest.hex(lesson)
     let external = root.appendingPathComponent("external.json")
     try lesson.write(to: external)
@@ -189,7 +186,7 @@ import Testing
     ) {
       _ = try EvaluationWorkspaceMaterializer.installPromotedLessonSet(
         lesson,
-        expectedDigest: digest,
+        receipt: promotion.receipt,
         stateRoot: stateRoot
       )
     }
@@ -210,11 +207,8 @@ import Testing
       isDirectory: true
     )
     try FileManager.default.createDirectory(at: sets, withIntermediateDirectories: true)
-    let lesson = try EvaluationCanonicalJSON.data(fromJSONObject: [
-      "lesson_set_id": "candidate",
-      "lessons": [],
-      "schema_version": 1,
-    ])
+    let promotion = try makeEvaluationPromotionFixture()
+    let lesson = promotion.activeLessonData
     let digest = SHA256Digest.hex(lesson)
     let immutable = sets.appendingPathComponent("\(digest).json")
     let external = root.appendingPathComponent("external.json")
@@ -234,7 +228,7 @@ import Testing
     ) {
       _ = try EvaluationWorkspaceMaterializer.installPromotedLessonSet(
         lesson,
-        expectedDigest: digest,
+        receipt: promotion.receipt,
         stateRoot: stateRoot
       )
     }

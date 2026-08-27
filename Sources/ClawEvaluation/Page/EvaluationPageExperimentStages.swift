@@ -27,7 +27,7 @@ struct EvaluationPageTerminalFailure: Equatable {
 }
 
 enum EvaluationLessonPromotionOutcome: Equatable {
-  case promoted
+  case promoted(EvaluationPagePromotionReceipt)
   case rejected
 }
 
@@ -45,6 +45,7 @@ extension EvaluationPageExperiment {
       guard case .result(let result) = item.payload else {
         throw EvaluationPagePipelineError.recordConstructionFailed("unexpected_sealed_result")
       }
+
       let configuration = try EvaluationJSONFile.decode(
         EvaluationAttemptConfiguration.self,
         from: URL(fileURLWithPath: item.actualConfigurationPath)
@@ -52,6 +53,7 @@ extension EvaluationPageExperiment {
       let data = try EvaluationPathSecurity.readRegularSingleLinkFile(
         at: configuration.resultURL
       )
+
       return EvaluationRecordedAttempt(
         result: result,
         resultOrEnvelopeSHA256: SHA256Digest.hex(data),
@@ -72,7 +74,9 @@ extension EvaluationPageExperiment {
         }
       }),
       case .sealed(let receipt) = item.payload
-    else { throw EvaluationPagePipelineError.restartBoundaryFailed }
+    else {
+      throw EvaluationPagePipelineError.restartBoundaryFailed
+    }
     return receipt
   }
 
@@ -86,6 +90,7 @@ extension EvaluationPageExperiment {
     else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }
+
     _ = try await artifacts.run(
       relativeExecutablePath: "\(EvaluationController.pageRootPath)/artifacts/page-synthesis",
       arguments: [
@@ -118,6 +123,7 @@ extension EvaluationPageExperiment {
       freeze: freeze,
       captureLimit: 128 * 1_024
     )
+
     guard FileManager.default.fileExists(atPath: paths.synthesisInput.path) else {
       throw EvaluationPagePipelineError.synthesisFailed("input")
     }
@@ -152,9 +158,11 @@ extension EvaluationPageExperiment {
       at: replacementURL.path,
       of: originalURL.path
     )
+
     guard page.within(PageEvaluationContract.pageLimits) else {
       throw EvaluationPagePipelineError.synthesisFailed("budget")
     }
+
     var transcript: [[String: Any]] = []
     let first = try await controller.runOne(
       executablePath: executable,
@@ -166,33 +174,49 @@ extension EvaluationPageExperiment {
       journal: journal,
       accumulator: &page
     )
+
     guard page.stopReason == nil else {
       throw EvaluationPagePipelineError.incompleteBatch(
         page.stopReason ?? "synthesis_budget_exhausted"
       )
     }
+
+    let replacementRequest = EvaluationSynthesisReplacementRequest(
+      configuration: replacement,
+      configurationURL: replacementURL,
+      inputURL: paths.synthesisInput,
+      executable: executable,
+      inputs: inputs,
+      freeze: freeze,
+      journal: journal
+    )
+
     let completed: EvaluationAttemptResult
     switch first {
     case .result(let result) where result.replacementDisposition == .ineligible:
       let raw = try completedSynthesisOutput(result)
       try validateSynthesisInput(original, at: paths.synthesisInput)
-      transcript.append(synthesisTranscriptAttempt(index: 1, result: result, rawOutput: raw))
+      transcript.append(
+        synthesisTranscriptAttempt(
+          index: 1,
+          attemptID: result.attemptID,
+          result: result,
+          rawOutput: raw
+        )
+      )
       completed = result
-    case .result(let result)
-    where result.replacementDisposition == .eligible
-      && result.replacementReason == "transport_failure":
+    case .result(let result) where result.replacementDisposition == .eligible:
       try validateSynthesisInput(original, at: paths.synthesisInput)
-      transcript.append(synthesisTranscriptAttempt(index: 1, result: result, rawOutput: nil))
+      transcript.append(
+        synthesisTranscriptAttempt(
+          index: 1,
+          attemptID: result.attemptID,
+          result: result,
+          rawOutput: nil
+        )
+      )
       completed = try await runSynthesisReplacement(
-        request: EvaluationSynthesisReplacementRequest(
-          configuration: replacement,
-          configurationURL: replacementURL,
-          inputURL: paths.synthesisInput,
-          executable: executable,
-          inputs: inputs,
-          freeze: freeze,
-          journal: journal
-        ),
+        request: replacementRequest,
         page: &page,
         transcript: &transcript
       )
@@ -200,14 +224,29 @@ extension EvaluationPageExperiment {
       _ = try completedSynthesisOutput(result)
       throw EvaluationPagePipelineError.invalidBatch("synthesis_replacement_contract")
     case .missing:
-      throw EvaluationPagePipelineError.incompleteBatch("synthesis_process_interruption")
+      try validateSynthesisInput(original, at: paths.synthesisInput)
+      transcript.append(
+        synthesisTranscriptAttempt(
+          index: 1,
+          attemptID: original.attemptID,
+          result: nil,
+          rawOutput: nil
+        )
+      )
+      completed = try await runSynthesisReplacement(
+        request: replacementRequest,
+        page: &page,
+        transcript: &transcript
+      )
     default:
       throw EvaluationPagePipelineError.invalidBatch("synthesis_sealed_result")
     }
+
     guard let raw = completed.rawOutput else {
       throw EvaluationPagePipelineError.synthesisFailed("missing_output")
     }
     try EvaluationDurablePublication.publish(Data(raw.utf8), to: paths.synthesisCandidate)
+
     return EvaluationSynthesisExecution(result: completed, attempts: transcript)
   }
 
@@ -219,8 +258,11 @@ extension EvaluationPageExperiment {
     guard
       page.replacements < PageEvaluationContract.pageLimits.replacementPool,
       page.within(PageEvaluationContract.pageLimits)
-    else { throw EvaluationPagePipelineError.synthesisFailed("replacement_budget") }
+    else {
+      throw EvaluationPagePipelineError.synthesisFailed("replacement_budget")
+    }
     page.replacements += 1
+
     let launched = try await controller.runOne(
       executablePath: request.executable,
       configurationPath: request.configurationURL.path,
@@ -231,21 +273,33 @@ extension EvaluationPageExperiment {
       journal: request.journal,
       accumulator: &page
     )
+
     guard page.stopReason == nil else {
       throw EvaluationPagePipelineError.incompleteBatch(
         page.stopReason ?? "synthesis_budget_exhausted"
       )
     }
+
     guard case .result(let result) = launched else {
       throw EvaluationPagePipelineError.incompleteBatch("synthesis_replacement_interrupted")
     }
+
     guard result.replacementDisposition == .ineligible else {
       _ = try completedSynthesisOutput(result)
       throw EvaluationPagePipelineError.invalidBatch("synthesis_replacement_contract")
     }
+
     let raw = try completedSynthesisOutput(result)
     try validateSynthesisInput(request.configuration, at: request.inputURL)
-    transcript.append(synthesisTranscriptAttempt(index: 2, result: result, rawOutput: raw))
+    transcript.append(
+      synthesisTranscriptAttempt(
+        index: 2,
+        attemptID: result.attemptID,
+        result: result,
+        rawOutput: raw
+      )
+    )
+
     return result
   }
 
@@ -293,14 +347,15 @@ extension EvaluationPageExperiment {
 
   private func synthesisTranscriptAttempt(
     index: Int,
-    result: EvaluationAttemptResult,
+    attemptID: String,
+    result: EvaluationAttemptResult?,
     rawOutput: String?
   ) -> [String: Any] {
     [
-      "attempt_id": result.attemptID,
+      "attempt_id": attemptID,
       "attempt_index": index,
-      "conversation_id": result.conversationID,
-      "process_uuid": result.processUUID.uuidString.lowercased(),
+      "conversation_id": result.map { $0.conversationID as Any } ?? NSNull(),
+      "process_uuid": result.map { $0.processUUID.uuidString.lowercased() as Any } ?? NSNull(),
       "raw_output": rawOutput.map { $0 as Any } ?? NSNull(),
       "runtime_outcome": rawOutput == nil ? "transport_failure" : "completed",
     ]
@@ -316,7 +371,10 @@ extension EvaluationPageExperiment {
     guard
       let prompt = freeze.manifest.artifact(role: "synthesis", category: "prompts"),
       let feedbackDigest = freeze.manifest.categories["feedback"]?.sha256
-    else { throw EvaluationPagePipelineError.invalidManifestContract }
+    else {
+      throw EvaluationPagePipelineError.invalidManifestContract
+    }
+
     let promptData: Data
     do {
       promptData = try EvaluationManifestBoundArtifactReader.read(
@@ -328,10 +386,13 @@ extension EvaluationPageExperiment {
     } catch {
       throw EvaluationPagePipelineError.protectedArtifactChanged(prompt.path)
     }
+
     guard
       prompt.sha256 == configuration.taskPromptSHA256,
       let promptText = String(data: promptData, encoding: .utf8)
-    else { throw EvaluationPagePipelineError.protectedArtifactChanged(prompt.path) }
+    else {
+      throw EvaluationPagePipelineError.protectedArtifactChanged(prompt.path)
+    }
 
     let inputData = try EvaluationPathSecurity.readRegularSingleLinkFile(
       at: paths.synthesisInput
@@ -340,12 +401,16 @@ extension EvaluationPageExperiment {
       let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any],
       let selected = input["selected_target_classes"] as? [String],
       selected.isEmpty == false
-    else { throw EvaluationPagePipelineError.synthesisFailed("input_provenance") }
+    else {
+      throw EvaluationPagePipelineError.synthesisFailed("input_provenance")
+    }
+
     let canonicalInput = try EvaluationCanonicalJSON.data(fromJSONObject: input)
     let canonicalLint = try EvaluationCanonicalJSON.data(fromJSONObject: lintReport)
     guard canonicalInput == inputData else {
       throw EvaluationPagePipelineError.synthesisFailed("input_provenance")
     }
+
     try EvaluationDurablePublication.publish(
       EvaluationCanonicalJSON.data(fromJSONObject: [
         "attempts": attempts,
@@ -374,6 +439,7 @@ extension EvaluationPageExperiment {
   ) throws {
     let errors = lintReport["errors"] as? [[String: Any]] ?? []
     let codes = errors.compactMap { $0["code"] as? String }
+
     let report: [String: Any] = [
       "attempt_id": synthesis.attemptID,
       "candidate_sha256": SHA256Digest.hex(
@@ -395,6 +461,7 @@ extension EvaluationPageExperiment {
       ),
       "wire_model": synthesis.wireModel,
     ]
+
     try EvaluationDurablePublication.publish(
       EvaluationCanonicalJSON.data(fromJSONObject: report),
       to: paths.synthesisRejectionReport
@@ -409,6 +476,7 @@ extension EvaluationPageExperiment {
     guard synthesis.result.rawOutput != nil else {
       throw EvaluationPagePipelineError.promotionFailed
     }
+
     let lint = try await artifacts.run(
       relativeExecutablePath: "\(EvaluationController.pageRootPath)/artifacts/page-lesson-lint",
       arguments: [
@@ -420,10 +488,14 @@ extension EvaluationPageExperiment {
       freeze: freeze,
       captureLimit: 256 * 1_024
     )
+
     guard let report = try JSONSerialization.jsonObject(with: lint) as? [String: Any],
       CanonicalJSON.boolean(report["accepted"]) != nil,
       try EvaluationCanonicalJSON.data(fromJSONObject: report) == lint
-    else { throw EvaluationPagePipelineError.promotionFailed }
+    else {
+      throw EvaluationPagePipelineError.promotionFailed
+    }
+
     try EvaluationDurablePublication.publish(lint, to: paths.lintReport)
     try writeSynthesisTranscript(
       attempts: synthesis.attempts,
@@ -432,6 +504,7 @@ extension EvaluationPageExperiment {
       paths: paths,
       lintReport: report
     )
+
     guard CanonicalJSON.boolean(report["accepted"]) == true else {
       try writeSynthesisRejectionReport(
         synthesis: synthesis.result,
@@ -441,6 +514,7 @@ extension EvaluationPageExperiment {
       )
       return .rejected
     }
+
     _ = try await artifacts.run(
       relativeExecutablePath: "\(EvaluationController.pageRootPath)/artifacts/page-promotion",
       arguments: [
@@ -460,17 +534,19 @@ extension EvaluationPageExperiment {
       freeze: freeze,
       captureLimit: 128 * 1_024
     )
+
     let active = try EvaluationPathSecurity.readRegularSingleLinkFile(
       at: paths.promotedTemporary
     )
-    let receipt = try EvaluationPathSecurity.readRegularSingleLinkFile(
-      at: paths.promotionReceipt
-    )
-    guard
-      let object = try JSONSerialization.jsonObject(with: receipt) as? [String: Any],
-      object["active_lesson_set_sha256"] as? String == SHA256Digest.hex(active)
-    else { throw EvaluationPagePipelineError.promotionFailed }
-    return .promoted
+
+    do {
+      let receipt = try EvaluationPagePromotionReceipt.load(from: paths.promotionReceipt)
+      try receipt.validateFrozenProvenance(against: freeze)
+      _ = try receipt.validatedActiveLessonSetDigest(active)
+      return .promoted(receipt)
+    } catch {
+      throw EvaluationPagePipelineError.promotionFailed
+    }
   }
 
   func aggregate(
@@ -491,6 +567,7 @@ extension EvaluationPageExperiment {
       "--records", records.path,
       "--conformance-receipt", paths.conformance.path,
     ]
+
     if stage == .regression || stage == .sealed {
       arguments += [
         "--development-receipt", paths.developmentGate.path,
@@ -503,6 +580,7 @@ extension EvaluationPageExperiment {
         "--active-lesson-set", paths.promotedTemporary.path,
       ]
     }
+
     if stage == .sealed {
       arguments += [
         "--regression-receipt", paths.regressionGate.path,
@@ -511,6 +589,7 @@ extension EvaluationPageExperiment {
       ]
     }
     arguments += ["--output", output.path]
+
     _ = try await artifacts.run(
       relativeExecutablePath: "\(EvaluationController.pageRootPath)/artifacts/page-aggregate",
       arguments: arguments,
@@ -519,13 +598,17 @@ extension EvaluationPageExperiment {
       captureLimit: 512 * 1_024
     )
     let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: output)
+
     guard
       let receipt = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       receipt["stage"] as? String == stage.rawValue,
       let result = receipt["result"] as? [String: Any],
       let outcome = result["outcome"] as? String,
       let passed = CanonicalJSON.boolean(result["passed"])
-    else { throw EvaluationPagePipelineError.stageGateReceiptInvalid(stage.rawValue) }
+    else {
+      throw EvaluationPagePipelineError.stageGateReceiptInvalid(stage.rawValue)
+    }
+
     return EvaluationPageGateStatus(outcome: outcome, passed: passed)
   }
 
@@ -533,6 +616,7 @@ extension EvaluationPageExperiment {
     guard let record = freeze.manifest.artifact(relativePath: relative) else {
       throw EvaluationPagePipelineError.missingProtectedArtifact(relative)
     }
+
     do {
       return try EvaluationManifestBoundArtifactReader.read(
         relativePath: record.path,
@@ -564,8 +648,10 @@ extension EvaluationPageExperiment {
       page.stopReason != nil
       || outcome == EvaluationPageTerminalClassification.incompleteBatch.rawValue
     let stopReason = page.stopReason ?? (isIncomplete ? "scored_stage_incomplete" : nil)
+
     try journal.finish(incomplete: isIncomplete)
     try EvaluationJSONFile.write(page.summary, to: paths.summary)
+
     let journalDigest = SHA256Digest.hex(
       try EvaluationPathSecurity.readRegularSingleLinkFile(at: journal.url)
     )
@@ -593,8 +679,10 @@ extension EvaluationPageExperiment {
       jointUnsealReceiptSHA256: try digestIfPresent(jointUnsealReceipt),
       synthesisRejectionReportSHA256: try digestIfPresent(synthesisRejectionReport)
     )
+
     let data = try EvaluationCanonicalJSON.data(encoding: result)
     try EvaluationDurablePublication.publish(data, to: paths.result)
+
     return data
   }
 
@@ -621,6 +709,7 @@ extension EvaluationPageExperiment {
     try journal.finish(incomplete: classification.isIncomplete)
     let canary = try summaryIfPresent(paths.canarySummary)
     let page = try summaryIfPresent(paths.summary)
+
     let result = EvaluationPagePipelineResult(
       outcome: classification.rawValue,
       incomplete: classification.isIncomplete,
@@ -641,6 +730,7 @@ extension EvaluationPageExperiment {
       jointUnsealReceiptSHA256: try digestIfPresent(paths.jointUnsealReceipt),
       synthesisRejectionReportSHA256: try digestIfPresent(paths.synthesisRejectionReport)
     )
+
     try EvaluationDurablePublication.publish(
       EvaluationCanonicalJSON.data(encoding: result),
       to: paths.result
@@ -686,6 +776,7 @@ extension EvaluationPageExperiment {
     if let error = error as? EvaluationPagePipelineError {
       return terminalFailure(for: error)
     }
+
     if let error = error as? EvaluationWorkspaceError {
       switch error.failureReason.classification {
       case .carrierFailure:
@@ -696,12 +787,15 @@ extension EvaluationPageExperiment {
         return terminalFailure(.invalidBatch, reason: "workspace_failure_classification")
       }
     }
+
     if error is CancellationError {
       return terminalFailure(.incompleteBatch, reason: "controller_cancelled")
     }
+
     if error is EvaluationPathSecurityError {
       return terminalFailure(.invalidBatch, reason: "evaluation_path_integrity_failure")
     }
+
     return terminalFailure(.invalidBatch, reason: "unclassified_harness_failure")
   }
 
@@ -789,8 +883,14 @@ extension EvaluationPageExperiment {
   ]
 
   private func digestIfPresent(_ url: URL?) throws -> String? {
-    guard let url else { return nil }
-    guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+    guard let url else {
+      return nil
+    }
+
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      return nil
+    }
+
     return SHA256Digest.hex(try EvaluationPathSecurity.readRegularSingleLinkFile(at: url))
   }
 }

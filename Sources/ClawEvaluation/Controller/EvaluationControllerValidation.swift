@@ -15,6 +15,7 @@ extension EvaluationController {
   ) throws {
     let runtime = freeze.runtime
     let receipt = freeze.receipt
+
     guard
       configuration.evaluationRoot == runtime.evaluationRoot,
       configuration.fixedTimestamp == runtime.fixedTimestamp,
@@ -26,6 +27,7 @@ extension EvaluationController {
     else {
       throw EvaluationControllerError.planPathMismatch
     }
+
     let approval = configuration.approval
     guard
       approval.manifestSHA256 == receipt.manifest.sha256,
@@ -41,14 +43,17 @@ extension EvaluationController {
     else {
       throw EvaluationControllerError.approvalBindingMismatch
     }
+
     guard configuration.provenance.freezeCommit == receipt.freezeCommit else {
       throw EvaluationControllerError.provenanceBindingMismatch("freeze_commit")
     }
+
     try compare(
       configuration.provenance.executableSHA256,
       receipt.executable.sha256,
       name: "executable"
     )
+
     let categories: [(String, String)] = [
       ("runtime_sources", configuration.provenance.runtimeSourcesSHA256),
       ("harness_sources", configuration.provenance.harnessSourcesSHA256),
@@ -72,6 +77,7 @@ extension EvaluationController {
     let root = URL(fileURLWithPath: freeze.repositoryRoot, isDirectory: true).standardizedFileURL
     let promptRole =
       configuration.stage == EvaluationPageStage.synthesis.rawValue ? "synthesis" : "task"
+
     guard
       let stage = EvaluationPageStage(rawValue: configuration.stage),
       freeze.runtime.fileReadAllowlists.expectedFileName(for: stage)
@@ -83,8 +89,9 @@ extension EvaluationController {
     else {
       throw EvaluationControllerError.artifactBindingMismatch("task_prompt")
     }
+
     try validateProtectedSource(configuration, root: root, manifest: freeze.manifest)
-    try validateLessonArtifact(configuration, root: root, manifest: freeze.manifest)
+    try validateLessonArtifact(configuration, root: root, freeze: freeze)
   }
 
   static func validateProtectedSource(
@@ -98,6 +105,7 @@ extension EvaluationController {
         .appendingPathComponent("pipeline", isDirectory: true)
         .appendingPathComponent("synthesis-input.json", isDirectory: false)
         .standardizedFileURL
+
       guard
         source == expected,
         EvaluationPathSecurity.isStrictlyContained(
@@ -110,8 +118,10 @@ extension EvaluationController {
       else {
         throw EvaluationControllerError.artifactBindingMismatch("synthesis_input")
       }
+
       return
     }
+
     guard
       let relative = EvaluationPathSecurity.relativePath(of: source, under: root),
       let artifact = manifest.artifact(relativePath: relative),
@@ -125,9 +135,13 @@ extension EvaluationController {
   static func validateLessonArtifact(
     _ configuration: EvaluationAttemptConfiguration,
     root: URL,
-    manifest: EvaluationFreezeManifest
+    freeze: EvaluationFreezeContext
   ) throws {
-    guard configuration.lessonSource != .clean else { return }
+    let manifest = freeze.manifest
+    guard configuration.lessonSource != .clean else {
+      return
+    }
+
     let isDurableCanary =
       configuration.stage == EvaluationPageStage.canary.rawValue
       && configuration.lessonSource == .durableActive
@@ -144,6 +158,7 @@ extension EvaluationController {
       }
       return
     }
+
     let lesson: URL
     switch configuration.lessonSource {
     case .clean:
@@ -160,6 +175,7 @@ extension EvaluationController {
         .appendingPathComponent("\(configuration.lessonSetDigest).json", isDirectory: false)
         .standardizedFileURL
     }
+
     let relative = EvaluationPathSecurity.relativePath(of: lesson, under: root)
     let artifact = relative.flatMap { relativePath in
       manifest.artifact(relativePath: relativePath)
@@ -174,61 +190,56 @@ extension EvaluationController {
       }
       return
     }
+
+    try validatePromotedLesson(configuration, at: lesson, freeze: freeze)
+  }
+
+  static func validatePromotedLesson(
+    _ configuration: EvaluationAttemptConfiguration,
+    at lesson: URL,
+    freeze: EvaluationFreezeContext
+  ) throws {
     let sets = configuration.stateRootURL.appendingPathComponent(
       PageEvaluationContract.lessonSetsDirectoryName,
       isDirectory: true
     )
+
     guard
       EvaluationPathSecurity.isStrictlyContained(lesson, under: sets),
       lesson.lastPathComponent == "\(configuration.lessonSetDigest).json",
       let data = try? EvaluationPathSecurity.readRegularSingleLinkFile(at: lesson),
       SHA256Digest.hex(data) == configuration.lessonSetDigest,
       let promotionPath = configuration.promotionReceiptPath,
-      let promotionDigest = configuration.promotionReceiptSHA256,
-      validatePromotionReceipt(
-        at: URL(fileURLWithPath: promotionPath),
-        digest: promotionDigest,
-        activeLessonData: data,
-        activeLessonDigest: configuration.lessonSetDigest,
-        evaluationRoot: configuration.evaluationRootURL
+      let promotionDigest = configuration.promotionReceiptSHA256
+    else {
+      throw EvaluationControllerError.artifactBindingMismatch("promoted_lesson")
+    }
+
+    let receiptURL = URL(fileURLWithPath: promotionPath)
+    guard
+      EvaluationPathSecurity.isStrictlyContained(
+        receiptURL,
+        under: configuration.evaluationRootURL
       )
     else {
       throw EvaluationControllerError.artifactBindingMismatch("promoted_lesson")
     }
-  }
 
-  static func validatePromotionReceipt(
-    at receiptURL: URL,
-    digest: String,
-    activeLessonData: Data,
-    activeLessonDigest: String,
-    evaluationRoot: URL
-  ) -> Bool {
-    guard
-      EvaluationPathSecurity.isStrictlyContained(receiptURL, under: evaluationRoot),
-      let receiptData = try? EvaluationPathSecurity.readRegularSingleLinkFile(at: receiptURL),
-      SHA256Digest.hex(receiptData) == digest,
-      let receipt = try? JSONSerialization.jsonObject(with: receiptData) as? [String: Any],
-      Set(receipt.keys)
-        == Set([
-          "schema_version", "promotion_id", "development_bundle_sha256",
-          "synthesis_input_sha256", "synthesis_transcript_sha256", "lint_rules_sha256",
-          "lint_report_sha256", "candidate_sha256", "active_lesson_set_sha256",
-          "active_lesson_set_id", "lesson_ids", "canonical_byte_count",
-        ]),
-      CanonicalJSON.integer(receipt["schema_version"]) == 1,
-      receipt["active_lesson_set_sha256"] as? String == activeLessonDigest,
-      CanonicalJSON.integer(receipt["canonical_byte_count"]) == activeLessonData.count,
-      let lesson = try? JSONSerialization.jsonObject(with: activeLessonData) as? [String: Any],
-      receipt["active_lesson_set_id"] as? String == lesson["lesson_set_id"] as? String,
-      let lessons = lesson["lessons"] as? [[String: Any]],
-      receipt["lesson_ids"] as? [String]
-        == lessons.compactMap({ $0["lesson_id"] as? String }),
-      lessons.count == (receipt["lesson_ids"] as? [String])?.count
-    else {
-      return false
+    do {
+      let receipt = try EvaluationPagePromotionReceipt.load(
+        from: receiptURL,
+        expectedSHA256: promotionDigest
+      )
+
+      try receipt.validateFrozenProvenance(against: freeze)
+      let receiptDigest = try receipt.validatedActiveLessonSetDigest(data)
+
+      guard receiptDigest == configuration.lessonSetDigest else {
+        throw EvaluationControllerError.artifactBindingMismatch("promoted_lesson")
+      }
+    } catch {
+      throw EvaluationControllerError.artifactBindingMismatch("promoted_lesson")
     }
-    return true
   }
 
   static func compare(_ observed: String, _ expected: String, name: String) throws {
@@ -325,7 +336,9 @@ extension EvaluationController {
             == SaturatingArithmetic.sum(row.promptTokens, row.completionTokens)
       }),
       accountedTokens >= 0
-    else { return false }
+    else {
+      return false
+    }
     return accountedTokens
       == EvaluationResultAccounting.accountedTokens(
         responsesSends: responsesSends,
@@ -408,7 +421,10 @@ extension EvaluationController {
     _ accumulator: inout Accumulator,
     limits: PageEvaluationContract.StageLimits
   ) {
-    guard accumulator.stopReason == nil else { return }
+    guard accumulator.stopReason == nil else {
+      return
+    }
+
     if accumulator.accountedTokens > limits.accountedTokenThreshold {
       accumulator.stopReason = "stage_accounted_token_threshold_crossed"
     } else if SaturatingArithmetic.sum(
@@ -445,15 +461,19 @@ extension EvaluationController {
       EvaluationAttemptConfiguration.self,
       from: URL(fileURLWithPath: originalPath)
     )
+
     let replacement = try EvaluationJSONFile.decode(
       EvaluationAttemptConfiguration.self,
       from: URL(fileURLWithPath: replacementPath)
     )
+
     try original.validate()
     try replacement.validate()
+
     let expectedResult = original.resultURL.deletingLastPathComponent()
       .appendingPathComponent("\(replacement.attemptID).json", isDirectory: false)
       .standardizedFileURL
+
     guard
       original.replacementOrdinal == 0,
       original.replacementOfAttemptID == nil,
@@ -472,10 +492,12 @@ extension EvaluationController {
       EvaluationAttemptConfiguration.self,
       from: URL(fileURLWithPath: configurationPath)
     )
+
     let url =
       sealed
       ? EvaluationSealedResultStore.envelopeURL(for: configuration.resultURL)
       : configuration.resultURL
+
     return SHA256Digest.hex(try EvaluationPathSecurity.readRegularSingleLinkFile(at: url))
   }
 
@@ -487,12 +509,15 @@ extension EvaluationController {
     _ configuration: EvaluationAttemptConfiguration
   ) throws -> Data {
     let encoded = try EvaluationCanonicalJSON.data(encoding: configuration)
+
     guard var object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
       throw EvaluationControllerError.replacementLineageMismatch
     }
+
     for key in EvaluationAttemptConfiguration.replacementLineageCodingKeys {
       object.removeValue(forKey: key.rawValue)
     }
+
     return try EvaluationCanonicalJSON.data(fromJSONObject: object)
   }
 
@@ -510,11 +535,13 @@ extension EvaluationController {
     let directory = evaluationRoot.appendingPathComponent("invocations", isDirectory: true)
     try EvaluationPathSecurity.rejectSymlinkComponents(in: [evaluationRoot])
     try EvaluationPathSecurity.ensurePrivateDirectory(at: directory)
+
     let invocationID = UUID()
     let configurationSnapshot = try EvaluationWorkerConfigurationSnapshot.load(
       kind: kind,
       path: configurationPath
     )
+
     let core = EvaluationWorkerInvocationCore(
       kind: kind,
       configurationPath: configurationPath,
@@ -522,17 +549,20 @@ extension EvaluationController {
       freeze: freeze,
       budget: budget
     )
+
     let reservation = try journal.reserve(
       invocationID: invocationID,
       invocationCoreSHA256: core.sha256,
       attemptIDs: attemptIDs,
       maximumResponsesSends: maximumResponsesSends
     )
+
     let authorization = EvaluationWorkerAuthorization(
       journalPath: journal.url.path,
       reservation: reservation,
       reservationSHA256: SHA256Digest.hex(try EvaluationCanonicalJSON.data(encoding: reservation))
     )
+
     let invocation = EvaluationWorkerInvocation(
       invocationID: invocationID,
       kind: kind,
@@ -543,6 +573,7 @@ extension EvaluationController {
       authorization: authorization
     )
     try invocation.validate()
+
     let url = directory.appendingPathComponent(
       "\(invocation.invocationID.uuidString.lowercased()).json",
       isDirectory: false
@@ -550,7 +581,9 @@ extension EvaluationController {
     guard FileManager.default.fileExists(atPath: url.path) == false else {
       throw EvaluationControllerError.staleInvocationExists
     }
+
     try EvaluationJSONFile.write(invocation, to: url)
+
     return WrittenInvocation(
       invocationID: invocation.invocationID,
       configurationSHA256: invocation.configurationSHA256,
