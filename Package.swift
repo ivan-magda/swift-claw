@@ -137,6 +137,15 @@ let package = Package(
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
+    .target(
+      name: "ClawEvaluation",
+      dependencies: [
+        "ClawCore", "ClawAgent", "ClawAuth", "ClawHTTP", "ClawSubprocess", "ClawLLM",
+        "ClawSecrets", "ClawTools", "ClawWorkspace",
+        .product(name: "AsyncHTTPClient", package: "async-http-client"),
+        .product(name: "Crypto", package: "swift-crypto"),
+      ]
+    ),
     .executableTarget(
       name: "clawd",
       dependencies: [
@@ -230,6 +239,13 @@ let package = Package(
         "ClawTools", "ClawTestSupport",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
+      ]
+    ),
+    .testTarget(
+      name: "ClawEvaluationTests",
+      dependencies: [
+        "ClawEvaluation", "ClawAgent", "ClawAuth", "ClawCore", "ClawSecrets", "ClawSubprocess",
+        "ClawTestSupport",
       ]
     ),
     .testTarget(
