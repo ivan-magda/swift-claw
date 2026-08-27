@@ -935,7 +935,7 @@ func waitForTurnResult(
     // then
     let (kind, usage) = try requireDegraded(outcome.result)
     #expect(kind == .providerUnavailable)
-    #expect(try #require(usage).isEstimated)
+    #expect(usage == nil)
     #expect(await provider.completeCalls == 1)
     #expect(await provider.streamCalls == 0)
   }

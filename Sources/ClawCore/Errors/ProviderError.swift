@@ -45,7 +45,7 @@ public enum ProviderError: Error, Sendable, Equatable {
   case modelIdentityMismatch
 }
 
-// MARK: - Redaction
+// MARK: - Reissue Safety
 
 extension ProviderError {
   /// Whether the cause itself proves that no inference could have started, making one reissue safe
@@ -59,7 +59,11 @@ extension ProviderError {
       return false
     }
   }
+}
 
+// MARK: - Redaction
+
+extension ProviderError {
   /// Scrubs the quoted diagnostic a message-bearing cause carries, through the supplied redactor.
   /// The text-free cases carry no free text at all — that is exactly what makes them safe to surface
   /// — so they pass through unchanged. One home for the classification so the two wire adapters
@@ -120,16 +124,30 @@ extension ProviderFailureAccounting {
     if let failure = error as? ProviderFailure {
       return failure.accounting
     }
+
     guard let providerError = error as? ProviderError else {
       return .mayHaveStarted(observing: 0)
     }
+
     switch providerError {
-    case .terminal, .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .invalidProviderState, .visionUnsupported, .credentialStateUnavailable:
+    case .connectFailed,
+      .rejected,
+      .terminal,
+      .authenticationRequired,
+      .accessDenied,
+      .quotaLimited,
+      .cleanRejection,
+      .invalidProviderState,
+      .visionUnsupported,
+      .credentialStateUnavailable:
       return .notStarted
-    case .connectFailed, .transportFailure, .retryable, .rejected, .credentialRefreshCompleted,
-      .credentialRefreshExhausted, .partialStreamWithoutCompletedTerminal,
-      .localOutputLimit, .modelIdentityMismatch:
+    case .transportFailure,
+      .retryable,
+      .credentialRefreshCompleted,
+      .credentialRefreshExhausted,
+      .partialStreamWithoutCompletedTerminal,
+      .localOutputLimit,
+      .modelIdentityMismatch:
       return .mayHaveStarted(observing: 0)
     }
   }
