@@ -3,6 +3,8 @@ import ClawSubprocess
 import Foundation
 
 public actor ContainerBackend {
+  package static let cliPath = "/usr/local/bin/container"
+
   public static let maxRawStreamBytes = 1024 * 1024
   public static let maxControlStreamBytes = 1024 * 1024
 
@@ -12,6 +14,7 @@ public actor ContainerBackend {
   public static let pullTimeout: Duration = .seconds(120)
   public static let prepareTimeout: Duration = .seconds(300)
   static let commandTeardownGrace: Duration = .seconds(2)
+
   static let environmentKeysToRemove = [
     "SSH_AUTH_SOCK",
     "CONTAINER_DEBUG",
@@ -85,7 +88,7 @@ public actor ContainerBackend {
       stateRoot.path,
       stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
       FileManager.default.homeDirectoryForCurrentUser.path,
-      "/usr/local/bin/container",
+      Self.cliPath,
     ]
     .filter { !$0.isEmpty }
     .sorted { $0.count > $1.count }

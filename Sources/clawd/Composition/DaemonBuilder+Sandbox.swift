@@ -28,8 +28,6 @@ extension DaemonBuilder {
 // MARK: - Backend Factory
 
 enum SandboxBackendFactory {
-  private static let containerExecutablePath = "/usr/local/bin/container"
-
   static func make(
     config: AppConfig,
     redactionValues: [String]
@@ -51,7 +49,7 @@ enum SandboxBackendFactory {
     return ContainerBackend(
       settings: settings,
       stateRoot: config.stateRoot,
-      commands: SwiftSubprocessRunner(executablePath: Self.containerExecutablePath),
+      commands: SwiftSubprocessRunner(executablePath: ContainerBackend.cliPath),
       sanitizeReason: { text in
         redactor.redact(text)
       }

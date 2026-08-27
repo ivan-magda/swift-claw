@@ -211,7 +211,7 @@ struct ContainerBackendRealAcceptanceTests {
     let backend = try await host.readyBackend()
     defer { Task { await backend.shutdown() } }
     let initImage = try #require(await backend.preparedInitImageForTesting)
-    let runner = SwiftSubprocessRunner(executablePath: "/usr/local/bin/container")
+    let runner = SwiftSubprocessRunner(executablePath: ContainerBackend.cliPath)
     let identity = ExecutionIdentity()
     let orphanScratch = host.root.appendingPathComponent("orphan-scratch", isDirectory: true)
     try FileManager.default.createDirectory(at: orphanScratch, withIntermediateDirectories: true)
@@ -273,7 +273,7 @@ private struct RealSandboxHost {
     return ContainerBackend(
       settings: resolved,
       stateRoot: root,
-      commands: SwiftSubprocessRunner(executablePath: "/usr/local/bin/container"),
+      commands: SwiftSubprocessRunner(executablePath: ContainerBackend.cliPath),
       sanitizeReason: { $0 }
     )
   }
