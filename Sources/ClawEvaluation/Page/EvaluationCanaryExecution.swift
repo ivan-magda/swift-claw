@@ -216,7 +216,7 @@ extension EvaluationController {
       PageEvaluationContract.canaryAttemptsPerProcess
     )
     let freezeInputs = factory.freezeInputs
-    guard try await freezeVerifier.verifyLocal(freezeInputs).hasSameApprovedBinding(as: freeze)
+    guard try await freezeVerifier.verify(freezeInputs).hasSameApprovedBinding(as: freeze)
     else {
       throw EvaluationControllerError.freezeChangedBeforeLaunch
     }

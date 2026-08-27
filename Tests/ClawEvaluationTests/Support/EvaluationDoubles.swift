@@ -6,11 +6,85 @@ import Testing
 @testable import ClawEvaluation
 
 struct StaticEvaluationFreezeVerifier: EvaluationFreezeVerifying {
-  let context: EvaluationFreezeContext
+  let liveContext: EvaluationFreezeContext
+  let localContext: EvaluationFreezeContext
+
+  init(context: EvaluationFreezeContext) {
+    liveContext = context
+    localContext = context
+  }
+
+  init(liveContext: EvaluationFreezeContext, localContext: EvaluationFreezeContext) {
+    self.liveContext = liveContext
+    self.localContext = localContext
+  }
 
   func verify(_ inputs: EvaluationFreezeInputs) async throws -> EvaluationFreezeContext {
-    context
+    liveContext
   }
+
+  func verifyLocal(_ inputs: EvaluationFreezeInputs) async throws -> EvaluationFreezeContext {
+    localContext
+  }
+}
+
+actor SequencedEvaluationFreezeVerifier: EvaluationFreezeVerifying {
+  private let liveContexts: [EvaluationFreezeContext]
+  private let localContext: EvaluationFreezeContext
+  private var liveIndex = 0
+
+  init(liveContexts: [EvaluationFreezeContext], localContext: EvaluationFreezeContext) {
+    self.liveContexts = liveContexts
+    self.localContext = localContext
+  }
+
+  func verify(_ inputs: EvaluationFreezeInputs) async throws -> EvaluationFreezeContext {
+    guard liveContexts.indices.contains(liveIndex) else {
+      throw EvaluationHarnessTestError.unexpectedFreezeCall
+    }
+    defer { liveIndex += 1 }
+    return liveContexts[liveIndex]
+  }
+
+  func verifyLocal(_ inputs: EvaluationFreezeInputs) async throws -> EvaluationFreezeContext {
+    localContext
+  }
+}
+
+func evaluationContextChangingApprovalBody(
+  _ context: EvaluationFreezeContext,
+  to bodySHA256: String = String(repeating: "f", count: 64)
+) -> EvaluationFreezeContext {
+  let comment = context.receipt.comment
+  let changedComment = EvaluationFreezeReceipt.Comment(
+    id: comment.id,
+    nodeID: comment.nodeID,
+    author: comment.author,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt,
+    bodySHA256: bodySHA256
+  )
+  let receipt = context.receipt
+  let changedReceipt = EvaluationFreezeReceipt(
+    schemaVersion: receipt.schemaVersion,
+    status: receipt.status,
+    verifiedAt: receipt.verifiedAt,
+    decision: receipt.decision,
+    experiment: receipt.experiment,
+    manifest: receipt.manifest,
+    verifier: receipt.verifier,
+    verifierModules: receipt.verifierModules,
+    freezeCommit: receipt.freezeCommit,
+    comment: changedComment,
+    executable: receipt.executable
+  )
+  return EvaluationFreezeContext(
+    repositoryRoot: context.repositoryRoot,
+    manifest: context.manifest,
+    receipt: changedReceipt,
+    runtime: context.runtime,
+    runOrderJSON: context.runOrderJSON
+  )
 }
 
 struct ScriptedEvaluationWorkerObservation: Sendable, Equatable {

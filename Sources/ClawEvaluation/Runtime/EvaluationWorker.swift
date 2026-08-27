@@ -12,6 +12,26 @@ protocol EvaluationWorkerResource: Sendable {
   func shutdownTransport() async throws
 }
 
+struct EvaluationLiveFreezeAdmission: Sendable {
+  let verifier: any EvaluationFreezeVerifying
+  let inputs: EvaluationFreezeInputs
+  let initial: EvaluationFreezeContext
+
+  func evaluate() async -> ProviderRoundTripAdmission {
+    do {
+      let refreshed = try await verifier.verify(inputs)
+
+      guard refreshed.hasSameApprovedBinding(as: initial) else {
+        return .deny(cap: "evaluation-freeze-integrity")
+      }
+
+      return .allow
+    } catch {
+      return .deny(cap: "evaluation-freeze-integrity")
+    }
+  }
+}
+
 enum EvaluationWorkerLifecycle {
   package static func withProductionLock<Resource: EvaluationWorkerResource, Value: Sendable>(
     stateRoot: URL,
@@ -232,6 +252,12 @@ package struct EvaluationWorker: Sendable {
     }
     let configuration = try snapshot.decodeAttempt()
     let freeze = try await freezeVerifier.verifyLocal(invocation.freeze)
+    let liveAdmission = EvaluationLiveFreezeAdmission(
+      verifier: freezeVerifier,
+      inputs: invocation.freeze,
+      initial: freeze
+    )
+
     try EvaluationControllerJournal.authorize(
       invocation.authorization,
       invocationID: invocation.invocationID,
@@ -287,11 +313,7 @@ package struct EvaluationWorker: Sendable {
             sendBudget: invocation.budget,
             lockAcquisitionID: lockAcquisitionID,
             integrityAdmission: {
-              await Self.liveAdmission(
-                verifier: freezeVerifier,
-                inputs: invocation.freeze,
-                initial: freeze
-              )
+              await liveAdmission.evaluate()
             }
           )
         }
@@ -344,6 +366,12 @@ package struct EvaluationWorker: Sendable {
     }
     let attempts = try snapshot.decodeCanaryAttempts()
     let freeze = try await freezeVerifier.verifyLocal(invocation.freeze)
+    let liveAdmission = EvaluationLiveFreezeAdmission(
+      verifier: freezeVerifier,
+      inputs: invocation.freeze,
+      initial: freeze
+    )
+
     try EvaluationControllerJournal.authorize(
       invocation.authorization,
       invocationID: invocation.invocationID,
@@ -410,11 +438,7 @@ package struct EvaluationWorker: Sendable {
                 sendBudget: currentSendBudget,
                 lockAcquisitionID: lockAcquisitionID,
                 integrityAdmission: {
-                  await Self.liveAdmission(
-                    verifier: freezeVerifier,
-                    inputs: invocation.freeze,
-                    initial: freeze
-                  )
+                  await liveAdmission.evaluate()
                 }
               )
             }
@@ -425,22 +449,6 @@ package struct EvaluationWorker: Sendable {
         sendBudget = sendBudget.advanced(by: result)
       }
       return results
-    }
-  }
-
-  private static func liveAdmission(
-    verifier: any EvaluationFreezeVerifying,
-    inputs: EvaluationFreezeInputs,
-    initial: EvaluationFreezeContext
-  ) async -> ProviderRoundTripAdmission {
-    do {
-      let refreshed = try await verifier.verifyLocal(inputs)
-      guard refreshed.hasSameApprovedBinding(as: initial) else {
-        return .deny(cap: "evaluation-freeze-integrity")
-      }
-      return .allow
-    } catch {
-      return .deny(cap: "evaluation-freeze-integrity")
     }
   }
 

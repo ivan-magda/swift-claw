@@ -158,7 +158,16 @@ import Testing
       journalName: "live-integrity-progress.jsonl"
     )
     let provider = SequenceProvider(scriptedTwoRoundResponses())
-    let admission = SequencedIntegrityAdmission()
+    let changedApproval = evaluationContextChangingApprovalBody(frozen.context)
+    let freezeVerifier = SequencedEvaluationFreezeVerifier(
+      liveContexts: [frozen.context, changedApproval],
+      localContext: frozen.context
+    )
+    let admission = EvaluationLiveFreezeAdmission(
+      verifier: freezeVerifier,
+      inputs: frozen.inputs,
+      initial: frozen.context
+    )
     let roster = ProviderRoster(
       primary: LLMRouteBinding(
         provider: provider,
@@ -196,7 +205,7 @@ import Testing
     ).run(
       configuration: configured.configuration,
       sendBudget: budget,
-      integrityAdmission: { await admission.next() }
+      integrityAdmission: { await admission.evaluate() }
     )
     let progress = try #require(
       try EvaluationAttemptProgressRecorder.loadIfPresent(
@@ -308,14 +317,5 @@ import Testing
     #expect(noStartProgress.attempts.first?.provenNotStartedResponsesSends == 1)
     #expect(noStartProgress.attempts.first?.usage.isEmpty == true)
     #expect(noStartProgress.attempts.first?.accountedTokens == 0)
-  }
-}
-
-private actor SequencedIntegrityAdmission {
-  private var calls = 0
-
-  func next() -> ProviderRoundTripAdmission {
-    calls += 1
-    return calls == 1 ? .allow : .deny(cap: "evaluation-freeze-integrity")
   }
 }

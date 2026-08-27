@@ -242,8 +242,28 @@ actor EvaluationHTTPRecorder: HTTPExecuting, HTTPStreaming {
     if let array = value as? [Any] {
       return array.map(normalize)
     }
-    if let object = value as? [String: Any] {
-      return object.mapValues(normalize)
+    if var object = value as? [String: Any] {
+      object = object.mapValues(normalize)
+      switch object["type"] as? String {
+      case "function_call", "function_call_output":
+        if object["call_id"] != nil {
+          object["call_id"] = "<provider-call-id>"
+        }
+      case "reasoning":
+        if object["encrypted_content"] != nil {
+          object["encrypted_content"] = "<provider-encrypted-content>"
+        }
+        if object["summary"] != nil {
+          object["summary"] = "<provider-reasoning-summary>"
+        }
+      case "message" where object["role"] as? String == "assistant":
+        if object["content"] != nil {
+          object["content"] = "<provider-assistant-content>"
+        }
+      default:
+        break
+      }
+      return object
     }
     return value
   }

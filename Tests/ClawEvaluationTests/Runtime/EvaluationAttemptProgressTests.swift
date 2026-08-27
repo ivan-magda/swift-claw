@@ -117,7 +117,8 @@ import Testing
       _ object: inout [String: Any],
       _ mutation: (inout [String: Any]) throws -> Void
     ) throws {
-      var attempts = try #require(object["attempts"] as? [[String: Any]])
+      let decodedAttempts = object["attempts"] as? [[String: Any]]
+      var attempts = try #require(decodedAttempts)
       try mutation(&attempts[0])
       object["attempts"] = attempts
     }
@@ -300,7 +301,7 @@ import Testing
     }
   }
 
-  @Test func structuralHashNormalizesOnlyProtocolDeclaredEphemeralValues() throws {
+  @Test func structuralHashIgnoresProviderReplayValuesButPreservesToolBehavior() throws {
     // given
     let firstFence =
       #"<claw-untrusted nonce="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" label="file_read">x</claw-untrusted nonce="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">"#
@@ -327,6 +328,7 @@ import Testing
     func secondRequest(
       callID: String,
       reasoning: String,
+      reasoningSummary: String = "provider-generated summary",
       path: String,
       fence: String,
       assistantText: String? = nil
@@ -348,7 +350,7 @@ import Testing
         "input": assistantReplay + [
           [
             "encrypted_content": reasoning,
-            "summary": ["provider-generated summary"],
+            "summary": [reasoningSummary],
             "type": "reasoning",
           ],
           [
@@ -401,6 +403,14 @@ import Testing
       fence: secondFence,
       assistantText: "Different visible commentary."
     )
+    let summaryDrift = try secondRequest(
+      callID: "call-provider-a",
+      reasoning: "encrypted-provider-a",
+      reasoningSummary: "Different provider-generated summary",
+      path: "input.json",
+      fence: secondFence,
+      assistantText: "I will read the approved input."
+    )
     let pathDrift = try secondRequest(
       callID: "call-provider-a",
       reasoning: "encrypted-provider-a",
@@ -422,9 +432,10 @@ import Testing
         != EvaluationHTTPRecorder.normalizedStructureSHA256(ordinaryB)
     )
     #expect(replayHash == replayBHash)
-    #expect(replayBHash != EvaluationHTTPRecorder.normalizedStructureSHA256(callIDDrift))
-    #expect(replayBHash != EvaluationHTTPRecorder.normalizedStructureSHA256(reasoningDrift))
-    #expect(replayBHash != EvaluationHTTPRecorder.normalizedStructureSHA256(assistantDrift))
+    #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(callIDDrift))
+    #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(reasoningDrift))
+    #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(assistantDrift))
+    #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(summaryDrift))
     #expect(replayBHash != EvaluationHTTPRecorder.normalizedStructureSHA256(pathDrift))
   }
 }

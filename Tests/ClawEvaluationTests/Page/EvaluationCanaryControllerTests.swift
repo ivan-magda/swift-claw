@@ -10,6 +10,50 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EvaluationCanaryControllerTests {
+  @Test func changedLiveApprovalStopsBeforeCanaryWorkerLaunch() async throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try makeCanaryControllerFixture(root: root)
+    let changedApproval = evaluationContextChangingApprovalBody(fixture.context)
+    let verifier = StaticEvaluationFreezeVerifier(
+      liveContext: changedApproval,
+      localContext: fixture.context
+    )
+    let launcher = ScriptedEvaluationWorkerLauncher { _, _, _ in
+      EvaluationWorkerLaunchResult(termination: .rejected, processID: nil)
+    }
+    let journal = try EvaluationControllerJournal.startNew(
+      evaluationRoot: fixture.configurations[0].evaluationRootURL,
+      manifestSHA256: fixture.configurations[0].approval.manifestSHA256,
+      freezeCommit: fixture.configurations[0].provenance.freezeCommit,
+      fixedTimestamp: fixture.configurations[0].fixedTimestamp,
+      journalName: "canary-changed-approval.jsonl"
+    )
+    var accumulator = EvaluationController.Accumulator()
+
+    // when
+    await #expect(throws: EvaluationControllerError.freezeChangedBeforeLaunch) {
+      _ = try await EvaluationController(
+        launcher: launcher,
+        freezeVerifier: verifier
+      ).executeCanary(
+        EvaluationCanaryExecutionRequest(
+          order: fixture.order,
+          factory: fixture.factory,
+          executablePath: fixture.executable.path,
+          journal: journal,
+          configurationPaths: [fixture.paths.canaryProcessA, fixture.paths.canaryProcessB],
+          evidenceURL: fixture.paths.canarySummary
+        ),
+        accumulator: &accumulator
+      )
+    }
+
+    // then — the stale local receipt cannot authorize either canary process after the live change.
+    #expect(await launcher.observations.isEmpty)
+  }
+
   @Test func controllerLaunchesTwoCanaryProcessesAndStartsProcessBWithAnEmptyWorkspace()
     async throws
   {

@@ -509,7 +509,7 @@ extension EvaluationController {
     )
     accumulator.attempts += 1
     guard
-      try await freezeVerifier.verifyLocal(context.freezeInputs).hasSameApprovedBinding(
+      try await freezeVerifier.verify(context.freezeInputs).hasSameApprovedBinding(
         as: context.freeze
       )
     else {
