@@ -1,3 +1,4 @@
+import ClawAgent
 import ClawCore
 import Foundation
 
@@ -30,6 +31,23 @@ public actor SequenceProvider: LLMProvider {
       throw exhaustionError
     }
     return responses.removeFirst()
+  }
+
+  nonisolated public func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { _ in
+      do {
+        return .completed(try await self.complete(request: request))
+      } catch let cause as ProviderError {
+        return .failed(ProviderFailure(cause: cause, accounting: .notStarted))
+      } catch {
+        return .failed(
+          ProviderFailure(
+            cause: .terminal(status: nil, message: "scripted provider failed"),
+            accounting: .notStarted
+          )
+        )
+      }
+    }
   }
 }
 
@@ -198,34 +216,5 @@ public struct EmptyWorkspace: WorkspaceReading {
   }
 }
 
-/// A memory store with nothing stored: `fetchRanked` always returns empty, other members are
-/// unused by history-rendering tests.
-public struct EmptyMemoryStore: MemoryStore {
-  public init() {}
-
-  public func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
-    throw StoreError.unexpected("not used")
-  }
-
-  public func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
-  public func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
-  public func delete(id: Int64) throws(StoreError) -> Bool { false }
-
-  public func fetchRanked(
-    excludeSensitive: Bool,
-    limit: Int
-  ) throws(StoreError) -> [MemoryItem] { [] }
-}
-
-/// A retriever with no recall corpus: always returns no hits.
-public struct EmptyRetriever: Retriever {
-  public init() {}
-
-  public func searchRelevantMessages(
-    query: String,
-    currentSessionId: Int64,
-    windowStartMessageId: Int64?,
-    excludedMessageIds: [Int64],
-    limit: Int
-  ) throws(StoreError) -> [RecallHit] { [] }
-}
+package typealias EmptyMemoryStore = ClawAgent.EmptyMemoryStore
+package typealias EmptyRetriever = ClawAgent.EmptyRetriever
