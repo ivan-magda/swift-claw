@@ -719,7 +719,8 @@ def _diagnostics(clean: dict[str, Any], lesson: dict[str, Any]) -> dict[str, Any
     sign_values: list[float] = []
     for swaps in product((False, True), repeat=4):
         clean_fp = clean_total = lesson_fp = lesson_total = 0
-        for swap, family in zip(swaps, families, strict=True):
+        for family_index, family in enumerate(families):
+            swap = swaps[family_index]
             clean_values = clean["family_noise"][family]
             lesson_values = lesson["family_noise"][family]
             left, right = (lesson_values, clean_values) if swap else (clean_values, lesson_values)

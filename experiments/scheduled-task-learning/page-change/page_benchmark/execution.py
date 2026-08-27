@@ -173,7 +173,8 @@ def validate_record_order(
     expected = stage_attempts(run_order, stage)
     if len(records) != len(expected):
         raise ValueError(f"{stage} records differ from the frozen attempt count")
-    for index, (record, attempt) in enumerate(zip(records, expected, strict=True)):
+    for index, record in enumerate(records):
+        attempt = expected[index]
         expected_fields = {
             "stage": (
                 "sealed-pre-restart"
