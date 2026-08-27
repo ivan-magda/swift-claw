@@ -883,7 +883,9 @@ private struct Harness: Sendable {
 
   var credentialRejections: [GenerationRecordingCredentialSource.Rejection] {
     get async {
-      guard let recordingCredentials else { return [] }
+      guard let recordingCredentials else {
+        return []
+      }
       return await recordingCredentials.rejections
     }
   }

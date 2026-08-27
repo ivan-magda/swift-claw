@@ -107,7 +107,9 @@ struct EvaluationWorkerFailureEvidence: Codable, Sendable, Equatable {
       attemptID == configuration.attemptID,
       manifestSHA256 == configuration.approval.manifestSHA256,
       classification == reason.classification
-    else { throw EvaluationPagePipelineError.invalidBatch("worker_failure_evidence_identity") }
+    else {
+      throw EvaluationPagePipelineError.invalidBatch("worker_failure_evidence_identity")
+    }
   }
 
   static func url(for resultURL: URL) -> URL {
@@ -130,7 +132,9 @@ struct EvaluationWorkerFailureEvidence: Codable, Sendable, Equatable {
     invocation: EvaluationWorkerInvocation,
     configuration: EvaluationAttemptConfiguration
   ) throws {
-    guard case .policyMismatch = error else { return }
+    guard case .policyMismatch = error else {
+      return
+    }
     try EvaluationJSONFile.write(
       Self(reason: .policyMismatch, invocation: invocation, configuration: configuration),
       to: url(for: configuration.resultURL)
@@ -143,7 +147,9 @@ struct EvaluationWorkerFailureEvidence: Codable, Sendable, Equatable {
     configuration: EvaluationAttemptConfiguration
   ) throws -> Self? {
     let url = url(for: configuration.resultURL)
-    guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      return nil
+    }
     let evidence = try EvaluationJSONFile.decode(Self.self, from: url)
     try evidence.validate(
       invocationID: invocationID,
@@ -173,7 +179,9 @@ struct EvaluationWorkerFailureEvidence: Codable, Sendable, Equatable {
     guard evidence.count <= 1 else {
       throw EvaluationPagePipelineError.invalidBatch("worker_failure_evidence_ambiguous")
     }
-    guard let terminal = evidence.first else { return nil }
+    guard let terminal = evidence.first else {
+      return nil
+    }
     switch terminal.classification {
     case .carrierFailure:
       return .carrierFailure(terminal.reason.rawValue)

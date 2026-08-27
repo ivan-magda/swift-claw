@@ -16,7 +16,7 @@ concurrency:
 jobs:
   swift-format:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     container:
       image: swift:6.3.2
     steps:
@@ -25,6 +25,12 @@ jobs:
           persist-credentials: false
       - name: Run swift-format
         run: swift format lint --recursive --strict --parallel .
+      - name: Enforce multiline guard bodies
+        run: >-
+          swift run --package-path BuildTools swiftformat
+          --config "$GITHUB_WORKSPACE/BuildTools/guard-bodies.swiftformat" --lint
+          "$GITHUB_WORKSPACE/Sources" "$GITHUB_WORKSPACE/Tests" "$GITHUB_WORKSPACE/Package.swift"
+          "$GITHUB_WORKSPACE/BuildTools/Package.swift" "$GITHUB_WORKSPACE/BuildTools/Sources"
 
   swiftlint:
     runs-on: ubuntu-latest

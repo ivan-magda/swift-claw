@@ -54,7 +54,9 @@ struct EvaluationCanaryEvidence: Codable, Sendable, Equatable {
       results[2].workspace.workspaceWasEmptyAtStart,
       results[2].workspace.inputWasRegenerated,
       results[3].workspace.inputWasRegenerated
-    else { throw EvaluationPagePipelineError.canaryEvidenceMissing }
+    else {
+      throw EvaluationPagePipelineError.canaryEvidenceMissing
+    }
     schemaVersion = PageEvaluationContract.schemaVersion
     processAUUID = results[0].processUUID
     processBUUID = results[2].processUUID
@@ -215,7 +217,9 @@ extension EvaluationController {
     )
     let freezeInputs = factory.freezeInputs
     guard try await freezeVerifier.verifyLocal(freezeInputs).hasSameApprovedBinding(as: freeze)
-    else { throw EvaluationControllerError.freezeChangedBeforeLaunch }
+    else {
+      throw EvaluationControllerError.freezeChangedBeforeLaunch
+    }
     let invocation = try Self.writeInvocation(
       kind: .canaryProcess,
       configurationPath: batchURL.path,
@@ -390,7 +394,9 @@ extension EvaluationController {
       FileManager.default.fileExists(atPath: $0.resultURL.path)
     }
     if present.allSatisfy({ $0 == false }) { return .none }
-    guard present.allSatisfy({ $0 }) else { return .partial }
+    guard present.allSatisfy({ $0 }) else {
+      return .partial
+    }
     return try .complete(
       configurations.map { configuration in
         let result: EvaluationAttemptResult

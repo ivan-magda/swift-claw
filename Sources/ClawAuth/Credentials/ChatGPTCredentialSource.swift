@@ -406,7 +406,9 @@ private extension ChatGPTCredentialSource {
   }
 
   func append(_ value: String, to values: inout [String]) {
-    guard values.contains(value) == false else { return }
+    guard values.contains(value) == false else {
+      return
+    }
     values.append(value)
   }
 }
@@ -471,7 +473,9 @@ private extension ChatGPTCredentialSource {
   }
 
   nonisolated static func isWorthRetrying(_ error: any Error) -> Bool {
-    guard case .transport = error as? ChatGPTOAuthFailure else { return false }
+    guard case .transport = error as? ChatGPTOAuthFailure else {
+      return false
+    }
     return true
   }
 

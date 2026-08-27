@@ -464,7 +464,9 @@ import Testing
 
     // then — only the pre-done delta is published, and the final content never grows past it
     let deltas = drained.events.compactMap { event -> String? in
-      guard case .delta(let text) = event else { return nil }
+      guard case .delta(let text) = event else {
+        return nil
+      }
       return text
     }
     #expect(deltas == ["Hello"])

@@ -594,7 +594,9 @@ private extension EvaluationAttemptConfiguration {
   }
 
   static func isOpaquePageTaskID(_ value: String) -> Bool {
-    guard value.count == 17, value.hasPrefix("page-") else { return false }
+    guard value.count == 17, value.hasPrefix("page-") else {
+      return false
+    }
     return value.dropFirst(5).allSatisfy(isLowerHex)
   }
 

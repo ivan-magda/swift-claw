@@ -220,14 +220,18 @@ actor RecordingTransport: TelegramTransport {
   }
 
   private func wait(_ event: Event, current: Int, threshold: Int) async {
-    guard current < threshold else { return }
+    guard current < threshold else {
+      return
+    }
     await withCheckedContinuation { continuation in
       waiters[event, default: []].append((threshold, continuation))
     }
   }
 
   private func resumeWaiters(_ event: Event, reached current: Int) {
-    guard let pending = waiters[event] else { return }
+    guard let pending = waiters[event] else {
+      return
+    }
     waiters[event] = pending.filter { $0.threshold > current }
     for waiter in pending where waiter.threshold <= current {
       waiter.continuation.resume()

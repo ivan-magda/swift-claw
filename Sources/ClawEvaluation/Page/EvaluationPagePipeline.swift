@@ -163,7 +163,9 @@ enum EvaluationProtectedClosure {
       freeze.manifest.protectedArtifacts.isEmpty == false,
       Set(freeze.manifest.protectedArtifacts.map(\.path)).count
         == freeze.manifest.protectedArtifacts.count
-    else { throw EvaluationPagePipelineError.invalidManifestContract }
+    else {
+      throw EvaluationPagePipelineError.invalidManifestContract
+    }
     for artifact in freeze.manifest.protectedArtifacts.sorted(by: { $0.path < $1.path }) {
       do {
         _ = try EvaluationManifestBoundArtifactReader.read(

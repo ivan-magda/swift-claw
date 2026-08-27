@@ -122,12 +122,16 @@ func authorizing(_ source: ChatGPTCredentialSource<ScriptedClock>) -> Caller {
 
 extension ChatGPTCredentialError {
   var throttleDelay: Duration? {
-    guard case .throttled(let retryAfter) = self else { return nil }
+    guard case .throttled(let retryAfter) = self else {
+      return nil
+    }
     return retryAfter
   }
 
   var unavailableDelay: Duration? {
-    guard case .temporarilyUnavailable(let retryAfter, _) = self else { return nil }
+    guard case .temporarilyUnavailable(let retryAfter, _) = self else {
+      return nil
+    }
     return retryAfter
   }
 }

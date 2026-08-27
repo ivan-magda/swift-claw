@@ -31,8 +31,9 @@ swift-claw — a persistent, always-on, **single-owner personal AI assistant** c
 
 ## Code style
 
-- **Lint gate = `scripts/lint.sh`** — swift-format owns layout (`.swift-format`: 2-space, width 100, one-arg-per-line), SwiftLint owns correctness/idiom (`.swiftlint.yml`). Run `scripts/lint.sh --fix` to auto-apply both, then `scripts/lint.sh` to check; both must pass before committing (CI enforces it).
+- **Lint gate = `scripts/lint.sh`** — Apple swift-format owns general layout (`.swift-format`: 2-space, width 100, one-arg-per-line), the targeted SwiftFormat pass owns layout rules Apple cannot express (`BuildTools/guard-bodies.swiftformat`), and SwiftLint owns correctness/idiom (`.swiftlint.yml`). Run `scripts/lint.sh --fix` to auto-apply all fixes, then `scripts/lint.sh` to check; both must pass before committing (CI enforces it).
 - **Wrapped conditions:** `swiftlint --fix` and `swift format` disagree on the `{` of a multi-line `if let X, cond {` (the gate then fails) — use `guard … else {` (brace attaches to `else`) or keep the condition single-line; if the single line would exceed width 100 (another case `--fix` never converges on), hoist a subexpression into a named local first.
+- **Guard bodies are always multiline.** Never write `guard condition else { return }`; the targeted SwiftFormat pass expands it and the lint gate rejects it.
 - **Tests follow Given-When-Then** — separate the body with `// given` / `// when` / `// then` sections (AAA equivalent).
 - **Variable names ≥ 3 chars** — no single/double-letter locals (`incoming`, not `m`).
 - **Comments: signal, not noise** — `///` states contract the signature can't express; `//` states a non-obvious *why*; never restate the code. Change history (task/increment/review tags) belongs to git, not comments.

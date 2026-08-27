@@ -29,7 +29,9 @@ private final class BurstingHandler: ChannelInboundHandler, @unchecked Sendable 
   }
 
   func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-    guard case .end = unwrapInboundIn(data) else { return }
+    guard case .end = unwrapInboundIn(data) else {
+      return
+    }
 
     let headers = HTTPHeaders([("content-type", "text/event-stream")])
     context.write(

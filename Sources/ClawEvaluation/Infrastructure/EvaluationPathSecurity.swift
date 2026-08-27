@@ -25,7 +25,9 @@ enum EvaluationPathSecurity {
   static func relativePath(of candidate: URL, under root: URL) -> String? {
     let candidate = candidate.standardizedFileURL
     let root = root.standardizedFileURL
-    guard isStrictlyContained(candidate, under: root) else { return nil }
+    guard isStrictlyContained(candidate, under: root) else {
+      return nil
+    }
     return candidate.pathComponents.dropFirst(root.pathComponents.count).joined(separator: "/")
   }
 
@@ -285,7 +287,9 @@ enum EvaluationManifestBoundArtifactReader {
       relativePath.isEmpty == false,
       relativePath.hasPrefix("/") == false,
       components.allSatisfy({ $0.isEmpty == false && $0 != "." && $0 != ".." })
-    else { throw EvaluationManifestBoundArtifactError.invalidRelativePath(relativePath) }
+    else {
+      throw EvaluationManifestBoundArtifactError.invalidRelativePath(relativePath)
+    }
 
     let root = repositoryRoot.standardizedFileURL
     let raw = root.appendingPathComponent(relativePath)

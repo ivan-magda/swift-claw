@@ -177,14 +177,18 @@ extension EvaluationController {
         accumulator: &accumulator
       )
       accepted.append(contentsOf: originals.accepted)
-      guard originals.stopped == false else { break }
+      guard originals.stopped == false else {
+        break
+      }
       let replacements = try await executeReplacementAttempts(
         originals.replacements,
         context: context,
         accumulator: &accumulator
       )
       accepted.append(contentsOf: replacements.accepted)
-      guard replacements.stopped == false else { break }
+      guard replacements.stopped == false else {
+        break
+      }
     }
     return accepted
   }
@@ -636,7 +640,9 @@ extension EvaluationController {
   ) throws {
     guard
       accumulator.completedAttemptIDs.contains(launched.configuration.attemptID) == false
-    else { return }
+    else {
+      return
+    }
     try accountProgress(launched, context: context, accumulator: &accumulator)
   }
 
@@ -686,7 +692,9 @@ extension EvaluationController {
         progress: launched.progress
       )
     }
-    guard let admitted else { return nil }
+    guard let admitted else {
+      return nil
+    }
     accumulator.completedAttemptIDs.append(admitted.attemptID)
     accumulator.responsesSends = SaturatingArithmetic.sum(
       accumulator.responsesSends,
@@ -770,7 +778,9 @@ extension EvaluationController {
     configuration: EvaluationAttemptConfiguration,
     progress: EvaluationAttemptProgressRecord?
   ) throws -> AdmittedAttempt? {
-    guard FileManager.default.fileExists(atPath: configuration.resultURL.path) else { return nil }
+    guard FileManager.default.fileExists(atPath: configuration.resultURL.path) else {
+      return nil
+    }
     let result: EvaluationAttemptResult
     do {
       result = try EvaluationJSONFile.decode(

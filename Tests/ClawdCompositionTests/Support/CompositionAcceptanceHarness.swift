@@ -358,7 +358,9 @@ struct CompositionAcceptanceHarness {
     sandbox: DaemonBuilder.SandboxStack,
     capture: BootCapture
   ) async -> [String: String] {
-    guard let cooldown = try? capture.requireCooldown() else { return [:] }
+    guard let cooldown = try? capture.requireCooldown() else {
+      return [:]
+    }
     return await rowValues(
       builder.makeDoctorReporter(sandbox: sandbox, cooldown: cooldown, mcpOutcomes: [])
     )
@@ -400,21 +402,27 @@ final class BootCapture: @unchecked Sendable {
   func requireBuilder() throws -> DaemonBuilder {
     lock.lock()
     defer { lock.unlock() }
-    guard let builder else { throw BootNeverAssembled() }
+    guard let builder else {
+      throw BootNeverAssembled()
+    }
     return builder
   }
 
   func requireRosterStack() throws -> RosterStack {
     lock.lock()
     defer { lock.unlock() }
-    guard let rosterStack else { throw BootNeverAssembled() }
+    guard let rosterStack else {
+      throw BootNeverAssembled()
+    }
     return rosterStack
   }
 
   func requireCooldown() throws -> PrimaryRouteCooldown<ContinuousClock> {
     lock.lock()
     defer { lock.unlock() }
-    guard let cooldown else { throw BootNeverAssembled() }
+    guard let cooldown else {
+      throw BootNeverAssembled()
+    }
     return cooldown
   }
 }

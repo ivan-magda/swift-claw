@@ -248,7 +248,9 @@ package struct EvaluationWorker: Sendable {
       FileManager.default.fileExists(
         atPath: EvaluationWorkerFailureEvidence.url(for: configuration.resultURL).path
       ) == false
-    else { throw EvaluationWorkerError.staleFailureEvidence }
+    else {
+      throw EvaluationWorkerError.staleFailureEvidence
+    }
     try EvaluationPathSecurity.rejectSymlinkComponents(
       in: [
         configuration.evaluationRootURL,
@@ -296,14 +298,18 @@ package struct EvaluationWorker: Sendable {
       )
     }
     if configuration.requiresJointUnseal {
-      guard let sealedOutputKey else { throw EvaluationWorkerError.sealedOutputKeyRequired }
+      guard let sealedOutputKey else {
+        throw EvaluationWorkerError.sealedOutputKeyRequired
+      }
       try EvaluationSealedResultStore.seal(
         result,
         keyData: sealedOutputKey,
         resultURL: configuration.resultURL
       )
     } else {
-      guard sealedOutputKey == nil else { throw EvaluationWorkerError.unexpectedSealedOutputKey }
+      guard sealedOutputKey == nil else {
+        throw EvaluationWorkerError.unexpectedSealedOutputKey
+      }
       try EvaluationJSONFile.write(result, to: configuration.resultURL)
     }
     return result
@@ -354,7 +360,9 @@ package struct EvaluationWorker: Sendable {
         FileManager.default.fileExists(
           atPath: EvaluationWorkerFailureEvidence.url(for: attempt.resultURL).path
         ) == false
-      else { throw EvaluationWorkerError.staleFailureEvidence }
+      else {
+        throw EvaluationWorkerError.staleFailureEvidence
+      }
     }
     try EvaluationController.authorizeCanaryProcess(attempts, against: freeze)
     guard

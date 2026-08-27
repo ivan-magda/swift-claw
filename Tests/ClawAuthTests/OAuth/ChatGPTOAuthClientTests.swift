@@ -75,17 +75,23 @@ enum OAuthFixture {
 /// written into an equality expectation.
 extension ChatGPTOAuthFailure {
   var isMalformed: Bool {
-    guard case .malformedResponse = self else { return false }
+    guard case .malformedResponse = self else {
+      return false
+    }
     return true
   }
 
   var isGrantRejected: Bool {
-    guard case .grantRejected = self else { return false }
+    guard case .grantRejected = self else {
+      return false
+    }
     return true
   }
 
   var isTransport: Bool {
-    guard case .transport = self else { return false }
+    guard case .transport = self else {
+      return false
+    }
     return true
   }
 

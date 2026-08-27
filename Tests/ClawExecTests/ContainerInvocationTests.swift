@@ -263,7 +263,9 @@ import Testing
 
 extension Array where Element: Equatable {
   fileprivate func containsSubsequence(_ subsequence: [Element]) -> Bool {
-    guard !subsequence.isEmpty, subsequence.count <= count else { return false }
+    guard !subsequence.isEmpty, subsequence.count <= count else {
+      return false
+    }
     return indices.dropLast(subsequence.count - 1).contains { index in
       Array(self[index..<(index + subsequence.count)]) == subsequence
     }

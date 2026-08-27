@@ -141,7 +141,9 @@ actor StreamingAcceptanceProvider: LLMProvider {
   }
 
   func waitForStreamCalls(_ count: Int) async {
-    guard streamCalls < count else { return }
+    guard streamCalls < count else {
+      return
+    }
     await withCheckedContinuation { continuation in
       requestWaiters.append((threshold: count, continuation: continuation))
     }
@@ -184,7 +186,9 @@ actor StreamingAcceptanceProvider: LLMProvider {
   }
 
   private func waitForPostDeltaRelease() async {
-    guard !postDeltaReleased else { return }
+    guard !postDeltaReleased else {
+      return
+    }
     await withCheckedContinuation { continuation in
       postDeltaRelease = continuation
     }
@@ -216,7 +220,9 @@ actor StopNewProvider: LLMProvider {
   }
 
   func waitForRequestCount(_ count: Int) async {
-    guard requests.count < count else { return }
+    guard requests.count < count else {
+      return
+    }
     await withCheckedContinuation { continuation in
       requestContinuations.append((count: count, continuation: continuation))
     }

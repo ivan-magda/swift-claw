@@ -127,7 +127,9 @@ func writeCidfile(from arguments: [String]) {
 
 func scratchChildren(_ stateRoot: URL) throws -> [URL] {
   let root = stateRoot.appending(path: "exec-scratch")
-  guard FileManager.default.fileExists(atPath: root.path) else { return [] }
+  guard FileManager.default.fileExists(atPath: root.path) else {
+    return []
+  }
   return try FileManager.default.contentsOfDirectory(
     at: root,
     includingPropertiesForKeys: nil
