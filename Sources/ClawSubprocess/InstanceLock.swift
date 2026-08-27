@@ -21,10 +21,17 @@ package final class InstanceLock: @unchecked Sendable {
   private var released = false
 
   package init(path: String) throws {
-    let descriptor = open(path, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, Self.lockFileMode)
+    let descriptor = open(
+      path,
+      O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC,
+      Self.lockFileMode
+    )
     guard descriptor >= 0 else {
-      throw errno == ELOOP ? LockError.insecureLockFile : LockError.openFailed(errno: errno)
+      throw errno == ELOOP
+        ? LockError.insecureLockFile
+        : LockError.openFailed(errno: errno)
     }
+
     guard Self.secure(descriptor) else {
       close(descriptor)
       throw LockError.insecureLockFile
@@ -48,14 +55,18 @@ package final class InstanceLock: @unchecked Sendable {
   }
 
   package func release() {
-    guard !released else { return }
+    guard !released else {
+      return
+    }
     released = true
+
     flock(fileDescriptor, LOCK_UN)
     close(fileDescriptor)
   }
 
   private static func secure(_ descriptor: Int32) -> Bool {
     var status = stat()
+
     guard
       fstat(descriptor, &status) == 0,
       (status.st_mode & S_IFMT) == S_IFREG,
@@ -66,6 +77,7 @@ package final class InstanceLock: @unchecked Sendable {
     else {
       return false
     }
+
     return (status.st_mode & S_IFMT) == S_IFREG
       && status.st_nlink == 1
       && status.st_uid == geteuid()
