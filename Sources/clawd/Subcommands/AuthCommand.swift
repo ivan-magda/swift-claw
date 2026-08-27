@@ -3,6 +3,7 @@ import AsyncHTTPClient
 import ClawAuth
 import ClawCore
 import ClawGateway
+import ClawHTTP
 import ClawSecrets
 import ClawTelegram
 import Foundation

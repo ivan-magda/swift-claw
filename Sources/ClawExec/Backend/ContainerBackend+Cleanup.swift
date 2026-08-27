@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 
 // MARK: - Shielded Cleanup
@@ -30,7 +31,7 @@ extension ContainerBackend {
 }
 
 private struct CleanupOperation: Sendable {
-  let commands: any ContainerCommandRunning
+  let commands: any SubprocessRunning
   let identity: String
   let workspace: ScratchWorkspace
   let watchdogSleep: @Sendable (Duration) async throws -> Void

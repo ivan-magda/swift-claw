@@ -2,6 +2,7 @@ import ClawAgent
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawHTTP
 import ClawLLM
 import ClawTelegram
 import ClawTestSupport

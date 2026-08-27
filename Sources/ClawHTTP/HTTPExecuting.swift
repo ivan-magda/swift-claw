@@ -11,10 +11,7 @@ import NIOPosix
   import Darwin
 #endif
 
-/// AHC-backed executor injected at the `clawd` root into both Telegram and LLM clients. Opts into
-/// gzip (decompression is enabled on the shared `HTTPClient` configuration — see `clawd`) and holds
-/// only what the request's body policy allows. Response headers are collected case-as-received;
-/// `HTTPResult.getHeader` matches case-insensitively.
+/// Shared AHC-backed executor injected into Telegram, LLM, and evaluation clients.
 public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
   private let client: HTTPClient
 
@@ -138,9 +135,7 @@ private extension AsyncHTTPExecutor {
     case truncates
   }
 
-  /// Reads at most `cap` bytes and stops there, leaving `handling` to say what an over-cap body
-  /// means. Leaving the sequence early — by return or by throw — also stops pulling the rest off the
-  /// connection.
+  /// Reads at most `cap` bytes and stops there, leaving `handling` to say what an over-cap body means.
   static func collect(
     _ body: HTTPClientResponse.Body,
     upTo cap: Int,
@@ -191,7 +186,10 @@ private extension AsyncHTTPExecutor {
             break
           }
 
-          chunk = view.count > remaining ? Data(view.prefix(remaining)) : Data(view)
+          chunk =
+            view.count > remaining
+            ? Data(view.prefix(remaining))
+            : Data(view)
         } else {
           chunk = Data(view)
         }
@@ -267,9 +265,9 @@ extension AsyncHTTPExecutor {
   }
 
   static func isConnectionRefused(_ error: any Error) -> Bool {
-    guard let ioError = error as? IOError else {
-      return false
+    if let ioError = error as? IOError {
+      return ioError.errnoCode == ECONNREFUSED
     }
-    return ioError.errnoCode == ECONNREFUSED
+    return false
   }
 }
