@@ -66,14 +66,17 @@ public enum CanonicalJSON {
     return Int(exactly: raw)
   }
 
+  // swiftlint:disable discouraged_optional_boolean
   package static func boolean(_ value: Any?) -> Bool? {
-    if let number = value as? NSNumber,
+    guard
+      let number = value as? NSNumber,
       CFGetTypeID(number) == CFBooleanGetTypeID()
-    {
-      return number.boolValue
+    else {
+      return nil
     }
-    return nil
+    return number.boolValue
   }
+  // swiftlint:enable discouraged_optional_boolean
 }
 
 package enum CanonicalJSONError: Error, Sendable, Equatable {

@@ -18,7 +18,7 @@ extension DaemonBuilder {
     let contextBuilder: ContextBuilder
   }
 
-  func makeAgentStack(
+  func makeAgentStack(  // swiftlint:disable:this function_parameter_count
     roster: ProviderRoster,
     cooldown: any PrimaryRouteCooldownTracking,
     workspace: FileSystemWorkspace,
