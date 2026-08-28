@@ -58,20 +58,17 @@ class ApprovalTests(unittest.TestCase):
         }
 
     def _body(self, digest: str, commit: str) -> bytes:
-        return (
-            approval.approval_statement(
-                digest,
-                contract.sha256_hex(
-                    (self.repo.root / contract.REPLACEMENT_DELTA_PATH).read_bytes()
-                ),
-                contract.sha256_hex(
-                    (self.repo.root / contract.RECOVERY_LEDGER_PATH).read_bytes()
-                ),
-                contract.INVALIDATION_REPORT_SHA256,
-                commit,
-            )
-            + "\n"
-        ).encode()
+        return approval.approval_comment_body(
+            digest,
+            contract.sha256_hex(
+                (self.repo.root / contract.REPLACEMENT_DELTA_PATH).read_bytes()
+            ),
+            contract.sha256_hex(
+                (self.repo.root / contract.RECOVERY_LEDGER_PATH).read_bytes()
+            ),
+            contract.INVALIDATION_REPORT_SHA256,
+            commit,
+        ) + b"\n"
 
     def _live_comment(self, value: dict, body: bytes) -> dict:
         comment = value["comment"]
@@ -123,17 +120,24 @@ class ApprovalTests(unittest.TestCase):
         for field in ("replacement_delta", "recovery_ledger", "invalidation_report"):
             wrong_binding = copy.deepcopy(value)
             wrong_binding[field]["sha256"] = "c" * 64
-            mutations.append((wrong_binding, body, "exact approval line"))
+            mutations.append((wrong_binding, body, "exact approval body"))
         wrong_statement_body = b"D6 is not approved\n"
         wrong_statement = self._approval(
             digest=digest,
             commit=commit,
             body=wrong_statement_body,
         )
-        mutations.append((wrong_statement, wrong_statement_body, "exact approval line"))
+        mutations.append((wrong_statement, wrong_statement_body, "exact approval body"))
         wrong_commit = copy.deepcopy(value)
         wrong_commit["freeze_commit"] = "d" * 40
-        mutations.append((wrong_commit, body, "exact approval line"))
+        mutations.append((wrong_commit, body, "exact approval body"))
+        embedded_body = b"This is an approval request, not approval.\n\n```text\n" + body + b"```\n"
+        embedded_statement = self._approval(
+            digest=digest,
+            commit=commit,
+            body=embedded_body,
+        )
+        mutations.append((embedded_statement, embedded_body, "exact approval body"))
         for candidate, candidate_body, message in mutations:
             with self.subTest(message=message), self.assertRaisesRegex(
                 contract.FreezeError,
@@ -347,7 +351,7 @@ class ApprovalTests(unittest.TestCase):
             return b"{}"
 
         # when
-        with self.assertRaisesRegex(contract.FreezeError, "exact approval line"):
+        with self.assertRaisesRegex(contract.FreezeError, "exact approval body"):
             approval.verify_live_freeze(
                 self.repo.root,
                 manifest_path=manifest_path,
