@@ -42,7 +42,9 @@ enum EvaluationPathSecurity {
       if let dotComponent = path.pathComponents.first(where: { $0 == "." || $0 == ".." }) {
         throw EvaluationPathSecurityError.dotPathComponent(dotComponent)
       }
-      try rejectSymlinkComponents(of: path.standardizedFileURL)
+      try rejectSymlinkComponents(
+        of: symlinkInspectionPath(for: path.standardizedFileURL)
+      )
     }
   }
 
@@ -230,6 +232,27 @@ private extension EvaluationPathSecurity {
     return candidates.first { candidate in
       WorkspacePathContainment.isContained(target: path.path, root: candidate.path)
     } ?? URL(fileURLWithPath: "/", isDirectory: true)
+  }
+
+  static func symlinkInspectionPath(for path: URL) -> URL {
+    #if os(macOS)
+      let temporaryAliasPath = "/tmp"
+      let canonicalTemporaryPath = "/private/tmp"
+      guard
+        WorkspacePathContainment.canonicalPath(temporaryAliasPath) == canonicalTemporaryPath,
+        WorkspacePathContainment.isContained(target: path.path, root: temporaryAliasPath)
+      else {
+        return path
+      }
+
+      let suffix = String(path.path.dropFirst(temporaryAliasPath.count))
+      return URL(
+        fileURLWithPath: canonicalTemporaryPath + suffix,
+        isDirectory: path.hasDirectoryPath
+      )
+    #else
+      return path
+    #endif
   }
 
   static func rejectSymlink(at candidate: URL) throws {

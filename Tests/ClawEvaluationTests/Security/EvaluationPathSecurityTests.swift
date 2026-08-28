@@ -72,6 +72,35 @@ extension EvaluationFilesystemSecurityTests {
     #expect((attributes[.posixPermissions] as? NSNumber)?.uint16Value == 0o700)
   }
 
+  #if os(macOS)
+    @Test func privateDirectoryPreparationTrustsOnlyTheCanonicalSystemTemporaryAlias() throws {
+      // given
+      let directoryName = "swift-claw-evaluation-path-\(UUID().uuidString)"
+      let canonicalRoot = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+        .appendingPathComponent(directoryName, isDirectory: true)
+      let aliasRoot = URL(fileURLWithPath: "/tmp", isDirectory: true)
+        .appendingPathComponent(directoryName, isDirectory: true)
+      defer { try? FileManager.default.removeItem(at: canonicalRoot) }
+
+      // when
+      try EvaluationPathSecurity.ensurePrivateDirectory(at: canonicalRoot)
+      try EvaluationPathSecurity.ensurePrivateDirectory(at: aliasRoot)
+
+      let target = canonicalRoot.appendingPathComponent("target", isDirectory: true)
+      let link = canonicalRoot.appendingPathComponent("link", isDirectory: true)
+      try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+      try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+      let aliasLink = aliasRoot.appendingPathComponent("link", isDirectory: true)
+
+      // then
+      #expect(
+        throws: EvaluationPathSecurityError.symlinkedComponent(link.lastPathComponent)
+      ) {
+        try EvaluationPathSecurity.ensurePrivateDirectory(at: aliasLink)
+      }
+    }
+  #endif
+
   @Test func workerConfigurationSnapshotRejectsDotComponentsBeforeNormalization() throws {
     // given
     let root = try makeEvaluationTestRoot()
