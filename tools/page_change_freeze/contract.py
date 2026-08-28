@@ -377,8 +377,8 @@ REPLACEMENT_EXACT_CANDIDATE_ARTIFACTS = (
         "executable",
         EXECUTABLE_PATH,
         "executable",
-        16_722_880,
-        "ad471ed38847b1eba7233051e16bda3028c31bd1812d49d72c7e837464dd3b46",
+        16_722_896,
+        "9a3ed6df83430e746ba4dd344b3f01ce136ac05bd84ba28e01b07c0f489b5702",
     ),
     (
         "harness_sources",
@@ -391,8 +391,15 @@ REPLACEMENT_EXACT_CANDIDATE_ARTIFACTS = (
         "harness_sources",
         "Sources/ClawEvaluation/Page/EvaluationPageRecords.swift",
         "source",
-        12_335,
-        "f9a65b10d9bb7365c9a7af188aefda0531b494ec7e0970200c9bd75baf67283b",
+        12_674,
+        "e62977f9118633f91a4b765ccce49bcfb638d9fe008e472193820066b79cbd51",
+    ),
+    (
+        "harness_sources",
+        "Sources/ClawEvaluation/Runtime/EvaluationHTTPRecorder.swift",
+        "source",
+        9_408,
+        "fa0517a97f3bf2273c802a4d97df5b7f8cae844450576148332532ab5cdbe9e7",
     ),
     (
         "harness_sources",
@@ -412,8 +419,8 @@ REPLACEMENT_EXACT_CANDIDATE_ARTIFACTS = (
         "scorer",
         f"{BENCHMARK_PACKAGE_ROOT}/record.py",
         "source",
-        5_278,
-        "d93cfd0bed7e0fff6cc86c55131717cc246da9a01f494c66989fe62e17780b64",
+        5_882,
+        "0ea3deb22aa1f920131dc0413241f50b866e175130e06ad0d55aa71927d0674c",
     ),
 )
 REPLACEMENT_CHANGED_HARNESS_PATHS = frozenset(
