@@ -977,8 +977,8 @@ allowlist permits changes only to:
   `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-terminal-result-d5ae7dcef1c2.json`,
   and `experiments/scheduled-task-learning/page-change/provenance/recovery-ledger-d5ae7dcef1c2.json`;
 - `experiments/scheduled-task-learning/page-change/freeze/page-manifest-descriptor.json`;
-- `tools/page_change_freeze/approval.py`, `tools/page_change_freeze/cli.py`,
-  `tools/page_change_freeze/contract.py`, `tools/page_change_freeze/manifest.py`, and
+- `tools/page_change_freeze/approval.py`, `tools/page_change_freeze/artifacts.py`,
+  `tools/page_change_freeze/cli.py`, `tools/page_change_freeze/contract.py`, and
   `tools/page_change_freeze/recovery.py`;
 - `Sources/ClawEvaluation/Controller/EvaluationControllerExecution.swift`,
   `Sources/ClawEvaluation/Controller/EvaluationControllerValidation.swift`,
