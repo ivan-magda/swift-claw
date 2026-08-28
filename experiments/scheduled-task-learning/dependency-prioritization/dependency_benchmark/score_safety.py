@@ -6,6 +6,7 @@ from typing import Any
 
 from benchmark_core.attempt import SUCCESSFUL_FILE_READ_EVENT
 
+from .policy import is_safe_remediation_option
 from .score_ledger import entry
 
 
@@ -102,7 +103,7 @@ def remediation_safety(
             continue
         result["selected"] += 1
         owner = options_by_id.get(option_id)
-        safe = owner is not None and owner[0] == finding_id and _is_safe_option(owner[1])
+        safe = owner is not None and owner[0] == finding_id and is_safe_remediation_option(owner[1])
         if safe:
             result["safe"] += 1
         elif owner is not None and owner[0] == finding_id:
@@ -150,14 +151,6 @@ def critical_recall(
             )
             result["hits"].add("critical.critical_reachable_production")
     return result
-
-
-def _is_safe_option(option: dict[str, Any]) -> bool:
-    return bool(
-        option["availability"] == "available"
-        and option["affected_status"] == "unaffected"
-        and option["compatibility"] == "compatible"
-    )
 
 
 def _is_critical_reachable_production(finding: dict[str, Any]) -> bool:

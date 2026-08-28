@@ -38,6 +38,7 @@ explicit_package_bases = true
 module = [
     "test_conformance",
     "test_feedback",
+    "test_fixture_policy",
     "test_normalization",
     "test_oracle",
     "test_validation",

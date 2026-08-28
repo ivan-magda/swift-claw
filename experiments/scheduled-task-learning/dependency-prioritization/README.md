@@ -11,9 +11,12 @@ benchmark reads its grades directly rather than re-encoding them in Python.
 
 ## Layout
 
-- `contracts/` fixes D5 ranking, target ownership, error taxonomy, feedback, and coverage.
+- `contracts/` fixes D5 ranking, fixture decisions, target ownership, error taxonomy, feedback, and
+  coverage.
 - `schemas/` closes the normalized source, canonical task, model input/output, gold, and score shapes.
 - `dependency_benchmark/normalization.py` maps author-only source keys to opaque canonical IDs.
+- `dependency_benchmark/fixture_policy.py` derives actionability, remediation, evidence, ranking
+  opportunities, and unrelated-family decisions from the frozen fixture contract.
 - `dependency_benchmark/scorer.py` validates one attempt and coordinates pure component/safety checks.
 - `dependency_benchmark/oracle.py` applies only frozen target-owned field transforms and computes headroom.
 - `conformance/cases.json` embeds three normalized fixtures and exactly 24 byte-distinct attempts.
@@ -58,3 +61,11 @@ A model output is semantically valid only when its remediation queue contains ex
 findings labeled `actionable`. This keeps the frozen D5 ranking component as pure linear-grade nDCG:
 an aligned but wrong actionability decision remains lesson-addressable, while a contradictory queue
 cannot receive an accidental perfect score from a trailing zero-grade entry.
+
+The embedded 24-case conformance corpus tests scorer behavior and deliberately exercises independent
+target-class ownership combinations. Fixture-policy derivation has its own pure tests; the scorer
+corpus is not evidence that future 10/4/6 project fixtures follow `contracts/fixture-policy.json`.
+That policy treats valid advisory fixed events as available releases and unions them with the frozen
+release inventory. It selects a pre-materialization source key by ecosystem version, origin, and source
+key; the later source-derivation layer owns parsing, version ordering, and the authoritative binding
+from that source key to a canonical option ID while materializing normalized facts.

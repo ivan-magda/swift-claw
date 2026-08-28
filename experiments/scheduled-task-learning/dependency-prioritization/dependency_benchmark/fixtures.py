@@ -7,7 +7,7 @@ from typing import Any
 from benchmark_core.contract_validation import ContractError, ValidationIssue, require_valid
 
 from .normalization import materialize_task
-from .policy import finding_grade, validate_ranking_policy
+from .policy import finding_grade, is_safe_remediation_option, validate_ranking_policy
 from .validation import validate_gold, validate_source
 
 
@@ -48,11 +48,7 @@ def validate_fixture(
         remediation = label["remediation"]
         selected_option_id = remediation["selected_option_id"]
         safe_options = {
-            option_id
-            for option_id, option in options.items()
-            if option["availability"] == "available"
-            and option["affected_status"] == "unaffected"
-            and option["compatibility"] == "compatible"
+            option_id for option_id, option in options.items() if is_safe_remediation_option(option)
         }
         if remediation["disposition"] == "upgrade" and selected_option_id not in safe_options:
             _fail("gold upgrade must select a safe option")
