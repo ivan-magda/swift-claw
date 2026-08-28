@@ -101,6 +101,159 @@ import Testing
     #expect(SHA256Digest.hex(carrierData) == result.carrierReceiptSHA256)
   }
 
+  // swiftlint:disable:next function_body_length
+  @Test func developmentCompositesUseProtectedCanonicalFractionBytes() async throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let configured = try makeEvaluationConfiguration(root: root)
+    let configuration = configured.configuration
+    let frozen = try makeEvaluationFreeze(root: root, configurations: [configuration])
+    let taskID = configuration.taskID
+    let fixturesDirectory = root.appendingPathComponent("composite-fixtures", isDirectory: true)
+    try EvaluationPathSecurity.ensurePrivateDirectory(at: fixturesDirectory)
+
+    var fixtures: [EvaluationPageFixture] = []
+    var fixtureJSON: [String] = []
+    var protectedFixtures: [EvaluationManifestProtectedArtifact] = []
+    for index in 1...PageEvaluationContract.developmentFixtureCount {
+      let fixtureID = String(format: "pc-development-%02d", index)
+      let relativePath = "composite-fixtures/\(fixtureID).json"
+      let json = #"{"fixture_id":"\#(fixtureID)","task_id":"\#(taskID)"}"#
+      let data = Data((json + "\n").utf8)
+      let url = root.appendingPathComponent(relativePath)
+      try EvaluationDurablePublication.publish(data, to: url)
+      fixtures.append(
+        EvaluationPageFixture(
+          fixtureID: fixtureID,
+          split: EvaluationPageSplit.development.rawValue,
+          sourceRelativePath: relativePath,
+          goldRelativePath: relativePath,
+          taskID: taskID,
+          sourceSHA256: SHA256Digest.hex(data)
+        )
+      )
+      fixtureJSON.append(json)
+      protectedFixtures.append(
+        EvaluationManifestProtectedArtifact(
+          path: relativePath,
+          bytes: data.count,
+          sha256: SHA256Digest.hex(data)
+        )
+      )
+    }
+    let context = EvaluationFreezeContext(
+      repositoryRoot: frozen.context.repositoryRoot,
+      manifest: EvaluationFreezeManifest(
+        schemaVersion: frozen.context.manifest.schemaVersion,
+        decision: frozen.context.manifest.decision,
+        experiment: frozen.context.manifest.experiment,
+        protocolBinding: frozen.context.manifest.protocolBinding,
+        categories: frozen.context.manifest.categories,
+        protectedArtifacts: frozen.context.manifest.protectedArtifacts + protectedFixtures
+      ),
+      receipt: frozen.context.receipt,
+      runtime: frozen.context.runtime,
+      runOrderJSON: frozen.context.runOrderJSON
+    )
+    let workspace = try EvaluationWorkspaceMaterializer.reset(configuration: configuration)
+    let result = makeEvaluationResult(
+      configuration: configuration,
+      replacementDisposition: .ineligible,
+      workspace: workspace
+    )
+    let recordJSON =
+      #"{"attempt":{"one_third":0.333333},"attempt_id":"\#(result.attemptID)","carrier_receipt_sha256":"\#(result.carrierReceiptSHA256)","fixture_id":"\#(configuration.fixtureID)","parsed_output":null,"replicate":1,"score_result":{"two_thirds":0.666667}}"#
+    let recordData = Data((recordJSON + "\n").utf8)
+    let runner = FractionCanonicalizingArtifactRunner(recordData: recordData)
+    let builder = EvaluationPageRecordBuilder(artifacts: runner)
+    let catalog = EvaluationPageFixtureCatalog(
+      fixtures: fixtures,
+      byID: Dictionary(uniqueKeysWithValues: fixtures.map { ($0.fixtureID, $0) })
+    )
+    let slot = EvaluationPageTaskSlot(
+      stage: configuration.stage,
+      split: configuration.split,
+      orderIndex: configuration.frozenOrderIndex,
+      blockIndex: 0,
+      orderKey: configuration.frozenOrderKey,
+      blockOrderKey: String(repeating: "b", count: 64),
+      fixtureID: configuration.fixtureID,
+      replicate: configuration.replicate,
+      condition: configuration.condition.runOrderValue,
+      lessonSource: configuration.lessonSource,
+      workerProcessKey: String(repeating: "e", count: 64)
+    )
+    let runOrder = EvaluationPageRunOrder(
+      canaryProcesses: [],
+      taskSlots: [slot],
+      synthesis: EvaluationPageSynthesisSlot(
+        orderKey: SHA256Digest.hex("unused-synthesis"),
+        workerProcessKey: SHA256Digest.hex("unused-synthesis-worker"),
+        promptPath: "unused"
+      )
+    )
+    let outputDirectory = configuration.evaluationRootURL.appendingPathComponent(
+      "composites",
+      isDirectory: true
+    )
+    try EvaluationPathSecurity.ensurePrivateDirectory(at: outputDirectory)
+    let recordsURL = outputDirectory.appendingPathComponent("development-records.json")
+    let runsURL = outputDirectory.appendingPathComponent("development-runs.json")
+    let bundleURL = outputDirectory.appendingPathComponent("development-bundle.json")
+
+    // when
+    let records = try await builder.writeBundle(
+      attempts: [
+        EvaluationRecordedAttempt(
+          result: result,
+          resultOrEnvelopeSHA256: String(repeating: "f", count: 64)
+        )
+      ],
+      runOrder: runOrder,
+      catalog: catalog,
+      freeze: context,
+      lifecycleReceiptSHA256: "",
+      outputURL: recordsURL
+    )
+    try await builder.writeDevelopmentInputs(
+      records: records,
+      catalog: catalog,
+      freeze: context,
+      runsURL: runsURL,
+      bundleURL: bundleURL
+    )
+
+    // then — direct Foundation publication expands both decimals and cannot match these bytes.
+    let runID = "run-\(SHA256Digest.hex(Data("\(taskID):1".utf8)).prefix(12))"
+    let runJSON =
+      #"{"attempt":{"one_third":0.333333},"fixture_id":"\#(configuration.fixtureID)","parsed_output":null,"replicate":1,"run_id":"\#(runID)","score_result":{"two_thirds":0.666667}}"#
+    let expectedRecords = Data(
+      (#"{"records":[\#(recordJSON)],"schema_version":1}"# + "\n").utf8
+    )
+    let expectedRuns = Data((#"{"runs":[\#(runJSON)]}"# + "\n").utf8)
+    let fixturesJSON = fixtureJSON.joined(separator: ",")
+    let expectedBundle = Data(
+      (#"{"golds":[\#(fixturesJSON)],"runs":[\#(runJSON)],"sources":[\#(fixturesJSON)]}"#
+        + "\n").utf8
+    )
+    #expect(try EvaluationPathSecurity.readRegularSingleLinkFile(at: recordsURL) == expectedRecords)
+    #expect(try EvaluationPathSecurity.readRegularSingleLinkFile(at: runsURL) == expectedRuns)
+    #expect(try EvaluationPathSecurity.readRegularSingleLinkFile(at: bundleURL) == expectedBundle)
+    let recordDraft = outputDirectory.appendingPathComponent(
+      "development-records-parts/records-draft.json"
+    )
+    let runsDraft = outputDirectory.appendingPathComponent(
+      "development-bundle-parts/runs-draft.json"
+    )
+    let bundleDraft = outputDirectory.appendingPathComponent(
+      "development-bundle-parts/bundle-draft.json"
+    )
+    #expect(FileManager.default.fileExists(atPath: recordDraft.path) == false)
+    #expect(FileManager.default.fileExists(atPath: runsDraft.path) == false)
+    #expect(FileManager.default.fileExists(atPath: bundleDraft.path) == false)
+  }
+
   @Test func lifecyclePublicationUsesCanonicalLowercaseIdentifiersAndReturnsItsDigest() throws {
     // given
     let root = try makeEvaluationTestRoot()
@@ -231,6 +384,57 @@ import Testing
     let publishedData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: outputURL)
     #expect(publishedData == expectedData)
     #expect(publishedDigest == SHA256Digest.hex(publishedData))
+  }
+}
+
+private actor FractionCanonicalizingArtifactRunner: EvaluationProtectedArtifactRunning {
+  let recordData: Data
+
+  init(recordData: Data) {
+    self.recordData = recordData
+  }
+
+  func run(
+    relativeExecutablePath: String,
+    arguments: [String],
+    protectedOutputURLs: [URL],
+    freeze _: EvaluationFreezeContext,
+    captureLimit _: Int
+  ) async throws -> Data {
+    let output: Data
+    if arguments.first == "canonicalize" {
+      guard
+        relativeExecutablePath == "\(EvaluationController.pageRootPath)/artifacts/page-record",
+        let inputFlag = arguments.firstIndex(of: "--input"),
+        arguments.indices.contains(inputFlag + 1),
+        let outputFlag = arguments.firstIndex(of: "--output"),
+        arguments.indices.contains(outputFlag + 1)
+      else {
+        throw EvaluationPagePipelineError.protectedArtifactFailed(relativeExecutablePath)
+      }
+      let outputURL = URL(fileURLWithPath: arguments[outputFlag + 1])
+      guard protectedOutputURLs == [outputURL] else {
+        throw EvaluationPagePipelineError.protectedArtifactFailed(relativeExecutablePath)
+      }
+      let draft = try EvaluationPathSecurity.readRegularSingleLinkFile(
+        at: URL(fileURLWithPath: arguments[inputFlag + 1])
+      )
+      guard let draftText = String(data: draft, encoding: .utf8) else {
+        throw EvaluationPagePipelineError.protectedArtifactFailed(relativeExecutablePath)
+      }
+      let canonical =
+        draftText
+        .replacingOccurrences(of: "0.33333299999999999", with: "0.333333")
+        .replacingOccurrences(of: "0.66666700000000001", with: "0.666667")
+      output = Data(canonical.utf8)
+      try EvaluationDurablePublication.publish(output, to: outputURL)
+    } else {
+      output = recordData
+      for url in protectedOutputURLs {
+        try EvaluationDurablePublication.publish(output, to: url)
+      }
+    }
+    return output
   }
 }
 

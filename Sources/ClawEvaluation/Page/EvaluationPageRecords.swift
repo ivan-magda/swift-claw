@@ -20,6 +20,9 @@ struct EvaluationRecordedAttempt: Sendable {
 struct EvaluationPageRecordBuilder: Sendable {
   let artifacts: any EvaluationProtectedArtifactRunning
 
+  private static let pageRecordExecutablePath =
+    "\(EvaluationController.pageRootPath)/artifacts/page-record"
+
   // swiftlint:disable:next function_body_length function_parameter_count
   func writeBundle(
     attempts: [EvaluationRecordedAttempt],
@@ -33,12 +36,7 @@ struct EvaluationPageRecordBuilder: Sendable {
       relativePath: freeze.receipt.manifest.path,
       repositoryRoot: URL(fileURLWithPath: freeze.repositoryRoot, isDirectory: true)
     )
-    let scratch = outputURL.deletingLastPathComponent().appendingPathComponent(
-      "\(outputURL.deletingPathExtension().lastPathComponent)-parts",
-      isDirectory: true
-    )
-
-    try EvaluationPathSecurity.ensurePrivateDirectory(at: scratch)
+    let scratch = try privatePublicationDirectory(for: outputURL)
 
     var records: [[String: Any]] = []
     for attempt in attempts {
@@ -112,7 +110,7 @@ struct EvaluationPageRecordBuilder: Sendable {
 
       try EvaluationPathSecurity.rejectSymlinkComponents(in: [scratch, recordURL])
       _ = try await artifacts.run(
-        relativeExecutablePath: "\(EvaluationController.pageRootPath)/artifacts/page-record",
+        relativeExecutablePath: Self.pageRecordExecutablePath,
         arguments: [
           "--root", freeze.repositoryRoot,
           "--manifest", manifestURL.path,
@@ -143,23 +141,26 @@ struct EvaluationPageRecordBuilder: Sendable {
       records.append(record)
     }
 
-    try EvaluationDurablePublication.publish(
-      EvaluationCanonicalJSON.data(fromJSONObject: [
+    try await publishCanonicalComposite(
+      draft: EvaluationCanonicalJSON.data(fromJSONObject: [
         "records": records, "schema_version": 1,
       ]),
-      to: outputURL
+      draftURL: scratch.appendingPathComponent("records-draft.json"),
+      outputURL: outputURL,
+      freeze: freeze
     )
 
     return records
   }
 
+  // swiftlint:disable:next function_body_length
   func writeDevelopmentInputs(
     records: [[String: Any]],
     catalog: EvaluationPageFixtureCatalog,
     freeze: EvaluationFreezeContext,
     runsURL: URL,
     bundleURL: URL
-  ) throws {
+  ) async throws {
     let development = catalog.fixtures.filter {
       $0.split == EvaluationPageSplit.development.rawValue
     }
@@ -215,15 +216,50 @@ struct EvaluationPageRecordBuilder: Sendable {
       ]
     }
 
-    try EvaluationDurablePublication.publish(
-      EvaluationCanonicalJSON.data(fromJSONObject: ["runs": runs]),
-      to: runsURL
+    let scratch = try privatePublicationDirectory(for: bundleURL)
+    try await publishCanonicalComposite(
+      draft: EvaluationCanonicalJSON.data(fromJSONObject: ["runs": runs]),
+      draftURL: scratch.appendingPathComponent("runs-draft.json"),
+      outputURL: runsURL,
+      freeze: freeze
     )
-    try EvaluationDurablePublication.publish(
-      EvaluationCanonicalJSON.data(fromJSONObject: [
+    try await publishCanonicalComposite(
+      draft: EvaluationCanonicalJSON.data(fromJSONObject: [
         "golds": golds, "runs": runs, "sources": sources,
       ]),
-      to: bundleURL
+      draftURL: scratch.appendingPathComponent("bundle-draft.json"),
+      outputURL: bundleURL,
+      freeze: freeze
+    )
+  }
+
+  private func privatePublicationDirectory(for outputURL: URL) throws -> URL {
+    let directory = outputURL.deletingLastPathComponent().appendingPathComponent(
+      "\(outputURL.deletingPathExtension().lastPathComponent)-parts",
+      isDirectory: true
+    )
+    try EvaluationPathSecurity.ensurePrivateDirectory(at: directory)
+    return directory
+  }
+
+  private func publishCanonicalComposite(
+    draft: Data,
+    draftURL: URL,
+    outputURL: URL,
+    freeze: EvaluationFreezeContext
+  ) async throws {
+    defer { try? FileManager.default.removeItem(at: draftURL) }
+    try EvaluationDurablePublication.publish(draft, to: draftURL)
+    _ = try await artifacts.run(
+      relativeExecutablePath: Self.pageRecordExecutablePath,
+      arguments: [
+        "canonicalize",
+        "--input", draftURL.path,
+        "--output", outputURL.path,
+      ],
+      protectedOutputURLs: [outputURL],
+      freeze: freeze,
+      captureLimit: 128 * 1_024
     )
   }
 
