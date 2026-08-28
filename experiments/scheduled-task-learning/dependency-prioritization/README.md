@@ -1,7 +1,7 @@
 # Dependency-prioritization benchmark core
 
 This directory contains the deterministic, artifact-only foundation for the dependency candidate
-in protocol 0.3. It normalizes already-frozen dependency facts, scores report-only task outputs,
+in protocol 0.5. It normalizes already-frozen dependency facts, scores report-only task outputs,
 computes bounded lesson headroom, and validates a 24-case conformance corpus.
 
 Follow-up layers own model calls, OSV ingestion, package-manager parsing, scheduling, dependency

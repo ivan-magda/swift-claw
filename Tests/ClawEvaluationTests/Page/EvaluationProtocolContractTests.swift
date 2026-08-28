@@ -34,6 +34,7 @@ import Testing
         $0.path.hasPrefix("\(pageRoot)/")
       }
     )
+    try manifest.validateBudgetContract(for: .pageChange)
     let canarySource = try #require(
       manifest.artifact(role: "canary_base_task", category: "configuration")
     )

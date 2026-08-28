@@ -7,7 +7,9 @@
 - Date: 2026-08-28
 - Decision issue: [#118](https://github.com/ivan-magda/swift-claw/issues/118)
 - Parent project: [#115](https://github.com/ivan-magda/swift-claw/issues/115)
-- Inspected recovery implementation revision: `ef2d94c989ef2f2bfb89b4bed3c7b2d33e593e0b`
+- Inspected implementation revisions: live integrity `ef2d94c989ef2f2bfb89b4bed3c7b2d33e593e0b`,
+  recovery provenance `81706642f1c43916d4245ac96e80bf0c145be2e0`, and recovery accounting
+  `97ba90fd3880f9713ba68368ffb6412fb9017704`
 
 ## Purpose
 

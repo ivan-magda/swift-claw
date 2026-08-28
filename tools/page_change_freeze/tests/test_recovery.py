@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 import unittest
 
 from tools.page_change_freeze import contract, recovery
@@ -16,6 +17,12 @@ class RecoveryTests(unittest.TestCase):
 
     def _replacement_pair(self) -> tuple[dict, dict]:
         candidate = self.repo.make_manifest()
+        candidate_harness = candidate["categories"]["harness_sources"]
+        candidate_harness["artifacts"][0]["path"] = min(
+            contract.REPLACEMENT_CHANGED_HARNESS_PATHS
+        )
+        payload = {key: candidate_harness[key] for key in ("artifacts", "values")}
+        candidate_harness["sha256"] = contract.sha256_hex(contract.canonical_json_bytes(payload))
         baseline = copy.deepcopy(candidate)
         historical, _ = contract.load_json(self.repo.root / contract.INVALIDATED_MANIFEST_PATH)
         baseline["protocol"] = historical["protocol"]
@@ -81,25 +88,76 @@ class RecoveryTests(unittest.TestCase):
             ["budget", "configuration", "executable", "harness_sources"],
         )
 
+        repository_root = Path(contract.__file__).resolve().parents[2]
+        approved_candidate, approved_candidate_raw = contract.load_json(
+            repository_root / f"{contract.PAGE_ROOT}/freeze/page-manifest.json"
+        )
+        approved_delta = recovery.build_replacement_delta(
+            self.repo.root,
+            approved_candidate,
+            approved_candidate_raw,
+        )
+        approved_delta_raw = contract.canonical_json_bytes(approved_delta)
+        (self.repo.root / contract.REPLACEMENT_DELTA_PATH).write_bytes(approved_delta_raw)
+        ledger_raw = (self.repo.root / contract.RECOVERY_LEDGER_PATH).read_bytes()
+
+        admission = recovery.verify_replacement_admission(
+            self.repo.root,
+            approved_candidate,
+            approved_candidate_raw,
+            replacement_delta_sha256=contract.sha256_hex(approved_delta_raw),
+            recovery_ledger_sha256=contract.sha256_hex(ledger_raw),
+            invalidation_report_sha256=contract.INVALIDATION_REPORT_SHA256,
+        )
+        self.assertEqual(
+            admission["replacement_delta_sha256"],
+            contract.sha256_hex(approved_delta_raw),
+        )
+
     def test_decision_artifact_mutants_are_forbidden(self) -> None:
         # given
         baseline, candidate = self._replacement_pair()
-        mutations = {
-            "prompt": ("prompts", contract.TASK_PROMPT_PATH),
-            "scorer": ("scorer", None),
-            "fixture": ("fixtures", None),
-            "gold_label": ("gold", None),
-            "split": ("splits", contract.SPLITS_PATH),
+        baseline_delta = recovery.compare_replacement_manifests(
+            baseline,
+            candidate,
+            baseline_sha256=contract.INVALIDATED_MANIFEST_SHA256,
+            candidate_sha256="b" * 64,
+        )
+        replacement_categories = {
+            item["category"] for item in baseline_delta["changed_categories"]
         }
+        mutations = [
+            (
+                category,
+                category,
+                None,
+                f"immutable category changed: {category}",
+            )
+            for category in sorted(set(candidate["categories"]) - replacement_categories)
+        ]
+        target_taxonomy_path = f"{contract.PAGE_ROOT}/contracts/target-classes.json"
+        mutations.append(
+            (
+                "target_taxonomy",
+                "configuration",
+                target_taxonomy_path,
+                f"configuration changed forbidden path {target_taxonomy_path}",
+            )
+        )
 
-        for name, (category, path) in mutations.items():
+        for name, category, path, expected_violation in mutations:
             with self.subTest(name=name):
                 changed = copy.deepcopy(candidate)
-                artifacts = changed["categories"][category]["artifacts"]
-                target = next(
-                    item for item in artifacts if path is None or item["path"] == path
-                )
-                target["sha256"] = "f" * 64
+                changed_category = changed["categories"][category]
+                if changed_category["artifacts"]:
+                    target = next(
+                        item
+                        for item in changed_category["artifacts"]
+                        if path is None or item["path"] == path
+                    )
+                    target["sha256"] = "f" * 64
+                else:
+                    changed_category["values"]["recovery_test_mutant"] = True
 
                 # when
                 delta = recovery.compare_replacement_manifests(
@@ -111,7 +169,7 @@ class RecoveryTests(unittest.TestCase):
 
                 # then
                 self.assertEqual(delta["verdict"], "forbidden")
-                self.assertIn(f"immutable category changed: {category}", delta["violations"])
+                self.assertIn(expected_violation, delta["violations"])
 
     def test_ledger_total_or_source_digest_mismatch_blocks_admission(self) -> None:
         # given

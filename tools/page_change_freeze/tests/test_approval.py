@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 from unittest import mock
 
-from tools.page_change_freeze import approval, artifacts, contract
+from tools.page_change_freeze import approval, artifacts, contract, recovery
 from tools.page_change_freeze.tests.support import FreezeRepository
 
 
@@ -393,6 +393,37 @@ class ApprovalTests(unittest.TestCase):
 
     def test_live_freeze_is_one_shot_and_returns_canonical_machine_receipt(self) -> None:
         # given
+        repository_root = Path(contract.__file__).resolve().parents[2]
+        candidate, candidate_raw = contract.load_json(
+            repository_root / f"{contract.PAGE_ROOT}/freeze/page-manifest.json"
+        )
+        replacement_delta = recovery.build_replacement_delta(
+            self.repo.root,
+            candidate,
+            candidate_raw,
+        )
+        self.repo.write(
+            contract.REPLACEMENT_DELTA_PATH,
+            contract.canonical_json_bytes(replacement_delta),
+        )
+        candidate_path = self.repo.root / f"{contract.PAGE_ROOT}/freeze/page-manifest.json"
+        candidate_path.write_bytes(candidate_raw)
+        candidate_digest = contract.sha256_hex(candidate_raw)
+        candidate_commit = "b" * 40
+        candidate_body = self._body(candidate_digest, candidate_commit)
+        candidate_record = self._approval(
+            digest=candidate_digest,
+            commit=candidate_commit,
+            body=candidate_body,
+        )
+
+        # Exercise the real approval-to-admission seam against the approved candidate/evidence.
+        prepared = approval.prepare_binding(
+            self.repo.root,
+            manifest_path=candidate_path,
+            approval=candidate_record,
+            approval_body=candidate_body,
+        )
         value, raw, relative, commit = self.repo.committed_manifest()
         digest = contract.sha256_hex(raw)
         body = self._body(digest, commit)
@@ -420,6 +451,9 @@ class ApprovalTests(unittest.TestCase):
             )
 
         # then
+        self.assertEqual(prepared[1], f"{contract.PAGE_ROOT}/freeze/page-manifest.json")
+        self.assertEqual(prepared[4]["replacement_delta_sha256"],
+                         contract.sha256_hex(contract.canonical_json_bytes(replacement_delta)))
         verify_admission.assert_called_once()
         self.assertEqual(calls, 1)
         self.assertEqual(receipt["verified_at"], "2026-08-26T15:30:00Z")

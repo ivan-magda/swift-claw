@@ -309,9 +309,10 @@ def _executable_binding(repo_root: Path, value: dict[str, Any], path: Path) -> d
 
 
 def verify_committed_replacement_delta(repo_root: Path, freeze_commit: str) -> None:
-    expected = artifacts.artifact(repo_root, REPLACEMENT_DELTA_PATH)
+    root = repo_root.resolve(strict=True)
+    expected = artifacts.artifact(root, REPLACEMENT_DELTA_PATH)
     committed = artifacts.committed_blob(
-        repo_root,
+        root,
         commit=freeze_commit,
         path=REPLACEMENT_DELTA_PATH,
         mode="100644",
