@@ -5,12 +5,45 @@ import unittest
 
 from dependency_benchmark.fixtures import validate_fixture
 from dependency_benchmark.normalization import materialize_task
+from dependency_benchmark.policy import is_critical_reachable_production
 from dependency_benchmark.validation import validate_output, validate_source
 
 from support import case_output, contracts, fixture
 
 
 class DependencyValidationTests(unittest.TestCase):
+    def test_critical_recall_predicate_requires_every_policy_dimension(self) -> None:
+        # Given
+        task = materialize_task(fixture("dp-development-01")["source"])
+        critical = next(
+            finding
+            for finding in task["findings"]
+            if finding["affected_status"] == "affected"
+            and finding["severity"] == "critical"
+            and finding["reachability"] == "reachable"
+            and any(path["runtime_scope"] == "production" for path in finding["dependency_paths"])
+        )
+        non_affected = copy.deepcopy(critical)
+        non_affected["affected_status"] = "unaffected"
+        non_critical = copy.deepcopy(critical)
+        non_critical["severity"] = "high"
+        non_reachable = copy.deepcopy(critical)
+        non_reachable["reachability"] = "unknown"
+        non_production = copy.deepcopy(critical)
+        for path in non_production["dependency_paths"]:
+            path["runtime_scope"] = "development_only"
+
+        # When / Then
+        self.assertTrue(is_critical_reachable_production(critical))
+        for name, candidate in (
+            ("affected status", non_affected),
+            ("critical severity", non_critical),
+            ("reachability", non_reachable),
+            ("production scope", non_production),
+        ):
+            with self.subTest(required_dimension=name):
+                self.assertFalse(is_critical_reachable_production(candidate))
+
     def test_evidence_cannot_cross_normalized_findings(self) -> None:
         # Given
         source = copy.deepcopy(fixture("dp-development-01")["source"])

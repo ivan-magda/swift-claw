@@ -6,7 +6,7 @@ from typing import Any
 
 from benchmark_core.attempt import SUCCESSFUL_FILE_READ_EVENT
 
-from .policy import is_safe_remediation_option
+from .policy import is_critical_reachable_production, is_safe_remediation_option
 from .score_ledger import entry
 
 
@@ -129,7 +129,7 @@ def critical_recall(
 ) -> dict[str, Any]:
     result: dict[str, Any] = {"recalled": 0, "total": 0, "ledger": [], "hits": set()}
     for finding_id, finding in findings_by_id.items():
-        if not _is_critical_reachable_production(finding):
+        if not is_critical_reachable_production(finding):
             continue
         result["total"] += 1
         finding_output = output_by_id.get(finding_id)
@@ -151,12 +151,3 @@ def critical_recall(
             )
             result["hits"].add("critical.critical_reachable_production")
     return result
-
-
-def _is_critical_reachable_production(finding: dict[str, Any]) -> bool:
-    return (
-        finding["affected_status"] == "affected"
-        and finding["severity"] == "critical"
-        and finding["reachability"] == "reachable"
-        and any(path["runtime_scope"] == "production" for path in finding["dependency_paths"])
-    )
