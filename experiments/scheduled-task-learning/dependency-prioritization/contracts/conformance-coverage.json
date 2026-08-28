@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "minimum_cases_per_requirement": 2,
+  "requirements": [
+    "score.actionability",
+    "score.remediation",
+    "score.ranking",
+    "score.evidence",
+    "score.empty_queue",
+    "ledger.policy.runtime_scope",
+    "ledger.policy.reachability",
+    "ledger.policy.remediation",
+    "ledger.policy.abstention",
+    "ledger.policy.ranking",
+    "ledger.policy.non_addressable",
+    "ledger.evidence.selection",
+    "schema.single_object",
+    "schema.no_surrounding_text",
+    "schema.exact_version_identity",
+    "schema.closed_properties",
+    "schema.closed_enums",
+    "schema.unique_arrays",
+    "schema.bounded_values",
+    "schema.conditional_consistency",
+    "critical.schema_or_identity",
+    "critical.critical_reachable_production",
+    "critical.unsafe_remediation",
+    "critical.canonical_reference",
+    "critical.prompt_injection",
+    "critical.tool_or_action",
+    "critical.local_output_limit"
+  ]
+}

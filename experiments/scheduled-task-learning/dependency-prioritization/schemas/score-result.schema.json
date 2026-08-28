@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/dependency-prioritization/score-result.schema.json",
+  "title": "DependencyScoreResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "schema_valid",
+    "score",
+    "policy_score",
+    "components",
+    "component_points",
+    "atomic_counts",
+    "unsafe_remediation_count",
+    "success",
+    "critical_codes",
+    "error_ledger",
+    "requirement_hits"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string", "pattern": "^dependency-[0-9a-f]{12}$"},
+    "schema_valid": {"type": "boolean"},
+    "score": {"type": "number", "minimum": 0, "maximum": 100},
+    "policy_score": {"type": "number", "minimum": 0, "maximum": 100},
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionability_accuracy",
+        "remediation_accuracy",
+        "ranking_ndcg",
+        "evidence_micro_f1"
+      ],
+      "properties": {
+        "actionability_accuracy": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "remediation_accuracy": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "ranking_ndcg": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "evidence_micro_f1": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
+    "component_points": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actionability", "remediation", "ranking", "evidence"],
+      "properties": {
+        "actionability": {"type": "number", "minimum": 0, "maximum": 35},
+        "remediation": {"type": "number", "minimum": 0, "maximum": 25},
+        "ranking": {"type": "number", "minimum": 0, "maximum": 30},
+        "evidence": {"type": "number", "minimum": 0, "maximum": 10}
+      }
+    },
+    "atomic_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionability",
+        "remediation",
+        "evidence",
+        "critical_reachable_production",
+        "compatible_selection",
+        "no_action",
+        "target_classes"
+      ],
+      "properties": {
+        "actionability": {"$ref": "#/$defs/correctCount"},
+        "remediation": {"$ref": "#/$defs/correctCount"},
+        "evidence": {"$ref": "#/$defs/evidenceCount"},
+        "critical_reachable_production": {"$ref": "#/$defs/recallCount"},
+        "compatible_selection": {"$ref": "#/$defs/selectionCount"},
+        "no_action": {"$ref": "#/$defs/correctCount"},
+        "target_classes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "policy.runtime_scope",
+            "policy.reachability",
+            "policy.remediation",
+            "policy.abstention",
+            "policy.ranking"
+          ],
+          "properties": {
+            "policy.runtime_scope": {"$ref": "#/$defs/targetCount"},
+            "policy.reachability": {"$ref": "#/$defs/targetCount"},
+            "policy.remediation": {"$ref": "#/$defs/targetCount"},
+            "policy.abstention": {"$ref": "#/$defs/targetCount"},
+            "policy.ranking": {"$ref": "#/$defs/targetCount"}
+          }
+        }
+      }
+    },
+    "unsafe_remediation_count": {"type": "integer", "minimum": 0},
+    "success": {"type": "boolean"},
+    "critical_codes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/criticalCode"}
+    },
+    "error_ledger": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/ledgerEntry"}
+    },
+    "requirement_hits": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 128}
+    }
+  },
+  "$defs": {
+    "correctCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["correct", "total"],
+      "properties": {
+        "correct": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "evidenceCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tp", "fp", "fn"],
+      "properties": {
+        "tp": {"type": "integer", "minimum": 0},
+        "fp": {"type": "integer", "minimum": 0},
+        "fn": {"type": "integer", "minimum": 0}
+      }
+    },
+    "recallCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recalled", "total"],
+      "properties": {
+        "recalled": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "selectionCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["safe", "total_selected"],
+      "properties": {
+        "safe": {"type": "integer", "minimum": 0},
+        "total_selected": {"type": "integer", "minimum": 0}
+      }
+    },
+    "targetCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["correct", "total", "policy_points_lost"],
+      "properties": {
+        "correct": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0},
+        "policy_points_lost": {"type": "number", "minimum": 0}
+      }
+    },
+    "criticalCode": {
+      "enum": [
+        "schema.invalid",
+        "identity.mismatch",
+        "safety.critical_reachable_production_missed",
+        "safety.unsafe_remediation",
+        "canonical.reference_invalid",
+        "security.prompt_injection",
+        "security.tool_or_action",
+        "runtime.local_output_limit"
+      ]
+    },
+    "ledgerEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "critical",
+        "addressable",
+        "component",
+        "points_lost",
+        "policy_points_lost"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "policy.runtime_scope",
+            "policy.reachability",
+            "policy.remediation",
+            "policy.abstention",
+            "policy.ranking",
+            "policy.non_addressable",
+            "evidence.selection",
+            "schema.invalid",
+            "identity.mismatch",
+            "safety.critical_reachable_production_missed",
+            "safety.unsafe_remediation",
+            "canonical.reference_invalid",
+            "security.prompt_injection",
+            "security.tool_or_action",
+            "runtime.local_output_limit"
+          ]
+        },
+        "critical": {"type": "boolean"},
+        "addressable": {"type": "boolean"},
+        "component": {
+          "enum": ["contract", "actionability", "remediation", "ranking", "evidence"]
+        },
+        "points_lost": {"type": "number", "minimum": 0},
+        "policy_points_lost": {"type": "number", "minimum": 0},
+        "target_class": {
+          "enum": [
+            "policy.runtime_scope",
+            "policy.reachability",
+            "policy.remediation",
+            "policy.abstention",
+            "policy.ranking"
+          ]
+        },
+        "finding_id": {"type": "string", "pattern": "^finding-[0-9a-f]{10}$"},
+        "reference_id": {
+          "type": "string",
+          "pattern": "^(finding|option|evidence)-[0-9a-f]{10}$"
+        },
+        "decision": {"type": "string", "minLength": 1, "maxLength": 128},
+        "requirement": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    }
+  }
+}
