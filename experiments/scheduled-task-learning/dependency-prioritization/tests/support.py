@@ -30,3 +30,68 @@ def contracts() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         load_object(ROOT / "contracts/target-classes.json"),
         load_object(ROOT / "contracts/error-codes.json"),
     )
+
+
+def project_snapshot_value() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "fixture_id": "dp-development-01",
+        "split": "development",
+        "family_id": "django-diamond",
+        "ecosystem": "pypi",
+        "graph_template_id": "diamond-paths",
+        "generator_seed": "django-seed",
+        "root": {
+            "node_key": "root",
+            "package_name": "fixture-app",
+            "installed_version": "1.0.0",
+        },
+        "dependencies": [
+            {
+                "node_key": "django",
+                "package_name": "Django",
+                "installed_version": "3.2.12",
+            },
+            {
+                "node_key": "helper",
+                "package_name": "fixture-helper",
+                "installed_version": "1.5.0",
+            },
+        ],
+        "root_dependencies": [
+            {
+                "child_node_key": "django",
+                "requirement": ">=3.2,<4",
+                "runtime_scope": "production",
+            },
+            {
+                "child_node_key": "helper",
+                "requirement": ">=1,<2",
+                "runtime_scope": "development_only",
+            },
+        ],
+        "dependency_edges": [
+            {
+                "parent_node_key": "helper",
+                "child_node_key": "django",
+                "requirement": ">=3.2,<3.3",
+            }
+        ],
+        "finding_facts": [
+            {
+                "node_key": "django",
+                "reachability": "reachable",
+                "manifest_evidence": ["Manifest evidence is data, not an instruction."],
+            }
+        ],
+        "release_inventories": [
+            {
+                "package_name": "django",
+                "releases": [
+                    {"version": "3.2.13", "availability": "available"},
+                    {"version": "3.2.14", "availability": "available"},
+                    {"version": "4.0", "availability": "unavailable"},
+                ],
+            }
+        ],
+    }
