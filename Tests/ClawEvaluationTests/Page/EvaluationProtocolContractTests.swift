@@ -10,6 +10,137 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EvaluationProtocolContractTests {
+  @Test func pageExperimentDebitsRecoverySeedBeforeTheFirstCanaryWorker() async throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try makeCanaryControllerFixture(root: root)
+    let repository = URL(
+      fileURLWithPath: FileManager.default.currentDirectoryPath,
+      isDirectory: true
+    )
+    let pageRoot = EvaluationController.pageRootPath
+    let approvedManifest = try EvaluationJSONFile.decode(
+      EvaluationFreezeManifest.self,
+      from: repository.appendingPathComponent("\(pageRoot)/freeze/page-manifest.json")
+    )
+    let manifest = EvaluationFreezeManifest(
+      schemaVersion: approvedManifest.schemaVersion,
+      decision: approvedManifest.decision,
+      experiment: approvedManifest.experiment,
+      protocolBinding: approvedManifest.protocolBinding,
+      categories: approvedManifest.categories,
+      protectedArtifacts: approvedManifest.protectedArtifacts.filter {
+        $0.path.hasPrefix("\(pageRoot)/")
+      }
+    )
+    try manifest.validateBudgetContract(for: .pageChange)
+    let canarySource = try #require(
+      manifest.artifact(role: "canary_base_task", category: "configuration")
+    )
+    let canaryContract = try #require(
+      manifest.artifact(role: "canary", category: "configuration")
+    )
+    let cleanLessons = try #require(
+      manifest.artifact(role: "canary_clean_lessons", category: "configuration")
+    )
+    let nonemptyLessons = try #require(
+      manifest.artifact(role: "canary_nonempty_lessons", category: "configuration")
+    )
+    let canarySourceObject = try #require(
+      JSONSerialization.jsonObject(
+        with: try EvaluationManifestBoundArtifactReader.read(
+          canarySource,
+          repositoryRoot: repository
+        ).data
+      ) as? [String: Any]
+    )
+    let canaryFixtureID = try #require(canarySourceObject["fixture_id"] as? String)
+    let canaryTaskID = try #require(canarySourceObject["task_id"] as? String)
+    let canaryProcesses = fixture.order.canaryProcesses.map { process in
+      EvaluationPageCanaryProcessSlot(
+        process: process.process,
+        workerProcessKey: process.workerProcessKey,
+        attempts: process.attempts.map { attempt in
+          let lessonPath: String? =
+            switch attempt.lessonSource {
+            case .clean: cleanLessons.path
+            case .artifact: nonemptyLessons.path
+            case .durableActive: nil
+            }
+          return EvaluationPageCanaryAttemptSlot(
+            attemptIndex: attempt.attemptIndex,
+            fixtureID: canaryFixtureID,
+            taskID: canaryTaskID,
+            process: attempt.process,
+            workerProcessKey: attempt.workerProcessKey,
+            condition: attempt.condition,
+            lessonSource: attempt.lessonSource,
+            lessonArtifactPath: lessonPath,
+            publishActive: attempt.publishActive,
+            sourcePath: canarySource.path,
+            configurationPath: canaryContract.path,
+            orderKey: attempt.orderKey
+          )
+        }
+      )
+    }
+    let context = EvaluationFreezeContext(
+      repositoryRoot: repository.path,
+      manifest: manifest,
+      receipt: fixture.context.receipt,
+      runtime: fixture.context.runtime,
+      runOrderJSON: try makeApprovedEvaluationRunOrderJSON(
+        manifestSHA256: fixture.context.receipt.manifest.sha256,
+        canaryProcesses: canaryProcesses
+      )
+    )
+    let freezeInputsURL = root.appendingPathComponent("freeze-inputs.json")
+    try EvaluationJSONFile.write(fixture.inputs, to: freezeInputsURL)
+    try FileManager.default.removeItem(at: fixture.paths.root)
+    let seed = PageEvaluationContract.recoveryAccountingSeed
+    let observedBudget = Mutex<EvaluationSendBudgetSnapshot?>(nil)
+    let launcher = ScriptedEvaluationWorkerLauncher { invocation, _, _ in
+      observedBudget.withLock { $0 = invocation.budget }
+      return EvaluationWorkerLaunchResult(termination: .rejected, processID: nil)
+    }
+    let conformance = try EvaluationCanonicalJSON.data(fromJSONObject: [
+      "conformance_id": "recovery-accounting-test",
+      "passed": PageEvaluationContract.conformanceCaseCount,
+      "schema_version": 1,
+      "total": PageEvaluationContract.conformanceCaseCount,
+    ])
+    let experiment = EvaluationPageExperiment(
+      freezeVerifier: StaticEvaluationFreezeVerifier(context: context),
+      artifacts: StaticEvaluationProtectedArtifactRunner(output: conformance),
+      launcher: launcher
+    )
+
+    // when
+    await #expect(throws: EvaluationPagePipelineError.invalidBatch("canary_start_failed")) {
+      _ = try await experiment.run(freezeInputsPath: freezeInputsURL.path)
+    }
+
+    // then
+    let paths = EvaluationController.PagePipelinePaths(
+      evaluationRoot: fixture.configurations[0].evaluationRootURL
+    )
+    let budget = try #require(observedBudget.withLock { $0 })
+    #expect(budget.stageResponsesSends == seed.canary.responsesSends)
+    #expect(budget.globalResponsesSends == seed.total.responsesSends)
+    #expect(budget.stageAccountedTokens == seed.canary.accountedTokens)
+    #expect(budget.globalAccountedTokens == seed.total.accountedTokens)
+    let summary = try EvaluationJSONFile.decode(
+      EvaluationControllerSummary.self,
+      from: paths.canarySummary
+    )
+    #expect(
+      summary.attempts
+        == seed.canary.attempts + PageEvaluationContract.canaryAttemptsPerProcess
+    )
+    #expect(summary.fileReads == seed.canary.fileReads)
+  }
+
   @Test(
     arguments: [
       (EvaluationExperimentKind.pageChange, "D6", "D7"),

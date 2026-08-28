@@ -59,8 +59,9 @@ package struct EvaluationRuntimeContract: Sendable, Equatable {
   package let responsesSendsPerLogicalRoundTrip = 1
   package let maximumInputGraphemes = 59_999
   package let missingUsageTokenProxy = 132_768
-  package let globalMaximumAttempts = 194
-  package let globalMaximumFileReads = 194
+  package let globalMaximumAttempts = 206
+  package let globalMaximumResponsesSends = 410
+  package let globalMaximumFileReads = 205
   package let globalAccountedTokenThreshold = 4_350_000
   package let policyVersionHexCount = 16
   package let terminalValidationPolicy = StreamingTerminalValidationPolicy.throughStreamEnd
@@ -84,10 +85,6 @@ package struct EvaluationRuntimeContract: Sendable, Equatable {
 
   package var maximumResponsesSendsPerAttempt: Int {
     maximumCompletedModelRoundTripsPerAttempt * responsesSendsPerLogicalRoundTrip
-  }
-
-  package var globalMaximumResponsesSends: Int {
-    globalMaximumAttempts * maximumResponsesSendsPerAttempt
   }
 
   package func isValidPolicyVersion(_ value: String) -> Bool {

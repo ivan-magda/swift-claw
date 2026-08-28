@@ -5,21 +5,20 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from pathlib import Path, PurePosixPath
 import re
+from pathlib import Path, PurePosixPath
 from typing import Any, NoReturn
-
 
 MANIFEST_KIND = "swift-claw.scheduled-task-learning.page-change.freeze"
 MANIFEST_SCHEMA_VERSION = 1
 DESCRIPTOR_SCHEMA_VERSION = 1
-APPROVAL_SCHEMA_VERSION = 1
+APPROVAL_SCHEMA_VERSION = 2
 DECISION = "D6"
 EXPERIMENT = "page-change"
 
-PROTOCOL_VERSION = "0.3"
+PROTOCOL_VERSION = "0.5"
 PROTOCOL_PATH = "docs/research/118-validation-protocol.md"
-PROTOCOL_SHA256 = "17e70a3253400ceb9408da1dcf168664ea9533294661774bd4962cb9f9d11213"
+PROTOCOL_SHA256 = "ac2628e7e57f1c013c6fdb8f337426dadff534e03b7e2ded67973970c9d7c12f"
 PACKAGE_MANIFEST_PATH = "Package.swift"
 PACKAGE_RESOLVED_PATH = "Package.resolved"
 SWIFT_EXECUTABLE_TARGET = "claw-eval"
@@ -36,6 +35,24 @@ CANARY_NONEMPTY_LESSONS_PATH = f"{PAGE_ROOT}/config/canary-nonempty-lessons.json
 CANARY_FIXTURE_ID = "pc-development-00"
 CANARY_TASK_ID = "page-7af01fe15924"
 MANIFEST_DESCRIPTOR_PATH = f"{PAGE_ROOT}/freeze/page-manifest-descriptor.json"
+REPLACEMENT_DELTA_PATH = f"{PAGE_ROOT}/freeze/replacement-delta.json"
+INVALIDATED_MANIFEST_SHA256 = "d5ae7dcef1c20f4c95f22cad9d23c7c1f37409abb3d2a02349a951c7647faad8"
+INVALIDATED_MANIFEST_PATH = (
+    f"{PAGE_ROOT}/provenance/invalidated-page-manifest-d5ae7dcef1c2.json"
+)
+INVALID_BATCH_JOURNAL_SHA256 = "377b6c1c9e5161fc10e41e723906ca1492fd60256ba2715d5bc109df39ace3cb"
+INVALID_BATCH_JOURNAL_PATH = (
+    f"{PAGE_ROOT}/provenance/invalid-batch-controller-journal-d5ae7dcef1c2.jsonl"
+)
+INVALID_BATCH_TERMINAL_RESULT_SHA256 = (
+    "ceda3f4995d3bc2655faa68d5aeb29efc6b31e4a0f4db73404c20c9415b367d8"
+)
+INVALID_BATCH_TERMINAL_RESULT_PATH = (
+    f"{PAGE_ROOT}/provenance/invalid-batch-terminal-result-d5ae7dcef1c2.json"
+)
+INVALIDATION_REPORT_SHA256 = "7f663a34f284ff4e98ea7f6cacad6d371b7cbb9f5e02a01f65083113cfaf4559"
+INVALIDATION_REPORT_PATH = f"{PAGE_ROOT}/provenance/invalidation-report-d5ae7dcef1c2.json"
+RECOVERY_LEDGER_PATH = f"{PAGE_ROOT}/provenance/recovery-ledger-d5ae7dcef1c2.json"
 TASK_PROMPT_PATH = f"{PAGE_ROOT}/prompts/task.md"
 SYNTHESIS_PROMPT_PATH = f"{PAGE_ROOT}/prompts/synthesis.md"
 LESSON_LINT_RULES_PATH = f"{PAGE_ROOT}/contracts/lesson-lint-rules.json"
@@ -92,6 +109,7 @@ FREEZE_MODULE_PATHS = frozenset(
         "cli.py",
         "contract.py",
         "manifest.py",
+        "recovery.py",
         "freeze.py",
         "run_order.py",
     )
@@ -119,7 +137,14 @@ CATEGORY_ROLE_RULES = {
         "freeze_verifier_source": (len(FREEZE_MODULE_PATHS), len(FREEZE_MODULE_PATHS)),
         "manifest_descriptor": (1, 1),
     },
-    "budget": {}, "model": {}, "retry": {}, "output": {},
+    "budget": {
+        "controller_journal": (1, 1),
+        "invalidated_manifest": (1, 1),
+        "invalidation_report": (1, 1),
+        "recovery_ledger": (1, 1),
+        "terminal_result": (1, 1),
+    },
+    "model": {}, "retry": {}, "output": {},
     "prompts": {"task": (1, 1), "synthesis": (1, 1)},
     "schemas": {"schema": (1, None)},
     "lesson_linter": {
@@ -145,6 +170,13 @@ CATEGORY_ROLE_RULES = {
 }
 
 FIXED_ROLE_PATHS = {
+    "budget": {
+        ("controller_journal", INVALID_BATCH_JOURNAL_PATH),
+        ("invalidated_manifest", INVALIDATED_MANIFEST_PATH),
+        ("invalidation_report", INVALIDATION_REPORT_PATH),
+        ("recovery_ledger", RECOVERY_LEDGER_PATH),
+        ("terminal_result", INVALID_BATCH_TERMINAL_RESULT_PATH),
+    },
     "dependencies": {
         ("package_manifest", PACKAGE_MANIFEST_PATH),
         ("resolved_dependencies", PACKAGE_RESOLVED_PATH),
@@ -185,6 +217,53 @@ FIXED_ROLE_PATHS = {
         ("executable", CONFORMANCE_EXECUTABLE_PATH),
     },
 }
+
+REPLACEMENT_IMMUTABLE_CATEGORIES = frozenset(
+    {
+        "conformance",
+        "dependencies",
+        "feedback",
+        "fixtures",
+        "gold",
+        "lesson_linter",
+        "model",
+        "output",
+        "prompts",
+        "retry",
+        "run_order",
+        "runtime_sources",
+        "schemas",
+        "scorer",
+        "splits",
+    }
+)
+REPLACEMENT_CHANGED_HARNESS_PATHS = frozenset(
+    {
+        "Sources/ClawEvaluation/Controller/EvaluationControllerExecution.swift",
+        "Sources/ClawEvaluation/Controller/EvaluationControllerValidation.swift",
+        "Sources/ClawEvaluation/Infrastructure/EvaluationFreezeVerification.swift",
+        "Sources/ClawEvaluation/Page/EvaluationCanaryExecution.swift",
+        "Sources/ClawEvaluation/Page/EvaluationContract.swift",
+        "Sources/ClawEvaluation/Page/Experiment/EvaluationPageExperiment.swift",
+        "Sources/ClawEvaluation/Runtime/EvaluationRuntimeConfiguration.swift",
+        "Sources/ClawEvaluation/Runtime/EvaluationWorker.swift",
+    }
+)
+REPLACEMENT_ADDED_HARNESS_PATHS = frozenset(
+    {"Sources/ClawEvaluation/Runtime/EvaluationExperimentProfile.swift"}
+)
+REPLACEMENT_CHANGED_CONFIGURATION_PATHS = frozenset(
+    {
+        MANIFEST_DESCRIPTOR_PATH,
+        f"{FREEZE_PACKAGE_ROOT}/approval.py",
+        f"{FREEZE_PACKAGE_ROOT}/artifacts.py",
+        f"{FREEZE_PACKAGE_ROOT}/cli.py",
+        f"{FREEZE_PACKAGE_ROOT}/contract.py",
+    }
+)
+REPLACEMENT_ADDED_CONFIGURATION_PATHS = frozenset(
+    {f"{FREEZE_PACKAGE_ROOT}/recovery.py"}
+)
 
 RESERVED_METADATA_KEYS = frozenset(
     {"commit", "freeze_commit", "git_commit", "git_revision", "head_commit",

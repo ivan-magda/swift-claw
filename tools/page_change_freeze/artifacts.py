@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path, PurePosixPath
 import stat
 import struct
 import subprocess
 import tempfile
+from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 
 from .contract import (
-    BENCHMARK_CORE_ROOT,
-    BENCHMARK_CORE_CATEGORY_SOURCES,
-    BENCHMARK_PACKAGE_ROOT,
     BENCHMARK_BOOTSTRAP_ROLE,
+    BENCHMARK_CORE_CATEGORY_SOURCES,
+    BENCHMARK_CORE_ROOT,
+    BENCHMARK_PACKAGE_ROOT,
     CONFORMANCE_EXECUTABLE_PATH,
     EXECUTABLE_PATH,
     FREEZE_MODULE_PATHS,
@@ -32,7 +32,6 @@ from .contract import (
     require_object,
     sha256_hex,
 )
-
 
 MACHO_MAGIC_64 = 0xFEEDFACF
 MACHO_CPU_TYPE_ARM64 = 0x0100000C
@@ -382,6 +381,27 @@ def run_git(repo_root: Path, arguments: list[str]) -> bytes:
     return result.stdout
 
 
+def committed_blob(repo_root: Path, *, commit: str, path: str, mode: str) -> bytes:
+    output = run_git(repo_root, ["ls-tree", "-z", "--full-tree", commit, "--", path])
+    entries = [entry for entry in output.split(b"\x00") if entry]
+    if len(entries) != 1:
+        fail(f"approved commit must contain one exact tree entry: {path}")
+    try:
+        metadata, raw_path = entries[0].split(b"\t", 1)
+        observed_mode, kind, object_id = metadata.decode("ascii").split(" ")
+        observed_path = raw_path.decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        fail(f"cannot parse Git tree entry for {path}")
+    if observed_path != path or observed_mode != mode or kind != "blob":
+        fail(
+            f"approved commit has wrong mode/type for {path}: "
+            f"expected {mode} blob, observed {observed_mode} {kind}"
+        )
+    if run_git(repo_root, ["cat-file", "-t", object_id]).decode().strip() != "blob":
+        fail(f"Git object is not a blob: {object_id}")
+    return run_git(repo_root, ["cat-file", "blob", object_id])
+
+
 def verify_commit_snapshot(repo_root: Path, *, freeze_commit: str, manifest_path: str,
                            manifest_raw: bytes, manifest: dict[str, Any]) -> None:
     root = repo_root.resolve(strict=True)
@@ -399,22 +419,10 @@ def verify_commit_snapshot(repo_root: Path, *, freeze_commit: str, manifest_path
     by_path = {item["path"]: item for item in manifest["protected_artifacts"]}
     expected = [(manifest_path, manifest_raw), *((path, None) for path in by_path)]
     for path, exact in expected:
-        output = run_git(root, ["ls-tree", "-z", "--full-tree", freeze_commit, "--", path])
-        entries = [entry for entry in output.split(b"\x00") if entry]
-        if len(entries) != 1:
-            fail(f"approved commit must contain one exact tree entry: {path}")
-        try:
-            metadata, raw_path = entries[0].split(b"\t", 1)
-            mode, kind, object_id = metadata.decode("ascii").split(" ")
-            observed_path = raw_path.decode("utf-8")
-        except (ValueError, UnicodeDecodeError):
-            fail(f"cannot parse Git tree entry for {path}")
         wanted_mode = "100755" if path in executables else "100644"
-        if observed_path != path or mode != wanted_mode or kind != "blob":
-            fail(f"approved commit has wrong mode/type for {path}: expected {wanted_mode} blob, observed {mode} {kind}")
-        if run_git(root, ["cat-file", "-t", object_id]).decode().strip() != "blob":
-            fail(f"Git object is not a blob: {object_id}")
-        committed = run_git(root, ["cat-file", "blob", object_id])
+        committed = committed_blob(
+            root, commit=freeze_commit, path=path, mode=wanted_mode
+        )
         if exact is not None and committed != exact:
             fail("approved commit does not contain the exact canonical manifest bytes")
         if exact is None and (len(committed) != by_path[path]["bytes"] or sha256_hex(committed) != by_path[path]["sha256"]):

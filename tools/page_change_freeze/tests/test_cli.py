@@ -37,6 +37,7 @@ class CLITests(unittest.TestCase):
     def test_cli_names_offline_live_and_local_runtime_checks_honestly(self) -> None:
         # given
         expected_commands = (
+            "generate-recovery-ledger", "generate-replacement-delta",
             "verify-record-consistency", "verify-live-freeze", "verify-runtime-binding",
         )
 

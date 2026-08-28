@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import argparse
 import os
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 from typing import Any, Optional
 
-from . import approval, artifacts, manifest, run_order
+from . import approval, artifacts, manifest, recovery, run_order
 from .contract import (
-    FREEZE_VERIFIER_PATH,
     MANIFEST_DESCRIPTOR_PATH,
+    RECOVERY_LEDGER_PATH,
+    REPLACEMENT_DELTA_PATH,
     FreezeError,
     canonical_json_bytes,
     canonical_json_line_bytes,
@@ -108,6 +109,35 @@ def command_verify(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def command_generate_recovery_ledger(arguments: argparse.Namespace) -> int:
+    root = arguments.repo_root.resolve(strict=True)
+    output, relative = _output(root, arguments.output)
+    if relative != RECOVERY_LEDGER_PATH:
+        fail(f"recovery ledger must use the frozen path: {RECOVERY_LEDGER_PATH}")
+    raw = canonical_json_bytes(recovery.build_recovery_ledger(root))
+    atomic_write(output, raw)
+    print(f"recovery_ledger_path={relative}")
+    print(f"recovery_ledger_sha256={sha256_hex(raw)}")
+    return 0
+
+
+def command_generate_replacement_delta(arguments: argparse.Namespace) -> int:
+    root = arguments.repo_root.resolve(strict=True)
+    value, raw = load_json(arguments.manifest)
+    candidate = manifest.verify_structure(value, raw)
+    delta = recovery.build_replacement_delta(root, candidate, raw)
+    if delta["verdict"] != "allowed":
+        fail(f"replacement D6 contains forbidden changes: {delta['violations']}")
+    output, relative = _output(root, arguments.output)
+    if relative != REPLACEMENT_DELTA_PATH:
+        fail(f"replacement delta must use the frozen path: {REPLACEMENT_DELTA_PATH}")
+    delta_raw = canonical_json_bytes(delta)
+    atomic_write(output, delta_raw)
+    print(f"replacement_delta_path={relative}")
+    print(f"replacement_delta_sha256={sha256_hex(delta_raw)}")
+    return 0
+
+
 def _approval_inputs(arguments: argparse.Namespace) -> tuple[Path, str, dict[str, Any], bytes, str]:
     record, record_raw = load_json(arguments.approval)
     if canonical_json_bytes(record) != record_raw:
@@ -126,6 +156,7 @@ def _approval_inputs(arguments: argparse.Namespace) -> tuple[Path, str, dict[str
     commit = parsed["freeze_commit"]
     artifacts.verify_commit_snapshot(root, freeze_commit=commit, manifest_path=relative,
                                      manifest_raw=raw, manifest=value)
+    approval.verify_committed_replacement_delta(root, commit)
     return root, relative, value, raw, commit
 
 
@@ -194,6 +225,21 @@ def parser() -> argparse.ArgumentParser:
     verify.add_argument("--repo-root", type=Path, required=True)
     verify.add_argument("--manifest", type=Path, required=True)
     verify.set_defaults(handler=command_verify)
+    ledger = commands.add_parser(
+        "generate-recovery-ledger",
+        help="derive the canonical invalid-batch accounting ledger",
+    )
+    ledger.add_argument("--repo-root", type=Path, required=True)
+    ledger.add_argument("--output", type=Path, required=True)
+    ledger.set_defaults(handler=command_generate_recovery_ledger)
+    delta = commands.add_parser(
+        "generate-replacement-delta",
+        help="compare a replacement D6 manifest with its invalidated baseline",
+    )
+    delta.add_argument("--repo-root", type=Path, required=True)
+    delta.add_argument("--manifest", type=Path, required=True)
+    delta.add_argument("--output", type=Path, required=True)
+    delta.set_defaults(handler=command_generate_replacement_delta)
     record = commands.add_parser("verify-record-consistency",
                                  help="check stored approval bytes and commit without GitHub")
     _approval_arguments(record)

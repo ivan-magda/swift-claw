@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-from tools.page_change_freeze import artifacts, contract, manifest, run_order
+from tools.page_change_freeze import artifacts, contract, manifest, recovery, run_order
 
 
 class FreezeRepository:
@@ -38,6 +38,15 @@ let package = Package(name: "fixture", targets: [
 
         for path in contract.FREEZE_MODULE_PATHS:
             self.write(path, (canonical_root / path).read_bytes())
+        for path in (
+            contract.INVALIDATED_MANIFEST_PATH,
+            contract.INVALIDATION_REPORT_PATH,
+            contract.INVALID_BATCH_JOURNAL_PATH,
+            contract.INVALID_BATCH_TERMINAL_RESULT_PATH,
+            contract.RECOVERY_LEDGER_PATH,
+        ):
+            self.write(path, (canonical_root / path).read_bytes())
+        self.write(contract.REPLACEMENT_DELTA_PATH, b"{}")
         for name in ("runtime.json", "canary.json", "canary-base-task.json",
                      "canary-clean-lessons.json", "canary-nonempty-lessons.json"):
             self.write(f"{contract.PAGE_ROOT}/config/{name}", b'{"schema_version":1}\n')
@@ -115,7 +124,24 @@ let package = Package(name: "fixture", targets: [
         values = {name: {} for name in contract.CATEGORY_NAMES}
         values.update({
             "configuration": {"runtime_contract_owner": "ClawEvaluation"},
-            "budget": {"attempt_cap": 76},
+            "budget": {
+                "canary_accounted_token_stopping_threshold": 50_000,
+                "canary_attempt_cap": 8,
+                "canary_responses_send_cap": 16,
+                "global_accounted_token_stopping_threshold": 4_350_000,
+                "global_attempt_cap": 206,
+                "global_file_read_cap": 205,
+                "global_responses_send_cap": 410,
+                "missing_usage_token_proxy": 132_768,
+                "page_accounted_token_stopping_threshold": 1_500_000,
+                "page_attempt_cap": 84,
+                "page_planned_attempts": 73,
+                "page_replacement_pool": 3,
+                "page_responses_send_cap": 166,
+                "recovery_accounting_seed": recovery.recovery_seed(
+                    recovery.verify_recovery_ledger(self.root)[0]
+                ),
+            },
             "model": {"provider_route": "openai-chatgpt/gpt-5.6-sol"},
             "retry": {"provider_retry": False},
             "output": {"max_utf8_bytes": 32768},
@@ -135,6 +161,10 @@ let package = Package(name: "fixture", targets: [
         ]
         categories["executable"]["artifacts"] = [
             {"role": "executable", "path": contract.EXECUTABLE_PATH}]
+        categories["budget"]["artifacts"] = [
+            {"role": role, "path": path}
+            for role, path in sorted(contract.FIXED_ROLE_PATHS["budget"])
+        ]
         configuration = [
             ("runtime", contract.RUNTIME_CONFIGURATION_PATH),
             ("canary", contract.CANARY_CONFIGURATION_PATH),
