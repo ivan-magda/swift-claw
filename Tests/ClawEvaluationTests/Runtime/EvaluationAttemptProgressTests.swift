@@ -403,6 +403,12 @@ import Testing
       fence: secondFence,
       assistantText: "Different visible commentary."
     )
+    let assistantOmitted = try secondRequest(
+      callID: "call-provider-a",
+      reasoning: "encrypted-provider-a",
+      path: "input.json",
+      fence: secondFence
+    )
     let summaryDrift = try secondRequest(
       callID: "call-provider-a",
       reasoning: "encrypted-provider-a",
@@ -435,6 +441,7 @@ import Testing
     #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(callIDDrift))
     #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(reasoningDrift))
     #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(assistantDrift))
+    #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(assistantOmitted))
     #expect(replayBHash == EvaluationHTTPRecorder.normalizedStructureSHA256(summaryDrift))
     #expect(replayBHash != EvaluationHTTPRecorder.normalizedStructureSHA256(pathDrift))
   }

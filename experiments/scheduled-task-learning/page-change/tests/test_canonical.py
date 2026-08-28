@@ -130,6 +130,42 @@ class StrictJSONTests(unittest.TestCase):
                 )
                 self.assertFalse(output.exists())
 
+    def test_page_record_bundle_preserves_integral_float_receipt_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            # Given
+            root = Path(directory)
+            first = root / "first.json"
+            second = root / "second.json"
+            write(first, {"attempt_id": "first", "score": 1.0})
+            write(second, {"attempt_id": "second", "score": 0.5})
+            output = root / "records.json"
+
+            # When
+            completed = subprocess.run(  # noqa: S603 - fixed protected executable
+                [
+                    str(ROOT / "artifacts/page-record"),
+                    "bundle",
+                    "--record",
+                    str(first),
+                    "--record",
+                    str(second),
+                    "--output",
+                    str(output),
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            # Then
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            self.assertEqual(
+                output.read_bytes(),
+                b'{"records":[{"attempt_id":"first","score":1.0},'
+                b'{"attempt_id":"second","score":0.5}],"schema_version":1}\n',
+            )
+
     def test_rejects_duplicate_object_keys(self) -> None:
         # Given
         raw = '{"task_id":"a","task_id":"b"}'

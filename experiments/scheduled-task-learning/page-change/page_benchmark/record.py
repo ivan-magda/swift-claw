@@ -38,6 +38,13 @@ def _parse_canonicalize_arguments(arguments: list[str]) -> argparse.Namespace:
     return parser.parse_args(arguments)
 
 
+def _parse_bundle_arguments(arguments: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--record", action="append", required=True)
+    parser.add_argument("--output", required=True)
+    return parser.parse_args(arguments)
+
+
 def seal_record(arguments: argparse.Namespace) -> dict[str, Any]:
     repository_root = Path(arguments.root)
     manifest, manifest_sha256 = load_manifest(Path(arguments.manifest))
@@ -117,15 +124,19 @@ def seal_record(arguments: argparse.Namespace) -> dict[str, Any]:
 
 def main(arguments: list[str] | None = None) -> int:
     raw_arguments = sys.argv[1:] if arguments is None else arguments
-    canonicalize = raw_arguments[:1] == ["canonicalize"]
-    parsed = (
-        _parse_canonicalize_arguments(raw_arguments[1:])
-        if canonicalize
-        else _parse_arguments(raw_arguments)
-    )
+    mode = raw_arguments[0] if raw_arguments[:1] else "seal"
+    if mode == "canonicalize":
+        parsed = _parse_canonicalize_arguments(raw_arguments[1:])
+    elif mode == "bundle":
+        parsed = _parse_bundle_arguments(raw_arguments[1:])
+    else:
+        parsed = _parse_arguments(raw_arguments)
     try:
-        if canonicalize:
+        if mode == "canonicalize":
             write(Path(parsed.output), load_object(Path(parsed.input)))
+        elif mode == "bundle":
+            records = [load_canonical_artifact(Path(path)) for path in parsed.record]
+            write(Path(parsed.output), {"records": records, "schema_version": 1})
         else:
             record = seal_record(parsed)
     except (
@@ -147,7 +158,7 @@ def main(arguments: list[str] | None = None) -> int:
             end="",
         )
         return 2
-    if canonicalize:
+    if mode in {"canonicalize", "bundle"}:
         return 0
     if parsed.output:
         write(Path(parsed.output), record)

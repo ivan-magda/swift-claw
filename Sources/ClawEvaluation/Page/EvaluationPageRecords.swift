@@ -39,6 +39,7 @@ struct EvaluationPageRecordBuilder: Sendable {
     let scratch = try privatePublicationDirectory(for: outputURL)
 
     var records: [[String: Any]] = []
+    var recordURLs: [URL] = []
     for attempt in attempts {
       let result = attempt.result
       guard
@@ -139,16 +140,10 @@ struct EvaluationPageRecordBuilder: Sendable {
       }
 
       records.append(record)
+      recordURLs.append(recordURL)
     }
 
-    try await publishCanonicalComposite(
-      draft: EvaluationCanonicalJSON.data(fromJSONObject: [
-        "records": records, "schema_version": 1,
-      ]),
-      draftURL: scratch.appendingPathComponent("records-draft.json"),
-      outputURL: outputURL,
-      freeze: freeze
-    )
+    try await publishRecordBundle(recordURLs, to: outputURL, freeze: freeze)
 
     return records
   }
@@ -257,6 +252,23 @@ struct EvaluationPageRecordBuilder: Sendable {
         "--input", draftURL.path,
         "--output", outputURL.path,
       ],
+      protectedOutputURLs: [outputURL],
+      freeze: freeze,
+      captureLimit: 128 * 1_024
+    )
+  }
+
+  private func publishRecordBundle(
+    _ records: [URL],
+    to outputURL: URL,
+    freeze: EvaluationFreezeContext
+  ) async throws {
+    let arguments = ["bundle"]
+      + records.flatMap { ["--record", $0.path] }
+      + ["--output", outputURL.path]
+    _ = try await artifacts.run(
+      relativeExecutablePath: Self.pageRecordExecutablePath,
+      arguments: arguments,
       protectedOutputURLs: [outputURL],
       freeze: freeze,
       captureLimit: 128 * 1_024

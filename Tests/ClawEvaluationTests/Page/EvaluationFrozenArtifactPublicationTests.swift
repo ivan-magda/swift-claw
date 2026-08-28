@@ -163,7 +163,7 @@ import Testing
       workspace: workspace
     )
     let recordJSON =
-      #"{"attempt":{"one_third":0.333333},"attempt_id":"\#(result.attemptID)","carrier_receipt_sha256":"\#(result.carrierReceiptSHA256)","fixture_id":"\#(configuration.fixtureID)","parsed_output":null,"replicate":1,"score_result":{"two_thirds":0.666667}}"#
+      #"{"attempt":{"one_third":0.333333},"attempt_id":"\#(result.attemptID)","carrier_receipt_sha256":"\#(result.carrierReceiptSHA256)","fixture_id":"\#(configuration.fixtureID)","parsed_output":null,"replicate":1,"score_result":{"perfect":1.0,"two_thirds":0.666667}}"#
     let recordData = Data((recordJSON + "\n").utf8)
     let runner = FractionCanonicalizingArtifactRunner(recordData: recordData)
     let builder = EvaluationPageRecordBuilder(artifacts: runner)
@@ -227,7 +227,7 @@ import Testing
     // then — direct Foundation publication expands both decimals and cannot match these bytes.
     let runID = "run-\(SHA256Digest.hex(Data("\(taskID):1".utf8)).prefix(12))"
     let runJSON =
-      #"{"attempt":{"one_third":0.333333},"fixture_id":"\#(configuration.fixtureID)","parsed_output":null,"replicate":1,"run_id":"\#(runID)","score_result":{"two_thirds":0.666667}}"#
+      #"{"attempt":{"one_third":0.333333},"fixture_id":"\#(configuration.fixtureID)","parsed_output":null,"replicate":1,"run_id":"\#(runID)","score_result":{"perfect":1,"two_thirds":0.666667}}"#
     let expectedRecords = Data(
       (#"{"records":[\#(recordJSON)],"schema_version":1}"# + "\n").utf8
     )
@@ -401,7 +401,7 @@ private actor FractionCanonicalizingArtifactRunner: EvaluationProtectedArtifactR
     freeze _: EvaluationFreezeContext,
     captureLimit _: Int
   ) async throws -> Data {
-    let output: Data
+    var output: Data
     if arguments.first == "canonicalize" {
       guard
         relativeExecutablePath == "\(EvaluationController.pageRootPath)/artifacts/page-record",
@@ -427,6 +427,39 @@ private actor FractionCanonicalizingArtifactRunner: EvaluationProtectedArtifactR
         .replacingOccurrences(of: "0.33333299999999999", with: "0.333333")
         .replacingOccurrences(of: "0.66666700000000001", with: "0.666667")
       output = Data(canonical.utf8)
+      try EvaluationDurablePublication.publish(output, to: outputURL)
+    } else if arguments.first == "bundle" {
+      guard
+        relativeExecutablePath == "\(EvaluationController.pageRootPath)/artifacts/page-record",
+        let outputFlag = arguments.firstIndex(of: "--output"),
+        arguments.indices.contains(outputFlag + 1)
+      else {
+        throw EvaluationPagePipelineError.protectedArtifactFailed(relativeExecutablePath)
+      }
+      let outputURL = URL(fileURLWithPath: arguments[outputFlag + 1])
+      let recordURLs = arguments.indices.compactMap { index -> URL? in
+        guard arguments[index] == "--record", arguments.indices.contains(index + 1) else {
+          return nil
+        }
+        return URL(fileURLWithPath: arguments[index + 1])
+      }
+      guard recordURLs.isEmpty == false, protectedOutputURLs == [outputURL] else {
+        throw EvaluationPagePipelineError.protectedArtifactFailed(relativeExecutablePath)
+      }
+      let records = try recordURLs.map { url -> Data in
+        var data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
+        guard data.last == 0x0A else {
+          throw EvaluationPagePipelineError.protectedArtifactFailed(relativeExecutablePath)
+        }
+        data.removeLast()
+        return data
+      }
+      output = Data("{\"records\":[".utf8)
+      for (index, record) in records.enumerated() {
+        if index > 0 { output.append(0x2C) }
+        output.append(record)
+      }
+      output.append(Data("],\"schema_version\":1}\n".utf8))
       try EvaluationDurablePublication.publish(output, to: outputURL)
     } else {
       output = recordData
