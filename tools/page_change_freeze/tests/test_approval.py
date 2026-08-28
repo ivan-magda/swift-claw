@@ -4,6 +4,7 @@ import copy
 import datetime as dt
 from pathlib import Path
 import unittest
+from unittest import mock
 
 from tools.page_change_freeze import approval, artifacts, contract
 from tools.page_change_freeze.tests.support import FreezeRepository
@@ -26,6 +27,22 @@ class ApprovalTests(unittest.TestCase):
             "issue_number": approval.GITHUB_ISSUE_NUMBER,
             "manifest": {"path": f"{contract.PAGE_ROOT}/freeze/page-manifest.json",
                          "sha256": digest},
+            "replacement_delta": {
+                "path": contract.REPLACEMENT_DELTA_PATH,
+                "sha256": contract.sha256_hex(
+                    (self.repo.root / contract.REPLACEMENT_DELTA_PATH).read_bytes()
+                ),
+            },
+            "recovery_ledger": {
+                "path": contract.RECOVERY_LEDGER_PATH,
+                "sha256": contract.sha256_hex(
+                    (self.repo.root / contract.RECOVERY_LEDGER_PATH).read_bytes()
+                ),
+            },
+            "invalidation_report": {
+                "path": contract.INVALIDATION_REPORT_PATH,
+                "sha256": contract.INVALIDATION_REPORT_SHA256,
+            },
             "freeze_commit": commit,
             "comment": {
                 "id": comment_id, "node_id": "IC_kwDOExample",
@@ -39,6 +56,22 @@ class ApprovalTests(unittest.TestCase):
                 "body_sha256": contract.sha256_hex(body),
             },
         }
+
+    def _body(self, digest: str, commit: str) -> bytes:
+        return (
+            approval.approval_statement(
+                digest,
+                contract.sha256_hex(
+                    (self.repo.root / contract.REPLACEMENT_DELTA_PATH).read_bytes()
+                ),
+                contract.sha256_hex(
+                    (self.repo.root / contract.RECOVERY_LEDGER_PATH).read_bytes()
+                ),
+                contract.INVALIDATION_REPORT_SHA256,
+                commit,
+            )
+            + "\n"
+        ).encode()
 
     def _live_comment(self, value: dict, body: bytes) -> dict:
         comment = value["comment"]
@@ -67,7 +100,7 @@ class ApprovalTests(unittest.TestCase):
     def test_record_binds_unedited_owner_comment_body_manifest_and_commit(self) -> None:
         # given
         digest, commit = "a" * 64, "b" * 40
-        body = (approval.approval_statement(digest, commit) + "\n").encode()
+        body = self._body(digest, commit)
         value = self._approval(digest=digest, commit=commit, body=body)
 
         # when
@@ -87,6 +120,10 @@ class ApprovalTests(unittest.TestCase):
         wrong_digest = copy.deepcopy(value)
         wrong_digest["manifest"]["sha256"] = "c" * 64
         mutations.append((wrong_digest, body, "wrong manifest digest"))
+        for field in ("replacement_delta", "recovery_ledger", "invalidation_report"):
+            wrong_binding = copy.deepcopy(value)
+            wrong_binding[field]["sha256"] = "c" * 64
+            mutations.append((wrong_binding, body, "exact approval line"))
         wrong_statement_body = b"D6 is not approved\n"
         wrong_statement = self._approval(
             digest=digest,
@@ -112,7 +149,7 @@ class ApprovalTests(unittest.TestCase):
     def test_record_rejects_edited_timestamp_and_changed_body(self) -> None:
         # given
         digest, commit = "a" * 64, "b" * 40
-        body = (approval.approval_statement(digest, commit) + "\n").encode()
+        body = self._body(digest, commit)
         for mutation, message in (("timestamp", "must be unedited"), ("body", "body digest")):
             with self.subTest(mutation=mutation):
                 value = self._approval(digest=digest, commit=commit, body=body)
@@ -136,7 +173,7 @@ class ApprovalTests(unittest.TestCase):
     def test_live_fetch_is_injected_and_identity_body_timestamp_mutants_fail(self) -> None:
         # given
         digest, commit = "a" * 64, "b" * 40
-        body = (approval.approval_statement(digest, commit) + "\n").encode()
+        body = self._body(digest, commit)
         value = self._approval(digest=digest, commit=commit, body=body)
         baseline = self._live_comment(value, body)
         observed: dict[str, object] = {}
@@ -256,6 +293,9 @@ class ApprovalTests(unittest.TestCase):
 
         # then
         self.assertRegex(str(raised.exception), "different protected bytes")
+        self.repo.write(contract.REPLACEMENT_DELTA_PATH, b'{"changed":true}')
+        with self.assertRaisesRegex(contract.FreezeError, "different replacement-delta bytes"):
+            approval.verify_committed_replacement_delta(self.repo.root, commit)
 
     def test_runtime_binding_checks_digest_path_bytes_and_all_verifier_modules(self) -> None:
         # given
@@ -327,13 +367,17 @@ class ApprovalTests(unittest.TestCase):
         _, raw, manifest_path, marker = self._manifest_with_marker_runner()
         digest = contract.sha256_hex(raw)
         commit = "b" * 40
-        body = (approval.approval_statement(digest, commit) + "\n").encode()
+        body = self._body(digest, commit)
         record = self._approval(digest=digest, commit=commit, body=body)
         live = self._live_comment(record, body)
         live["body"] = "substituted live comment"
 
         # when
-        with self.assertRaisesRegex(contract.FreezeError, "body does not match"):
+        with mock.patch.object(
+            approval.recovery,
+            "verify_replacement_admission",
+            return_value={"status": "verified"},
+        ), self.assertRaisesRegex(contract.FreezeError, "body does not match"):
             approval.verify_live_freeze(
                 self.repo.root,
                 manifest_path=manifest_path,
@@ -351,7 +395,7 @@ class ApprovalTests(unittest.TestCase):
         # given
         value, raw, relative, commit = self.repo.committed_manifest()
         digest = contract.sha256_hex(raw)
-        body = (approval.approval_statement(digest, commit) + "\n").encode()
+        body = self._body(digest, commit)
         record = self._approval(digest=digest, commit=commit, body=body)
         live = self._live_comment(record, body)
         calls = 0
@@ -362,15 +406,21 @@ class ApprovalTests(unittest.TestCase):
             return contract.canonical_json_bytes(live)
 
         # when
-        receipt = approval.verify_live_freeze(
-            self.repo.root, manifest_path=self.repo.root / relative, approval=record,
-            approval_body=body, executable_path=self.repo.root / contract.EXECUTABLE_PATH,
-            http_get=http_get,
-            now=lambda: dt.datetime(2026, 8, 26, 15, 30, tzinfo=dt.timezone.utc),
-            package_description=self.repo.package_description,
-        )
+        with mock.patch.object(
+            approval.recovery,
+            "verify_replacement_admission",
+            return_value={"status": "verified"},
+        ) as verify_admission:
+            receipt = approval.verify_live_freeze(
+                self.repo.root, manifest_path=self.repo.root / relative, approval=record,
+                approval_body=body, executable_path=self.repo.root / contract.EXECUTABLE_PATH,
+                http_get=http_get,
+                now=lambda: dt.datetime(2026, 8, 26, 15, 30, tzinfo=dt.timezone.utc),
+                package_description=self.repo.package_description,
+            )
 
         # then
+        verify_admission.assert_called_once()
         self.assertEqual(calls, 1)
         self.assertEqual(receipt["verified_at"], "2026-08-26T15:30:00Z")
         self.assertEqual(receipt["manifest"]["sha256"], digest)

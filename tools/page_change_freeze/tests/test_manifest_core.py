@@ -72,7 +72,7 @@ class ManifestCoreTests(unittest.TestCase):
         # given
         baseline = self.repo.make_manifest()
         changed_descriptor = copy.deepcopy(self.repo.descriptor)
-        changed_descriptor["categories"]["budget"]["values"]["attempt_cap"] = 77
+        changed_descriptor["categories"]["budget"]["values"]["page_attempt_cap"] = 85
 
         # when
         changed = self.repo.make_manifest(changed_descriptor)
@@ -85,7 +85,7 @@ class ManifestCoreTests(unittest.TestCase):
 
         # given
         forged = copy.deepcopy(baseline)
-        forged["categories"]["budget"]["values"]["attempt_cap"] = 77
+        forged["categories"]["budget"]["values"]["page_attempt_cap"] = 85
         payload = {key: forged["categories"]["budget"][key] for key in ("artifacts", "values")}
         forged["categories"]["budget"]["sha256"] = contract.sha256_hex(
             contract.canonical_json_bytes(payload)

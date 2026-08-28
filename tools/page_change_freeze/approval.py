@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import datetime as dt
-from pathlib import Path
 import re
 import stat
+from pathlib import Path
 from typing import Any, Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from . import artifacts, manifest
+from . import artifacts, manifest, recovery
 from .contract import (
     APPROVAL_SCHEMA_VERSION,
     DECISION,
@@ -20,7 +20,9 @@ from .contract import (
     FREEZE_VERIFIER_PATH,
     GIT_OBJECT_ID,
     HEX_SHA256,
-    canonical_json_bytes,
+    INVALIDATION_REPORT_PATH,
+    RECOVERY_LEDGER_PATH,
+    REPLACEMENT_DELTA_PATH,
     fail,
     load_json,
     load_json_bytes,
@@ -29,7 +31,6 @@ from .contract import (
     require_object,
     sha256_hex,
 )
-
 
 GITHUB_OWNER_LOGIN = "ivan-magda"
 GITHUB_REPOSITORY_NAME = "swift-claw"
@@ -64,19 +65,44 @@ def _timestamp(value: Any, *, location: str) -> None:
         fail(f"{location} must include a UTC offset")
 
 
-def approval_statement(manifest_sha256: str, freeze_commit: str) -> str:
-    return f"D6 APPROVED: page manifest sha256={manifest_sha256} freeze_commit={freeze_commit}"
+def approval_statement(
+    manifest_sha256: str,
+    replacement_delta_sha256: str,
+    recovery_ledger_sha256: str,
+    invalidation_report_sha256: str,
+    freeze_commit: str,
+) -> str:
+    return (
+        f"D6 APPROVED: page manifest sha256={manifest_sha256} "
+        f"replacement delta sha256={replacement_delta_sha256} "
+        f"recovery ledger sha256={recovery_ledger_sha256} "
+        f"invalidation report sha256={invalidation_report_sha256} "
+        f"freeze_commit={freeze_commit}"
+    )
+
+
+def _artifact_binding(raw: Any, *, location: str, expected_path: str) -> tuple[str, str]:
+    value = require_object(raw, location=location)
+    require_keys(value, {"path", "sha256"}, location=location)
+    path = normalized_path(value["path"], location=f"{location}.path")
+    digest = value["sha256"]
+    if path != expected_path:
+        fail(f"{location}.path must be {expected_path}")
+    if not isinstance(digest, str) or not HEX_SHA256.fullmatch(digest):
+        fail(f"{location}.sha256 must be a lowercase SHA-256 digest")
+    return path, digest
 
 
 def parse_record(value: Any) -> dict[str, Any]:
     root = require_object(value, location="approval")
     require_keys(root, {"schema_version", "decision", "experiment", "repository",
-                        "issue_number", "manifest", "freeze_commit", "comment"},
+                        "issue_number", "manifest", "replacement_delta", "recovery_ledger",
+                        "invalidation_report", "freeze_commit", "comment"},
                  location="approval")
     if type(root["schema_version"]) is not int \
             or root["schema_version"] != APPROVAL_SCHEMA_VERSION or root["decision"] != DECISION \
             or root["experiment"] != EXPERIMENT:
-        fail("approval must describe schema-1 D6 page-change")
+        fail("approval must describe schema-2 D6 page-change")
     repository = require_object(root["repository"], location="approval.repository")
     require_keys(repository, {"owner", "name"}, location="approval.repository")
     if repository != {"owner": GITHUB_OWNER_LOGIN, "name": GITHUB_REPOSITORY_NAME}:
@@ -92,6 +118,21 @@ def parse_record(value: Any) -> dict[str, Any]:
     digest = manifest_record["sha256"]
     if not isinstance(digest, str) or not HEX_SHA256.fullmatch(digest):
         fail("approval.manifest.sha256 must be a lowercase SHA-256 digest")
+    delta_path, delta_digest = _artifact_binding(
+        root["replacement_delta"],
+        location="approval.replacement_delta",
+        expected_path=REPLACEMENT_DELTA_PATH,
+    )
+    ledger_path, ledger_digest = _artifact_binding(
+        root["recovery_ledger"],
+        location="approval.recovery_ledger",
+        expected_path=RECOVERY_LEDGER_PATH,
+    )
+    report_path, report_digest = _artifact_binding(
+        root["invalidation_report"],
+        location="approval.invalidation_report",
+        expected_path=INVALIDATION_REPORT_PATH,
+    )
     comment = require_object(root["comment"], location="approval.comment")
     require_keys(comment, {"id", "node_id", "api_url", "html_url", "issue_url",
                            "author", "created_at", "updated_at", "body_sha256"},
@@ -118,6 +159,9 @@ def parse_record(value: Any) -> dict[str, Any]:
         fail("approval.comment.body_sha256 must be a lowercase SHA-256 digest")
     return {
         "freeze_commit": commit, "manifest_path": path, "manifest_sha256": digest,
+        "replacement_delta_path": delta_path, "replacement_delta_sha256": delta_digest,
+        "recovery_ledger_path": ledger_path, "recovery_ledger_sha256": ledger_digest,
+        "invalidation_report_path": report_path, "invalidation_report_sha256": report_digest,
         "comment_id": comment_id, "comment_node_id": node_id,
         "api_url": comment["api_url"], "html_url": comment["html_url"],
         "issue_url": comment["issue_url"], "author_login": login,
@@ -140,7 +184,13 @@ def verify_record(value: Any, *, approval_body: bytes, manifest_path: str,
         body = approval_body.decode("utf-8")
     except UnicodeDecodeError:
         fail("approval comment body must be UTF-8")
-    statement = approval_statement(manifest_sha256, record["freeze_commit"])
+    statement = approval_statement(
+        manifest_sha256,
+        record["replacement_delta_sha256"],
+        record["recovery_ledger_sha256"],
+        record["invalidation_report_sha256"],
+        record["freeze_commit"],
+    )
     if statement not in body.splitlines():
         fail(f"approval comment lacks the exact approval line: {statement}")
     return record["freeze_commit"], record["manifest_path"]
@@ -160,7 +210,16 @@ def prepare_binding(
     digest = sha256_hex(raw)
     verify_record(approval, approval_body=approval_body,
                   manifest_path=relative, manifest_sha256=digest)
-    return root, relative, verified, raw, parse_record(approval)
+    record = parse_record(approval)
+    recovery.verify_replacement_admission(
+        root,
+        verified,
+        raw,
+        replacement_delta_sha256=record["replacement_delta_sha256"],
+        recovery_ledger_sha256=record["recovery_ledger_sha256"],
+        invalidation_report_sha256=record["invalidation_report_sha256"],
+    )
+    return root, relative, verified, raw, record
 
 
 def _default_http_get(url: str, headers: dict[str, str]) -> bytes:
@@ -249,6 +308,18 @@ def _executable_binding(repo_root: Path, value: dict[str, Any], path: Path) -> d
     return record
 
 
+def verify_committed_replacement_delta(repo_root: Path, freeze_commit: str) -> None:
+    expected = artifacts.artifact(repo_root, REPLACEMENT_DELTA_PATH)
+    committed = artifacts.committed_blob(
+        repo_root,
+        commit=freeze_commit,
+        path=REPLACEMENT_DELTA_PATH,
+        mode="100644",
+    )
+    if len(committed) != expected["bytes"] or sha256_hex(committed) != expected["sha256"]:
+        fail("approved commit has different replacement-delta bytes")
+
+
 def verify_runtime_binding(repo_root: Path, *, manifest_path: Path,
                            expected_manifest_sha256: str, executable_path: Path,
                            package_description: Optional[dict[str, Any]] = None) -> dict[str, Any]:
@@ -286,6 +357,7 @@ def verify_live_freeze(repo_root: Path, *, manifest_path: Path, approval: Any,
     freeze_commit = record["freeze_commit"]
     artifacts.verify_commit_snapshot(root, freeze_commit=freeze_commit,
                                      manifest_path=relative, manifest_raw=raw, manifest=value)
+    verify_committed_replacement_delta(root, freeze_commit)
     executable = _executable_binding(root, value, executable_path)
     verifier_modules = _verifier_records(value)
     clock = (now or (lambda: dt.datetime.now(dt.timezone.utc)))()
