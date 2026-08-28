@@ -2,8 +2,62 @@ import ClawCore
 import Foundation
 
 struct EvaluationPageGateStatus {
-  let outcome: EvaluationPageTerminalClassification
-  let passed: Bool
+  let decision: EvaluationPageGateDecision
+}
+
+enum EvaluationPageGateDecision: Sendable, Equatable {
+  case proceed
+  case finish(EvaluationPageTerminalClassification)
+}
+
+enum EvaluationPageGateOutcome: String, Sendable, Equatable {
+  case carrierFailure = "carrier_failure"
+  case developmentReady = "development_ready"
+  case incompleteBatch = "incomplete_batch"
+  case insufficientDevelopmentHeadroom = "insufficient_development_headroom"
+  case insufficientSealedHeadroom = "insufficient_sealed_headroom"
+  case invalidBatch = "invalid_batch"
+  case pageTaskSpecificFailure = "page_task_specific_failure"
+  case pageValidated = "page_validated"
+  case regressionPromoted = "regression_promoted"
+  case regressionPromotedNotTestable = "regression_promoted_not_testable"
+  case safetyFailure = "safety_failure"
+
+  var passed: Bool {
+    switch self {
+    case .developmentReady, .regressionPromoted, .regressionPromotedNotTestable, .pageValidated:
+      true
+    default:
+      false
+    }
+  }
+
+  func decision(for stage: EvaluationPageSplit) -> EvaluationPageGateDecision? {
+    switch (stage, self) {
+    case (.development, .developmentReady),
+      (.regression, .regressionPromoted),
+      (.regression, .regressionPromotedNotTestable):
+      .proceed
+    case (.development, .insufficientDevelopmentHeadroom):
+      .finish(.insufficientDevelopmentHeadroom)
+    case (.sealed, .insufficientSealedHeadroom):
+      .finish(.insufficientSealedHeadroom)
+    case (.sealed, .pageValidated):
+      .finish(.pageValidated)
+    case (_, .invalidBatch):
+      .finish(.invalidBatch)
+    case (_, .carrierFailure):
+      .finish(.carrierFailure)
+    case (_, .safetyFailure):
+      .finish(.safetyFailure)
+    case (_, .pageTaskSpecificFailure):
+      .finish(.pageTaskSpecificFailure)
+    case (_, .incompleteBatch):
+      .finish(.incompleteBatch)
+    default:
+      nil
+    }
+  }
 }
 
 extension EvaluationPageExperiment {
@@ -62,12 +116,14 @@ extension EvaluationPageExperiment {
       receipt["stage"] as? String == stage.rawValue,
       let result = receipt["result"] as? [String: Any],
       let outcomeValue = result["outcome"] as? String,
-      let outcome = EvaluationPageTerminalClassification(rawValue: outcomeValue),
-      let passed = CanonicalJSON.boolean(result["passed"])
+      let outcome = EvaluationPageGateOutcome(rawValue: outcomeValue),
+      let passed = CanonicalJSON.boolean(result["passed"]),
+      passed == outcome.passed,
+      let decision = outcome.decision(for: stage)
     else {
       throw EvaluationPagePipelineError.stageGateReceiptInvalid(stage.rawValue)
     }
 
-    return EvaluationPageGateStatus(outcome: outcome, passed: passed)
+    return EvaluationPageGateStatus(decision: decision)
   }
 }

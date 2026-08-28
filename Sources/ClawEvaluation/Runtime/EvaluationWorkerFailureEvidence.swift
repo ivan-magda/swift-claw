@@ -187,7 +187,8 @@ struct EvaluationWorkerFailureEvidence: Codable, Sendable, Equatable {
       return .carrierFailure(terminal.reason.rawValue)
     case .invalidBatch:
       return .invalidBatch(terminal.reason.rawValue)
-    case .safetyFailure, .pageTaskSpecificFailure, .incompleteBatch:
+    case .pageValidated, .insufficientDevelopmentHeadroom, .insufficientSealedHeadroom,
+      .safetyFailure, .pageTaskSpecificFailure, .incompleteBatch:
       throw EvaluationPagePipelineError.invalidBatch("worker_failure_evidence_classification")
     }
   }

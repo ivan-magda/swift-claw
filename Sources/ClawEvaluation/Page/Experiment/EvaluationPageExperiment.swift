@@ -191,9 +191,9 @@ private extension EvaluationPageExperiment {
       context: context,
       accumulator: &page
     )
-    guard developmentGate.passed else {
+    if case .finish(let outcome) = developmentGate.decision {
       return try finish(
-        outcome: developmentGate.outcome,
+        outcome: outcome,
         canary: canary,
         page: page,
         journal: journal,
@@ -224,9 +224,9 @@ private extension EvaluationPageExperiment {
       lesson: promoted.binding,
       accumulator: &page
     )
-    guard regressionGate.passed else {
+    if case .finish(let outcome) = regressionGate.decision {
       return try finish(
-        outcome: regressionGate.outcome,
+        outcome: outcome,
         canary: canary,
         page: page,
         journal: journal,
@@ -611,8 +611,14 @@ private extension EvaluationPageExperiment {
       paths: context.paths
     )
 
+    guard case .finish(let outcome) = gate.decision else {
+      throw EvaluationPagePipelineError.stageGateReceiptInvalid(
+        EvaluationPageSplit.sealed.rawValue
+      )
+    }
+
     return try finish(
-      outcome: gate.outcome,
+      outcome: outcome,
       canary: canary,
       page: page,
       journal: context.journal,
