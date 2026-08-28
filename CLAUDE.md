@@ -1,6 +1,4 @@
-# swift-claw — agent instructions
-
-`AGENTS.md` is a symlink to this file: Claude Code and Codex read the same rules. Edit this file, never replace the symlink.
+# Agent instructions
 
 ## What this is
 
