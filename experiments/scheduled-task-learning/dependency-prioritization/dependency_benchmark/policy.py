@@ -16,6 +16,17 @@ def is_safe_remediation_option(option: Mapping[str, Any]) -> bool:
     )
 
 
+def is_critical_reachable_production(finding: Mapping[str, Any]) -> bool:
+    """Return whether one canonical finding is a mandatory critical-recall case."""
+
+    return bool(
+        finding["affected_status"] == "affected"
+        and finding["severity"] == "critical"
+        and finding["reachability"] == "reachable"
+        and any(path["runtime_scope"] == "production" for path in finding["dependency_paths"])
+    )
+
+
 def validate_ranking_policy(value: Any) -> None:
     if not isinstance(value, dict) or set(value) != {
         "schema_version",

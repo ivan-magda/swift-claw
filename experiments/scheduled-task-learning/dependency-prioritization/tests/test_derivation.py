@@ -6,7 +6,6 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any
 
 from benchmark_core.canonical import dumps, load_object
 from dependency_benchmark.derivation import (
@@ -18,47 +17,13 @@ from dependency_benchmark.normalization import materialize
 from dependency_benchmark.project_snapshot import parse_project_snapshot
 from dependency_benchmark.versioning import compare_versions
 
-from support import ROOT, project_snapshot_value
-
-
-def _sealed_project_snapshot_value() -> dict[str, Any]:
-    value = project_snapshot_value()
-    value["fixture_id"] = "dp-sealed-04"
-    value["split"] = "sealed"
-    value["dependencies"].append(
-        {
-            "node_key": "aiohttp",
-            "package_name": "aiohttp",
-            "installed_version": "3.9.1",
-        }
-    )
-    value["root_dependencies"].append(
-        {
-            "child_node_key": "aiohttp",
-            "requirement": ">=3.9,<4",
-            "runtime_scope": "production",
-        }
-    )
-    value["finding_facts"].append(
-        {
-            "node_key": "aiohttp",
-            "reachability": "unknown",
-            "manifest_evidence": ["Frozen aiohttp manifest evidence."],
-        }
-    )
-    value["release_inventories"].append(
-        {
-            "package_name": "aiohttp",
-            "releases": [{"version": "3.9.2", "availability": "available"}],
-        }
-    )
-    return value
+from support import ROOT, sealed_project_snapshot_value
 
 
 class DependencyDerivationTests(unittest.TestCase):
     def test_derivation_joins_complete_aliases_and_binds_deterministic_options(self) -> None:
         # Given
-        snapshot = parse_project_snapshot(_sealed_project_snapshot_value())
+        snapshot = parse_project_snapshot(sealed_project_snapshot_value())
 
         # When
         derived = derive_normalized_source(snapshot, ROOT / "sources")
@@ -174,7 +139,7 @@ class DependencyDerivationTests(unittest.TestCase):
                 manifest_digests=frozenset({snapshot.semantic_sha256}),
             ),
         )
-        changed_value = copy.deepcopy(_sealed_project_snapshot_value())
+        changed_value = copy.deepcopy(sealed_project_snapshot_value())
         changed_value["finding_facts"][0]["manifest_evidence"] = ["Different frozen evidence."]
         changed_snapshot = derive_normalized_source(
             parse_project_snapshot(changed_value),
@@ -201,7 +166,7 @@ class DependencyDerivationTests(unittest.TestCase):
 
     def test_safe_equivalent_candidate_preserves_materialization_binding(self) -> None:
         # Given
-        value = _sealed_project_snapshot_value()
+        value = sealed_project_snapshot_value()
         value["root_dependencies"][0]["requirement"] = ">=3.2,<3.3,!=3.2.13"
         value["dependency_edges"][0]["requirement"] = ">=3.2,<3.3,!=3.2.13"
         releases = value["release_inventories"][0]["releases"]
@@ -254,9 +219,9 @@ class DependencyDerivationTests(unittest.TestCase):
 
     def test_catalog_allocation_and_selected_package_closure_fail_closed(self) -> None:
         # Given
-        swapped_allocation = _sealed_project_snapshot_value()
+        swapped_allocation = sealed_project_snapshot_value()
         swapped_allocation["fixture_id"] = "dp-sealed-05"
-        orphan_inventory = _sealed_project_snapshot_value()
+        orphan_inventory = sealed_project_snapshot_value()
         orphan_inventory["dependencies"] = [
             item for item in orphan_inventory["dependencies"] if item["node_key"] != "aiohttp"
         ]

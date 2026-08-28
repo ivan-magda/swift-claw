@@ -95,3 +95,37 @@ def project_snapshot_value() -> dict[str, Any]:
             }
         ],
     }
+
+
+def sealed_project_snapshot_value() -> dict[str, Any]:
+    value = project_snapshot_value()
+    value["fixture_id"] = "dp-sealed-04"
+    value["split"] = "sealed"
+    value["dependencies"].append(
+        {
+            "node_key": "aiohttp",
+            "package_name": "aiohttp",
+            "installed_version": "3.9.1",
+        }
+    )
+    value["root_dependencies"].append(
+        {
+            "child_node_key": "aiohttp",
+            "requirement": ">=3.9,<4",
+            "runtime_scope": "production",
+        }
+    )
+    value["finding_facts"].append(
+        {
+            "node_key": "aiohttp",
+            "reachability": "unknown",
+            "manifest_evidence": ["Frozen aiohttp manifest evidence."],
+        }
+    )
+    value["release_inventories"].append(
+        {
+            "package_name": "aiohttp",
+            "releases": [{"version": "3.9.2", "availability": "available"}],
+        }
+    )
+    return value

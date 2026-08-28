@@ -7,7 +7,12 @@ from typing import Any
 from benchmark_core.contract_validation import ContractError, ValidationIssue, require_valid
 
 from .normalization import materialize_task
-from .policy import finding_grade, is_safe_remediation_option, validate_ranking_policy
+from .policy import (
+    finding_grade,
+    is_critical_reachable_production,
+    is_safe_remediation_option,
+    validate_ranking_policy,
+)
 from .validation import validate_gold, validate_source
 
 
@@ -67,13 +72,7 @@ def validate_fixture(
         expected_grade = finding_grade(finding, label["queue"]["member"], ranking_policy)
         if label["queue"]["grade"] != expected_grade:
             _fail("gold queue grade differs from frozen D5")
-        critical_runtime = (
-            finding["affected_status"] == "affected"
-            and finding["severity"] == "critical"
-            and finding["reachability"] == "reachable"
-            and any(path["runtime_scope"] == "production" for path in finding["dependency_paths"])
-        )
-        if critical_runtime and not actionable:
+        if is_critical_reachable_production(finding) and not actionable:
             _fail("critical reachable production finding must queue")
         if label["queue"]["member"]:
             queue_members.append(finding_id)
