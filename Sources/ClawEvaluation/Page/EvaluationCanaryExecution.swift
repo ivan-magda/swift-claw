@@ -238,6 +238,7 @@ extension EvaluationController {
         )
       ]
     )
+    try Self.verifyProtectedClosureBeforeLaunch(freeze)
     let launched = await launcher.launch(
       kind: .canaryProcess,
       executablePath: request.executablePath,

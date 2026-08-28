@@ -8,19 +8,30 @@ import Testing
 struct StaticEvaluationFreezeVerifier: EvaluationFreezeVerifying {
   let liveContext: EvaluationFreezeContext
   let localContext: EvaluationFreezeContext
+  let beforeReturningLiveContext: @Sendable () throws -> Void
 
-  init(context: EvaluationFreezeContext) {
+  init(
+    context: EvaluationFreezeContext,
+    beforeReturningLiveContext: @escaping @Sendable () throws -> Void = {}
+  ) {
     liveContext = context
     localContext = context
+    self.beforeReturningLiveContext = beforeReturningLiveContext
   }
 
-  init(liveContext: EvaluationFreezeContext, localContext: EvaluationFreezeContext) {
+  init(
+    liveContext: EvaluationFreezeContext,
+    localContext: EvaluationFreezeContext,
+    beforeReturningLiveContext: @escaping @Sendable () throws -> Void = {}
+  ) {
     self.liveContext = liveContext
     self.localContext = localContext
+    self.beforeReturningLiveContext = beforeReturningLiveContext
   }
 
   func verify(_ inputs: EvaluationFreezeInputs) async throws -> EvaluationFreezeContext {
-    liveContext
+    try beforeReturningLiveContext()
+    return liveContext
   }
 
   func verifyLocal(_ inputs: EvaluationFreezeInputs) async throws -> EvaluationFreezeContext {
@@ -31,17 +42,24 @@ struct StaticEvaluationFreezeVerifier: EvaluationFreezeVerifying {
 actor SequencedEvaluationFreezeVerifier: EvaluationFreezeVerifying {
   private let liveContexts: [EvaluationFreezeContext]
   private let localContext: EvaluationFreezeContext
+  private let beforeReturningLiveContext: @Sendable (Int) throws -> Void
   private var liveIndex = 0
 
-  init(liveContexts: [EvaluationFreezeContext], localContext: EvaluationFreezeContext) {
+  init(
+    liveContexts: [EvaluationFreezeContext],
+    localContext: EvaluationFreezeContext,
+    beforeReturningLiveContext: @escaping @Sendable (Int) throws -> Void = { _ in }
+  ) {
     self.liveContexts = liveContexts
     self.localContext = localContext
+    self.beforeReturningLiveContext = beforeReturningLiveContext
   }
 
   func verify(_ inputs: EvaluationFreezeInputs) async throws -> EvaluationFreezeContext {
     guard liveContexts.indices.contains(liveIndex) else {
       throw EvaluationHarnessTestError.unexpectedFreezeCall
     }
+    try beforeReturningLiveContext(liveIndex)
     defer { liveIndex += 1 }
     return liveContexts[liveIndex]
   }

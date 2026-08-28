@@ -25,6 +25,7 @@ struct EvaluationLiveFreezeAdmission: Sendable {
         return .deny(cap: "evaluation-freeze-integrity")
       }
 
+      try EvaluationProtectedClosure.verify(refreshed)
       return .allow
     } catch {
       return .deny(cap: "evaluation-freeze-integrity")

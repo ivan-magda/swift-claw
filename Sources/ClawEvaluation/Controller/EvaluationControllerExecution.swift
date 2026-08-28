@@ -533,6 +533,7 @@ extension EvaluationController {
         )
       ]
     )
+    try Self.verifyProtectedClosureBeforeLaunch(context.freeze)
     let launched = await launcher.launch(
       kind: .attempt,
       executablePath: context.executablePath,

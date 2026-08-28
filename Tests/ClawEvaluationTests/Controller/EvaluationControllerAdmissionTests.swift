@@ -54,6 +54,52 @@ import Testing
     #expect(await launcher.observations.isEmpty)
   }
 
+  @Test func protectedArtifactDriftStopsBeforeAttemptWorkerLaunch() async throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let configured = try makeEvaluationConfiguration(root: root, attemptID: "changed-artifact")
+    let frozen = try makeEvaluationFreeze(root: root, configurations: [configured.configuration])
+    let sourceURL = URL(fileURLWithPath: configured.configuration.sourceArtifactPath)
+    let verifier = StaticEvaluationFreezeVerifier(
+      context: frozen.context,
+      beforeReturningLiveContext: {
+        try Data("changed during live verification".utf8).write(to: sourceURL)
+      }
+    )
+    let launcher = ScriptedEvaluationWorkerLauncher { _, _, _ in
+      EvaluationWorkerLaunchResult(termination: .rejected, processID: nil)
+    }
+    let journal = try EvaluationControllerJournal.startNew(
+      evaluationRoot: configured.configuration.evaluationRootURL,
+      manifestSHA256: configured.configuration.approval.manifestSHA256,
+      freezeCommit: configured.configuration.provenance.freezeCommit,
+      fixedTimestamp: configured.configuration.fixedTimestamp,
+      journalName: "changed-artifact.jsonl"
+    )
+    var accumulator = EvaluationController.Accumulator()
+
+    // when
+    await #expect(throws: EvaluationControllerError.freezeChangedBeforeLaunch) {
+      _ = try await EvaluationController(
+        launcher: launcher,
+        freezeVerifier: verifier
+      ).runOne(
+        executablePath: frozen.executable.path,
+        configurationPath: configured.configurationURL.path,
+        freezeInputs: frozen.inputs,
+        freeze: frozen.context,
+        limits: PageEvaluationContract.pageLimits,
+        sealedOutputKey: nil,
+        journal: journal,
+        accumulator: &accumulator
+      )
+    }
+
+    // then — removing the final whole-closure check would launch this worker.
+    #expect(await launcher.observations.isEmpty)
+  }
+
   @Test func controllerRejectsForgedResultAccounting() async throws {
     // given
     let root = try makeEvaluationTestRoot()

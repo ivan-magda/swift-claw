@@ -235,6 +235,63 @@ import Testing
     #expect(persisted.audit == result.audit)
   }
 
+  @Test func protectedArtifactDriftBetweenRoundsStopsBeforeTheSecondProviderSend() async throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let configured = try makeEvaluationConfiguration(root: root)
+    let frozen = try makeEvaluationFreeze(root: root, configurations: [configured.configuration])
+    let sourceURL = URL(fileURLWithPath: configured.configuration.sourceArtifactPath)
+    let provider = SequenceProvider(scriptedTwoRoundResponses())
+    let verifier = SequencedEvaluationFreezeVerifier(
+      liveContexts: [frozen.context, frozen.context],
+      localContext: frozen.context,
+      beforeReturningLiveContext: { refreshIndex in
+        guard refreshIndex == 1 else {
+          return
+        }
+        try Data("changed during live verification".utf8).write(to: sourceURL)
+      }
+    )
+    let admission = EvaluationLiveFreezeAdmission(
+      verifier: verifier,
+      inputs: frozen.inputs,
+      initial: frozen.context
+    )
+    let roster = ProviderRoster(
+      primary: LLMRouteBinding(
+        provider: provider,
+        wireModel: PageEvaluationContract.wireModel,
+        configuredReference: PageEvaluationContract.providerReference,
+        costPolicy: .includedPlan,
+        reservationPolicy: .chatGPTReplayState
+      )
+    )
+    let recorder = EvaluationHTTPRecorder(base: ScriptedHTTPExecutor([]))
+
+    // when
+    let result = try await EvaluationAttemptRunner(
+      roster: roster,
+      httpRecorder: recorder
+    ).run(
+      configuration: configured.configuration,
+      sendBudget: EvaluationSendBudgetSnapshot(
+        stageAccountedTokens: 0,
+        globalAccountedTokens: 0,
+        stageResponsesSends: 0,
+        globalResponsesSends: 0,
+        stageAccountedTokenThreshold: PageEvaluationContract.pageLimits.accountedTokenThreshold,
+        stageResponsesSendCap: PageEvaluationContract.pageLimits.maximumResponsesSends
+      ),
+      integrityAdmission: { await admission.evaluate() }
+    )
+
+    // then — deleting the full-closure refresh check allows provider request 2.
+    #expect(await provider.requests.count == 1)
+    #expect(result.outcome == .harnessFailure)
+    #expect(result.criticalCode == "evaluation-freeze-integrity")
+  }
+
   @Test func preInferenceNoStartSendCountsTowardTheCapWithoutAProxyDebit() async throws {
     // given
     let root = try makeEvaluationTestRoot()
