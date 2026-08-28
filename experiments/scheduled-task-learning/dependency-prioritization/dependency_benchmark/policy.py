@@ -1,8 +1,19 @@
-"""Frozen D5 ranking-policy interpretation."""
+"""Frozen dependency policy primitives and D5 ranking interpretation."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
+
+
+def is_safe_remediation_option(option: Mapping[str, Any]) -> bool:
+    """Return whether canonical option facts permit selection."""
+
+    return bool(
+        option["availability"] == "available"
+        and option["affected_status"] == "unaffected"
+        and option["compatibility"] == "compatible"
+    )
 
 
 def validate_ranking_policy(value: Any) -> None:
@@ -82,12 +93,7 @@ def finding_grade(
     )
     compatible = (
         "available"
-        if any(
-            option["availability"] == "available"
-            and option["affected_status"] == "unaffected"
-            and option["compatibility"] == "compatible"
-            for option in finding["remediation_options"]
-        )
+        if any(is_safe_remediation_option(option) for option in finding["remediation_options"])
         else "absent"
     )
     return int(
