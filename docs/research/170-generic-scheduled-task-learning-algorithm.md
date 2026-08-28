@@ -238,7 +238,7 @@ line-ending normalization and surrounding-whitespace removal before digesting. A
 - a lesson over 512 UTF-8 bytes;
 - total lesson text over 1536 UTF-8 bytes;
 - a replacement digest identical to the current stable digest;
-- a candidate digest already closed against the same base and algorithm version;
+- a replacement lesson-set digest already closed against the same base and algorithm version;
 - any M1 schema, Unicode, secret-leakage, job, epoch, base or source-binding violation.
 
 The reflector is instructed to preserve still-useful incumbent rules, merge overlapping rules and
@@ -329,9 +329,10 @@ Fallback closes the exact trial and leaves the stable pointer untouched. It occu
 - stale epoch/base/feedback/version predicates;
 - decision-time corruption or compare-and-swap loss.
 
-A closed candidate is not automatically retried against the same base under the same algorithm
-version. New evidence must produce a different candidate, an owner edit must produce a new digest, or
-a newer algorithm version must make a new decision. This prevents trial loops.
+A closed replacement lesson-set digest is not automatically retried against the same base under the
+same algorithm version. New evidence must produce different lesson bytes, an owner edit must change
+the replacement digest, or a newer algorithm version must make a new decision. This prevents trial
+loops hidden behind a new candidate-record manifest.
 
 ## 9. Rollback
 
@@ -354,8 +355,8 @@ candidate. This avoids oscillation from one uncalibrated evaluator result.
 
 The direct predecessor base, promotion receipt and exact support dependencies remain retained while
 that promotion is the current stable revision. A stale trigger or stable-pointer compare-and-swap
-miss records a stale rollback decision and changes nothing. A rolled-back candidate cannot be
-re-admitted against the same base under `scheduled-learning/v1`.
+miss records a stale rollback decision and changes nothing. A rolled-back replacement lesson-set
+digest cannot be re-admitted against the same base under `scheduled-learning/v1`.
 
 ## 10. Route, budget and retention policy
 
