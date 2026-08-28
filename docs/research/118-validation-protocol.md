@@ -1,15 +1,17 @@
 # Issue #118: scenario validation protocol
 
 - Status: Proposed; owner approval required before scored runs
-- Protocol version: 0.5
-- Supersedes: version 0.4; no model call ran under 0.4, and the version 0.3 replacement-D6
-  page batch remains preserved as invalid
+- Protocol version: 0.6
+- Supersedes: version 0.5; its approved replacement-D6 page batch remains preserved as invalid,
+  together with the earlier invalid version 0.3 batch; no model call ran under version 0.4
 - Date: 2026-08-28
 - Decision issue: [#118](https://github.com/ivan-magda/swift-claw/issues/118)
 - Parent project: [#115](https://github.com/ivan-magda/swift-claw/issues/115)
 - Inspected implementation revisions: live integrity `ef2d94c989ef2f2bfb89b4bed3c7b2d33e593e0b`,
-  recovery provenance `81706642f1c43916d4245ac96e80bf0c145be2e0`, and recovery accounting
-  `97ba90fd3880f9713ba68368ffb6412fb9017704`
+  recovery provenance `81706642f1c43916d4245ac96e80bf0c145be2e0`, recovery accounting
+  `97ba90fd3880f9713ba68368ffb6412fb9017704`, canonicalization repair
+  `b8815fd069870496bdf373d1ded5783c5bb2268b`, and the invalid version 0.5 freeze commit
+  `902868a7d163650f6a68178a0d692658c653dd95`
 
 ## Purpose
 
@@ -28,27 +30,38 @@ The protocol must answer three separate questions:
 No scored model call may run until the owner approves the content hash of this version, the model
 route, execution budget, learning target, and gates.
 
-Version 0.5 retains the recovery accounting and live integrity enforcement introduced in version
-0.4 after the approved replacement-D6 page batch under version 0.3 was invalidated. That batch
-consumed 12 attempts, 22 Responses sends, 11 file reads, and 28,159 accounted tokens before the
-protected source closure changed. Version 0.5 preserves that usage as a cumulative accounting seed,
-retains the original fresh attempt, send, and read allowance, and requires complete protected-
-closure verification before each worker launch and model send. The unchanged token thresholds use
-the same seed, so the 28,159 prior accounted tokens reduce the remaining token headroom.
+Version 0.6 chains both invalid page batches into one non-refundable recovery seed. The invalid
+version 0.3 batch contributed 12 attempts, 22 Responses sends, 11 file reads, and 28,159 accounted
+tokens. The approved version 0.5 batch under manifest
+`40a848a3dc290fa203fe084ec9a18bc5c9b4416ca2eff5ecd55f65bd450ad63f` then contributed 22 attempts,
+44 Responses sends, 22 file reads, and 57,798 accounted tokens. The cumulative seed is therefore 34
+attempts, 66 Responses sends, 33 file reads, and 85,957 accounted tokens. Version 0.6 retains the
+original fresh attempt, send, and read allowance. Accounted-token thresholds are unchanged, so all
+85,957 prior accounted tokens reduce the remaining headroom.
 
-Version 0.5 also closes two provenance gaps before a replacement D6 approval. The freeze verifier
-must compare the candidate manifest with the exact invalidated D6 manifest and reject any change
-outside the recovery and live-integrity allowlist below. A canonical attempt ledger must derive the
-recovery totals from the invalid-batch journal, terminal result, and invalidation report. No model
-call ran under version 0.4.
+The version 0.5 run completed its four fresh canary attempts and all 18 clean-development attempts.
+Foundation then reserialized scorer-owned fractional values with noncanonical decimal spellings in
+the controller-authored development records, runs, and bundle composites. The protected aggregate
+rejected `development-records.json` before synthesis. Re-encoding each preserved object with the
+unchanged benchmark canonical writer produces the same decoded JSON value and different bytes. The
+only authorized runtime correction is to route those page composite drafts through that already-
+protected writer before durable publication. This is a byte-canonicalization repair, not a change to
+record sealing, prompts, schemas, scorer semantics, gates, fixtures, gold, splits, target classes,
+model routing, or the canonical JSON contract.
 
-The model route, fresh execution plan, replacement pools, run-order derivation algorithm and
-topology, attempt counts, primary endpoints, decision matrix, gates, scorer rules, fixture
-requirements, learning target, and accounted-token stopping thresholds remain unchanged from
-version 0.3. The realized run order is derived again from the new D6 manifest digest and frozen
-before calls. The page experiment must rerun in full from the first canary under that manifest. Its
-existing sealed set may be reused because no sealed fixture, output, or score was opened during the
-invalid batch.
+The freeze verifier must compare the version 0.6 candidate with the exact invalidated version 0.5
+manifest and reject any change outside the closed recovery and canonicalization allowlist below. A
+canonical chained ledger derives the fresh version 0.5 usage from its durable journal and terminal
+result, verifies the preserved composite mismatch, and adds that usage to the exact version 0.5
+recovery ledger. No model call ran under version 0.4.
+
+The fresh execution plan, replacement pools, run-order derivation algorithm and topology, attempt
+counts, primary endpoints, decision matrix, gates, scorer rules, fixture requirements, learning
+target, and accounted-token stopping thresholds remain unchanged from version 0.5. The canonical
+JSON vector remains byte-identical. The realized run order is derived again from the new D6 manifest
+digest and frozen before calls. The page experiment reruns in full from the first canary. Its
+existing sealed set may be reused because neither invalid batch opened a sealed fixture, output, or
+score.
 
 ## Claim boundaries
 
@@ -69,7 +82,7 @@ The lesson artifact must not be embedded in `ScheduledJob.prompt`, a system prom
 `MEMORY.md`. Doing so would either turn it into trusted owner text or exercise global memory rather
 than the intended job-scoped boundary.
 
-Version 0.5 does not include an irrelevant same-length lesson control because it would require more
+Version 0.6 does not include an irrelevant same-length lesson control because it would require more
 decision-bearing attempts than the staged budget permits. A positive result therefore supports the
 frozen lesson intervention, but does not separately quantify a generic extra-context or attention
 effect. Adding that control requires a new protocol version, budget, and sealed manifest.
@@ -868,14 +881,20 @@ boundary, regardless of their numeric result.
 The budget is staged so a failed gate stops later spend. Each task or synthesis attempt may complete
 at most two model round-trips and has at most one whole-attempt replacement under the retry rules.
 
-Protocol 0.5 does not refund the invalid version 0.3 page batch. Before the new page canary, the
-controller initializes its cumulative ledger from this immutable recovery seed:
+Protocol 0.6 refunds neither invalid batch. Before the new page canary, the controller initializes
+its cumulative ledger from this immutable chained recovery evidence:
 
-| Invalidated stage | Attempts | Responses sends | File reads | Accounted tokens |
+| Invalidated batch and stage | Attempts | Responses sends | File reads | Accounted tokens |
 |---|---:|---:|---:|---:|
-| Unscored runtime canary | 4 | 8 | 4 | 9,550 |
-| Page clean development | 8 | 14 | 7 | 18,609 |
-| **Cumulative seed** | **12** | **22** | **11** | **28,159** |
+| Version 0.3 unscored runtime canary | 4 | 8 | 4 | 9,550 |
+| Version 0.3 page clean development | 8 | 14 | 7 | 18,609 |
+| Version 0.5 unscored runtime canary | 4 | 8 | 4 | 9,548 |
+| Version 0.5 page clean development | 18 | 36 | 18 | 48,250 |
+| **Cumulative seed** | **34** | **66** | **33** | **85,957** |
+
+The controller-facing seed folds those rows by stage: canary starts at 8 attempts, 16 Responses
+sends, 8 file reads, and 19,098 accounted tokens; page clean development starts at 26 attempts, 50
+Responses sends, 25 file reads, and 66,859 accounted tokens. Their sum is the cumulative seed above.
 
 The fresh plan and replacement pools remain unchanged. The cumulative count caps add only the
 attempts, sends, and reads already consumed by the invalid batch, preserving the original fresh
@@ -884,23 +903,23 @@ the seeded usage:
 
 | Stage | Fresh planned attempts | Fresh replacement pool | Prior attempts | Cumulative attempt cap | Prior sends | Cumulative Responses-send cap | Accounted-token stopping threshold |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Unscored runtime canary | 4 | 0 | 4 | 8 | 8 | 16 | 50,000 |
-| Page runs plus one synthesis attempt | 73 | 3 | 8 | 84 | 14 | 166 | 1,500,000 |
+| Unscored runtime canary | 4 | 0 | 8 | 12 | 16 | 24 | 50,000 |
+| Page runs plus one synthesis attempt | 73 | 3 | 26 | 102 | 50 | 202 | 1,500,000 |
 | Dependency development plus one synthesis attempt | 31 | 1 | 0 | 32 | 0 | 64 | 800,000 |
 | Dependency regression, sealed transfer, and restart | 78 | 4 | 0 | 82 | 0 | 164 | 2,000,000 |
-| **Maximum if every stage proceeds** | **186** | **8** | **12** | **206** | **22** | **410** | **4,350,000** |
+| **Maximum if every stage proceeds** | **186** | **8** | **34** | **228** | **66** | **454** | **4,350,000** |
 
-Canary stage admission starts at 4 attempts, 8 sends, 4 reads, and 9,550 accounted tokens against
-cumulative caps of 8 attempts, 16 sends, 8 reads, and 50,000 accounted tokens. Page stage admission
-starts at 8 attempts, 14 sends, 7 reads, and 18,609 accounted tokens against cumulative caps of 84
-attempts, 166 sends, 83 reads, and 1,500,000 accounted tokens. Dependency stage counters start at
-zero. Page admission includes the complete recovery seed in its global totals. Dependency
-admission includes the later immutable page-completion checkpoint, which contains that seed plus
-all valid version 0.5 page usage.
+Canary stage admission starts at 8 attempts, 16 sends, 8 reads, and 19,098 accounted tokens against
+cumulative caps of 12 attempts, 24 sends, 12 reads, and 50,000 accounted tokens. Page stage
+admission starts at 26 attempts, 50 sends, 25 reads, and 66,859 accounted tokens against cumulative
+caps of 102 attempts, 202 sends, 101 reads, and 1,500,000 accounted tokens. Dependency stage-local
+counters start at zero. Page admission includes the complete 34/66/33/85,957 recovery seed in its
+global totals. Dependency admission includes the later immutable page-completion checkpoint, which
+contains that seed plus all valid version 0.6 page usage.
 
-The global hard caps are 206 attempts, 410 outbound Responses sends, and 205 file reads. The 4.35
+The global hard caps are 228 attempts, 454 outbound Responses sends, and 227 file reads. The 4.35
 million value remains an `accounted_tokens` stopping threshold, not a hard provider-billing cap, and
-starts with 28,159 accounted tokens already consumed. For a send with terminal usage, accounting
+starts with 85,957 accounted tokens already consumed. For a send with terminal usage, accounting
 uses the provider-reported total. For any accepted or interrupted send without terminal usage,
 accounting applies the unchanged fixed 132,768-token proxy: the 100,000-token input cap plus the
 32,768-byte visible-output cap treated as one token per byte. This is a missing-usage accounting
@@ -912,8 +931,8 @@ preserved and the batch becomes `incomplete`. D3 approves this limitation and mu
 threshold as a strict billing cap.
 
 Semantic judge calls and Responses inference retries are zero. OAuth refresh traffic is separately
-recorded and is not a Responses send. The harness aborts before cumulative attempt 207, send 411, or
-file read 206. The ChatGPT subscription route has no decision-bearing USD measure. No metered route
+recorded and is not a Responses send. The harness aborts before cumulative attempt 229, send 455, or
+file read 228. The ChatGPT subscription route has no decision-bearing USD measure. No metered route
 is allowed; a route change requires a new protocol version and owner approval.
 
 The page stage contains 18 development attempts (`6 fixtures * 3 replicates`), 18 regression
@@ -936,7 +955,7 @@ Each manifest covers:
 
 - protocol, runtime and harness source-tree digest, executable, and resolved dependencies;
 - provider route, transport mode, model checks, retry policy, output limits, budgets, and the
-  version 0.5 recovery-accounting seed;
+  version 0.6 chained recovery-accounting seed;
 - task prompt, synthesis prompt, schemas, lesson linter, deterministic feedback-generator source,
   executable, and templates, plus scorer source and executable;
 - all fixtures, sources, gold labels, split assignments, conformance cases, and the run-order
@@ -944,63 +963,119 @@ Each manifest covers:
 
 ### Replacement-D6 delta closure
 
-The replacement Page D6 must preserve the invalidated manifest bytes at the content-addressed
-provenance path named by the freeze contract. The verifier checks those bytes against
-`d5ae7dcef1c20f4c95f22cad9d23c7c1f37409abb3d2a02349a951c7647faad8` and compares the candidate
-manifest with that baseline. It rejects removed protected paths and any changed or added path that
-the closed replacement allowlist does not name.
+The replacement Page D6 must preserve the invalidated version 0.5 manifest bytes at
+`experiments/scheduled-task-learning/page-change/provenance/invalidated-page-manifest-40a848a3dc29.json`.
+The verifier checks those bytes against
+`40a848a3dc290fa203fe084ec9a18bc5c9b4416ca2eff5ecd55f65bd450ad63f` and compares the candidate
+manifest with that exact baseline. It rejects removed protected paths and any changed or added path
+that the closed replacement allowlist does not name. The version 0.3 manifest and its complete
+version 0.5 recovery chain remain byte-identical protected artifacts in that baseline.
 
 The comparison is recursive, order-sensitive, and fail-closed. Root identity fields,
 `swift_package`, category names, category values, artifact roles and order, and protected-artifact
 memberships remain identical unless an exact field or path below permits the difference. For an
 allowed existing path, only `bytes` and `sha256` may change. Category and membership digests may
 then change only as derived consequences. The root `protocol` record keeps its path, changes
-`version` only from `0.3` to `0.5`, and derives its new byte count and SHA-256. No other
+`version` only from `0.5` to `0.6`, and derives its new byte count and SHA-256. No other
 JSON-pointer difference is accepted.
 
 The following manifest categories must remain byte-identical, including values, ordered artifact
 records, roles, byte lengths, SHA-256 values, memberships, and category digests:
 
 - `runtime_sources`, `dependencies`, `model`, `retry`, `output`, and `run_order`;
-- `prompts`, `schemas`, `lesson_linter`, `feedback`, `scorer`, and `conformance`;
+- `prompts`, `schemas`, `lesson_linter`, `feedback`, and `conformance`;
 - `fixtures`, `gold`, and `splits`.
 
 The target taxonomy, task and synthesis prompts, runtime and canary inputs, output and lesson
-schemas, linter, feedback templates and generator, scorer, conformance cases, fixture sources, gold
-labels, and split assignments must therefore keep their invalidated-manifest bytes. The replacement
-allowlist permits changes only to:
+schemas, linter, feedback templates and generator, scorer and gate implementations, conformance
+cases, fixture sources, gold labels, and split assignments therefore keep their invalidated-manifest
+bytes, with one source-file exception below. The protected
+`experiments/scheduled-task-learning/page-change/artifacts/page-bootstrap` bytes remain unchanged,
+as do every feedback, lesson-linter, and conformance artifact. The canonical vector remains exactly
+`experiments/scheduled-task-learning/page-change/contracts/canonical-json-vector.json` at SHA-256
+`f6611c2df08bfd194e6b8cea3001c72acd7e9d1c2357070ec8007baa1f0c757f`; its encoded payload remains
+SHA-256 `69208b57f1be144c0ad6463c5865302ce1efe21b7d8070d60a40dbf49063d8d4`.
+
+The `scorer` category may change only at
+`experiments/scheduled-task-learning/page-change/page_benchmark/record.py`, solely to add a
+`canonicalize --input --output` mode using the existing `load_object` and `write` primitives. Its
+`seal_record` function remains textually and semantically unchanged, and every pre-existing CLI mode
+retains its exact behavior. Every other scorer, record-validation, aggregate, gate, bootstrap, and
+executable-wrapper artifact remains byte-for-byte unchanged. The scorer-category
+digest may change only as a derived consequence of that one source record. The target-classes file
+remains SHA-256 `f9b964c2ed6591ff67a447d51365edf32dbb74ee06ab35ab5a4affcafa94a095`.
+All sealed source and gold records remain byte-identical; the invalidated-manifest fixture and gold
+category digests remain `ebd6262e908cf16bee2fcd8dedb314248579f8b86ea9bb6ebb2f0cb429c7e4a5`
+and `e02fdb1952357643867b6eabdfaeda1df05b6699e41e66c9e5724f1619954be3` respectively.
+
+The replacement allowlist permits changes only to:
 
 - `docs/research/118-validation-protocol.md`;
-- budget values `canary_attempt_cap` (`4` to `8`), `canary_responses_send_cap` (`8` to `16`),
-  `page_attempt_cap` (`76` to `84`), `page_responses_send_cap` (`152` to `166`),
-  `global_attempt_cap` (`194` to `206`), `global_responses_send_cap` (`388` to `410`),
-  `global_file_read_cap` (`194` to `205`), and the new `recovery_accounting_seed`;
-- `experiments/scheduled-task-learning/page-change/provenance/invalidated-page-manifest-d5ae7dcef1c2.json`,
-  `experiments/scheduled-task-learning/page-change/provenance/invalidation-report-d5ae7dcef1c2.json`,
-  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-controller-journal-d5ae7dcef1c2.jsonl`,
-  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-terminal-result-d5ae7dcef1c2.json`,
-  and `experiments/scheduled-task-learning/page-change/provenance/recovery-ledger-d5ae7dcef1c2.json`;
+- budget values `canary_attempt_cap` (`8` to `12`), `canary_responses_send_cap` (`16` to `24`),
+  `page_attempt_cap` (`84` to `102`), `page_responses_send_cap` (`166` to `202`),
+  `global_attempt_cap` (`206` to `228`), `global_responses_send_cap` (`410` to `454`),
+  `global_file_read_cap` (`205` to `227`), and the exact new `recovery_accounting_seed`;
+- the new version 0.5 invalidation evidence at
+  `experiments/scheduled-task-learning/page-change/provenance/invalidated-page-manifest-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-controller-journal-40a848a3dc29.jsonl`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-canary-summary-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-live-freeze-receipt-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-page-conformance-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-run-order-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-page-summary-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-terminal-result-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-development-gate-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-development-records-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-development-runs-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-development-bundle-40a848a3dc29.json`,
+  `experiments/scheduled-task-learning/page-change/provenance/invalidation-report-40a848a3dc29.json`,
+  and `experiments/scheduled-task-learning/page-change/provenance/recovery-ledger-40a848a3dc29.json`;
+- an immutable copy of the approved version 0.5 external replacement delta at
+  `experiments/scheduled-task-learning/page-change/provenance/invalidated-replacement-delta-40a848a3dc29.json`,
+  whose exact 6,721 bytes have SHA-256
+  `60d7edc9d6ad55fc29a75bff71c1ad3c1bac65ea75977a4da7af84bc03bed899`;
 - `experiments/scheduled-task-learning/page-change/freeze/page-manifest-descriptor.json`;
-- `tools/page_change_freeze/approval.py`, `tools/page_change_freeze/artifacts.py`,
-  `tools/page_change_freeze/cli.py`, `tools/page_change_freeze/contract.py`, and
-  `tools/page_change_freeze/recovery.py`;
-- `Sources/ClawEvaluation/Controller/EvaluationControllerExecution.swift`,
-  `Sources/ClawEvaluation/Controller/EvaluationControllerValidation.swift`,
-  `Sources/ClawEvaluation/Infrastructure/EvaluationFreezeVerification.swift`,
-  `Sources/ClawEvaluation/Page/EvaluationCanaryExecution.swift`,
-  `Sources/ClawEvaluation/Page/EvaluationContract.swift`,
-  `Sources/ClawEvaluation/Page/Experiment/EvaluationPageExperiment.swift`,
-  `Sources/ClawEvaluation/Runtime/EvaluationExperimentProfile.swift`,
-  `Sources/ClawEvaluation/Runtime/EvaluationRuntimeConfiguration.swift`, and
-  `Sources/ClawEvaluation/Runtime/EvaluationWorker.swift`;
+- `tools/page_change_freeze/contract.py` and `tools/page_change_freeze/recovery.py`, only for the
+  version 0.6 closure, fixed evidence, chained-ledger, and cap bindings;
+- `Sources/ClawEvaluation/Page/EvaluationPageRecords.swift`, only to send the three page composite
+  drafts to the protected canonicalizer, and
+  `Sources/ClawEvaluation/Page/Experiment/EvaluationPageExperiment.swift`, only to propagate that
+  operation's asynchronous result;
+- `Sources/ClawEvaluation/Page/EvaluationContract.swift`, only for the exact cumulative seed and
+  derived canary/page caps, and
+  `Sources/ClawEvaluation/Runtime/EvaluationExperimentProfile.swift`, only for the exact global
+  attempt, send, and read caps;
+- `experiments/scheduled-task-learning/page-change/page_benchmark/record.py` under the exact
+  canonicalization-only restriction above;
 - the rebuilt evaluation executable.
 
-The five provenance additions above belong only to `budget`, with fixed roles
-`invalidated_manifest`, `invalidation_report`, `controller_journal`, `terminal_result`, and
-`recovery_ledger` respectively.
-`recovery.py` belongs only to `configuration` as `freeze_verifier_source`;
-`EvaluationExperimentProfile.swift` belongs only to `harness_sources` as `source`. Existing
-memberships and roles do not change.
+Those executable and non-generated source exceptions are also content-pinned. The verifier refuses
+an `allowed` verdict unless the candidate manifest contains these exact records:
+
+| Category | Path | Bytes | SHA-256 |
+| --- | --- | ---: | --- |
+| `executable` | `experiments/scheduled-task-learning/page-change/artifacts/claw-eval-macos-arm64` | 16,722,880 | `ad471ed38847b1eba7233051e16bda3028c31bd1812d49d72c7e837464dd3b46` |
+| `harness_sources` | `Sources/ClawEvaluation/Page/EvaluationContract.swift` | 8,842 | `96e3a816dbb19543fea5dc4714605286769b4d57554e705f33012c8f7fd57cba` |
+| `harness_sources` | `Sources/ClawEvaluation/Page/EvaluationPageRecords.swift` | 12,335 | `f9a65b10d9bb7365c9a7af188aefda0531b494ec7e0970200c9bd75baf67283b` |
+| `harness_sources` | `Sources/ClawEvaluation/Page/Experiment/EvaluationPageExperiment.swift` | 21,608 | `0f0ea2fa14804459b5aa335c177ac221685e41c6d45ef2ef7f41cef112f03181` |
+| `harness_sources` | `Sources/ClawEvaluation/Runtime/EvaluationExperimentProfile.swift` | 3,207 | `7ddfe2a4f39ad0fb704ba65c4dbec6ca60519ba0e2d2d289141219429a4b1bb3` |
+| `scorer` | `experiments/scheduled-task-learning/page-change/page_benchmark/record.py` | 5,278 | `d93cfd0bed7e0fff6cc86c55131717cc246da9a01f494c66989fe62e17780b64` |
+
+The protocol, descriptor, and freeze-verifier sources participate in constructing their own freeze
+binding, so they are not self-pinned inside verifier source. Their exact candidate bytes remain
+externally bound by the owner-approved manifest and replacement-delta SHA-256 values.
+
+The existing version 0.3 provenance records retain their five exact `budget` paths, roles, byte
+lengths, and SHA-256 values. The version 0.5 evidence uses the fixed `budget` roles
+`replacement_invalidated_manifest`, `replacement_invalidated_delta`,
+`replacement_controller_journal`, `replacement_canary_summary`, `replacement_live_freeze_receipt`,
+`replacement_page_conformance`, `replacement_run_order`, `replacement_page_summary`,
+`replacement_terminal_result`, `replacement_development_gate`, `replacement_development_records`,
+`replacement_development_runs`, `replacement_development_bundle`,
+`replacement_invalidation_report`, and `replacement_recovery_ledger`, with one record for each role.
+`contract.py` and `recovery.py` remain only in `configuration` as `freeze_verifier_source`; the four
+Swift paths remain only in `harness_sources` as `source`; `record.py` retains only its existing
+scorer-source membership. Existing memberships and roles otherwise do not change.
 
 The verifier produces canonical external `replacement-delta.json` bytes after it computes the
 candidate manifest SHA-256. The artifact records both manifest digests, every changed category and
@@ -1011,56 +1086,132 @@ is stored at
 the manifest because it contains that manifest's external digest. An allowlisted path is not an
 open authorization for later edits: D6 approves only the exact new hash recorded in this artifact.
 
-If a candidate changes a prompt, schema, scorer, conformance case, fixture, source datum, gold
-label, split, or target class, the verifier rejects it as a recovery replacement. Such a change
-requires a new experimental design and a protocol that decides which development, regression, and
-sealed data must be replaced. Protocol 0.5 does not authorize that path.
+If a candidate changes a prompt, schema, scorer or gate semantic, conformance case, fixture, source
+datum, gold label, split, target class, canonical vector, or sealed byte, the verifier rejects it as
+a recovery replacement. Such a change requires a new experimental design and a protocol that
+decides which development, regression, and sealed data must be replaced. Protocol 0.6 does not
+authorize that path.
 
 ### Canonical recovery ledger
 
-Code generates `recovery-ledger.json` from the preserved durable controller journal, terminal page
-result, and invalidation report. The ledger binds the invalidated D6 manifest and invalidation-report
-digests and lists all 12 reserved attempts in journal order. Each row records its terminal
-disposition, Responses sends, file reads, accounted tokens, and result-artifact digest when one
-exists. The rejected twelfth attempt has zero sends, reads, and tokens and no result artifact.
+The version 0.6 ledger is a chain, not an operator-authored replacement for the version 0.5 seed.
+The verifier first recomputes the exact prior ledger at
+`experiments/scheduled-task-learning/page-change/provenance/recovery-ledger-d5ae7dcef1c2.json` and
+requires SHA-256 `bec9cfe583a73844f0952c77c05abffa10f496196f15e57ca34931c9cc387f3d`.
+The complete prior chain remains exact:
 
-The verifier derives attempt identity from journal reservations, pairs each reservation with one
-terminal event, cross-checks the invalidation report's per-attempt records against each terminal
-event, and recomputes the terminal page result. It must reproduce these rows before it accepts the
-recovery seed:
+| Prior evidence leaf | Bytes | SHA-256 |
+|---|---:|---|
+| `invalidated-page-manifest-d5ae7dcef1c2.json` | 137,830 | `d5ae7dcef1c20f4c95f22cad9d23c7c1f37409abb3d2a02349a951c7647faad8` |
+| `invalid-batch-controller-journal-d5ae7dcef1c2.jsonl` | 11,722 | `377b6c1c9e5161fc10e41e723906ca1492fd60256ba2715d5bc109df39ace3cb` |
+| `invalid-batch-terminal-result-d5ae7dcef1c2.json` | 871 | `ceda3f4995d3bc2655faa68d5aeb29efc6b31e4a0f4db73404c20c9415b367d8` |
+| `invalidation-report-d5ae7dcef1c2.json` | 10,824 | `7f663a34f284ff4e98ea7f6cacad6d371b7cbb9f5e02a01f65083113cfaf4559` |
+| `recovery-ledger-d5ae7dcef1c2.json` | 6,633 | `bec9cfe583a73844f0952c77c05abffa10f496196f15e57ca34931c9cc387f3d` |
 
-| Stage | Attempts | Responses sends | File reads | Accounted tokens |
+The prior ledger binds the first four rows. The verifier also requires the archived version 0.5
+replacement delta above with `verdict` `allowed`, an empty `violations` array, the first row as its
+baseline manifest, and the version 0.5 manifest
+`40a848a3dc290fa203fe084ec9a18bc5c9b4416ca2eff5ecd55f65bd450ad63f` as its candidate. The new
+external delta cannot overwrite the preserved bytes of that D6 approval chain.
+
+The second invalidation report binds manifest
+`40a848a3dc290fa203fe084ec9a18bc5c9b4416ca2eff5ecd55f65bd450ad63f`, protocol
+`ac2628e7e57f1c013c6fdb8f337426dadff534e03b7e2ded67973970c9d7c12f`, executable
+`a2fa94b53d72cbaebf4fe85b949f05d4719eeaf24c68d8c47b2a56b0693d0cee`, freeze commit
+`902868a7d163650f6a68178a0d692658c653dd95`, owner approval comment `5450724909` with body SHA-256
+`f7c673cb633e237472aa2eaf6dcfb47518eb6637e7176c1fecd99267d5e920c7`, the prior invalidation
+report SHA-256 `7f663a34f284ff4e98ea7f6cacad6d371b7cbb9f5e02a01f65083113cfaf4559`, the prior recovery-ledger
+SHA-256 above, and prior replacement-delta SHA-256 above.
+
+The following version 0.5 evidence is immutable. The verifier derives the final chained-ledger row
+from the preceding rows and the exact prior chain. Each leaf name completes the common path
+`experiments/scheduled-task-learning/page-change/provenance/`:
+
+| Evidence leaf | Bytes | Actual SHA-256 | Canonical binding |
+|---|---:|---|---|
+| `invalidated-page-manifest-40a848a3dc29.json` | 141,263 | `40a848a3dc290fa203fe084ec9a18bc5c9b4416ca2eff5ecd55f65bd450ad63f` | Exact invalidated manifest |
+| `invalidated-replacement-delta-40a848a3dc29.json` | 6,721 | `60d7edc9d6ad55fc29a75bff71c1ad3c1bac65ea75977a4da7af84bc03bed899` | Exact approved version 0.5 delta |
+| `invalid-batch-controller-journal-40a848a3dc29.jsonl` | 22,693 | `ecb119808f5cc49d64b53f6b0a61c8ba7524bd861d117478c5ff7f769b9d0846` | Canonical JSONL |
+| `invalid-batch-canary-summary-40a848a3dc29.json` | 314 | `434b7ffda44d7842f603748cef9e25413d3ad459f94af87fc2e4a9a653bc9791` | Exact source bytes |
+| `invalid-batch-live-freeze-receipt-40a848a3dc29.json` | 2,490 | `d1f8325cf339ede48c0ff1f17b57a6a5edce88ed28be82b284f56f57f7e80682` | Canonical JSON plus LF |
+| `invalid-batch-page-conformance-40a848a3dc29.json` | 16,135 | `585056a9d06443e433494c52bc2d63755303b7d7faedfa36f74fb1eab9d5b87c` | Canonical JSON plus LF; 24/24 passed |
+| `invalid-batch-run-order-40a848a3dc29.json` | 40,738 | `518c85a65f5551f5ab3d713ba116735ff17c0b1da9cbe4d0d409be600f78b8c9` | Canonical JSON plus LF; binds manifest |
+| `invalid-batch-page-summary-40a848a3dc29.json` | 940 | `215d791c6a1db27ea61e3cfab56a63a90c8054e7a056a6468ad7d97a40aa9c55` | Exact source bytes |
+| `invalid-batch-terminal-result-40a848a3dc29.json` | 1,443 | `854bd5593f8fa1342e03b8e1713420931a048720fa33fb75ec7bc93308eda7c3` | Canonical JSON plus LF |
+| `invalid-batch-development-gate-40a848a3dc29.json` | 303 | `7f8d40d6206c4a055df1b0abbba5ab6d628849d55ae7f8af443048d6a9486154` | Canonical JSON plus LF |
+| `invalid-batch-development-records-40a848a3dc29.json` | 68,893 | `be08920443960330d682933a3b1feb3c96ec3c93d9f53ea1cb322b8cf0d65c42` | 68,816 / `c307aa3de22d6cd2f0d7bb23a80c8c2446d6f5df2129011d67753febc95200b9` |
+| `invalid-batch-development-runs-40a848a3dc29.json` | 39,350 | `7bffb183dbceaf847611b6da99c8342dfc9dfcc4ad0d6191312fc8ed25608076` | 39,273 / `33cdc6fb39564f05cdcda6bc463b3014a99331d6360b9ef37f5542794c6815e5` |
+| `invalid-batch-development-bundle-40a848a3dc29.json` | 51,114 | `0d15886cd51726cef9c493c5517022dd12cf7a1a53aac90f3e8b3799204a4cc1` | 51,037 / `ff32467069101ab729da701c8f65c3f25c7db2d467d06c796291f9ed26103d06` |
+| `invalidation-report-40a848a3dc29.json` | 13,014 | `ad312cf9f93ab58df3a12caa5032087ab8c929a41b14df7c794be5039cd45056` | Canonical JSON plus LF |
+| `recovery-ledger-40a848a3dc29.json` | 14,860 | `12aa5f07ab30f6c920e82bc223724eecdd7a2f9060cbea6dcb95fbabdaa34d1b` | Derived canonical chained ledger |
+
+After independently verifying those files and the chain, the replacement-delta builder requires
+every candidate-manifest `budget` record whose role begins `replacement_` to match the actual path,
+byte count, and SHA-256 exactly. Rehashing a manifest record cannot substitute different evidence.
+
+The first differing offsets for records, runs, and bundle are 6,742, 3,570, and 9,182 bytes. Each
+actual composite contains four `0.33333299999999999` spellings and three
+`0.66666700000000001` spellings where the unchanged canonical writer emits `0.333333` and
+`0.666667`. Each actual file is therefore 77 bytes longer. Parsing and canonicalizing must preserve
+the complete decoded value; a semantic difference is not an authorized repair.
+
+The verifier reads the second journal in order, pairs its 20 launch reservations with 20 completed
+terminal events, and derives the 22 fresh attempt identities from those reservations. The two canary
+launches each contain two attempts; the 18 development launches each contain one. It recomputes this
+fresh increment without treating the terminal result's already-cumulative summaries as fresh usage:
+
+| Version 0.5 fresh stage | Attempts | Responses sends | File reads | Accounted tokens |
 |---|---:|---:|---:|---:|
-| Canary | 4 | 8 | 4 | 9,550 |
-| Page clean development | 8 | 14 | 7 | 18,609 |
-| **Total** | **12** | **22** | **11** | **28,159** |
+| Canary | 4 | 8 | 4 | 9,548 |
+| Page clean development | 18 | 36 | 18 | 48,250 |
+| **Fresh total** | **22** | **44** | **22** | **57,798** |
 
-The canonical accounting seed in `budget.values` contains only the two stage rows and their totals;
-the manifest's protected-artifact records bind the controller journal, terminal result, recovery
-ledger, invalidated manifest, and invalidation report by path, role, byte length, and SHA-256. The
-verifier accepts the accounting seed only after deriving the same rows and totals from those bound
-artifacts. The controller accepts no operator-supplied starting counts. Any missing artifact,
-digest mismatch, unpaired attempt, or arithmetic mismatch blocks D6 admission.
+It then adds those rows to the exact prior ledger and must reproduce:
+
+| Cumulative stage | Attempts | Responses sends | File reads | Accounted tokens |
+|---|---:|---:|---:|---:|
+| Canary | 8 | 16 | 8 | 19,098 |
+| Page clean development | 26 | 50 | 25 | 66,859 |
+| **Cumulative seed** | **34** | **66** | **33** | **85,957** |
+
+The second terminal result's canary and page summaries must equal those cumulative stage rows while
+its completed-attempt ID lists equal only the 22 fresh journal attempts. The terminal outcome must be
+`invalid_batch`, its stop reason must name the protected `page-aggregate`, and its development-gate
+digest must bind the exact `aggregate.input_invalid` receipt. The invalidation report must bind the
+same fresh rows, cumulative rows, composite byte mismatches, output-exposure disposition, and the
+attestation that no sealed content was exposed.
+
+The canonical accounting seed in `budget.values` contains only the two cumulative stage rows and
+their total. Protected `budget` records bind both invalid manifests, both journals and terminal
+results, both invalidation reports, both recovery ledgers, the archived prior replacement delta, the
+failed development gate, all three composites, and the five supporting receipts in the table by
+fixed path, role, byte length, and SHA-256. The controller accepts no operator-supplied starting
+counts. Any missing artifact, digest mismatch, unpaired launch, double-counted terminal summary,
+composite that no longer reproduces the frozen mismatch, exposure inconsistency, or arithmetic
+mismatch blocks D6 admission.
 
 The manifest fixes the run-order algorithm, stage topology, and fixture/replicate blocks. After the
 verifier computes the final external manifest SHA-256, it derives the realized run order from that
 digest, stores the order in external run provenance, and verifies it before execution. The manifest
 contains no realized run-order artifact or manifest digest, so this sequence has no digest cycle.
 
-Protocol 0.5 adds three decision-bearing verifier tests: a recovery-only delta passes; a table of
-prompt, scorer, fixture, gold-label, and split mutations fails; and changed ledger totals or source
-digests block admission. Existing tests continue to own all unchanged protocol behavior.
+Protocol 0.6 requires decision-bearing tests that prove the exact canonicalization-only delta passes
+and an always-reject implementation fails. Mutants for prompts, schemas, any non-`record.py` scorer
+or gate path, record-sealing behavior, canonical vector, fixtures, gold labels, splits, target
+classes, model, page-bootstrap, feedback, linter, conformance, and every sealed byte must fail.
+Ledger tests independently recompute 22/44/22/57,798 and 34/66/33/85,957, reject source or prior-
+chain digest drift and double counting, and bind the three actual/canonical composite pairs. Swift
+and manifest tests assert canary caps 12/24/12, page caps 102/202/101, global caps 228/454/227, and
+unchanged token thresholds. Runtime tests require all controller-authored page composites to use the
+protected canonical fractional bytes and require ordinary record sealing and aggregate outcomes to
+remain unchanged.
 
-Every replacement D6 and later D7 manifest under version 0.5 carries the same canonical recovery-
-accounting seed in its budget category: the per-stage rows above and the cumulative totals of 12
-attempts, 22 Responses sends, 11 file reads, and 28,159 accounted tokens. The same budget category
-contains the protected-artifact records whose exact hashes bind the invalidated D6 manifest
-`d5ae7dcef1c20f4c95f22cad9d23c7c1f37409abb3d2a02349a951c7647faad8`, owner-approved
-invalidation report, recovery ledger, source journal, and terminal result. The category digest and
-external manifest approval bind both parts without duplicating provenance hashes in the
-runtime's count contract. The harness must reject a missing or mismatched seed or artifact before
-launch, initialize admission from the seed rather than operator-supplied numbers, and never lower
-or reset it in a later stage.
+Every replacement D6 and later D7 manifest under version 0.6 carries the same cumulative recovery-
+accounting seed of 34 attempts, 66 Responses sends, 33 file reads, and 85,957 accounted tokens. The
+category digest and external manifest approval bind both invalidation chains and the seed without
+duplicating provenance hashes in the runtime's count contract. The harness rejects a missing or
+mismatched seed or artifact before launch, initializes admission from the seed rather than
+operator-supplied numbers, and never lowers or resets it in a later stage.
 
 After the replacement page run ends, the controller writes an immutable canonical cumulative-
 budget checkpoint derived only from the approved seed and its durable page journal and result. It
@@ -1068,7 +1219,7 @@ records cumulative attempts, Responses sends, file reads, and accounted tokens, 
 seed, page manifest, controller journal, and terminal page result. D7 binds the checkpoint digest
 and bytes in addition to the unchanged recovery seed. Dependency admission rejects a missing,
 mismatched, operator-authored, or non-terminal checkpoint and initializes its global totals from
-that checkpoint; its stage-local counters still start at zero. This preserves all valid version 0.5
+that checkpoint; its stage-local counters still start at zero. This preserves all valid version 0.6
 page usage across the separate dependency controller process.
 
 The manifest does not contain the Git commit that first contains that manifest, which would create a
@@ -1080,18 +1231,21 @@ The complete replacement page run starts from its first canary in a dedicated cl
 detached `HEAD` at the exact new D6 `freeze_commit`. The controller, workers, manifest, executable,
 and protected-artifact verifier all use that worktree as the repository root. No checkout, merge,
 source edit, build, or other repository mutation may occur there until the batch ends. Development
-continues only in other worktrees. Partial version 0.3 outputs cannot satisfy a version 0.5 run slot,
-create feedback, select a lesson, or enter a score; only their immutable accounting seed and
-invalidation evidence carry forward.
+continues only in other worktrees. Outputs from either invalid batch cannot satisfy a version 0.6 run
+slot, create feedback, select a lesson, enter a score, or satisfy a gate; only their immutable
+accounting and invalidation evidence carry forward.
 
 Approvals are staged:
 
-- `D1` through `D4` cite protocol version 0.5, protocol SHA-256, and the external protocol
+- `D1` through `D4` cite protocol version 0.6, protocol SHA-256, and the external protocol
   `freeze_commit`;
 - `D5` cites the ranking-policy digest before dependency fixtures, labels, and scorer are finalized;
+  an earlier D5 remains usable only if that exact digest is unchanged;
 - the replacement `D6` cites the page manifest SHA-256, replacement-delta SHA-256, recovery-
-  accounting seed, recovery-ledger SHA-256, approved invalidation-report SHA-256, and external
-  `freeze_commit` before the new page canary or any page model call;
+  accounting seed, chained recovery-ledger SHA-256, approved second-invalidation-report SHA-256,
+  and external `freeze_commit` before the new page canary or any page model call; the candidate
+  manifest and chained ledger transitively bind the archived version 0.5 replacement-delta SHA-256
+  and the complete earlier recovery evidence;
 - `D7` cites the dependency manifest SHA-256, unchanged recovery seed, immutable page-completion
   cumulative-checkpoint digest, and external `freeze_commit` before any dependency model call.
 
@@ -1126,11 +1280,14 @@ defect concerns sealed semantics. A pre-call defect may reuse a sealed set that 
 under a new approved manifest. Credential, entitlement, access, and exhausted-budget failures are
 `incomplete`, not `invalid`, unless they also violate a frozen contract.
 
-The invalid version 0.3 replacement-D6 batch stopped during clean development. No synthesis,
-regression, or sealed runtime artifact exists, and no sealed fixture, output, or score was opened.
-Version 0.5 therefore reuses the existing sealed set under the new approved manifest and reruns the
-complete page sequence from the first canary. This exception carries no model output or score
-forward and does not alter the general invalidation rule above.
+The invalid version 0.3 replacement-D6 batch stopped during clean development. The invalid version
+0.5 batch completed all fresh canary and clean-development model attempts, constructed and scored
+the 18 development records, and then stopped when the protected aggregate rejected the noncanonical
+records composite. No synthesis, regression, or sealed reservation exists in the version 0.5
+journal. No sealed fixture, output, or score was opened in either batch. Version 0.6 therefore reuses
+the exact existing sealed source and gold bytes under the new approved manifest and reruns the
+complete page sequence from the first canary. No invalid model output, derived score, lesson, or run
+slot carries forward; all remain preserved only as invalidation evidence and accounting.
 
 ## Artifacts and provenance
 
@@ -1162,23 +1319,27 @@ The owner must approve these decisions before any scored call:
    verify the requested model in every outbound request and any terminal model field the backend
    supplies, disable client-side fallback, leave unsupported sampling controls unset, use three
    replicates, and use an isolated credential state.
-2. `D2`: approve the hash of protocol 0.5, its unchanged decision matrix, primary endpoints, safety
+2. `D2`: approve the hash of protocol 0.6, its unchanged decision matrix, primary endpoints, safety
    gates, scorer reliability rules, and restart conditions without post-result changes.
-3. `D3`: approve the immutable prior-usage seed, cumulative hard caps of 206 task or synthesis
-   attempts, 410 outbound Responses sends, and 205 file reads, plus the unchanged 4.35 million
-   accounted-token stopping threshold, fixed missing-usage proxy, and possibility of an unknown
-   one-send terminal-usage overshoot, with Responses inference retries disabled.
+3. `D3`: approve the immutable 34-attempt, 66-send, 33-read, 85,957-token prior-usage seed,
+   cumulative hard caps of 228 task or synthesis attempts, 454 outbound Responses sends, and 227 file
+   reads, plus the unchanged 4.35 million accounted-token stopping threshold, fixed missing-usage
+   proxy, and possibility of an unknown one-send terminal-usage overshoot, with Responses inference
+   retries disabled.
 4. `D4`: supply canonical dependency facts deterministically and learn only derived actionability,
    remediation, abstention, and ranking policy.
 
 Before Task 4 dependency labels are frozen, the owner must separately approve `D5`, the exact
 dependency ranking grades. This approval is not required to run the earlier page experiment.
 
-Before the replacement page canary, the owner approves the invalidation report and new `D6`, the
-complete page experiment manifest digest, replacement-delta digest, recovery-ledger digest, and
-recovery seed. Before any dependency call, the owner approves `D7`, the complete dependency
-experiment manifest digest with the same recovery seed and the controller-derived page-completion
-cumulative-checkpoint digest.
+Before the replacement page canary, the owner approves the second invalidation report and new `D6`,
+the complete page experiment manifest digest, new replacement-delta digest, chained recovery-ledger
+digest, exact cumulative recovery seed, and external freeze commit. The candidate manifest and
+chained recovery ledger transitively bind the archived version 0.5 replacement-delta digest. The
+version 0.6 approval reaffirms `D1` through `D4` against the new protocol hash; the version 0.5
+approval cannot authorize a version 0.6 model call. Before any dependency call, the owner approves
+`D7`, the complete dependency experiment manifest digest with the same recovery seed and the
+controller-derived page-completion cumulative-checkpoint digest.
 
 After `D1` through `D4`, `D6`, and the owner-completed isolated device-flow login, the agent can
 complete the page experiment without further owner input. After `D5` and `D7`, the agent can run the

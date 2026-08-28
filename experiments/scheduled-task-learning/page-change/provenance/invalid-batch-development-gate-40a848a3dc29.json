@@ -1,0 +1,1 @@
+{"gate_failures":["aggregate.input_invalid"],"input_error":"JSON artifact is not compact sorted JSON plus one LF: /private/tmp/swift-claw-evaluation/scheduled-task-learning/page-change/pipeline/development-records.json","outcome":"invalid_batch","passed":false,"schema_version":1,"stage":"development"}

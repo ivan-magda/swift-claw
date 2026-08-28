@@ -59,9 +59,9 @@ package struct EvaluationRuntimeContract: Sendable, Equatable {
   package let responsesSendsPerLogicalRoundTrip = 1
   package let maximumInputGraphemes = 59_999
   package let missingUsageTokenProxy = 132_768
-  package let globalMaximumAttempts = 206
-  package let globalMaximumResponsesSends = 410
-  package let globalMaximumFileReads = 205
+  package let globalMaximumAttempts = 228
+  package let globalMaximumResponsesSends = 454
+  package let globalMaximumFileReads = 227
   package let globalAccountedTokenThreshold = 4_350_000
   package let policyVersionHexCount = 16
   package let terminalValidationPolicy = StreamingTerminalValidationPolicy.throughStreamEnd

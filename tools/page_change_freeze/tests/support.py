@@ -39,11 +39,20 @@ let package = Package(name: "fixture", targets: [
         for path in contract.FREEZE_MODULE_PATHS:
             self.write(path, (canonical_root / path).read_bytes())
         for path in (
+            contract.PRIOR_INVALIDATED_MANIFEST_PATH,
+            contract.PRIOR_INVALIDATION_REPORT_PATH,
+            contract.PRIOR_INVALID_BATCH_JOURNAL_PATH,
+            contract.PRIOR_INVALID_BATCH_TERMINAL_RESULT_PATH,
+            contract.PRIOR_RECOVERY_LEDGER_PATH,
             contract.INVALIDATED_MANIFEST_PATH,
+            contract.INVALIDATED_REPLACEMENT_DELTA_PATH,
             contract.INVALIDATION_REPORT_PATH,
             contract.INVALID_BATCH_JOURNAL_PATH,
             contract.INVALID_BATCH_TERMINAL_RESULT_PATH,
+            contract.INVALID_BATCH_DEVELOPMENT_GATE_PATH,
             contract.RECOVERY_LEDGER_PATH,
+            *(item[1] for item in contract.INVALID_BATCH_COMPOSITES),
+            *(item[1] for item in contract.INVALID_BATCH_EVIDENCE),
         ):
             self.write(path, (canonical_root / path).read_bytes())
         self.write(contract.REPLACEMENT_DELTA_PATH, b"{}")
@@ -59,7 +68,13 @@ let package = Package(name: "fixture", targets: [
         for name in ("input.schema.json", "output.schema.json"):
             self.write(f"{contract.PAGE_ROOT}/schemas/{name}", b'{"type":"object"}\n')
 
-        self.benchmark_sources = ["__init__.py", "canonical.py", "lessons.py", "scorer.py"]
+        self.benchmark_sources = [
+            "__init__.py",
+            "canonical.py",
+            "lessons.py",
+            "record.py",
+            "scorer.py",
+        ]
         for name in self.benchmark_sources:
             body = b"def main():\n    return 0\n" if name == "scorer.py" else b"VALUE = 1\n"
             self.write(f"{contract.BENCHMARK_PACKAGE_ROOT}/{name}", body)
@@ -126,18 +141,18 @@ let package = Package(name: "fixture", targets: [
             "configuration": {"runtime_contract_owner": "ClawEvaluation"},
             "budget": {
                 "canary_accounted_token_stopping_threshold": 50_000,
-                "canary_attempt_cap": 8,
-                "canary_responses_send_cap": 16,
+                "canary_attempt_cap": 12,
+                "canary_responses_send_cap": 24,
                 "global_accounted_token_stopping_threshold": 4_350_000,
-                "global_attempt_cap": 206,
-                "global_file_read_cap": 205,
-                "global_responses_send_cap": 410,
+                "global_attempt_cap": 228,
+                "global_file_read_cap": 227,
+                "global_responses_send_cap": 454,
                 "missing_usage_token_proxy": 132_768,
                 "page_accounted_token_stopping_threshold": 1_500_000,
-                "page_attempt_cap": 84,
+                "page_attempt_cap": 102,
                 "page_planned_attempts": 73,
                 "page_replacement_pool": 3,
-                "page_responses_send_cap": 166,
+                "page_responses_send_cap": 202,
                 "recovery_accounting_seed": recovery.recovery_seed(
                     recovery.verify_recovery_ledger(self.root)[0]
                 ),
@@ -203,7 +218,7 @@ let package = Package(name: "fixture", targets: [
         ]
         categories["scorer"]["artifacts"] = [
             {"role": "source", "path": f"{contract.BENCHMARK_PACKAGE_ROOT}/{name}"}
-            for name in ("__init__.py", "scorer.py")]
+            for name in ("__init__.py", "record.py", "scorer.py")]
         for category, source_names in contract.BENCHMARK_CORE_CATEGORY_SOURCES.items():
             categories[category]["artifacts"] += [
                 {"role": "source", "path": f"{contract.BENCHMARK_CORE_ROOT}/{name}"}

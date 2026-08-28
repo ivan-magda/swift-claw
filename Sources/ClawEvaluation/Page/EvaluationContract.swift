@@ -104,16 +104,16 @@ enum PageEvaluationContract {
   package static let globalAccountedTokenThreshold = runtime.globalAccountedTokenThreshold
   static let recoveryAccountingSeed = RecoveryAccountingSeed(
     canary: RecoveryUsage(
-      attempts: 4,
-      responsesSends: 8,
-      fileReads: 4,
-      accountedTokens: 9_550
+      attempts: 8,
+      responsesSends: 16,
+      fileReads: 8,
+      accountedTokens: 19_098
     ),
     pageCleanDevelopment: RecoveryUsage(
-      attempts: 8,
-      responsesSends: 14,
-      fileReads: 7,
-      accountedTokens: 18_609
+      attempts: 26,
+      responsesSends: 50,
+      fileReads: 25,
+      accountedTokens: 66_859
     )
   )
   package static let feedbackGeneratorVersion = "page-feedback-v1"
