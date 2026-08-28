@@ -4,7 +4,7 @@ import copy
 import unittest
 from typing import Any
 
-from dependency_benchmark.normalization import materialize_task
+from dependency_benchmark.normalization import materialize
 
 from support import fixture
 
@@ -21,6 +21,11 @@ class DependencyNormalizationTests(unittest.TestCase):
     def test_materialization_is_order_independent_and_hides_source_keys(self) -> None:
         # Given
         source = fixture("dp-development-01")["source"]
+        source["normalized_findings"][0]["advisories"].append(
+            {"advisory_id": "OSV-NO-CVSS", "severity": None}
+        )
+        shared_option_key = source["normalized_findings"][0]["remediation_options"][0]["source_key"]
+        source["normalized_findings"][1]["remediation_options"][0]["source_key"] = shared_option_key
         reordered = copy.deepcopy(source)
         for finding_index, finding in enumerate(reordered["normalized_findings"]):
             finding_key = finding["source_key"]
@@ -54,13 +59,39 @@ class DependencyNormalizationTests(unittest.TestCase):
         }
 
         # When
-        task = materialize_task(source)
-        reordered_task = materialize_task(reordered)
+        materialization = materialize(source)
+        reordered_materialization = materialize(reordered)
+        task = materialization.task
+        reordered_task = reordered_materialization.task
 
         # Then
         self.assertEqual(task, reordered_task)
         self.assertTrue(author_only_keys.isdisjoint(_object_keys(task)))
         self.assertEqual(len(task["findings"]), len(source["normalized_findings"]))
+        self.assertEqual(
+            {binding.finding_id for binding in materialization.bindings.findings},
+            {finding["finding_id"] for finding in task["findings"]},
+        )
+        scoped_targets: list[str] = []
+        for source_finding in source["normalized_findings"][:2]:
+            finding_id = materialization.bindings.finding_id(source_finding["source_key"])
+            option_id = materialization.bindings.option_id(
+                source_finding["source_key"],
+                shared_option_key,
+            )
+            canonical_finding = next(
+                finding for finding in task["findings"] if finding["finding_id"] == finding_id
+            )
+            canonical_option = next(
+                option
+                for option in canonical_finding["remediation_options"]
+                if option["option_id"] == option_id
+            )
+            scoped_targets.append(canonical_option["target_version"])
+        self.assertEqual(
+            scoped_targets,
+            ["1.1.0", "2.0.0"],
+        )
 
 
 if __name__ == "__main__":

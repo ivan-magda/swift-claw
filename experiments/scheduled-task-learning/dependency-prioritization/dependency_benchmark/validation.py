@@ -25,6 +25,12 @@ CANONICAL_IDS = {
 }
 _MAX_QUEUE_GRADE = 48
 _MAX_TASK_EVIDENCE_REFERENCES = 48
+MAX_FINDINGS = 12
+MAX_PATHS_PER_FINDING = 8
+MAX_PATH_NODES = 12
+MAX_OPTIONS_PER_FINDING = 8
+MAX_EVIDENCE_PER_FINDING = 16
+MAX_PACKAGE_CHAIN_ITEM_SCALARS = 128
 
 
 def _source_key(value: Any, path: str, issues: list[ValidationIssue]) -> bool:
@@ -66,7 +72,7 @@ def validate_source(value: Any) -> list[ValidationIssue]:
         issue(issues, "schema.exact_version_identity", "fixture_id does not encode split")
     findings = value.get("normalized_findings")
     finding_keys: list[str] = []
-    if bounded_list(findings, 0, 12, "$.normalized_findings", issues):
+    if bounded_list(findings, 0, MAX_FINDINGS, "$.normalized_findings", issues):
         for index, finding in enumerate(findings):
             path = f"$.normalized_findings[{index}]"
             finding_keys.extend(_validate_source_finding(finding, path, issues))
@@ -144,7 +150,7 @@ def _validate_source_finding(
 
 def _validate_advisories(value: Any, path: str, issues: list[ValidationIssue]) -> None:
     advisory_ids: list[str] = []
-    if not bounded_list(value, 1, 8, path, issues):
+    if not bounded_list(value, 1, MAX_PATHS_PER_FINDING, path, issues):
         return
     for index, advisory in enumerate(value):
         item_path = f"{path}[{index}]"
@@ -154,12 +160,14 @@ def _validate_advisories(value: Any, path: str, issues: list[ValidationIssue]) -
         advisory_id = advisory.get("advisory_id")
         if bounded_string(advisory_id, 1, 128, f"{item_path}.advisory_id", issues):
             advisory_ids.append(advisory_id)
-        closed_enum(
-            advisory.get("severity"),
-            ("low", "moderate", "high", "critical"),
-            f"{item_path}.severity",
-            issues,
-        )
+        severity = advisory.get("severity")
+        if severity is not None:
+            closed_enum(
+                severity,
+                ("low", "moderate", "high", "critical"),
+                f"{item_path}.severity",
+                issues,
+            )
     if len(advisory_ids) != len(set(advisory_ids)):
         issue(issues, "schema.unique_arrays", f"{path} advisory IDs must be unique")
 
@@ -177,12 +185,12 @@ def _validate_source_paths(value: Any, path: str, issues: list[ValidationIssue])
         if _source_key(source_key, f"{item_path}.source_key", issues):
             source_keys.append(source_key)
         chain = item.get("package_chain")
-        if bounded_list(chain, 1, 12, f"{item_path}.package_chain", issues):
+        if bounded_list(chain, 1, MAX_PATH_NODES, f"{item_path}.package_chain", issues):
             for chain_index, package in enumerate(chain):
                 bounded_string(
                     package,
                     1,
-                    128,
+                    MAX_PACKAGE_CHAIN_ITEM_SCALARS,
                     f"{item_path}.package_chain[{chain_index}]",
                     issues,
                 )
@@ -203,7 +211,7 @@ def _validate_source_paths(value: Any, path: str, issues: list[ValidationIssue])
 
 def _validate_source_options(value: Any, path: str, issues: list[ValidationIssue]) -> list[str]:
     source_keys: list[str] = []
-    if not bounded_list(value, 0, 8, path, issues):
+    if not bounded_list(value, 0, MAX_OPTIONS_PER_FINDING, path, issues):
         return source_keys
     for index, item in enumerate(value):
         item_path = f"{path}[{index}]"
@@ -243,7 +251,7 @@ def _validate_source_options(value: Any, path: str, issues: list[ValidationIssue
 
 def _validate_source_evidence(value: Any, path: str, issues: list[ValidationIssue]) -> list[str]:
     source_keys: list[str] = []
-    if not bounded_list(value, 0, 16, path, issues):
+    if not bounded_list(value, 0, MAX_EVIDENCE_PER_FINDING, path, issues):
         return source_keys
     for index, item in enumerate(value):
         item_path = f"{path}[{index}]"
@@ -288,7 +296,7 @@ def validate_output(value: Any, expected_task_id: str) -> list[ValidationIssue]:
     finding_ids: list[str] = []
     actionable_ids: list[str] = []
     findings = value.get("findings")
-    if bounded_list(findings, 0, 12, "$.findings", issues):
+    if bounded_list(findings, 0, MAX_FINDINGS, "$.findings", issues):
         for index, finding in enumerate(findings):
             item_path = f"$.findings[{index}]"
             item_keys = {
@@ -369,7 +377,7 @@ def validate_output(value: Any, expected_task_id: str) -> list[ValidationIssue]:
     if len(finding_ids) != len(set(finding_ids)):
         issue(issues, "schema.unique_arrays", "$.findings must use unique finding IDs")
     queue = value.get("remediation_queue")
-    if bounded_list(queue, 0, 12, "$.remediation_queue", issues, unique=True):
+    if bounded_list(queue, 0, MAX_FINDINGS, "$.remediation_queue", issues, unique=True):
         for index, finding_id in enumerate(queue):
             bounded_string(
                 finding_id,
@@ -424,7 +432,7 @@ def validate_gold(
     )
     finding_ids: list[str] = []
     findings = value.get("findings")
-    if bounded_list(findings, 0, 12, "$.findings", issues):
+    if bounded_list(findings, 0, MAX_FINDINGS, "$.findings", issues):
         for index, finding in enumerate(findings):
             item_path = f"$.findings[{index}]"
             item_keys = {

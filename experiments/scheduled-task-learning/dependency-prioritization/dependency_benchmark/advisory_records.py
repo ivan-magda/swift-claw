@@ -113,11 +113,33 @@ def _texts(value: Any, context: str) -> tuple[str, ...]:
     return result
 
 
-def _catalog_entries(root: Path) -> tuple[Path, frozenset[str], tuple[_CatalogEntry, ...]]:
+def _catalog_entries(
+    root: Path,
+) -> tuple[Mapping[str, Any], Path, frozenset[str], tuple[_CatalogEntry, ...]]:
     index_path = root / "index.json"
     if index_path.is_symlink():
         raise AdvisorySourceError("source catalogs must not be symlinks")
     index = load_object(index_path)
+    if set(index) != {"schema_version", "fixtures", "provenance_path"}:
+        raise AdvisorySourceError("source index has the wrong shape")
+    if type(index["schema_version"]) is not int or index["schema_version"] != 1:
+        raise AdvisorySourceError("source index schema version is unsupported")
+    fixtures = _array(index["fixtures"], "source fixtures")
+    fixture_ids: list[str] = []
+    for raw_fixture in fixtures:
+        fixture = _object(raw_fixture, "source fixture")
+        if set(fixture) != {"fixture_id", "record_ids", "split"}:
+            raise AdvisorySourceError("source fixture has the wrong shape")
+        fixture_id = _text(fixture["fixture_id"], "fixture id")
+        split = _text(fixture["split"], "fixture split")
+        if split not in {"development", "regression", "sealed"}:
+            raise AdvisorySourceError("source fixture split is unsupported")
+        if not fixture_id.startswith(f"dp-{split}-"):
+            raise AdvisorySourceError("source fixture id does not encode its split")
+        _texts(fixture["record_ids"], "fixture record ids")
+        fixture_ids.append(fixture_id)
+    if len(fixture_ids) != len(set(fixture_ids)):
+        raise AdvisorySourceError("source fixture ids must be unique")
     provenance_declaration = Path(_text(index.get("provenance_path"), "provenance path"))
     if provenance_declaration.name != "provenance.json":
         raise AdvisorySourceError("source index must declare provenance.json")
@@ -156,7 +178,7 @@ def _catalog_entries(root: Path) -> tuple[Path, frozenset[str], tuple[_CatalogEn
         )
         for repository_id, repository in repositories.items()
     )
-    return snapshot_prefix, frozenset(repositories), tuple(entries)
+    return index, snapshot_prefix, frozenset(repositories), tuple(entries)
 
 
 def _verified_entry(
@@ -205,7 +227,7 @@ def _verified_sources(source_root: Path) -> tuple[_VerifiedRecord, ...]:
     if source_root.is_symlink():
         raise AdvisorySourceError("source root must not be a symlink")
     root = source_root.resolve()
-    snapshot_prefix, repositories, entries = _catalog_entries(root)
+    _, snapshot_prefix, repositories, entries = _catalog_entries(root)
 
     declared_paths: set[Path] = set()
     verified_records: list[_VerifiedRecord] = []
@@ -240,6 +262,31 @@ def verify_frozen_source_catalog(source_root: Path) -> None:
     """Verify path closure, byte counts, and hashes for every frozen source entry."""
 
     _verified_sources(source_root)
+
+
+def fixture_record_ids(source_root: Path, fixture_id: str, split: str) -> tuple[str, ...]:
+    """Return the sole frozen advisory selection for one fixture."""
+
+    if source_root.is_symlink():
+        raise AdvisorySourceError("source root must not be a symlink")
+    root = source_root.resolve()
+    index, _, _, entries = _catalog_entries(root)
+    known_record_ids = {
+        _text(entry.get("record_id"), "catalog record id")
+        for _, entry, is_record in entries
+        if is_record
+    }
+    matches = [
+        fixture
+        for raw_fixture in _array(index["fixtures"], "source fixtures")
+        if (fixture := _object(raw_fixture, "source fixture"))["fixture_id"] == fixture_id
+    ]
+    if len(matches) != 1 or matches[0]["split"] != split:
+        raise AdvisorySourceError("fixture advisory selection is missing or mismatched")
+    record_ids = _texts(matches[0]["record_ids"], "fixture record ids")
+    if not record_ids or not set(record_ids).issubset(known_record_ids):
+        raise AdvisorySourceError("fixture advisory selection contains unknown records")
+    return record_ids
 
 
 def _decode_record(source: _VerifiedRecord) -> dict[str, Any]:

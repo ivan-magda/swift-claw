@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from benchmark_core.canonical import canonical_sha256
@@ -12,16 +13,76 @@ from .validation import validate_source
 _SEVERITY_ORDER = {"low": 0, "moderate": 1, "high": 2, "critical": 3}
 
 
+@dataclass(frozen=True, slots=True)
+class IdBinding:
+    source_key: str
+    canonical_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class FindingBindings:
+    source_key: str
+    finding_id: str
+    paths: tuple[IdBinding, ...]
+    options: tuple[IdBinding, ...]
+    evidence: tuple[IdBinding, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationBindings:
+    findings: tuple[FindingBindings, ...]
+
+    def finding_id(self, source_key: str) -> str:
+        return self._finding(source_key).finding_id
+
+    def path_id(self, finding_source_key: str, path_source_key: str) -> str:
+        return self._resolve(self._finding(finding_source_key).paths, path_source_key, "path")
+
+    def option_id(self, finding_source_key: str, option_source_key: str) -> str:
+        return self._resolve(
+            self._finding(finding_source_key).options,
+            option_source_key,
+            "option",
+        )
+
+    def evidence_id(self, finding_source_key: str, evidence_source_key: str) -> str:
+        return self._resolve(
+            self._finding(finding_source_key).evidence,
+            evidence_source_key,
+            "evidence",
+        )
+
+    def _finding(self, source_key: str) -> FindingBindings:
+        for binding in self.findings:
+            if binding.source_key == source_key:
+                return binding
+        raise KeyError(f"unknown finding source key: {source_key}")
+
+    @staticmethod
+    def _resolve(bindings: tuple[IdBinding, ...], source_key: str, label: str) -> str:
+        for binding in bindings:
+            if binding.source_key == source_key:
+                return binding.canonical_id
+        raise KeyError(f"unknown {label} source key: {source_key}")
+
+
+@dataclass(frozen=True, slots=True)
+class Materialization:
+    task: dict[str, Any]
+    bindings: NormalizationBindings
+
+
 def _canonical_id(prefix: str, value: Any) -> str:
     return f"{prefix}-{canonical_sha256({'domain': prefix, 'value': value})[:10]}"
 
 
-def materialize_task(source: dict[str, Any]) -> dict[str, Any]:
-    """Return the canonical model-visible task, excluding author-only source keys."""
+def materialize(source: dict[str, Any]) -> Materialization:
+    """Return canonical task facts and their sole source-key binding."""
 
     require_valid(source, validate_source)
     findings: list[dict[str, Any]] = []
     evidence_references: list[dict[str, Any]] = []
+    finding_bindings: list[FindingBindings] = []
     observed_ids: dict[str, set[str]] = {
         "finding": set(),
         "path": set(),
@@ -80,6 +141,7 @@ def materialize_task(source: dict[str, Any]) -> dict[str, Any]:
                     "compatibility": raw_option["compatibility"],
                 }
             )
+        evidence_ids_by_source: dict[str, str] = {}
         for raw_evidence in raw_finding["evidence_references"]:
             subject_type = raw_evidence["subject_type"]
             subject_id: str | None
@@ -102,6 +164,7 @@ def materialize_task(source: dict[str, Any]) -> dict[str, Any]:
                     "subject_type": subject_type,
                 },
             )
+            evidence_ids_by_source[raw_evidence["source_key"]] = evidence_id
             evidence_references.append(
                 {
                     "evidence_reference_id": evidence_id,
@@ -112,6 +175,13 @@ def materialize_task(source: dict[str, Any]) -> dict[str, Any]:
                 }
             )
 
+        severities = [
+            advisory["severity"]
+            for advisory in raw_finding["advisories"]
+            if advisory["severity"] is not None
+        ]
+        if not severities:
+            raise ValueError("normalized alias component has no supported severity")
         finding = {
             "finding_id": finding_id,
             "alias_cluster_id": alias_cluster_id,
@@ -119,7 +189,7 @@ def materialize_task(source: dict[str, Any]) -> dict[str, Any]:
             "installed_version": raw_finding["installed_version"],
             "affected_status": raw_finding["affected_status"],
             "severity": max(
-                (advisory["severity"] for advisory in raw_finding["advisories"]),
+                severities,
                 key=_SEVERITY_ORDER.__getitem__,
             ),
             "reachability": raw_finding["reachability"],
@@ -127,6 +197,15 @@ def materialize_task(source: dict[str, Any]) -> dict[str, Any]:
             "remediation_options": sorted(options, key=lambda item: item["option_id"]),
         }
         findings.append(finding)
+        finding_bindings.append(
+            FindingBindings(
+                source_key=raw_finding["source_key"],
+                finding_id=finding_id,
+                paths=_id_bindings(path_ids),
+                options=_id_bindings(option_ids),
+                evidence=_id_bindings(evidence_ids_by_source),
+            )
+        )
         for namespace, values in (
             ("finding", [finding_id]),
             ("path", list(path_ids.values())),
@@ -141,10 +220,28 @@ def materialize_task(source: dict[str, Any]) -> dict[str, Any]:
     evidence_ids = [item["evidence_reference_id"] for item in evidence_references]
     if len(evidence_ids) != len(set(evidence_ids)):
         raise ValueError("normalized facts collapse to a duplicate canonical evidence ID")
-    return {
-        "findings": sorted(findings, key=lambda item: item["finding_id"]),
-        "evidence_references": sorted(
-            evidence_references,
-            key=lambda item: item["evidence_reference_id"],
+    return Materialization(
+        task={
+            "findings": sorted(findings, key=lambda item: item["finding_id"]),
+            "evidence_references": sorted(
+                evidence_references,
+                key=lambda item: item["evidence_reference_id"],
+            ),
+        },
+        bindings=NormalizationBindings(
+            findings=tuple(sorted(finding_bindings, key=lambda item: item.source_key))
         ),
-    }
+    )
+
+
+def materialize_task(source: dict[str, Any]) -> dict[str, Any]:
+    """Return the canonical model-visible task, excluding author-only source keys."""
+
+    return materialize(source).task
+
+
+def _id_bindings(values: dict[str, str]) -> tuple[IdBinding, ...]:
+    return tuple(
+        IdBinding(source_key=source_key, canonical_id=canonical_id)
+        for source_key, canonical_id in sorted(values.items())
+    )
