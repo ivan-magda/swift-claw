@@ -76,12 +76,20 @@ class SynthesisContractTests(unittest.TestCase):
 
         # Then
         expected_mapping = [
-            (run["run_id"], index, entry["code"])
+            (run["run_id"], index, entry["code"], entry.get("target_class"))
             for run in sorted(self.runs, key=lambda item: item["run_id"])
             for index, entry in enumerate(run["score_result"]["error_ledger"])
         ]
         self.assertEqual(
-            [(item["run_id"], item["ledger_index"], item["code"]) for item in feedback],
+            [
+                (
+                    item["run_id"],
+                    item["ledger_index"],
+                    item["code"],
+                    item.get("target_class"),
+                )
+                for item in feedback
+            ],
             expected_mapping,
         )
         for item in feedback:

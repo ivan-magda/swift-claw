@@ -2,14 +2,38 @@
 
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter
-from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Any
 
-from .canonical import SHA256_HEX
+from benchmark_core.attempt import SUCCESSFUL_FILE_READ_EVENT, validate_attempt
+from benchmark_core.contract_validation import ContractError, ValidationIssue, require_valid
+from benchmark_core.contract_validation import (
+    bounded_list as _bounded_list,
+)
+from benchmark_core.contract_validation import (
+    bounded_string as _bounded_string,
+)
+from benchmark_core.contract_validation import (
+    closed_enum as _closed_enum,
+)
+from benchmark_core.contract_validation import (
+    exact_keys as _exact_keys,
+)
+from benchmark_core.contract_validation import (
+    is_integer as _is_integer,
+)
+from benchmark_core.contract_validation import (
+    issue as _issue,
+)
+
+__all__ = [
+    "SUCCESSFUL_FILE_READ_EVENT",
+    "ContractError",
+    "ValidationIssue",
+    "require_valid",
+    "validate_attempt",
+]
 
 FIXTURE_ID = re.compile(r"^pc-(development|regression|sealed)-[0-9]{2}$")
 TASK_ID = re.compile(r"^page-[0-9a-f]{12}$")
@@ -23,220 +47,8 @@ TARGET_CLASSES = (
     "noise.time_or_build_metadata",
     "noise.structure_or_order",
 )
-RESPONSES_REQUEST_KEYS = {
-    "sequence",
-    "requested_model",
-    "body_byte_count",
-    "body_sha256",
-    "normalized_structure_sha256",
-    "untrusted_fence_present",
-    "untrusted_payload_sha256",
-}
-SUCCESSFUL_FILE_READ_EVENT = {
-    "name": "file_read",
-    "path": "input.json",
-    "status": "succeeded",
-}
 FROZEN_PROVIDER_REFERENCE = "openai-chatgpt/gpt-5.6-sol"
 FROZEN_WIRE_MODEL = "gpt-5.6-sol"
-_UTF16_SURROGATE_LOW = 0xD800
-_UTF16_SURROGATE_HIGH = 0xDFFF
-
-
-@dataclass(frozen=True)
-class ValidationIssue:
-    requirement: str
-    message: str
-
-
-class ContractError(ValueError):
-    def __init__(self, issues: Iterable[ValidationIssue]) -> None:
-        self.issues = tuple(issues)
-        super().__init__("; ".join(issue.message for issue in self.issues))
-
-
-def _issue(issues: list[ValidationIssue], requirement: str, message: str) -> None:
-    item = ValidationIssue(requirement, message)
-    if item not in issues:
-        issues.append(item)
-
-
-def _exact_keys(
-    value: Any,
-    required: set[str],
-    allowed: set[str],
-    path: str,
-    issues: list[ValidationIssue],
-) -> bool:
-    if not isinstance(value, dict):
-        _issue(issues, "schema.single_object", f"{path} must be an object")
-        return False
-    missing = sorted(required - value.keys())
-    unknown = sorted(value.keys() - allowed)
-    if missing:
-        _issue(issues, "schema.closed_properties", f"{path} missing keys: {missing}")
-    if unknown:
-        _issue(issues, "schema.closed_properties", f"{path} unknown keys: {unknown}")
-    return not missing and not unknown
-
-
-def _is_integer(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _scalar_count(value: str) -> int:
-    if any(_UTF16_SURROGATE_LOW <= ord(character) <= _UTF16_SURROGATE_HIGH for character in value):
-        return -1
-    return len(value)
-
-
-def _bounded_string(
-    value: Any,
-    minimum: int,
-    maximum: int,
-    path: str,
-    issues: list[ValidationIssue],
-    pattern: re.Pattern[str] | None = None,
-) -> bool:
-    if not isinstance(value, str):
-        _issue(issues, "schema.bounded_values", f"{path} must be a string")
-        return False
-    size = _scalar_count(value)
-    if size < minimum or size > maximum:
-        _issue(
-            issues,
-            "schema.bounded_values",
-            f"{path} must contain {minimum}..{maximum} Unicode scalars",
-        )
-        return False
-    if pattern is not None and pattern.fullmatch(value) is None:
-        _issue(issues, "schema.bounded_values", f"{path} has invalid format")
-        return False
-    return True
-
-
-def _bounded_list(
-    value: Any,
-    minimum: int,
-    maximum: int,
-    path: str,
-    issues: list[ValidationIssue],
-    *,
-    unique: bool = False,
-) -> bool:
-    if not isinstance(value, list):
-        _issue(issues, "schema.bounded_values", f"{path} must be an array")
-        return False
-    if len(value) < minimum or len(value) > maximum:
-        _issue(issues, "schema.bounded_values", f"{path} must contain {minimum}..{maximum} items")
-    if unique:
-        try:
-            normalized = [
-                json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-                for item in value
-            ]
-        except (TypeError, ValueError):
-            _issue(issues, "schema.bounded_values", f"{path} contains a non-JSON value")
-            return False
-        if len(set(normalized)) != len(normalized):
-            _issue(issues, "schema.unique_arrays", f"{path} must contain unique items")
-    return minimum <= len(value) <= maximum
-
-
-def _closed_enum(
-    value: Any,
-    allowed: Iterable[str],
-    path: str,
-    issues: list[ValidationIssue],
-) -> bool:
-    if not isinstance(value, str) or value not in set(allowed):
-        _issue(issues, "schema.closed_enums", f"{path} is outside its closed enum")
-        return False
-    return True
-
-
-def validate_attempt(
-    value: Any,
-    *,
-    require_request_provenance: bool = False,
-) -> list[ValidationIssue]:
-    issues: list[ValidationIssue] = []
-    required = {"runtime_outcome", "raw_output", "tool_events"}
-    allowed = required | {"responses_requests"}
-    if require_request_provenance:
-        required.add("responses_requests")
-    if not _exact_keys(value, required, allowed, "$", issues):
-        return issues
-    _closed_enum(
-        value.get("runtime_outcome"),
-        ("completed", "local_output_limit", "tool_budget_stop"),
-        "$.runtime_outcome",
-        issues,
-    )
-    raw_output = value.get("raw_output")
-    if raw_output is not None and not isinstance(raw_output, str):
-        _issue(issues, "schema.bounded_values", "$.raw_output must be text or null")
-    tool_events = value.get("tool_events")
-    if _bounded_list(tool_events, 0, 4, "$.tool_events", issues):
-        for index, event in enumerate(tool_events):
-            path = f"$.tool_events[{index}]"
-            event_keys = {"name", "path", "status"}
-            if not _exact_keys(event, event_keys, event_keys, path, issues):
-                continue
-            event_path = event.get("path")
-            _bounded_string(event.get("name"), 1, 64, f"{path}.name", issues)
-            if event_path is not None:
-                _bounded_string(event_path, 1, 256, f"{path}.path", issues)
-            _closed_enum(
-                event.get("status"), ("proposed", "succeeded", "failed"), f"{path}.status", issues
-            )
-
-    requests = value.get("responses_requests")
-    if requests is not None and _bounded_list(
-        requests,
-        0,
-        2,
-        "$.responses_requests",
-        issues,
-    ):
-        for index, request in enumerate(requests):
-            path = f"$.responses_requests[{index}]"
-            if not _exact_keys(
-                request,
-                RESPONSES_REQUEST_KEYS,
-                RESPONSES_REQUEST_KEYS,
-                path,
-                issues,
-            ):
-                continue
-            sequence = request.get("sequence")
-            byte_count = request.get("body_byte_count")
-            if not _is_integer(sequence) or sequence not in (1, 2):
-                _issue(issues, "schema.bounded_values", f"{path}.sequence must equal 1 or 2")
-            if not _is_integer(byte_count) or byte_count < 1:
-                _issue(issues, "schema.bounded_values", f"{path}.body_byte_count must be positive")
-            requested_model = request.get("requested_model")
-            if requested_model is not None:
-                _bounded_string(requested_model, 1, 128, f"{path}.requested_model", issues)
-            for field in ("body_sha256", "normalized_structure_sha256"):
-                _bounded_string(request.get(field), 64, 64, f"{path}.{field}", issues, SHA256_HEX)
-            if not isinstance(request.get("untrusted_fence_present"), bool):
-                _issue(
-                    issues,
-                    "schema.bounded_values",
-                    f"{path}.untrusted_fence_present must be boolean",
-                )
-            payload_sha256 = request.get("untrusted_payload_sha256")
-            if payload_sha256 is not None:
-                _bounded_string(
-                    payload_sha256,
-                    64,
-                    64,
-                    f"{path}.untrusted_payload_sha256",
-                    issues,
-                    SHA256_HEX,
-                )
-    return issues
 
 
 def validate_output(value: Any, expected_task_id: str) -> list[ValidationIssue]:
@@ -466,9 +278,3 @@ def validate_lesson_candidate(value: Any) -> list[ValidationIssue]:
         if len(set(classes)) != len(classes):
             _issue(issues, "schema.unique_arrays", "lesson target classes must be unique")
     return issues
-
-
-def require_valid(value: Any, validator: Any) -> None:
-    issues = validator(value)
-    if issues:
-        raise ContractError(issues)

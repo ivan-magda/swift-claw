@@ -1,0 +1,22 @@
+[project]
+name = "swift-claw-benchmark-core"
+version = "0.1.0"
+description = "Scenario-neutral deterministic benchmark primitives for Swift Claw experiments."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.package-data]
+benchmark_core = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["benchmark_core"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF", "S", "N", "PL"]
+ignore = ["PLR0912", "PLR0913", "PLR0917"]
+
+[tool.mypy]
+strict = true
+files = ["benchmark_core"]

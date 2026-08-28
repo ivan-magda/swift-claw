@@ -49,6 +49,16 @@ class ManifestCoreTests(unittest.TestCase):
         dependency = copy.deepcopy(self.repo.descriptor)
         dependency["categories"]["dependencies"]["artifacts"].pop()
         mutations.append((dependency, "requires role"))
+        for category in ("feedback", "lesson_linter"):
+            wrong_core_provenance = copy.deepcopy(self.repo.descriptor)
+            wrong_core_provenance["categories"][category]["artifacts"] = [
+                item
+                for item in wrong_core_provenance["categories"][category]["artifacts"]
+                if item["path"] != f"{contract.BENCHMARK_CORE_ROOT}/canonical.py"
+            ]
+            mutations.append(
+                (wrong_core_provenance, f"{category} benchmark-core sources")
+            )
         for candidate, message in mutations:
             with self.subTest(message=message):
                 # when
@@ -109,6 +119,7 @@ class ManifestCoreTests(unittest.TestCase):
         # given
         for mutation, expected in (("schema", "full file closure"),
                                    ("verifier", "freeze_verifier_source count"),
+                                   ("core", "benchmark source categories"),
                                    ("shadow", "shadow")):
             with self.subTest(mutation=mutation):
                 descriptor = copy.deepcopy(self.repo.descriptor)
@@ -118,6 +129,11 @@ class ManifestCoreTests(unittest.TestCase):
                     descriptor["categories"]["configuration"]["artifacts"] = [
                         item for item in descriptor["categories"]["configuration"]["artifacts"]
                         if item["path"] != f"{contract.FREEZE_PACKAGE_ROOT}/approval.py"]
+                elif mutation == "core":
+                    self.repo.write(
+                        f"{contract.BENCHMARK_CORE_ROOT}/unlisted.py",
+                        b"VALUE = 2\n",
+                    )
                 else:
                     self.repo.write(f"{contract.PAGE_ROOT}/hashlib.py", b"raise RuntimeError\n")
 
@@ -127,6 +143,8 @@ class ManifestCoreTests(unittest.TestCase):
 
                 # then
                 self.assertRegex(str(raised.exception), expected)
+                if mutation == "core":
+                    (self.repo.root / contract.BENCHMARK_CORE_ROOT / "unlisted.py").unlink()
 
     def test_python_closures_reject_unprotected_import_artifacts(self) -> None:
         for suffix in (".pyc", ".so"):

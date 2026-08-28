@@ -11,6 +11,8 @@ import tempfile
 from typing import Any, Optional
 
 from .contract import (
+    BENCHMARK_CORE_ROOT,
+    BENCHMARK_CORE_CATEGORY_SOURCES,
     BENCHMARK_PACKAGE_ROOT,
     BENCHMARK_BOOTSTRAP_ROLE,
     CONFORMANCE_EXECUTABLE_PATH,
@@ -170,9 +172,18 @@ def validate_repository_membership(repo_root: Path,
         category_paths(categories, name, roles={"source"})
         for name in ("lesson_linter", "feedback", "scorer")
     ))
+    for category, source_names in BENCHMARK_CORE_CATEGORY_SOURCES.items():
+        expected = {f"{BENCHMARK_CORE_ROOT}/{name}" for name in source_names}
+        observed = {
+            path
+            for path in category_paths(categories, category, roles={"source"})
+            if path.startswith(f"{BENCHMARK_CORE_ROOT}/")
+        }
+        _require_membership(f"{category} benchmark-core sources", observed, expected)
     _require_membership(
         "benchmark source categories", benchmark_sources,
-        repository_files(repo_root, BENCHMARK_PACKAGE_ROOT, suffix=".py", python_source_only=True),
+        repository_files(repo_root, BENCHMARK_PACKAGE_ROOT, suffix=".py", python_source_only=True)
+        | repository_files(repo_root, BENCHMARK_CORE_ROOT, suffix=".py", python_source_only=True),
     )
     contract_paths = {
         item["path"] for category in categories.values() for item in category["artifacts"]

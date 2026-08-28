@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "experiments/scheduled-task-learning/page-change/**"
+      - "experiments/scheduled-task-learning/benchmark-core/**"
       - ".github/workflows/python-page-benchmark.yml"
   pull_request:
     paths:
       - "experiments/scheduled-task-learning/page-change/**"
+      - "experiments/scheduled-task-learning/benchmark-core/**"
       - ".github/workflows/python-page-benchmark.yml"
   workflow_dispatch:
 

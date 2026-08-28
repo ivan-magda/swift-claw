@@ -3,7 +3,12 @@ name = "page-benchmark"
 version = "0.1.0"
 description = "Deterministic page-change benchmark tooling."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "swift-claw-benchmark-core",
+]
+
+[tool.uv.sources]
+swift-claw-benchmark-core = { path = "../benchmark-core" }
 
 [dependency-groups]
 dev = [

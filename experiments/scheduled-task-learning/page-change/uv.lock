@@ -170,6 +170,9 @@ wheels = [
 name = "page-benchmark"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "swift-claw-benchmark-core" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -178,6 +181,7 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "swift-claw-benchmark-core", directory = "../benchmark-core" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -218,6 +222,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/03/e724450f621698117f9aa6dd241c94d0274ae96781378dc86745ae29f0e7/ruff-0.16.4-py3-none-win_amd64.whl", hash = "sha256:05d9d27a18c4bcbefada602480ec9e01e0bc949d432e0ced5df77edac195919c", size = 10567657, upload-time = "2026-08-20T17:43:54.78Z" },
     { url = "https://files.pythonhosted.org/packages/0e/fe/da8b9e1347696bb22120b77280ec5ce25d500ca5cb39d5ad6e5c18de19c1/ruff-0.16.4-py3-none-win_arm64.whl", hash = "sha256:a3a61621c9b6f6a89573e938a080e648f1695baa3f58570a3a707bc51ff65a21", size = 10451579, upload-time = "2026-08-20T17:43:57.135Z" },
 ]
+
+[[package]]
+name = "swift-claw-benchmark-core"
+version = "0.1.0"
+source = { directory = "../benchmark-core" }
 
 [[package]]
 name = "typing-extensions"
