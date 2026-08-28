@@ -713,6 +713,7 @@ import Testing
     // then — denied offline with the named cap; the owner is DMed exactly once; audited
     #expect(payloads.contains(Degradation.budget(cap: BudgetGate.proactivePerDayCap)))
     #expect(await harness.provider.completions == 0)
+    _ = try await harness.waitForAudit(action: AuditAction.budgetTripped.rawValue, atLeast: 1)
     let trips = await harness.transport.sent.map(\.text).filter { text in
       text == Degradation.proactiveCapTripped
     }
