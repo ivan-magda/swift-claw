@@ -21,6 +21,8 @@ from .contract import (
     GIT_OBJECT_ID,
     HEX_SHA256,
     INVALIDATION_REPORT_PATH,
+    PROTOCOL_SHA256,
+    PROTOCOL_VERSION,
     RECOVERY_LEDGER_PATH,
     REPLACEMENT_DELTA_PATH,
     fail,
@@ -79,6 +81,35 @@ def approval_statement(
         f"invalidation report sha256={invalidation_report_sha256} "
         f"freeze_commit={freeze_commit}"
     )
+
+
+def approval_comment_body(
+    manifest_sha256: str,
+    replacement_delta_sha256: str,
+    recovery_ledger_sha256: str,
+    invalidation_report_sha256: str,
+    freeze_commit: str,
+) -> bytes:
+    total = recovery.EXPECTED_TOTAL
+    lines = [
+        (
+            f"D1-D4 APPROVED: protocol version={PROTOCOL_VERSION} "
+            f"protocol sha256={PROTOCOL_SHA256} freeze_commit={freeze_commit}"
+        ),
+        approval_statement(
+            manifest_sha256,
+            replacement_delta_sha256,
+            recovery_ledger_sha256,
+            invalidation_report_sha256,
+            freeze_commit,
+        ),
+        (
+            f"Recovery accounting seed: attempts={total['attempts']} "
+            f"responses_sends={total['responses_sends']} file_reads={total['file_reads']} "
+            f"accounted_tokens={total['accounted_tokens']}"
+        ),
+    ]
+    return "\n".join(lines).encode()
 
 
 def _artifact_binding(raw: Any, *, location: str, expected_path: str) -> tuple[str, str]:
@@ -181,18 +212,18 @@ def verify_record(value: Any, *, approval_body: bytes, manifest_path: str,
     if sha256_hex(approval_body) != record["body_sha256"]:
         fail("approval comment body digest mismatch")
     try:
-        body = approval_body.decode("utf-8")
+        approval_body.decode("utf-8")
     except UnicodeDecodeError:
         fail("approval comment body must be UTF-8")
-    statement = approval_statement(
+    expected_body = approval_comment_body(
         manifest_sha256,
         record["replacement_delta_sha256"],
         record["recovery_ledger_sha256"],
         record["invalidation_report_sha256"],
         record["freeze_commit"],
     )
-    if statement not in body.splitlines():
-        fail(f"approval comment lacks the exact approval line: {statement}")
+    if approval_body not in (expected_body, expected_body + b"\n"):
+        fail("approval comment body must equal the exact approval body")
     return record["freeze_commit"], record["manifest_path"]
 
 
