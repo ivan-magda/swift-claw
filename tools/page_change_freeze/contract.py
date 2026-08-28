@@ -45,6 +45,22 @@ CONFORMANCE_CASES_PATH = f"{PAGE_ROOT}/conformance/cases.json"
 CONFORMANCE_COVERAGE_PATH = f"{PAGE_ROOT}/contracts/conformance-coverage.json"
 CANONICAL_JSON_VECTOR_PATH = f"{PAGE_ROOT}/contracts/canonical-json-vector.json"
 BENCHMARK_PACKAGE_ROOT = f"{PAGE_ROOT}/page_benchmark"
+BENCHMARK_CORE_ROOT = "experiments/scheduled-task-learning/benchmark-core/benchmark_core"
+BENCHMARK_CORE_SOURCE_NAMES = (
+    "__init__.py",
+    "attempt.py",
+    "canonical.py",
+    "conformance.py",
+    "contract_validation.py",
+    "feedback.py",
+)
+BENCHMARK_CORE_CATEGORY_SOURCES = {
+    "feedback": frozenset({"__init__.py", "canonical.py", "feedback.py"}),
+    "lesson_linter": frozenset(
+        {"__init__.py", "attempt.py", "canonical.py", "contract_validation.py", "feedback.py"}
+    ),
+    "scorer": frozenset(BENCHMARK_CORE_SOURCE_NAMES),
+}
 
 FEEDBACK_EXECUTABLE_PATH = f"{PAGE_ROOT}/artifacts/page-feedback"
 BENCHMARK_BOOTSTRAP_PATH = f"{PAGE_ROOT}/artifacts/page-bootstrap"

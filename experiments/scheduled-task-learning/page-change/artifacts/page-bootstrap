@@ -26,28 +26,28 @@ def fail(message: str) -> None:
     raise SystemExit(f"error: {message}")
 
 
-def validate_source_closure(package_root: Path) -> None:
+def validate_source_closure(package_root: Path, package_name: str) -> None:
     if not package_root.is_dir() or package_root.is_symlink():
-        fail("page_benchmark must be a real directory")
+        fail(f"{package_name} must be a real directory")
     for candidate in package_root.rglob("*"):
         if candidate.is_symlink():
-            fail(f"symlinks are forbidden in page_benchmark: {candidate.name}")
+            fail(f"symlinks are forbidden in {package_name}: {candidate.name}")
         if candidate.is_dir() and candidate.name == "__pycache__":
-            fail("bytecode caches are forbidden in page_benchmark")
+            fail(f"bytecode caches are forbidden in {package_name}")
         if candidate.is_file() and candidate.suffix in FORBIDDEN_IMPORT_SUFFIXES:
-            fail(f"non-source import artifact is forbidden in page_benchmark: {candidate.name}")
+            fail(f"non-source import artifact is forbidden in {package_name}: {candidate.name}")
 
 
-def load_package(package_root: Path) -> None:
+def load_package(package_root: Path, package_name: str) -> None:
     specification = importlib.util.spec_from_file_location(
-        "page_benchmark",
+        package_name,
         package_root / "__init__.py",
         submodule_search_locations=[str(package_root)],
     )
     if specification is None or specification.loader is None:
-        fail("cannot load the frozen page_benchmark package")
+        fail(f"cannot load the frozen {package_name} package")
     package = importlib.util.module_from_spec(specification)
-    sys.modules["page_benchmark"] = package
+    sys.modules[package_name] = package
     specification.loader.exec_module(package)
 
 
@@ -56,18 +56,23 @@ def main() -> int:
         fail("a known benchmark role is required")
     role = sys.argv[1]
     page_root = Path(__file__).resolve().parents[1]
+    core_root = page_root.parent / "benchmark-core" / "benchmark_core"
     package_root = page_root / "page_benchmark"
     sys.dont_write_bytecode = True
-    validate_source_closure(package_root)
+    packages = ((core_root, "benchmark_core"), (package_root, "page_benchmark"))
+    for source_root, package_name in packages:
+        validate_source_closure(source_root, package_name)
     try:
-        load_package(package_root)
+        for source_root, package_name in packages:
+            load_package(source_root, package_name)
         sys.argv = [sys.argv[0], *sys.argv[2:]]
         if role == "scorer" and len(sys.argv) > 1 and sys.argv[1] == "score":
             sys.argv = [sys.argv[0], *sys.argv[2:]]
         entry = getattr(importlib.import_module(f"page_benchmark.{ROLE_MODULES[role]}"), "main")
         result = entry()
     finally:
-        validate_source_closure(package_root)
+        for source_root, package_name in packages:
+            validate_source_closure(source_root, package_name)
     return result if isinstance(result, int) else 0
 
 

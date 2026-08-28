@@ -54,6 +54,8 @@ let package = Package(name: "fixture", targets: [
         for name in self.benchmark_sources:
             body = b"def main():\n    return 0\n" if name == "scorer.py" else b"VALUE = 1\n"
             self.write(f"{contract.BENCHMARK_PACKAGE_ROOT}/{name}", body)
+        for name in contract.BENCHMARK_CORE_SOURCE_NAMES:
+            self.write(f"{contract.BENCHMARK_CORE_ROOT}/{name}", b"VALUE = 1\n")
         wrapper_paths = (
             set(contract.LESSON_EXECUTABLE_PATHS)
             | set(contract.SCORER_EXECUTABLE_PATHS)
@@ -172,6 +174,11 @@ let package = Package(name: "fixture", targets: [
         categories["scorer"]["artifacts"] = [
             {"role": "source", "path": f"{contract.BENCHMARK_PACKAGE_ROOT}/{name}"}
             for name in ("__init__.py", "scorer.py")]
+        for category, source_names in contract.BENCHMARK_CORE_CATEGORY_SOURCES.items():
+            categories[category]["artifacts"] += [
+                {"role": "source", "path": f"{contract.BENCHMARK_CORE_ROOT}/{name}"}
+                for name in sorted(source_names)
+            ]
         categories["scorer"]["artifacts"] += [
             {"role": "executable", "path": path}
             for path in sorted(contract.SCORER_EXECUTABLE_PATHS)]

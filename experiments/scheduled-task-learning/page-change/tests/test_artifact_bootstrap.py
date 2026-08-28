@@ -13,6 +13,7 @@ class ArtifactBootstrapTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.page_root = Path(self.temporary.name) / "page-change"
+        self.core_root = Path(self.temporary.name) / "benchmark-core" / "benchmark_core"
         artifacts = self.page_root / "artifacts"
         artifacts.mkdir(parents=True)
         self.bootstrap = artifacts / "page-bootstrap"
@@ -21,6 +22,18 @@ class ArtifactBootstrapTests(unittest.TestCase):
         shutil.copytree(
             PAGE_ROOT / "page_benchmark",
             self.page_root / "page_benchmark",
+            ignore=shutil.ignore_patterns(
+                "__pycache__",
+                "*.pyc",
+                "*.pyo",
+                "*.so",
+                "*.dylib",
+                "*.pyd",
+            ),
+        )
+        shutil.copytree(
+            PAGE_ROOT.parent / "benchmark-core" / "benchmark_core",
+            self.core_root,
             ignore=shutil.ignore_patterns(
                 "__pycache__",
                 "*.pyc",
@@ -51,8 +64,9 @@ class ArtifactBootstrapTests(unittest.TestCase):
 
         # then
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertFalse(any(package_root.rglob("*.pyc")))
-        self.assertFalse(any(path.name == "__pycache__" for path in package_root.rglob("*")))
+        for source_root in (package_root, self.core_root):
+            self.assertFalse(any(source_root.rglob("*.pyc")))
+            self.assertFalse(any(path.name == "__pycache__" for path in source_root.rglob("*")))
 
     def test_role_wrapper_isolates_standard_library_imports(self) -> None:
         # given
@@ -130,13 +144,14 @@ class ArtifactBootstrapTests(unittest.TestCase):
     def test_role_bootstrap_rejects_preexisting_import_artifacts(self) -> None:
         package_root = self.page_root / "page_benchmark"
         cases = (
-            ("__pycache__/rogue.pyc", "bytecode caches"),
-            ("rogue.so", "non-source import artifact"),
+            (package_root, "__pycache__/rogue.pyc", "bytecode caches"),
+            (package_root, "rogue.so", "non-source import artifact"),
+            (self.core_root, "rogue.so", "non-source import artifact"),
         )
-        for relative, expected_error in cases:
+        for source_root, relative, expected_error in cases:
             with self.subTest(relative=relative):
                 # given
-                candidate = package_root / relative
+                candidate = source_root / relative
                 candidate.parent.mkdir(exist_ok=True)
                 candidate.write_bytes(b"unprotected import bytes")
 
