@@ -2,3 +2,6 @@
 # line at end of file is the final event's delimiter — without it that event never frames. Exempt
 # them from the whitespace checks that would read it as stray padding and invite its removal.
 *.sse -whitespace
+
+# Frozen third-party advisories preserve the exact upstream bytes, including upstream whitespace.
+experiments/scheduled-task-learning/dependency-prioritization/sources/snapshots/** -whitespace
