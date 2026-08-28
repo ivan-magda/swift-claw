@@ -21,9 +21,9 @@
       "additionalProperties": false,
       "required": ["version", "bytes_sha256"],
       "properties": {
-        "version": {"const": "0.5"},
+        "version": {"const": "0.6"},
         "bytes_sha256": {
-          "const": "ac2628e7e57f1c013c6fdb8f337426dadff534e03b7e2ded67973970c9d7c12f"
+          "const": "777343c73654256df50081c5b2be81fb41db529fbf98d2e067d41139bc39bc7e"
         }
       }
     },
