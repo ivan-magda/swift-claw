@@ -207,6 +207,9 @@ enum EvaluationPagePipelineError: Error, Sendable, Equatable {
 }
 
 enum EvaluationPageTerminalClassification: String, Codable, Sendable, Equatable {
+  case pageValidated = "page_validated"
+  case insufficientDevelopmentHeadroom = "insufficient_development_headroom"
+  case insufficientSealedHeadroom = "insufficient_sealed_headroom"
   case invalidBatch = "invalid_batch"
   case carrierFailure = "carrier_failure"
   case safetyFailure = "safety_failure"
