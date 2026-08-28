@@ -1,12 +1,12 @@
 # Issue #118: scenario validation protocol
 
 - Status: Proposed; owner approval required before scored runs
-- Protocol version: 0.3
-- Supersedes: version 0.2; no canary, synthesis, or scored model call ran under version 0.2
+- Protocol version: 0.4
+- Supersedes: version 0.3; its replacement-D6 page batch is preserved as invalid
 - Date: 2026-08-28
 - Decision issue: [#118](https://github.com/ivan-magda/swift-claw/issues/118)
 - Parent project: [#115](https://github.com/ivan-magda/swift-claw/issues/115)
-- Inspected implementation revision: `fb55cc7736658557ec9cd373e89b30e10ea066e2`
+- Inspected recovery implementation revision: `ef2d94c989ef2f2bfb89b4bed3c7b2d33e593e0b`
 
 ## Purpose
 
@@ -25,11 +25,21 @@ The protocol must answer three separate questions:
 No scored model call may run until the owner approves the content hash of this version, the model
 route, execution budget, learning target, and gates.
 
-Version 0.3 changes protocol semantics only for the second-round request-parity projection, which
-now excludes provider-minted replay values that vary across otherwise equivalent replicates. It
-also makes the existing live-approval recheck boundaries explicit. The decision matrix, model
-route, budgets, run order, primary endpoints, gates, scorer rules, fixture requirements, learning
-target, and approval boundaries are unchanged from version 0.2.
+Version 0.4 changes only recovery accounting and live integrity enforcement after the approved
+replacement-D6 page batch under version 0.3 was invalidated. That batch consumed 12 attempts, 22
+Responses sends, 11 file reads, and 28,159 accounted tokens before the protected source closure
+changed. Version 0.4 preserves that usage as a cumulative accounting seed, retains the original
+fresh attempt, send, and read allowance, and requires complete protected-closure verification
+immediately before every worker launch and model send. The unchanged token thresholds are seeded,
+so the 28,159 prior accounted tokens reduce the remaining token headroom.
+
+The model route, fresh execution plan, replacement pools, run-order derivation algorithm and
+topology, attempt counts, primary endpoints, decision matrix, gates, scorer rules, fixture
+requirements, learning target, and accounted-token stopping thresholds remain unchanged from
+version 0.3. The realized run order is derived again from the new D6 manifest digest and frozen
+before calls. The page experiment must rerun in full from the first canary under that manifest. Its
+existing sealed set may be reused because no sealed fixture, output, or score was opened during the
+invalid batch.
 
 ## Claim boundaries
 
@@ -50,7 +60,7 @@ The lesson artifact must not be embedded in `ScheduledJob.prompt`, a system prom
 `MEMORY.md`. Doing so would either turn it into trusted owner text or exercise global memory rather
 than the intended job-scoped boundary.
 
-Version 0.3 does not include an irrelevant same-length lesson control because it would require more
+Version 0.4 does not include an irrelevant same-length lesson control because it would require more
 decision-bearing attempts than the staged budget permits. A positive result therefore supports the
 frozen lesson intervention, but does not separately quantify a generic extra-context or attention
 effect. Adding that control requires a new protocol version, budget, and sealed manifest.
@@ -849,30 +859,53 @@ boundary, regardless of their numeric result.
 The budget is staged so a failed gate stops later spend. Each task or synthesis attempt may complete
 at most two model round-trips and has at most one whole-attempt replacement under the retry rules.
 
-| Stage | Planned task or synthesis attempts | Replacement pool | Hard attempt cap | Responses-send cap | Accounted-token stopping threshold |
-|---|---:|---:|---:|---:|---:|
-| Unscored runtime canary | 4 | 0 | 4 | 8 | 50,000 |
-| Page runs plus one synthesis attempt | 73 | 3 | 76 | 152 | 1,500,000 |
-| Dependency development plus one synthesis attempt | 31 | 1 | 32 | 64 | 800,000 |
-| Dependency regression, sealed transfer, and restart | 78 | 4 | 82 | 164 | 2,000,000 |
-| **Maximum if every stage proceeds** | **186** | **8** | **194** | **388** | **4,350,000** |
+Protocol 0.4 does not refund the invalid version 0.3 page batch. Before the new page canary, the
+controller initializes its cumulative ledger from this immutable recovery seed:
 
-The global hard caps are 194 attempts, 388 outbound Responses sends, and 194 file reads. The 4.35
-million value is an `accounted_tokens` stopping threshold, not a hard provider-billing cap. For a
-send with terminal usage, accounting uses the provider-reported total. For any accepted or
-interrupted send without terminal usage, accounting applies a fixed 132,768-token proxy: the
-100,000-token input cap plus the 32,768-byte visible-output cap treated as one token per byte. This is
-a missing-usage accounting rule, not an upper bound on provider work. The route does not transmit a
-wire output-token limit, and hidden reasoning may make terminal usage exceed the visible-output
-bound. The harness checks stage and global totals after every send and starts no later send once a
-threshold is reached. One in-flight send can therefore cross a threshold by an unknown amount; its
-reported usage is preserved and the batch becomes `incomplete`. D3 approves this limitation and
-must not describe the threshold as a strict billing cap.
+| Invalidated stage | Attempts | Responses sends | File reads | Accounted tokens |
+|---|---:|---:|---:|---:|
+| Unscored runtime canary | 4 | 8 | 4 | 9,550 |
+| Page clean development | 8 | 14 | 7 | 18,609 |
+| **Cumulative seed** | **12** | **22** | **11** | **28,159** |
+
+The fresh plan and replacement pools remain unchanged. The cumulative count caps add only the
+attempts, sends, and reads already consumed by the invalid batch, preserving the original fresh
+count allowance. Accounted-token thresholds are not raised; their remaining headroom is reduced by
+the seeded usage:
+
+| Stage | Fresh planned attempts | Fresh replacement pool | Prior attempts | Cumulative attempt cap | Prior sends | Cumulative Responses-send cap | Accounted-token stopping threshold |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Unscored runtime canary | 4 | 0 | 4 | 8 | 8 | 16 | 50,000 |
+| Page runs plus one synthesis attempt | 73 | 3 | 8 | 84 | 14 | 166 | 1,500,000 |
+| Dependency development plus one synthesis attempt | 31 | 1 | 0 | 32 | 0 | 64 | 800,000 |
+| Dependency regression, sealed transfer, and restart | 78 | 4 | 0 | 82 | 0 | 164 | 2,000,000 |
+| **Maximum if every stage proceeds** | **186** | **8** | **12** | **206** | **22** | **410** | **4,350,000** |
+
+Canary stage admission starts at 4 attempts, 8 sends, 4 reads, and 9,550 accounted tokens against
+cumulative caps of 8 attempts, 16 sends, 8 reads, and 50,000 accounted tokens. Page stage admission
+starts at 8 attempts, 14 sends, 7 reads, and 18,609 accounted tokens against cumulative caps of 84
+attempts, 166 sends, 83 reads, and 1,500,000 accounted tokens. Dependency stage counters start at
+zero. Page admission includes the complete recovery seed in its global totals. Dependency
+admission includes the later immutable page-completion checkpoint, which contains that seed plus
+all valid version 0.4 page usage.
+
+The global hard caps are 206 attempts, 410 outbound Responses sends, and 205 file reads. The 4.35
+million value remains an `accounted_tokens` stopping threshold, not a hard provider-billing cap, and
+starts with 28,159 accounted tokens already consumed. For a send with terminal usage, accounting
+uses the provider-reported total. For any accepted or interrupted send without terminal usage,
+accounting applies the unchanged fixed 132,768-token proxy: the 100,000-token input cap plus the
+32,768-byte visible-output cap treated as one token per byte. This is a missing-usage accounting
+rule, not an upper bound on provider work. The route does not transmit a wire output-token limit,
+and hidden reasoning may make terminal usage exceed the visible-output bound. The harness checks
+stage and global totals after every send and starts no later send once a threshold is reached. One
+in-flight send can therefore cross a threshold by an unknown amount; its reported usage is
+preserved and the batch becomes `incomplete`. D3 approves this limitation and must not describe the
+threshold as a strict billing cap.
 
 Semantic judge calls and Responses inference retries are zero. OAuth refresh traffic is separately
-recorded and is not a Responses send. The harness aborts before attempt 195 or send 389. The ChatGPT
-subscription route has no decision-bearing USD measure. No metered route is allowed; a route change
-requires a new protocol version and owner approval.
+recorded and is not a Responses send. The harness aborts before cumulative attempt 207, send 411, or
+file read 206. The ChatGPT subscription route has no decision-bearing USD measure. No metered route
+is allowed; a route change requires a new protocol version and owner approval.
 
 The page stage contains 18 development attempts (`6 fixtures * 3 replicates`), 18 regression
 attempts (`3 * 3 * 2 conditions`), 36 sealed and restart attempts (`4 * 3 * 3 conditions`), and one
@@ -893,33 +926,64 @@ artifact. The manifest omits its own digest; the owner approves its external SHA
 Each manifest covers:
 
 - protocol, runtime and harness source-tree digest, executable, and resolved dependencies;
-- provider route, transport mode, model checks, retry policy, output limits, and budgets;
+- provider route, transport mode, model checks, retry policy, output limits, budgets, and the
+  version 0.4 recovery-accounting seed;
 - task prompt, synthesis prompt, schemas, lesson linter, deterministic feedback-generator source,
   executable, and templates, plus scorer source and executable;
 - all fixtures, sources, gold labels, split assignments, conformance cases, and frozen run order.
+
+Every replacement D6 and later D7 manifest under version 0.4 carries the same canonical recovery-
+accounting seed in its budget category. The seed binds invalidated D6 manifest
+`d5ae7dcef1c20f4c95f22cad9d23c7c1f37409abb3d2a02349a951c7647faad8`, the owner-approved
+invalidation-report SHA-256, the per-stage rows above, and the cumulative totals of 12 attempts, 22
+Responses sends, 11 file reads, and 28,159 accounted tokens. The manifest category digest and
+external manifest approval bind those values. The harness must reject a missing or mismatched seed
+before launch, initialize admission from the seed rather than operator-supplied numbers, and never
+lower or reset it in a later stage.
+
+After the replacement page run ends, the controller writes an immutable canonical cumulative-
+budget checkpoint derived only from the approved seed and its durable page journal and result. It
+records cumulative attempts, Responses sends, file reads, and accounted tokens, plus hashes of the
+seed, page manifest, controller journal, and terminal page result. D7 binds the checkpoint digest
+and bytes in addition to the unchanged recovery seed. Dependency admission rejects a missing,
+mismatched, operator-authored, or non-terminal checkpoint and initializes its global totals from
+that checkpoint; its stage-local counters still start at zero. This preserves all valid version 0.4
+page usage across the separate dependency controller process.
 
 The manifest does not contain the Git commit that first contains that manifest, which would create a
 self-reference cycle. The owner approval externally binds the manifest digest to `freeze_commit`.
 That commit contains the manifest and protected artifacts; the manifest's source-tree digest binds
 the runtime and harness content independently.
 
+The complete replacement page run starts from its first canary in a dedicated clean worktree with a
+detached `HEAD` at the exact new D6 `freeze_commit`. The controller, workers, manifest, executable,
+and protected-artifact verifier all use that worktree as the repository root. No checkout, merge,
+source edit, build, or other repository mutation may occur there until the batch ends. Development
+continues only in other worktrees. Partial version 0.3 outputs cannot satisfy a version 0.4 run slot,
+create feedback, select a lesson, or enter a score; only their immutable accounting seed and
+invalidation evidence carry forward.
+
 Approvals are staged:
 
-- `D1` through `D4` cite protocol version 0.3, protocol SHA-256, and the external protocol
+- `D1` through `D4` cite protocol version 0.4, protocol SHA-256, and the external protocol
   `freeze_commit`;
 - `D5` cites the ranking-policy digest before dependency fixtures, labels, and scorer are finalized;
-- `D6` cites the page manifest SHA-256 and external `freeze_commit` before page canary or any page
+- the replacement `D6` cites the page manifest SHA-256, recovery-accounting seed, approved
+  invalidation-report SHA-256, and external `freeze_commit` before the new page canary or any page
   model call;
-- `D7` cites the dependency manifest SHA-256 and external `freeze_commit` before any dependency
-  model call.
+- `D7` cites the dependency manifest SHA-256, unchanged recovery seed, immutable page-completion
+  cumulative-checkpoint digest, and external `freeze_commit` before any dependency model call.
 
 The owner records each approval in #118 with the exact hashes. Provenance stores the comment ID and
 URL, GitHub login, `createdAt`, `updatedAt`, and SHA-256 of the full comment body. Before initial
 admission, before every worker launch, and before every outbound Responses send, the harness reruns
 live approval verification and compares the complete approved binding, including comment identity,
-timestamps, and full-body SHA-256, with the initial freeze context. A changed, deleted, mismatched,
-or unreachable approval, a changed protected artifact, or any verifier failure stops the batch
-before launch or send; a local receipt alone cannot authorize a send.
+timestamps, and full-body SHA-256, with the initial freeze context. After that live refresh, complete
+protected-closure verification is the final admission operation immediately before invoking the
+worker launcher or opening the model stream. The controller applies this boundary to task,
+synthesis, canary, and restart workers; each worker applies it before every model send. A changed,
+deleted, mismatched, or unreachable approval, a changed protected artifact, or any verifier failure
+stops the batch before launch or send; a local receipt alone cannot authorize a launch or send.
 
 ## Invalidation procedure
 
@@ -939,6 +1003,12 @@ approval. A new sealed set is mandatory if anyone saw sealed content, output, or
 defect concerns sealed semantics. A pre-call defect may reuse a sealed set that remained unopened
 under a new approved manifest. Credential, entitlement, access, and exhausted-budget failures are
 `incomplete`, not `invalid`, unless they also violate a frozen contract.
+
+The invalid version 0.3 replacement-D6 batch stopped during clean development. No synthesis,
+regression, or sealed runtime artifact exists, and no sealed fixture, output, or score was opened.
+Version 0.4 therefore reuses the existing sealed set under the new approved manifest and reruns the
+complete page sequence from the first canary. This exception carries no model output or score
+forward and does not alter the general invalidation rule above.
 
 ## Artifacts and provenance
 
@@ -970,20 +1040,22 @@ The owner must approve these decisions before any scored call:
    verify the requested model in every outbound request and any terminal model field the backend
    supplies, disable client-side fallback, leave unsupported sampling controls unset, use three
    replicates, and use an isolated credential state.
-2. `D2`: approve the hash of protocol 0.3, its decision matrix, primary endpoints, safety gates,
-   scorer reliability rules, and restart conditions without post-result changes.
-3. `D3`: approve the hard caps of 194 task or synthesis attempts and 388 outbound Responses sends,
-   plus the 4.35 million accounted-token stopping threshold, the fixed missing-usage proxy, and the
-   possibility of an unknown one-send terminal-usage overshoot, with Responses inference retries
-   disabled.
+2. `D2`: approve the hash of protocol 0.4, its unchanged decision matrix, primary endpoints, safety
+   gates, scorer reliability rules, and restart conditions without post-result changes.
+3. `D3`: approve the immutable prior-usage seed, cumulative hard caps of 206 task or synthesis
+   attempts, 410 outbound Responses sends, and 205 file reads, plus the unchanged 4.35 million
+   accounted-token stopping threshold, fixed missing-usage proxy, and possibility of an unknown
+   one-send terminal-usage overshoot, with Responses inference retries disabled.
 4. `D4`: supply canonical dependency facts deterministically and learn only derived actionability,
    remediation, abstention, and ranking policy.
 
 Before Task 4 dependency labels are frozen, the owner must separately approve `D5`, the exact
 dependency ranking grades. This approval is not required to run the earlier page experiment.
 
-Before page canary, the owner approves `D6`, the complete page experiment manifest digest. Before
-any dependency call, the owner approves `D7`, the complete dependency experiment manifest digest.
+Before the replacement page canary, the owner approves the invalidation report and new `D6`, the
+complete page experiment manifest digest and recovery seed. Before any dependency call, the owner
+approves `D7`, the complete dependency experiment manifest digest with the same recovery seed and
+the controller-derived page-completion cumulative-checkpoint digest.
 
 After `D1` through `D4`, `D6`, and the owner-completed isolated device-flow login, the agent can
 complete the page experiment without further owner input. After `D5` and `D7`, the agent can run the
