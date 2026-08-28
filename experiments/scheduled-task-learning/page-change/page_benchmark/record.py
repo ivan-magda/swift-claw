@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .canonical import SHA256_HEX, StrictJSONError, dumps, write
+from .canonical import SHA256_HEX, StrictJSONError, dumps, load_object, write
 from .manifest_artifacts import (
     load_canonical_artifact,
     load_manifest,
@@ -28,6 +28,13 @@ def _parse_arguments(arguments: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--carrier", required=True)
     parser.add_argument("--skeleton", required=True)
     parser.add_argument("--output")
+    return parser.parse_args(arguments)
+
+
+def _parse_canonicalize_arguments(arguments: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", required=True)
     return parser.parse_args(arguments)
 
 
@@ -109,9 +116,18 @@ def seal_record(arguments: argparse.Namespace) -> dict[str, Any]:
 
 
 def main(arguments: list[str] | None = None) -> int:
-    parsed = _parse_arguments(arguments)
+    raw_arguments = sys.argv[1:] if arguments is None else arguments
+    canonicalize = raw_arguments[:1] == ["canonicalize"]
+    parsed = (
+        _parse_canonicalize_arguments(raw_arguments[1:])
+        if canonicalize
+        else _parse_arguments(raw_arguments)
+    )
     try:
-        record = seal_record(parsed)
+        if canonicalize:
+            write(Path(parsed.output), load_object(Path(parsed.input)))
+        else:
+            record = seal_record(parsed)
     except (
         KeyError,
         OSError,
@@ -131,6 +147,8 @@ def main(arguments: list[str] | None = None) -> int:
             end="",
         )
         return 2
+    if canonicalize:
+        return 0
     if parsed.output:
         write(Path(parsed.output), record)
     else:

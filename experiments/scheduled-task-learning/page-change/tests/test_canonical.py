@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -51,6 +52,83 @@ class StrictJSONTests(unittest.TestCase):
                 # Then
                 self.assertEqual(protected.read_bytes(), b"keep me")
                 self.assertEqual(output.read_text(encoding="utf-8"), '{"published":true}\n')
+
+    def test_page_record_canonicalize_normalizes_problematic_fraction_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            # Given
+            root = Path(directory)
+            source = root / "swift-draft.json"
+            source.write_text(
+                '{"two_thirds":0.66666700000000001,"one_third":0.33333299999999999}\n',
+                encoding="utf-8",
+            )
+            output = root / "canonical.json"
+
+            # When
+            completed = subprocess.run(  # noqa: S603 - fixed protected executable
+                [
+                    str(ROOT / "artifacts/page-record"),
+                    "canonicalize",
+                    "--input",
+                    str(source),
+                    "--output",
+                    str(output),
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            # Then
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            self.assertEqual(completed.stdout, "")
+            self.assertEqual(
+                output.read_bytes(),
+                b'{"one_third":0.333333,"two_thirds":0.666667}\n',
+            )
+
+    def test_page_record_canonicalize_fails_closed_for_invalid_json(self) -> None:
+        mutants = {
+            "malformed": '{"value":',
+            "duplicate": '{"value":1,"value":2}',
+            "nonfinite": '{"value":NaN}',
+        }
+        for name, raw in mutants.items():
+            with self.subTest(mutant=name), tempfile.TemporaryDirectory() as directory:
+                # Given
+                root = Path(directory)
+                source = root / "invalid.json"
+                source.write_text(raw, encoding="utf-8")
+                output = root / "canonical.json"
+
+                # When
+                completed = subprocess.run(  # noqa: S603 - fixed protected executable
+                    [
+                        str(ROOT / "artifacts/page-record"),
+                        "canonicalize",
+                        "--input",
+                        str(source),
+                        "--output",
+                        str(output),
+                    ],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+
+                # Then
+                self.assertEqual(completed.returncode, 2)
+                self.assertEqual(
+                    loads_object(completed.stdout),
+                    {
+                        "schema_version": 1,
+                        "status": "invalid",
+                        "error": "page_record.input_invalid",
+                    },
+                )
+                self.assertFalse(output.exists())
 
     def test_rejects_duplicate_object_keys(self) -> None:
         # Given

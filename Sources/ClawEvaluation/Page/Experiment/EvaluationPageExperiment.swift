@@ -376,7 +376,7 @@ private extension EvaluationPageExperiment {
       outputURL: context.paths.developmentRecords
     )
 
-    try context.records.writeDevelopmentInputs(
+    try await context.records.writeDevelopmentInputs(
       records: developmentRecords,
       catalog: context.catalog,
       freeze: context.freeze,
