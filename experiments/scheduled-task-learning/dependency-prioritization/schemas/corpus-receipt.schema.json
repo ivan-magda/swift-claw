@@ -78,10 +78,18 @@
     "family_separation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pair_count", "pair_set_canonical_sha256", "violations"],
+      "required": [
+        "pair_count",
+        "pair_set_canonical_sha256",
+        "cross_split_pair_count",
+        "cross_split_pair_set_canonical_sha256",
+        "violations"
+      ],
       "properties": {
         "pair_count": {"const": 190},
         "pair_set_canonical_sha256": {"$ref": "#/$defs/sha256"},
+        "cross_split_pair_count": {"const": 124},
+        "cross_split_pair_set_canonical_sha256": {"$ref": "#/$defs/sha256"},
         "violations": {"type": "array", "maxItems": 0}
       }
     }

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from benchmark_core.canonical import canonical_sha256
-from benchmark_core.contract_validation import require_valid
 
 from .advisory_records import (
     AdvisoryComponent,
@@ -20,7 +19,13 @@ from .advisory_records import (
     load_frozen_advisories,
     record_affects,
 )
-from .fixture_policy import FixtureFamilyFingerprint, RemediationCandidate
+from .fixture_policy import (
+    FixtureFamilyFingerprint,
+    RemediationCandidate,
+    graph_template_digest,
+    manifest_structure_digest,
+)
+from .normalization import materialize_task
 from .policy import is_safe_remediation_option
 from .project_snapshot import (
     FindingFact,
@@ -34,7 +39,6 @@ from .validation import (
     MAX_EVIDENCE_PER_FINDING,
     MAX_FINDINGS,
     MAX_OPTIONS_PER_FINDING,
-    validate_source,
 )
 from .versioning import compare_versions, satisfies_requirement
 
@@ -141,13 +145,13 @@ def _derive_normalized_source(
         "split": snapshot.split,
         "normalized_findings": sorted(findings, key=lambda item: item["source_key"]),
     }
-    require_valid(source, validate_source)
+    task = materialize_task(source)
     return DerivedSource(
         source=source,
         family_fingerprint=_family_fingerprint(
             snapshot,
             selected_components,
-            target_nodes,
+            task,
         ),
         snapshot_sha256=snapshot.semantic_sha256,
         selected_record_ids=selected_ids,
@@ -420,29 +424,22 @@ def _task_id(snapshot: ProjectSnapshot, records: Iterable[AdvisoryRecord]) -> st
 def _family_fingerprint(
     snapshot: ProjectSnapshot,
     components: tuple[AdvisoryComponent, ...],
-    target_nodes: tuple[PackageNode, ...],
+    task: dict[str, Any],
 ) -> FixtureFamilyFingerprint:
-    target_keys = {node.node_key for node in target_nodes}
-    helper_nodes = (
-        snapshot.root,
-        *(node for node in snapshot.dependencies if node.node_key not in target_keys),
-    )
     return FixtureFamilyFingerprint(
-        family_id=snapshot.family_id,
-        normalized_packages=frozenset(
-            f"{component.ecosystem}:{component.package_name}" for component in components
+        split=snapshot.split,
+        project_packages=frozenset(
+            f"{snapshot.ecosystem}:{node.package_name}"
+            for node in (snapshot.root, *snapshot.dependencies)
         ),
         record_alias_components=frozenset(
             _source_key("alias-component", {"identities": list(component.identities)})
             for component in components
         ),
-        root_helper_nodes=frozenset(
-            f"{snapshot.ecosystem}:{node.package_name}@{node.installed_version}"
-            for node in helper_nodes
-        ),
         graph_template_ids=frozenset({snapshot.graph_template_id}),
+        graph_template_digests=frozenset({graph_template_digest(task)}),
         generator_seeds=frozenset({snapshot.generator_seed}),
-        manifest_digests=frozenset({snapshot.semantic_sha256}),
+        manifest_digests=frozenset({manifest_structure_digest(task)}),
     )
 
 

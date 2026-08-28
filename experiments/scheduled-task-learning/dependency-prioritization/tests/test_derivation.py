@@ -12,7 +12,12 @@ from dependency_benchmark.derivation import (
     DependencyDerivationError,
     derive_normalized_source,
 )
-from dependency_benchmark.fixture_policy import FixtureFamilyFingerprint, derive_remediation
+from dependency_benchmark.fixture_policy import (
+    FixtureFamilyFingerprint,
+    derive_remediation,
+    graph_template_digest,
+    manifest_structure_digest,
+)
 from dependency_benchmark.normalization import materialize
 from dependency_benchmark.project_snapshot import parse_project_snapshot
 from dependency_benchmark.versioning import compare_versions
@@ -126,17 +131,22 @@ class DependencyDerivationTests(unittest.TestCase):
         self.assertEqual(
             derived.family_fingerprint,
             FixtureFamilyFingerprint(
-                family_id="django-diamond",
-                normalized_packages=frozenset({"pypi:aiohttp", "pypi:django"}),
+                split="sealed",
+                project_packages=frozenset(
+                    {
+                        "pypi:aiohttp",
+                        "pypi:django",
+                        "pypi:fixture-app",
+                        "pypi:fixture-helper",
+                    }
+                ),
                 record_alias_components=frozenset(
                     {"alias-component-33477110112e", "alias-component-b0787ec317c8"}
                 ),
-                root_helper_nodes=frozenset(
-                    {"pypi:fixture-app@1.0.0", "pypi:fixture-helper@1.5.0"}
-                ),
                 graph_template_ids=frozenset({"diamond-paths"}),
+                graph_template_digests=frozenset({graph_template_digest(materialization.task)}),
                 generator_seeds=frozenset({"django-seed"}),
-                manifest_digests=frozenset({snapshot.semantic_sha256}),
+                manifest_digests=frozenset({manifest_structure_digest(materialization.task)}),
             ),
         )
         changed_value = copy.deepcopy(sealed_project_snapshot_value())
