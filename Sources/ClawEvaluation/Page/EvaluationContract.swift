@@ -14,6 +14,44 @@ enum PageEvaluationContract {
     let replacementPool: Int
   }
 
+  struct RecoveryUsage: Sendable, Equatable {
+    let attempts: Int
+    let responsesSends: Int
+    let fileReads: Int
+    let accountedTokens: Int
+
+    var manifestValue: JSONValue {
+      .object([
+        "accounted_tokens": .integer(accountedTokens),
+        "attempts": .integer(attempts),
+        "file_reads": .integer(fileReads),
+        "responses_sends": .integer(responsesSends),
+      ])
+    }
+  }
+
+  struct RecoveryAccountingSeed: Sendable, Equatable {
+    let canary: RecoveryUsage
+    let pageCleanDevelopment: RecoveryUsage
+
+    var total: RecoveryUsage {
+      RecoveryUsage(
+        attempts: canary.attempts + pageCleanDevelopment.attempts,
+        responsesSends: canary.responsesSends + pageCleanDevelopment.responsesSends,
+        fileReads: canary.fileReads + pageCleanDevelopment.fileReads,
+        accountedTokens: canary.accountedTokens + pageCleanDevelopment.accountedTokens
+      )
+    }
+
+    var manifestValue: JSONValue {
+      .object([
+        "canary": canary.manifestValue,
+        "page_clean_development": pageCleanDevelopment.manifestValue,
+        "total": total.manifestValue,
+      ])
+    }
+  }
+
   package static let schemaVersion = 1
   package static let providerReference = runtime.providerReference
   package static let wireModel = runtime.wireModel
@@ -64,6 +102,20 @@ enum PageEvaluationContract {
   package static let globalMaximumResponsesSends = runtime.globalMaximumResponsesSends
   package static let globalMaximumFileReads = runtime.globalMaximumFileReads
   package static let globalAccountedTokenThreshold = runtime.globalAccountedTokenThreshold
+  static let recoveryAccountingSeed = RecoveryAccountingSeed(
+    canary: RecoveryUsage(
+      attempts: 4,
+      responsesSends: 8,
+      fileReads: 4,
+      accountedTokens: 9_550
+    ),
+    pageCleanDevelopment: RecoveryUsage(
+      attempts: 8,
+      responsesSends: 14,
+      fileReads: 7,
+      accountedTokens: 18_609
+    )
+  )
   package static let feedbackGeneratorVersion = "page-feedback-v1"
   package static let targetClasses = Set([
     "noise.volatile_value",
@@ -72,18 +124,22 @@ enum PageEvaluationContract {
   ])
   package static let terminalValidationPolicy = runtime.terminalValidationPolicy
   static let canaryLimits = StageLimits(
-    maximumAttempts: canaryPlannedAttempts,
-    maximumResponsesSends: canaryPlannedAttempts * maximumResponsesSendsPerAttempt,
-    maximumFileReads: canaryPlannedAttempts,
+    maximumAttempts: recoveryAccountingSeed.canary.attempts + canaryPlannedAttempts,
+    maximumResponsesSends: recoveryAccountingSeed.canary.responsesSends
+      + canaryPlannedAttempts * maximumResponsesSendsPerAttempt,
+    maximumFileReads: recoveryAccountingSeed.canary.fileReads + canaryPlannedAttempts,
     accountedTokenThreshold: 50_000,
     replacementPool: 0
   )
 
   static let pageLimits = StageLimits(
-    maximumAttempts: pagePlannedAttempts + pageReplacementPool,
-    maximumResponsesSends: (pagePlannedAttempts + pageReplacementPool)
-      * maximumResponsesSendsPerAttempt,
-    maximumFileReads: pagePlannedAttempts + pageReplacementPool,
+    maximumAttempts: recoveryAccountingSeed.pageCleanDevelopment.attempts + pagePlannedAttempts
+      + pageReplacementPool,
+    maximumResponsesSends: recoveryAccountingSeed.pageCleanDevelopment.responsesSends
+      + (pagePlannedAttempts + pageReplacementPool)
+        * maximumResponsesSendsPerAttempt,
+    maximumFileReads: recoveryAccountingSeed.pageCleanDevelopment.fileReads + pagePlannedAttempts
+      + pageReplacementPool,
     accountedTokenThreshold: 1_500_000,
     replacementPool: pageReplacementPool
   )
@@ -105,6 +161,7 @@ enum PageEvaluationContract {
       "page_planned_attempts": .integer(pagePlannedAttempts),
       "page_replacement_pool": .integer(pageLimits.replacementPool),
       "page_responses_send_cap": .integer(pageLimits.maximumResponsesSends),
+      "recovery_accounting_seed": recoveryAccountingSeed.manifestValue,
     ])
   }
 

@@ -26,6 +26,31 @@ package struct EvaluationPageExperiment: Sendable {
     controller = EvaluationController(launcher: launcher, freezeVerifier: freezeVerifier)
   }
 
+  private static func initialAccumulators() -> (
+    canary: EvaluationController.Accumulator,
+    page: EvaluationController.Accumulator
+  ) {
+    func accumulator(
+      from usage: PageEvaluationContract.RecoveryUsage
+    ) -> EvaluationController.Accumulator {
+      var accumulator = EvaluationController.Accumulator()
+      accumulator.attempts = usage.attempts
+      accumulator.responsesSends = usage.responsesSends
+      accumulator.fileReads = usage.fileReads
+      accumulator.accountedTokens = usage.accountedTokens
+      return accumulator
+    }
+
+    let seed = PageEvaluationContract.recoveryAccountingSeed
+    var canary = accumulator(from: seed.canary)
+    let page = accumulator(from: seed.pageCleanDevelopment)
+    canary.globalAttemptsBase = page.attempts
+    canary.globalResponsesSendsBase = page.responsesSends
+    canary.globalFileReadsBase = page.fileReads
+    canary.globalAccountedTokensBase = page.accountedTokens
+    return (canary, page)
+  }
+
   package func run(freezeInputsPath: String) async throws -> Data {
     let inputs = try EvaluationJSONFile.decode(
       EvaluationFreezeInputs.self,
@@ -175,8 +200,7 @@ private extension EvaluationPageExperiment {
       paths: paths,
       journal: journal
     )
-    var canary = EvaluationController.Accumulator()
-    var page = EvaluationController.Accumulator()
+    var (canary, page) = Self.initialAccumulators()
 
     defer {
       _ = try? EvaluationJSONFile.write(canary.summary, to: paths.canarySummary)

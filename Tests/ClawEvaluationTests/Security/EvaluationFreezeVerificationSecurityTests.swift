@@ -116,7 +116,7 @@ extension EvaluationFilesystemSecurityTests {
 
     let tools = root.appendingPathComponent("tools", isDirectory: true)
     try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
-    let modulePaths = ["freeze.py"] + (1...7).map { "freeze_support_\($0).py" }
+    let modulePaths = ["freeze.py"] + (1...8).map { "freeze_support_\($0).py" }
     let moduleData = Data("# frozen verifier module\n".utf8)
     var moduleRecords: [EvaluationManifestArtifact] = []
     for path in modulePaths {

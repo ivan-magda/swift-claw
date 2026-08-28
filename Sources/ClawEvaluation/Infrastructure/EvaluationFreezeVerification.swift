@@ -453,7 +453,7 @@ private extension EvaluationLiveFreezeVerifier {
     }
     let modules = manifest.artifacts(role: "freeze_verifier_source", category: "configuration")
       .sorted { $0.path < $1.path }
-    guard modules.count == 8,
+    guard modules.count == 9,
       let verifier = modules.first(where: { $0.path == runtime.freezeVerifierPath })
     else {
       throw EvaluationFreezeError.missingProtectedBinding
