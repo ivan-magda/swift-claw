@@ -94,15 +94,16 @@ package struct EvaluationRuntimeConfiguration: Codable, Sendable, Equatable {
   }
 
   package func validate() throws {
+    let contract = EvaluationRuntimeContract.frozen
     guard
       schemaVersion == PageEvaluationContract.schemaVersion,
       evaluationRoot.hasPrefix("/"),
       ISO8601DateFormatter().date(from: fixedTimestamp) != nil,
-      providerReference == PageEvaluationContract.providerReference,
-      wireModel == PageEvaluationContract.wireModel,
-      transportMode.rawValue == PageEvaluationContract.transportMode,
+      providerReference == contract.providerReference,
+      wireModel == contract.wireModel,
+      transportMode.rawValue == contract.transportMode,
       fallbackReference == nil,
-      PageEvaluationContract.isValidPolicyVersion(expectedPolicyVersion),
+      contract.isValidPolicyVersion(expectedPolicyVersion),
       Self.isSafeRepositoryRelativePath(taskPromptPath),
       Self.isSafeRepositoryRelativePath(executablePath),
       Self.isSafeRepositoryRelativePath(freezeVerifierPath),
@@ -110,21 +111,21 @@ package struct EvaluationRuntimeConfiguration: Codable, Sendable, Equatable {
       fileReadAllowlists.task == [PageEvaluationContract.inputFileName],
       fileReadAllowlists.synthesis == [PageEvaluationContract.synthesisInputFileName],
       maxCompletedModelRoundTrips
-        == PageEvaluationContract.maximumCompletedModelRoundTripsPerAttempt,
-      runBudget.maxInputTokens == PageEvaluationContract.runBudget.maxInputTokens,
-      runBudget.maxOutputTokens == PageEvaluationContract.runBudget.maxOutputTokens,
-      runBudget.maxTurns == PageEvaluationContract.runBudget.maxTurns,
-      runBudget.maxToolCalls == PageEvaluationContract.runBudget.maxToolCalls,
-      runBudget.deadlineSeconds == PageEvaluationContract.runBudget.wallClockDeadlineSeconds,
-      runBudget.retryBudget == PageEvaluationContract.runBudget.retryBudget,
-      inputMaxGraphemes == PageEvaluationContract.maximumInputGraphemes,
-      attemptOutputLimits == PageEvaluationContract.outputLimits,
+        == contract.maximumCompletedModelRoundTripsPerAttempt,
+      runBudget.maxInputTokens == contract.runBudget.maxInputTokens,
+      runBudget.maxOutputTokens == contract.runBudget.maxOutputTokens,
+      runBudget.maxTurns == contract.runBudget.maxTurns,
+      runBudget.maxToolCalls == contract.runBudget.maxToolCalls,
+      runBudget.deadlineSeconds == contract.runBudget.wallClockDeadlineSeconds,
+      runBudget.retryBudget == contract.runBudget.retryBudget,
+      inputMaxGraphemes == contract.maximumInputGraphemes,
+      attemptOutputLimits == contract.outputLimits,
       retry.responsesSendsPerLogicalRoundTrip
-        == PageEvaluationContract.responsesSendsPerLogicalRoundTrip,
-      retry.maxResponsesSendsPerAttempt == PageEvaluationContract.maximumResponsesSendsPerAttempt,
+        == contract.responsesSendsPerLogicalRoundTrip,
+      retry.maxResponsesSendsPerAttempt == contract.maximumResponsesSendsPerAttempt,
       retry.providerInferenceRetryEnabled == false,
       retry.streamToBufferedReattemptEnabled == false,
-      retry.wholeAttemptReplacementMax == PageEvaluationContract.wholeAttemptReplacementMax
+      retry.wholeAttemptReplacementMax == contract.wholeAttemptReplacementMax
     else {
       throw EvaluationRuntimeConfigurationError.frozenValueMismatch
     }
@@ -211,8 +212,9 @@ enum EvaluationRuntimeContextFactory {
   }
 
   static func attemptBudget(toolDefinitions: [ToolDefinition]) -> ContextBudget {
+    let contract = EvaluationRuntimeContract.frozen
     let messageInputTokens = TokenEstimator.messageInputBudget(
-      maxInputTokens: PageEvaluationContract.runBudget.maxInputTokens,
+      maxInputTokens: contract.runBudget.maxInputTokens,
       tools: toolDefinitions
     )
     let defaults = ContextBudget.default
@@ -259,8 +261,8 @@ package enum EvaluationPolicyInspector {
 
   package static func policyVersion(
     evaluationRootURL: URL,
-    providerReference: String = PageEvaluationContract.providerReference,
-    wireModel: String = PageEvaluationContract.wireModel,
+    providerReference: String = EvaluationRuntimeContract.frozen.providerReference,
+    wireModel: String = EvaluationRuntimeContract.frozen.wireModel,
     allowedFileName: String = PageEvaluationContract.inputFileName
   ) -> String {
     let workspaceRootURL = evaluationRootURL.appendingPathComponent(

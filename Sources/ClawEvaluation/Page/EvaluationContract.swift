@@ -1,8 +1,11 @@
 import ClawCore
 import Foundation
 
-/// Frozen runtime values shared by the page-change controller, worker, and manifest generator.
+/// Frozen fixture, topology, and stage-budget values owned by the page-change experiment.
 enum PageEvaluationContract {
+  static let profile = EvaluationExperimentProfile.pageChange
+  static let runtime = profile.runtime
+
   struct StageLimits: Sendable, Equatable {
     let maximumAttempts: Int
     let maximumResponsesSends: Int
@@ -12,9 +15,9 @@ enum PageEvaluationContract {
   }
 
   package static let schemaVersion = 1
-  package static let providerReference = "openai-chatgpt/gpt-5.6-sol"
-  package static let wireModel = "gpt-5.6-sol"
-  package static let transportMode = EvaluationTransportMode.streamingSSE.rawValue
+  package static let providerReference = runtime.providerReference
+  package static let wireModel = runtime.wireModel
+  package static let transportMode = runtime.transportMode
   package static let inputFileName = "input.json"
   package static let synthesisInputFileName = "synthesis-input.json"
   package static let stateDirectoryName = "state"
@@ -22,14 +25,14 @@ enum PageEvaluationContract {
   package static let resultsDirectoryName = "results"
   package static let lessonSetsDirectoryName = "lesson-sets"
   package static let activeLessonFileName = "active.json"
-  package static let policyVersionHexCount = 16
-  package static let wholeAttemptReplacementMax = 1
+  package static let wholeAttemptReplacementMax = runtime.wholeAttemptReplacementMax
   // swiftlint:disable:next identifier_name
-  package static let maximumCompletedModelRoundTripsPerAttempt = 2
-  package static let responsesSendsPerLogicalRoundTrip = 1
-  package static let maximumResponsesSendsPerAttempt =
-    maximumCompletedModelRoundTripsPerAttempt * responsesSendsPerLogicalRoundTrip
-  package static let maximumInputGraphemes = 59_999
+  package static let maximumCompletedModelRoundTripsPerAttempt =
+    runtime.maximumCompletedModelRoundTripsPerAttempt
+  package static let responsesSendsPerLogicalRoundTrip =
+    runtime.responsesSendsPerLogicalRoundTrip
+  package static let maximumResponsesSendsPerAttempt = runtime.maximumResponsesSendsPerAttempt
+  package static let maximumInputGraphemes = runtime.maximumInputGraphemes
   package static let canaryProcessCount = 2
   package static let canaryAttemptsPerProcess = 2
   package static let canaryPlannedAttempts = canaryProcessCount * canaryAttemptsPerProcess
@@ -56,19 +59,18 @@ enum PageEvaluationContract {
   package static let pagePlannedAttempts = pageTaskPlannedAttempts + pageSynthesisPlannedAttempts
   package static let pageReplacementPool = 3
   package static let conformanceCaseCount = 24
-  package static let missingUsageTokenProxy = 132_768
-  package static let globalMaximumAttempts = 194
-  package static let globalMaximumResponsesSends =
-    globalMaximumAttempts * maximumResponsesSendsPerAttempt
-  package static let globalMaximumFileReads = 194
-  package static let globalAccountedTokenThreshold = 4_350_000
+  package static let missingUsageTokenProxy = runtime.missingUsageTokenProxy
+  package static let globalMaximumAttempts = runtime.globalMaximumAttempts
+  package static let globalMaximumResponsesSends = runtime.globalMaximumResponsesSends
+  package static let globalMaximumFileReads = runtime.globalMaximumFileReads
+  package static let globalAccountedTokenThreshold = runtime.globalAccountedTokenThreshold
   package static let feedbackGeneratorVersion = "page-feedback-v1"
   package static let targetClasses = Set([
     "noise.volatile_value",
     "noise.time_or_build_metadata",
     "noise.structure_or_order",
   ])
-  package static let terminalValidationPolicy = StreamingTerminalValidationPolicy.throughStreamEnd
+  package static let terminalValidationPolicy = runtime.terminalValidationPolicy
   static let canaryLimits = StageLimits(
     maximumAttempts: canaryPlannedAttempts,
     maximumResponsesSends: canaryPlannedAttempts * maximumResponsesSendsPerAttempt,
@@ -106,28 +108,12 @@ enum PageEvaluationContract {
     ])
   }
 
-  package static let outputLimits = AttemptOutputLimits(
-    maximumUTF8Bytes: 32_768,
-    maximumGraphemes: 16_384
-  )
+  package static let outputLimits = runtime.outputLimits
 
-  package static let runBudget = RunBudget(
-    maxInputTokens: 100_000,
-    maxOutputTokens: 4_096,
-    wallClockDeadlineSeconds: 180,
-    retryBudget: 1,
-    perRunUSD: RunBudget.default.perRunUSD,
-    perDayUSD: RunBudget.default.perDayUSD,
-    proactivePerDayUSD: RunBudget.default.proactivePerDayUSD,
-    referenceUSDPerToken: RunBudget.default.referenceUSDPerToken,
-    maxTurns: 2,
-    maxToolCalls: 1,
-    dayTokenCeilingOverride: RunBudget.default.dayTokenCeiling
-  )
+  package static let runBudget = runtime.runBudget
 
   static func isValidPolicyVersion(_ value: String) -> Bool {
-    value.count == policyVersionHexCount
-      && value.allSatisfy { "0123456789abcdef".contains($0) }
+    runtime.isValidPolicyVersion(value)
   }
 }
 
