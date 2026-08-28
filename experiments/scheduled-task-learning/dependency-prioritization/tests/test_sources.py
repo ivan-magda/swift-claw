@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-import hashlib
 import re
+import shutil
+import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
 
 from benchmark_core.canonical import dumps, load_object
+from dependency_benchmark.advisory_records import (
+    AdvisorySourceError,
+    verify_frozen_source_catalog,
+)
 
 from support import ROOT
 
@@ -46,42 +51,34 @@ class DependencySourceIntegrityTests(unittest.TestCase):
         provenance_path = ROOT / "sources/provenance.json"
         index = load_object(index_path)
         provenance = load_object(provenance_path)
-        snapshot_root = ROOT / "sources/snapshots"
-        snapshot_prefix = Path(index["provenance_path"]).parent / "snapshots"
-        repositories = {
-            repository["repository_id"]: repository for repository in provenance["repositories"]
-        }
-        records = {record["record_id"]: record for record in provenance["records"]}
-        entries = [(record["repository_id"], record) for record in provenance["records"]] + [
-            (repository["repository_id"], repository["license"])
-            for repository in provenance["repositories"]
-        ]
 
         # When
-        declared_paths: set[Path] = set()
-        for repository_id, entry in entries:
-            relative_path = Path(entry["snapshot_path"]).relative_to(snapshot_prefix)
-            snapshot_path = snapshot_root / relative_path
-            declared_paths.add(snapshot_path)
-            with self.subTest(snapshot_path=entry["snapshot_path"]):
-                self.assertIn(repository_id, repositories)
-                self.assertNotIn("..", relative_path.parts)
-                self.assertEqual(relative_path, Path(repository_id) / entry["repository_path"])
-                self.assertFalse(snapshot_path.is_symlink())
-                snapshot_bytes = snapshot_path.read_bytes()
-                self.assertEqual(len(snapshot_bytes), entry["bytes"])
-                self.assertEqual(hashlib.sha256(snapshot_bytes).hexdigest(), entry["sha256"])
-        actual_paths = {
-            path for path in snapshot_root.rglob("*") if path.is_file() or path.is_symlink()
-        }
+        verify_frozen_source_catalog(ROOT / "sources")
 
         # Then
-        self.assertEqual(len(repositories), len(provenance["repositories"]))
-        self.assertEqual(len(records), len(provenance["records"]))
-        self.assertEqual(actual_paths, declared_paths)
         for catalog_path, catalog in ((index_path, index), (provenance_path, provenance)):
             with self.subTest(catalog_path=catalog_path):
                 self.assertEqual(catalog_path.read_text(encoding="utf-8"), dumps(catalog))
+        for mutation in ("bytes", "sha256", "closure", "catalog_symlink"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                copied_sources = shutil.copytree(ROOT / "sources", Path(directory) / "sources")
+                if mutation == "bytes":
+                    record = provenance["records"][0]
+                    snapshot = copied_sources / record["snapshot_path"].split("/sources/", 1)[1]
+                    snapshot.write_bytes(snapshot.read_bytes() + b"\n")
+                elif mutation == "sha256":
+                    record = provenance["records"][0]
+                    snapshot = copied_sources / record["snapshot_path"].split("/sources/", 1)[1]
+                    content = snapshot.read_bytes()
+                    snapshot.write_bytes(bytes([content[0] ^ 1]) + content[1:])
+                elif mutation == "closure":
+                    (copied_sources / "snapshots/orphan").write_text("orphan", encoding="utf-8")
+                else:
+                    index_copy = copied_sources / "index-copy.json"
+                    (copied_sources / "index.json").rename(index_copy)
+                    (copied_sources / "index.json").symlink_to(index_copy)
+                with self.assertRaises(AdvisorySourceError):
+                    verify_frozen_source_catalog(copied_sources)
 
     def test_source_index_preserves_the_exact_record_allocation(self) -> None:
         # Given
