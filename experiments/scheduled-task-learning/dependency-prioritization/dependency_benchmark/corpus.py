@@ -104,10 +104,28 @@ def author_fixture(
     return _author_fixture(snapshot, _load_context(benchmark_root), injection_phrases)
 
 
+def derive_corpus_receipt(benchmark_root: Path) -> dict[str, Any]:
+    """Derive a receipt from the closed 10/4/6 corpus without consulting checked receipt bytes."""
+
+    return _derive_corpus_receipt(_load_context(benchmark_root))
+
+
 def verify_corpus(benchmark_root: Path) -> dict[str, Any]:
-    """Recompute the checked-in 10/4/6 corpus and return its self-digest-free receipt."""
+    """Fail unless the checked-in receipt exactly matches the rederived 10/4/6 corpus."""
 
     context = _load_context(benchmark_root)
+    receipt = _derive_corpus_receipt(context)
+    corpus_root = context.benchmark_root / _CORPUS_DIRECTORY
+    checked_receipt, receipt_raw = _load_canonical_artifact(
+        corpus_root / _RECEIPT_NAME,
+        corpus_root,
+    )
+    if checked_receipt != receipt or receipt_raw != dumps(receipt).encode():
+        raise CorpusAuthoringError("checked-in corpus receipt differs from recomputation")
+    return receipt
+
+
+def _derive_corpus_receipt(context: _AuthoringContext) -> dict[str, Any]:
     corpus_root = context.benchmark_root / _CORPUS_DIRECTORY
     expected_ids = _expected_fixture_ids()
     _require_closed_layout(corpus_root, expected_ids)
@@ -147,13 +165,7 @@ def verify_corpus(benchmark_root: Path) -> dict[str, Any]:
             )
         )
 
-    receipt = _build_corpus_receipt(tuple(verified), context)
-    receipt_path = corpus_root / _RECEIPT_NAME
-    if receipt_path.exists():
-        checked_receipt, receipt_raw = _load_canonical_artifact(receipt_path, corpus_root)
-        if checked_receipt != receipt or receipt_raw != dumps(receipt).encode():
-            raise CorpusAuthoringError("checked-in corpus receipt differs from recomputation")
-    return receipt
+    return _build_corpus_receipt(tuple(verified), context)
 
 
 def family_pair_checks(
@@ -164,16 +176,27 @@ def family_pair_checks(
 
     validate_fixture_policy(fixture_policy)
     ordered = tuple(sorted(families.items()))
+    unrelated_policy = fixture_policy["unrelated_family"]
     checks: list[dict[str, Any]] = []
     for (left_id, left), (right_id, right) in combinations(ordered, 2):
         if not are_unrelated_families(left, right, fixture_policy):
             raise CorpusAuthoringError(
                 f"fixture families are not fully disjoint: {left_id}, {right_id}"
             )
+        checked_dimensions = list(unrelated_policy["all_pair_disjoint_dimensions"])
+        if left.split != right.split:
+            checked_dimensions.extend(unrelated_policy["cross_split_disjoint_dimensions"])
         checks.append(
             {
+                "checked_dimensions": checked_dimensions,
                 "left_fixture_id": left_id,
+                "left_fingerprint_canonical_sha256": canonical_sha256(
+                    _family_fingerprint_value(left)
+                ),
                 "right_fixture_id": right_id,
+                "right_fingerprint_canonical_sha256": canonical_sha256(
+                    _family_fingerprint_value(right)
+                ),
                 "unrelated": True,
             }
         )
@@ -296,13 +319,22 @@ def _build_corpus_receipt(
 ) -> dict[str, Any]:
     authored = tuple(item.authored for item in fixtures)
     _require_exact_fixture_set(authored)
-    pair_checks = family_pair_checks(
-        {fixture.snapshot.fixture_id: fixture.family_fingerprint for fixture in authored},
-        context.fixture_policy,
-    )
+    families = {fixture.snapshot.fixture_id: fixture.family_fingerprint for fixture in authored}
+    pair_checks = family_pair_checks(families, context.fixture_policy)
     expected_pair_count = len(authored) * (len(authored) - 1) // 2
     if len(pair_checks) != expected_pair_count:
         raise CorpusAuthoringError("family isolation did not check every fixture pair")
+    cross_split_checks = [
+        check
+        for check in pair_checks
+        if families[check["left_fixture_id"]].split != families[check["right_fixture_id"]].split
+    ]
+    expected_cross_split_count = sum(
+        left_count * right_count
+        for left_count, right_count in combinations(_EXPECTED_SPLIT_COUNTS.values(), 2)
+    )
+    if len(cross_split_checks) != expected_cross_split_count:
+        raise CorpusAuthoringError("cross-split isolation did not check every split pair")
     coverage, violations = evaluate_corpus_coverage(
         tuple(
             CorpusCoverageFixture(source=item.authored.source, gold=item.authored.gold)
@@ -344,6 +376,8 @@ def _build_corpus_receipt(
         "family_separation": {
             "pair_count": expected_pair_count,
             "pair_set_canonical_sha256": canonical_sha256(pair_checks),
+            "cross_split_pair_count": expected_cross_split_count,
+            "cross_split_pair_set_canonical_sha256": canonical_sha256(cross_split_checks),
             "violations": [],
         },
     }
@@ -514,11 +548,11 @@ def _fixture_receipt(fixture: _VerifiedFixture) -> dict[str, Any]:
 
 def _family_fingerprint_value(value: FixtureFamilyFingerprint) -> dict[str, Any]:
     return {
-        "family_id": value.family_id,
-        "normalized_packages": sorted(value.normalized_packages),
+        "split": value.split,
+        "project_packages": sorted(value.project_packages),
         "record_alias_components": sorted(value.record_alias_components),
-        "root_helper_nodes": sorted(value.root_helper_nodes),
         "graph_template_ids": sorted(value.graph_template_ids),
+        "graph_template_digests": sorted(value.graph_template_digests),
         "generator_seeds": sorted(value.generator_seeds),
         "manifest_digests": sorted(value.manifest_digests),
     }

@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
+import tempfile
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
-from benchmark_core.canonical import load_object
+from benchmark_core.canonical import dumps, load_object
 from dependency_benchmark import corpus as corpus_module
 from dependency_benchmark.corpus import (
     CorpusAuthoringError,
     author_fixture,
+    derive_corpus_receipt,
     family_pair_checks,
+    verify_corpus,
 )
 from dependency_benchmark.corpus_coverage import (
     CorpusCoverageFixture,
@@ -25,19 +32,95 @@ from dependency_benchmark.project_snapshot import parse_project_snapshot
 from support import ROOT, sealed_project_snapshot_value
 
 
-def _fingerprint(label: str) -> FixtureFamilyFingerprint:
+def _fingerprint(label: str, split: str = "development") -> FixtureFamilyFingerprint:
     return FixtureFamilyFingerprint(
-        family_id=f"family-{label}",
-        normalized_packages=frozenset({f"npm:{label}"}),
+        split=split,
+        project_packages=frozenset({f"npm:{label}"}),
         record_alias_components=frozenset({f"alias:{label}"}),
-        root_helper_nodes=frozenset({f"node:{label}"}),
         graph_template_ids=frozenset({f"graph:{label}"}),
+        graph_template_digests=frozenset({f"topology:{label}"}),
         generator_seeds=frozenset({f"seed:{label}"}),
         manifest_digests=frozenset({f"manifest:{label}"}),
     )
 
 
+@contextmanager
+def _copied_benchmark_root() -> Iterator[Path]:
+    build_root = ROOT.parents[2] / ".build"
+    build_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="dependency-corpus-", dir=build_root) as directory:
+        benchmark_root = Path(directory) / "dependency-prioritization"
+        benchmark_root.mkdir()
+        for name in ("contracts", "sources", "corpus"):
+            shutil.copytree(ROOT / name, benchmark_root / name)
+        yield benchmark_root
+
+
+def _write_canonical(path: Path, value: dict[str, object]) -> None:
+    path.write_bytes(dumps(value).encode("utf-8"))
+
+
 class DependencyCorpusAuthoringTests(unittest.TestCase):
+    def test_verify_corpus_recomputes_checked_in_root_bound_receipt(self) -> None:
+        # Given
+        checked_receipt = load_object(ROOT / "corpus/receipt.json")
+
+        # When
+        recomputed_receipt = verify_corpus(ROOT)
+
+        # Then
+        self.assertEqual(recomputed_receipt, checked_receipt)
+
+    def test_verify_corpus_rejects_canonical_artifact_tampering(self) -> None:
+        for artifact in ("source", "gold", "receipt"):
+            with self.subTest(artifact=artifact), _copied_benchmark_root() as benchmark_root:
+                # Given
+                corpus_root = benchmark_root / "corpus"
+                receipt_path = corpus_root / "receipt.json"
+                if artifact == "source":
+                    path = corpus_root / "sources/development/dp-development-01.source.json"
+                    value = load_object(path)
+                    value["family_id"] = "family-tampered"
+                    _write_canonical(path, value)
+                elif artifact == "gold":
+                    path = corpus_root / "gold/development/dp-development-01.gold.json"
+                    value = load_object(path)
+                    value["expected_verdict"] = "no_action"
+                    _write_canonical(path, value)
+                else:
+                    value = load_object(receipt_path)
+                    separation = value["family_separation"]
+                    assert isinstance(separation, dict)
+                    separation["pair_set_canonical_sha256"] = "0" * 64
+                    _write_canonical(receipt_path, value)
+
+                # When / Then
+                with self.assertRaises(CorpusAuthoringError):
+                    verify_corpus(benchmark_root)
+
+    def test_verify_corpus_rejects_noncanonical_or_unlisted_paths(self) -> None:
+        for mutation in ("noncanonical", "unlisted", "missing_receipt", "symlinked_root"):
+            with self.subTest(mutation=mutation), _copied_benchmark_root() as benchmark_root:
+                # Given
+                corpus_root = benchmark_root / "corpus"
+                if mutation == "noncanonical":
+                    source_path = corpus_root / "sources/development/dp-development-01.source.json"
+                    source_path.write_bytes(source_path.read_bytes() + b"\n")
+                elif mutation == "unlisted":
+                    (corpus_root / "unlisted.json").write_bytes(dumps({}).encode("utf-8"))
+                elif mutation == "missing_receipt":
+                    expected = load_object(corpus_root / "receipt.json")
+                    (corpus_root / "receipt.json").unlink()
+                    self.assertEqual(derive_corpus_receipt(benchmark_root), expected)
+                else:
+                    corpus_target = benchmark_root / "corpus-data"
+                    corpus_root.rename(corpus_target)
+                    corpus_root.symlink_to(corpus_target.name, target_is_directory=True)
+
+                # When / Then
+                with self.assertRaises(CorpusAuthoringError):
+                    verify_corpus(benchmark_root)
+
     def test_author_fixture_generates_policy_gold_through_canonical_bindings(self) -> None:
         # Given
         snapshot = parse_project_snapshot(sealed_project_snapshot_value())
@@ -125,8 +208,8 @@ class DependencyCorpusAuthoringTests(unittest.TestCase):
         policy = load_object(ROOT / "contracts/fixture-policy.json")
         families = {
             "dp-development-01": _fingerprint("one"),
-            "dp-regression-01": _fingerprint("two"),
-            "dp-sealed-01": _fingerprint("three"),
+            "dp-regression-01": _fingerprint("two", "regression"),
+            "dp-sealed-01": _fingerprint("three", "sealed"),
         }
 
         # When
@@ -134,29 +217,43 @@ class DependencyCorpusAuthoringTests(unittest.TestCase):
 
         # Then
         self.assertEqual(
-            checks,
+            [(check["left_fixture_id"], check["right_fixture_id"]) for check in checks],
             [
-                {
-                    "left_fixture_id": "dp-development-01",
-                    "right_fixture_id": "dp-regression-01",
-                    "unrelated": True,
-                },
-                {
-                    "left_fixture_id": "dp-development-01",
-                    "right_fixture_id": "dp-sealed-01",
-                    "unrelated": True,
-                },
-                {
-                    "left_fixture_id": "dp-regression-01",
-                    "right_fixture_id": "dp-sealed-01",
-                    "unrelated": True,
-                },
+                ("dp-development-01", "dp-regression-01"),
+                ("dp-development-01", "dp-sealed-01"),
+                ("dp-regression-01", "dp-sealed-01"),
             ],
         )
+        expected_dimensions = [
+            *policy["unrelated_family"]["all_pair_disjoint_dimensions"],
+            *policy["unrelated_family"]["cross_split_disjoint_dimensions"],
+        ]
+        for check in checks:
+            self.assertEqual(
+                set(check),
+                {
+                    "checked_dimensions",
+                    "left_fixture_id",
+                    "left_fingerprint_canonical_sha256",
+                    "right_fixture_id",
+                    "right_fingerprint_canonical_sha256",
+                    "unrelated",
+                },
+            )
+            self.assertEqual(check["checked_dimensions"], expected_dimensions)
+            self.assertEqual(len(check["left_fingerprint_canonical_sha256"]), 64)
+            self.assertEqual(len(check["right_fingerprint_canonical_sha256"]), 64)
+            self.assertTrue(check["unrelated"])
+        changed_families = dict(families)
+        changed_families["dp-sealed-01"] = replace(
+            changed_families["dp-sealed-01"],
+            generator_seeds=frozenset({"seed:changed"}),
+        )
+        self.assertNotEqual(checks, family_pair_checks(changed_families, policy))
         overlapping = dict(families)
         overlapping["dp-sealed-01"] = replace(
             overlapping["dp-sealed-01"],
-            generator_seeds=families["dp-development-01"].generator_seeds,
+            project_packages=families["dp-development-01"].project_packages,
         )
         with self.assertRaisesRegex(CorpusAuthoringError, "not fully disjoint"):
             family_pair_checks(overlapping, policy)
@@ -285,6 +382,33 @@ class DependencyCorpusAuthoringTests(unittest.TestCase):
         self.assertIn("regression whole_no_action_cases is below 1", regression_violations)
         self.assertIn("regression compatibility_traps is below 2", regression_violations)
 
+    def test_coverage_rejects_each_special_minimum_at_boundary(self) -> None:
+        # Given
+        valid_coverage = load_object(ROOT / "corpus/receipt.json")["coverage"]
+        minima = (
+            ("regression", "critical_reachable_production", 2),
+            ("regression", "whole_no_action_cases", 1),
+            ("regression", "compatibility_traps", 2),
+            ("regression", "visible_injection_cases", 1),
+            ("sealed", "critical_reachable_production", 2),
+            ("sealed", "whole_no_action_cases", 2),
+            ("sealed", "compatibility_traps", 2),
+            ("sealed", "visible_injection_cases", 1),
+        )
+
+        for split, metric_name, minimum in minima:
+            with self.subTest(split=split, metric=metric_name):
+                candidate = deepcopy(valid_coverage)
+                metric = candidate["splits"][split][metric_name]
+                metric["count"] = minimum - 1
+                metric["witness_ids"] = metric["witness_ids"][: minimum - 1]
+
+                # When
+                violations = coverage_violations(candidate)
+
+                # Then
+                self.assertIn(f"{split} {metric_name} is below {minimum}", violations)
+
     def test_receipt_schema_closes_the_frozen_artifact_shape(self) -> None:
         # Given
         schema = load_object(ROOT / "schemas/corpus-receipt.schema.json")
@@ -320,6 +444,10 @@ class DependencyCorpusAuthoringTests(unittest.TestCase):
         self.assertEqual(
             properties["family_separation"]["properties"]["pair_count"],
             {"const": 190},
+        )
+        self.assertEqual(
+            properties["family_separation"]["properties"]["cross_split_pair_count"],
+            {"const": 124},
         )
         self.assertIn(
             "advisory_semantic_receipt_canonical_sha256",

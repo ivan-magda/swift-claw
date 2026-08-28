@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cmp_to_key
 from itertools import pairwise
 from typing import Any, TypedDict, cast
+
+from benchmark_core.canonical import canonical_sha256, dumps
 
 from .policy import is_safe_remediation_option
 
@@ -18,11 +20,13 @@ _ACTIONABILITY_TARGETS = {
     "policy.reachability",
     "policy.runtime_scope",
 }
-_FINGERPRINT_DIMENSIONS = {
-    "normalized_packages",
+_FAMILY_DIMENSIONS = {
+    "project_packages",
     "record_alias_components",
-    "root_helper_nodes",
+}
+_CROSS_SPLIT_DIMENSIONS = {
     "graph_template_ids",
+    "graph_template_digests",
     "generator_seeds",
     "manifest_digests",
 }
@@ -51,11 +55,11 @@ class RemediationCandidate(TypedDict):
 class FixtureFamilyFingerprint:
     """Semantic identities that must not overlap between unrelated fixture families."""
 
-    family_id: str
-    normalized_packages: frozenset[str]
+    split: str
+    project_packages: frozenset[str]
     record_alias_components: frozenset[str]
-    root_helper_nodes: frozenset[str]
     graph_template_ids: frozenset[str]
+    graph_template_digests: frozenset[str]
     generator_seeds: frozenset[str]
     manifest_digests: frozenset[str]
 
@@ -112,23 +116,75 @@ def validate_fixture_policy(value: Any) -> None:
     unrelated = _object(
         policy["unrelated_family"],
         {
-            "family_id",
-            "disjoint_dimensions",
+            "all_pair_disjoint_dimensions",
+            "cross_split_disjoint_dimensions",
+            "graph_template_digest",
             "record_alias_identity",
             "manifest_digest",
         },
         "unrelated-family policy",
     )
     if (
-        unrelated["family_id"] != "different"
-        or unrelated["record_alias_identity"] != "transitive_component"
-        or unrelated["manifest_digest"] != "canonical_semantic_json"
+        unrelated["record_alias_identity"] != "transitive_component"
+        or unrelated["graph_template_digest"] != "identity_free_model_visible_task_path_structure"
+        or unrelated["manifest_digest"] != "identity_free_model_visible_decision_structure"
         or not _exact_string_list(
-            unrelated["disjoint_dimensions"],
-            _FINGERPRINT_DIMENSIONS,
+            unrelated["all_pair_disjoint_dimensions"],
+            _FAMILY_DIMENSIONS,
+        )
+        or not _exact_string_list(
+            unrelated["cross_split_disjoint_dimensions"],
+            _CROSS_SPLIT_DIMENSIONS,
         )
     ):
         raise ValueError("unrelated-family policy is unsupported")
+
+
+def graph_template_digest(task: Mapping[str, Any]) -> str:
+    """Hash model-visible dependency path structure without fixture identities."""
+
+    finding_shapes = [
+        sorted(
+            (_path_shape(path) for path in finding["dependency_paths"]),
+            key=dumps,
+        )
+        for finding in task["findings"]
+    ]
+    return canonical_sha256({"finding_path_shapes": sorted(finding_shapes, key=dumps)})
+
+
+def manifest_structure_digest(task: Mapping[str, Any]) -> str:
+    """Hash model-visible decision structure without opaque IDs or literal values."""
+
+    evidence_by_finding: dict[str, list[str]] = {}
+    for evidence in task["evidence_references"]:
+        evidence_by_finding.setdefault(evidence["finding_id"], []).append(evidence["subject_type"])
+    finding_shapes: list[dict[str, Any]] = []
+    for finding in task["findings"]:
+        option_shapes = [
+            {
+                "affected_status": option["affected_status"],
+                "availability": option["availability"],
+                "compatibility": option["compatibility"],
+            }
+            for option in finding["remediation_options"]
+        ]
+        finding_shapes.append(
+            {
+                "affected_status": finding["affected_status"],
+                "evidence_subject_types": sorted(
+                    evidence_by_finding.get(finding["finding_id"], [])
+                ),
+                "path_shapes": sorted(
+                    (_path_shape(path) for path in finding["dependency_paths"]),
+                    key=dumps,
+                ),
+                "reachability": finding["reachability"],
+                "remediation_option_shapes": sorted(option_shapes, key=dumps),
+                "severity": finding["severity"],
+            }
+        )
+    return canonical_sha256({"finding_shapes": sorted(finding_shapes, key=dumps)})
 
 
 def aggregate_runtime_scope(values: Iterable[str], policy: dict[str, Any]) -> str:
@@ -242,12 +298,26 @@ def are_unrelated_families(
     policy: dict[str, Any],
 ) -> bool:
     validate_fixture_policy(policy)
-    if left.family_id == right.family_id:
+    family_dimensions = policy["unrelated_family"]["all_pair_disjoint_dimensions"]
+    if not all(
+        getattr(left, dimension).isdisjoint(getattr(right, dimension))
+        for dimension in family_dimensions
+    ):
         return False
-    dimensions = policy["unrelated_family"]["disjoint_dimensions"]
+    if left.split == right.split:
+        return True
+    split_dimensions = policy["unrelated_family"]["cross_split_disjoint_dimensions"]
     return all(
-        getattr(left, dimension).isdisjoint(getattr(right, dimension)) for dimension in dimensions
+        getattr(left, dimension).isdisjoint(getattr(right, dimension))
+        for dimension in split_dimensions
     )
+
+
+def _path_shape(path: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "relationship": path["relationship"],
+        "runtime_scope": path["runtime_scope"],
+    }
 
 
 def _object(value: Any, keys: set[str], label: str) -> dict[str, Any]:

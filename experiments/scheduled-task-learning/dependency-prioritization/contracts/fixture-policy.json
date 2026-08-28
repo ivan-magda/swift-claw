@@ -100,16 +100,18 @@
     "requires_unequal_grades": true
   },
   "unrelated_family": {
-    "family_id": "different",
-    "disjoint_dimensions": [
-      "normalized_packages",
-      "record_alias_components",
-      "root_helper_nodes",
+    "all_pair_disjoint_dimensions": [
+      "project_packages",
+      "record_alias_components"
+    ],
+    "cross_split_disjoint_dimensions": [
       "graph_template_ids",
+      "graph_template_digests",
       "generator_seeds",
       "manifest_digests"
     ],
+    "graph_template_digest": "identity_free_model_visible_task_path_structure",
     "record_alias_identity": "transitive_component",
-    "manifest_digest": "canonical_semantic_json"
+    "manifest_digest": "identity_free_model_visible_decision_structure"
   }
 }

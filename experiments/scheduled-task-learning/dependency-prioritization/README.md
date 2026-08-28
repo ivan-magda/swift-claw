@@ -14,6 +14,15 @@ benchmark reads its grades directly rather than re-encoding them in Python.
 - `contracts/` fixes D5 ranking, fixture decisions, target ownership, error taxonomy, feedback, and
   coverage.
 - `schemas/` closes the normalized source, canonical task, model input/output, gold, and score shapes.
+- `corpus/projects/` contains the frozen project graphs, installed versions, reachability facts, and
+  release inventories for the 10/4/6 development, regression, and sealed split.
+- `corpus/sources/` contains normalized findings deterministically derived from those project
+  snapshots and the checked-in advisory catalogs under `sources/`.
+- `corpus/gold/` contains policy-derived actionability, remediation, queue, evidence, and injection
+  labels over canonical IDs.
+- `corpus/receipt.json` binds all 20 artifact triplets to the approved protocol and contracts, frozen
+  source catalogs, split quotas, coverage witnesses, all 190 package/alias family checks, and all 124
+  cross-split topology, decision-structure, template, and seed checks.
 - `dependency_benchmark/normalization.py` maps author-only source keys to opaque canonical IDs.
 - `dependency_benchmark/fixture_policy.py` derives actionability, remediation, evidence, ranking
   opportunities, and unrelated-family decisions from the frozen fixture contract.
@@ -34,6 +43,19 @@ From this directory:
 scripts/lint.sh
 scripts/test.sh
 ```
+
+Verify the checked-in 10/4/6 corpus and its receipt directly:
+
+```sh
+uv run python -B -c 'from pathlib import Path; from dependency_benchmark.corpus import verify_corpus; verify_corpus(Path("."))'
+```
+
+Verification is offline-only: it reads canonical checked-in JSON and frozen source snapshots; it
+does not query package registries, advisory services, or the network. Missing, extra,
+non-canonical, changed, under-covered, package/alias-overlapping, or cross-split structure-overlapping
+corpus artifacts fail verification. The authoring-only `derive_corpus_receipt` seam can produce
+candidate receipt bytes; `verify_corpus` always requires the checked-in receipt and compares it
+exactly.
 
 Run the exact conformance corpus directly:
 
@@ -63,8 +85,9 @@ an aligned but wrong actionability decision remains lesson-addressable, while a 
 cannot receive an accidental perfect score from a trailing zero-grade entry.
 
 The embedded 24-case conformance corpus tests scorer behavior and deliberately exercises independent
-target-class ownership combinations. Fixture-policy derivation has its own pure tests; the scorer
-corpus is not evidence that future 10/4/6 project fixtures follow `contracts/fixture-policy.json`.
+target-class ownership combinations. Fixture-policy derivation has its own pure tests; the separate
+checked-in 10/4/6 project corpus is rederived and verified against
+`contracts/fixture-policy.json`.
 That policy treats valid advisory fixed events as available releases and unions them with the frozen
 release inventory. It selects a pre-materialization source key by ecosystem version, origin, and source
 key; the later source-derivation layer owns parsing, version ordering, and the authoritative binding
