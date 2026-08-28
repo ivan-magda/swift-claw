@@ -2,6 +2,14 @@ import ClawCore
 import Foundation
 
 extension EvaluationController {
+  static func verifyProtectedClosureBeforeLaunch(_ freeze: EvaluationFreezeContext) throws {
+    do {
+      try EvaluationProtectedClosure.verify(freeze)
+    } catch {
+      throw EvaluationControllerError.freezeChangedBeforeLaunch
+    }
+  }
+
   struct WrittenInvocation {
     let invocationID: UUID
     let configurationSHA256: String
