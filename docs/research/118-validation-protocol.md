@@ -969,8 +969,10 @@ labels, and split assignments must therefore keep their invalidated-manifest byt
 allowlist permits changes only to:
 
 - `docs/research/118-validation-protocol.md`;
-- budget values `global_attempt_cap` (`194` to `206`), `global_responses_send_cap` (`388` to
-  `410`), `global_file_read_cap` (`194` to `205`), and the new `recovery_accounting_seed`;
+- budget values `canary_attempt_cap` (`4` to `8`), `canary_responses_send_cap` (`8` to `16`),
+  `page_attempt_cap` (`76` to `84`), `page_responses_send_cap` (`152` to `166`),
+  `global_attempt_cap` (`194` to `206`), `global_responses_send_cap` (`388` to `410`),
+  `global_file_read_cap` (`194` to `205`), and the new `recovery_accounting_seed`;
 - `experiments/scheduled-task-learning/page-change/provenance/invalidated-page-manifest-d5ae7dcef1c2.json`,
   `experiments/scheduled-task-learning/page-change/provenance/invalidation-report-d5ae7dcef1c2.json`,
   `experiments/scheduled-task-learning/page-change/provenance/invalid-batch-controller-journal-d5ae7dcef1c2.jsonl`,
@@ -1031,10 +1033,12 @@ recovery seed:
 | Page clean development | 8 | 14 | 7 | 18,609 |
 | **Total** | **12** | **22** | **11** | **28,159** |
 
-The recovery seed binds the controller-journal SHA-256, terminal-result SHA-256, recovery-ledger
-SHA-256, invalidated-manifest SHA-256, invalidation-report SHA-256, stage rows, and totals. The
-controller accepts no operator-supplied starting counts. Any missing artifact, digest mismatch,
-unpaired attempt, or arithmetic mismatch blocks D6 admission.
+The canonical accounting seed in `budget.values` contains only the two stage rows and their totals;
+the manifest's protected-artifact records bind the controller journal, terminal result, recovery
+ledger, invalidated manifest, and invalidation report by path, role, byte length, and SHA-256. The
+verifier accepts the accounting seed only after deriving the same rows and totals from those bound
+artifacts. The controller accepts no operator-supplied starting counts. Any missing artifact,
+digest mismatch, unpaired attempt, or arithmetic mismatch blocks D6 admission.
 
 The manifest fixes the run-order algorithm, stage topology, and fixture/replicate blocks. After the
 verifier computes the final external manifest SHA-256, it derives the realized run order from that
@@ -1046,14 +1050,15 @@ prompt, scorer, fixture, gold-label, and split mutations fails; and changed ledg
 digests block admission. Existing tests continue to own all unchanged protocol behavior.
 
 Every replacement D6 and later D7 manifest under version 0.5 carries the same canonical recovery-
-accounting seed in its budget category. The seed binds invalidated D6 manifest
-`d5ae7dcef1c20f4c95f22cad9d23c7c1f37409abb3d2a02349a951c7647faad8`, the owner-approved
-invalidation-report SHA-256, recovery-ledger SHA-256, source journal and terminal-result SHA-256,
-the per-stage rows above, and the cumulative totals of 12 attempts, 22 Responses sends, 11 file
-reads, and 28,159 accounted tokens. The manifest category digest and external manifest approval
-bind those values. The harness must reject a missing or mismatched seed before launch, initialize
-admission from the seed rather than operator-supplied numbers, and never lower or reset it in a
-later stage.
+accounting seed in its budget category: the per-stage rows above and the cumulative totals of 12
+attempts, 22 Responses sends, 11 file reads, and 28,159 accounted tokens. The same budget category
+contains the protected-artifact records whose exact hashes bind the invalidated D6 manifest
+`d5ae7dcef1c20f4c95f22cad9d23c7c1f37409abb3d2a02349a951c7647faad8`, owner-approved
+invalidation report, recovery ledger, source journal, and terminal result. The category digest and
+external manifest approval bind both parts without duplicating provenance hashes in the
+runtime's count contract. The harness must reject a missing or mismatched seed or artifact before
+launch, initialize admission from the seed rather than operator-supplied numbers, and never lower
+or reset it in a later stage.
 
 After the replacement page run ends, the controller writes an immutable canonical cumulative-
 budget checkpoint derived only from the approved seed and its durable page journal and result. It
