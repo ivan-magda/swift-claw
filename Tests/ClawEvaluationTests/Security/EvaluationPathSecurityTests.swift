@@ -99,6 +99,26 @@ extension EvaluationFilesystemSecurityTests {
         try EvaluationPathSecurity.ensurePrivateDirectory(at: aliasLink)
       }
     }
+
+    @Test func containmentUsesOneIdentityForAnExistingTemporaryRootAndMissingChild() throws {
+      // given
+      let directoryName = "swift-claw-evaluation-path-\(UUID().uuidString)"
+      let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+        .appendingPathComponent(directoryName, isDirectory: true)
+      let child = root.appendingPathComponent("results/output.json")
+      try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+      defer { try? FileManager.default.removeItem(at: root) }
+
+      // when
+      let isStrictlyContained = EvaluationPathSecurity.isStrictlyContained(child, under: root)
+      let isContainedOrEqual = EvaluationPathSecurity.isContainedOrEqual(child, under: root)
+      let relativePath = EvaluationPathSecurity.relativePath(of: child, under: root)
+
+      // then
+      #expect(isStrictlyContained)
+      #expect(isContainedOrEqual)
+      #expect(relativePath == "results/output.json")
+    }
   #endif
 
   @Test func workerConfigurationSnapshotRejectsDotComponentsBeforeNormalization() throws {

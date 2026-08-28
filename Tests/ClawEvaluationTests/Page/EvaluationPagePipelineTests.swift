@@ -235,6 +235,8 @@ import Testing
     defer { try? FileManager.default.removeItem(at: root) }
     let configured = try makeEvaluationConfiguration(root: root, attemptID: "record-safety")
     let frozen = try makeEvaluationFreeze(root: root, configurations: [configured.configuration])
+    let manifestURL = root.appendingPathComponent("config/manifest.json")
+    try Data("{}".utf8).write(to: manifestURL)
     let workspace = try EvaluationWorkspaceMaterializer.reset(
       configuration: configured.configuration
     )
@@ -330,10 +332,14 @@ import Testing
     #expect(toolEvents[1]["name"] as? String == EvaluationToolContract.requiredToolName)
     #expect(toolEvents[1]["path"] is NSNull)
     let manifestFlag = try #require(invocation.arguments.firstIndex(of: "--manifest"))
-    #expect(
-      invocation.arguments[manifestFlag + 1]
-        == root.appendingPathComponent("config/manifest.json").standardizedFileURL.path
+    let manifestPath = invocation.arguments[manifestFlag + 1]
+    let canonicalManifestPath = try #require(
+      WorkspacePathContainment.canonicalPath(manifestPath)
     )
-    #expect(invocation.arguments[manifestFlag + 1].hasPrefix("/"))
+    let expectedManifestPath = try #require(
+      WorkspacePathContainment.canonicalPath(manifestURL.path)
+    )
+    #expect(canonicalManifestPath == expectedManifestPath)
+    #expect(manifestPath.hasPrefix("/"))
   }
 }
