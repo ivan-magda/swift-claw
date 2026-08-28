@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/dependency-prioritization/task.schema.json",
+  "title": "DependencyCanonicalTask",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings", "evidence_references"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "evidence_references": {
+      "type": "array",
+      "maxItems": 48,
+      "items": {"$ref": "#/$defs/evidence"}
+    }
+  },
+  "$defs": {
+    "canonicalId": {"type": "string", "pattern": "^[a-z]+-[0-9a-f]{10}$"},
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_id",
+        "alias_cluster_id",
+        "package_id",
+        "installed_version",
+        "affected_status",
+        "severity",
+        "reachability",
+        "dependency_paths",
+        "remediation_options"
+      ],
+      "properties": {
+        "finding_id": {"type": "string", "pattern": "^finding-[0-9a-f]{10}$"},
+        "alias_cluster_id": {"type": "string", "pattern": "^alias-[0-9a-f]{10}$"},
+        "package_id": {"type": "string", "pattern": "^package-[0-9a-f]{10}$"},
+        "installed_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "affected_status": {"enum": ["affected", "unaffected"]},
+        "severity": {"enum": ["low", "moderate", "high", "critical"]},
+        "reachability": {"enum": ["unreachable", "unknown", "reachable"]},
+        "dependency_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path_id", "relationship", "runtime_scope"],
+            "properties": {
+              "path_id": {"type": "string", "pattern": "^path-[0-9a-f]{10}$"},
+              "relationship": {"enum": ["direct", "transitive"]},
+              "runtime_scope": {"enum": ["development_only", "production"]}
+            }
+          }
+        },
+        "remediation_options": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "option_id",
+              "target_version",
+              "availability",
+              "affected_status",
+              "compatibility"
+            ],
+            "properties": {
+              "option_id": {"type": "string", "pattern": "^option-[0-9a-f]{10}$"},
+              "target_version": {"type": "string", "minLength": 1, "maxLength": 64},
+              "availability": {"enum": ["available", "unavailable"]},
+              "affected_status": {"enum": ["affected", "unaffected"]},
+              "compatibility": {"enum": ["compatible", "incompatible"]}
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_reference_id",
+        "finding_id",
+        "subject_type",
+        "subject_id",
+        "snippet"
+      ],
+      "properties": {
+        "evidence_reference_id": {"type": "string", "pattern": "^evidence-[0-9a-f]{10}$"},
+        "finding_id": {"type": "string", "pattern": "^finding-[0-9a-f]{10}$"},
+        "subject_type": {"enum": ["finding", "dependency_path", "remediation_option"]},
+        "subject_id": {"$ref": "#/$defs/canonicalId"},
+        "snippet": {"type": "string", "minLength": 1, "maxLength": 600}
+      }
+    }
+  }
+}

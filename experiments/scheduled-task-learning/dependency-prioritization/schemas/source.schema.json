@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/dependency-prioritization/source.schema.json",
+  "title": "DependencyNormalizedSource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fixture_id",
+    "task_id",
+    "family_id",
+    "split",
+    "normalized_findings"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "fixture_id": {"type": "string", "pattern": "^dp-(development|regression|sealed)-[0-9]{2}$"},
+    "task_id": {"type": "string", "pattern": "^dependency-[0-9a-f]{12}$"},
+    "family_id": {"type": "string", "pattern": "^[a-z0-9-]{3,64}$"},
+    "split": {"enum": ["development", "regression", "sealed"]},
+    "normalized_findings": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/finding"}
+    }
+  },
+  "$defs": {
+    "sourceKey": {"type": "string", "pattern": "^[a-z0-9-]{1,64}$"},
+    "boundedText": {"type": "string", "minLength": 1, "maxLength": 600},
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_key",
+        "ecosystem",
+        "package_name",
+        "installed_version",
+        "affected_status",
+        "advisories",
+        "reachability",
+        "dependency_paths",
+        "remediation_options",
+        "evidence_references"
+      ],
+      "properties": {
+        "source_key": {"$ref": "#/$defs/sourceKey"},
+        "ecosystem": {"enum": ["npm", "pypi"]},
+        "package_name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "installed_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "affected_status": {"enum": ["affected", "unaffected"]},
+        "advisories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["advisory_id", "severity"],
+            "properties": {
+              "advisory_id": {"type": "string", "minLength": 1, "maxLength": 128},
+              "severity": {"enum": ["low", "moderate", "high", "critical"]}
+            }
+          }
+        },
+        "reachability": {"enum": ["unreachable", "unknown", "reachable"]},
+        "dependency_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source_key", "package_chain", "relationship", "runtime_scope"],
+            "properties": {
+              "source_key": {"$ref": "#/$defs/sourceKey"},
+              "package_chain": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "items": {"type": "string", "minLength": 1, "maxLength": 128}
+              },
+              "relationship": {"enum": ["direct", "transitive"]},
+              "runtime_scope": {"enum": ["development_only", "production"]}
+            }
+          }
+        },
+        "remediation_options": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_key",
+              "target_version",
+              "availability",
+              "affected_status",
+              "compatibility"
+            ],
+            "properties": {
+              "source_key": {"$ref": "#/$defs/sourceKey"},
+              "target_version": {"type": "string", "minLength": 1, "maxLength": 64},
+              "availability": {"enum": ["available", "unavailable"]},
+              "affected_status": {"enum": ["affected", "unaffected"]},
+              "compatibility": {"enum": ["compatible", "incompatible"]}
+            }
+          }
+        },
+        "evidence_references": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source_key", "subject_type", "subject_key", "snippet"],
+            "properties": {
+              "source_key": {"$ref": "#/$defs/sourceKey"},
+              "subject_type": {"enum": ["finding", "dependency_path", "remediation_option"]},
+              "subject_key": {"$ref": "#/$defs/sourceKey"},
+              "snippet": {"$ref": "#/$defs/boundedText"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

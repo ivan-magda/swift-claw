@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/dependency-prioritization/input.schema.json",
+  "title": "DependencyTaskInput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "task", "active_lessons"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string", "pattern": "^dependency-[0-9a-f]{12}$"},
+    "task": {"$ref": "task.schema.json"},
+    "active_lessons": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "lesson_set_id", "lessons"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "lesson_set_id": {"type": "string", "pattern": "^[a-z0-9-]{1,64}$"},
+        "lessons": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["lesson_id", "target_class", "text"],
+            "properties": {
+              "lesson_id": {"type": "string", "pattern": "^[a-z0-9-]{1,64}$"},
+              "target_class": {
+                "enum": [
+                  "policy.runtime_scope",
+                  "policy.reachability",
+                  "policy.remediation",
+                  "policy.abstention",
+                  "policy.ranking"
+                ]
+              },
+              "text": {"type": "string", "minLength": 1, "maxLength": 400}
+            }
+          }
+        }
+      }
+    }
+  }
+}
