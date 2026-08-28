@@ -10,6 +10,60 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EvaluationProtocolContractTests {
+  @Test(
+    arguments: [
+      (EvaluationExperimentKind.pageChange, "D6", "D7"),
+      (.dependencyPrioritization, "D7", "D6"),
+    ]
+  )
+  func experimentProfilesBindOnlyTheirOwnApprovalDecision(
+    kind: EvaluationExperimentKind,
+    decision: String,
+    mismatchedDecision: String
+  ) {
+    // given
+    let profile = kind.profile
+    let otherProfile =
+      kind == .pageChange
+      ? EvaluationExperimentProfile.dependencyPrioritization
+      : .pageChange
+
+    // when
+    let matching = EvaluationExperimentProfile.matching(
+      decision: decision,
+      experiment: kind.rawValue
+    )
+    let mismatched = EvaluationExperimentProfile.matching(
+      decision: mismatchedDecision,
+      experiment: kind.rawValue
+    )
+
+    // then
+    #expect(profile.approvalDecision == decision)
+    #expect(matching == profile)
+    #expect(mismatched == nil)
+    #expect(
+      profile.matches(
+        decision: otherProfile.approvalDecision,
+        experiment: otherProfile.kind.rawValue
+      ) == false
+    )
+  }
+
+  @Test func unknownExperimentCannotSelectAProfile() {
+    // given
+    let unknownExperiment = "unknown-experiment"
+
+    // when
+    let profile = EvaluationExperimentProfile.matching(
+      decision: EvaluationExperimentProfile.pageChange.approvalDecision,
+      experiment: unknownExperiment
+    )
+
+    // then
+    #expect(profile == nil)
+  }
+
   @Test func terminalFailureMappingPreservesEveryProtocolClassAndHarnessFallback() {
     // given
     let cases: [(error: any Error, expected: EvaluationPageTerminalFailure)] = [
@@ -291,12 +345,18 @@ import Testing
       sha256: String(repeating: "a", count: 64)
     )
     let valid = EvaluationFreezeManifest(
+      schemaVersion: PageEvaluationContract.schemaVersion,
+      decision: PageEvaluationContract.profile.approvalDecision,
+      experiment: PageEvaluationContract.profile.kind.rawValue,
       categories: ["budget": validCategory],
       protectedArtifacts: []
     )
     var driftedValues = try #require(PageEvaluationContract.budgetManifestValues.objectValue)
     driftedValues["page_attempt_cap"] = .integer(77)
     let drifted = EvaluationFreezeManifest(
+      schemaVersion: PageEvaluationContract.schemaVersion,
+      decision: PageEvaluationContract.profile.approvalDecision,
+      experiment: PageEvaluationContract.profile.kind.rawValue,
       categories: [
         "budget": EvaluationManifestCategory(
           artifacts: [],
@@ -308,9 +368,9 @@ import Testing
     )
 
     // when
-    try valid.validateBudgetContract()
+    try valid.validateBudgetContract(for: .pageChange)
     let driftError = #expect(throws: EvaluationFreezeError.budgetContractMismatch) {
-      try drifted.validateBudgetContract()
+      try drifted.validateBudgetContract(for: .pageChange)
     }
 
     // then — a decoder that drops budget values would accept the drifted manifest.

@@ -5,6 +5,48 @@ import Testing
 @testable import ClawEvaluation
 
 extension EvaluationFilesystemSecurityTests {
+  @Test func liveFreezeVerifierRejectsACrossDecisionManifestBeforeRuntimeOrPython() async throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = EvaluationFreezeManifest(
+      schemaVersion: PageEvaluationContract.schemaVersion,
+      decision: EvaluationExperimentProfile.dependencyPrioritization.approvalDecision,
+      experiment: EvaluationExperimentKind.pageChange.rawValue,
+      categories: [
+        "budget": EvaluationManifestCategory(
+          artifacts: [],
+          values: PageEvaluationContract.budgetManifestValues,
+          sha256: String(repeating: "a", count: 64)
+        )
+      ],
+      protectedArtifacts: []
+    )
+    let manifestURL = root.appendingPathComponent("manifest.json")
+    let manifestData = try EvaluationCanonicalJSON.data(encoding: manifest)
+    try manifestData.write(to: manifestURL)
+    let inputs = EvaluationFreezeInputs(
+      repositoryRoot: root.path,
+      manifestPath: manifestURL.path,
+      manifestSHA256: SHA256Digest.hex(manifestData),
+      approvalRecordPath: root.appendingPathComponent("approval.json").path,
+      approvalBodyPath: root.appendingPathComponent("approval.txt").path,
+      runtimeConfigurationPath: root.appendingPathComponent("runtime.json").path,
+      receiptPath: root.appendingPathComponent("receipt.json").path
+    )
+
+    // when
+    let error = await #expect(throws: EvaluationFreezeError.experimentProfileMismatch) {
+      _ = try await EvaluationLiveFreezeVerifier(
+        profile: .pageChange,
+        runningExecutablePath: { root.appendingPathComponent("claw-eval").path }
+      ).verifyLocal(inputs)
+    }
+
+    // then
+    #expect(error != nil)
+  }
+
   @Test func liveFreezeVerifierRejectsEveryRawPathBeforeNormalization() async throws {
     // given
     let root = try makeEvaluationTestRoot()
@@ -108,6 +150,9 @@ extension EvaluationFilesystemSecurityTests {
       sha256: SHA256Digest.hex(executableData)
     )
     let manifest = EvaluationFreezeManifest(
+      schemaVersion: PageEvaluationContract.schemaVersion,
+      decision: PageEvaluationContract.profile.approvalDecision,
+      experiment: PageEvaluationContract.profile.kind.rawValue,
       categories: [
         "configuration": EvaluationManifestCategory(
           artifacts: [runtimeRecord] + moduleRecords,

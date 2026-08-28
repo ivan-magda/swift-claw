@@ -163,6 +163,9 @@ func makeEvaluationFreeze(
     sha256: digest
   )
   let manifest = EvaluationFreezeManifest(
+    schemaVersion: PageEvaluationContract.schemaVersion,
+    decision: PageEvaluationContract.profile.approvalDecision,
+    experiment: PageEvaluationContract.profile.kind.rawValue,
     categories: categories,
     protectedArtifacts: Array(
       Dictionary(

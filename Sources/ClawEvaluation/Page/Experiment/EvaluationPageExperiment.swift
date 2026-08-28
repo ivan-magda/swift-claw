@@ -10,7 +10,7 @@ package struct EvaluationPageExperiment: Sendable {
   let controller: EvaluationController
 
   package init() {
-    let verifier = EvaluationLiveFreezeVerifier()
+    let verifier = EvaluationLiveFreezeVerifier(profile: PageEvaluationContract.profile)
     freezeVerifier = verifier
     artifacts = EvaluationProtectedArtifactRunner()
     controller = EvaluationController(freezeVerifier: verifier)
@@ -35,8 +35,7 @@ package struct EvaluationPageExperiment: Sendable {
 
     guard
       freeze.manifest.schemaVersion == PageEvaluationContract.schemaVersion,
-      freeze.manifest.decision == "D6",
-      freeze.manifest.experiment == "page-change"
+      freeze.matches(PageEvaluationContract.profile)
     else {
       throw EvaluationPagePipelineError.invalidManifestContract
     }

@@ -91,8 +91,15 @@ struct EvaluationFreezeManifest: Codable, Sendable, Equatable {
     protectedArtifacts.first { $0.path == relativePath }
   }
 
-  func validateBudgetContract() throws {
-    guard categories["budget"]?.values == PageEvaluationContract.budgetManifestValues else {
+  func validateBudgetContract(for profile: EvaluationExperimentProfile) throws {
+    let expectedValues: JSONValue
+    switch profile.kind {
+    case .pageChange:
+      expectedValues = PageEvaluationContract.budgetManifestValues
+    case .dependencyPrioritization:
+      throw EvaluationFreezeError.unsupportedExperiment(profile.kind.rawValue)
+    }
+    guard categories["budget"]?.values == expectedValues else {
       throw EvaluationFreezeError.budgetContractMismatch
     }
   }
@@ -240,6 +247,11 @@ struct EvaluationFreezeContext: Sendable, Equatable {
       && receipt.comment == other.receipt.comment
       && receipt.executable == other.receipt.executable
   }
+
+  package func matches(_ profile: EvaluationExperimentProfile) -> Bool {
+    profile.matches(decision: manifest.decision, experiment: manifest.experiment)
+      && profile.matches(decision: receipt.decision, experiment: receipt.experiment)
+  }
 }
 
 protocol EvaluationFreezeVerifying: Sendable {
@@ -254,11 +266,14 @@ extension EvaluationFreezeVerifying {
 }
 
 struct EvaluationLiveFreezeVerifier: EvaluationFreezeVerifying {
+  private let profile: EvaluationExperimentProfile
   private let runningExecutablePath: @Sendable () -> String
 
   package init(
+    profile: EvaluationExperimentProfile = .pageChange,
     runningExecutablePath: @escaping @Sendable () -> String = { CommandLine.arguments[0] }
   ) {
+    self.profile = profile
     self.runningExecutablePath = runningExecutablePath
   }
 
@@ -274,6 +289,7 @@ struct EvaluationLiveFreezeVerifier: EvaluationFreezeVerifying {
     try Self.validate(
       receipt: receipt,
       inputs: inputs,
+      profile: profile,
       verifierModules: prepared.verifierModules,
       executable: prepared.executableRecord
     )
@@ -301,6 +317,7 @@ struct EvaluationLiveFreezeVerifier: EvaluationFreezeVerifying {
     try Self.validate(
       receipt: receipt,
       inputs: inputs,
+      profile: profile,
       verifierModules: prepared.verifierModules,
       executable: prepared.executableRecord
     )
@@ -419,7 +436,10 @@ private extension EvaluationLiveFreezeVerifier {
       throw EvaluationFreezeError.manifestDigestMismatch
     }
     let manifest = try JSONDecoder().decode(EvaluationFreezeManifest.self, from: manifestData)
-    try manifest.validateBudgetContract()
+    guard profile.matches(decision: manifest.decision, experiment: manifest.experiment) else {
+      throw EvaluationFreezeError.experimentProfileMismatch
+    }
+    try manifest.validateBudgetContract(for: profile)
     let runtimeURL = inputURLs[4].standardizedFileURL
     try EvaluationPathSecurity.requireRegularSingleLinkFile(at: runtimeURL)
     let runtime = try EvaluationRuntimeConfiguration.load(from: runtimeURL)
@@ -516,6 +536,7 @@ private extension EvaluationLiveFreezeVerifier {
   static func validate(
     receipt: EvaluationFreezeReceipt,
     inputs: EvaluationFreezeInputs,
+    profile: EvaluationExperimentProfile,
     verifierModules: [EvaluationManifestArtifact],
     executable: EvaluationManifestArtifact
   ) throws {
@@ -525,8 +546,7 @@ private extension EvaluationLiveFreezeVerifier {
     guard
       receipt.schemaVersion == 1,
       receipt.status == "verified",
-      receipt.decision == "D6",
-      receipt.experiment == "page-change",
+      profile.matches(decision: receipt.decision, experiment: receipt.experiment),
       receipt.manifest.sha256 == inputs.manifestSHA256,
       receipt.verifier.path == verifier.path,
       receipt.verifier.bytes == verifier.bytes,
@@ -717,6 +737,8 @@ private extension EvaluationLiveFreezeVerifier {
 
 enum EvaluationFreezeError: Error, Sendable, Equatable {
   case manifestDigestMismatch
+  case experimentProfileMismatch
+  case unsupportedExperiment(String)
   case budgetContractMismatch
   case missingProtectedBinding
   case runtimeConfigurationPathMismatch
