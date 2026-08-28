@@ -10,6 +10,7 @@ from pathlib import Path
 from benchmark_core.canonical import dumps, load_object
 from dependency_benchmark.advisory_records import (
     AdvisorySourceError,
+    fixture_record_ids,
     verify_frozen_source_catalog,
 )
 
@@ -113,7 +114,10 @@ class DependencySourceIntegrityTests(unittest.TestCase):
 
         # When
         actual_allocation = {
-            fixture["fixture_id"]: fixture["record_ids"] for fixture in index["fixtures"]
+            fixture["fixture_id"]: list(
+                fixture_record_ids(ROOT / "sources", fixture["fixture_id"], fixture["split"])
+            )
+            for fixture in index["fixtures"]
         }
         allocation_counts = Counter(
             record_id for record_ids in actual_allocation.values() for record_id in record_ids

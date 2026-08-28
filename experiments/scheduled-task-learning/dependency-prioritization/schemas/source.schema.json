@@ -58,7 +58,7 @@
             "required": ["advisory_id", "severity"],
             "properties": {
               "advisory_id": {"type": "string", "minLength": 1, "maxLength": 128},
-              "severity": {"enum": ["low", "moderate", "high", "critical"]}
+              "severity": {"enum": ["low", "moderate", "high", "critical", null]}
             }
           }
         },
