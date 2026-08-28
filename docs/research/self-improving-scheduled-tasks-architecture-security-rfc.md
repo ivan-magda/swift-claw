@@ -1,208 +1,138 @@
-# RFC: Architecture and security boundaries for self-improving scheduled tasks
+# RFC: Self-improving scheduled tasks — architecture and security boundaries
 
 | | |
 |---|---|
-| **Status** | Proposed — M1 / Issue #167 |
-| **Date** | 2026-08-28 |
-| **Parent** | #115 |
-| **Evidence baseline** | #118, frozen Protocol 0.6 |
-| **Production scope** | Generic job-scoped learning for every scheduled task swift-claw can execute |
-| **First deterministic adapter / benchmark** | Scheduled page-change monitoring |
+| Status | Proposed — M1 / #167 |
+| Date | 2026-08-28 |
+| Parent | #115 |
+| Evidence baseline | #118, frozen Protocol 0.6 |
+| Production scope | Generic job-scoped learning for every executable scheduled task |
+| First deterministic adapter | Scheduled page-change monitoring |
 
 ## 1. Decision
 
-Every created scheduled run participates in one generic job-scoped learning control plane. Existing `run_id` remains the only task-attempt identity. The fire transaction binds that run to its exact logical occurrence, fire kind, job-definition digest, execution-surface version and effective lesson-set digest. The task then executes through the ordinary proactive `TurnRunner` / `AgentRuntime` path with existing tools, policy, approvals, budgets and delivery.
+Every created scheduled run uses one generic job-scoped learning control plane. Existing `run_id` remains the only task-attempt identity. The fire transaction binds it to the exact occurrence, fire kind, job-definition digest, execution surface and effective lesson-set digest; execution remains the ordinary proactive `TurnRunner`/`AgentRuntime` path with existing tools, policy, approvals, budgets and delivery.
 
-After terminal execution, the system records an immutable terminal receipt and seals a bounded evidence projection after late usage/approval observations settle. A deterministic eligibility classifier runs before any learning LLM call. Eligible evidence may enter a fresh, tool-free, procedurally blind evaluator; reflection is a separate fresh tool-free call. Reflection may propose only an immutable complete replacement lesson set.
+Every terminal transition writes an immutable terminal receipt. After late usage/approval observations settle, an idempotent worker seals a bounded evidence projection or a technical exclusion. A deterministic eligibility classifier runs before any learning LLM call. Eligible evidence may enter a fresh, tool-free, procedurally blind evaluator. Reflection is a separate fresh, tool-free call and may only propose an immutable complete replacement lesson set.
 
-Owner feedback is durable, authenticated, typed, append-only and bound to an exact subject/digest. Feedback is evidence: it never directly changes the stable lesson pointer or expands task authority.
+Owner feedback is durable, authenticated, typed, append-only and bound to an exact subject/digest. It is evidence, never direct activation.
 
-Each job has one stable lesson-set pointer and at most one bounded trial override. Trials cannot stack. A created run consumes a trial assignment atomically; skips and CAS losers consume none. Promotion compare-and-swaps the stable pointer from the recorded base digest to the candidate digest. Fallback closes the trial and leaves the stable pointer untouched.
+Each job has one stable lesson-set pointer and at most one bounded trial override. Trials cannot stack. Only a created run consumes an assignment. Promotion CASes the stable pointer from the recorded base digest to the candidate digest; fallback closes the trial and leaves stable untouched.
 
-**Capability guarantee:** if swift-claw can execute a scheduled job, this architecture can capture attempts, classify learning eligibility, accept owner feedback, evaluate eligible evidence, derive job-scoped lesson candidates, trial them on future occurrences, and promote or fall back without expanding the job's authority.
+**Capability guarantee:** any scheduled task swift-claw can execute can participate in capture → eligibility → evaluation → feedback → reflection → candidate → bounded trial → promote/fallback. This is not a guarantee that subjective tasks are objectively verifiable or will improve. Natural runs/LLM evaluation are heuristic; owner feedback establishes owner intent; only a deterministic adapter over a named frozen oracle/dataset may issue scoped `deterministically_verified` evidence.
 
-This does **not** guarantee objective verification or improvement for every task. Natural runs and LLM evaluation are observational/heuristic. Owner feedback establishes owner intent for its bound subject. Only a deterministic adapter over a named frozen dataset/oracle may issue scoped `deterministically_verified` evidence.
+No unresolved P0 architecture/security blocker remains. Exact policy parameters are deferred to M2 (§14).
 
-No unresolved P0 architecture or security blocker remains. Exact policy parameters are deferred to M2 (§15).
+## 2. Invariants
 
-## 2. Non-negotiable boundaries
-
-1. `runs.id` / `run_id` is canonical; no second attempt entity.
+1. `run_id` is canonical; no parallel attempt entity.
 2. Generic core contains no page/HTML/selector/region/snapshot types.
 3. Scheduled execution remains an ordinary proactive agent run.
-4. Lessons are data, never authority: they cannot change job prompt, schedule, budgets, model route, tool catalog, risk tiers, approvals, recipients, paths, commands or destinations.
-5. Effective lessons use a trusted harness wrapper around bounded **untrusted payload**.
-6. A non-empty lesson set establishes taint before sensitive-memory selection, first provider call and first tool-policy decision.
-7. Lessons never enter global memory, workspace memory, conversation history or FTS.
-8. Evaluation/reflection use fresh contexts with no tools, workspace memory, session history, approval capability or provider replay state.
-9. Evaluator input is blind to lesson text/IDs, active/candidate digest, trial condition, prior scores, promotion state and expected improvement.
-10. Deterministic eligibility runs before learning LLM spend.
-11. Feedback cannot activate lessons or expand authority.
-12. One stable pointer + at most one trial; no stacking.
-13. Positive eligible evidence is required for promotion. Silence, evaluator failure and ineligible runs are not positive evidence.
-14. Database claims/effects are idempotent; external LLM inference is never claimed exactly-once.
-15. Derived learning data follows source provenance through export, retention, deletion and purge.
+4. Lessons are data, never authority. They cannot change job prompt, schedule, budgets, model route, tool catalog/risk, approvals, recipients, paths, commands or destinations.
+5. Lessons use a trusted harness wrapper around bounded untrusted payload and never enter global/workspace memory, conversation history or FTS.
+6. Non-empty lessons establish taint before sensitive-memory selection, first provider call and first tool-policy decision.
+7. Evaluation/reflection get fresh contexts with no tools, workspace memory, session history, approvals or provider replay state.
+8. Evaluator is blind to lesson text/IDs, stable/candidate digests, trial condition, prior scores, promotion state and expected improvement.
+9. Deterministic eligibility precedes learning LLM spend.
+10. Feedback cannot activate lessons or expand authority.
+11. One stable pointer + at most one trial; no stacking.
+12. Promotion needs positive eligible evidence. Silence, evaluator failure and ineligible runs never count positive.
+13. DB claims/effects are idempotent; external LLM inference is not exactly-once.
+14. Export/retention/purge cover derived learning data; deleting private source data cannot leave an active lesson encoding it.
 
 ## 3. Existing-seam map
 
-### Scheduler / fire
+**Scheduler/fire.** `ScheduledJobStore.claimAndFire` already fuses occurrence compare-and-advance with session/trigger creation, `PENDING` run and audit; `fireNow` reuses the insert set without schedule advance; overlap prevents a second live job-session run. Extend the successful fire transaction with `learning_run_binding(run_id, job_id, occurrence, fire_kind, job_definition_digest, execution_surface_version, effective_lesson_set_id/digest, stable_base_digest, trial_id/generation?)`. Resolve trial expiry first; consume one assignment only after overlap passes and `run_id` is created. Misfire, overlap skip and CAS loser consume none.
 
-`ScheduledJobStore.claimAndFire` already fuses occurrence compare-and-advance with session/trigger creation, `PENDING` run creation and audit. `fireNow` reuses the same insert set without schedule advance; the overlap guard prevents a second live run on the job session.
+**Run persistence.** `RunStore` owns pickup, completion/degradation, cancel/supersede, approval suspension/resume and boot reconciliation. Extend every legal terminal transition (`DONE/FAILED/CANCELLED/SUPERSEDED`, including boot reconciliation) to write one `learning_terminal_receipt` in the same SQLite transaction. Seal evidence later unless a normal `DONE` transaction already has all settled facts.
 
-**Extension:** the same successful fire transaction writes one immutable `learning_run_binding` keyed by `run_id`: `job_id`, logical occurrence, fire kind, job-definition digest, execution-surface/schema version, effective lesson-set ID/digest, stable base digest and optional trial ID/generation. It resolves trial expiry before selection and consumes one trial assignment only after the existing overlap guard permits run creation. Misfire, overlap skip and CAS loser consume none.
+**Context/taint.** `TurnRunner` loads bounded context/budgets and calls `AgentRuntime` with taint/private-data state. Add a job-scoped lesson section whose wrapper is trusted but payload untrusted. Non-empty lessons set initial taint before context memory selection.
 
-### Run persistence
+**Policy/approvals.** Existing canonical-args, policy-version, owner and approval gates stay authoritative. Candidate text scanning is defense in depth. Lessons never become policy operands and cannot weaken approval, exfiltration, SSRF or proactive-budget policy.
 
-`RunStore` owns pickup, completion/degradation, cancellation/supersession, approval suspension/resume and boot reconciliation. Completed turns already fuse assistant output, `DONE`, usage and outbox.
+**Usage/budgets.** Learning calls are durable runless operations, not fake agent runs. Their provider usage counts toward global and proactive/learning budgets. Owner delivery never waits for learning calls.
 
-**Extension:** every legal terminal transition (`DONE`, `FAILED`, `CANCELLED`, `SUPERSEDED`, including reconciliation) writes exactly one immutable `learning_terminal_receipt` in the same SQLite transaction as the state change. A settlement worker later seals evidence or a technical exclusion. A normal `DONE` may seal immediately only when all required facts are already settled; cancellation/supersession and ambiguous late-write paths may not assume this.
-
-### Context / taint
-
-`TurnRunner` loads a bounded snapshot, budgets and `ContextBuilder` output before calling `AgentRuntime.runTurn` with taint/private-data state.
-
-**Extension:** effective lessons are a separate job-scoped context section. The wrapper is harness-controlled; lesson text is bounded untrusted data. Non-empty lessons set initial taint before memory selection, so high-sensitivity memory and tool/exfil policy see the conservative state from the beginning.
-
-### Policy / approvals
-
-Existing canonical-argument, policy-version, owner-binding and approval gates remain authoritative. Candidate text validation is defense in depth only. Lesson text never becomes a policy operand and cannot bypass or weaken approval, exfiltration, SSRF or proactive-budget policy.
-
-### Usage / budget
-
-`UsageStore` already supports run-linked and runless usage and global/proactive totals.
-
-**Extension:** evaluation/reflection are durable **runless learning operations**, not fake agent runs. Their usage counts toward global and proactive/learning budgets. Owner delivery never waits for learning calls.
-
-### Telegram feedback
-
-The existing approval callback path demonstrates the reusable security pattern: atomically claim update, numeric-ID allowlist, strict namespace parse, random nonce lookup, exact owner binding, CAS and redacted audit.
-
-**Extension:** learning feedback uses its own `fb:` namespace, feedback target/event domain and callback handler. It does not reuse tool-approval rows or suspend a run. Native reactions and reply-based corrections may later adapt into the same event type.
+**Telegram feedback.** Reuse the security pattern of approval callbacks (claim update, numeric allowlist, strict namespace, random nonce, owner binding, CAS, redacted audit), but use separate `fb:` targets/events. Feedback never reuses tool approvals or `AWAITING_APPROVAL`.
 
 ## 4. Architecture
 
 ```text
 SchedulerService
-  └─ fire transaction
-       ├─ resolve stable/trial lessons
-       ├─ create ordinary run_id
-       ├─ pin occurrence + digests
-       └─ consume trial assignment (if any)
-             │
-             v
-TurnEnqueuer → TurnRunner → AgentRuntime → existing policy/tools/outbox
-             │
-             └─ terminal transaction → terminal receipt
+  → fire txn: resolve lessons → create ordinary run_id → pin digests → consume trial assignment
+  → TurnEnqueuer → TurnRunner → AgentRuntime → existing policy/tools/outbox
+                                      → terminal txn + terminal receipt
 
-LearningCoordinator (async; never blocks owner delivery)
-  ├─ EvidenceSealer → sealed evidence | technical exclusion
-  ├─ EligibilityClassifier (deterministic)
-  ├─ Evaluator (fresh, tool-free, blind)
-  ├─ FeedbackStore + fb: Telegram adapter
-  ├─ Reflector (fresh, tool-free)
-  ├─ CandidateAdmissionPolicy (deterministic)
-  └─ TrialController → trial → promote CAS | fallback
+LearningCoordinator (async, post-delivery)
+  → EvidenceSealer → sealed evidence | exclusion
+  → EligibilityClassifier (deterministic)
+  → Evaluator (fresh/tool-free/blind)
+  → durable owner feedback
+  → Reflector (fresh/tool-free)
+  → CandidateAdmissionPolicy
+  → TrialController → promote CAS | fallback
 
-LearningEvaluatorAdapter (optional)
-  └─ page-change first: frozen inputs + deterministic scorer + fixtures
+Optional LearningEvaluatorAdapter
+  → page-change first: frozen inputs + deterministic scorer + regression fixtures
 ```
 
-The learning subsystem sits beside scheduler/persistence. `AgentRuntime` only consumes a pinned lesson payload and produces ordinary run facts; it does not own evaluation, reflection, trial or promotion.
+Learning sits beside scheduler/persistence. `AgentRuntime` consumes pinned lessons and produces ordinary run facts; it does not own evaluation, reflection, trial or promotion.
 
 ## 5. Generic data model
 
-Conceptual names are contracts, not M1 migrations.
+Conceptual contracts; migrations/Swift names are implementation work.
 
-- **`learning_job_state`** — `job_id` PK, stable lesson-set ID/digest, nullable open trial ID, monotonic generation, timestamps. The stable pointer is the only production activation pointer.
-- **`learning_lesson_sets`** — immutable complete replacement sets: job, digest, bounded ordered payload, base digest, source reflection/owner edit, schema version, timestamps. No in-place edit.
-- **`learning_run_bindings`** — one per created scheduled `run_id`: job/occurrence/fire-kind, job-definition digest, execution-surface/schema versions, effective lesson-set ID/digest, stable base digest, optional trial/generation.
-- **`learning_terminal_receipts`** — one immutable row per terminal scheduled run: run ID, winning terminal state/classification facts, timestamp, schema version/digest.
-- **`learning_evidence`** — one terminal result per binding: sealed projection or typed technical exclusion. Projection includes run/job/occurrence bindings, digests, terminal classification, bounded final output or digest, bounded tool facts (name/status/policy decision/result size/trust flags), actual model route, primary-run usage references, versions, optional adapter facts, evidence digest/timestamps. It excludes raw tool args, secrets, private raw observations, provider replay state and audit projections.
-- **`learning_operations`** — durable evaluation/reflection operation ID, kind, source evidence, phase/status, model route, schema version, attempts, usage/cost refs, timestamps. Status includes `interrupted_unknown`.
-- **`learning_evaluations`** — immutable evidence binding, rubric/adapter versions, closed result (`no_issue | reusable_issue | transient_issue | uncertain`), bounded findings/reasons, digest/timestamp.
-- **`learning_feedback_targets`** — random one-time nonce, authenticated owner ID, exact subject type/id/digest, expiry/consumed state.
-- **`learning_feedback_events`** — append-only owner ID, job/run/output identity, optional evaluation/candidate identity, typed signal, bounded payload, Telegram update ID or nonce, timestamp, optional superseded-event link.
-- **`learning_trials`** — job, base/candidate digests, generation, state, assignment deadline, max/consumed assignments, admission evidence, timestamps. Unique open trial per job.
-- **`learning_decision_receipts`** — immutable promotion/fallback/reject decision, base/candidate/trial, considered evidence/feedback, evidence-strength label, policy/version inputs, CAS generations, digest/timestamp.
-- **`deterministic_verification_receipts`** (adapter-only) — adapter/version, frozen dataset/oracle, execution surface, subject digests, deterministic result, receipt digest.
+- `learning_job_state`: job PK, stable lesson ID/digest, nullable open trial ID, monotonic generation. Stable pointer is the only production activation pointer.
+- `learning_lesson_sets`: immutable complete replacement set, job/digest, bounded ordered payload, base digest, source reflection/owner edit, schema/timestamps. No in-place edit.
+- `learning_run_bindings`: one per created scheduled `run_id`; exact occurrence/fire kind and pinned job/execution/lesson/trial digests.
+- `learning_terminal_receipts`: one immutable row per terminal scheduled run; winning terminal state, timestamp, schema/digest.
+- `learning_evidence`: one `sealed` projection or typed `excluded` result per binding. Projection contains bindings/digests, terminal classification, bounded final output or digest, bounded tool facts (name/status/policy decision/result size/trust flags), actual model route, primary-run usage refs, versions and optional adapter facts. Excludes raw tool args, secrets, private raw observations, replay state and audit projections.
+- `learning_operations`: durable evaluation/reflection ID, kind, source evidence, phase/status, model route, schema, attempts, usage/cost refs, timestamps; includes `interrupted_unknown`.
+- `learning_evaluations`: immutable evidence/digest binding, rubric/adapter versions, result `no_issue | reusable_issue | transient_issue | uncertain`, bounded findings, digest/timestamp.
+- `learning_feedback_targets`: random one-time nonce, owner ID, exact subject type/id/digest, expiry/consumed state.
+- `learning_feedback_events`: append-only owner/job/run/output identity, optional evaluation/candidate, typed signal/payload, Telegram update ID or nonce, timestamp, optional superseded-event link.
+- `learning_trials`: job, base/candidate digests, generation, state, deadline, max/consumed assignments, admission evidence. Unique open trial per job.
+- `learning_decision_receipts`: immutable promotion/fallback/reject decision, trial/base/candidate, considered evidence/feedback, evidence-strength label, policy/version inputs, CAS generations, digest/timestamp.
+- `deterministic_verification_receipts` (adapter-only): adapter/version, frozen dataset/oracle, execution surface, subject digests, deterministic result/digest.
 
-Feedback signals are: `result_useful`, `result_not_useful`, `result_correction`, `evaluation_confirm`, `evaluation_dispute`, `candidate_approve`, `candidate_reject`, `candidate_edit`. Candidate edit creates a new immutable digest and invalidates old approvals/support.
+Feedback signals: `result_useful`, `result_not_useful`, `result_correction`, `evaluation_confirm`, `evaluation_dispute`, `candidate_approve`, `candidate_reject`, `candidate_edit`. Edit creates a new immutable digest and invalidates old approvals/support.
 
-## 6. Lifecycle diagrams
-
-### Evidence → candidate
+## 6. Lifecycles
 
 ```text
-created run
-  → terminal receipt
-  → settlement
-      ├─ impossible/incomplete → technical exclusion
-      └─ sealed evidence
-           → deterministic eligibility
-              ├─ ineligible → retain; no LLM learning call
-              └─ eligible → evaluation operation
-                   ├─ failed/interrupted_unknown → stop
-                   └─ saved evaluation
-                        → reflection operation (when policy permits)
-                           ├─ failed/interrupted_unknown → stop
-                           └─ immutable replacement candidate
-                                → admission validation
-                                   ├─ veto/reject → inert history
-                                   └─ trial admission gate
+created run → terminal receipt → settlement
+  ├─ cannot safely seal → technical exclusion
+  └─ sealed evidence → deterministic eligibility
+       ├─ ineligible → retain; no learning LLM
+       └─ eligible → evaluation
+            ├─ failed/interrupted_unknown → stop
+            └─ saved evaluation → reflection (when policy permits)
+                 ├─ failed/interrupted_unknown → stop
+                 └─ immutable candidate → admission validation → inert | trial
 ```
-
-### Candidate / trial / activation
 
 ```text
-candidate
-   │
-   ├─ insufficient support ───────────────> inert candidate
-   │
-   └─ admitted
-        v
-      TRIAL (base stable pointer untouched)
-        │
-        ├─ expiry / assignment exhaustion
-        ├─ hard security/deterministic veto
-        ├─ regression / critical failure
-        ├─ owner reject/dispute
-        └─ insufficient positive eligible evidence
-              └───────────────────────────> FALLBACK / close trial
-        │
-        └─ acceptance policy satisfied
-              → decision receipt
-              → CAS stable(base → candidate)
-                   ├─ CAS lost → close stale trial
-                   └─ CAS won  → ACTIVE; close trial
+candidate → admitted TRIAL (stable pointer untouched)
+  ├─ expiry / assignment exhaustion / security veto / regression / owner reject-dispute /
+  │  insufficient positive eligible evidence → close + FALLBACK
+  └─ acceptance satisfied → decision receipt → CAS stable(base→candidate)
+       ├─ CAS lost → close stale trial
+       └─ CAS won → ACTIVE; close trial
 ```
 
-Lifecycle and evidence strength are orthogonal:
+Lifecycle and evidence strength are independent:
 
 ```text
 lifecycle: candidate | trial | active | rolled_back | superseded
 evidence:  heuristic | owner_supported | owner_confirmed | deterministically_verified
 ```
 
-An active lesson may still be heuristic. `deterministically_verified` is never produced by an LLM evaluator.
+An active lesson may remain heuristic. LLM evaluation never produces `deterministically_verified`.
 
-## 7. Evidence sealing and eligibility
+## 7. Evidence and eligibility
 
-### Terminal receipt
+The terminal receipt is settlement-independent so every terminal path can commit it. The sealer is idempotent by run + evidence-schema version and waits for required usage/approval observations. It writes immutable sealed evidence or `excluded(reason)`; ordinary audit is observability, not provenance.
 
-The terminal receipt is deliberately smaller than evaluation evidence so it can be committed on every terminal path without depending on late writes. Its transaction shares the run-state transition; duplicate terminal handling is `INSERT OR IGNORE`/unique-by-run and must agree with the winning terminal state.
-
-### Post-settlement sealing
-
-The sealer is idempotent by `run_id` + evidence schema version. It waits until required run-linked usage and approval observations are settled. It then writes either:
-
-- `sealed` evidence with an immutable digest; or
-- `excluded(reason)` when a safe/complete projection cannot be formed.
-
-Sealing never reads the ordinary audit log as provenance.
-
-### Initial eligibility taxonomy
-
-The deterministic classifier must distinguish at least:
+Initial deterministic eligibility taxonomy:
 
 - `eligible_task_evidence`;
 - `transient_infrastructure_failure`;
@@ -211,58 +141,74 @@ The deterministic classifier must distinguish at least:
 - `insufficient_evidence`;
 - `unsupported_terminal_state`.
 
-Provider/storage/credential/budget failures do not create behavioral lessons. Cancellation, supersession and security-policy blocks never enter reflection. A one-shot job may retain evidence/evaluation/feedback, but cannot exercise a trial without another occurrence.
+Provider/storage/credential/budget failures do not produce behavioral lessons. Cancellation, supersession and security-policy blocks do not enter reflection. One-shot jobs can retain evidence/evaluation/feedback but cannot exercise a trial without another occurrence.
 
-## 8. Evaluator and reflector contracts
+## 8. Evaluator, reflector and candidate firewall
 
-### Evaluator
+Evaluator input is exactly the frozen job prompt, frozen quality rubric, final output, safe evidence projection and optional adapter facts. It has no tools and returns the closed result above plus bounded findings. This is heuristic evidence.
 
-Model-visible input is exactly: frozen job prompt, frozen quality rubric, final output, safe bounded evidence projection, and optional adapter facts. It excludes lessons, lesson IDs/digests, candidate/stable digest, trial assignment, prior score, promotion state and expected improvement.
+Reflection is a separate call receiving compatible saved evaluations/multi-run evidence plus current lesson set; it proposes one complete immutable replacement set. Evaluation failure cannot start reflection; reflection failure cannot create a candidate. Compatibility must account for job semantics, evidence schema, execution surface, rubric and adapter version.
 
-The evaluator has no tools and returns a closed schema: `no_issue`, `reusable_issue`, `transient_issue`, or `uncertain`, plus bounded structured findings. This is heuristic evidence, not semantic proof.
+Before persistence/trial, deterministic admission validates schema/canonical encoding, lesson count/size, Unicode/invisible/bidi handling, exact-loaded-secret leakage, base digest/source integrity, and forbidden authority operands (schedule, recipients, model route, budgets, tools/risk/approval config, paths, commands, destinations, credentials). Text classification is defense in depth: runtime policy remains the security boundary.
 
-### Reflector
+## 9. Owner feedback
 
-Reflection is a distinct operation/call. It may receive compatible saved evaluations, compatible multi-run evidence and the current lesson set. It produces **one complete immutable replacement set**, never an imperative control-plane mutation. Evaluation failure cannot start reflection; reflection failure cannot create a candidate.
+Feedback transaction: claim external event → numeric-ID allowlist → parse `fb:` only → load random-nonce target → verify owner + exact subject digest → append event → consume one-time target if applicable → append redacted audit in the same write.
 
-Compatibility requires matching or explicitly compatible job-definition semantics, evidence schema, execution surface, rubric and adapter version. Incompatible evidence is retained but not silently pooled.
+Semantics: useful/not-useful supports/contradicts one result; correction is owner-attested expected behavior and possible one-run trial seed; evaluation confirm/dispute overlays exact evaluation and dispute blocks dependent promotion; candidate approve permits owner-supported trial through the common gate; reject vetoes/stops exact candidate; edit creates a new candidate/digest and reruns every gate. Owner statements establish owner intent, not deterministic verification.
 
-## 9. Candidate admission and authority firewall
+## 10. Trial rules
 
-Before persistence/trial, deterministic validation checks:
+A candidate is a complete replacement set with incumbent/base digest. Repeated compatible evidence may admit an automatic heuristic trial; explicit owner correction or candidate approval may admit a trial after one eligible occurrence. Exact support thresholds are M2.
 
-- closed schema and canonical encoding;
-- lesson count and per-item/total size limits;
-- Unicode normalization and invisible/bidi handling;
-- secret/exact-loaded-secret leakage;
-- forbidden authority operands: schedule, recipient/chat, model route, budgets, tool/risk/approval configuration, paths, commands, destinations, credentials;
-- job binding and incumbent/base digest;
-- source operation/evidence integrity.
+The fire transaction atomically: resolve expiry → pass existing occurrence/overlap guard → create run → pin stable/trial digest → consume one assignment. A created run consumes its assignment even if it later fails technically; only eligible completed evaluations count positive. Trials cannot stack.
 
-Text classification/pattern checks are defense in depth only. The actual security boundary is the data/control-plane split plus existing policy gates. A candidate that says “ignore approvals” is both rejected by admission and powerless if it reached runtime.
+Expiry, assignment exhaustion, critical failure/regression, deterministic/security veto, explicit rejection/dispute, or insufficient positive evidence closes the exact trial and future runs use untouched stable. Promotion writes a decision receipt, CASes stable only if base digest/generation still match, then closes trial. Hard security/deterministic veto and owner reject/dispute outrank heuristic support.
 
-Lessons may describe strategy at the semantic task level (for example, “compare the stable article body before alerting”), but may not encode executable destinations/commands or grant new capabilities.
+## 11. Trust and data lifecycle
 
-## 10. Owner feedback semantics
+Trust zones:
 
-Feedback capture transaction:
+```text
+CONTROL (trusted code): scheduler claims, policy, budgets, admission, trial/CAS, owner auth
+DATA (untrusted): lesson payloads, outputs, tool-derived facts, evaluator/reflection prose
+OWNER-ATTESTED: authenticated feedback for exact subject
+DETERMINISTIC: scoped adapter receipt for frozen oracle/dataset only
+```
 
-1. atomically claim the external Telegram update/nonce;
-2. enforce numeric-ID allowlist;
-3. parse only the `fb:` namespace;
-4. load target by random nonce;
-5. verify exact owner and subject digest;
-6. append immutable feedback event;
-7. mark one-time target consumed where applicable;
-8. append a redacted audit event in the same write.
+Learning never grants capabilities. Evaluation/reflection have no tools. Raw private observations and tool arguments are excluded from evaluator evidence. Lessons are job-scoped and excluded from memory/history/FTS. Non-empty lessons taint the run before memory/tool decisions.
 
-Semantics:
+Export/retention/purge cover evidence, evaluations, operations, feedback, candidates, lesson sets, trials, verification/decision receipts and provenance links. Job cancellation blocks new learning spend and promotion but retains immutable history until policy removes it. Explicit job-learning purge must either remove/deactivate derived active lessons whose provenance depends on purged private source data, or conservatively reset stable to an unaffected ancestor/empty set; it may not leave encoded deleted private facts active.
 
-- useful/not useful: supporting/contradicting sentiment for one delivered result;
-- result correction: owner-attested expected behavior for that occurrence; may seed one-run trial support;
-- evaluation confirm/dispute: overlay on exact evaluation; dispute blocks dependent promotion;
-- candidate approve: permits owner-supported trial through the common admission gate, never direct activation;
-- candidate reject: vetoes/stops exact candidate/trial;
-- candidate edit: creates a new candidate/digest, invalidates prior approvals, reruns every gate.
+## 12. Transaction + crash/restart matrix
 
-Owner statements establish owner intent
+| Operation | Atomic durable boundary | Crash/restart rule |
+|---|---|---|
+| Fire | existing occurrence/overlap claim + run + binding + trial assignment | no run ⇒ no assignment; created run keeps pinned digest forever |
+| Terminal | run terminal transition + terminal receipt | receipt agrees with winning terminal state; duplicate is idempotent |
+| Evidence seal | sealed projection/exclusion keyed by run+schema | retry DB construction idempotently; never duplicate evidence |
+| Feedback | external-event claim + owner/target validation + event + audit | duplicate update/nonce cannot append twice |
+| Eval/reflect start | operation row → `in_flight` before request | pre-crash in-flight becomes `interrupted_unknown`; do not auto-repeat same synthesis |
+| Eval/reflect finish | structured result + operation terminal status + usage refs | committed result reusable; ambiguous external inference is not replayed as exactly-once |
+| Trial admission | validate candidate + create single open trial + job-state trial pointer CAS | unique/CAS prevents stacking |
+| Trial assignment | successful fire + binding + assignment increment | run exists ⇒ assignment consumed even if run later fails |
+| Promotion | decision receipt + stable-pointer CAS + trial close | CAS winner activates once; loser closes stale/re-evaluates, never overwrites newer stable |
+| Fallback/reject | decision receipt + exact trial close | stable pointer unchanged; future fires resolve stable |
+| Job cancel | cancel state + block-new-learning marker/state | no new learning spend/promotion after cancel; history retained per lifecycle policy |
+
+External LLM inference is at-least-attempted, not exactly-once. Restart reconciliation never silently reissues an ambiguous synthesis.
+
+## 13. Page-change adapter
+
+Page-change is the first deterministic benchmark, not the product boundary. The adapter supplies frozen benchmark inputs, deterministic scorer/oracle, adapter version and regression fixtures through generic contracts. Generic persistence/lifecycle types contain no page concepts.
+
+A deterministic verification receipt is valid only for its named dataset/oracle, adapter version and execution surface. Route/rubric/policy/adapter incompatibility requires revalidation or downgrade to heuristic use. Protocol 0.6 from #118 remains frozen and is not rewritten by M1.
+
+## 14. Deferred to M2
+
+M2 selects, with benchmark evidence rather than architectural guesswork:
+
+- compatible-evidence window/recency policy;
+- minimum supporting runs/evaluations;
+- owner-signal weighting and conflict policy beyond hard veto precedence;
+- trial assignment count and wall-clock
