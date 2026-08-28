@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Deterministic dependency-prioritization benchmark core."
 requires-python = ">=3.11"
 dependencies = [
+    "cvss==3.6",
+    "node-semver==0.9.1",
+    "packaging==26.3",
+    "ruamel.yaml==0.19.1",
     "swift-claw-benchmark-core",
 ]
 
@@ -33,6 +37,7 @@ strict = true
 mypy_path = "tests"
 files = ["dependency_benchmark", "tests"]
 explicit_package_bases = true
+untyped_calls_exclude = ["cvss", "nodesemver"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -45,3 +50,8 @@ module = [
 ]
 disallow_any_generics = false
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["cvss", "cvss.*", "nodesemver", "nodesemver.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true
