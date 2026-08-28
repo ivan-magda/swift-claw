@@ -406,8 +406,8 @@ candidate-record digest and replacement lesson-set digest are distinct. Trusted 
 closed origin and an immutable source manifest with the exact evidence, evaluation, feedback, base-set
 and predecessor-candidate edges. A cutoff alone is not provenance.
 
-The same admission validator runs on reflector output, owner edits and future candidate sources before
-lesson bytes persist or a trial opens. It validates only boundaries that provide concrete value now:
+The same admission validator runs on reflector output and owner edits before lesson bytes persist or
+a trial opens. It validates only boundaries that provide concrete value now:
 
 - closed versioned schema and canonical encoding;
 - finite lesson count and UTF-8 byte caps;
@@ -418,9 +418,8 @@ lesson bytes persist or a trial opens. It validates only boundaries that provide
 Lessons are not parsed into schedule, route, tool, recipient, path, command or approval
 configuration. Lexical scanning may flag suspicious text as defense in depth, but it is not relied on
 to prove safety and must not reject ordinary useful prose merely for mentioning a file, URL or
-command. The candidate schema contains no authority-operand fields. A future structured operand may
-only repeat an owner-confirmed job or configuration value; it cannot introduce a new recipient, URL,
-path or command. Runtime policy remains authoritative for every model-proposed tool argument.
+command. The candidate schema contains no authority-operand fields. Runtime policy remains
+authoritative for every model-proposed tool argument.
 
 Repeated compatible evidence may admit an automatic heuristic trial. An explicit owner correction
 or approval may admit a trial after one eligible occurrence. In both cases admission requires a
