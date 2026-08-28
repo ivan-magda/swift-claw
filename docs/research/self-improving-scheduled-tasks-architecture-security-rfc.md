@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed M1 RFC/ADR, compact v3.1 |
+| **Status** | Accepted M1 RFC/ADR, compact v3.1 |
 | **Date** | 29 August 2026 |
 | **Parent** | Issue 115 |
 | **Scope issue** | Issue 167 |
