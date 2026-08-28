@@ -9,26 +9,31 @@ import Foundation
 
 enum EvaluationPathSecurity {
   static func isStrictlyContained(_ candidate: URL, under root: URL) -> Bool {
-    let candidatePath = candidate.standardizedFileURL.path
-    let rootPath = root.standardizedFileURL.path
+    let candidatePath = normalizedContainmentPath(for: candidate)
+    let rootPath = normalizedContainmentPath(for: root)
     return candidatePath != rootPath
       && WorkspacePathContainment.isContained(target: candidatePath, root: rootPath)
   }
 
   static func isContainedOrEqual(_ candidate: URL, under root: URL) -> Bool {
     WorkspacePathContainment.isContained(
-      target: candidate.standardizedFileURL.path,
-      root: root.standardizedFileURL.path
+      target: normalizedContainmentPath(for: candidate),
+      root: normalizedContainmentPath(for: root)
     )
   }
 
   static func relativePath(of candidate: URL, under root: URL) -> String? {
-    let candidate = candidate.standardizedFileURL
-    let root = root.standardizedFileURL
-    guard isStrictlyContained(candidate, under: root) else {
+    let candidatePath = normalizedContainmentPath(for: candidate)
+    let rootPath = normalizedContainmentPath(for: root)
+    guard
+      candidatePath != rootPath,
+      WorkspacePathContainment.isContained(target: candidatePath, root: rootPath)
+    else {
       return nil
     }
-    return candidate.pathComponents.dropFirst(root.pathComponents.count).joined(separator: "/")
+    let candidateComponents = URL(fileURLWithPath: candidatePath).pathComponents
+    let rootComponents = URL(fileURLWithPath: rootPath).pathComponents
+    return candidateComponents.dropFirst(rootComponents.count).joined(separator: "/")
   }
 
   package static func ensurePrivateDirectory(at directory: URL) throws {
@@ -235,21 +240,30 @@ private extension EvaluationPathSecurity {
   }
 
   static func symlinkInspectionPath(for path: URL) -> URL {
+    let normalizedPath = normalizedSystemTemporaryAlias(path.path)
+    guard normalizedPath != path.path else {
+      return path
+    }
+    return URL(fileURLWithPath: normalizedPath, isDirectory: path.hasDirectoryPath)
+  }
+
+  static func normalizedContainmentPath(for path: URL) -> String {
+    normalizedSystemTemporaryAlias(path.standardizedFileURL.path)
+  }
+
+  static func normalizedSystemTemporaryAlias(_ path: String) -> String {
     #if os(macOS)
       let temporaryAliasPath = "/tmp"
       let canonicalTemporaryPath = "/private/tmp"
       guard
         WorkspacePathContainment.canonicalPath(temporaryAliasPath) == canonicalTemporaryPath,
-        WorkspacePathContainment.isContained(target: path.path, root: temporaryAliasPath)
+        WorkspacePathContainment.isContained(target: path, root: temporaryAliasPath)
       else {
         return path
       }
 
-      let suffix = String(path.path.dropFirst(temporaryAliasPath.count))
-      return URL(
-        fileURLWithPath: canonicalTemporaryPath + suffix,
-        isDirectory: path.hasDirectoryPath
-      )
+      let suffix = String(path.dropFirst(temporaryAliasPath.count))
+      return canonicalTemporaryPath + suffix
     #else
       return path
     #endif
