@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/synthesis-input.schema.json",
+  "title": "PageChangeSynthesisInput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "selected_target_classes",
+    "development_runs",
+    "error_ledger",
+    "normalized_feedback",
+    "feedback_generator",
+    "error_code_definitions",
+    "lesson_schema",
+    "lint_rules"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "selected_target_classes": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "noise.volatile_value",
+          "noise.time_or_build_metadata",
+          "noise.structure_or_order"
+        ]
+      }
+    },
+    "development_runs": {"type": "array", "minItems": 1, "maxItems": 18},
+    "error_ledger": {"type": "array"},
+    "normalized_feedback": {"type": "array"},
+    "feedback_generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sha256", "templates_sha256"],
+      "properties": {
+        "version": {"const": "page-feedback-v1"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "templates_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "error_code_definitions": {"type": "object"},
+    "lesson_schema": {"type": "object"},
+    "lint_rules": {"type": "object"}
+  }
+}

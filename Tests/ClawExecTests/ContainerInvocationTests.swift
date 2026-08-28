@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 import Testing
 
@@ -71,7 +72,7 @@ import Testing
       totalBytes: 9,
       truncated: true
     )
-    let command = ContainerCommand(
+    let command = SubprocessCommand(
       arguments: ["system", "status"],
       timeout: .seconds(5),
       captureLimit: 1024,
@@ -79,7 +80,7 @@ import Testing
     )
 
     // when
-    let result = ContainerCommandResult(
+    let result = SubprocessResult(
       termination: .exited(7),
       stdout: output,
       stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
@@ -262,7 +263,9 @@ import Testing
 
 extension Array where Element: Equatable {
   fileprivate func containsSubsequence(_ subsequence: [Element]) -> Bool {
-    guard !subsequence.isEmpty, subsequence.count <= count else { return false }
+    guard !subsequence.isEmpty, subsequence.count <= count else {
+      return false
+    }
     return indices.dropLast(subsequence.count - 1).contains { index in
       Array(self[index..<(index + subsequence.count)]) == subsequence
     }

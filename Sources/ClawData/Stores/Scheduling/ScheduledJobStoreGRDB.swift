@@ -2,6 +2,8 @@ import ClawCore
 import Foundation
 import GRDB
 
+// swiftlint:disable file_length
+
 /// GRDB implementation of `ScheduledJobStore`. Occurrence instants persist as UTC epoch-second
 /// INTEGERs so the fused claim's compare-and-advance is exact integer equality; callers pass
 /// whole-second `Date`s (`OccurrenceCalculator` emits whole seconds). `Sendable` is declared
@@ -240,7 +242,7 @@ extension ScheduledJobStoreGRDB {
   /// `last_fired_at` stamp. Shared by `claimAndFire` (which advances the schedule first) and
   /// `fireNow` (which doesn't). `fireAt` is the fire's logical instant — `claimAndFire`'s T_fire,
   /// `now` for `fireNow` — recorded to `last_fired_at` only if the overlap guard lets the fire run.
-  static func insertFireRows(
+  static func insertFireRows(  // swiftlint:disable:this function_body_length
     _ db: Database,
     jobId: Int64,
     fireAt: Date,
@@ -587,6 +589,7 @@ extension ScheduledJobStoreGRDB {
 // MARK: - Heartbeat Fire (the gating lives in SchedulerService)
 
 extension ScheduledJobStoreGRDB {
+  // swiftlint:disable:next function_body_length
   public func fireHeartbeat(
     prompt: String,
     ownerChatId: Int64,

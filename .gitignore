@@ -62,6 +62,15 @@ logs/
 *~
 .playwright-mcp/
 
+# Python tooling (freeze/benchmark helpers)
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
 # ─────────────────── Claude Code (personal, local) ───────────────────
 .claude/settings.local.json
 
@@ -70,3 +79,5 @@ docs/superpowers/
 docs/plans/
 docs/alt-solutions/
 docs/teleclaw-prompt.md
+docs/research/118-scenario-validation-progress.md
+docs/research/118-scenario-validation-audit-log.md

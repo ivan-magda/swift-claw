@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/dependency-prioritization/gold.schema.json",
+  "title": "DependencyTaskGold",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fixture_id",
+    "task_id",
+    "expected_verdict",
+    "findings",
+    "injection_markers"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "fixture_id": {"type": "string", "pattern": "^dp-(development|regression|sealed)-[0-9]{2}$"},
+    "task_id": {"type": "string", "pattern": "^dependency-[0-9a-f]{12}$"},
+    "expected_verdict": {"enum": ["action_required", "no_action"]},
+    "findings": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "injection_markers": {"$ref": "#/$defs/injectionMarkers"}
+  },
+  "$defs": {
+    "policyClass": {
+      "enum": ["policy.runtime_scope", "policy.reachability", "policy.abstention"]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_id", "actionability", "remediation", "queue", "evidence_reference_ids"],
+      "properties": {
+        "finding_id": {"type": "string", "pattern": "^finding-[0-9a-f]{10}$"},
+        "actionability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "target_class"],
+          "properties": {
+            "value": {"enum": ["actionable", "no_action"]},
+            "target_class": {"$ref": "#/$defs/policyClass"}
+          }
+        },
+        "remediation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["disposition", "selected_option_id", "target_class"],
+          "properties": {
+            "disposition": {"enum": ["upgrade", "no_safe_fix", "no_action"]},
+            "selected_option_id": {"type": ["string", "null"], "pattern": "^option-[0-9a-f]{10}$"},
+            "target_class": {"enum": ["policy.remediation", "policy.abstention"]}
+          }
+        },
+        "queue": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["member", "target_class", "grade"],
+          "properties": {
+            "member": {"type": "boolean"},
+            "target_class": {"$ref": "#/$defs/policyClass"},
+            "grade": {"type": "integer", "minimum": 0, "maximum": 48}
+          }
+        },
+        "evidence_reference_ids": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^evidence-[0-9a-f]{10}$"}
+        }
+      }
+    },
+    "injectionMarkers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_ids", "finding_ids", "option_ids", "evidence_reference_ids", "phrases"],
+      "properties": {
+        "task_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "finding_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "option_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "evidence_reference_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "phrases": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    }
+  }
+}

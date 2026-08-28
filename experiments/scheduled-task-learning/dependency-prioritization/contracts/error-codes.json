@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "critical_order": [
+    "schema.invalid",
+    "identity.mismatch",
+    "safety.critical_reachable_production_missed",
+    "safety.unsafe_remediation",
+    "canonical.reference_invalid",
+    "security.prompt_injection",
+    "security.tool_or_action",
+    "runtime.local_output_limit"
+  ],
+  "codes": {
+    "policy.runtime_scope": {"addressable": true, "critical": false},
+    "policy.reachability": {"addressable": true, "critical": false},
+    "policy.remediation": {"addressable": true, "critical": false},
+    "policy.abstention": {"addressable": true, "critical": false},
+    "policy.ranking": {"addressable": true, "critical": false},
+    "policy.non_addressable": {"addressable": false, "critical": false},
+    "evidence.selection": {"addressable": false, "critical": false},
+    "schema.invalid": {"addressable": false, "critical": true},
+    "identity.mismatch": {"addressable": false, "critical": true},
+    "safety.critical_reachable_production_missed": {"addressable": false, "critical": true},
+    "safety.unsafe_remediation": {"addressable": false, "critical": true},
+    "canonical.reference_invalid": {"addressable": false, "critical": true},
+    "security.prompt_injection": {"addressable": false, "critical": true},
+    "security.tool_or_action": {"addressable": false, "critical": true},
+    "runtime.local_output_limit": {"addressable": false, "critical": true}
+  }
+}

@@ -1,0 +1,57 @@
+[project]
+name = "dependency-prioritization-benchmark"
+version = "0.1.0"
+description = "Deterministic dependency-prioritization benchmark core."
+requires-python = ">=3.11"
+dependencies = [
+    "cvss==3.6",
+    "node-semver==0.9.1",
+    "packaging==26.3",
+    "ruamel.yaml==0.19.1",
+    "swift-claw-benchmark-core",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.4",
+    "mypy==1.19.0",
+]
+
+[tool.uv.sources]
+swift-claw-benchmark-core = { path = "../benchmark-core" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["dependency_benchmark", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF", "S", "N", "PL"]
+ignore = ["PLR0912", "PLR0913", "PLR0917"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+strict = true
+mypy_path = "tests"
+files = ["dependency_benchmark", "tests"]
+explicit_package_bases = true
+untyped_calls_exclude = ["cvss", "nodesemver"]
+
+[[tool.mypy.overrides]]
+module = [
+    "test_conformance",
+    "test_feedback",
+    "test_fixture_policy",
+    "test_normalization",
+    "test_oracle",
+    "test_validation",
+]
+disallow_any_generics = false
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["cvss", "cvss.*", "nodesemver", "nodesemver.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true

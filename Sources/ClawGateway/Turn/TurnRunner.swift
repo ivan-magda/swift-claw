@@ -3,6 +3,8 @@ import ClawCore
 import Foundation
 import Logging
 
+// swiftlint:disable file_length
+
 /// Injected behind a protocol so the router/poller tests stay decoupled from the real provider.
 public protocol TurnDispatching: Sendable {
   func run(

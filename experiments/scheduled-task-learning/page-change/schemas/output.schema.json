@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/output.schema.json",
+  "title": "PageChangeOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "verdict",
+    "material_region_ids",
+    "ignored_region_ids",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {
+      "type": "string",
+      "pattern": "^page-[0-9a-f]{12}$",
+      "maxLength": 32
+    },
+    "verdict": {"enum": ["material", "cosmetic", "none"]},
+    "material_region_ids": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^region-[0-9a-f]{10}$"}
+    },
+    "ignored_region_ids": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^region-[0-9a-f]{10}$"}
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["region_id", "before", "after"],
+        "properties": {
+          "region_id": {"type": "string", "pattern": "^region-[0-9a-f]{10}$"},
+          "before": {"type": "string", "minLength": 1, "maxLength": 200},
+          "after": {"type": "string", "minLength": 1, "maxLength": 200}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"verdict": {"const": "material"}}},
+      "then": {"properties": {"material_region_ids": {"minItems": 1}}}
+    },
+    {
+      "if": {"properties": {"verdict": {"const": "cosmetic"}}},
+      "then": {
+        "properties": {
+          "material_region_ids": {"maxItems": 0},
+          "ignored_region_ids": {"minItems": 1},
+          "evidence": {"maxItems": 0}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"verdict": {"const": "none"}}},
+      "then": {
+        "properties": {
+          "material_region_ids": {"maxItems": 0},
+          "ignored_region_ids": {"maxItems": 0},
+          "evidence": {"maxItems": 0}
+        }
+      }
+    }
+  ]
+}

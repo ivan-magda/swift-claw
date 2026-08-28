@@ -220,14 +220,18 @@ actor RecordingTransport: TelegramTransport {
   }
 
   private func wait(_ event: Event, current: Int, threshold: Int) async {
-    guard current < threshold else { return }
+    guard current < threshold else {
+      return
+    }
     await withCheckedContinuation { continuation in
       waiters[event, default: []].append((threshold, continuation))
     }
   }
 
   private func resumeWaiters(_ event: Event, reached current: Int) {
-    guard let pending = waiters[event] else { return }
+    guard let pending = waiters[event] else {
+      return
+    }
     waiters[event] = pending.filter { $0.threshold > current }
     for waiter in pending where waiter.threshold <= current {
       waiter.continuation.resume()
@@ -383,44 +387,6 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
     doneRunId: doneRunId,
     deliveredRunId: deliveredRunId
   )
-}
-
-/// The single shared ceiling for acceptance bounded-polls — one knob to retune under CI load.
-/// 30s (not 2s) tolerates a heavily oversubscribed CI runner where a turn's async work is CPU-starved;
-/// a passing poll returns as soon as its condition holds, so the ceiling only bounds the failing path.
-let acceptancePollCeiling: Duration = .seconds(30)
-
-/// Re-runs `probe` every `interval` until it yields a non-nil value or `timeout` elapses, returning
-/// the last probe value (nil on exhaustion). Collapses the copied `for _ in 0..<N` + `Task.sleep`
-/// idiom so the ceiling lives in one place. Not a signal-await: the state these poll (runs/outbox
-/// rows) lands via a real GRDB write on the lane's background task, and the only wake available is
-/// the coalescing, valueless `OutboxSignal` poke — which cannot encode a count or a state vector.
-func pollUntil<Value>(
-  timeout: Duration = acceptancePollCeiling,
-  interval: Duration = .milliseconds(10),
-  _ probe: () throws -> Value?
-) async rethrows -> Value? {
-  let deadline = ContinuousClock.now + timeout
-  while true {
-    if let value = try probe() {
-      return value
-    }
-    if ContinuousClock.now >= deadline {
-      return nil
-    }
-    try? await Task.sleep(for: interval)
-  }
-}
-
-/// `pollUntil` for truth-valued probes: polls until the probe is true or the ceiling elapses and
-/// returns whether it ever became true. Keeps `#require`/`#expect` call sites unambiguous — a
-/// `Bool?` inside `#require` is ambiguous between optional-unwrap and is-true semantics.
-func pollUntilTrue(
-  timeout: Duration = acceptancePollCeiling,
-  interval: Duration = .milliseconds(10),
-  _ probe: () throws -> Bool
-) async rethrows -> Bool {
-  try await pollUntil(timeout: timeout, interval: interval) { try probe() ? true : nil } ?? false
 }
 
 /// Scripted draft parser: returns results in order (last one sticks), records every owner text.

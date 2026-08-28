@@ -2,137 +2,6 @@ import ClawCore
 import Foundation
 import Logging
 
-/// Why a turn produced no usable answer. Maps to a plain-language degradation reply; the runtime
-/// carries the vendor-neutral provider disposition through to the gateway rather than collapsing
-/// every subscription failure into `providerUnavailable`, so auth/access/quota/replay each earn
-/// distinct owner guidance. The stable `auditDecision` string is what the audit log records, so it
-/// survives case renames.
-public enum DegradationKind: Sendable, Equatable {
-  case providerUnavailable
-  case outputTruncated
-  case contextUnavailable
-  case accountingFailed  // usage-write failure mid-run
-  /// The credential is missing, expired, or refused; the owner reply names `clawd auth login` as the
-  /// exact recovery, because no further request can succeed until they log in.
-  case authenticationRequired
-  /// The subscription/account is not entitled to the requested route or model; a re-login would
-  /// change nothing, so its reply deliberately does not tell the owner to log in.
-  case accessDenied
-  /// A clean throttle. `retryAfterSeconds` is the provider's bounded hint when it gave one; the
-  /// reply says to retry after it or after the plan resets, never to log in.
-  case quotaLimited(retryAfterSeconds: Int?)
-  /// Replay state the route would not accept; the reply gives safe `/new` guidance and the attempt
-  /// is never re-issued.
-  case invalidProviderState
-  /// The route refused the request because the configured model cannot look at images; the reply
-  /// names that cause instead of reading as an outage, because retrying will never help.
-  case visionUnsupported
-
-  /// The stable string the audit log records for this kind. Held apart from the case names so a
-  /// rename cannot silently rewrite history, and categorical for `quotaLimited` so the retry hint
-  /// never leaks into an audit decision.
-  public var auditDecision: String {
-    switch self {
-    case .providerUnavailable: "providerUnavailable"
-    case .outputTruncated: "outputTruncated"
-    case .contextUnavailable: "contextUnavailable"
-    case .accountingFailed: "accountingFailed"
-    case .authenticationRequired: "authenticationRequired"
-    case .accessDenied: "accessDenied"
-    case .quotaLimited: "quotaLimited"
-    case .invalidProviderState: "invalidProviderState"
-    case .visionUnsupported: "visionUnsupported"
-    }
-  }
-}
-
-/// A route transition the owner is told about exactly once. Standing state belongs to the health
-/// rows; a notice on every turn of a multi-hour outage trains the owner to skip it.
-public enum RouteNotice: Sendable, Equatable {
-  // swiftlint:disable:next identifier_name
-  case switched(from: String, to: String)
-  case restored(route: String)
-}
-
-/// The outcome of one orchestrated turn. `runTurn` never throws — every failure becomes one of
-/// these so the gateway always has something to persist and send (never silence).
-public enum TurnResult: Sendable, Equatable {
-  /// A usable answer plus the reconciled, provider-truth usage to debit. `providerState` is the
-  /// replay material the route produced with this answer, carried opaquely to the commit that
-  /// persists the answer — nil from any route that mints none.
-  case completed(content: String, usage: ProviderUsage, providerState: ProviderExchangeState?)
-  /// No usable answer. `usage` is the real row when the call returned (truncation) or an
-  /// estimated row when it didn't (deadline / exhausted retries); `nil` for terminal errors.
-  case degraded(DegradationKind, usage: ProviderUsage?)
-  /// The offline budget gate refused before any provider call; `cap` names the tripped limit.
-  case budgetStopped(cap: String)
-  /// The batch drained after an ask-tier proposal recorded its action; the gateway commits
-  /// the durable suspend checkpoint. `usage` is the suspending round-trip's reconciled row — it was
-  /// already recorded mid-loop, so the suspend commit must NOT re-debit it.
-  case suspended(pending: PendingToolAction, usage: ProviderUsage)
-}
-
-/// The outcome of the bounded agentic loop: the terminal `TurnResult` plus everything the
-/// gateway needs to persist and gate the next turn.
-public struct TurnOutcome: Sendable {
-  public let result: TurnResult
-  /// Every round-trip that proposed tool calls, to persist.
-  public let exchanges: [ToolExchange]
-  /// Taint signal: provider-facing metadata or an executed observation ingested untrusted content.
-  public let ingestedUntrusted: Bool
-  /// Private-data signal: the assembly flag (fitted USER/MEMORY sections) OR any executed
-  /// observation that read private data this run — `assemblyPrivateData ∪ runPrivateData`. Every
-  /// commit path persists it as `setPrivateData`.
-  public let hadPrivateData: Bool
-  /// The one route transition this turn owes the owner, or `nil` when the turn ran where the last
-  /// one left off.
-  public let routeNotice: RouteNotice?
-
-  public init(
-    result: TurnResult,
-    exchanges: [ToolExchange] = [],
-    ingestedUntrusted: Bool = false,
-    hadPrivateData: Bool = false,
-    routeNotice: RouteNotice? = nil
-  ) {
-    self.result = result
-    self.exchanges = exchanges
-    self.ingestedUntrusted = ingestedUntrusted
-    self.hadPrivateData = hadPrivateData
-    self.routeNotice = routeNotice
-  }
-}
-
-/// One route bound to the per-turn collaborators derived from it. The accountant and the budget
-/// gate are built from the route's own policies rather than the runtime's, which is what lets a
-/// metered fallback be charged and capped as metered after the primary was an included plan.
-struct ActiveRoute {
-  let binding: LLMRouteBinding
-  let position: RoutePosition
-  let accountant: ProviderUsageAccountant
-  let gate: BudgetGate
-
-  init(
-    selection: RouteSelection,
-    budget: RunBudget,
-    costResolver: CostResolver,
-    usageResolver: UsageResolver
-  ) {
-    let binding = selection.binding
-    self.binding = binding
-    self.position = selection.position
-    self.accountant = ProviderUsageAccountant(
-      configuredReference: binding.configuredReference,
-      costPolicy: binding.costPolicy,
-      reservationPolicy: binding.reservationPolicy,
-      costResolver: costResolver,
-      usageResolver: usageResolver,
-      outputCap: budget.maxOutputTokens
-    )
-    self.gate = BudgetGate(budget: budget, costPolicy: binding.costPolicy)
-  }
-}
-
 /// The pure orchestration of one blocking turn: preflight → typing + wall-clock deadline →
 /// provider call → classify. No persistence or sending (the gateway owns that); all
 /// collaborators are injected `ClawCore` protocols so tests drive it with mocks.
@@ -147,6 +16,7 @@ public struct AgentRuntime: Sendable {
   private let typingIndicator: any TypingIndicator
   private let draftStreamer: any RichDraftStreaming
   private let streamingEnabled: Bool
+  private let attemptPolicy: AttemptRuntimePolicy
 
   // Route-independent: the resolvers and the run budget outlive any one route, so each
   // `ActiveRoute` is derived from them instead of replacing them. `internal`, not `private`, so the
@@ -168,6 +38,7 @@ public struct AgentRuntime: Sendable {
   private let logger: Logger
   /// Injected so tests can script pacing (deadline, backoff) instead of waiting on wall-clock.
   private let clock: any Clock<Duration>
+  private let now: @Sendable () -> ContinuousClock.Instant
 
   public init(
     roster: ProviderRoster,
@@ -185,11 +56,50 @@ public struct AgentRuntime: Sendable {
     logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
     clock: any Clock<Duration>
   ) {
+    self.init(
+      roster: roster,
+      cooldown: cooldown,
+      typingIndicator: typingIndicator,
+      draftStreamer: draftStreamer,
+      streamingEnabled: streamingEnabled,
+      attemptPolicy: .production,
+      costResolver: costResolver,
+      usageResolver: usageResolver,
+      budget: budget,
+      toolDispatcher: toolDispatcher,
+      usageStore: usageStore,
+      auditLog: auditLog,
+      providerCallIDGenerator: providerCallIDGenerator,
+      logger: logger,
+      clock: clock,
+      now: { ContinuousClock.now }
+    )
+  }
+
+  package init(
+    roster: ProviderRoster,
+    cooldown: (any PrimaryRouteCooldownTracking)? = nil,
+    typingIndicator: any TypingIndicator,
+    draftStreamer: any RichDraftStreaming,
+    streamingEnabled: Bool,
+    attemptPolicy: AttemptRuntimePolicy = .production,
+    costResolver: CostResolver,
+    usageResolver: UsageResolver = UsageResolver(),
+    budget: RunBudget,
+    toolDispatcher: (any ToolDispatching)? = nil,
+    usageStore: any UsageStore,
+    auditLog: any AuditLog,
+    providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
+    logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
+    clock: any Clock<Duration>,
+    now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
+  ) {
     self.roster = roster
     self.cooldown = cooldown
     self.typingIndicator = typingIndicator
     self.draftStreamer = draftStreamer
     self.streamingEnabled = streamingEnabled
+    self.attemptPolicy = attemptPolicy
 
     self.costResolver = costResolver
     self.usageResolver = usageResolver
@@ -205,9 +115,12 @@ public struct AgentRuntime: Sendable {
     self.logger = logger
 
     self.clock = clock
+    self.now = now
   }
+}
 
-  // swiftlint:disable function_parameter_count function_body_length cyclomatic_complexity
+extension AgentRuntime {
+  // swiftlint:disable file_length function_parameter_count function_body_length cyclomatic_complexity
   /// The bounded agentic loop: one context assembly, then up to `maxTurns` round-trips
   /// with per-round-trip budget preflight, gated tool dispatch, and immediate usage/audit writes.
   /// A DELIBERATE SOFTENING of "no persistence here": `usageStore`/`auditLog` are injected
@@ -226,7 +139,8 @@ public struct AgentRuntime: Sendable {
     proactiveTodayUSD: Double = 0,
     carryOver: ResumeUsage? = nil
   ) async throws -> TurnOutcome {
-    let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
+    let deadline = now() + .seconds(budget.wallClockDeadlineSeconds)
+    var attemptState = AttemptRuntimeState(policy: attemptPolicy)
     let definitions = toolDefinitions
     let fenceLabels = ToolFenceLabels(definitions: definitions)
     // A cooling primary starts the turn on the fallback, so the round-trip is spent on a route
@@ -247,7 +161,7 @@ public struct AgentRuntime: Sendable {
     for (key, value) in Self.turnMetadata(runId: runId, sessionId: sessionId) {
       turnLog[metadataKey: key] = value
     }
-    let turnStart = ContinuousClock.now
+    let turnStart = now()
     turnLog.info(
       "turn started model=\(active.binding.configuredReference) origin=\(origin) contextMessages=\(buildResult.messages.count) streaming=\(streamingEnabled) tools=\(definitions.count)"
     )
@@ -271,14 +185,18 @@ public struct AgentRuntime: Sendable {
     // Terminal choke-point for the RESULT paths: every `return outcome(...)` flows through here, so a
     // turn that produces a `TurnOutcome` emits exactly one finished line (see `logFinish`). The
     // `StoreError.diskFull` fast-path throws to the gateway instead, which logs that terminal.
-    func outcome(_ result: TurnResult) -> TurnOutcome {
-      Self.logFinish(result, on: turnLog, elapsed: ContinuousClock.now - turnStart)
+    func outcome(
+      _ result: TurnResult,
+      failureCause: AttemptFailureCause? = nil
+    ) -> TurnOutcome {
+      Self.logFinish(result, on: turnLog, elapsed: now() - turnStart)
       return TurnOutcome(
         result: result,
         exchanges: exchanges,
         ingestedUntrusted: ingestedUntrusted,
         hadPrivateData: buildResult.hasPrivateDataAccess || runPrivateData,
-        routeNotice: routeNotice
+        routeNotice: routeNotice,
+        attemptDiagnostics: attemptState.diagnostics(failureCause: failureCause)
       )
     }
 
@@ -335,42 +253,118 @@ public struct AgentRuntime: Sendable {
       }
 
       guard Task.isCancelled == false else {
-        return outcome(.degraded(.providerUnavailable, usage: nil))
+        return outcome(
+          .degraded(.providerUnavailable, usage: nil),
+          failureCause: .processInterruption
+        )
       }
 
-      let remaining = deadline - ContinuousClock.now
+      let remaining = deadline - now()
       guard remaining > .zero else {
         turnLog.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
-        return outcome(.degraded(.providerUnavailable, usage: nil))
+        return outcome(
+          .degraded(.providerUnavailable, usage: nil),
+          failureCause: .deadline
+        )
       }
 
       turnLog.debug(
         "round-trip \(roundTripIndex) inputTokens~=\(preflight.inputTokens) estCostUSD=\(USD.precise(preflight.costUSD))"
       )
+      if let admission = await attemptState.admission(
+        roundTripIndex: roundTripIndex,
+        priorRecordedTokens: recordedRunTokens,
+        priorResponsesSends: roundTripIndex - 1
+      ) {
+        if case .deny(let cap) = admission {
+          return outcome(.budgetStopped(cap: cap))
+        }
+      }
+      guard Task.isCancelled == false else {
+        return outcome(
+          .degraded(.providerUnavailable, usage: nil),
+          failureCause: .processInterruption
+        )
+      }
       // Re-issuing on the next route is one more attempt at the SAME round-trip, never a new one:
       // a turn that switches keeps the whole tool-call budget it started with.
       var response: ChatResponse
       attempts: while true {
+        let sendBudget = deadline - now()
+        guard sendBudget >= .seconds(1) else {
+          turnLog.notice(
+            "round-trip \(roundTripIndex) wall-clock cannot admit another bounded send; degrading"
+          )
+          return outcome(
+            .degraded(.providerUnavailable, usage: nil),
+            failureCause: .deadline
+          )
+        }
+        let outputScope = attemptState.beginRound(outboundModel: active.binding.wireModel)
         let request = ChatRequest(
           model: active.binding.wireModel,
           messages: wire,
           maxOutputTokens: budget.maxOutputTokens,
           tools: definitions,
-          sessionId: SessionTraceID.format(sessionID: sessionId)
+          sessionId: SessionTraceID.format(sessionID: sessionId),
+          outputScope: outputScope,
+          terminalValidationPolicy: attemptState.terminalValidationPolicy
         )
+        if attemptState.accepts(outboundModel: request.model) == false {
+          return outcome(
+            .degraded(.providerUnavailable, usage: nil),
+            failureCause: .modelIdentityMismatch
+          )
+        }
         do {
           response = try await roundTrip(
             provider: active.binding.provider,
             chatId: chatId,
             draftId: runId,
             request: request,
-            deadlineSeconds: max(1, Int((deadline - ContinuousClock.now).components.seconds))
+            deadlineSeconds: Int(sendBudget.components.seconds)
           )
+          if attemptState.observe(response: response, outboundModel: request.model) {
+            return outcome(
+              .degraded(
+                .providerUnavailable,
+                usage: active.accountant.reconciledRow(
+                  for: response,
+                  callID: callID,
+                  context: wire,
+                  tools: definitions,
+                  runId: runId,
+                  sessionId: sessionId
+                )
+              ),
+              failureCause: .modelIdentityMismatch
+            )
+          }
+
+          do {
+            try attemptState.finalize(response, scope: outputScope)
+          } catch {
+            return outcome(
+              .degraded(
+                .providerUnavailable,
+                usage: active.accountant.reconciledRow(
+                  for: response,
+                  callID: callID,
+                  context: wire,
+                  tools: definitions,
+                  runId: runId,
+                  sessionId: sessionId
+                )
+              ),
+              failureCause: .localOutputLimit
+            )
+          }
           break attempts
         } catch {
-          if firstFailureKind == nil {
-            firstFailureKind = Self.degradationKind(for: error)
-          }
+          let failure = AgentFailureClassification(error: error)
+          let reportedKind = firstFailureKind ?? failure.degradationKind
+          firstFailureKind = reportedKind
+
           guard
             let persistence = RouteSwitch.permits(error),
             let next = roster.failover(from: active.position)
@@ -384,8 +378,9 @@ public struct AgentRuntime: Sendable {
                 runId: runId,
                 sessionId: sessionId,
                 accountant: active.accountant,
-                overrideKind: firstFailureKind
-              )
+                degradationKind: reportedKind
+              ),
+              failureCause: failure.attemptFailureCause
             )
           }
 
@@ -400,7 +395,7 @@ public struct AgentRuntime: Sendable {
             costResolver: costResolver,
             usageResolver: usageResolver
           )
-          let reason = Self.degradationKind(for: error).auditDecision
+          let reason = failure.degradationKind.auditDecision
           let successor = active.binding.configuredReference
           turnLog.notice(
             "route switch from=\(previous) to=\(successor) reason=\(reason) cooldown=\(persistence)"
@@ -428,16 +423,15 @@ public struct AgentRuntime: Sendable {
       }
 
       guard response.toolCalls.isEmpty == false else {
-        return outcome(
-          classify(
-            response: response,
-            callID: callID,
-            context: wire,
-            runId: runId,
-            sessionId: sessionId,
-            accountant: active.accountant
-          )
+        let classified = classify(
+          response: response,
+          callID: callID,
+          context: wire,
+          runId: runId,
+          sessionId: sessionId,
+          accountant: active.accountant
         )
+        return outcome(classified)
       }
 
       let intermediate = active.accountant.reconciledRow(
@@ -458,6 +452,9 @@ public struct AgentRuntime: Sendable {
       }
       recordedRunTokens += intermediate.promptTokens + intermediate.completionTokens
       recordedRunUSD += intermediate.costUSD
+      if response.usage == nil {
+        attemptState.recordMissingUsage(intermediate)
+      }
 
       await typingIndicator.sendTyping(chatId: chatId)
       var observations: [ToolObservation] = []
@@ -467,8 +464,11 @@ public struct AgentRuntime: Sendable {
           return outcome(.budgetStopped(cap: "per-run tool-call"))
         }
 
-        guard deadline > ContinuousClock.now else {
-          return outcome(deadlineDegradation(callID))
+        guard deadline > now() else {
+          return outcome(
+            deadlineDegradation(callID),
+            failureCause: .deadline
+          )
         }
 
         let context = ToolDispatchContext(
@@ -494,10 +494,10 @@ public struct AgentRuntime: Sendable {
         }
 
         turnLog.debug("tool \(call.name) invoked")
-        let toolStart = ContinuousClock.now
+        let toolStart = now()
         let dispatched = await toolDispatcher.dispatch(call: call, context: context)
         turnLog.debug(
-          "tool \(call.name) done decision=\(dispatched.observation.status.rawValue) bytes=\(dispatched.observation.content.utf8.count) ms=\(Self.millis(ContinuousClock.now - toolStart))"
+          "tool \(call.name) done decision=\(dispatched.observation.status.rawValue) bytes=\(dispatched.observation.content.utf8.count) ms=\(Self.millis(now() - toolStart))"
         )
 
         if pendingSuspension == nil, let recordedAction = dispatched.requiresApproval {
@@ -646,7 +646,9 @@ private extension AgentRuntime {
   /// owed when that window had lapsed rather than been cleared, so exactly one turn tells the owner
   /// the primary is carrying traffic again.
   func primaryRecoveryNotice(binding: LLMRouteBinding) async -> RouteNotice? {
-    guard let cooldown else { return nil }
+    guard let cooldown else {
+      return nil
+    }
     let lapsed = await cooldown.recordSuccess()
     return lapsed ? .restored(route: binding.configuredReference) : nil
   }
@@ -688,7 +690,10 @@ private extension AgentRuntime {
         request: request,
         deadlineSeconds: deadlineSeconds
       )
-    } catch let error where ProviderError.cause(of: error)?.allowsBufferedReattempt == true {
+    } catch let error where ProviderError.cause(of: error)?.allowsPreInferenceReissue == true {
+      guard attemptPolicy.streamingReattemptPolicy == .bufferedWhenSafe else {
+        throw error
+      }
       // connectFailed: nothing was transmitted. rejected: the head carried an error status before
       // any SSE bytes, so the server generated nothing — the no-double-issue rationale does
       // not apply. Either way one blocking attempt is safe; `complete` brings its own retry
@@ -743,24 +748,5 @@ private extension AgentRuntime {
       clock: clock
     )
     return try await runtime.run(chatId: chatId, request: request)
-  }
-}
-
-// MARK: - Buffered Fallback Eligibility
-
-private extension ProviderError {
-  /// The pre-stream head failures a streaming round may re-attempt once on the buffered path:
-  /// `connectFailed` transmitted nothing, and `rejected` is an error status on the response head
-  /// before any SSE bytes, so the server generated nothing and a re-issue cannot double-charge.
-  /// Every other cause either may already owe tokens or would only fail the same way again, so the
-  /// round degrades instead of re-attempting.
-  var allowsBufferedReattempt: Bool {
-    switch self {
-    case .connectFailed, .rejected:
-      return true
-    case .retryable, .terminal, .authenticationRequired, .accessDenied, .quotaLimited,
-      .cleanRejection, .invalidProviderState, .visionUnsupported:
-      return false
-    }
   }
 }

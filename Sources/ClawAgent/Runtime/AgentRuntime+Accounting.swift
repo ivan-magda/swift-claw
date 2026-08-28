@@ -14,14 +14,11 @@ extension AgentRuntime {
   ///
   /// Cancellation is the owner's own doing, never a provider outage: raw cancellation generated
   /// nothing to bill, while the typed inference-cancellation marker says the model may have been
-  /// asked anyway. Both flow to the run-cancel path — the degradation reason stays
-  /// `.providerUnavailable`, but a cancelled run's commit is arbitrated away, so no outage copy
-  /// reaches the owner.
+  /// asked anyway. Both flow to the run-cancel path, where a cancelled run's commit is arbitrated
+  /// away before any outage copy can reach the owner.
   ///
-  /// `accountant` is the one bound to the route that made this call, so a failure is charged under
-  /// the policies that call was actually issued with. `overrideKind` replaces the kind read from the
-  /// error on the natural-failure path when the caller already knows the owner-facing reason;
-  /// `nil` keeps the error's own kind.
+  /// `accountant` is bound to the route that made this call. `degradationKind` is selected before
+  /// accounting and may preserve the primary route's actionable failure when its fallback also fails.
   func failureOutcome(  // swiftlint:disable:this function_parameter_count
     _ error: any Error,
     callID: ProviderCallID,
@@ -29,14 +26,12 @@ extension AgentRuntime {
     runId: Int64,
     sessionId: Int64,
     accountant: ProviderUsageAccountant,
-    overrideKind: DegradationKind? = nil
+    degradationKind: DegradationKind
   ) -> TurnResult {
     if let racedSuccess = error as? RacedDeadlineSuccess {
-      // A real response landed alongside a won deadline: its usage is authoritative, so it is booked
-      // through the same completed-call route a non-raced reply uses — never the conservative
-      // estimate below — while the owner still sees the degraded timeout.
+      // A real response landed alongside a won deadline: its usage is authoritative
       return .degraded(
-        .providerUnavailable,
+        degradationKind,
         usage: accountant.reconciledRow(
           for: racedSuccess.response,
           callID: callID,
@@ -47,9 +42,10 @@ extension AgentRuntime {
         )
       )
     }
+
     if let cancellation = error as? ProviderInferenceCancellation {
       return .degraded(
-        .providerUnavailable,
+        degradationKind,
         usage: accountant.conservativeRow(
           callID: callID,
           context: context,
@@ -60,20 +56,17 @@ extension AgentRuntime {
         )
       )
     }
-    if error is CancellationError {
-      return .degraded(.providerUnavailable, usage: nil)
+
+    if error is ProviderNoStartDeadline || error is CancellationError {
+      return .degraded(degradationKind, usage: nil)
     }
 
-    // The vendor-neutral kind is read from the cause, the debit from the accounting disposition —
-    // independently, so an auth/access/quota/replay rejection surfaces its own owner guidance while
-    // an ambiguous transport loss stays the generic outage with a conservative row.
-    let kind = overrideKind ?? Self.degradationKind(for: error)
     switch ProviderFailureAccounting.classify(error) {
     case .notStarted:
-      return .degraded(kind, usage: nil)
+      return .degraded(degradationKind, usage: nil)
     case .mayHaveStarted(let observedCompletionTokens):
       return .degraded(
-        kind,
+        degradationKind,
         usage: accountant.conservativeRow(
           callID: callID,
           context: context,
@@ -83,27 +76,6 @@ extension AgentRuntime {
           sessionId: sessionId
         )
       )
-    }
-  }
-
-  /// The owner-facing degradation kind for a thrown provider failure, read from its vendor-neutral
-  /// cause. Only the redaction-safe cases carry a distinct kind; the message-carrying causes
-  /// (terminal / retryable / connect / rejected) and a non-provider error stay the generic outage,
-  /// so no remote diagnostic text can ever reach owner copy through the kind.
-  static func degradationKind(for error: any Error) -> DegradationKind {
-    switch ProviderError.cause(of: error) {
-    case .authenticationRequired:
-      return .authenticationRequired
-    case .accessDenied:
-      return .accessDenied
-    case .quotaLimited(let retryAfterSeconds):
-      return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
-    case .invalidProviderState:
-      return .invalidProviderState
-    case .visionUnsupported:
-      return .visionUnsupported
-    case .terminal, .cleanRejection, .retryable, .connectFailed, .rejected, .none:
-      return .providerUnavailable
     }
   }
 

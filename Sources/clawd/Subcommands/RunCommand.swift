@@ -2,6 +2,7 @@ import ArgumentParser
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawSubprocess
 import ClawTelegram
 import ClawTools
 import Foundation

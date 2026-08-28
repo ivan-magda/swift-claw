@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/dependency-prioritization/corpus-receipt.schema.json",
+  "title": "DependencyCorpusReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol",
+    "contract_digests",
+    "source_catalog_digests",
+    "split_quotas",
+    "coverage",
+    "fixtures",
+    "family_separation"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "bytes_sha256"],
+      "properties": {
+        "version": {"const": "0.6"},
+        "bytes_sha256": {
+          "const": "777343c73654256df50081c5b2be81fb41db529fbf98d2e067d41139bc39bc7e"
+        }
+      }
+    },
+    "contract_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_policy_bytes_sha256",
+        "ranking_policy_bytes_sha256",
+        "target_classes_bytes_sha256"
+      ],
+      "properties": {
+        "fixture_policy_bytes_sha256": {"$ref": "#/$defs/sha256"},
+        "ranking_policy_bytes_sha256": {
+          "const": "9b779a8156ac3aa675457d010efa0c82185ea8ea6b30b967cb9031e24f648c69"
+        },
+        "target_classes_bytes_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source_catalog_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_index_bytes_sha256",
+        "provenance_bytes_sha256",
+        "advisory_semantic_receipt_canonical_sha256"
+      ],
+      "properties": {
+        "source_index_bytes_sha256": {"$ref": "#/$defs/sha256"},
+        "provenance_bytes_sha256": {"$ref": "#/$defs/sha256"},
+        "advisory_semantic_receipt_canonical_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "split_quotas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["development", "regression", "sealed"],
+      "properties": {
+        "development": {"const": 10},
+        "regression": {"const": 4},
+        "sealed": {"const": 6}
+      }
+    },
+    "coverage": {"$ref": "#/$defs/coverage"},
+    "fixtures": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/fixture"}
+    },
+    "family_separation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pair_count",
+        "pair_set_canonical_sha256",
+        "cross_split_pair_count",
+        "cross_split_pair_set_canonical_sha256",
+        "violations"
+      ],
+      "properties": {
+        "pair_count": {"const": 190},
+        "pair_set_canonical_sha256": {"$ref": "#/$defs/sha256"},
+        "cross_split_pair_count": {"const": 124},
+        "cross_split_pair_set_canonical_sha256": {"$ref": "#/$defs/sha256"},
+        "violations": {"type": "array", "maxItems": 0}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "fixtureId": {
+      "type": "string",
+      "pattern": "^dp-(development|regression|sealed)-[0-9]{2}$"
+    },
+    "witnessId": {
+      "type": "string",
+      "pattern": "^dp-(development|regression|sealed)-[0-9]{2}(/finding-[0-9a-f]{10})?$"
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "witness_ids"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "witness_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/witnessId"}
+        }
+      }
+    },
+    "metricMinOne": {
+      "allOf": [
+        {"$ref": "#/$defs/metric"},
+        {
+          "properties": {
+            "count": {"minimum": 1},
+            "witness_ids": {"minItems": 1}
+          }
+        }
+      ]
+    },
+    "metricMinTwo": {
+      "allOf": [
+        {"$ref": "#/$defs/metric"},
+        {
+          "properties": {
+            "count": {"minimum": 2},
+            "witness_ids": {"minItems": 2}
+          }
+        }
+      ]
+    },
+    "targetCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atom_count", "fixture_ids", "witness_ids"],
+      "properties": {
+        "atom_count": {"type": "integer", "minimum": 2},
+        "fixture_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/fixtureId"}
+        },
+        "witness_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/witnessId"}
+        }
+      }
+    },
+    "targetClasses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy.runtime_scope",
+        "policy.reachability",
+        "policy.remediation",
+        "policy.abstention",
+        "policy.ranking"
+      ],
+      "properties": {
+        "policy.runtime_scope": {"$ref": "#/$defs/targetCoverage"},
+        "policy.reachability": {"$ref": "#/$defs/targetCoverage"},
+        "policy.remediation": {"$ref": "#/$defs/targetCoverage"},
+        "policy.abstention": {"$ref": "#/$defs/targetCoverage"},
+        "policy.ranking": {"$ref": "#/$defs/targetCoverage"}
+      }
+    },
+    "splitCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_count",
+        "target_classes",
+        "critical_reachable_production",
+        "whole_no_action_cases",
+        "compatibility_traps",
+        "visible_injection_cases"
+      ],
+      "properties": {
+        "fixture_count": {"type": "integer", "minimum": 4, "maximum": 10},
+        "target_classes": {"$ref": "#/$defs/targetClasses"},
+        "critical_reachable_production": {"$ref": "#/$defs/metric"},
+        "whole_no_action_cases": {"$ref": "#/$defs/metric"},
+        "compatibility_traps": {"$ref": "#/$defs/metric"},
+        "visible_injection_cases": {"$ref": "#/$defs/metric"}
+      }
+    },
+    "overallCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "production_scope",
+        "development_only_scope",
+        "direct_relationship",
+        "transitive_relationship",
+        "reachable",
+        "unreachable",
+        "unknown_reachability",
+        "compatible_remediation",
+        "breaking_remediation",
+        "aliases",
+        "no_safe_fix",
+        "severity_ordering_traps",
+        "actionable",
+        "no_action",
+        "upgrade",
+        "no_action_disposition"
+      ],
+      "properties": {
+        "production_scope": {"$ref": "#/$defs/metric"},
+        "development_only_scope": {"$ref": "#/$defs/metric"},
+        "direct_relationship": {"$ref": "#/$defs/metric"},
+        "transitive_relationship": {"$ref": "#/$defs/metric"},
+        "reachable": {"$ref": "#/$defs/metric"},
+        "unreachable": {"$ref": "#/$defs/metric"},
+        "unknown_reachability": {"$ref": "#/$defs/metric"},
+        "compatible_remediation": {"$ref": "#/$defs/metric"},
+        "breaking_remediation": {"$ref": "#/$defs/metric"},
+        "aliases": {"$ref": "#/$defs/metric"},
+        "no_safe_fix": {"$ref": "#/$defs/metric"},
+        "severity_ordering_traps": {"$ref": "#/$defs/metric"},
+        "actionable": {"$ref": "#/$defs/metric"},
+        "no_action": {"$ref": "#/$defs/metric"},
+        "upgrade": {"$ref": "#/$defs/metric"},
+        "no_action_disposition": {"$ref": "#/$defs/metric"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["splits", "overall"],
+      "properties": {
+        "splits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["development", "regression", "sealed"],
+          "properties": {
+            "development": {
+              "allOf": [
+                {"$ref": "#/$defs/splitCoverage"},
+                {"properties": {"fixture_count": {"const": 10}}}
+              ]
+            },
+            "regression": {
+              "allOf": [
+                {"$ref": "#/$defs/splitCoverage"},
+                {
+                  "properties": {
+                    "fixture_count": {"const": 4},
+                    "critical_reachable_production": {"$ref": "#/$defs/metricMinTwo"},
+                    "whole_no_action_cases": {"$ref": "#/$defs/metricMinOne"},
+                    "compatibility_traps": {"$ref": "#/$defs/metricMinTwo"},
+                    "visible_injection_cases": {"$ref": "#/$defs/metricMinOne"}
+                  }
+                }
+              ]
+            },
+            "sealed": {
+              "allOf": [
+                {"$ref": "#/$defs/splitCoverage"},
+                {
+                  "properties": {
+                    "fixture_count": {"const": 6},
+                    "critical_reachable_production": {"$ref": "#/$defs/metricMinTwo"},
+                    "whole_no_action_cases": {"$ref": "#/$defs/metricMinTwo"},
+                    "compatibility_traps": {"$ref": "#/$defs/metricMinTwo"},
+                    "visible_injection_cases": {"$ref": "#/$defs/metricMinOne"}
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "overall": {"$ref": "#/$defs/overallCoverage"}
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "split",
+        "family_id",
+        "task_id",
+        "selected_record_ids",
+        "project_snapshot_bytes_sha256",
+        "project_snapshot_semantic_sha256",
+        "normalized_source_bytes_sha256",
+        "gold_bytes_sha256",
+        "materialized_task_canonical_sha256",
+        "family_fingerprint_canonical_sha256"
+      ],
+      "properties": {
+        "fixture_id": {"$ref": "#/$defs/fixtureId"},
+        "split": {"enum": ["development", "regression", "sealed"]},
+        "family_id": {"type": "string", "pattern": "^[a-z0-9-]{3,64}$"},
+        "task_id": {"type": "string", "pattern": "^dependency-[0-9a-f]{12}$"},
+        "selected_record_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "project_snapshot_bytes_sha256": {"$ref": "#/$defs/sha256"},
+        "project_snapshot_semantic_sha256": {"$ref": "#/$defs/sha256"},
+        "normalized_source_bytes_sha256": {"$ref": "#/$defs/sha256"},
+        "gold_bytes_sha256": {"$ref": "#/$defs/sha256"},
+        "materialized_task_canonical_sha256": {"$ref": "#/$defs/sha256"},
+        "family_fingerprint_canonical_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

@@ -237,11 +237,30 @@ package struct SecureFilePublisher: Sendable {
   /// sit at the target retries exactly this rather than minting a second inode for bytes that are
   /// already there — and reaches the same failpoint the publication does, so a directory that
   /// cannot be synced stays unsynced for the retry too.
-  func syncDirectory(_ directory: URL, forEntry name: String) -> Bool {
+  package func syncDirectory(_ directory: URL, forEntry name: String) -> Bool {
     guard fires(.directorySync, on: name) == false else {
       return false
     }
     return Self.syncDirectory(directory)
+  }
+
+  /// Resolves the only recoverable publication ambiguity without following the target name. The
+  /// file was already fsynced before it was committed; matching the returned inode identity proves
+  /// that the exact published file still owns the name, so only the parent directory sync remains.
+  package func proveDurable(_ outcome: PublicationOutcome, at url: URL) -> Bool {
+    switch outcome {
+    case .published:
+      return true
+    case .commitUncertain(let identity):
+      guard
+        let facts = Self.facts(ofEntryAt: url),
+        facts.isRegularFile,
+        facts.identity == identity
+      else {
+        return false
+      }
+      return syncDirectory(url.deletingLastPathComponent(), forEntry: url.lastPathComponent)
+    }
   }
 
   private func fires(_ step: Failpoint.Step, on name: String) -> Bool {

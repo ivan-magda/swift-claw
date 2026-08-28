@@ -10,6 +10,7 @@ excluded:
 
 disabled_rules:
   - line_length
+  - opening_brace
   - trailing_comma # swift-format adds multi-element trailing commas;
   - trailing_whitespace
   - vertical_whitespace

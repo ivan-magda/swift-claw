@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/dependency-prioritization/output.schema.json",
+  "title": "DependencyTaskOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "verdict",
+    "findings",
+    "remediation_queue",
+    "proposed_actions"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string", "pattern": "^dependency-[0-9a-f]{12}$"},
+    "verdict": {"enum": ["action_required", "no_action"]},
+    "findings": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "finding_id",
+          "actionability",
+          "remediation_disposition",
+          "selected_option_id",
+          "evidence_reference_ids"
+        ],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^finding-[0-9a-f]{10}$"},
+          "actionability": {"enum": ["actionable", "no_action"]},
+          "remediation_disposition": {"enum": ["upgrade", "no_safe_fix", "no_action"]},
+          "selected_option_id": {
+            "type": ["string", "null"],
+            "pattern": "^option-[0-9a-f]{10}$"
+          },
+          "evidence_reference_ids": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^evidence-[0-9a-f]{10}$"}
+          }
+        }
+      }
+    },
+    "remediation_queue": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^finding-[0-9a-f]{10}$"}
+    },
+    "proposed_actions": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {"type": "string", "minLength": 1, "maxLength": 200}
+    }
+  }
+}

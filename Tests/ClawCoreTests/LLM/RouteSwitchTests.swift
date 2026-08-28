@@ -36,16 +36,26 @@ struct RouteSwitchTests {
   func ineligibleCausesStay() {
     // given
     let causes: [ProviderError] = [
+      .transportFailure(message: "drop"),
       .retryable(status: 500, message: "boom"),
+      .credentialRefreshCompleted,
+      .credentialRefreshExhausted,
+      .credentialStateUnavailable,
       .terminal(status: 400, message: "bad"),
       .cleanRejection(status: 400),
       .invalidProviderState,
       .visionUnsupported,
+      .partialStreamWithoutCompletedTerminal,
+      .localOutputLimit,
+      .modelIdentityMismatch,
     ]
 
-    // when / then
-    for cause in causes {
-      #expect(cause.routeSwitchPersistence == nil)
+    // when
+    let observed = causes.map(\.routeSwitchPersistence)
+
+    // then
+    for persistence in observed {
+      #expect(persistence == nil)
     }
   }
 

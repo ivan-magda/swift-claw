@@ -37,7 +37,7 @@ swift build -c release
 ## Lint
 
 ```bash
-scripts/lint.sh --fix   # auto-apply swift-format + swiftlint fixes
+scripts/lint.sh --fix   # auto-apply layout, multiline guard bodies, and SwiftLint fixes
 scripts/lint.sh         # verify; must pass before committing
 ```
 

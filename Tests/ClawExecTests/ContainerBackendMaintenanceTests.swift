@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 import Testing
 
@@ -298,7 +299,9 @@ private final class MaintenanceFixture: @unchecked Sendable {
       let workloadImage = PinnedImageReference.parse(
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       )
-    else { throw MaintenanceFixtureError.missingIdentity }
+    else {
+      throw MaintenanceFixtureError.missingIdentity
+    }
     settings = ExecSandboxSettings(
       workloadImage: workloadImage,
       memoryMiB: 1024,
@@ -309,7 +312,7 @@ private final class MaintenanceFixture: @unchecked Sendable {
     self.guestProbe = guestProbe
   }
 
-  func backend(commands: any ContainerCommandRunning) -> ContainerBackend {
+  func backend(commands: any SubprocessRunning) -> ContainerBackend {
     ContainerBackend(
       settings: settings,
       stateRoot: root,
@@ -321,9 +324,9 @@ private final class MaintenanceFixture: @unchecked Sendable {
   }
 
   func response(
-    for command: ContainerCommand,
-    history _: [ContainerCommand]
-  ) -> ContainerCommandResult {
+    for command: SubprocessCommand,
+    history _: [SubprocessCommand]
+  ) -> SubprocessResult {
     let arguments = command.arguments
     if arguments == ContainerInvocation.systemStatus() {
       return jsonCommandResult(#"{"status":"running"}"#)

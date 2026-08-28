@@ -114,6 +114,25 @@ struct AgentRuntimeFallbackTests {
     #expect(await fallback.calls == 1)
   }
 
+  @Test("a fallback deadline still reports the primary's degradation kind")
+  func fallbackDeadlineReportsPrimaryKind() async throws {
+    // given
+    let primary = StubProvider(.fail(.quotaLimited(retryAfterSeconds: 42)))
+    let fallback = StubProvider(
+      .failInferenceCancellation(ProviderInferenceCancellation(observing: 0))
+    )
+    let runtime = makeRuntime(primary: primary, fallback: fallback)
+
+    // when
+    let outcome = try await run(runtime)
+
+    // then
+    let (kind, _) = try requireDegraded(outcome.result)
+    #expect(kind == .quotaLimited(retryAfterSeconds: 42))
+    #expect(outcome.attemptDiagnostics.failureCause == .deadline)
+    #expect(await fallback.calls == 1)
+  }
+
   @Test("a later round-trip failing on the fallback reports the fallback's own kind")
   func laterFailureOnTheFallbackReportsItsOwnKind() async throws {
     // given — the primary walls off on round-trip 1, then the fallback answers with a tool call and
