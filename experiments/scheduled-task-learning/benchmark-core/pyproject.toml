@@ -5,8 +5,8 @@ description = "Scenario-neutral deterministic benchmark primitives for Swift Cla
 requires-python = ">=3.11"
 dependencies = []
 
-[tool.setuptools]
-packages = ["benchmark_core", "benchmark_learning"]
+[tool.setuptools.packages.find]
+include = ["benchmark_core", "benchmark_learning", "benchmark_learning.*"]
 
 [tool.setuptools.package-data]
 benchmark_core = ["py.typed"]

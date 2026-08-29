@@ -1,15 +1,12 @@
-"""Closed ordered event and neutral adapter-receipt contracts for `scheduled-learning/v1`."""
+"""Closed event and adapter payload validation."""
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from typing import Any
 
-from benchmark_core.canonical import SHA256_HEX, canonical_sha256, dumps
+from benchmark_core.canonical import SHA256_HEX, dumps
 from benchmark_core.contract_validation import (
     ContractError,
     ValidationIssue,
@@ -21,231 +18,33 @@ from benchmark_core.contract_validation import (
     issue,
 )
 
-
-class LearningContractError(ValueError):
-    """Public-boundary error for the closed `scheduled-learning/v1` replay contract."""
-
-    def __init__(self, issues: list[ValidationIssue]) -> None:
-        self.issues = tuple(issues)
-        super().__init__("; ".join(item.message for item in self.issues))
-
-
-class ReplayEventKind(StrEnum):
-    CONTROLLER_STARTED = "controller_started"
-    CLOCK_ADVANCED = "clock_advanced"
-    STABLE_EVALUATION_RECORDED = "stable_evaluation_recorded"
-    OWNER_SIGNAL_RECORDED = "owner_signal_recorded"
-    OPERATION_STARTED = "operation_started"
-    OPERATION_FINISHED = "operation_finished"
-    NO_CANDIDATE_RECORDED = "no_candidate_recorded"
-    CANDIDATE_ARTIFACT_RECORDED = "candidate_artifact_recorded"
-    CANDIDATE_ADMITTED = "candidate_admitted"
-    TRIAL_RUN_CREATED = "trial_run_created"
-    TRIAL_RUN_SETTLED = "trial_run_settled"
-    ADAPTER_RECEIPT_RECORDED = "adapter_receipt_recorded"
-    HARD_VETO_RECEIPT_RECORDED = "hard_veto_receipt_recorded"
-
-
-class AdapterOutcome(StrEnum):
-    PASS = "pass"  # noqa: S105 -- adapter gate outcome, not a credential
-    REGRESSION = "regression"
-    CRITICAL = "critical"
-    INCONCLUSIVE = "inconclusive"
-
-
-@dataclass(frozen=True)
-class ReplayEvent:
-    sequence: int
-    occurred_at: str
-    kind: ReplayEventKind
-    payload: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class AdapterEnvelope:
-    adapter_id: str
-    adapter_version: str
-    candidate_digest: str
-    dataset_digest: str
-    oracle_digest: str
-    gates_digest: str
-    execution_surface_digest: str
-    outcome: AdapterOutcome
-    receipt_digest: str
-
-
-_ENVELOPE_KEYS = {"schema_version", "sequence", "occurred_at", "kind", "payload"}
-_EVENT_KIND_VALUES = tuple(kind.value for kind in ReplayEventKind)
-
-# Exactly `YYYY-MM-DDTHH:MM:SSZ`: an RFC-3339 UTC whole-second timestamp. Fractional seconds,
-# non-`Z` offsets, and lowercase `z` are all rejected by this fixed-width closed pattern.
-_OCCURRED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
-
-_ADAPTER_ENVELOPE_KEYS = {
-    "adapter_id",
-    "adapter_version",
-    "candidate_digest",
-    "dataset_digest",
-    "oracle_digest",
-    "gates_digest",
-    "execution_surface_digest",
-    "outcome",
-    "receipt_digest",
-}
-_ADAPTER_OUTCOME_VALUES = tuple(outcome.value for outcome in AdapterOutcome)
-_ADAPTER_GATE_DIGEST_FIELDS = (
-    "dataset_digest",
-    "oracle_digest",
-    "gates_digest",
-    "execution_surface_digest",
+from .schema import (
+    _ADAPTER_BINDING_KEYS,
+    _ADAPTER_DIGEST_FIELDS,
+    _ADAPTER_ENVELOPE_KEYS,
+    _ADAPTER_GATE_DIGEST_FIELDS,
+    _ADAPTER_OUTCOME_VALUES,
+    _ADAPTER_RECEIPT_SUBJECT_KINDS,
+    _CANDIDATE_EDIT_BODY_KEYS,
+    _CORRECTION_BODY_KEYS,
+    _ENVELOPE_KEYS,
+    _EVALUATOR_OUTCOMES,
+    _EVENT_KIND_VALUES,
+    _EVENT_PAYLOAD_KEYS,
+    _HARD_VETO_TRIGGER_KINDS,
+    _ISSUE_CODE_COUNT_BOUNDS,
+    _LESSON_COUNT_BOUNDS,
+    _LESSON_TEXT_BOUNDS,
+    _OCCURRED_AT,
+    _OPAQUE_STRING_BOUNDS,
+    _OPERATION_KINDS,
+    _OPERATION_STATUSES,
+    _OWNER_SIGNAL_RUN_ID_SUBJECT_KINDS,
+    _OWNER_SIGNAL_SIGNALS,
+    _OWNER_SIGNAL_SUBJECT_KINDS,
+    _TRIAL_RUN_OUTCOMES,
+    ReplayEventKind,
 )
-_ADAPTER_DIGEST_FIELDS = (
-    "candidate_digest",
-    *_ADAPTER_GATE_DIGEST_FIELDS,
-    "receipt_digest",
-)
-
-_EVENT_PAYLOAD_KEYS: dict[ReplayEventKind, set[str]] = {
-    ReplayEventKind.CLOCK_ADVANCED: set(),
-    ReplayEventKind.CONTROLLER_STARTED: {"controller_generation"},
-    ReplayEventKind.STABLE_EVALUATION_RECORDED: {
-        "job_id",
-        "run_id",
-        "operation_id",
-        "evaluation_digest",
-        "logical_occurrence",
-        "learning_epoch",
-        "compatibility_digest",
-        "stable_digest",
-        "outcome",
-        "issue_codes",
-    },
-    ReplayEventKind.OWNER_SIGNAL_RECORDED: {
-        "job_id",
-        "subject_kind",
-        "subject_digest",
-        "run_id",
-        "signal",
-        "payload",
-        "revision",
-        "supersedes_revision",
-    },
-    ReplayEventKind.OPERATION_STARTED: {
-        "job_id",
-        "operation_id",
-        "operation_kind",
-        "attempt_generation",
-        "carrier_digest",
-        "route_digest",
-        "provider_call_id",
-        "manifest_digest",
-        "freeze_commit",
-        "invocation_core_digest",
-        "trigger_digest",
-    },
-    ReplayEventKind.OPERATION_FINISHED: {
-        "job_id",
-        "operation_id",
-        "operation_kind",
-        "attempt_generation",
-        "status",
-        "result_digest",
-        "usage_digest",
-    },
-    ReplayEventKind.NO_CANDIDATE_RECORDED: {
-        "job_id",
-        "operation_id",
-        "result_digest",
-        "trigger_digest",
-    },
-    ReplayEventKind.CANDIDATE_ARTIFACT_RECORDED: {
-        "job_id",
-        "operation_id",
-        "result_digest",
-        "candidate_record_digest",
-        "replacement_digest",
-        "lessons",
-        "source_manifest_digest",
-        "base_digest",
-        "base_revision",
-        "learning_epoch",
-        "feedback_revision",
-        "algorithm_id",
-        "trigger_digest",
-    },
-    ReplayEventKind.CANDIDATE_ADMITTED: {
-        "job_id",
-        "candidate_record_digest",
-        "replacement_digest",
-        "base_digest",
-        "base_revision",
-        "learning_epoch",
-        "feedback_revision",
-        "adapter",
-    },
-    ReplayEventKind.TRIAL_RUN_CREATED: {"job_id", "candidate_record_digest", "run_id"},
-    ReplayEventKind.TRIAL_RUN_SETTLED: {"job_id", "run_id", "outcome"},
-    ReplayEventKind.ADAPTER_RECEIPT_RECORDED: {
-        "job_id",
-        "subject_kind",
-        "subject_digest",
-        "envelope",
-    },
-    ReplayEventKind.HARD_VETO_RECEIPT_RECORDED: {
-        "job_id",
-        "promotion_digest",
-        "candidate_record_digest",
-        "replacement_digest",
-        "trigger_kind",
-        "receipt_digest",
-        "receipt_version",
-    },
-}
-
-_OWNER_SIGNAL_SUBJECT_KINDS = ("run", "evaluation", "candidate", "promotion")
-_OWNER_SIGNAL_RUN_ID_SUBJECT_KINDS = {"run", "evaluation"}
-_OWNER_SIGNAL_SIGNALS = (
-    "result_useful",
-    "result_not_useful",
-    "result_correction",
-    "evaluation_confirm",
-    "evaluation_dispute",
-    "candidate_approve",
-    "candidate_reject",
-    "candidate_edit",
-    "promotion_rollback",
-)
-_CORRECTION_BODY_KEYS = {"correction_text"}
-_CANDIDATE_EDIT_BODY_KEYS = {"lessons"}
-
-_OPERATION_KINDS = ("task", "evaluator", "reflector")
-_OPERATION_STATUSES = ("succeeded", "failed_no_call", "failed")
-_TRIAL_RUN_OUTCOMES = ("positive", "negative", "neutral")
-_ADAPTER_RECEIPT_SUBJECT_KINDS = ("trial", "promotion")
-_HARD_VETO_TRIGGER_KINDS = ("security", "secret_leakage", "corruption", "invariant_violation")
-_EVALUATOR_OUTCOMES = ("no_issue", "reusable_issue", "transient_issue", "uncertain")
-_ADAPTER_BINDING_KEYS = {
-    "adapter_id",
-    "adapter_version",
-    "dataset_digest",
-    "oracle_digest",
-    "gates_digest",
-    "execution_surface_digest",
-}
-
-# Structural-only bounds: they reject pathological input sizes at parse time. The exact
-# ADR-mandated admission numbers (<= 3 lessons, <= 512/1536 UTF-8 bytes, blank/duplicate
-# rejection) are semantic `scheduled-learning/v1` decisions enforced by the reducer in
-# `learning_replay.py`, not by this closed-shape contract layer.
-_LESSON_COUNT_BOUNDS = (0, 32)
-_LESSON_TEXT_BOUNDS = (0, 8192)
-_ISSUE_CODE_COUNT_BOUNDS = (0, 32)
-_OPAQUE_STRING_BOUNDS = (1, 128)
-
-# Domain separators bind each receipt's identity to its own receipt kind, so a decision receipt
-# and a replay receipt with coincidentally identical field bytes never collide on ID.
-_DECISION_DOMAIN = "scheduled-learning/v1/decision"
-_REPLAY_DOMAIN = "scheduled-learning/v1/replay"
 
 
 def _opaque_string_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None:
@@ -638,168 +437,3 @@ def _event_issues(value: Any, issues: list[ValidationIssue]) -> None:
 def _require_valid(issues: list[ValidationIssue]) -> None:
     if issues:
         raise ContractError(issues)
-
-
-def parse_event(value: Any) -> ReplayEvent:
-    """Parse one closed canonical event object."""
-
-    try:
-        issues: list[ValidationIssue] = []
-        _event_issues(value, issues)
-        _require_valid(issues)
-    except ContractError as error:
-        raise LearningContractError(list(error.issues)) from error
-    return ReplayEvent(
-        sequence=value["sequence"],
-        occurred_at=value["occurred_at"],
-        kind=ReplayEventKind(value["kind"]),
-        payload=value["payload"],
-    )
-
-
-def event_json(event: ReplayEvent) -> dict[str, Any]:
-    """Render one closed canonical event object."""
-
-    return {
-        "schema_version": 1,
-        "sequence": event.sequence,
-        "occurred_at": event.occurred_at,
-        "kind": event.kind.value,
-        "payload": event.payload,
-    }
-
-
-def parse_adapter_envelope(value: Any) -> AdapterEnvelope:
-    """Parse the neutral adapter receipt envelope."""
-
-    try:
-        issues: list[ValidationIssue] = []
-        _adapter_envelope_issues(value, "$", issues)
-        _require_valid(issues)
-    except ContractError as error:
-        raise LearningContractError(list(error.issues)) from error
-    return AdapterEnvelope(
-        adapter_id=value["adapter_id"],
-        adapter_version=value["adapter_version"],
-        candidate_digest=value["candidate_digest"],
-        dataset_digest=value["dataset_digest"],
-        oracle_digest=value["oracle_digest"],
-        gates_digest=value["gates_digest"],
-        execution_surface_digest=value["execution_surface_digest"],
-        outcome=AdapterOutcome(value["outcome"]),
-        receipt_digest=value["receipt_digest"],
-    )
-
-
-def adapter_envelope_json(value: AdapterEnvelope) -> dict[str, Any]:
-    """Render the neutral adapter receipt envelope."""
-
-    return {
-        "adapter_id": value.adapter_id,
-        "adapter_version": value.adapter_version,
-        "candidate_digest": value.candidate_digest,
-        "dataset_digest": value.dataset_digest,
-        "oracle_digest": value.oracle_digest,
-        "gates_digest": value.gates_digest,
-        "execution_surface_digest": value.execution_surface_digest,
-        "outcome": value.outcome.value,
-        "receipt_digest": value.receipt_digest,
-    }
-
-
-def canonical_event_log(events: list[ReplayEvent]) -> dict[str, Any]:
-    """Validate the contiguous, nondecreasing ordered log and return its canonical object."""
-
-    issues: list[ValidationIssue] = []
-    previous_sequence = 0
-    previous_occurred_at = ""
-    for index, event in enumerate(events):
-        path = f"$.events[{index}]"
-        expected_sequence = previous_sequence + 1
-        if event.sequence != expected_sequence:
-            issue(
-                issues,
-                "schema.ordered_log",
-                f"{path}.sequence must equal {expected_sequence}",
-            )
-        elif event.occurred_at < previous_occurred_at:
-            issue(
-                issues,
-                "schema.ordered_log",
-                f"{path}.occurred_at must not precede the previous event",
-            )
-        previous_sequence = event.sequence
-        previous_occurred_at = event.occurred_at
-    try:
-        _require_valid(issues)
-    except ContractError as error:
-        raise LearningContractError(list(error.issues)) from error
-    return {"schema_version": 1, "events": [event_json(event) for event in events]}
-
-
-def decision_receipt(
-    *,
-    algorithm_id: str,
-    decision: str,
-    reason: str,
-    triggering_event_sha256: str,
-    before_state_sha256: str,
-    after_state_sha256: str,
-    artifact_identities: dict[str, Any],
-) -> dict[str, Any]:
-    """Build one canonical decision receipt with a domain-separated `decision_id`."""
-
-    issues: list[ValidationIssue] = []
-    _opaque_string_issues(algorithm_id, "$.algorithm_id", issues)
-    _opaque_string_issues(decision, "$.decision", issues)
-    _opaque_string_issues(reason, "$.reason", issues)
-    _sha256_issues(triggering_event_sha256, "$.triggering_event_sha256", issues)
-    _sha256_issues(before_state_sha256, "$.before_state_sha256", issues)
-    _sha256_issues(after_state_sha256, "$.after_state_sha256", issues)
-    _canonical_object_issues(artifact_identities, "$.artifact_identities", issues)
-    try:
-        _require_valid(issues)
-    except ContractError as error:
-        raise LearningContractError(list(error.issues)) from error
-
-    core = {
-        "schema_version": 1,
-        "algorithm_id": algorithm_id,
-        "decision": decision,
-        "reason": reason,
-        "triggering_event_sha256": triggering_event_sha256,
-        "before_state_sha256": before_state_sha256,
-        "after_state_sha256": after_state_sha256,
-        "artifact_identities": artifact_identities,
-    }
-    decision_hash = canonical_sha256({"domain": _DECISION_DOMAIN, "value": core})
-    return {**core, "decision_id": f"decision-{decision_hash[:12]}"}
-
-
-def replay_receipt(
-    *,
-    algorithm_id: str,
-    events: list[ReplayEvent],
-    decisions: list[dict[str, Any]],
-    final_state: dict[str, Any],
-) -> dict[str, Any]:
-    """Build the canonical whole-replay receipt with a domain-separated `receipt_id`."""
-
-    issues: list[ValidationIssue] = []
-    _opaque_string_issues(algorithm_id, "$.algorithm_id", issues)
-    _decision_list_issues(decisions, "$.decisions", issues)
-    _canonical_object_issues(final_state, "$.final_state", issues)
-    try:
-        _require_valid(issues)
-    except ContractError as error:
-        raise LearningContractError(list(error.issues)) from error
-
-    core = {
-        "schema_version": 1,
-        "algorithm_id": algorithm_id,
-        "events_sha256": canonical_sha256(canonical_event_log(events)),
-        "decision_receipt_sha256s": [canonical_sha256(item) for item in decisions],
-        "final_state_sha256": canonical_sha256(final_state),
-    }
-    replay_hash = canonical_sha256({"domain": _REPLAY_DOMAIN, "value": core})
-    return {**core, "receipt_id": f"replay-{replay_hash[:12]}"}
