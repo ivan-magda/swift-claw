@@ -7,6 +7,14 @@ carrier builders; later tasks add scoring and receipts.
 
 from __future__ import annotations
 
+from .adapter import score_pair
 from .materialize import build_evaluator_carrier, build_reflector_carrier, materialize_task
+from .receipt import build_adapter_receipt
 
-__all__ = ["build_evaluator_carrier", "build_reflector_carrier", "materialize_task"]
+__all__ = [
+    "build_adapter_receipt",
+    "build_evaluator_carrier",
+    "build_reflector_carrier",
+    "materialize_task",
+    "score_pair",
+]

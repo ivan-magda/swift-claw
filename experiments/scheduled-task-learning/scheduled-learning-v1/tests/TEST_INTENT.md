@@ -123,3 +123,35 @@ scenario. `test_materialize_task_preserves_the_exact_task_object_without_stringi
 kept in `test_materialization.py` because they name their own distinct mutants (task-object
 stringification/loss, and a normalization no-op) not covered by the five rows above; they are not
 duplicated here since neither is the nearest-test citation for a Protocol 0.6 comparison.
+
+## Trusted M3 page adapter scoring and receipt boundary (Task 4)
+
+`page_benchmark`'s scorer suite proves page-level scoring from a source, gold record, and raw attempt.
+It does not construct M3 pairs, aggregate deltas, apply the frozen 2--3 pair policy, or expose a
+generic-safe envelope. The new tests therefore own only that post-freeze adapter boundary.
+
+| Risk | Production branch or seam | Nearest existing test | Unique reachable mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| A model-supplied score claim changes a pair result instead of the reused scorer and sealer deciding it from the raw attempt | `page_change_m3.oracle.sealed_score` scorer/sealer boundary | `page-change/tests/test_scorer_semantics.py::test_evidence_is_order_independent_and_accepts_nonempty_exact_substrings` scores one raw attempt but has no M3 outer attempt or score-claim field | Read `attempt["score"]` instead of the sealed `score_result["score"]` | `test_pair_scoring::PairScoringTests::test_pair_receipt_is_sealed_from_raw_attempts_not_embedded_score_claims` |
+| A candidate score exactly at 90 or a mean delta exactly at 10 is rejected, or three otherwise-valid pairs are rejected | `page_change_m3.adapter.outcome_for_pairs` threshold/count pass branch | The page scorer's success threshold test has no paired mean or M3 maximum-pair branch | **threshold comparator changed** from inclusive to exclusive, or reject the allowed third pair | `test_adapter_gates::AdapterGateTests::test_adapter_reports_each_distinct_gate_outcome` |
+| A clean/candidate delta is calculated in the opposite direction, or a critical scorer result is folded into ordinary regression | `page_change_m3.adapter.outcome_for_pairs` delta and critical branches | `test_pair_scoring` proves score provenance only; it has equal clean/candidate scores and cannot distinguish direction or outcome taxonomy | **pair direction reversed**; **critical result treated as ordinary regression** | `test_adapter_gates::AdapterGateTests::test_adapter_reports_each_distinct_gate_outcome` |
+| The generic reducer receives page metrics, or the envelope digest hashes itself/envelope bytes rather than the complete page receipt | `page_change_m3.receipt.build_adapter_receipt` receipt-to-envelope boundary | `benchmark-core/tests/test_learning_contract.py::test_adapter_envelope_rejects_invalid_digest_unknown_key_and_unknown_outcome` validates generic shape but never builds a page receipt | **envelope hash computed over wrong bytes** or include `pairs` in the envelope | `test_adapter_receipt::AdapterReceiptTests::test_envelope_is_neutral_and_binds_each_identity` and `::test_receipt_digest_hashes_the_full_receipt_not_the_neutral_envelope` |
+
+### Redundancy pass (`docs/TESTING.md` §9.1)
+
+1. **Mutants killed:** the four named mutants above: threshold comparator changed, pair direction
+   reversed, critical result treated as ordinary regression, and envelope hash computed over wrong
+   bytes. The pair-provenance case additionally kills use of an untrusted embedded score claim.
+2. **Production branch/seam:** `oracle.py` is the only scorer/sealer bridge; `adapter.py` owns the
+   paired threshold, direction, count, and critical branches; `receipt.py` owns the boundary that
+   strips full page evidence before generic replay.
+3. **Nearest existing test and why it misses each mutant:** page-change scorer tests never call M3
+   pair aggregation or receipt construction, while generic contract tests accept an already-neutral
+   envelope and never see a page score or full receipt. Neither layer can observe an aggregation,
+   direction, outcome-taxonomy, or receipt-byte-binding defect here.
+4. **Behavior-preserving refactor stays green:** yes — the tests assert sealed scores, public
+   outcomes, exact neutral key shape, and receipt hashes, not private helpers or call order.
+
+No redundant test forms apply: the gate table contains only distinct observable categories; the two
+receipt tests separately protect visibility/identity binding and the distinct full-receipt hash
+boundary.
