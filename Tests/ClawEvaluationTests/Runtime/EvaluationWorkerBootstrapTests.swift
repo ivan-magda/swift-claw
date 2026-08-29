@@ -10,6 +10,59 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EvaluationWorkerBootstrapTests {
+  @Test func changedConfigurationIsRejectedBeforeExternalWork() async throws {
+    // given
+    let fixture = try makeEvaluationLearningTaskInvocationFixture()
+    defer { fixture.remove() }
+    var changedBytes = try Data(contentsOf: fixture.configurationURL)
+    changedBytes.append(0x20)
+    try changedBytes.write(to: fixture.configurationURL)
+    let verifier = StaticEvaluationLearningTaskAdmissionVerifier(
+      context: fixture.admissionContext
+    )
+    let provider = SequenceProvider(scriptedTwoRoundResponses())
+    let resourceCalls = EvaluationAsyncCounter()
+
+    // when
+    let error = await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
+      _ = try await EvaluationWorker().runResult(
+        invocation: fixture.invocation,
+        admissionVerifier: verifier,
+        makeResource: { _ in
+          await resourceCalls.increment()
+          return makeEvaluationLearningLiveResource(provider: provider)
+        }
+      )
+    }
+
+    // then
+    #expect(error != nil)
+    #expect(await resourceCalls.value == 0)
+    #expect(await provider.requests.isEmpty)
+  }
+
+  @Test func firstRoundTripUsesTheAuthorizedProviderCallID() async throws {
+    // given
+    let fixture = try makeEvaluationLearningTaskInvocationFixture()
+    defer { fixture.remove() }
+    let verifier = StaticEvaluationLearningTaskAdmissionVerifier(
+      context: fixture.admissionContext
+    )
+    let provider = SequenceProvider(scriptedTwoRoundResponses())
+
+    // when
+    let result = try await EvaluationWorker().runResult(
+      invocation: fixture.invocation,
+      admissionVerifier: verifier,
+      makeResource: { _ in
+        makeEvaluationLearningLiveResource(provider: provider)
+      }
+    )
+
+    // then
+    #expect(result.usage.first?.providerCallID == fixture.invocation.providerCallID.rawValue)
+  }
+
   @Test func workerRejectsSamePathConfigurationMutationBeforeFreezeOrProviderSetup() async throws {
     // given
     let root = try makeEvaluationTestRoot()
@@ -187,6 +240,14 @@ import Testing
     #expect(evidence.classification == .carrierFailure)
     #expect(evidence.invocationID == invocation.invocationID)
     #expect(evidence.configurationSHA256 == invocation.configurationSHA256)
+  }
+}
+
+private actor EvaluationAsyncCounter {
+  private(set) var value = 0
+
+  func increment() {
+    value += 1
   }
 }
 

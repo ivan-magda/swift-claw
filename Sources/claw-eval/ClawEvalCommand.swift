@@ -81,19 +81,23 @@ struct ClawEvalCommand: AsyncParsableCommand {
     var sealedOutputKeyStdin = false
 
     mutating func run() async throws {
-      let url = URL(fileURLWithPath: invocation)
-      let authorized = try EvaluationJSONFile.decode(EvaluationWorkerInvocation.self, from: url)
-
-      let key =
-        sealedOutputKeyStdin
-        ? FileHandle.standardInput.readDataToEndOfFile()
-        : nil
-      let attemptID = try await EvaluationWorker().run(
-        invocation: authorized,
-        sealedOutputKey: key
-      )
-
-      print(attemptID)
+      switch try EvaluationWorkerInput.decode(from: URL(fileURLWithPath: invocation)) {
+      case .legacy(let authorized):
+        let key =
+          sealedOutputKeyStdin
+          ? FileHandle.standardInput.readDataToEndOfFile()
+          : nil
+        let attemptID = try await EvaluationWorker().run(
+          invocation: authorized,
+          sealedOutputKey: key
+        )
+        print(attemptID)
+      case .scheduledLearning(let authorized):
+        guard sealedOutputKeyStdin == false else {
+          throw ValidationError("scheduled-learning-v1 does not accept a sealed-output key")
+        }
+        print(try await EvaluationWorker().run(invocation: authorized))
+      }
     }
   }
 
