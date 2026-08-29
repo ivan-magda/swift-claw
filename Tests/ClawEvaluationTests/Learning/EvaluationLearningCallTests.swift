@@ -401,16 +401,29 @@ import Testing
     #expect(await transport.recorded.count == 3)
   }
 
-  @Test func managedMissingCredentialPublishesFailedZeroSendUsage() async throws {
+  @Test func productionSelectsArgumentZeroBeforeMissingCredentialFailure() async throws {
     // given
     let fixture = try makeLearningCallFixture()
     defer { fixture.remove() }
+    let decoyRoot = fixture.root.appendingPathComponent(
+      "Decoy.bundle/Contents/MacOS",
+      isDirectory: true
+    )
+    try FileManager.default.createDirectory(at: decoyRoot, withIntermediateDirectories: true)
+    let decoyExecutableURL = decoyRoot.appendingPathComponent("claw-eval-decoy")
+    try Data("decoy executable".utf8).write(to: decoyExecutableURL)
+    for executableURL in [fixture.executableURL, decoyExecutableURL] {
+      try FileManager.default.setAttributes(
+        [.posixPermissions: 0o700],
+        ofItemAtPath: executableURL.path
+      )
+    }
 
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
       makeResource: EvaluationLearningCall.productionResourceFactory(
-        runningExecutablePath: { fixture.executableURL.path }
+        arguments: [fixture.executableURL.path, decoyExecutableURL.path]
       )
     )
     let durable = try fixture.readDurableResult()
@@ -427,29 +440,6 @@ import Testing
     #expect(result.usage?.accountedTokens == 0)
     #expect(result.usage?.isEstimated == false)
     #expect(lockIsFree)
-  }
-
-  @Test func productionFactoryVerifierBindsExactLaunchExecutableBeforeCredentialFailure()
-    async throws
-  {
-    // given
-    let fixture = try makeLearningCallFixture()
-    defer { fixture.remove() }
-
-    // when
-    let result = try await EvaluationLearningCall().run(
-      request: fixture.request,
-      makeResource: EvaluationLearningCall.productionResourceFactory(
-        runningExecutablePath: { fixture.executableURL.path }
-      )
-    )
-
-    // then
-    #expect(result.outcome == .failed)
-    #expect(result.failureCode == EvaluationAttemptOutcome.authenticationRequired.rawValue)
-    #expect(result.usage?.responsesSends == 0)
-    #expect(try fixture.readDurableResult() == result)
-    #expect(try EvaluationWorkerLifecycle.proveProductionLockIsFree(stateRoot: fixture.stateRoot))
   }
 
   @Test func liveAdmissionDenialPublishesFailedNoCallAndCleansUp() async throws {
