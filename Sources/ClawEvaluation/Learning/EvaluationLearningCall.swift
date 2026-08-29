@@ -702,26 +702,25 @@ package struct EvaluationLearningCallRunner: Sendable {
 package struct EvaluationLearningCall: Sendable {
   package init() {}
 
-  static var productionExecutablePath: String { CommandLine.arguments[0] }
-
   package func run(
     request: EvaluationLearningCallRequest
   ) async throws -> EvaluationLearningCallResult {
     return try await run(
       request: request,
-      makeResource: Self.productionResourceFactory(
-        admissionVerifier: Self.productionAdmissionVerifier()
-      )
+      makeResource: Self.productionResourceFactory()
     )
   }
 
   static func productionResourceFactory(
-    admissionVerifier: EvaluationLearningAdmissionVerifier
+    runningExecutablePath: @escaping @Sendable () -> String = { CommandLine.arguments[0] }
   )
     -> @Sendable (EvaluationLearningCallResourceFactoryInput) async throws ->
     EvaluationLearningCallResource
   {
-    { input in
+    let admissionVerifier = Self.productionAdmissionVerifier(
+      runningExecutablePath: runningExecutablePath
+    )
+    return { input in
       try await Self.makeLiveResource(input: input, admissionVerifier: admissionVerifier)
     }
   }
@@ -1067,17 +1066,17 @@ private extension EvaluationLearningCallRunner {
 // MARK: - Live Call Composition
 
 private extension EvaluationLearningCall {
-  static func productionAdmissionVerifier() -> EvaluationLearningAdmissionVerifier {
+  static func productionAdmissionVerifier(
+    runningExecutablePath: @escaping @Sendable () -> String
+  ) -> EvaluationLearningAdmissionVerifier {
     EvaluationLearningAdmissionVerifier(
-      runningExecutablePath: {
-        CommandLine.arguments[0]
-      },
+      runningExecutablePath: runningExecutablePath,
       readFile: { url in
         try EvaluationPathSecurity.readRegularSingleLinkFile(
           at: url,
           maximumByteCount: 256 * 1_024 * 1_024
         )
-      }
+      },
     )
   }
 

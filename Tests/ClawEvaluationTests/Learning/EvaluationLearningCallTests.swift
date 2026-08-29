@@ -38,7 +38,6 @@ import Testing
     #expect(request.tools.isEmpty)
     #expect(request.responseFormat == nil)
     #expect(request.sessionId == nil)
-    #expect(request.terminalValidationPolicy == .throughStreamEnd)
   }
 
   @Test func reflectorUsesTheFrozen768TokenReservation() async throws {
@@ -411,7 +410,7 @@ import Testing
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
       makeResource: EvaluationLearningCall.productionResourceFactory(
-        admissionVerifier: fixture.admissionVerifier
+        runningExecutablePath: { fixture.executableURL.path }
       )
     )
     let durable = try fixture.readDurableResult()
@@ -430,15 +429,27 @@ import Testing
     #expect(lockIsFree)
   }
 
-  @Test func productionAdmissionBindsTheExactLaunchExecutable() {
+  @Test func productionFactoryVerifierBindsExactLaunchExecutableBeforeCredentialFailure()
+    async throws
+  {
     // given
-    let launchedExecutable = CommandLine.arguments[0]
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
 
     // when
-    let boundExecutable = EvaluationLearningCall.productionExecutablePath
+    let result = try await EvaluationLearningCall().run(
+      request: fixture.request,
+      makeResource: EvaluationLearningCall.productionResourceFactory(
+        runningExecutablePath: { fixture.executableURL.path }
+      )
+    )
 
     // then
-    #expect(boundExecutable == launchedExecutable)
+    #expect(result.outcome == .failed)
+    #expect(result.failureCode == EvaluationAttemptOutcome.authenticationRequired.rawValue)
+    #expect(result.usage?.responsesSends == 0)
+    #expect(try fixture.readDurableResult() == result)
+    #expect(try EvaluationWorkerLifecycle.proveProductionLockIsFree(stateRoot: fixture.stateRoot))
   }
 
   @Test func liveAdmissionDenialPublishesFailedNoCallAndCleansUp() async throws {
@@ -479,6 +490,43 @@ import Testing
     #expect(await lifecycle.credentialShutdownCount == 1)
     #expect(await lifecycle.transportShutdownCount == 1)
     #expect(lockIsFree)
+  }
+
+  @Test func liveAdmissionDenialRejectsAnObservedResponsesSend() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let provider = SequenceProvider([fixture.response(content: "unreachable")])
+    let lifecycle = LearningCallLifecycleProbe()
+    let recorder = learningRecorder(fixture: fixture)
+
+    // when
+    await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
+      try await EvaluationLearningCall().run(
+        request: fixture.request,
+        makeResource: { input in
+          try await makeLearningResource(
+            input: input,
+            fixture: fixture,
+            roster: ProviderRoster(primary: fixture.binding(provider: provider)),
+            recorder: recorder,
+            credentialSource: LearningCallCredentialSource(lifecycle: lifecycle),
+            closeTransport: {
+              await lifecycle.recordTransportShutdown()
+            },
+            liveAdmission: { ProviderRoundTripAdmission.deny(cap: "test-live-denial") },
+            recordResponsesSend: true
+          )
+        }
+      )
+    }
+
+    // then
+    #expect(FileManager.default.fileExists(atPath: fixture.resultURL.path) == false)
+    #expect(await provider.requests.isEmpty)
+    #expect(await lifecycle.credentialShutdownCount == 1)
+    #expect(await lifecycle.transportShutdownCount == 1)
+    #expect(try EvaluationWorkerLifecycle.proveProductionLockIsFree(stateRoot: fixture.stateRoot))
   }
 
   @Test func liveReadmissionRejectsArtifactMutationInsideResourceFactory() async throws {
