@@ -157,16 +157,40 @@ import Testing
     let fixture = try makeEvaluationLearningAdmissionFixture(eventMutation: changedField)
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     let admission = fixture.liveAdmission(initial: initial)
-    let downstream = RecordingHTTPExecutor(
-      cannedResult: HTTPResult(statusCode: 200, headers: [:], body: Data())
+    let configured = try makeEvaluationConfiguration(root: fixture.root)
+    let provider = SequenceProvider([])
+    let roster = ProviderRoster(
+      primary: LLMRouteBinding(
+        provider: provider,
+        wireModel: PageEvaluationContract.wireModel,
+        configuredReference: PageEvaluationContract.providerReference,
+        costPolicy: .includedPlan,
+        reservationPolicy: .chatGPTReplayState
+      )
     )
+    let recorder = EvaluationHTTPRecorder(base: ScriptedHTTPExecutor([]))
 
     // when
-    let decision = await admitThenReachDownstream(admission, downstream: downstream)
+    let result = try await EvaluationAttemptRunner(
+      roster: roster,
+      httpRecorder: recorder
+    ).run(
+      configuration: configured.configuration,
+      sendBudget: EvaluationSendBudgetSnapshot(
+        stageAccountedTokens: 0,
+        globalAccountedTokens: 0,
+        stageResponsesSends: 0,
+        globalResponsesSends: 0,
+        stageAccountedTokenThreshold: PageEvaluationContract.pageLimits.accountedTokenThreshold,
+        stageResponsesSendCap: PageEvaluationContract.pageLimits.maximumResponsesSends
+      ),
+      integrityAdmission: { await admission.evaluate() }
+    )
 
-    // then — accepting any row reaches a provider call with a mismatched pre-minted identity.
-    #expect(decision == .deny(cap: "evaluation-learning-integrity"))
-    #expect(await downstream.requests.isEmpty)
+    // then — ignoring the production integrity admission reaches the provider.
+    #expect(result.outcome == .harnessFailure)
+    #expect(result.criticalCode == "evaluation-learning-integrity")
+    #expect(await provider.requests.isEmpty)
   }
 
   @Test(arguments: [
@@ -193,16 +217,40 @@ import Testing
     let fixture = try makeEvaluationLearningAdmissionFixture(approvalBudgetMutation: changedBudget)
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     let admission = fixture.liveAdmission(initial: initial)
-    let downstream = RecordingHTTPExecutor(
-      cannedResult: HTTPResult(statusCode: 200, headers: [:], body: Data())
+    let configured = try makeEvaluationConfiguration(root: fixture.root)
+    let provider = SequenceProvider([])
+    let roster = ProviderRoster(
+      primary: LLMRouteBinding(
+        provider: provider,
+        wireModel: PageEvaluationContract.wireModel,
+        configuredReference: PageEvaluationContract.providerReference,
+        costPolicy: .includedPlan,
+        reservationPolicy: .chatGPTReplayState
+      )
     )
+    let recorder = EvaluationHTTPRecorder(base: ScriptedHTTPExecutor([]))
 
     // when
-    let decision = await admitThenReachDownstream(admission, downstream: downstream)
+    let result = try await EvaluationAttemptRunner(
+      roster: roster,
+      httpRecorder: recorder
+    ).run(
+      configuration: configured.configuration,
+      sendBudget: EvaluationSendBudgetSnapshot(
+        stageAccountedTokens: 0,
+        globalAccountedTokens: 0,
+        stageResponsesSends: 0,
+        globalResponsesSends: 0,
+        stageAccountedTokenThreshold: PageEvaluationContract.pageLimits.accountedTokenThreshold,
+        stageResponsesSendCap: PageEvaluationContract.pageLimits.maximumResponsesSends
+      ),
+      integrityAdmission: { await admission.evaluate() }
+    )
 
-    // then — comparing only one budget dimension permits an unapproved aggregate cap.
-    #expect(decision == .deny(cap: "evaluation-learning-integrity"))
-    #expect(await downstream.requests.isEmpty)
+    // then — ignoring the production integrity admission reaches the provider.
+    #expect(result.outcome == .harnessFailure)
+    #expect(result.criticalCode == "evaluation-learning-integrity")
+    #expect(await provider.requests.isEmpty)
   }
 
   @Test func verifierUsesOnlyTheManifestBytesItHashes() async throws {
@@ -610,25 +658,4 @@ private struct StaticEvaluationLearningAdmissionVerifier: EvaluationLearningAdmi
   ) async throws -> EvaluationLearningAdmissionContext {
     context
   }
-}
-
-private func admitThenReachDownstream(
-  _ admission: EvaluationLearningLiveAdmission,
-  downstream: RecordingHTTPExecutor
-) async -> ProviderRoundTripAdmission {
-  let decision = await admission.evaluate()
-  guard decision == .allow else {
-    return decision
-  }
-  _ = try? await downstream.execute(
-    HTTPRequest(
-      method: .post,
-      url: "https://provider.invalid/v1/responses",
-      headers: [:],
-      body: Data(),
-      timeout: .seconds(1),
-      responseBodyPolicy: .buffered(successBytes: 1_024, errorBytes: 1_024)
-    )
-  )
-  return decision
 }
