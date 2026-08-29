@@ -10,6 +10,62 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EvaluationWorkerBootstrapTests {
+  @Test func mismatchedEvaluationRootIsRejectedBeforeExternalWork() async throws {
+    // given
+    let fixture = try makeEvaluationLearningTaskInvocationFixture()
+    defer { fixture.remove() }
+    let alternateEvaluation = fixture.root.appendingPathComponent(
+      "alternate-evaluation",
+      isDirectory: true
+    )
+    let alternateResults = alternateEvaluation.appendingPathComponent("results", isDirectory: true)
+    try FileManager.default.createDirectory(at: alternateResults, withIntermediateDirectories: true)
+    var configurationObject = try #require(
+      JSONSerialization.jsonObject(
+        with: Data(contentsOf: fixture.configurationURL)
+      ) as? [String: Any]
+    )
+    configurationObject["evaluation_root"] = alternateEvaluation.path
+    configurationObject["result_path"] =
+      alternateResults.appendingPathComponent("attempt-1.json").path
+    let configurationData = try EvaluationCanonicalJSON.data(fromJSONObject: configurationObject)
+    try configurationData.write(to: fixture.configurationURL)
+    let invocation = EvaluationLearningTaskInvocation(
+      executionProfile: fixture.invocation.executionProfile,
+      jobID: fixture.invocation.jobID,
+      operationID: fixture.invocation.operationID,
+      attemptGeneration: fixture.invocation.attemptGeneration,
+      providerCallID: fixture.invocation.providerCallID,
+      configurationPath: fixture.invocation.configurationPath,
+      configurationSHA256: SHA256Digest.hex(configurationData),
+      manifest: fixture.invocation.manifest,
+      budget: fixture.invocation.budget,
+      authorization: fixture.invocation.authorization
+    )
+    let verifier = StaticEvaluationLearningTaskAdmissionVerifier(
+      context: fixture.admissionContext
+    )
+    let provider = SequenceProvider(scriptedTwoRoundResponses())
+    let resourceCalls = EvaluationAsyncCounter()
+
+    // when
+    let error = await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
+      _ = try await EvaluationWorker().runResult(
+        invocation: invocation,
+        admissionVerifier: verifier,
+        makeResource: { _ in
+          await resourceCalls.increment()
+          return makeEvaluationLearningLiveResource(provider: provider)
+        }
+      )
+    }
+
+    // then
+    #expect(error != nil)
+    #expect(await resourceCalls.value == 0)
+    #expect(await provider.requests.isEmpty)
+  }
+
   @Test func changedConfigurationIsRejectedBeforeExternalWork() async throws {
     // given
     let fixture = try makeEvaluationLearningTaskInvocationFixture()

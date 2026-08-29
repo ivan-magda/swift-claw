@@ -610,6 +610,7 @@ private extension EvaluationWorker {
       admission.manifestSHA256 == invocation.manifest.manifestSHA256,
       admission.manifestSHA256 == configuration.approval.manifestSHA256,
       admission.freezeCommit == configuration.provenance.freezeCommit,
+      configuration.evaluationRoot == invocation.manifest.evaluationRoot,
       admission.missingUsageTokenProxy == PageEvaluationContract.missingUsageTokenProxy,
       budgets.taskAttempts > 0,
       budgets.evaluatorCalls > 0,
