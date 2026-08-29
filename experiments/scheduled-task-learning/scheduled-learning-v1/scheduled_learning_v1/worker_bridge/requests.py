@@ -12,6 +12,16 @@ from typing import Literal, cast
 
 from benchmark_core.canonical import canonical_sha256, dumps, loads_object
 
+from ..frozen_contract import (
+    AGGREGATE_BUDGETS,
+    APPROVAL_KEYS,
+    LEARNING_RETRY_BUDGET,
+    MISSING_USAGE_TOKEN_PROXY,
+    SCHEMA_VERSION,
+    TASK_ROUTE,
+    json_exactly_matches,
+)
+
 _LEARNING_CORE_KEYS = {
     "schema_version",
     "execution_profile",
@@ -45,35 +55,14 @@ _MANIFEST_KEYS = {
     "manifest_sha256",
     "owner_approval",
 }
-_BUDGET_KEYS = {
-    "task_attempts",
-    "evaluator_calls",
-    "reflector_calls",
-    "responses_sends",
-    "accounted_tokens",
-}
-_ROUTE_KEYS = {
-    "provider_reference",
-    "wire_model",
-    "retry_budget",
-    "max_output_tokens",
-    "max_output_utf8_bytes",
-    "max_output_graphemes",
-}
+_BUDGET_KEYS = set(AGGREGATE_BUDGETS)
+_ROUTE_KEYS = set(TASK_ROUTE)
 _EXECUTION_KEYS = {
     "evaluator_route",
     "executable_sha256",
     "missing_usage_token_proxy",
     "reflector_route",
     "task_route",
-}
-_APPROVAL_KEYS = {
-    "schema_version",
-    "manifest_sha256",
-    "expected_freeze_commit",
-    "budgets",
-    "owner_identity",
-    "approved_at",
 }
 _TASK_BUDGET_KEYS = {
     "stage_accounted_tokens",
@@ -166,16 +155,6 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _GLOBAL_ACCOUNTED_TOKEN_THRESHOLD = 4_350_000
 _GLOBAL_RESPONSES_SEND_CAP = 454
-_TASK_MISSING_USAGE_TOKEN_PROXY = 132_768
-_TASK_ROUTE = {
-    "provider_reference": "openai-chatgpt/gpt-5.6-sol",
-    "wire_model": "gpt-5.6-sol",
-    "retry_budget": 1,
-    "max_output_tokens": 4096,
-    "max_output_utf8_bytes": 32_768,
-    "max_output_graphemes": 16_384,
-}
-_LEARNING_RETRY_BUDGET = 3
 
 
 @dataclass(frozen=True)
@@ -251,11 +230,11 @@ def bound_contract(core: dict[str, object], kind: str) -> dict[str, object]:
     _require_sha(execution.get("executable_sha256"), "manifest executable")
     proxy = _positive_integer(execution, "missing_usage_token_proxy")
     if kind == "task" and (
-        routes["task"] != _TASK_ROUTE or proxy != _TASK_MISSING_USAGE_TOKEN_PROXY
+        not json_exactly_matches(routes["task"], TASK_ROUTE) or proxy != MISSING_USAGE_TOKEN_PROXY
     ):
         raise ValueError("task route or usage proxy does not match the Swift runtime contract")
     if kind in {"evaluator", "reflector"} and (
-        routes[kind].get("retry_budget") != _LEARNING_RETRY_BUDGET
+        not json_exactly_matches(routes[kind].get("retry_budget"), LEARNING_RETRY_BUDGET)
     ):
         raise ValueError("learning route retry budget does not match the Swift call contract")
 
@@ -264,13 +243,13 @@ def bound_contract(core: dict[str, object], kind: str) -> dict[str, object]:
     if _sha256(approval_data) != approval_binding.get("sha256"):
         raise ValueError("owner approval digest does not bind to core")
     approval = _canonical_bytes_object(approval_data)
-    _require_exact(approval, _APPROVAL_KEYS, "owner approval")
+    _require_exact(approval, set(APPROVAL_KEYS), "owner approval")
     approval_budgets = _required_object(approval, "budgets")
     _require_exact(approval_budgets, _BUDGET_KEYS, "owner approval budgets")
     if (
-        approval.get("schema_version") != 1
+        not json_exactly_matches(approval.get("schema_version"), SCHEMA_VERSION)
         or approval.get("manifest_sha256") != manifest.get("manifest_sha256")
-        or approval_budgets != budgets
+        or not json_exactly_matches(approval_budgets, budgets)
         or not isinstance(approval.get("owner_identity"), str)
         or not approval.get("owner_identity")
         or not _COMMIT.fullmatch(str(approval.get("expected_freeze_commit")))
@@ -298,7 +277,7 @@ def _validate_core(core: dict[str, object], kind: str) -> None:
     expected = _TASK_CORE_KEYS if kind == "task" else _LEARNING_CORE_KEYS
     _require_exact(core, expected, f"{kind} core")
     if (
-        core.get("schema_version") != 1
+        not json_exactly_matches(core.get("schema_version"), SCHEMA_VERSION)
         or core.get("execution_profile") != "scheduled-learning-v1"
         or not isinstance(core.get("job_id"), str)
         or not core.get("job_id")
@@ -371,7 +350,7 @@ def _validate_configuration(
     _require_exact(approval, _TASK_APPROVAL_KEYS, "task configuration approval")
     route = _required_object(projection, "route")
     if (
-        configuration.get("schema_version") != 1
+        not json_exactly_matches(configuration.get("schema_version"), SCHEMA_VERSION)
         or configuration.get("execution_profile") != "scheduled-learning-v1"
         or configuration.get("carrier_sha256") != configuration.get("input_sha256")
         or configuration.get("provider_reference") != route.get("provider_reference")

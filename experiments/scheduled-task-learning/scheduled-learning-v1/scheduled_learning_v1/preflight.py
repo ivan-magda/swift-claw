@@ -7,18 +7,17 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from benchmark_core.canonical import canonical_sha256
+from benchmark_core.canonical import SHA256_HEX, canonical_sha256
 
-from .freeze import _BUDGETS, _SHA256, _load_canonical_object, verify_manifest
+from .freeze import verify_manifest
+from .freeze_inputs import load_canonical_object
+from .frozen_contract import (
+    AGGREGATE_BUDGETS,
+    APPROVAL_KEYS,
+    SCHEMA_VERSION,
+    json_exactly_matches,
+)
 
-_APPROVAL_KEYS = {
-    "schema_version",
-    "manifest_sha256",
-    "expected_freeze_commit",
-    "budgets",
-    "owner_identity",
-    "approved_at",
-}
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _RFC3339_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
 
@@ -27,7 +26,7 @@ def verify_pre_run(root: Path, approval: dict[str, object]) -> dict[str, object]
     """Verify the canonical manifest, exact owner budget, and checked-out freeze commit."""
 
     experiment_root = Path(root).resolve(strict=True)
-    manifest = _load_canonical_object(experiment_root / "freeze" / "manifest.json")
+    manifest = load_canonical_object(experiment_root / "freeze" / "manifest.json")
     verify_manifest(experiment_root, manifest)
     manifest_sha256 = canonical_sha256(manifest)
     _verify_approval(approval, manifest_sha256)
@@ -35,27 +34,27 @@ def verify_pre_run(root: Path, approval: dict[str, object]) -> dict[str, object]
     if approval["expected_freeze_commit"] != head:
         raise ValueError("owner approval names a different freeze commit than the checked-out HEAD")
     return {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "status": "verified",
         "manifest_sha256": manifest_sha256,
         "freeze_commit": head,
-        "budgets": dict(_BUDGETS),
+        "budgets": dict(AGGREGATE_BUDGETS),
         "owner_identity": approval["owner_identity"],
         "approved_at": approval["approved_at"],
     }
 
 
 def _verify_approval(approval: dict[str, object], manifest_sha256: str) -> None:
-    if set(approval) != _APPROVAL_KEYS:
+    if set(approval) != set(APPROVAL_KEYS):
         raise ValueError("owner approval has wrong keys")
-    if approval.get("schema_version") != 1:
+    if not json_exactly_matches(approval.get("schema_version"), SCHEMA_VERSION):
         raise ValueError("owner approval schema is invalid")
     digest = approval.get("manifest_sha256")
-    if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+    if not isinstance(digest, str) or SHA256_HEX.fullmatch(digest) is None:
         raise ValueError("owner approval manifest_sha256 is invalid")
     if digest != manifest_sha256:
         raise ValueError("owner approval names a different manifest")
-    if approval.get("budgets") != _BUDGETS:
+    if not json_exactly_matches(approval.get("budgets"), AGGREGATE_BUDGETS):
         raise ValueError("owner approval budgets differ from the frozen aggregate budget")
     commit = approval.get("expected_freeze_commit")
     if not isinstance(commit, str) or _COMMIT.fullmatch(commit) is None:

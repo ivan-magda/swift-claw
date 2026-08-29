@@ -80,6 +80,29 @@ class ManifestTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "evaluator route"):
             verify_manifest(self.repository.experiment_root, output_changed)
 
+    def test_verifier_rejects_json_type_coercions_in_exact_values(self) -> None:
+        # given
+        boolean_schema = copy.deepcopy(self.manifest)
+        boolean_schema["schema_version"] = True
+
+        float_budget = copy.deepcopy(self.manifest)
+        _object(float_budget, "budgets")["reflector_calls"] = 1.0
+        rehash_binding(float_budget, "budgets")
+
+        integer_gate = copy.deepcopy(self.manifest)
+        gates = _object(integer_gate, "gates")
+        _object(gates, "adapter_pass_rule")["allow_critical_result"] = 0
+        rehash_binding(integer_gate, "gates")
+
+        # when / then
+        for case, changed in (
+            ("boolean schema", boolean_schema),
+            ("float budget", float_budget),
+            ("integer gate", integer_gate),
+        ):
+            with self.subTest(case=case), self.assertRaises(ValueError):
+                verify_manifest(self.repository.experiment_root, changed)
+
     def test_verifier_rejects_a_rehashed_run_order_substitution(self) -> None:
         # given
         changed = copy.deepcopy(self.manifest)
@@ -141,6 +164,22 @@ class FreezeCLITests(unittest.TestCase):
         self.assertTrue((repository.experiment_root / "freeze" / "manifest-input.json").is_file())
         self.assertTrue((repository.experiment_root / "freeze" / "manifest.json").is_file())
         self.assertIn("owner_approval=absent", verified.stdout)
+
+    def test_module_cli_verify_rejects_a_changed_bound_input(self) -> None:
+        # given
+        repository = create_repository()
+        self.addCleanup(repository.cleanup)
+        built = run_module("build", str(repository.experiment_root))
+        prompt = repository.experiment_root / "prompts" / "task.md"
+        prompt.write_bytes(prompt.read_bytes() + b"changed\n")
+
+        # when
+        verified = run_module("verify", str(repository.experiment_root))
+
+        # then
+        self.assertEqual(built.returncode, 0, built.stderr)
+        self.assertNotEqual(verified.returncode, 0)
+        self.assertIn("input file changed", verified.stderr)
 
 
 def _object(value: dict[str, object], key: str) -> dict[str, object]:

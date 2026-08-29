@@ -8,7 +8,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from benchmark_core.canonical import canonical_sha256, write
@@ -60,17 +60,6 @@ class FreezeTestRepository:
         self.git("add", "-A")
         self.git("commit", "-m", message)
         return self.git("rev-parse", "HEAD")
-
-
-@dataclass
-class RecordingBridge:
-    calls: list[str] = field(default_factory=list)
-
-    def run_task(self) -> None:
-        self.calls.append("task")
-
-    def run_learning(self) -> None:
-        self.calls.append("learning")
 
 
 def create_repository() -> FreezeTestRepository:
