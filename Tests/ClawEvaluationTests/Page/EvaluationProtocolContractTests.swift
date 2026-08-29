@@ -32,6 +32,7 @@ import Testing
       categories: approvedManifest.categories,
       protectedArtifacts: approvedManifest.protectedArtifacts.filter {
         $0.path.hasPrefix("\(pageRoot)/")
+          && $0.path != "\(pageRoot)/freeze/page-manifest-descriptor.json"
       }
     )
     try manifest.validateBudgetContract(for: .pageChange)

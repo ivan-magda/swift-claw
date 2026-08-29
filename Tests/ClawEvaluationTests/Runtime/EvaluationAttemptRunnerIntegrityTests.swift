@@ -10,6 +10,93 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EvaluationAttemptRunnerIntegrityTests {
+  @Test func learningFenceIntegrityRequiresSeparateLessonAndFileReadDigests() async throws {
+    // given
+    let cases = [
+      (name: "verified", fileReadUsesLesson: false),
+      (name: "mismatched-file-read", fileReadUsesLesson: true),
+    ]
+
+    for item in cases {
+      let fixture = try makeLearningAttemptFixture(lessons: ["Preserve semantic page changes."])
+      defer { fixture.remove() }
+      let carrierPath = try #require(fixture.configuration.carrierPath)
+      let carrierData = try EvaluationPathSecurity.readRegularSingleLinkFile(
+        at: URL(fileURLWithPath: carrierPath)
+      )
+      let carrierText = try #require(String(data: carrierData, encoding: .utf8))
+      let lessonFence = LabeledContext(
+        label: "scheduled_learning_lessons",
+        content: fixture.lessonSetText,
+        nonce: String(repeating: "a", count: 32)
+      ).render()
+      let fileReadFence = LabeledContext(
+        label: "file_read",
+        content: item.fileReadUsesLesson ? fixture.lessonSetText : carrierText,
+        nonce: String(repeating: "b", count: 32)
+      ).render()
+      let recorder = EvaluationHTTPRecorder(
+        base: ScriptedHTTPExecutor([
+          .stream(HTTPStreamHead(statusCode: 200, headers: [:]), []),
+          .stream(HTTPStreamHead(statusCode: 200, headers: [:]), []),
+        ])
+      )
+      _ = try await recorder.openStream(try learningRequest(input: lessonFence))
+      _ = try await recorder.openStream(
+        try learningRequest(input: "\(lessonFence)\n\n\(fileReadFence)")
+      )
+      let provider = SequenceProvider(scriptedTwoRoundResponses())
+      let roster = ProviderRoster(
+        primary: LLMRouteBinding(
+          provider: provider,
+          wireModel: PageEvaluationContract.wireModel,
+          configuredReference: PageEvaluationContract.providerReference,
+          costPolicy: .includedPlan,
+          reservationPolicy: .chatGPTReplayState
+        )
+      )
+
+      // when
+      let result = try await EvaluationAttemptRunner(
+        roster: roster,
+        httpRecorder: recorder
+      ).run(
+        configuration: fixture.configuration,
+        sendBudget: EvaluationSendBudgetSnapshot(
+          stageAccountedTokens: 0,
+          globalAccountedTokens: 0,
+          stageResponsesSends: 0,
+          globalResponsesSends: 0,
+          stageAccountedTokenThreshold: PageEvaluationContract.pageLimits.accountedTokenThreshold,
+          stageResponsesSendCap: PageEvaluationContract.pageLimits.maximumResponsesSends
+        )
+      )
+
+      // then — accepting the legacy first-match payload for both labels makes the mismatch pass;
+      // rejecting every M3 result makes the verified case fail.
+      if item.fileReadUsesLesson {
+        #expect(result.learningCarrierVerified == false, Comment(rawValue: item.name))
+        #expect(result.outcome == .harnessFailure, Comment(rawValue: item.name))
+        #expect(
+          result.criticalCode == "untrusted_payload_digest_mismatch",
+          Comment(rawValue: item.name)
+        )
+      } else {
+        #expect(
+          result.learningCarrierSHA256 == fixture.configuration.inputSHA256,
+          Comment(rawValue: item.name)
+        )
+        #expect(
+          result.learningLessonSetSHA256 == fixture.configuration.lessonSetDigest,
+          Comment(rawValue: item.name)
+        )
+        #expect(result.learningInitialTainted == true, Comment(rawValue: item.name))
+        #expect(result.learningCarrierVerified == true, Comment(rawValue: item.name))
+        #expect(result.outcome == .completed, Comment(rawValue: item.name))
+      }
+    }
+  }
+
   @Test func toolDeviationTakesPrecedenceOverACompetingCarrierDigestMismatch() async throws {
     // given — the model proposes a forbidden path while the recorded second request also carries
     // the wrong fenced payload. The model-visible task deviation must not become a harness defect.
@@ -375,4 +462,18 @@ import Testing
     #expect(noStartProgress.attempts.first?.usage.isEmpty == true)
     #expect(noStartProgress.attempts.first?.accountedTokens == 0)
   }
+}
+
+private func learningRequest(input: String) throws -> HTTPRequest {
+  HTTPRequest(
+    method: .post,
+    url: LLMProviderDescriptor.chatGPTResponsesEndpoint,
+    headers: [:],
+    body: try JSONSerialization.data(withJSONObject: [
+      "input": input,
+      "model": PageEvaluationContract.wireModel,
+    ]),
+    timeout: .seconds(1),
+    responseBodyPolicy: .streaming(maximumUnreadBytes: 1_024, errorBytes: 1_024)
+  )
 }

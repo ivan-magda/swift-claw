@@ -1,0 +1,401 @@
+import ClawCore
+import Foundation
+
+package struct EvaluationLearningCallUsage: Codable, Sendable, Equatable {
+  package let providerCallID: ProviderCallID
+  package let responsesSends: Int
+  package let provenNotStartedResponsesSends: Int
+  package let promptTokens: Int?
+  package let completionTokens: Int?
+  package let reportedTotalTokens: Int?
+  package let accountedTokens: Int
+  package let isEstimated: Bool
+
+  package init(
+    providerCallID: ProviderCallID,
+    responsesSends: Int,
+    provenNotStartedResponsesSends: Int,
+    terminalUsage: ChatUsage?,
+    missingUsageTokenProxy: Int
+  ) throws {
+    let reportedRow: EvaluationUsageAccountingRow?
+    if let terminalUsage {
+      let (reportedTotal, overflowed) = terminalUsage.promptTokens.addingReportingOverflow(
+        terminalUsage.completionTokens
+      )
+      guard
+        terminalUsage.promptTokens >= 0,
+        terminalUsage.completionTokens >= 0,
+        terminalUsage.totalTokens >= 0,
+        overflowed == false,
+        reportedTotal == terminalUsage.totalTokens
+      else {
+        throw EvaluationLearningAdmissionError.invalidBinding
+      }
+      promptTokens = terminalUsage.promptTokens
+      completionTokens = terminalUsage.completionTokens
+      reportedTotalTokens = terminalUsage.totalTokens
+      reportedRow = EvaluationUsageAccountingRow(
+        tokens: terminalUsage.totalTokens,
+        isEstimated: false
+      )
+    } else {
+      promptTokens = nil
+      completionTokens = nil
+      reportedTotalTokens = nil
+      reportedRow = nil
+    }
+
+    guard
+      missingUsageTokenProxy > 0,
+      responsesSends >= 0,
+      provenNotStartedResponsesSends >= 0,
+      provenNotStartedResponsesSends <= responsesSends,
+      reportedRow == nil || responsesSends - provenNotStartedResponsesSends > 0
+    else {
+      throw EvaluationLearningAdmissionError.invalidBinding
+    }
+    self.providerCallID = providerCallID
+    self.responsesSends = responsesSends
+    self.provenNotStartedResponsesSends = provenNotStartedResponsesSends
+    let rows = reportedRow.map { [$0] } ?? []
+    accountedTokens = EvaluationResultAccounting.accountedTokens(
+      responsesSends: responsesSends,
+      provenNotStartedResponsesSends: provenNotStartedResponsesSends,
+      usage: rows,
+      missingUsageTokenProxy: missingUsageTokenProxy
+    )
+    let accountableSends = responsesSends - provenNotStartedResponsesSends
+    isEstimated = accountableSends > rows.count
+  }
+
+  package func validate(
+    providerCallID: ProviderCallID,
+    retryBudget: Int,
+    maxOutputTokens: Int,
+    missingUsageTokenProxy: Int
+  ) throws {
+    let reportedValues = [promptTokens, completionTokens, reportedTotalTokens]
+    guard
+      self.providerCallID == providerCallID,
+      responsesSends >= 0,
+      responsesSends <= retryBudget,
+      provenNotStartedResponsesSends >= 0,
+      provenNotStartedResponsesSends <= responsesSends,
+      reportedValues.allSatisfy({ $0 == nil }) || reportedValues.allSatisfy({ $0 != nil })
+    else {
+      throw EvaluationLearningAdmissionError.invalidBinding
+    }
+    let terminalUsage: ChatUsage?
+    if let promptTokens,
+      let completionTokens,
+      let reportedTotalTokens
+    {
+      guard completionTokens <= maxOutputTokens else {
+        throw EvaluationLearningAdmissionError.invalidBinding
+      }
+      terminalUsage = ChatUsage(
+        promptTokens: promptTokens,
+        completionTokens: completionTokens,
+        totalTokens: reportedTotalTokens
+      )
+    } else {
+      terminalUsage = nil
+    }
+    let expected = try Self(
+      providerCallID: providerCallID,
+      responsesSends: responsesSends,
+      provenNotStartedResponsesSends: provenNotStartedResponsesSends,
+      terminalUsage: terminalUsage,
+      missingUsageTokenProxy: missingUsageTokenProxy
+    )
+    guard accountedTokens == expected.accountedTokens, isEstimated == expected.isEstimated else {
+      throw EvaluationLearningAdmissionError.invalidBinding
+    }
+  }
+
+  package enum CodingKeys: String, CodingKey, CaseIterable {
+    case providerCallID = "provider_call_id"
+    case responsesSends = "responses_sends"
+    case provenNotStartedResponsesSends = "proven_not_started_responses_sends"
+    case promptTokens = "prompt_tokens"
+    case completionTokens = "completion_tokens"
+    case reportedTotalTokens = "reported_total_tokens"
+    case accountedTokens = "accounted_tokens"
+    case isEstimated = "is_estimated"
+  }
+
+  package func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(providerCallID, forKey: .providerCallID)
+    try container.encode(responsesSends, forKey: .responsesSends)
+    try container.encode(provenNotStartedResponsesSends, forKey: .provenNotStartedResponsesSends)
+    try container.encodeOptional(promptTokens, forKey: .promptTokens)
+    try container.encodeOptional(completionTokens, forKey: .completionTokens)
+    try container.encodeOptional(reportedTotalTokens, forKey: .reportedTotalTokens)
+    try container.encode(accountedTokens, forKey: .accountedTokens)
+    try container.encode(isEstimated, forKey: .isEstimated)
+  }
+}
+
+package enum EvaluationLearningCallOutcome: String, Codable, Sendable {
+  case response
+  case failedNoCall = "failed_no_call"
+  case failed
+}
+
+package struct EvaluationLearningCallProvenance: Codable, Sendable, Equatable {
+  package let requestSHA256: String
+  package let manifestSHA256: String
+  package let freezeCommit: String
+  package let executableSHA256: String
+  package let promptSHA256: String
+  package let carrierSHA256: String
+
+  enum CodingKeys: String, CodingKey {
+    case requestSHA256 = "request_sha256"
+    case manifestSHA256 = "manifest_sha256"
+    case freezeCommit = "freeze_commit"
+    case executableSHA256 = "executable_sha256"
+    case promptSHA256 = "prompt_sha256"
+    case carrierSHA256 = "carrier_sha256"
+  }
+}
+
+package struct EvaluationLearningCallResult: Codable, Sendable, Equatable {
+  package let schemaVersion: Int
+  package let jobID: String
+  package let operationID: String
+  package let attemptGeneration: Int
+  package let providerCallID: ProviderCallID
+  package let kind: EvaluationLearningOperationKind
+  package let outcome: EvaluationLearningCallOutcome
+  package let failureCode: String?
+  package let output: String?
+  package let outputSHA256: String?
+  package let finishReason: String?
+  package let providerReference: String
+  package let wireModel: String
+  package let reportedModel: String?
+  package let retryBudget: Int
+  package let maxOutputTokens: Int
+  package let maxOutputUTF8Bytes: Int
+  package let maxOutputGraphemes: Int
+  package let usage: EvaluationLearningCallUsage?
+  package let provenance: EvaluationLearningCallProvenance
+
+  package init(
+    request: EvaluationLearningCallRequest,
+    requestSHA256: String,
+    outcome: EvaluationLearningCallOutcome,
+    failureCode: EvaluationAttemptOutcome?,
+    output: String?,
+    finishReason: String?,
+    reportedModel: String?,
+    usage: EvaluationLearningCallUsage?,
+    admissionContext: EvaluationLearningAdmissionContext
+  ) throws {
+    try request.validate()
+    let canonicalRequestSHA256 = SHA256Digest.hex(
+      try EvaluationCanonicalJSON.data(encoding: request)
+    )
+    guard
+      requestSHA256 == canonicalRequestSHA256,
+      admissionContext.jobID == request.jobID,
+      admissionContext.operationID == request.operationID,
+      admissionContext.attemptGeneration == request.attemptGeneration,
+      admissionContext.providerCallID == request.providerCallID,
+      admissionContext.manifestSHA256 == request.manifest.manifestSHA256,
+      admissionContext.route.retryBudget > 0,
+      admissionContext.route.maxOutputTokens > 0,
+      admissionContext.route.maxOutputUTF8Bytes > 0,
+      admissionContext.route.maxOutputGraphemes > 0
+    else {
+      throw EvaluationLearningAdmissionError.invalidBinding
+    }
+
+    schemaVersion = 1
+    jobID = request.jobID
+    operationID = request.operationID
+    attemptGeneration = request.attemptGeneration
+    providerCallID = request.providerCallID
+    kind = request.kind
+    self.outcome = outcome
+    self.failureCode = failureCode?.rawValue
+    self.output = output
+    outputSHA256 = output.map { SHA256Digest.hex(Data($0.utf8)) }
+    self.finishReason = finishReason
+    providerReference = admissionContext.route.providerReference
+    wireModel = admissionContext.route.wireModel
+    self.reportedModel = reportedModel
+    retryBudget = admissionContext.route.retryBudget
+    maxOutputTokens = admissionContext.route.maxOutputTokens
+    maxOutputUTF8Bytes = admissionContext.route.maxOutputUTF8Bytes
+    maxOutputGraphemes = admissionContext.route.maxOutputGraphemes
+    self.usage = usage
+    provenance = EvaluationLearningCallProvenance(
+      requestSHA256: requestSHA256,
+      manifestSHA256: admissionContext.manifestSHA256,
+      freezeCommit: admissionContext.freezeCommit,
+      executableSHA256: admissionContext.executableSHA256,
+      promptSHA256: request.prompt.sha256,
+      carrierSHA256: request.carrier.sha256
+    )
+    try validate(missingUsageTokenProxy: admissionContext.missingUsageTokenProxy)
+  }
+
+  // swiftlint:disable:next function_body_length
+  package func validate(missingUsageTokenProxy: Int) throws {
+    guard
+      schemaVersion == 1,
+      kind == .evaluator || kind == .reflector,
+      jobID.isEmpty == false,
+      operationID.isEmpty == false,
+      attemptGeneration > 0,
+      EvaluationLearningAdmissionVerifier.isCanonicalProviderCallID(providerCallID),
+      providerReference.isEmpty == false,
+      wireModel.isEmpty == false,
+      retryBudget > 0,
+      maxOutputTokens > 0,
+      maxOutputUTF8Bytes > 0,
+      maxOutputGraphemes > 0,
+      SHA256Digest.isCanonicalHex(provenance.requestSHA256),
+      SHA256Digest.isCanonicalHex(provenance.manifestSHA256),
+      EvaluationLearningAdmissionVerifier.isCommit(provenance.freezeCommit),
+      SHA256Digest.isCanonicalHex(provenance.executableSHA256),
+      SHA256Digest.isCanonicalHex(provenance.promptSHA256),
+      SHA256Digest.isCanonicalHex(provenance.carrierSHA256),
+      finishReason.map(Self.isBoundedText) ?? true,
+      reportedModel.map(Self.isBoundedText) ?? true
+    else {
+      throw EvaluationLearningAdmissionError.invalidBinding
+    }
+    if let output {
+      guard
+        output.utf8.count <= maxOutputUTF8Bytes,
+        output.count <= maxOutputGraphemes,
+        outputSHA256 == SHA256Digest.hex(Data(output.utf8))
+      else {
+        throw EvaluationLearningAdmissionError.invalidBinding
+      }
+    } else if outputSHA256 != nil {
+      throw EvaluationLearningAdmissionError.invalidBinding
+    }
+    if let usage {
+      try usage.validate(
+        providerCallID: providerCallID,
+        retryBudget: retryBudget,
+        maxOutputTokens: maxOutputTokens,
+        missingUsageTokenProxy: missingUsageTokenProxy
+      )
+    }
+
+    switch outcome {
+    case .response:
+      guard
+        failureCode == nil,
+        output != nil,
+        usage?.responsesSends ?? 0 > 0
+      else {
+        throw EvaluationLearningAdmissionError.invalidBinding
+      }
+    case .failedNoCall:
+      guard
+        Self.isFailureCode(failureCode),
+        output == nil,
+        finishReason == nil,
+        reportedModel == nil,
+        usage == nil
+      else {
+        throw EvaluationLearningAdmissionError.invalidBinding
+      }
+    case .failed:
+      guard
+        Self.isFailureCode(failureCode),
+        output == nil,
+        finishReason == nil,
+        reportedModel == nil,
+        usage != nil
+      else {
+        throw EvaluationLearningAdmissionError.invalidBinding
+      }
+    }
+  }
+
+  package enum CodingKeys: String, CodingKey, CaseIterable {
+    case schemaVersion = "schema_version"
+    case jobID = "job_id"
+    case operationID = "operation_id"
+    case attemptGeneration = "attempt_generation"
+    case providerCallID = "provider_call_id"
+    case kind
+    case outcome
+    case failureCode = "failure_code"
+    case output
+    case outputSHA256 = "output_sha256"
+    case finishReason = "finish_reason"
+    case providerReference = "provider_reference"
+    case wireModel = "wire_model"
+    case reportedModel = "reported_model"
+    case retryBudget = "retry_budget"
+    case maxOutputTokens = "max_output_tokens"
+    case maxOutputUTF8Bytes = "max_output_utf8_bytes"
+    case maxOutputGraphemes = "max_output_graphemes"
+    case usage
+    case provenance
+  }
+
+  package func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(schemaVersion, forKey: .schemaVersion)
+    try container.encode(jobID, forKey: .jobID)
+    try container.encode(operationID, forKey: .operationID)
+    try container.encode(attemptGeneration, forKey: .attemptGeneration)
+    try container.encode(providerCallID, forKey: .providerCallID)
+    try container.encode(kind, forKey: .kind)
+    try container.encode(outcome, forKey: .outcome)
+    try container.encodeOptional(failureCode, forKey: .failureCode)
+    try container.encodeOptional(output, forKey: .output)
+    try container.encodeOptional(outputSHA256, forKey: .outputSHA256)
+    try container.encodeOptional(finishReason, forKey: .finishReason)
+    try container.encode(providerReference, forKey: .providerReference)
+    try container.encode(wireModel, forKey: .wireModel)
+    try container.encodeOptional(reportedModel, forKey: .reportedModel)
+    try container.encode(retryBudget, forKey: .retryBudget)
+    try container.encode(maxOutputTokens, forKey: .maxOutputTokens)
+    try container.encode(maxOutputUTF8Bytes, forKey: .maxOutputUTF8Bytes)
+    try container.encode(maxOutputGraphemes, forKey: .maxOutputGraphemes)
+    try container.encodeOptional(usage, forKey: .usage)
+    try container.encode(provenance, forKey: .provenance)
+  }
+}
+
+private extension EvaluationLearningCallResult {
+  static func isFailureCode(_ value: String?) -> Bool {
+    guard let value, let outcome = EvaluationAttemptOutcome(rawValue: value) else {
+      return false
+    }
+    return outcome != .completed
+  }
+
+  static func isBoundedText(_ value: String) -> Bool {
+    value.isEmpty == false
+      && value.utf8.count <= 256
+      && value.unicodeScalars.allSatisfy { scalar in
+        scalar.value >= 0x20 && scalar.value != 0x7F
+      }
+  }
+}
+
+private extension KeyedEncodingContainer {
+  mutating func encodeOptional<Value: Encodable>(
+    _ value: Value?,
+    forKey key: Key
+  ) throws {
+    if let value {
+      try encode(value, forKey: key)
+    } else {
+      try encodeNil(forKey: key)
+    }
+  }
+}
