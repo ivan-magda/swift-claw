@@ -552,7 +552,7 @@ package struct EvaluationLearningCallResult: Codable, Sendable, Equatable {
         output == nil,
         finishReason == nil,
         reportedModel == nil,
-        usage?.responsesSends ?? 0 > 0
+        usage != nil
       else {
         throw EvaluationLearningAdmissionError.invalidBinding
       }
@@ -664,7 +664,8 @@ package struct EvaluationLearningCallRunner: Sendable {
       tools: [],
       responseFormat: nil,
       sessionId: nil,
-      outputScope: outputScope
+      outputScope: outputScope,
+      terminalValidationPolicy: .throughStreamEnd
     )
 
     do {
@@ -701,38 +702,35 @@ package struct EvaluationLearningCallRunner: Sendable {
 package struct EvaluationLearningCall: Sendable {
   package init() {}
 
-  package static func runningExecutablePath() throws -> String {
-    let argumentURLs = CommandLine.arguments.dropFirst().map {
-      URL(fileURLWithPath: $0)
-    }
-    let candidates = Bundle.allBundles.compactMap(\.executableURL) + argumentURLs
-    for candidate in candidates {
-      if FileManager.default.isExecutableFile(atPath: candidate.path),
-        (try? EvaluationPathSecurity.requireRegularSingleLinkFile(at: candidate)) != nil
-      {
-        return candidate.path
-      }
-    }
-    throw EvaluationLearningAdmissionError.integrityFailure
-  }
+  static var productionExecutablePath: String { CommandLine.arguments[0] }
 
   package func run(
     request: EvaluationLearningCallRequest
   ) async throws -> EvaluationLearningCallResult {
-    let stateRoot = try EvaluationLearningAdmissionVerifier.absoluteURL(request.stateRoot)
     return try await run(
       request: request,
-      makeResource: { context in
-        try await Self.makeLiveResource(context: context, stateRoot: stateRoot)
-      }
+      makeResource: Self.productionResourceFactory(
+        admissionVerifier: Self.productionAdmissionVerifier()
+      )
     )
+  }
+
+  static func productionResourceFactory(
+    admissionVerifier: EvaluationLearningAdmissionVerifier
+  )
+    -> @Sendable (EvaluationLearningCallResourceFactoryInput) async throws ->
+    EvaluationLearningCallResource
+  {
+    { input in
+      try await Self.makeLiveResource(input: input, admissionVerifier: admissionVerifier)
+    }
   }
 
   package func run(
     request: EvaluationLearningCallRequest,
     makeResource:
       @escaping @Sendable (
-        EvaluationLearningAdmissionContext
+        EvaluationLearningCallResourceFactoryInput
       ) async throws -> EvaluationLearningCallResource
   ) async throws -> EvaluationLearningCallResult {
     try request.validate()
@@ -744,32 +742,18 @@ package struct EvaluationLearningCall: Sendable {
     return try await EvaluationWorkerLifecycle.withProductionLockOnly(stateRoot: stateRoot) { _ in
       let prompt = try Self.readArtifact(request.prompt)
       let carrier = try Self.readArtifact(request.carrier)
-      let verifier = try Self.admissionVerifier()
-      let context = try await verifier.verify(
-        manifest: request.manifest,
-        authorization: request.authorization,
-        invocationCoreDigest: request.core.sha256,
-        carrierSHA256: request.carrier.sha256,
-        providerCallID: request.providerCallID,
-        kind: request.kind
-      )
-      try Self.validate(request: request, context: context)
-      let liveAdmission = EvaluationLearningLiveAdmission(
-        verifier: verifier,
-        manifest: request.manifest,
-        authorization: request.authorization,
-        invocationCoreDigest: request.core.sha256,
-        carrierSHA256: request.carrier.sha256,
-        providerCallID: request.providerCallID,
-        kind: request.kind,
-        initial: context
+      let factoryInput = EvaluationLearningCallResourceFactoryInput(
+        request: request,
+        requestSHA256: requestSHA256
       )
 
       return try await EvaluationWorkerLifecycle.withResource(
         makeResource: {
-          try await makeResource(context)
+          try await makeResource(factoryInput)
         },
         operation: { resource in
+          let context = resource.admission.context
+          try Self.validate(request: request, context: context)
           guard resource.roster.hasFallback == false else {
             throw EvaluationLearningAdmissionError.invalidBinding
           }
@@ -781,7 +765,7 @@ package struct EvaluationLearningCall: Sendable {
             binding: resource.roster.primary,
             admissionContext: context,
             liveAdmission: {
-              await liveAdmission.evaluate()
+              await resource.admission.evaluate()
             }
           )
           let reconciled = try await Self.reconcile(
@@ -800,7 +784,70 @@ package struct EvaluationLearningCall: Sendable {
   }
 }
 
+package struct EvaluationLearningCallResourceFactoryInput: Sendable {
+  package let request: EvaluationLearningCallRequest
+  package let requestSHA256: String
+
+  package init(request: EvaluationLearningCallRequest, requestSHA256: String) {
+    self.request = request
+    self.requestSHA256 = requestSHA256
+  }
+
+  package func admission(
+    using verifier: any EvaluationLearningAdmissionVerifying
+  ) async throws -> EvaluationLearningCallAdmission {
+    let context = try await verifier.verify(
+      manifest: request.manifest,
+      authorization: request.authorization,
+      invocationCoreDigest: request.core.sha256,
+      carrierSHA256: request.carrier.sha256,
+      providerCallID: request.providerCallID,
+      kind: request.kind
+    )
+    let liveAdmission = EvaluationLearningLiveAdmission(
+      verifier: verifier,
+      manifest: request.manifest,
+      authorization: request.authorization,
+      invocationCoreDigest: request.core.sha256,
+      carrierSHA256: request.carrier.sha256,
+      providerCallID: request.providerCallID,
+      kind: request.kind,
+      initial: context
+    )
+    return EvaluationLearningCallAdmission(
+      context: context,
+      liveAdmission: {
+        do {
+          _ = try EvaluationLearningCall.readArtifact(request.prompt)
+          _ = try EvaluationLearningCall.readArtifact(request.carrier)
+        } catch {
+          return .deny(cap: "evaluation-learning-integrity")
+        }
+        return await liveAdmission.evaluate()
+      }
+    )
+  }
+}
+
+package struct EvaluationLearningCallAdmission: Sendable {
+  package let context: EvaluationLearningAdmissionContext
+  private let liveAdmission: @Sendable () async -> ProviderRoundTripAdmission
+
+  package init(
+    context: EvaluationLearningAdmissionContext,
+    liveAdmission: @escaping @Sendable () async -> ProviderRoundTripAdmission
+  ) {
+    self.context = context
+    self.liveAdmission = liveAdmission
+  }
+
+  func evaluate() async -> ProviderRoundTripAdmission {
+    await liveAdmission()
+  }
+}
+
 package struct EvaluationLearningCallResource: EvaluationWorkerResource {
+  package let admission: EvaluationLearningCallAdmission
   package let roster: ProviderRoster
   private let credentialSource: any LLMCredentialSource
   private let closeTransport: @Sendable () async throws -> Void
@@ -808,12 +855,14 @@ package struct EvaluationLearningCallResource: EvaluationWorkerResource {
   private let markProvenNotStarted: @Sendable (Int) async throws -> Void
 
   package init(
+    admission: EvaluationLearningCallAdmission,
     roster: ProviderRoster,
     credentialSource: any LLMCredentialSource,
     closeTransport: @escaping @Sendable () async throws -> Void,
     observeHTTP: @escaping @Sendable () async -> EvaluationLearningCallHTTPObservation,
     markProvenNotStarted: @escaping @Sendable (Int) async throws -> Void
   ) {
+    self.admission = admission
     self.roster = roster
     self.credentialSource = credentialSource
     self.closeTransport = closeTransport
@@ -893,13 +942,16 @@ private extension EvaluationLearningCallRunner {
 
   static func failedNoCall(
     request: EvaluationLearningCallRequest,
-    requestSHA256: String,
+    requestSHA256 _: String,
     outcome: EvaluationAttemptOutcome,
     context: EvaluationLearningAdmissionContext
   ) throws -> EvaluationLearningCallResult {
-    try EvaluationLearningCallResult(
+    let canonicalRequestSHA256 = SHA256Digest.hex(
+      try EvaluationCanonicalJSON.data(encoding: request)
+    )
+    return try EvaluationLearningCallResult(
       request: request,
-      requestSHA256: requestSHA256,
+      requestSHA256: canonicalRequestSHA256,
       outcome: .failedNoCall,
       failureCode: outcome,
       output: nil,
@@ -917,24 +969,24 @@ private extension EvaluationLearningCallRunner {
     requestSHA256: String,
     context: EvaluationLearningAdmissionContext
   ) throws -> EvaluationLearningCallResult {
-    let failure: EvaluationAttemptOutcome?
-    if response.toolCalls.isEmpty == false {
+    var failure: EvaluationAttemptOutcome?
+    do {
+      try outputScope.finalize(response)
+    } catch {
+      failure = .localOutputLimit
+    }
+    if failure == nil, response.toolCalls.isEmpty == false {
       failure = .toolContractFailure
-    } else if let reportedModel = response.reportedModel,
+    } else if failure == nil,
+      let reportedModel = response.reportedModel,
       reportedModel != context.route.wireModel
     {
       failure = .modelIdentityMismatch
-    } else if let usage = response.usage,
+    } else if failure == nil,
+      let usage = response.usage,
       usage.completionTokens > context.route.maxOutputTokens
     {
       failure = .budgetStopped
-    } else {
-      do {
-        try outputScope.finalize(response)
-        failure = nil
-      } catch {
-        failure = .localOutputLimit
-      }
     }
 
     let terminalUsage = failure == .budgetStopped ? nil : response.usage
@@ -1015,11 +1067,10 @@ private extension EvaluationLearningCallRunner {
 // MARK: - Live Call Composition
 
 private extension EvaluationLearningCall {
-  static func admissionVerifier() throws -> EvaluationLearningAdmissionVerifier {
-    let executablePath = try runningExecutablePath()
-    return EvaluationLearningAdmissionVerifier(
+  static func productionAdmissionVerifier() -> EvaluationLearningAdmissionVerifier {
+    EvaluationLearningAdmissionVerifier(
       runningExecutablePath: {
-        executablePath
+        CommandLine.arguments[0]
       },
       readFile: { url in
         try EvaluationPathSecurity.readRegularSingleLinkFile(
@@ -1069,9 +1120,12 @@ private extension EvaluationLearningCall {
   // Resource construction stays linear so the catch visibly owns the transport on every failure.
   // swiftlint:disable:next function_body_length
   static func makeLiveResource(
-    context: EvaluationLearningAdmissionContext,
-    stateRoot: URL
+    input: EvaluationLearningCallResourceFactoryInput,
+    admissionVerifier: any EvaluationLearningAdmissionVerifying
   ) async throws -> EvaluationLearningCallResource {
+    let admission = try await input.admission(using: admissionVerifier)
+    let context = admission.context
+    let stateRoot = try EvaluationLearningAdmissionVerifier.absoluteURL(input.request.stateRoot)
     let route = try LLMProviderRegistry.resolve(
       modelReference: context.route.providerReference,
       configuredBaseURL: ""
@@ -1113,6 +1167,7 @@ private extension EvaluationLearningCall {
         buildVersion: "swift-claw-evaluation-v1"
       )
       return EvaluationLearningCallResource(
+        admission: admission,
         roster: ProviderRoster(primary: stack.binding),
         credentialSource: stack.credentialSource,
         closeTransport: {
@@ -1158,8 +1213,12 @@ private extension EvaluationLearningCall {
       }
       return result
     }
+    let permittedSends =
+      result.outcome == .response
+      ? (1...context.route.retryBudget).contains(observation.responsesSends)
+      : (0...context.route.retryBudget).contains(observation.responsesSends)
     guard
-      (1...context.route.retryBudget).contains(observation.responsesSends),
+      permittedSends,
       observation.provenNotStartedResponsesSends <= observation.responsesSends
     else {
       throw EvaluationLearningAdmissionError.integrityFailure

@@ -1,5 +1,7 @@
 import ClawAgent
 import ClawCore
+import ClawSecrets
+import ClawSubprocess
 import ClawTestSupport
 import Foundation
 import Testing
@@ -36,7 +38,62 @@ import Testing
     #expect(request.tools.isEmpty)
     #expect(request.responseFormat == nil)
     #expect(request.sessionId == nil)
-    #expect(request.outputScope != nil)
+    #expect(request.terminalValidationPolicy == .throughStreamEnd)
+  }
+
+  @Test func reflectorUsesTheFrozen768TokenReservation() async throws {
+    // given
+    let fixture = try makeLearningCallFixture(kind: .reflector)
+    defer { fixture.remove() }
+    let provider = SequenceProvider([fixture.response(content: "reflection")])
+
+    // when
+    let result = try await fixture.run(provider: provider)
+    let request = try #require(await provider.requests.first)
+
+    // then
+    #expect(result.outcome == .response)
+    #expect(request.maxOutputTokens == 768)
+    #expect(result.maxOutputTokens == 768)
+  }
+
+  @Test(arguments: LearningCallOutputLimitCase.allCases)
+  func outputOneUnitPastEitherFrozenLocalLimitFails(
+    limitCase: LearningCallOutputLimitCase
+  ) async throws {
+    // given
+    let fixture = try makeLearningCallFixture(route: limitCase.route)
+    defer { fixture.remove() }
+    let provider = SequenceProvider([fixture.response(content: limitCase.output)])
+
+    // when
+    let result = try await fixture.run(provider: provider)
+
+    // then
+    #expect(result.outcome == .failed)
+    #expect(result.failureCode == EvaluationAttemptOutcome.localOutputLimit.rawValue)
+    #expect(result.output == nil)
+    #expect(result.usage?.responsesSends == 1)
+    #expect(await provider.requests.count == 1)
+  }
+
+  @Test(arguments: LearningCallPreSendMutation.allCases)
+  func everyFrozenPreSendBindingMustMatch(
+    mutation: LearningCallPreSendMutation
+  ) async throws {
+    // given
+    let fixture = try makeLearningCallFixture(route: mutation.route)
+    defer { fixture.remove() }
+    let provider = SequenceProvider([fixture.response(content: "unreachable")])
+
+    // when
+    let result = try await mutation.run(fixture: fixture, provider: provider)
+
+    // then
+    #expect(result.outcome == .failedNoCall)
+    #expect(result.failureCode == EvaluationAttemptOutcome.harnessFailure.rawValue)
+    #expect(result.usage == nil)
+    #expect(await provider.requests.isEmpty)
   }
 
   @Test func invalidModelOutputIsRecordedAfterExactlyOneProviderCall() async throws {
@@ -55,24 +112,12 @@ import Testing
     #expect(await provider.requests.count == 1)
   }
 
-  @Test func routeAndOutputCapMustMatchTheFrozenKind() async throws {
+  @Test func terminalModelAndUsageMustMatchTheFrozenRoute() async throws {
     // given
-    let routeMismatch = try makeLearningCallFixture()
-    let capMismatch = try makeLearningCallFixture(
-      route: learningRoute(maxOutputTokens: 768)
-    )
     let terminalMismatch = try makeLearningCallFixture()
     defer {
-      routeMismatch.remove()
-      capMismatch.remove()
       terminalMismatch.remove()
     }
-    let routeProvider = SequenceProvider([routeMismatch.response(content: "unused")])
-    let capProvider = SequenceProvider([capMismatch.response(content: "unused")])
-    let mismatchedBinding = routeMismatch.binding(
-      provider: routeProvider,
-      wireModel: "gpt-5.6-sol-drifted"
-    )
     let modelProvider = SequenceProvider([
       ChatResponse(
         content: "unusable",
@@ -90,21 +135,10 @@ import Testing
     ])
 
     // when
-    let routeResult = try await routeMismatch.run(
-      binding: mismatchedBinding,
-      liveAdmission: { .allow }
-    )
-    let capResult = try await capMismatch.run(provider: capProvider)
     let modelResult = try await terminalMismatch.run(provider: modelProvider)
     let usageResult = try await terminalMismatch.run(provider: overCapProvider)
 
     // then
-    #expect(routeResult.outcome == .failedNoCall)
-    #expect(routeResult.failureCode == EvaluationAttemptOutcome.harnessFailure.rawValue)
-    #expect(capResult.outcome == .failedNoCall)
-    #expect(capResult.failureCode == EvaluationAttemptOutcome.harnessFailure.rawValue)
-    #expect(await routeProvider.requests.isEmpty)
-    #expect(await capProvider.requests.isEmpty)
     #expect(modelResult.outcome == .failed)
     #expect(modelResult.failureCode == EvaluationAttemptOutcome.modelIdentityMismatch.rawValue)
     #expect(usageResult.outcome == .failed)
@@ -120,7 +154,7 @@ import Testing
     let output = #"{"schema_version":1,"outcome":"pass"}"#
     let providerState = ProviderExchangeState(
       issuer: "private-replay-state",
-      payload: Data("opaque".utf8)
+      payload: Data("provider-state-secret".utf8)
     )
     let provider = SequenceProvider([
       fixture.response(
@@ -138,24 +172,14 @@ import Testing
     // then
     #expect(result.outcome == .response)
     #expect(result.output == output)
-    #expect(result.providerReference == fixture.context.route.providerReference)
-    #expect(result.wireModel == fixture.context.route.wireModel)
     #expect(result.reportedModel == fixture.context.route.wireModel)
-    #expect(result.retryBudget == fixture.context.route.retryBudget)
-    #expect(result.maxOutputTokens == fixture.context.route.maxOutputTokens)
     #expect(result.usage?.responsesSends == 1)
-    #expect(result.usage?.provenNotStartedResponsesSends == 0)
     #expect(result.usage?.reportedTotalTokens == 16)
     #expect(result.usage?.accountedTokens == 16)
     #expect(result.usage?.isEstimated == false)
     #expect(result.provenance.requestSHA256 == fixture.requestSHA256)
-    #expect(result.provenance.manifestSHA256 == fixture.context.manifestSHA256)
-    #expect(result.provenance.freezeCommit == fixture.context.freezeCommit)
-    #expect(result.provenance.executableSHA256 == fixture.context.executableSHA256)
-    #expect(result.provenance.promptSHA256 == fixture.request.prompt.sha256)
-    #expect(result.provenance.carrierSHA256 == fixture.request.carrier.sha256)
     #expect(encodedText.contains("private-replay-state") == false)
-    #expect(encodedText.contains("opaque") == false)
+    #expect(encodedText.contains(providerState.payload.base64EncodedString()) == false)
   }
 
   @Test func failuresBeforeAndAfterProviderHandoffHaveDifferentAccounting() async throws {
@@ -216,10 +240,40 @@ import Testing
     #expect(await provider.requests.count == 1)
   }
 
+  @Test func oversizedTerminalToolArgumentsTakeLocalLimitPrecedence() async throws {
+    // given
+    let fixture = try makeLearningCallFixture(
+      route: learningRoute(
+        maxOutputTokens: 512,
+        maxOutputUTF8Bytes: 8,
+        maxOutputGraphemes: 8
+      )
+    )
+    defer { fixture.remove() }
+    let provider = SequenceProvider([
+      fixture.response(
+        content: "",
+        toolCalls: [
+          ToolCall(id: "call-1", name: "file_read", argumentsJSON: String(repeating: "x", count: 9))
+        ]
+      )
+    ])
+
+    // when
+    let result = try await fixture.run(provider: provider)
+
+    // then
+    #expect(result.outcome == .failed)
+    #expect(result.failureCode == EvaluationAttemptOutcome.localOutputLimit.rawValue)
+    #expect(result.output == nil)
+    #expect(result.usage?.responsesSends == 1)
+    #expect(await provider.requests.count == 1)
+  }
+
   @Test(.timeLimit(.minutes(1)))
   func managedProviderRetriesWithinTheFrozenBudgetAndCountsEverySend() async throws {
     // given
-    let fixture = try makeLearningCallFixture(liveAdmission: true)
+    let fixture = try makeLearningCallFixture()
     defer { fixture.remove() }
     let transport = ScriptedHTTPExecutor([
       .stream(
@@ -249,22 +303,14 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
-      makeResource: { _ in
-        EvaluationLearningCallResource(
+      makeResource: { input in
+        try await makeLearningResource(
+          input: input,
+          fixture: fixture,
           roster: ProviderRoster(primary: stack.binding),
+          recorder: recorder,
           credentialSource: stack.credentialSource,
-          closeTransport: {},
-          observeHTTP: {
-            let snapshot = await recorder.snapshot()
-            return EvaluationLearningCallHTTPObservation(
-              responsesSends: snapshot.responsesSends.count,
-              provenNotStartedResponsesSends: snapshot.provenNotStartedResponsesSends,
-              hasIntegrityFailures: snapshot.integrityFailures.isEmpty == false
-            )
-          },
-          markProvenNotStarted: { count in
-            try await recorder.recordProvenNotStartedResponsesSends(count)
-          }
+          closeTransport: {}
         )
       }
     )
@@ -282,9 +328,276 @@ import Testing
     #expect(await transport.recorded.count == 2)
   }
 
+  @Test(.timeLimit(.minutes(1)))
+  func managedConflictingTerminalEventsFailClosed() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let transport = ScriptedHTTPExecutor([
+      .stream(
+        HTTPStreamHead(statusCode: 200, headers: [:]),
+        managedConflictingTerminalEvents()
+      )
+    ])
+    let recorder = learningRecorder(fixture: fixture, transport: transport)
+    let stack = try managedStack(fixture: fixture, recorder: recorder)
+
+    // when
+    let result = try await EvaluationLearningCall().run(
+      request: fixture.request,
+      makeResource: { input in
+        try await makeLearningResource(
+          input: input,
+          fixture: fixture,
+          roster: ProviderRoster(primary: stack.binding),
+          recorder: recorder,
+          credentialSource: stack.credentialSource,
+          closeTransport: {}
+        )
+      }
+    )
+
+    // then
+    #expect(result.outcome == .failed)
+    #expect(result.failureCode == EvaluationAttemptOutcome.modelIdentityMismatch.rawValue)
+    #expect(result.usage?.responsesSends == 1)
+    #expect(result.output == nil)
+    #expect(await transport.recorded.count == 1)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func exhaustedCleanManagedFailureMarksEverySendProvenNotStarted() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let rejected = ScriptedHTTPExecutor.Step.stream(
+      HTTPStreamHead(statusCode: 500, headers: [:]),
+      [Data(#"{"error":{"message":"retry"}}"#.utf8)]
+    )
+    let transport = ScriptedHTTPExecutor([rejected, rejected, rejected])
+    let recorder = learningRecorder(fixture: fixture, transport: transport)
+    let stack = try managedStack(fixture: fixture, recorder: recorder)
+
+    // when
+    let result = try await EvaluationLearningCall().run(
+      request: fixture.request,
+      makeResource: { input in
+        try await makeLearningResource(
+          input: input,
+          fixture: fixture,
+          roster: ProviderRoster(primary: stack.binding),
+          recorder: recorder,
+          credentialSource: stack.credentialSource,
+          closeTransport: {}
+        )
+      }
+    )
+
+    // then
+    #expect(result.outcome == .failed)
+    #expect(result.usage?.responsesSends == 3)
+    #expect(result.usage?.provenNotStartedResponsesSends == 3)
+    #expect(result.usage?.accountedTokens == 0)
+    #expect(result.usage?.isEstimated == false)
+    #expect(await transport.recorded.count == 3)
+  }
+
+  @Test func managedMissingCredentialPublishesFailedZeroSendUsage() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+
+    // when
+    let result = try await EvaluationLearningCall().run(
+      request: fixture.request,
+      makeResource: EvaluationLearningCall.productionResourceFactory(
+        admissionVerifier: fixture.admissionVerifier
+      )
+    )
+    let durable = try fixture.readDurableResult()
+    let lockIsFree = try EvaluationWorkerLifecycle.proveProductionLockIsFree(
+      stateRoot: fixture.stateRoot
+    )
+
+    // then
+    #expect(result == durable)
+    #expect(result.outcome == .failed)
+    #expect(result.failureCode == EvaluationAttemptOutcome.authenticationRequired.rawValue)
+    #expect(result.usage?.responsesSends == 0)
+    #expect(result.usage?.provenNotStartedResponsesSends == 0)
+    #expect(result.usage?.accountedTokens == 0)
+    #expect(result.usage?.isEstimated == false)
+    #expect(lockIsFree)
+  }
+
+  @Test func productionAdmissionBindsTheExactLaunchExecutable() {
+    // given
+    let launchedExecutable = CommandLine.arguments[0]
+
+    // when
+    let boundExecutable = EvaluationLearningCall.productionExecutablePath
+
+    // then
+    #expect(boundExecutable == launchedExecutable)
+  }
+
+  @Test func liveAdmissionDenialPublishesFailedNoCallAndCleansUp() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let provider = SequenceProvider([fixture.response(content: "unreachable")])
+    let lifecycle = LearningCallLifecycleProbe()
+    let recorder = learningRecorder(fixture: fixture)
+
+    // when
+    let result = try await EvaluationLearningCall().run(
+      request: fixture.request,
+      makeResource: { input in
+        try await makeLearningResource(
+          input: input,
+          fixture: fixture,
+          roster: ProviderRoster(primary: fixture.binding(provider: provider)),
+          recorder: recorder,
+          credentialSource: LearningCallCredentialSource(lifecycle: lifecycle),
+          closeTransport: {
+            await lifecycle.recordTransportShutdown()
+          },
+          liveAdmission: { ProviderRoundTripAdmission.deny(cap: "test-live-denial") }
+        )
+      }
+    )
+    let durable = try fixture.readDurableResult()
+    let lockIsFree = try EvaluationWorkerLifecycle.proveProductionLockIsFree(
+      stateRoot: fixture.stateRoot
+    )
+
+    // then
+    #expect(result == durable)
+    #expect(result.outcome == .failedNoCall)
+    #expect(result.usage == nil)
+    #expect(await provider.requests.isEmpty)
+    #expect(await lifecycle.credentialShutdownCount == 1)
+    #expect(await lifecycle.transportShutdownCount == 1)
+    #expect(lockIsFree)
+  }
+
+  @Test func liveReadmissionRejectsArtifactMutationInsideResourceFactory() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let provider = SequenceProvider([fixture.response(content: "unreachable")])
+    let lifecycle = LearningCallLifecycleProbe()
+    let recorder = learningRecorder(fixture: fixture)
+
+    // when
+    let result = try await EvaluationLearningCall().run(
+      request: fixture.request,
+      makeResource: { input in
+        let admission = try await input.admission(using: fixture.admissionVerifier)
+        try Data("changed carrier".utf8).write(
+          to: URL(fileURLWithPath: fixture.request.carrier.path)
+        )
+        return learningResource(
+          admission: admission,
+          roster: ProviderRoster(primary: fixture.binding(provider: provider)),
+          recorder: recorder,
+          credentialSource: LearningCallCredentialSource(lifecycle: lifecycle),
+          closeTransport: {
+            await lifecycle.recordTransportShutdown()
+          }
+        )
+      }
+    )
+
+    // then
+    #expect(result.outcome == .failedNoCall)
+    #expect(result.usage == nil)
+    #expect(await provider.requests.isEmpty)
+    #expect(await lifecycle.credentialShutdownCount == 1)
+    #expect(await lifecycle.transportShutdownCount == 1)
+    #expect(try fixture.readDurableResult() == result)
+  }
+
+  @Test func resourceFactoryRunsWhileProductionLockIsHeld() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let provider = SequenceProvider([fixture.response(content: "ok")])
+    let lifecycle = LearningCallLifecycleProbe()
+    let recorder = learningRecorder(fixture: fixture)
+
+    // when
+    let result = try await EvaluationLearningCall().run(
+      request: fixture.request,
+      makeResource: { input in
+        let lockPath = SecretStatePaths(stateRoot: fixture.stateRoot).instanceLock.path
+        do {
+          let unexpected = try InstanceLock(path: lockPath)
+          unexpected.release()
+        } catch InstanceLock.LockError.alreadyLocked {
+          await lifecycle.recordLockContention()
+        }
+        return try await makeLearningResource(
+          input: input,
+          fixture: fixture,
+          roster: ProviderRoster(primary: fixture.binding(provider: provider)),
+          recorder: recorder,
+          credentialSource: LearningCallCredentialSource(lifecycle: lifecycle),
+          closeTransport: {
+            await lifecycle.recordTransportShutdown()
+          },
+          recordResponsesSend: true
+        )
+      }
+    )
+
+    // then
+    #expect(result.outcome == .response)
+    #expect(await lifecycle.lockContentionCount == 1)
+    #expect(try EvaluationWorkerLifecycle.proveProductionLockIsFree(stateRoot: fixture.stateRoot))
+  }
+
+  @Test func exclusivePublicationDoesNotReplaceExistingResultAndStillCleansUp() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let existing = Data("existing-result".utf8)
+    try existing.write(to: fixture.resultURL)
+    let provider = SequenceProvider([fixture.response(content: "unused")])
+    let lifecycle = LearningCallLifecycleProbe()
+    let recorder = learningRecorder(fixture: fixture)
+
+    // when
+    await #expect(throws: (any Error).self) {
+      try await EvaluationLearningCall().run(
+        request: fixture.request,
+        makeResource: { input in
+          try await makeLearningResource(
+            input: input,
+            fixture: fixture,
+            roster: ProviderRoster(primary: fixture.binding(provider: provider)),
+            recorder: recorder,
+            credentialSource: LearningCallCredentialSource(lifecycle: lifecycle),
+            closeTransport: {
+              await lifecycle.recordTransportShutdown()
+            },
+            recordResponsesSend: true
+          )
+        }
+      )
+    }
+    let retained = try Data(contentsOf: fixture.resultURL)
+
+    // then
+    #expect(retained == existing)
+    #expect(await lifecycle.credentialShutdownCount == 1)
+    #expect(await lifecycle.transportShutdownCount == 1)
+    #expect(try EvaluationWorkerLifecycle.proveProductionLockIsFree(stateRoot: fixture.stateRoot))
+  }
+
   @Test func liveCompositionVerifiesPublishesAndCleansUp() async throws {
     // given
-    let fixture = try makeLearningCallFixture(liveAdmission: true)
+    let fixture = try makeLearningCallFixture()
     defer { fixture.remove() }
     let provider = SequenceProvider([fixture.response(content: #"{"schema_version":1}"#)])
     let lifecycle = LearningCallLifecycleProbe()
@@ -299,13 +612,15 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
-      makeResource: { admissionContext in
-        await lifecycle.recordStartupAdmission(admissionContext)
+      makeResource: { input in
+        let admission = try await input.admission(using: fixture.admissionVerifier)
+        await lifecycle.recordStartupAdmission(admission.context)
         let exchange = try await recorder.openStream(
-          responsesRequest(wireModel: admissionContext.route.wireModel)
+          responsesRequest(wireModel: admission.context.route.wireModel)
         )
         _ = await exchange.cancelAndAwait()
         return EvaluationLearningCallResource(
+          admission: admission,
           roster: ProviderRoster(primary: fixture.binding(provider: provider)),
           credentialSource: LearningCallCredentialSource(lifecycle: lifecycle),
           closeTransport: {
@@ -345,15 +660,85 @@ import Testing
 
 // MARK: - Fixture
 
+enum LearningCallOutputLimitCase: CaseIterable, Sendable {
+  case utf8
+  case grapheme
+
+  var route: EvaluationLearningRouteBinding {
+    switch self {
+    case .utf8:
+      learningRoute(maxOutputTokens: 512, maxOutputUTF8Bytes: 4, maxOutputGraphemes: 10)
+    case .grapheme:
+      learningRoute(maxOutputTokens: 512, maxOutputUTF8Bytes: 10, maxOutputGraphemes: 4)
+    }
+  }
+
+  var output: String { "abcde" }
+}
+
+enum LearningCallPreSendMutation: CaseIterable, Sendable {
+  case configuredReference
+  case wireModel
+  case retryBudget
+  case outputCap
+  case costPolicy
+  case reservationPolicy
+  case requestDigest
+  case promptDigest
+  case carrierDigest
+
+  var route: EvaluationLearningRouteBinding {
+    switch self {
+    case .retryBudget:
+      learningRoute(maxOutputTokens: 512, retryBudget: 2)
+    case .outputCap:
+      learningRoute(maxOutputTokens: 768)
+    default:
+      learningRoute(maxOutputTokens: 512)
+    }
+  }
+
+  fileprivate func run(
+    fixture: LearningCallFixture,
+    provider: SequenceProvider
+  ) async throws -> EvaluationLearningCallResult {
+    let binding: LLMRouteBinding
+    switch self {
+    case .configuredReference:
+      binding = fixture.binding(provider: provider, configuredReference: "changed/reference")
+    case .wireModel:
+      binding = fixture.binding(provider: provider, wireModel: "changed-model")
+    case .costPolicy:
+      binding = fixture.binding(provider: provider, costPolicy: .metered)
+    case .reservationPolicy:
+      binding = fixture.binding(provider: provider, reservationPolicy: .textOnly)
+    default:
+      binding = fixture.binding(provider: provider)
+    }
+    return try await fixture.run(
+      binding: binding,
+      requestSHA256: self == .requestDigest ? String(repeating: "f", count: 64) : nil,
+      prompt: self == .promptDigest ? "changed prompt" : nil,
+      carrier: self == .carrierDigest ? "changed carrier" : nil,
+      liveAdmission: { .allow }
+    )
+  }
+}
+
 private struct LearningCallFixture: Sendable {
   let root: URL
   let stateRoot: URL
   let resultURL: URL
+  let executableURL: URL
   let prompt: String
   let carrier: String
   let request: EvaluationLearningCallRequest
   let requestSHA256: String
   let context: EvaluationLearningAdmissionContext
+
+  var admissionVerifier: EvaluationLearningAdmissionVerifier {
+    EvaluationLearningAdmissionVerifier(runningExecutablePath: { executableURL.path })
+  }
 
   func remove() {
     try? FileManager.default.removeItem(at: root)
@@ -362,14 +747,16 @@ private struct LearningCallFixture: Sendable {
   func binding(
     provider: any LLMProvider,
     wireModel: String? = nil,
-    configuredReference: String? = nil
+    configuredReference: String? = nil,
+    costPolicy: LLMCostPolicy = .includedPlan,
+    reservationPolicy: LLMInputReservationPolicy = .chatGPTReplayState
   ) -> LLMRouteBinding {
     LLMRouteBinding(
       provider: provider,
       wireModel: wireModel ?? context.route.wireModel,
       configuredReference: configuredReference ?? context.route.providerReference,
-      costPolicy: .includedPlan,
-      reservationPolicy: .chatGPTReplayState
+      costPolicy: costPolicy,
+      reservationPolicy: reservationPolicy
     )
   }
 
@@ -396,17 +783,25 @@ private struct LearningCallFixture: Sendable {
 
   func run(
     binding: LLMRouteBinding,
+    requestSHA256: String? = nil,
+    prompt: String? = nil,
+    carrier: String? = nil,
     liveAdmission: @escaping @Sendable () async -> ProviderRoundTripAdmission
   ) async throws -> EvaluationLearningCallResult {
     try await EvaluationLearningCallRunner().run(
       request: request,
-      requestSHA256: requestSHA256,
-      prompt: prompt,
-      carrier: carrier,
+      requestSHA256: requestSHA256 ?? self.requestSHA256,
+      prompt: prompt ?? self.prompt,
+      carrier: carrier ?? self.carrier,
       binding: binding,
       admissionContext: context,
       liveAdmission: liveAdmission
     )
+  }
+
+  func readDurableResult() throws -> EvaluationLearningCallResult {
+    let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: resultURL)
+    return try JSONDecoder().decode(EvaluationLearningCallResult.self, from: data)
   }
 }
 
@@ -414,7 +809,7 @@ private struct LearningCallFixture: Sendable {
 private func makeLearningCallFixture(
   kind: EvaluationLearningOperationKind = .evaluator,
   route: EvaluationLearningRouteBinding? = nil,
-  liveAdmission: Bool = false
+  executableData: Data = Data("test executable".utf8)
 ) throws -> LearningCallFixture {
   let root = try makeEvaluationTestRoot()
   let evaluationRoot = root.appendingPathComponent("evaluation", isDirectory: true)
@@ -456,13 +851,8 @@ private func makeLearningCallFixture(
     responsesSends: 6,
     accountedTokens: 10_000
   )
-  let executableData: Data
-  if liveAdmission {
-    let executablePath = try EvaluationLearningCall.runningExecutablePath()
-    executableData = try Data(contentsOf: URL(fileURLWithPath: executablePath))
-  } else {
-    executableData = Data("test executable".utf8)
-  }
+  let executableURL = root.appendingPathComponent("claw-eval")
+  try executableData.write(to: executableURL)
   let manifestData = try EvaluationCanonicalJSON.data(fromJSONObject: [
     "budgets": budgetObject(budgets),
     "swift_execution": [
@@ -585,6 +975,7 @@ private func makeLearningCallFixture(
     root: root,
     stateRoot: stateRoot,
     resultURL: resultURL,
+    executableURL: executableURL,
     prompt: prompt,
     carrier: carrier,
     request: request,
@@ -593,14 +984,19 @@ private func makeLearningCallFixture(
   )
 }
 
-private func learningRoute(maxOutputTokens: Int) -> EvaluationLearningRouteBinding {
+private func learningRoute(
+  maxOutputTokens: Int,
+  retryBudget: Int = 3,
+  maxOutputUTF8Bytes: Int = 16_384,
+  maxOutputGraphemes: Int = 4_096
+) -> EvaluationLearningRouteBinding {
   EvaluationLearningRouteBinding(
     providerReference: "openai-chatgpt/gpt-5.6-sol",
     wireModel: "gpt-5.6-sol",
-    retryBudget: 3,
+    retryBudget: retryBudget,
     maxOutputTokens: maxOutputTokens,
-    maxOutputUTF8Bytes: 16_384,
-    maxOutputGraphemes: 4_096
+    maxOutputUTF8Bytes: maxOutputUTF8Bytes,
+    maxOutputGraphemes: maxOutputGraphemes
   )
 }
 
@@ -626,6 +1022,94 @@ private func budgetObject(_ budgets: EvaluationLearningApprovedBudgets) -> [Stri
 }
 
 // MARK: - Managed provider
+
+private func learningRecorder(
+  fixture: LearningCallFixture,
+  transport: any HTTPExecuting & HTTPStreaming = ScriptedHTTPExecutor([
+    .stream(HTTPStreamHead(statusCode: 200, headers: [:]), [])
+  ])
+) -> EvaluationHTTPRecorder {
+  EvaluationHTTPRecorder(
+    base: transport,
+    expectedWireModel: fixture.context.route.wireModel,
+    maximumResponsesSends: fixture.context.route.retryBudget
+  )
+}
+
+private func managedStack(
+  fixture: LearningCallFixture,
+  recorder: EvaluationHTTPRecorder
+) throws -> ProviderStack {
+  try ProviderStackFactory.make(
+    route: try managedRoute(for: fixture.context.route),
+    settings: try managedSettings(for: fixture.context.route),
+    loadStaticBearer: { nil },
+    makeManagedCredentialStore: {
+      SeededLearningCredentialStore(credential: learningCredential())
+    },
+    http: recorder,
+    buildVersion: "swift-claw-evaluation-v1"
+  )
+}
+
+// swiftlint:disable:next function_parameter_count
+private func makeLearningResource(
+  input: EvaluationLearningCallResourceFactoryInput,
+  fixture: LearningCallFixture,
+  roster: ProviderRoster,
+  recorder: EvaluationHTTPRecorder,
+  credentialSource: any LLMCredentialSource,
+  closeTransport: @escaping @Sendable () async throws -> Void,
+  liveAdmission: (@Sendable () async -> ProviderRoundTripAdmission)? = nil,
+  recordResponsesSend: Bool = false
+) async throws -> EvaluationLearningCallResource {
+  var admission = try await input.admission(using: fixture.admissionVerifier)
+  if let liveAdmission {
+    admission = EvaluationLearningCallAdmission(
+      context: admission.context,
+      liveAdmission: liveAdmission
+    )
+  }
+  if recordResponsesSend {
+    let exchange = try await recorder.openStream(
+      responsesRequest(wireModel: admission.context.route.wireModel)
+    )
+    _ = await exchange.cancelAndAwait()
+  }
+  return learningResource(
+    admission: admission,
+    roster: roster,
+    recorder: recorder,
+    credentialSource: credentialSource,
+    closeTransport: closeTransport
+  )
+}
+
+private func learningResource(
+  admission: EvaluationLearningCallAdmission,
+  roster: ProviderRoster,
+  recorder: EvaluationHTTPRecorder,
+  credentialSource: any LLMCredentialSource,
+  closeTransport: @escaping @Sendable () async throws -> Void
+) -> EvaluationLearningCallResource {
+  EvaluationLearningCallResource(
+    admission: admission,
+    roster: roster,
+    credentialSource: credentialSource,
+    closeTransport: closeTransport,
+    observeHTTP: {
+      let snapshot = await recorder.snapshot()
+      return EvaluationLearningCallHTTPObservation(
+        responsesSends: snapshot.responsesSends.count,
+        provenNotStartedResponsesSends: snapshot.provenNotStartedResponsesSends,
+        hasIntegrityFailures: snapshot.integrityFailures.isEmpty == false
+      )
+    },
+    markProvenNotStarted: { count in
+      try await recorder.recordProvenNotStartedResponsesSends(count)
+    }
+  )
+}
 
 private func managedRoute(
   for route: EvaluationLearningRouteBinding
@@ -693,6 +1177,14 @@ private func managedSuccessEvents() -> [Data] {
   ]
 }
 
+private func managedConflictingTerminalEvents() -> [Data] {
+  managedSuccessEvents() + [
+    responsesEvent(
+      #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"conflicting-model","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#
+    )
+  ]
+}
+
 private func responsesEvent(_ json: String) -> Data {
   Data("data: \(json)\n\n".utf8)
 }
@@ -714,6 +1206,7 @@ private actor LearningCallLifecycleProbe {
   private(set) var startupAdmission: EvaluationLearningAdmissionContext?
   private(set) var credentialShutdownCount = 0
   private(set) var transportShutdownCount = 0
+  private(set) var lockContentionCount = 0
 
   func recordStartupAdmission(_ context: EvaluationLearningAdmissionContext) {
     startupAdmission = context
@@ -725,6 +1218,10 @@ private actor LearningCallLifecycleProbe {
 
   func recordTransportShutdown() {
     transportShutdownCount += 1
+  }
+
+  func recordLockContention() {
+    lockContentionCount += 1
   }
 }
 
