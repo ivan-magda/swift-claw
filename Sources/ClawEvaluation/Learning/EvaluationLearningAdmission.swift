@@ -436,7 +436,13 @@ private extension EvaluationLearningAdmissionVerifier {
     }
   }
 
-  static func absoluteURL(_ path: String) throws -> URL {
+  static func isUTCTimestamp(_ value: String) -> Bool {
+    value.hasSuffix("Z") && ISO8601DateFormatter().date(from: value) != nil
+  }
+}
+
+extension EvaluationLearningAdmissionVerifier {
+  package static func absoluteURL(_ path: String) throws -> URL {
     let url = URL(fileURLWithPath: path)
     guard path.hasPrefix("/"), url.standardizedFileURL.path == path else {
       throw EvaluationLearningAdmissionError.invalidBinding
@@ -444,13 +450,13 @@ private extension EvaluationLearningAdmissionVerifier {
     return url
   }
 
-  static func requireExactKeys(_ object: [String: Any], keys: Set<String>) throws {
+  package static func requireExactKeys(_ object: [String: Any], keys: Set<String>) throws {
     guard Set(object.keys) == keys else {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
   }
 
-  static func requireExactObjectKeys(
+  package static func requireExactObjectKeys(
     in root: [String: Any],
     path: [String],
     keys: Set<String>
@@ -467,15 +473,11 @@ private extension EvaluationLearningAdmissionVerifier {
     }
   }
 
-  static func isCommit(_ value: String) -> Bool {
+  package static func isCommit(_ value: String) -> Bool {
     value.count == 40 && value.allSatisfy { "0123456789abcdef".contains($0) }
   }
 
-  static func isUTCTimestamp(_ value: String) -> Bool {
-    value.hasSuffix("Z") && ISO8601DateFormatter().date(from: value) != nil
-  }
-
-  static func isCanonicalProviderCallID(_ value: ProviderCallID) -> Bool {
+  package static func isCanonicalProviderCallID(_ value: ProviderCallID) -> Bool {
     guard let identifier = UUID(uuidString: value.rawValue) else {
       return false
     }

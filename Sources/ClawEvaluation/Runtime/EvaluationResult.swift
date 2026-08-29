@@ -2,7 +2,7 @@ import ClawAgent
 import ClawCore
 import Foundation
 
-enum EvaluationAttemptOutcome: String, Codable, Sendable, Equatable {
+package enum EvaluationAttemptOutcome: String, Codable, Sendable, Equatable {
   case completed
   case providerFailure = "provider_failure"
   case authenticationRequired = "authentication_required"
@@ -287,28 +287,30 @@ enum EvaluationResultAccounting {
           ),
           isEstimated: row.isEstimated
         )
-      }
+      },
+      missingUsageTokenProxy: PageEvaluationContract.missingUsageTokenProxy
     )
   }
 
   static func accountedTokens(
     responsesSends: Int,
     provenNotStartedResponsesSends: Int,
-    usage: [EvaluationUsageAccountingRow]
+    usage: [EvaluationUsageAccountingRow],
+    missingUsageTokenProxy: Int = PageEvaluationContract.missingUsageTokenProxy
   ) -> Int {
     let safeSends = max(0, responsesSends)
     let accountableSends = max(0, safeSends - max(0, provenNotStartedResponsesSends))
     let reported = usage.prefix(accountableSends).reduce(0) { total, row in
       let rowTokens =
         row.isEstimated
-        ? PageEvaluationContract.missingUsageTokenProxy
+        ? missingUsageTokenProxy
         : max(0, row.tokens)
       return SaturatingArithmetic.sum(total, rowTokens)
     }
     let missing = max(0, accountableSends - usage.count)
     let missingTokens = SaturatingArithmetic.product(
       missing,
-      PageEvaluationContract.missingUsageTokenProxy
+      missingUsageTokenProxy
     )
     return SaturatingArithmetic.sum(reported, missingTokens)
   }

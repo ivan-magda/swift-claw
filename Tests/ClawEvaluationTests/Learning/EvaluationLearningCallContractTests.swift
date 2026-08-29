@@ -46,19 +46,51 @@ import Testing
     #expect(error != nil)
   }
 
-  @Test func requestRejectsAnOpenArtifactBinding() throws {
+  @Test(arguments: UnknownNestedCallRequestField.allCases)
+  func requestRejectsAnUnknownFieldInEachClosedNestedObject(
+    _ field: UnknownNestedCallRequestField
+  ) throws {
     // given
     let fixture = try makeEvaluationLearningCallFixture()
     defer { fixture.remove() }
     var object = try jsonObject(encoding: fixture.request)
-    var prompt = try #require(object["prompt"] as? [String: Any])
-    prompt["label"] = "evaluator-prompt"
-    object["prompt"] = prompt
+    try field.addUnknownKey(to: &object)
     try EvaluationCanonicalJSON.data(fromJSONObject: object).write(to: fixture.requestURL)
 
     // when
     let error = #expect(throws: EvaluationLearningAdmissionError.invalidJSON) {
       _ = try EvaluationLearningCallRequest.load(from: fixture.requestURL)
+    }
+
+    // then
+    #expect(error != nil)
+  }
+
+  @Test func resultRejectsARequestDigestFromDifferentCanonicalBytes() throws {
+    // given
+    let fixture = try makeEvaluationLearningCallFixture()
+    defer { fixture.remove() }
+    let usage = try EvaluationLearningCallUsage(
+      providerCallID: fixture.request.providerCallID,
+      responsesSends: 1,
+      provenNotStartedResponsesSends: 0,
+      terminalUsage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+      missingUsageTokenProxy: fixture.context.missingUsageTokenProxy
+    )
+
+    // when
+    let error = #expect(throws: EvaluationLearningAdmissionError.invalidBinding) {
+      _ = try EvaluationLearningCallResult(
+        request: fixture.request,
+        requestSHA256: String(repeating: "0", count: 64),
+        outcome: .response,
+        failureCode: nil,
+        output: #"{"schema_version":1}"#,
+        finishReason: "stop",
+        reportedModel: fixture.context.route.wireModel,
+        usage: usage,
+        admissionContext: fixture.context
+      )
     }
 
     // then
@@ -86,9 +118,7 @@ import Testing
     // given
     let fixture = try makeEvaluationLearningCallFixture()
     defer { fixture.remove() }
-    let requestSHA256 = SHA256Digest.hex(
-      try EvaluationCanonicalJSON.data(encoding: fixture.request)
-    )
+    let requestSHA256 = try canonicalRequestSHA256(for: fixture.request)
     let usage = try EvaluationLearningCallUsage(
       providerCallID: fixture.request.providerCallID,
       responsesSends: 2,
@@ -130,13 +160,8 @@ import Testing
     #expect(result.outputSHA256 == result.output.map { SHA256Digest.hex(Data($0.utf8)) })
     #expect(result.usage?.accountedTokens == 115)
     #expect(result.usage?.isEstimated == true)
-    #expect(
-      Set(object.keys) == Set(EvaluationLearningCallResult.CodingKeys.allCases.map(\.rawValue))
-    )
-    #expect(
-      Set(usageObject.keys)
-        == Set(EvaluationLearningCallUsage.CodingKeys.allCases.map(\.rawValue))
-    )
+    #expect(Set(object.keys) == expectedResultWireKeys)
+    #expect(Set(usageObject.keys) == expectedUsageWireKeys)
     #expect(
       Set(provenanceObject.keys)
         == [
@@ -185,9 +210,9 @@ import Testing
     )
     let result = try EvaluationLearningCallResult(
       request: fixture.request,
-      requestSHA256: String(repeating: "a", count: 64),
+      requestSHA256: try canonicalRequestSHA256(for: fixture.request),
       outcome: .failed,
-      failureCode: "provider_failure",
+      failureCode: .providerFailure,
       output: nil,
       finishReason: nil,
       reportedModel: nil,
@@ -212,9 +237,9 @@ import Testing
     // when
     let result = try EvaluationLearningCallResult(
       request: fixture.request,
-      requestSHA256: String(repeating: "a", count: 64),
+      requestSHA256: try canonicalRequestSHA256(for: fixture.request),
       outcome: .failedNoCall,
-      failureCode: "budget_denied",
+      failureCode: .budgetStopped,
       output: nil,
       finishReason: nil,
       reportedModel: nil,
@@ -224,7 +249,7 @@ import Testing
 
     // then
     #expect(result.outcome == .failedNoCall)
-    #expect(result.failureCode == "budget_denied")
+    #expect(result.failureCode == EvaluationAttemptOutcome.budgetStopped.rawValue)
     #expect(result.usage == nil)
     #expect(result.output == nil)
     #expect(result.outputSHA256 == nil)
@@ -248,9 +273,9 @@ import Testing
     let error = #expect(throws: EvaluationLearningAdmissionError.invalidBinding) {
       _ = try EvaluationLearningCallResult(
         request: fixture.request,
-        requestSHA256: String(repeating: "a", count: 64),
+        requestSHA256: try canonicalRequestSHA256(for: fixture.request),
         outcome: .failed,
-        failureCode: "provider_failure",
+        failureCode: .providerFailure,
         output: nil,
         finishReason: nil,
         reportedModel: nil,
@@ -283,7 +308,7 @@ import Testing
     let error = #expect(throws: EvaluationLearningAdmissionError.invalidBinding) {
       _ = try EvaluationLearningCallResult(
         request: fixture.request,
-        requestSHA256: String(repeating: "a", count: 64),
+        requestSHA256: try canonicalRequestSHA256(for: fixture.request),
         outcome: values.outcome,
         failureCode: values.failureCode,
         output: values.output,
@@ -296,6 +321,68 @@ import Testing
 
     // then
     #expect(error != nil)
+  }
+
+  @Test func resultRejectsAOneTokenProviderBodyAsAFailureCode() throws {
+    // given
+    let fixture = try makeEvaluationLearningCallFixture()
+    defer { fixture.remove() }
+    let result = try EvaluationLearningCallResult(
+      request: fixture.request,
+      requestSHA256: try canonicalRequestSHA256(for: fixture.request),
+      outcome: .failedNoCall,
+      failureCode: .providerFailure,
+      output: nil,
+      finishReason: nil,
+      reportedModel: nil,
+      usage: nil,
+      admissionContext: fixture.context
+    )
+    var object = try jsonObject(encoding: result)
+    object["failure_code"] = "unauthorized"
+    let decoded = try JSONDecoder().decode(
+      EvaluationLearningCallResult.self,
+      from: EvaluationCanonicalJSON.data(fromJSONObject: object)
+    )
+
+    // when
+    let error = #expect(throws: EvaluationLearningAdmissionError.invalidBinding) {
+      try decoded.validate(missingUsageTokenProxy: fixture.context.missingUsageTokenProxy)
+    }
+
+    // then
+    #expect(error != nil)
+  }
+}
+
+enum UnknownNestedCallRequestField: String, CaseIterable, Sendable {
+  case prompt
+  case carrier
+  case manifest
+  case ownerApproval
+  case authorization
+
+  func addUnknownKey(to object: inout [String: Any]) throws {
+    switch self {
+    case .prompt, .carrier:
+      var binding = try #require(object[rawValue] as? [String: Any])
+      binding["label"] = "unapproved"
+      object[rawValue] = binding
+    case .manifest:
+      var manifest = try #require(object["manifest"] as? [String: Any])
+      manifest["candidate_identity"] = "candidate-01"
+      object["manifest"] = manifest
+    case .ownerApproval:
+      var manifest = try #require(object["manifest"] as? [String: Any])
+      var approval = try #require(manifest["owner_approval"] as? [String: Any])
+      approval["owner_note"] = "unapproved"
+      manifest["owner_approval"] = approval
+      object["manifest"] = manifest
+    case .authorization:
+      var authorization = try #require(object["authorization"] as? [String: Any])
+      authorization["retry_budget"] = 4
+      object["authorization"] = authorization
+    }
   }
 }
 
@@ -330,28 +417,37 @@ enum InvalidCallResultMutation: String, CaseIterable, Sendable {
   case failedWithoutUsage
   case failedWithOutput
   case failedNoCallWithUsage
-  case rawFailureBody
 
   func values(validUsage: EvaluationLearningCallUsage) -> (
     outcome: EvaluationLearningCallOutcome,
-    failureCode: String?,
+    failureCode: EvaluationAttemptOutcome?,
     output: String?,
     usage: EvaluationLearningCallUsage?
   ) {
     switch self {
     case .responseWithFailure:
-      (.response, "provider_failure", "{}", validUsage)
+      (.response, .providerFailure, "{}", validUsage)
     case .failedWithoutUsage:
-      (.failed, "provider_failure", nil, nil)
+      (.failed, .providerFailure, nil, nil)
     case .failedWithOutput:
-      (.failed, "provider_failure", "partial", validUsage)
+      (.failed, .providerFailure, "partial", validUsage)
     case .failedNoCallWithUsage:
-      (.failedNoCall, "budget_denied", nil, validUsage)
-    case .rawFailureBody:
-      (.failedNoCall, "provider said: invalid bearer token", nil, nil)
+      (.failedNoCall, .budgetStopped, nil, validUsage)
     }
   }
 }
+
+private let expectedResultWireKeys: Set<String> = [
+  "schema_version", "job_id", "operation_id", "attempt_generation", "provider_call_id", "kind",
+  "outcome", "failure_code", "output", "output_sha256", "finish_reason", "provider_reference",
+  "wire_model", "reported_model", "retry_budget", "max_output_tokens", "max_output_utf8_bytes",
+  "max_output_graphemes", "usage", "provenance",
+]
+
+private let expectedUsageWireKeys: Set<String> = [
+  "provider_call_id", "responses_sends", "proven_not_started_responses_sends", "prompt_tokens",
+  "completion_tokens", "reported_total_tokens", "accounted_tokens", "is_estimated",
+]
 
 private struct EvaluationLearningCallFixture {
   let root: URL
@@ -509,6 +605,10 @@ private func expectedCoreData(for request: EvaluationLearningCallRequest) throws
     "schema_version": request.schemaVersion,
     "state_root": request.stateRoot,
   ])
+}
+
+private func canonicalRequestSHA256(for request: EvaluationLearningCallRequest) throws -> String {
+  SHA256Digest.hex(try EvaluationCanonicalJSON.data(encoding: request))
 }
 
 private func jsonObject<Value: Encodable>(encoding value: Value) throws -> [String: Any] {

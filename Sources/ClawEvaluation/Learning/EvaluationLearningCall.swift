@@ -68,18 +68,21 @@ package struct EvaluationLearningCallRequest: Codable, Sendable, Equatable {
   package static func load(from url: URL) throws -> Self {
     let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
     let object = try EvaluationLearningClosedJSON.object(from: data)
-    try requireExactKeys(object, keys: Set(CodingKeys.allCases.map(\.rawValue)))
-    try requireExactObjectKeys(
+    try EvaluationLearningAdmissionVerifier.requireExactKeys(
+      object,
+      keys: Set(CodingKeys.allCases.map(\.rawValue))
+    )
+    try EvaluationLearningAdmissionVerifier.requireExactObjectKeys(
       in: object,
       path: [CodingKeys.prompt.rawValue],
       keys: ["path", "sha256"]
     )
-    try requireExactObjectKeys(
+    try EvaluationLearningAdmissionVerifier.requireExactObjectKeys(
       in: object,
       path: [CodingKeys.carrier.rawValue],
       keys: ["path", "sha256"]
     )
-    try requireExactObjectKeys(
+    try EvaluationLearningAdmissionVerifier.requireExactObjectKeys(
       in: object,
       path: [CodingKeys.manifest.rawValue],
       keys: [
@@ -87,12 +90,12 @@ package struct EvaluationLearningCallRequest: Codable, Sendable, Equatable {
         "owner_approval",
       ]
     )
-    try requireExactObjectKeys(
+    try EvaluationLearningAdmissionVerifier.requireExactObjectKeys(
       in: object,
       path: [CodingKeys.manifest.rawValue, "owner_approval"],
       keys: ["path", "sha256"]
     )
-    try requireExactObjectKeys(
+    try EvaluationLearningAdmissionVerifier.requireExactObjectKeys(
       in: object,
       path: [CodingKeys.authorization.rawValue],
       keys: ["event_path", "event_sha256"]
@@ -114,7 +117,7 @@ package struct EvaluationLearningCallRequest: Codable, Sendable, Equatable {
       jobID.isEmpty == false,
       operationID.isEmpty == false,
       attemptGeneration > 0,
-      Self.isCanonical(providerCallID),
+      EvaluationLearningAdmissionVerifier.isCanonicalProviderCallID(providerCallID),
       SHA256Digest.isCanonicalHex(prompt.sha256),
       SHA256Digest.isCanonicalHex(carrier.sha256),
       SHA256Digest.isCanonicalHex(manifest.manifestSHA256),
@@ -124,15 +127,17 @@ package struct EvaluationLearningCallRequest: Codable, Sendable, Equatable {
       throw EvaluationLearningAdmissionError.invalidBinding
     }
 
-    let repository = try Self.absoluteURL(manifest.repositoryRoot)
-    let evaluation = try Self.absoluteURL(manifest.evaluationRoot)
-    let state = try Self.absoluteURL(stateRoot)
-    let promptURL = try Self.absoluteURL(prompt.path)
-    let carrierURL = try Self.absoluteURL(carrier.path)
-    let resultURL = try Self.absoluteURL(resultPath)
-    let manifestURL = try Self.absoluteURL(manifest.manifestPath)
-    let approvalURL = try Self.absoluteURL(manifest.ownerApproval.path)
-    let eventURL = try Self.absoluteURL(authorization.eventPath)
+    let repository = try EvaluationLearningAdmissionVerifier.absoluteURL(manifest.repositoryRoot)
+    let evaluation = try EvaluationLearningAdmissionVerifier.absoluteURL(manifest.evaluationRoot)
+    let state = try EvaluationLearningAdmissionVerifier.absoluteURL(stateRoot)
+    let promptURL = try EvaluationLearningAdmissionVerifier.absoluteURL(prompt.path)
+    let carrierURL = try EvaluationLearningAdmissionVerifier.absoluteURL(carrier.path)
+    let resultURL = try EvaluationLearningAdmissionVerifier.absoluteURL(resultPath)
+    let manifestURL = try EvaluationLearningAdmissionVerifier.absoluteURL(manifest.manifestPath)
+    let approvalURL = try EvaluationLearningAdmissionVerifier.absoluteURL(
+      manifest.ownerApproval.path
+    )
+    let eventURL = try EvaluationLearningAdmissionVerifier.absoluteURL(authorization.eventPath)
     guard
       EvaluationPathSecurity.isStrictlyContained(evaluation, under: repository),
       EvaluationPathSecurity.isStrictlyContained(state, under: evaluation),
@@ -415,7 +420,7 @@ package struct EvaluationLearningCallResult: Codable, Sendable, Equatable {
     request: EvaluationLearningCallRequest,
     requestSHA256: String,
     outcome: EvaluationLearningCallOutcome,
-    failureCode: String?,
+    failureCode: EvaluationAttemptOutcome?,
     output: String?,
     finishReason: String?,
     reportedModel: String?,
@@ -423,8 +428,11 @@ package struct EvaluationLearningCallResult: Codable, Sendable, Equatable {
     admissionContext: EvaluationLearningAdmissionContext
   ) throws {
     try request.validate()
+    let canonicalRequestSHA256 = SHA256Digest.hex(
+      try EvaluationCanonicalJSON.data(encoding: request)
+    )
     guard
-      SHA256Digest.isCanonicalHex(requestSHA256),
+      requestSHA256 == canonicalRequestSHA256,
       admissionContext.jobID == request.jobID,
       admissionContext.operationID == request.operationID,
       admissionContext.attemptGeneration == request.attemptGeneration,
@@ -445,7 +453,7 @@ package struct EvaluationLearningCallResult: Codable, Sendable, Equatable {
     providerCallID = request.providerCallID
     kind = request.kind
     self.outcome = outcome
-    self.failureCode = failureCode
+    self.failureCode = failureCode?.rawValue
     self.output = output
     outputSHA256 = output.map { SHA256Digest.hex(Data($0.utf8)) }
     self.finishReason = finishReason
@@ -476,7 +484,7 @@ package struct EvaluationLearningCallResult: Codable, Sendable, Equatable {
       jobID.isEmpty == false,
       operationID.isEmpty == false,
       attemptGeneration > 0,
-      EvaluationLearningCallRequest.isCanonical(providerCallID),
+      EvaluationLearningAdmissionVerifier.isCanonicalProviderCallID(providerCallID),
       providerReference.isEmpty == false,
       wireModel.isEmpty == false,
       retryBudget > 0,
@@ -485,7 +493,7 @@ package struct EvaluationLearningCallResult: Codable, Sendable, Equatable {
       maxOutputGraphemes > 0,
       SHA256Digest.isCanonicalHex(provenance.requestSHA256),
       SHA256Digest.isCanonicalHex(provenance.manifestSHA256),
-      Self.isCommit(provenance.freezeCommit),
+      EvaluationLearningAdmissionVerifier.isCommit(provenance.freezeCommit),
       SHA256Digest.isCanonicalHex(provenance.executableSHA256),
       SHA256Digest.isCanonicalHex(provenance.promptSHA256),
       SHA256Digest.isCanonicalHex(provenance.carrierSHA256),
@@ -594,81 +602,12 @@ package struct EvaluationLearningCallResult: Codable, Sendable, Equatable {
   }
 }
 
-extension EvaluationResultAccounting {
-  static func accountedTokens(
-    responsesSends: Int,
-    provenNotStartedResponsesSends: Int,
-    usage: [EvaluationUsageAccountingRow],
-    missingUsageTokenProxy: Int
-  ) -> Int {
-    let safeSends = max(0, responsesSends)
-    let accountableSends = max(0, safeSends - max(0, provenNotStartedResponsesSends))
-    let reported = usage.prefix(accountableSends).reduce(0) { total, row in
-      let rowTokens = row.isEstimated ? missingUsageTokenProxy : max(0, row.tokens)
-      return SaturatingArithmetic.sum(total, rowTokens)
-    }
-    let missing = max(0, accountableSends - usage.count)
-    let missingTokens = SaturatingArithmetic.product(missing, missingUsageTokenProxy)
-    return SaturatingArithmetic.sum(reported, missingTokens)
-  }
-}
-
-private extension EvaluationLearningCallRequest {
-  static func absoluteURL(_ path: String) throws -> URL {
-    let url = URL(fileURLWithPath: path)
-    guard path.hasPrefix("/"), url.standardizedFileURL.path == path else {
-      throw EvaluationLearningAdmissionError.invalidBinding
-    }
-    return url
-  }
-
-  static func isCanonical(_ providerCallID: ProviderCallID) -> Bool {
-    guard let identifier = UUID(uuidString: providerCallID.rawValue) else {
-      return false
-    }
-    return identifier.uuidString.lowercased() == providerCallID.rawValue
-  }
-
-  static func requireExactKeys(_ object: [String: Any], keys: Set<String>) throws {
-    guard Set(object.keys) == keys else {
-      throw EvaluationLearningAdmissionError.invalidJSON
-    }
-  }
-
-  static func requireExactObjectKeys(
-    in root: [String: Any],
-    path: [String],
-    keys: Set<String>
-  ) throws {
-    var value: Any = root
-    for component in path {
-      guard let object = value as? [String: Any], let next = object[component] else {
-        throw EvaluationLearningAdmissionError.invalidJSON
-      }
-      value = next
-    }
-    guard let object = value as? [String: Any], Set(object.keys) == keys else {
-      throw EvaluationLearningAdmissionError.invalidJSON
-    }
-  }
-}
-
 private extension EvaluationLearningCallResult {
-  static func isCommit(_ value: String) -> Bool {
-    value.count == 40 && value.allSatisfy { "0123456789abcdef".contains($0) }
-  }
-
   static func isFailureCode(_ value: String?) -> Bool {
-    guard
-      let value,
-      (1...64).contains(value.count),
-      value.first?.isLowercase == true
-    else {
+    guard let value, let outcome = EvaluationAttemptOutcome(rawValue: value) else {
       return false
     }
-    return value.allSatisfy { character in
-      character.isLowercase || character.isNumber || character == "_"
-    }
+    return outcome != .completed
   }
 
   static func isBoundedText(_ value: String) -> Bool {
