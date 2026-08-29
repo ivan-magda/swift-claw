@@ -10,6 +10,7 @@ struct ClawEvalCommand: AsyncParsableCommand {
     subcommands: [
       Page.self,
       Worker.self,
+      LearningCall.self,
       CanaryProcess.self,
       InspectPolicy.self,
       AuthLogin.self,
@@ -98,6 +99,24 @@ struct ClawEvalCommand: AsyncParsableCommand {
         }
         print(try await EvaluationWorker().run(invocation: authorized))
       }
+    }
+  }
+
+  struct LearningCall: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      commandName: "learning-call",
+      abstract: "Run one isolated scheduled-learning evaluator or reflector call."
+    )
+
+    @Option(help: "Absolute path to one manifest-bound learning-call request.")
+    var request: String
+
+    mutating func run() async throws {
+      let value = try EvaluationLearningCallRequest.load(
+        from: URL(fileURLWithPath: request)
+      )
+      let result = try await EvaluationLearningCall().run(request: value)
+      print(result.operationID)
     }
   }
 
