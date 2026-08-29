@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed M2 ADR, algorithm v1 |
+| **Status** | Accepted M2 ADR, algorithm v1 |
 | **Date** | 29 August 2026 |
 | **Parent** | Issue 115 |
 | **Scope issue** | Issue 170 |
