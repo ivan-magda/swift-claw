@@ -1053,13 +1053,7 @@ private extension EvaluationLearningCall {
     EvaluationLearningAdmissionVerifier(
       runningExecutablePath: {
         Self.productionExecutablePath(arguments: arguments)
-      },
-      readFile: { url in
-        try EvaluationPathSecurity.readRegularSingleLinkFile(
-          at: url,
-          maximumByteCount: 256 * 1_024 * 1_024
-        )
-      },
+      }
     )
   }
 

@@ -168,6 +168,7 @@ enum EvaluationWorkspaceMaterializer {
     else {
       throw EvaluationWorkspaceError.invalidSourceArtifact
     }
+    try verifyPromotionReceipt(configuration: configuration)
 
     let workspace = configuration.workspaceRootURL
     let source = URL(fileURLWithPath: configuration.sourceArtifactPath).standardizedFileURL
@@ -456,6 +457,28 @@ enum EvaluationWorkspaceMaterializer {
     try installImmutable(data, at: destination, fileManager: fileManager)
 
     return destination
+  }
+}
+
+extension EvaluationWorkspaceMaterializer {
+  package static func verifyPromotionReceipt(
+    configuration: EvaluationAttemptConfiguration
+  ) throws {
+    guard
+      let receiptPath = configuration.promotionReceiptPath,
+      let expectedDigest = configuration.promotionReceiptSHA256
+    else {
+      return
+    }
+    let receiptURL = URL(fileURLWithPath: receiptPath).standardizedFileURL
+    let receiptData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: receiptURL)
+    let observedDigest = SHA256Digest.hex(receiptData)
+    guard observedDigest == expectedDigest else {
+      throw EvaluationPromotionReceiptError.digestMismatch(
+        expected: expectedDigest,
+        observed: observedDigest
+      )
+    }
   }
 }
 
@@ -867,6 +890,10 @@ enum EvaluationWorkspaceError: Error, Sendable, Equatable {
   case inputIsNotUTF8
   case inputGraphemeLimitExceeded(Int)
   case unexpectedWorkspaceContents([String])
+}
+
+enum EvaluationPromotionReceiptError: Error, Sendable, Equatable {
+  case digestMismatch(expected: String, observed: String)
 }
 
 package enum EvaluationJSONFile {

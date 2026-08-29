@@ -530,6 +530,7 @@ extension EvaluationWorker {
       invocation: invocation,
       configuration: configuration
     )
+    try EvaluationWorkspaceMaterializer.verifyPromotionReceipt(configuration: configuration)
     let liveAdmission = EvaluationLearningLiveAdmission(
       verifier: admissionVerifier,
       manifest: invocation.manifest,
@@ -610,6 +611,7 @@ private extension EvaluationWorker {
       admission.manifestSHA256 == invocation.manifest.manifestSHA256,
       admission.manifestSHA256 == configuration.approval.manifestSHA256,
       admission.freezeCommit == configuration.provenance.freezeCommit,
+      admission.executableSHA256 == configuration.provenance.executableSHA256,
       configuration.evaluationRoot == invocation.manifest.evaluationRoot,
       admission.missingUsageTokenProxy == PageEvaluationContract.missingUsageTokenProxy,
       budgets.taskAttempts > 0,

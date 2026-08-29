@@ -198,7 +198,7 @@ func makeEvaluationLearningTaskInvocationFixture() throws
     providerCallID: providerCallID,
     manifestSHA256: invocation.manifest.manifestSHA256,
     freezeCommit: attempt.configuration.provenance.freezeCommit,
-    executableSHA256: String(repeating: "e", count: 64),
+    executableSHA256: attempt.configuration.provenance.executableSHA256,
     missingUsageTokenProxy: PageEvaluationContract.missingUsageTokenProxy,
     budgets: EvaluationLearningApprovedBudgets(
       taskAttempts: 1,

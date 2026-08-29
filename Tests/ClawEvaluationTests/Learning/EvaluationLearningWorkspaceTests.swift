@@ -202,6 +202,60 @@ import Testing
     #expect(observed == observedDigest)
   }
 
+  @Test(arguments: PromotionReceiptMutation.allCases)
+  func activeAndRestartRejectMissingOrChangedPromotionReceiptBytes(
+    _ mutation: PromotionReceiptMutation
+  ) throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try makeLearningWorkspaceFixture(
+      root: root,
+      attemptID: mutation.rawValue,
+      split: "sealed",
+      stage: mutation.isRestart ? "sealed-post-restart" : "sealed-pre-restart",
+      condition: mutation.isRestart ? .postRestartLessonConditioned : .lessonConditioned,
+      lessonSource: mutation.isRestart ? .durableActive : .artifact,
+      hasPromotionReceipt: true
+    )
+    let receiptPath = try #require(fixture.configuration.promotionReceiptPath)
+    let receiptURL = URL(fileURLWithPath: receiptPath)
+    if mutation.isMissing {
+      try FileManager.default.removeItem(at: receiptURL)
+    } else {
+      try Data("changed promotion receipt".utf8).write(to: receiptURL)
+    }
+    let workspace = fixture.configuration.workspaceRootURL
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    let sentinel = workspace.appendingPathComponent("preexisting.txt")
+    try Data("preserve".utf8).write(to: sentinel)
+
+    // when
+    let error = #expect(throws: (any Error).self) {
+      _ = try EvaluationWorkspaceMaterializer.resetLearning(
+        configuration: fixture.configuration
+      )
+    }
+
+    // then — skipping either live receipt guard publishes a workspace from stale provenance.
+    if mutation.isMissing {
+      #expect(
+        error as? EvaluationPathSecurityError == .unavailable(receiptURL.lastPathComponent)
+      )
+    } else {
+      #expect(
+        error as? EvaluationPromotionReceiptError
+          == .digestMismatch(
+            expected: try #require(fixture.configuration.promotionReceiptSHA256),
+            observed: SHA256Digest.hex(Data("changed promotion receipt".utf8))
+          )
+      )
+    }
+    #expect(
+      try FileManager.default.contentsOfDirectory(atPath: workspace.path) == ["preexisting.txt"]
+    )
+  }
+
   @Test func cleanRejectsANoncanonicalEmptySet() throws {
     // given
     let root = try makeEvaluationTestRoot()
@@ -351,6 +405,21 @@ enum IncompletePromotedCondition: String, CaseIterable, Sendable {
 
   var hasDigest: Bool {
     rawValue.hasSuffix("digest-only")
+  }
+}
+
+enum PromotionReceiptMutation: String, CaseIterable, Sendable {
+  case activeMissing = "active-receipt-missing"
+  case activeChanged = "active-receipt-changed"
+  case restartMissing = "restart-receipt-missing"
+  case restartChanged = "restart-receipt-changed"
+
+  var isRestart: Bool {
+    rawValue.hasPrefix("restart-")
+  }
+
+  var isMissing: Bool {
+    rawValue.hasSuffix("-missing")
   }
 }
 

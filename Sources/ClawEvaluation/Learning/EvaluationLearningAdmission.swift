@@ -172,7 +172,9 @@ package struct EvaluationLearningAdmissionVerifier: EvaluationLearningAdmissionV
     let eventObject = try EvaluationLearningClosedJSON.object(from: eventData)
     let event = try Self.operationStartedEvent(from: eventData, object: eventObject)
 
-    let executableData = try readFile(URL(fileURLWithPath: runningExecutablePath()))
+    let executableData = try EvaluationLearningExecutableReader.read(
+      at: URL(fileURLWithPath: runningExecutablePath())
+    )
     guard SHA256Digest.hex(executableData) == projection.executableSHA256 else {
       throw EvaluationLearningAdmissionError.integrityFailure
     }
@@ -202,6 +204,15 @@ package struct EvaluationLearningAdmissionVerifier: EvaluationLearningAdmissionV
       missingUsageTokenProxy: projection.missingUsageTokenProxy,
       budgets: projection.budgets,
       route: route
+    )
+  }
+}
+
+private enum EvaluationLearningExecutableReader {
+  static func read(at executable: URL) throws -> Data {
+    try EvaluationPathSecurity.readRegularSingleLinkFile(
+      at: executable,
+      maximumByteCount: 256 * 1_024 * 1_024
     )
   }
 }

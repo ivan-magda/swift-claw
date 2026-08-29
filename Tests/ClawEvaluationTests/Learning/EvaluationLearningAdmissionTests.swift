@@ -144,6 +144,32 @@ import Testing
     #expect(error != nil)
   }
 
+  @Test func taskVerifierAcceptsAProductionSizedExecutable() async throws {
+    // given
+    let byteCount = 16 * 1_024 * 1_024 + 1
+    let fixture = try makeEvaluationLearningAdmissionFixture(
+      operationKind: .task,
+      executableByteCount: byteCount
+    )
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+    // when
+    let context = try await fixture.verifier().verify(
+      manifest: fixture.manifest,
+      authorization: fixture.authorization,
+      invocationCoreDigest: fixture.invocationCoreDigest,
+      carrierSHA256: fixture.carrierSHA256,
+      providerCallID: fixture.providerCallID,
+      kind: .task
+    )
+
+    // then — routing executable reads through the JSON limit rejects the default product size.
+    #expect(
+      context.executableSHA256 == SHA256Digest.hex(try Data(contentsOf: fixture.executableURL))
+    )
+    #expect(try fixture.executableURL.resourceValues(forKeys: [.fileSizeKey]).fileSize == byteCount)
+  }
+
   @Test(arguments: [
     "provider_call_id",
     "carrier_digest",
@@ -483,7 +509,8 @@ private struct EvaluationLearningAdmissionFixture {
 private func makeEvaluationLearningAdmissionFixture(
   operationKind: EvaluationLearningOperationKind = .evaluator,
   eventMutation: String? = nil,
-  approvalBudgetMutation: String? = nil
+  approvalBudgetMutation: String? = nil,
+  executableByteCount: Int? = nil
 ) throws -> EvaluationLearningAdmissionFixture {
   let root = try makeEvaluationTestRoot()
   let liveRun = root.appendingPathComponent("live-run", isDirectory: true)
@@ -523,8 +550,19 @@ private func makeEvaluationLearningAdmissionFixture(
     "accounted_tokens": 5,
   ]
   let executableURL = root.appendingPathComponent("claw-eval")
-  let executableData = Data("frozen executable".utf8)
-  try executableData.write(to: executableURL)
+  if let executableByteCount {
+    try Data().write(to: executableURL)
+    let executable = try FileHandle(forWritingTo: executableURL)
+    defer { try? executable.close() }
+    try executable.truncate(atOffset: UInt64(executableByteCount))
+  } else {
+    try Data("frozen executable".utf8).write(to: executableURL)
+  }
+  try FileManager.default.setAttributes(
+    [.posixPermissions: 0o700],
+    ofItemAtPath: executableURL.path
+  )
+  let executableData = try Data(contentsOf: executableURL)
   let manifestObject: [String: Any] = [
     "budgets": budgets,
     "swift_execution": [
