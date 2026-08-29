@@ -3,6 +3,7 @@ import ClawCore
 import ClawWorkspace
 import Foundation
 
+// swiftlint:disable file_length
 struct EvaluationAttemptRunner: Sendable {
   private let roster: ProviderRoster
   private let httpRecorder: EvaluationHTTPRecorder
@@ -11,6 +12,7 @@ struct EvaluationAttemptRunner: Sendable {
   private let now: @Sendable () -> Date
   private let providerCallIDGenerator: any ProviderCallIDGenerating
   private let runtimeNow: @Sendable () -> ContinuousClock.Instant
+  private let memoryStore: any MemoryStore
 
   package init(
     roster: ProviderRoster,
@@ -19,7 +21,8 @@ struct EvaluationAttemptRunner: Sendable {
     processUUID: UUID = UUID(),
     now: @escaping @Sendable () -> Date = Date.init,
     providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
-    runtimeNow: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
+    runtimeNow: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
+    memoryStore: any MemoryStore = EmptyMemoryStore()
   ) {
     self.roster = roster
     self.httpRecorder = httpRecorder
@@ -28,6 +31,7 @@ struct EvaluationAttemptRunner: Sendable {
     self.now = now
     self.providerCallIDGenerator = providerCallIDGenerator
     self.runtimeNow = runtimeNow
+    self.memoryStore = memoryStore
   }
 
   // One linear attempt transaction keeps timestamps, usage, and recorded side effects bound to the
@@ -47,7 +51,25 @@ struct EvaluationAttemptRunner: Sendable {
       throw mismatch
     }
     let started = now()
-    let workspace = try EvaluationWorkspaceMaterializer.reset(configuration: configuration)
+    let learningMaterialization: EvaluationLearningTaskMaterialization?
+    let workspace: EvaluationWorkspaceMaterialization
+    if configuration.executionProfile == .scheduledLearningV1 {
+      let materialization = try EvaluationWorkspaceMaterializer.resetLearning(
+        configuration: configuration
+      )
+      learningMaterialization = materialization
+      workspace = materialization.workspace
+    } else {
+      learningMaterialization = nil
+      workspace = try EvaluationWorkspaceMaterializer.reset(configuration: configuration)
+    }
+    let initialTainted =
+      learningMaterialization.map { materialization in
+        Self.initialTainted(
+          configuration: configuration,
+          lessonSet: materialization.carrier.activeLessons
+        )
+      } ?? false
     let taskPrompt = try Self.verifiedTaskPrompt(configuration: configuration)
     let runID = Self.stableIdentifier("run:\(configuration.attemptID)")
     let sessionID = Self.stableIdentifier("session:\(configuration.attemptID)")
@@ -59,13 +81,17 @@ struct EvaluationAttemptRunner: Sendable {
     let dispatcher = EvaluationToolDispatcher(
       workspaceRoot: configuration.workspaceRootURL,
       allowedFileName: expectedInputFileName,
-      recorder: toolRecorder
+      recorder: toolRecorder,
+      recordsInitialTrust: configuration.executionProfile == .scheduledLearningV1
     )
     let buildResult = try Self.buildContext(
       configuration: configuration,
       taskPrompt: taskPrompt,
       sessionID: sessionID,
-      dispatcher: dispatcher
+      dispatcher: dispatcher,
+      memoryStore: memoryStore,
+      learningMaterialization: learningMaterialization,
+      initialTainted: initialTainted
     )
 
     let usageStore = EvaluationUsageStore(
@@ -109,7 +135,7 @@ struct EvaluationAttemptRunner: Sendable {
       sessionId: sessionID,
       chatId: 1,
       buildResult: buildResult,
-      sessionTainted: false,
+      sessionTainted: initialTainted,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0,
@@ -118,12 +144,20 @@ struct EvaluationAttemptRunner: Sendable {
     )
     let tools = await toolRecorder.records()
     let observedHTTP = await httpRecorder.snapshot()
+    let labeledFenceRecords = await httpRecorder.labeledFenceRecords()
+    let learningCarrierVerified = Self.learningCarrierVerified(
+      configuration: configuration,
+      http: observedHTTP,
+      records: labeledFenceRecords
+    )
     let mapped = Self.map(
       outcome: outcome,
       tools: tools,
       http: observedHTTP,
       expectedInputFileName: expectedInputFileName,
-      expectedInputSHA256: configuration.inputSHA256
+      expectedInputSHA256: configuration.inputSHA256,
+      usesLearningProfile: configuration.executionProfile == .scheduledLearningV1,
+      learningCarrierVerified: learningCarrierVerified
     )
     var usageRows = usageStore.rows
     func appendTerminalUsageIfNeeded(_ usage: ProviderUsage) throws {
@@ -179,8 +213,20 @@ struct EvaluationAttemptRunner: Sendable {
       replacementDisposition: mapped.replacementDisposition,
       replacementReason: mapped.replacementReason,
       workspace: workspace,
-      lockAcquisitionID: lockAcquisitionID
+      lockAcquisitionID: lockAcquisitionID,
+      learningCarrierSHA256: learningMaterialization?.workspace.inputSHA256,
+      learningLessonSetSHA256: learningMaterialization?.workspace.lessonSetDigest,
+      learningInitialTainted: learningMaterialization.map { _ in initialTainted },
+      learningCarrierVerified: learningMaterialization.map { _ in learningCarrierVerified }
     )
+  }
+
+  package static func initialTainted(
+    configuration: EvaluationAttemptConfiguration,
+    lessonSet: EvaluationLearningLessonSet
+  ) -> Bool {
+    configuration.executionProfile == .scheduledLearningV1
+      && lessonSet.lessons.isEmpty == false
   }
 }
 
@@ -274,23 +320,46 @@ private extension EvaluationAttemptRunner {
     }
   }
 
+  // swiftlint:disable:next function_body_length function_parameter_count
   static func buildContext(
     configuration: EvaluationAttemptConfiguration,
     taskPrompt: String,
     sessionID: Int64,
-    dispatcher: EvaluationToolDispatcher
+    dispatcher: EvaluationToolDispatcher,
+    memoryStore: any MemoryStore,
+    learningMaterialization: EvaluationLearningTaskMaterialization?,
+    initialTainted: Bool
   ) throws -> BuildResult {
     guard let fixedDate = configuration.fixedDate else {
       throw EvaluationConfigurationError.invalidFixedTimestamp(configuration.fixedTimestamp)
     }
+    let fullBudget = EvaluationRuntimeContextFactory.attemptBudget(
+      toolDefinitions: dispatcher.definitions
+    )
+    let lessonMessage = learningMaterialization.map { materialization in
+      ChatMessage(
+        role: .user,
+        content: LabeledContextFactory.make(
+          label: "scheduled_learning_lessons",
+          content: materialization.lessonSetText
+        ).render()
+      )
+    }
+    let reservedInputGraphemes = lessonMessage?.content.text.count ?? 0
+    guard reservedInputGraphemes <= fullBudget.inputCapGraphemes else {
+      throw EvaluationAttemptError.requiredLessonContextExceedsBudget
+    }
+    let fittedBudget = EvaluationRuntimeContextFactory.attemptBudget(
+      toolDefinitions: dispatcher.definitions,
+      reservedInputGraphemes: reservedInputGraphemes
+    )
     let builder = EvaluationRuntimeContextFactory.makeBuilder(
       workspaceRootURL: configuration.workspaceRootURL,
       providerReference: configuration.providerReference,
       wireModel: configuration.wireModel,
       toolDefinitions: dispatcher.definitions,
-      budget: EvaluationRuntimeContextFactory.attemptBudget(
-        toolDefinitions: dispatcher.definitions
-      ),
+      budget: fittedBudget,
+      memoryStore: memoryStore,
       now: { fixedDate }
     )
     let snapshot = SessionContextSnapshot(
@@ -303,21 +372,41 @@ private extension EvaluationAttemptRunner {
       ],
       historyMessageIds: [1],
       windowStartMessageId: nil,
-      isTainted: false,
+      isTainted: initialTainted,
       hasPrivateData: false
     )
-    return try builder.assemble(snapshot: snapshot, sessionId: sessionID, origin: .scheduled)
+    let buildResult = try builder.assemble(
+      snapshot: snapshot,
+      sessionId: sessionID,
+      origin: .scheduled
+    )
+    guard let lessonMessage else {
+      return buildResult
+    }
+    var learningMessages = buildResult.messages
+    learningMessages.insert(
+      lessonMessage,
+      at: learningMessages.index(before: learningMessages.endIndex)
+    )
+    return BuildResult(
+      messages: learningMessages,
+      ownerNotices: buildResult.ownerNotices,
+      hasPrivateDataAccess: buildResult.hasPrivateDataAccess,
+      policyVersion: buildResult.policyVersion
+    )
   }
 
   // Exhaustive terminal mapping stays in one switch so a new `TurnResult` cannot bypass protocol
   // classification through a helper default.
-  // swiftlint:disable:next function_body_length
+  // swiftlint:disable:next function_body_length function_parameter_count
   static func map(
     outcome: TurnOutcome,
     tools: [EvaluationToolRecord],
     http: EvaluationHTTPSnapshot,
     expectedInputFileName: String,
-    expectedInputSHA256: String
+    expectedInputSHA256: String,
+    usesLearningProfile: Bool,
+    learningCarrierVerified: Bool
   ) -> MappedOutcome {
     if let integrityFailure = http.integrityFailures.first {
       let modelMismatch = integrityFailure == "wire_model_mismatch"
@@ -354,10 +443,20 @@ private extension EvaluationAttemptRunner {
       )
     }
     let hasUnexpectedSecondSend =
-      http.responsesSends.count == PageEvaluationContract.maximumResponsesSendsPerAttempt
+      usesLearningProfile == false
+      && http.responsesSends.count == PageEvaluationContract.maximumResponsesSendsPerAttempt
       && (http.responsesSends[0].untrustedPayloadSHA256 != nil
         || http.responsesSends[1].untrustedPayloadSHA256 != expectedInputSHA256)
     if hasUnexpectedSecondSend {
+      return MappedOutcome(
+        outcome: .harnessFailure,
+        criticalCode: "untrusted_payload_digest_mismatch",
+        rawOutput: nil,
+        replacementDisposition: .ineligible,
+        replacementReason: "harness_integrity_failure"
+      )
+    }
+    if learningCarrierVerified == false {
       return MappedOutcome(
         outcome: .harnessFailure,
         criticalCode: "untrusted_payload_digest_mismatch",
@@ -414,6 +513,46 @@ private extension EvaluationAttemptRunner {
         replacementReason: "task_contract_failure"
       )
     }
+  }
+
+  static func learningCarrierVerified(
+    configuration: EvaluationAttemptConfiguration,
+    http: EvaluationHTTPSnapshot,
+    records: [EvaluationLabeledFenceRecord]
+  ) -> Bool {
+    guard configuration.executionProfile == .scheduledLearningV1 else {
+      return true
+    }
+    let lessonSetDigest = configuration.lessonSetDigest
+    guard http.responsesSends.isEmpty == false else {
+      return false
+    }
+    let firstLessons = records.filter { record in
+      record.sequence == 1 && record.label == "scheduled_learning_lessons"
+    }
+    let firstFileReads = records.filter { record in
+      record.sequence == 1 && record.label == EvaluationToolContract.requiredToolName
+    }
+    guard
+      firstLessons.count == 1,
+      firstLessons[0].payloadSHA256 == lessonSetDigest,
+      firstFileReads.isEmpty
+    else {
+      return false
+    }
+    guard http.responsesSends.count > 1 else {
+      return true
+    }
+    let secondLessons = records.filter { record in
+      record.sequence == 2 && record.label == "scheduled_learning_lessons"
+    }
+    let secondFileReads = records.filter { record in
+      record.sequence == 2 && record.label == EvaluationToolContract.requiredToolName
+    }
+    return secondLessons.count == 1
+      && secondLessons[0].payloadSHA256 == lessonSetDigest
+      && secondFileReads.count == 1
+      && secondFileReads[0].payloadSHA256 == configuration.inputSHA256
   }
 
   static func map(
@@ -521,4 +660,5 @@ enum EvaluationAttemptError: Error, Sendable, Equatable {
   case rosterReservationPolicyMismatch
   case systemPromptDigestMismatch
   case proactiveSystemPromptDigestMismatch
+  case requiredLessonContextExceedsBudget
 }

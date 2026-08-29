@@ -7,11 +7,20 @@ struct EvaluationToolRecord: Codable, Sendable, Equatable {
   package let name: String
   package let path: String?
   package let status: String
+  // swiftlint:disable:next discouraged_optional_boolean
+  package let sessionTainted: Bool?
 
-  package init(name: String, path: String?, status: String) {
+  // swiftlint:disable:next discouraged_optional_boolean
+  package init(name: String, path: String?, status: String, sessionTainted: Bool? = nil) {
     self.name = name
     self.path = path
     self.status = status
+    self.sessionTainted = sessionTainted
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case name, path, status
+    case sessionTainted = "session_tainted"
   }
 }
 
@@ -48,11 +57,13 @@ struct EvaluationToolDispatcher: ToolDispatching {
   private let wrapped: GatedToolDispatcher
   private let allowedFileName: String
   private let recorder: EvaluationToolRecorder
+  private let recordsInitialTrust: Bool
 
   package init(
     workspaceRoot: URL,
     allowedFileName: String,
-    recorder: EvaluationToolRecorder
+    recorder: EvaluationToolRecorder,
+    recordsInitialTrust: Bool = false
   ) {
     let fileRead = FileReadTool(
       workspaceRoot: workspaceRoot,
@@ -70,6 +81,7 @@ struct EvaluationToolDispatcher: ToolDispatching {
     )
     self.allowedFileName = allowedFileName
     self.recorder = recorder
+    self.recordsInitialTrust = recordsInitialTrust
   }
 
   package func dispatch(
@@ -92,7 +104,8 @@ struct EvaluationToolDispatcher: ToolDispatching {
         EvaluationToolRecord(
           name: call.name,
           path: path,
-          status: EvaluationToolContract.failedStatus
+          status: EvaluationToolContract.failedStatus,
+          sessionTainted: recordedInitialTrust(context)
         )
       )
       return outcome
@@ -115,7 +128,8 @@ struct EvaluationToolDispatcher: ToolDispatching {
           EvaluationToolRecord(
             name: call.name,
             path: path,
-            status: EvaluationToolContract.failedStatus
+            status: EvaluationToolContract.failedStatus,
+            sessionTainted: recordedInitialTrust(context)
           )
         )
         return outcome
@@ -127,10 +141,16 @@ struct EvaluationToolDispatcher: ToolDispatching {
         name: call.name,
         path: path,
         status: outcome.observation.status == .ok
-          ? EvaluationToolContract.succeededStatus : EvaluationToolContract.failedStatus
+          ? EvaluationToolContract.succeededStatus : EvaluationToolContract.failedStatus,
+        sessionTainted: recordedInitialTrust(context)
       )
     )
     return outcome
+  }
+
+  // swiftlint:disable:next discouraged_optional_boolean
+  private func recordedInitialTrust(_ context: ToolDispatchContext) -> Bool? {
+    recordsInitialTrust ? context.sessionTainted : nil
   }
 }
 

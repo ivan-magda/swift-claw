@@ -118,7 +118,14 @@ struct EvaluationAttemptResult: Codable, Sendable, Equatable {
   package let replacementOfAttemptID: String?
   package let replacementOrdinal: Int
   package let workspace: EvaluationWorkspaceMaterialization
+  package let learningCarrierSHA256: String?
+  package let learningLessonSetSHA256: String?
+  // swiftlint:disable discouraged_optional_boolean
+  package let learningInitialTainted: Bool?
+  package let learningCarrierVerified: Bool?
+  // swiftlint:enable discouraged_optional_boolean
 
+  // swiftlint:disable discouraged_optional_boolean
   package init(
     configuration: EvaluationAttemptConfiguration,
     processUUID: UUID,
@@ -142,7 +149,11 @@ struct EvaluationAttemptResult: Codable, Sendable, Equatable {
     replacementDisposition: EvaluationReplacementDisposition,
     replacementReason: String,
     workspace: EvaluationWorkspaceMaterialization,
-    lockAcquisitionID: UUID? = nil
+    lockAcquisitionID: UUID? = nil,
+    learningCarrierSHA256: String? = nil,
+    learningLessonSetSHA256: String? = nil,
+    learningInitialTainted: Bool? = nil,
+    learningCarrierVerified: Bool? = nil
   ) {
     schemaVersion = PageEvaluationContract.schemaVersion
     attemptID = configuration.attemptID
@@ -194,7 +205,12 @@ struct EvaluationAttemptResult: Codable, Sendable, Equatable {
     replacementOfAttemptID = configuration.replacementOfAttemptID
     replacementOrdinal = configuration.replacementOrdinal
     self.workspace = workspace
+    self.learningCarrierSHA256 = learningCarrierSHA256
+    self.learningLessonSetSHA256 = learningLessonSetSHA256
+    self.learningInitialTainted = learningInitialTainted
+    self.learningCarrierVerified = learningCarrierVerified
   }
+  // swiftlint:enable discouraged_optional_boolean
 
   enum CodingKeys: String, CodingKey {
     case schemaVersion = "schema_version"
@@ -247,6 +263,10 @@ struct EvaluationAttemptResult: Codable, Sendable, Equatable {
     case replacementOfAttemptID = "replacement_of_attempt_id"
     case replacementOrdinal = "replacement_ordinal"
     case workspace
+    case learningCarrierSHA256 = "learning_carrier_sha256"
+    case learningLessonSetSHA256 = "learning_lesson_set_sha256"
+    case learningInitialTainted = "learning_initial_tainted"
+    case learningCarrierVerified = "learning_carrier_verified"
   }
 }
 

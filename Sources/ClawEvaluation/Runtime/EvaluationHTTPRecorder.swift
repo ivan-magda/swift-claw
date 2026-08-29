@@ -40,6 +40,12 @@ struct EvaluationResponsesSend: Codable, Sendable, Equatable {
   }
 }
 
+package struct EvaluationLabeledFenceRecord: Sendable, Equatable {
+  package let sequence: Int
+  package let label: String
+  package let payloadSHA256: String
+}
+
 struct EvaluationHTTPSnapshot: Codable, Sendable, Equatable {
   package let responsesSends: [EvaluationResponsesSend]
   package let provenNotStartedResponsesSends: Int
@@ -69,6 +75,7 @@ actor EvaluationHTTPRecorder: HTTPExecuting, HTTPStreaming {
   private let progressRecorder: EvaluationAttemptProgressRecorder?
   private let attemptID: String?
   private var sends: [EvaluationResponsesSend] = []
+  private var fenceRecords: [EvaluationLabeledFenceRecord] = []
   private var provenNotStartedResponsesSends = 0
   private var credentialCalls = 0
   private var failures: [String] = []
@@ -120,9 +127,11 @@ actor EvaluationHTTPRecorder: HTTPExecuting, HTTPStreaming {
       throw EvaluationHTTPError.wireModelMismatch
     }
 
+    let sequence = sends.count + 1
     let untrustedPayload = Self.untrustedPayload(in: request.body)
+    fenceRecords.append(contentsOf: Self.labeledFences(in: request.body, sequence: sequence))
     let recordedSend = EvaluationResponsesSend(
-      sequence: sends.count + 1,
+      sequence: sequence,
       requestedModel: requestedModel,
       bodyByteCount: request.body?.count ?? 0,
       bodySHA256: SHA256Digest.hex(request.body ?? Data()),
@@ -150,6 +159,10 @@ actor EvaluationHTTPRecorder: HTTPExecuting, HTTPStreaming {
       credentialHTTPCalls: credentialCalls,
       integrityFailures: failures
     )
+  }
+
+  package func labeledFenceRecords() -> [EvaluationLabeledFenceRecord] {
+    fenceRecords
   }
 
   package func recordProvenNotStartedResponsesSends(_ count: Int) throws {
@@ -222,6 +235,42 @@ actor EvaluationHTTPRecorder: HTTPExecuting, HTTPStreaming {
       return Data(value[contentRange].utf8)
     }
     return nil
+  }
+
+  private static func labeledFences(
+    in body: Data?,
+    sequence: Int
+  ) -> [EvaluationLabeledFenceRecord] {
+    guard
+      let body,
+      let object = try? JSONSerialization.jsonObject(with: body)
+    else {
+      return []
+    }
+    let pattern =
+      #"<claw-untrusted nonce="([0-9a-f]{32})" label="([^"]+)">\n([\s\S]*?)\n</claw-untrusted nonce="\1">"#
+    guard let expression = try? NSRegularExpression(pattern: pattern) else {
+      return []
+    }
+    return strings(in: object).flatMap { value in
+      let range = NSRange(value.startIndex..<value.endIndex, in: value)
+      // swiftlint:disable closure_parameter_position
+      return expression.matches(in: value, range: range).compactMap {
+        match -> EvaluationLabeledFenceRecord? in
+        guard
+          let labelRange = Range(match.range(at: 2), in: value),
+          let contentRange = Range(match.range(at: 3), in: value)
+        else {
+          return nil
+        }
+        return EvaluationLabeledFenceRecord(
+          sequence: sequence,
+          label: String(value[labelRange]),
+          payloadSHA256: SHA256Digest.hex(Data(value[contentRange].utf8))
+        )
+      }
+      // swiftlint:enable closure_parameter_position
+    }
   }
 
   private static func strings(in value: Any) -> [String] {

@@ -181,6 +181,7 @@ enum EvaluationRuntimeContextFactory {
     wireModel: String,
     toolDefinitions: [ToolDefinition],
     budget: ContextBudget,
+    memoryStore: any MemoryStore = EmptyMemoryStore(),
     now: @escaping @Sendable () -> Date = Date.init
   ) -> ContextBuilder {
     let route = ResolvedLLMRoute(
@@ -202,7 +203,7 @@ enum EvaluationRuntimeContextFactory {
       systemPrompt: SystemPrompt.minimal,
       proactiveSystemPrompt: SystemPrompt.proactive,
       workspace: FileSystemWorkspace(root: workspaceRootURL),
-      memoryStore: EmptyMemoryStore(),
+      memoryStore: memoryStore,
       retriever: EmptyRetriever(),
       budget: budget,
       fenceLabels: ToolFenceLabels(definitions: toolDefinitions),
@@ -211,7 +212,11 @@ enum EvaluationRuntimeContextFactory {
     )
   }
 
-  static func attemptBudget(toolDefinitions: [ToolDefinition]) -> ContextBudget {
+  static func attemptBudget(
+    toolDefinitions: [ToolDefinition],
+    reservedInputGraphemes: Int = 0
+  ) -> ContextBudget {
+    precondition(reservedInputGraphemes >= 0)
     let contract = EvaluationRuntimeContract.frozen
     let messageInputTokens = TokenEstimator.messageInputBudget(
       maxInputTokens: contract.runBudget.maxInputTokens,
@@ -219,7 +224,8 @@ enum EvaluationRuntimeContextFactory {
     )
     let defaults = ContextBudget.default
     return ContextBudget(
-      inputCapGraphemes: TokenEstimator.graphemeBudget(forInputTokens: messageInputTokens),
+      inputCapGraphemes: TokenEstimator.graphemeBudget(forInputTokens: messageInputTokens)
+        - reservedInputGraphemes,
       userFileCap: defaults.userFileCap,
       memoryFileCap: defaults.memoryFileCap,
       itemsCap: defaults.itemsCap,
