@@ -25,7 +25,7 @@ def _rejected_hits(error: LearningContractError) -> list[str]:
 
 
 def score_case(case: dict[str, Any]) -> dict[str, Any]:
-    """Replay one frozen attempt, closing rejection into the stable contract-error code."""
+    """Replay one frozen attempt, closing rejection into its stable contract-error codes."""
 
     attempt = case["attempt"]
     events = [parse_event(value) for value in attempt["events"]]
@@ -34,7 +34,7 @@ def score_case(case: dict[str, Any]) -> dict[str, Any]:
     except LearningContractError as error:
         return {
             "outcome": "rejected",
-            "error_code": error.issues[0].requirement,
+            "error_code": sorted({item.requirement for item in error.issues}),
             "requirement_hits": _rejected_hits(error),
         }
     return {
