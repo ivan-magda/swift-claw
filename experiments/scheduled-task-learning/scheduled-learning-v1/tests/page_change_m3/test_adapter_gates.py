@@ -8,7 +8,7 @@ from page_change_m3 import build_adapter_receipt
 
 from . import support
 
-_CANDIDATE_DIGEST = "a" * 64
+_CANDIDATE_LESSONS = ["A frozen candidate lesson."]
 
 
 class AdapterGateTests(unittest.TestCase):
@@ -61,7 +61,7 @@ class AdapterGateTests(unittest.TestCase):
         # when / then
         for name, pairs, expected_outcome in cases:
             with self.subTest(case=name):
-                receipt, envelope = build_adapter_receipt(_CANDIDATE_DIGEST, pairs)
+                receipt, envelope = build_adapter_receipt(_CANDIDATE_LESSONS, pairs)
                 self.assertEqual(receipt["outcome"], expected_outcome)
                 self.assertEqual(envelope["outcome"], expected_outcome)
 

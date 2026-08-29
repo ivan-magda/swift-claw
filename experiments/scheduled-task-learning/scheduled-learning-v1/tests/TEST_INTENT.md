@@ -155,3 +155,15 @@ generic-safe envelope. The new tests therefore own only that post-freeze adapter
 No redundant test forms apply: the gate table contains only distinct observable categories; the two
 receipt tests separately protect visibility/identity binding and the distinct full-receipt hash
 boundary.
+
+### Fix round 1
+
+| Risk | Production branch or seam | Nearest existing test | Unique reachable mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| A caller-provided candidate-record digest or unnormalized lesson text is forwarded as the replacement lesson-set identity | `page_change_m3.receipt.build_adapter_receipt` candidate provenance boundary | The original neutral-envelope test only checked a supplied digest was forwarded | Replace the canonical normalized lesson-set hash with the caller argument or hash raw CRLF/whitespace lesson text | `test_adapter_receipt::AdapterReceiptTests::test_candidate_digest_is_derived_from_the_frozen_replacement_lessons` |
+| One frozen adapter/dataset/oracle/gates/execution-surface binding, or the candidate replacement digest, is omitted, swapped, or held stale when its exact frozen input changes | `page_change_m3.receipt.build_adapter_receipt` envelope binding projection | The candidate-provenance test does not vary frozen adapter identities, and the receipt-hash test intentionally proves receipt stability across an envelope-only change | Project every envelope identity from one fixed value, swap two digest fields, or retain the old candidate digest | `test_adapter_receipt::AdapterReceiptTests::test_envelope_binds_each_changed_frozen_identity_independently` |
+
+The two fix-round tests are non-redundant: one proves the candidate is derived from normalized frozen
+lesson data rather than a caller digest; the table proves each separate envelope projection reacts to
+its own changed identity. The existing full-receipt hash test remains the only check that an
+envelope-only identity change does not alter receipt bytes.
