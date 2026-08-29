@@ -207,7 +207,7 @@ enum EvaluationCondition: String, Codable, Sendable, Equatable {
   }
 }
 
-enum EvaluationLessonSource: String, Codable, Sendable, Equatable {
+package enum EvaluationLessonSource: String, Codable, Sendable, Equatable {
   case clean
   case artifact
   case durableActive = "durable_active"

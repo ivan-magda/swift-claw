@@ -150,6 +150,9 @@ struct EvaluationFrozenProvenance: Codable, Sendable, Equatable {
 }
 
 struct EvaluationAttemptConfiguration: Codable, Sendable, Equatable {
+  package let executionProfile: EvaluationLearningExecutionProfile?
+  package let carrierPath: String?
+  package let carrierSHA256: String?
   package let schemaVersion: Int
   package let attemptID: String
   package let fixtureID: String
@@ -186,6 +189,9 @@ struct EvaluationAttemptConfiguration: Codable, Sendable, Equatable {
   package let replacementOrdinal: Int
 
   package init(
+    executionProfile: EvaluationLearningExecutionProfile? = nil,
+    carrierPath: String? = nil,
+    carrierSHA256: String? = nil,
     schemaVersion: Int = PageEvaluationContract.schemaVersion,
     attemptID: String,
     fixtureID: String,
@@ -221,6 +227,9 @@ struct EvaluationAttemptConfiguration: Codable, Sendable, Equatable {
     replacementOfAttemptID: String? = nil,
     replacementOrdinal: Int = 0
   ) {
+    self.executionProfile = executionProfile
+    self.carrierPath = carrierPath
+    self.carrierSHA256 = carrierSHA256
     self.schemaVersion = schemaVersion
     self.attemptID = attemptID
     self.fixtureID = fixtureID
@@ -299,7 +308,11 @@ struct EvaluationAttemptConfiguration: Codable, Sendable, Equatable {
     try validateDigests()
     try validateLessonSource()
     let pageStage = try validatedPageStage()
-    try validateCondition(for: pageStage)
+    if let executionProfile {
+      try validateLearningCondition(executionProfile, for: pageStage)
+    } else {
+      try validateCondition(for: pageStage)
+    }
     try validateTopology(for: pageStage)
     try validateApprovalAndProvenance()
   }
@@ -309,6 +322,9 @@ struct EvaluationAttemptConfiguration: Codable, Sendable, Equatable {
   ]
 
   enum CodingKeys: String, CodingKey, CaseIterable {
+    case executionProfile = "execution_profile"
+    case carrierPath = "carrier_path"
+    case carrierSHA256 = "carrier_sha256"
     case schemaVersion = "schema_version"
     case attemptID = "attempt_id"
     case fixtureID = "fixture_id"
@@ -433,7 +449,7 @@ private extension EvaluationAttemptConfiguration {
         approval.manifestSHA256,
         approval.approvedManifestSHA256,
         approval.approvalBodySHA256,
-      ] + [promotionReceiptSHA256].compactMap { $0 } + provenance.digests
+      ] + [carrierSHA256, promotionReceiptSHA256].compactMap { $0 } + provenance.digests
     for digest in digests where Self.isSHA256(digest) == false {
       throw EvaluationConfigurationError.invalidSHA256(digest)
     }
@@ -483,6 +499,51 @@ private extension EvaluationAttemptConfiguration {
       try validateConditionedLessonSource(.durableActive, for: pageStage)
     case .synthesis, .canary:
       break
+    }
+  }
+
+  func validateLearningCondition(
+    _ executionProfile: EvaluationLearningExecutionProfile,
+    for pageStage: EvaluationPageStage
+  ) throws {
+    guard executionProfile == .scheduledLearningV1 else {
+      throw EvaluationConfigurationError.invalidLearningProfile
+    }
+    guard
+      carrierPath != nil,
+      carrierSHA256 != nil,
+      publishLessonAsActive == false
+    else {
+      throw EvaluationConfigurationError.invalidLearningProfile
+    }
+
+    switch condition {
+    case .clean:
+      guard
+        lessonSource == .clean,
+        lessonArtifactPath == nil,
+        hasCompletePromotionReceipt == false,
+        pageStage != .canary,
+        pageStage != .synthesis
+      else {
+        throw EvaluationConfigurationError.invalidLessonSource
+      }
+    case .lessonConditioned:
+      let isTrial = pageStage == .regression && hasCompletePromotionReceipt == false
+      let isActive = pageStage == .sealedPreRestart && hasCompletePromotionReceipt
+      guard lessonSource == .artifact, isTrial || isActive else {
+        throw EvaluationConfigurationError.invalidLessonSource
+      }
+    case .postRestartLessonConditioned:
+      guard
+        lessonSource == .durableActive,
+        pageStage == .sealedPostRestart,
+        hasCompletePromotionReceipt
+      else {
+        throw EvaluationConfigurationError.invalidLessonSource
+      }
+    case .synthesis, .canary:
+      throw EvaluationConfigurationError.invalidStageTopology
     }
   }
 
@@ -562,7 +623,7 @@ private extension EvaluationAttemptConfiguration {
   }
 
   var optionalArtifactPaths: [String] {
-    [lessonArtifactPath, promotionReceiptPath].compactMap { $0 }
+    [carrierPath, lessonArtifactPath, promotionReceiptPath].compactMap { $0 }
   }
 
   var hasCompletePromotionReceipt: Bool {
@@ -635,6 +696,7 @@ enum EvaluationConfigurationError: Error, Sendable, Equatable {
   case resultOutsideEvaluationRoot(String)
   case invalidSHA256(String)
   case invalidLessonSource
+  case invalidLearningProfile
   case invalidStageTopology
   case manifestApprovalMismatch
   case invalidApprovalURL
