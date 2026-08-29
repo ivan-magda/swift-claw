@@ -52,6 +52,8 @@ _TRIGGER_DOMAIN = "scheduled-learning/v1/trigger"
 _CANDIDATE_RECORD_DOMAIN = "scheduled-learning/v1/candidate-record"
 _CANDIDATE_SOURCE_DOMAIN = "scheduled-learning/v1/candidate-source"
 _TRIAL_DOMAIN = "scheduled-learning/v1/trial"
+_TRIAL_EVALUATION_DOMAIN = "scheduled-learning/v1/trial-evaluation"
+_PROMOTION_DOMAIN = "scheduled-learning/v1/promotion"
 
 _INITIAL_JOB_KEYS = {
     "job_id",
@@ -74,6 +76,7 @@ _DERIVED_JOB_KEYS = {
     "vetoes",
     "trial",
     "promotion",
+    "promotion_history",
 }
 _JOB_KEYS = _INITIAL_JOB_KEYS | _DERIVED_JOB_KEYS
 _STATE_KEYS = {
@@ -102,6 +105,14 @@ _OPERATION_START_FIELDS = (
 _POSITIVE_EVALUATOR_OUTCOMES = {"no_issue"}
 _NEGATIVE_EVALUATOR_OUTCOMES = {"reusable_issue"}
 _OWNER_RESULT_SIGNALS = {"result_useful", "result_not_useful", "result_correction"}
+_ADAPTER_BINDING_FIELDS = (
+    "adapter_id",
+    "adapter_version",
+    "dataset_digest",
+    "oracle_digest",
+    "gates_digest",
+    "execution_surface_digest",
+)
 
 # One signal kind may target exactly one subject kind. An owner statement about a run's usefulness
 # can never be replayed as a statement about a candidate or an active promotion.
@@ -201,6 +212,7 @@ def _new_job(entry: dict[str, Any]) -> dict[str, Any]:
             "vetoes": [],
             "trial": None,
             "promotion": None,
+            "promotion_history": [],
         }
     )
     return job
@@ -325,6 +337,26 @@ def _trial_assignment(job: dict[str, Any], run_id: Any) -> dict[str, Any] | None
         if record["run_id"] == run_id:
             assignment: dict[str, Any] = record
             return assignment
+    return None
+
+
+def _evaluation_run_id(job: dict[str, Any], digest: Any) -> str | None:
+    for entry in job["evaluations"]:
+        if entry["evaluation_digest"] == digest:
+            run_id: str = entry["run_id"]
+            return run_id
+    trial = job["trial"]
+    if trial is not None:
+        for assignment in trial["assignments"]:
+            if assignment.get("evaluation_digest") == digest:
+                trial_run_id: str = assignment["run_id"]
+                return trial_run_id
+    promotion = job["promotion"]
+    if promotion is not None:
+        for support in promotion["positive_supports"]:
+            if support["evaluation_digest"] == digest:
+                support_run_id: str = support["run_id"]
+                return support_run_id
     return None
 
 
@@ -686,21 +718,14 @@ def _subject_issues(
             )
         return
     if kind == "evaluation":
-        evaluation = next(
-            (
-                entry
-                for entry in job["evaluations"]
-                if entry["evaluation_digest"] == payload["subject_digest"]
-            ),
-            None,
-        )
-        if evaluation is None:
+        evaluation_run_id = _evaluation_run_id(job, payload["subject_digest"])
+        if evaluation_run_id is None:
             issue(
                 issues,
                 "policy.unknown_subject",
                 "$.payload.subject_digest is not a recorded evaluation",
             )
-        elif evaluation["run_id"] != payload["run_id"]:
+        elif evaluation_run_id != payload["run_id"]:
             issue(
                 issues,
                 "policy.unknown_subject",
@@ -716,7 +741,11 @@ def _subject_issues(
             )
         return
     promotion = job["promotion"]
-    if promotion is None or promotion["promotion_digest"] != payload["subject_digest"]:
+    current_digest = None if promotion is None else promotion["promotion_digest"]
+    if (
+        payload["subject_digest"] != current_digest
+        and payload["subject_digest"] not in job["promotion_history"]
+    ):
         issue(issues, "policy.unknown_subject", "$.payload.subject_digest is not the promotion")
 
 
@@ -791,7 +820,18 @@ def _apply_owner_signal(
     decisions: list[dict[str, Any]] = []
     if payload["subject_kind"] == "candidate":
         state = _apply_candidate_control(state, event)
-    else:
+    rollback = _owner_rollback_trigger(state["jobs"][payload["job_id"]], event)
+    if rollback is not None:
+        reason, source_kind, source_matches, remaining = rollback
+        return _rollback_promotion(
+            state,
+            event,
+            reason=reason,
+            source_kind=source_kind,
+            source_matches=source_matches,
+            remaining_supports=remaining,
+        )
+    if payload["subject_kind"] != "candidate":
         state, decisions = _maybe_trigger(state, payload["job_id"], event)
     state, trial_decisions = _reconcile_job(state, payload["job_id"], event)
     return state, [*decisions, *trial_decisions]
@@ -1404,6 +1444,9 @@ def _apply_candidate_admitted(
     trial = {
         **{field: value for field, value in trial_core.items() if field != "schema_version"},
         "trial_digest": canonical_sha256({"domain": _TRIAL_DOMAIN, "value": trial_core}),
+        "source_manifest_digest": candidate["source_manifest_digest"],
+        "job_definition_digest": job["job_definition_digest"],
+        "compatibility_digest": job["compatibility_digest"],
         "assignments": [],
         "assignment_closed_at": None,
         "adapter_receipt": None,
@@ -1474,6 +1517,10 @@ def _trial_artifact_identities(job: dict[str, Any], trial: dict[str, Any]) -> di
         "base_revision": trial["base_revision"],
         "learning_epoch": trial["learning_epoch"],
         "feedback_revision": trial["feedback_revision"],
+        "algorithm_id": trial["algorithm_id"],
+        "source_manifest_digest": trial["source_manifest_digest"],
+        "job_definition_digest": trial["job_definition_digest"],
+        "compatibility_digest": trial["compatibility_digest"],
         "adapter": trial["adapter"],
         "adapter_receipt": trial["adapter_receipt"],
         "assignments": assignments,
@@ -1485,6 +1532,500 @@ def _trial_artifact_identities(job: dict[str, Any], trial: dict[str, Any]) -> di
     }
 
 
+def _trial_core_from_record(trial: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": _SCHEMA_VERSION,
+        "job_id": trial["job_id"],
+        "candidate_record_digest": trial["candidate_record_digest"],
+        "replacement_digest": trial["replacement_digest"],
+        "base_digest": trial["base_digest"],
+        "base_revision": trial["base_revision"],
+        "learning_epoch": trial["learning_epoch"],
+        "feedback_revision": trial["feedback_revision"],
+        "algorithm_id": trial["algorithm_id"],
+        "adapter": trial["adapter"],
+        "admitted_at": trial["admitted_at"],
+        "assignment_deadline": trial["assignment_deadline"],
+        "decision_deadline": trial["decision_deadline"],
+    }
+
+
+def _settled_cohort(job: dict[str, Any], trial: dict[str, Any]) -> list[dict[str, Any]]:
+    cohort: list[dict[str, Any]] = []
+    for assignment in trial["assignments"]:
+        signal = _effective_signal(job, "run", assignment["run_id"])
+        owner_signal_event_digest = (
+            signal["event_digest"]
+            if signal is not None and signal["signal"] in _OWNER_RESULT_SIGNALS
+            else None
+        )
+        cohort.append(
+            {
+                "run_id": assignment["run_id"],
+                "outcome": assignment["outcome"],
+                "evaluation_digest": assignment["evaluation_digest"],
+                "effective_outcome": _effective_trial_outcome(job, assignment),
+                "evaluation_required": owner_signal_event_digest is None,
+                "owner_signal_event_digest": owner_signal_event_digest,
+            }
+        )
+    return cohort
+
+
+def _adapter_pass_matches(trial: dict[str, Any]) -> bool:
+    adapter = trial["adapter"]
+    receipt = trial["adapter_receipt"]
+    if adapter is None:
+        return receipt is None
+    if receipt is None or receipt["outcome"] != "pass":
+        return False
+    if receipt["candidate_digest"] != trial["replacement_digest"]:
+        return False
+    return all(receipt[field] == adapter[field] for field in _ADAPTER_BINDING_FIELDS)
+
+
+def _promotion_cas_failures(
+    state: dict[str, Any],
+    job: dict[str, Any],
+    trial: dict[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    candidate = _candidate(job, trial["candidate_record_digest"])
+    if not job["repeatable"] or job["cancelled"]:
+        failures.append("job_status")
+    if trial["job_id"] != job["job_id"]:
+        failures.append("trial_job_id")
+    recomputed_trial_digest = canonical_sha256(
+        {"domain": _TRIAL_DOMAIN, "value": _trial_core_from_record(trial)}
+    )
+    if trial["trial_digest"] != recomputed_trial_digest:
+        failures.append("trial_digest")
+    if candidate is None:
+        failures.append("candidate_record_digest")
+    else:
+        if candidate["replacement_digest"] != trial["replacement_digest"]:
+            failures.append("replacement_digest")
+        if (
+            candidate["base_digest"] != trial["base_digest"]
+            or candidate["base_revision"] != trial["base_revision"]
+        ):
+            failures.append("candidate_base")
+        if candidate["learning_epoch"] != trial["learning_epoch"]:
+            failures.append("candidate_learning_epoch")
+        if candidate["feedback_revision"] != trial["feedback_revision"]:
+            failures.append("candidate_feedback_revision")
+        if candidate["algorithm_id"] != trial["algorithm_id"]:
+            failures.append("candidate_algorithm_id")
+        if candidate["source_manifest_digest"] != trial["source_manifest_digest"]:
+            failures.append("source_manifest_digest")
+        if not candidate["admitted"] or candidate["superseded"] or candidate["vetoed"]:
+            failures.append("candidate_status")
+    if (
+        job["stable_digest"] != trial["base_digest"]
+        or job["stable_revision"] != trial["base_revision"]
+    ):
+        failures.append("stable_pointer")
+    if job["learning_epoch"] != trial["learning_epoch"]:
+        failures.append("learning_epoch")
+    if job["feedback_revision"] != trial["feedback_revision"]:
+        failures.append("feedback_revision")
+    if state["algorithm_id"] != trial["algorithm_id"]:
+        failures.append("algorithm_id")
+    if job["job_definition_digest"] != trial["job_definition_digest"]:
+        failures.append("job_definition_digest")
+    if job["compatibility_digest"] != trial["compatibility_digest"]:
+        failures.append("compatibility_digest")
+    if not _adapter_pass_matches(trial):
+        failures.append("adapter_gate")
+    cohort = _settled_cohort(job, trial)
+    if any(entry["effective_outcome"] == "negative" for entry in cohort):
+        failures.append("negative_support")
+    if sum(entry["effective_outcome"] == "positive" for entry in cohort) < (_POSITIVE_TRIAL_RUNS):
+        failures.append("positive_support")
+    if any(
+        assignment["status"] != "settled" or assignment["evaluation_digest"] is None
+        for assignment in trial["assignments"]
+    ):
+        failures.append("settled_cohort")
+    return failures
+
+
+def _closed_trial_record(
+    state: dict[str, Any],
+    trial: dict[str, Any],
+    status: str,
+) -> dict[str, Any]:
+    return {
+        **trial,
+        "assignment_closed_at": trial["assignment_closed_at"] or state["controlled_clock"],
+        "status": status,
+        "decided_at": state["controlled_clock"],
+    }
+
+
+def _promote_trial(
+    state: dict[str, Any],
+    job: dict[str, Any],
+    trial: dict[str, Any],
+    event: ReplayEvent,
+    reason: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    failures = _promotion_cas_failures(state, job, trial)
+    if failures:
+        closed_trial = _closed_trial_record(state, trial, "stale_promotion")
+        after = _replace_job(state, {**job, "trial": closed_trial})
+        identities = {
+            **_trial_artifact_identities(job, closed_trial),
+            "failed_predicates": failures,
+            "current_stable_digest": job["stable_digest"],
+            "current_stable_revision": job["stable_revision"],
+            "current_feedback_revision": job["feedback_revision"],
+        }
+        receipt = _decision(
+            before=state,
+            after=after,
+            event=event,
+            decision="stale_promotion",
+            reason="promotion_compare_and_swap_miss",
+            artifact_identities=identities,
+        )
+        return after, [receipt]
+
+    closed_trial = _closed_trial_record(state, trial, "promoted")
+    cohort = _settled_cohort(job, closed_trial)
+    positive_supports = [entry for entry in cohort if entry["effective_outcome"] == "positive"]
+    promotion_revision = trial["base_revision"] + 1
+    promotion_core = {
+        "schema_version": _SCHEMA_VERSION,
+        "job_id": job["job_id"],
+        "trial_digest": trial["trial_digest"],
+        "candidate_record_digest": trial["candidate_record_digest"],
+        "replacement_digest": trial["replacement_digest"],
+        "source_manifest_digest": trial["source_manifest_digest"],
+        "base_digest": trial["base_digest"],
+        "base_revision": trial["base_revision"],
+        "learning_epoch": trial["learning_epoch"],
+        "feedback_revision": trial["feedback_revision"],
+        "algorithm_id": trial["algorithm_id"],
+        "job_definition_digest": trial["job_definition_digest"],
+        "compatibility_digest": trial["compatibility_digest"],
+        "adapter": trial["adapter"],
+        "adapter_receipt": trial["adapter_receipt"],
+        "settled_cohort": cohort,
+        "positive_supports": positive_supports,
+        "promotion_revision": promotion_revision,
+        "activated_at": state["controlled_clock"],
+        "triggering_event": event_json(event),
+    }
+    promotion = {
+        **{field: value for field, value in promotion_core.items() if field != "schema_version"},
+        "promotion_digest": canonical_sha256(
+            {"domain": _PROMOTION_DOMAIN, "value": promotion_core}
+        ),
+        "status": "active",
+        "rollback": None,
+    }
+    promotion_history = [*job["promotion_history"]]
+    if job["promotion"] is not None:
+        promotion_history.append(job["promotion"]["promotion_digest"])
+    updated = {
+        **job,
+        "stable_digest": trial["replacement_digest"],
+        "stable_revision": promotion_revision,
+        "trial": closed_trial,
+        "promotion": promotion,
+        "promotion_history": promotion_history,
+    }
+    after = _replace_job(state, updated)
+    identities = {
+        **_trial_artifact_identities(job, closed_trial),
+        "promotion_digest": promotion["promotion_digest"],
+        "promotion_revision": promotion_revision,
+        "settled_cohort": cohort,
+        "positive_supports": positive_supports,
+    }
+    receipt = _decision(
+        before=state,
+        after=after,
+        event=event,
+        decision="promoted",
+        reason=reason,
+        artifact_identities=identities,
+    )
+    return after, [receipt]
+
+
+def _promotion_core_from_record(promotion: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": _SCHEMA_VERSION,
+        "job_id": promotion["job_id"],
+        "trial_digest": promotion["trial_digest"],
+        "candidate_record_digest": promotion["candidate_record_digest"],
+        "replacement_digest": promotion["replacement_digest"],
+        "source_manifest_digest": promotion["source_manifest_digest"],
+        "base_digest": promotion["base_digest"],
+        "base_revision": promotion["base_revision"],
+        "learning_epoch": promotion["learning_epoch"],
+        "feedback_revision": promotion["feedback_revision"],
+        "algorithm_id": promotion["algorithm_id"],
+        "job_definition_digest": promotion["job_definition_digest"],
+        "compatibility_digest": promotion["compatibility_digest"],
+        "adapter": promotion["adapter"],
+        "adapter_receipt": promotion["adapter_receipt"],
+        "settled_cohort": promotion["settled_cohort"],
+        "positive_supports": promotion["positive_supports"],
+        "promotion_revision": promotion["promotion_revision"],
+        "activated_at": promotion["activated_at"],
+        "triggering_event": promotion["triggering_event"],
+    }
+
+
+def _remaining_positive_supports(
+    job: dict[str, Any],
+    promotion: dict[str, Any],
+) -> list[dict[str, Any]]:
+    remaining: list[dict[str, Any]] = []
+    for support in promotion["positive_supports"]:
+        result = _effective_signal(job, "run", support["run_id"])
+        if result is not None and result["signal"] in {
+            "result_not_useful",
+            "result_correction",
+        }:
+            continue
+        owner_supports = result is not None and result["signal"] == "result_useful"
+        judgement = _effective_signal(job, "evaluation", support["evaluation_digest"])
+        disputed = judgement is not None and judgement["signal"] == "evaluation_dispute"
+        if disputed and support["evaluation_required"] and not owner_supports:
+            continue
+        remaining.append(support)
+    return remaining
+
+
+def _owner_rollback_trigger(
+    job: dict[str, Any],
+    event: ReplayEvent,
+) -> tuple[str, str, bool, list[dict[str, Any]]] | None:
+    promotion = job["promotion"]
+    if promotion is None:
+        return None
+    payload = event.payload
+    signal = payload["signal"]
+    remaining = _remaining_positive_supports(job, promotion)
+    trigger: tuple[str, str, bool, list[dict[str, Any]]] | None = None
+    if (
+        signal == "candidate_reject"
+        and payload["subject_digest"] == promotion["candidate_record_digest"]
+    ):
+        trigger = (
+            "owner_candidate_reject",
+            "owner_candidate_reject",
+            True,
+            remaining,
+        )
+    elif signal == "promotion_rollback":
+        trigger = (
+            "owner_promotion_rollback",
+            "owner_promotion_rollback",
+            payload["subject_digest"] == promotion["promotion_digest"],
+            remaining,
+        )
+    elif signal in {"result_not_useful", "result_correction"}:
+        supports_run = any(
+            support["run_id"] == payload["run_id"] for support in promotion["positive_supports"]
+        )
+        if supports_run and len(remaining) < _POSITIVE_TRIAL_RUNS:
+            trigger = "owner_support_invalidated", "owner_run_feedback", True, remaining
+    elif signal == "evaluation_dispute":
+        supports_evaluation = any(
+            support["evaluation_digest"] == payload["subject_digest"]
+            and support["evaluation_required"]
+            for support in promotion["positive_supports"]
+        )
+        if supports_evaluation and len(remaining) < _POSITIVE_TRIAL_RUNS:
+            trigger = "owner_support_invalidated", "owner_evaluation_dispute", True, remaining
+    return trigger
+
+
+def _rollback_cas_failures(
+    state: dict[str, Any],
+    job: dict[str, Any],
+    promotion: dict[str, Any],
+    *,
+    source_matches: bool,
+) -> list[str]:
+    failures: list[str] = []
+    if not source_matches:
+        failures.append("trigger_identity")
+    if promotion["job_id"] != job["job_id"]:
+        failures.append("promotion_job_id")
+    if promotion["status"] != "active":
+        failures.append("promotion_status")
+    if job["stable_digest"] != promotion["replacement_digest"]:
+        failures.append("stable_digest")
+    if job["stable_revision"] != promotion["promotion_revision"]:
+        failures.append("stable_revision")
+    if job["learning_epoch"] != promotion["learning_epoch"]:
+        failures.append("learning_epoch")
+    if state["algorithm_id"] != promotion["algorithm_id"]:
+        failures.append("algorithm_id")
+    if job["job_definition_digest"] != promotion["job_definition_digest"]:
+        failures.append("job_definition_digest")
+    if job["compatibility_digest"] != promotion["compatibility_digest"]:
+        failures.append("compatibility_digest")
+    if promotion["promotion_revision"] != promotion["base_revision"] + 1:
+        failures.append("promotion_revision")
+    candidate = _candidate(job, promotion["candidate_record_digest"])
+    if candidate is None:
+        failures.append("candidate_record_digest")
+    else:
+        if candidate["replacement_digest"] != promotion["replacement_digest"]:
+            failures.append("replacement_digest")
+        if (
+            candidate["base_digest"] != promotion["base_digest"]
+            or candidate["base_revision"] != promotion["base_revision"]
+        ):
+            failures.append("candidate_base")
+        if candidate["learning_epoch"] != promotion["learning_epoch"]:
+            failures.append("candidate_learning_epoch")
+        if candidate["feedback_revision"] != promotion["feedback_revision"]:
+            failures.append("candidate_feedback_revision")
+        if candidate["algorithm_id"] != promotion["algorithm_id"]:
+            failures.append("candidate_algorithm_id")
+        if candidate["source_manifest_digest"] != promotion["source_manifest_digest"]:
+            failures.append("source_manifest_digest")
+    recomputed = canonical_sha256(
+        {"domain": _PROMOTION_DOMAIN, "value": _promotion_core_from_record(promotion)}
+    )
+    if promotion["promotion_digest"] != recomputed:
+        failures.append("promotion_digest")
+    return failures
+
+
+def _rollback_artifact_identities(
+    job: dict[str, Any],
+    promotion: dict[str, Any],
+    event: ReplayEvent,
+    *,
+    source_kind: str,
+    remaining_supports: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "job_id": job["job_id"],
+        "promotion_digest": promotion["promotion_digest"],
+        "trial_digest": promotion["trial_digest"],
+        "candidate_record_digest": promotion["candidate_record_digest"],
+        "replacement_digest": promotion["replacement_digest"],
+        "base_digest": promotion["base_digest"],
+        "base_revision": promotion["base_revision"],
+        "promotion_revision": promotion["promotion_revision"],
+        "before_stable_digest": job["stable_digest"],
+        "before_stable_revision": job["stable_revision"],
+        "source_kind": source_kind,
+        "triggering_event": event_json(event),
+        "remaining_positive_supports": remaining_supports,
+    }
+
+
+def _rollback_promotion(
+    state: dict[str, Any],
+    event: ReplayEvent,
+    *,
+    reason: str,
+    source_kind: str,
+    source_matches: bool,
+    remaining_supports: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    job = state["jobs"][event.payload["job_id"]]
+    promotion = job["promotion"]
+    if promotion is None:
+        return state, []
+    failures = _rollback_cas_failures(
+        state,
+        job,
+        promotion,
+        source_matches=source_matches,
+    )
+    identities = _rollback_artifact_identities(
+        job,
+        promotion,
+        event,
+        source_kind=source_kind,
+        remaining_supports=remaining_supports,
+    )
+    if failures:
+        receipt = _decision(
+            before=state,
+            after=state,
+            event=event,
+            decision="stale_rollback",
+            reason="rollback_compare_and_swap_miss",
+            artifact_identities={**identities, "failed_predicates": failures},
+        )
+        return state, [receipt]
+
+    after_revision = job["stable_revision"] + 1
+    rollback = {
+        "reason": reason,
+        "source_kind": source_kind,
+        "triggering_event": event_json(event),
+        "remaining_positive_supports": remaining_supports,
+        "restored_digest": promotion["base_digest"],
+        "before_stable_revision": job["stable_revision"],
+        "after_stable_revision": after_revision,
+        "rolled_back_at": state["controlled_clock"],
+    }
+    updated_promotion = {**promotion, "status": "rolled_back", "rollback": rollback}
+    dependent_trial = _open_trial(job)
+    closed_dependent_trial = (
+        None
+        if dependent_trial is None
+        else _closed_trial_record(state, dependent_trial, "fallback")
+    )
+    after = _replace_job(
+        state,
+        {
+            **job,
+            "stable_digest": promotion["base_digest"],
+            "stable_revision": after_revision,
+            "trial": job["trial"] if closed_dependent_trial is None else closed_dependent_trial,
+            "promotion": updated_promotion,
+        },
+    )
+    decisions: list[dict[str, Any]] = []
+    if closed_dependent_trial is not None:
+        decisions.append(
+            _decision(
+                before=state,
+                after=after,
+                event=event,
+                decision="fallback",
+                reason="promotion_rollback_invalidated_base",
+                artifact_identities={
+                    **_trial_artifact_identities(job, closed_dependent_trial),
+                    "invalidating_promotion_digest": promotion["promotion_digest"],
+                    "before_stable_digest": job["stable_digest"],
+                    "before_stable_revision": job["stable_revision"],
+                    "after_stable_digest": promotion["base_digest"],
+                    "after_stable_revision": after_revision,
+                    "triggering_event": event_json(event),
+                },
+            )
+        )
+    receipt = _decision(
+        before=state,
+        after=after,
+        event=event,
+        decision="rollback",
+        reason=reason,
+        artifact_identities={
+            **identities,
+            "after_stable_digest": promotion["base_digest"],
+            "after_stable_revision": after_revision,
+        },
+    )
+    return after, [*decisions, receipt]
+
+
 def _close_trial(
     state: dict[str, Any],
     job: dict[str, Any],
@@ -1494,12 +2035,9 @@ def _close_trial(
     decision: str,
     reason: str,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    closed_trial = {
-        **trial,
-        "assignment_closed_at": trial["assignment_closed_at"] or state["controlled_clock"],
-        "status": decision,
-        "decided_at": state["controlled_clock"],
-    }
+    if decision == "promoted":
+        return _promote_trial(state, job, trial, event, reason)
+    closed_trial = _closed_trial_record(state, trial, decision)
     after = _replace_job(state, {**job, "trial": closed_trial})
     receipt = _decision(
         before=state,
@@ -1624,6 +2162,15 @@ def _apply_trial_run_created(
     if trial is None:
         _reject("policy.no_open_trial", "$.payload.job_id has no open trial")
     issues: list[ValidationIssue] = []
+    if (
+        trial["base_digest"] != job["stable_digest"]
+        or trial["base_revision"] != job["stable_revision"]
+    ):
+        issue(
+            issues,
+            "policy.stale_base",
+            "$.payload cannot create a run for a trial whose frozen base is no longer current",
+        )
     if payload["candidate_record_digest"] != trial["candidate_record_digest"]:
         issue(
             issues,
@@ -1643,7 +2190,12 @@ def _apply_trial_run_created(
     ):
         issue(issues, "policy.duplicate_trial_run", "$.payload.run_id is already recorded")
     _require_valid(issues)
-    assignment = {"run_id": payload["run_id"], "status": "created", "outcome": None}
+    assignment = {
+        "run_id": payload["run_id"],
+        "status": "created",
+        "outcome": None,
+        "evaluation_digest": None,
+    }
     updated_trial = {**trial, "assignments": [*trial["assignments"], assignment]}
     state = _replace_job(state, {**job, "trial": updated_trial})
     return _reconcile_job(state, payload["job_id"], event)
@@ -1664,7 +2216,14 @@ def _apply_trial_run_settled(
     if assignment["status"] != "created":
         _reject("policy.trial_run_settled", "$.payload.run_id is already settled")
     assignments = [
-        {**record, "status": "settled", "outcome": payload["outcome"]}
+        {
+            **record,
+            "status": "settled",
+            "outcome": payload["outcome"],
+            "evaluation_digest": canonical_sha256(
+                {"domain": _TRIAL_EVALUATION_DOMAIN, "value": event_json(event)}
+            ),
+        }
         if record["run_id"] == payload["run_id"]
         else record
         for record in trial["assignments"]
@@ -1679,10 +2238,40 @@ def _apply_adapter_receipt(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     payload = event.payload
     job = _job_or_raise(state, payload["job_id"])
+    envelope = adapter_envelope_json(parse_adapter_envelope(payload["envelope"]))
+    if payload["subject_kind"] == "promotion":
+        promotion = job["promotion"]
+        if promotion is None:
+            _reject(
+                "policy.adapter_subject",
+                "$.payload must name an exact retained promotion subject",
+            )
+        frozen_adapter = promotion["adapter"]
+        source_matches = (
+            payload["subject_digest"] == promotion["promotion_digest"]
+            and frozen_adapter is not None
+            and envelope["candidate_digest"] == promotion["replacement_digest"]
+            and all(envelope[field] == frozen_adapter[field] for field in _ADAPTER_BINDING_FIELDS)
+        )
+        if envelope["outcome"] not in {"critical", "regression"}:
+            if not source_matches:
+                _reject(
+                    "policy.adapter_binding",
+                    "$.payload must match the exact retained promotion adapter identity",
+                )
+            return state, []
+        return _rollback_promotion(
+            state,
+            event,
+            reason=f"adapter_{envelope['outcome']}",
+            source_kind="adapter_receipt",
+            source_matches=source_matches,
+            remaining_supports=_remaining_positive_supports(job, promotion),
+        )
+
     trial = _open_trial(job)
     if trial is None:
         _reject("policy.no_open_trial", "$.payload.job_id has no open trial")
-    envelope = adapter_envelope_json(parse_adapter_envelope(payload["envelope"]))
     issues: list[ValidationIssue] = []
     if payload["subject_kind"] != "trial" or payload["subject_digest"] != trial["trial_digest"]:
         issue(
@@ -1698,14 +2287,7 @@ def _apply_adapter_receipt(
             "$.payload.envelope is not permitted when the trial froze no adapter",
         )
     else:
-        for field in (
-            "adapter_id",
-            "adapter_version",
-            "dataset_digest",
-            "oracle_digest",
-            "gates_digest",
-            "execution_surface_digest",
-        ):
+        for field in _ADAPTER_BINDING_FIELDS:
             if envelope[field] != frozen_adapter[field]:
                 issue(
                     issues,
@@ -1727,6 +2309,30 @@ def _apply_adapter_receipt(
     _require_valid(issues)
     state = _replace_job(state, {**job, "trial": {**trial, "adapter_receipt": envelope}})
     return _reconcile_job(state, payload["job_id"], event)
+
+
+def _apply_hard_veto_receipt(
+    state: dict[str, Any],
+    event: ReplayEvent,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    payload = event.payload
+    job = _job_or_raise(state, payload["job_id"])
+    promotion = job["promotion"]
+    if promotion is None:
+        _reject("policy.no_promotion", "$.payload.job_id has no retained promotion")
+    source_matches = (
+        payload["promotion_digest"] == promotion["promotion_digest"]
+        and payload["candidate_record_digest"] == promotion["candidate_record_digest"]
+        and payload["replacement_digest"] == promotion["replacement_digest"]
+    )
+    return _rollback_promotion(
+        state,
+        event,
+        reason=f"hard_veto_{payload['trigger_kind']}",
+        source_kind="hard_veto_receipt",
+        source_matches=source_matches,
+        remaining_supports=_remaining_positive_supports(job, promotion),
+    )
 
 
 # MARK: - Stable evaluations and replay
@@ -1766,6 +2372,7 @@ _HANDLERS: dict[ReplayEventKind, _Handler] = {
     ReplayEventKind.TRIAL_RUN_CREATED: _apply_trial_run_created,
     ReplayEventKind.TRIAL_RUN_SETTLED: _apply_trial_run_settled,
     ReplayEventKind.ADAPTER_RECEIPT_RECORDED: _apply_adapter_receipt,
+    ReplayEventKind.HARD_VETO_RECEIPT_RECORDED: _apply_hard_veto_receipt,
 }
 
 

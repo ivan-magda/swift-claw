@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from typing import Any
 
-from benchmark_core.canonical import canonical_sha256
+from benchmark_core.canonical import canonical_sha256, dumps
 from benchmark_learning.learning_contract import (
     LearningContractError,
     ReplayEvent,
@@ -18,6 +18,8 @@ COMPATIBILITY_DIGEST = "compatibility-0"
 CANDIDATE_RECORD_DOMAIN = "scheduled-learning/v1/candidate-record"
 CANDIDATE_SOURCE_DOMAIN = "scheduled-learning/v1/candidate-source"
 TRIAL_DOMAIN = "scheduled-learning/v1/trial"
+TRIAL_EVALUATION_DOMAIN = "scheduled-learning/v1/trial-evaluation"
+PROMOTION_DOMAIN = "scheduled-learning/v1/promotion"
 LESSONS = ["Quote the exact deadline in the first sentence."]
 
 FIRST_CLOCK = "2026-01-31T00:00:00Z"
@@ -207,6 +209,27 @@ def candidate_signal(
     )
 
 
+def promotion_signal(
+    sequence: int,
+    occurred_at: str,
+    job_id: str,
+    promotion_digest: str,
+    *,
+    revision: int,
+    supersedes_revision: int | None = None,
+) -> ReplayEvent:
+    return owner_signal(
+        sequence,
+        occurred_at,
+        job_id,
+        "promotion_rollback",
+        subject_kind="promotion",
+        subject_digest=promotion_digest,
+        revision=revision,
+        supersedes_revision=supersedes_revision,
+    )
+
+
 def reflector_operation(
     sequence: int,
     occurred_at: str,
@@ -253,6 +276,13 @@ def candidate_artifact(
     lessons: list[str],
     *,
     normalized: list[str] | None = None,
+    frozen_base_digest: str = STABLE_DIGEST,
+    frozen_base_revision: int = 0,
+    frozen_learning_epoch: int = 0,
+    frozen_feedback_revision: int = 0,
+    frozen_operation_id: str = "reflector-1",
+    frozen_result_digest: str = "reflector-result-1",
+    frozen_source_manifest_digest: str = "source-manifest-1",
     **overrides: Any,
 ) -> ReplayEvent:
     settled = lessons if normalized is None else normalized
@@ -260,32 +290,32 @@ def candidate_artifact(
     core = {
         "schema_version": 1,
         "job_id": job_id,
-        "operation_id": "reflector-1",
-        "result_digest": "reflector-result-1",
+        "operation_id": frozen_operation_id,
+        "result_digest": frozen_result_digest,
         "replacement_digest": replacement_digest,
         "lessons": settled,
-        "source_manifest_digest": "source-manifest-1",
-        "base_digest": STABLE_DIGEST,
-        "base_revision": 0,
-        "learning_epoch": 0,
-        "feedback_revision": 0,
+        "source_manifest_digest": frozen_source_manifest_digest,
+        "base_digest": frozen_base_digest,
+        "base_revision": frozen_base_revision,
+        "learning_epoch": frozen_learning_epoch,
+        "feedback_revision": frozen_feedback_revision,
         "algorithm_id": ALGORITHM_ID,
         "trigger_digest": trigger_digest,
     }
     payload = {
         "job_id": job_id,
-        "operation_id": "reflector-1",
-        "result_digest": "reflector-result-1",
+        "operation_id": frozen_operation_id,
+        "result_digest": frozen_result_digest,
         "candidate_record_digest": canonical_sha256(
             {"domain": CANDIDATE_RECORD_DOMAIN, "value": core}
         ),
         "replacement_digest": replacement_digest,
         "lessons": lessons,
-        "source_manifest_digest": "source-manifest-1",
-        "base_digest": STABLE_DIGEST,
-        "base_revision": 0,
-        "learning_epoch": 0,
-        "feedback_revision": 0,
+        "source_manifest_digest": frozen_source_manifest_digest,
+        "base_digest": frozen_base_digest,
+        "base_revision": frozen_base_revision,
+        "learning_epoch": frozen_learning_epoch,
+        "feedback_revision": frozen_feedback_revision,
         "algorithm_id": ALGORITHM_ID,
         "trigger_digest": trigger_digest,
         **overrides,
@@ -315,10 +345,36 @@ def candidate_admitted(
     return event(sequence, occurred_at, "candidate_admitted", payload)
 
 
-def negative_evidence(job_id: str = "job-a") -> list[ReplayEvent]:
+def negative_evidence(
+    job_id: str = "job-a",
+    *,
+    stable_digest: str = STABLE_DIGEST,
+    learning_epoch: int = 0,
+    compatibility_digest: str = COMPATIBILITY_DIGEST,
+) -> list[ReplayEvent]:
     return [
-        stable_evaluation(1, FIRST_OCCURRENCE, job_id, "run-1", "reusable_issue", ["x"]),
-        stable_evaluation(2, SECOND_OCCURRENCE, job_id, "run-2", "reusable_issue", ["x"]),
+        stable_evaluation(
+            1,
+            FIRST_OCCURRENCE,
+            job_id,
+            "run-1",
+            "reusable_issue",
+            ["x"],
+            stable_digest=stable_digest,
+            learning_epoch=learning_epoch,
+            compatibility_digest=compatibility_digest,
+        ),
+        stable_evaluation(
+            2,
+            SECOND_OCCURRENCE,
+            job_id,
+            "run-2",
+            "reusable_issue",
+            ["x"],
+            stable_digest=stable_digest,
+            learning_epoch=learning_epoch,
+            compatibility_digest=compatibility_digest,
+        ),
     ]
 
 
@@ -342,7 +398,13 @@ def recorded_candidate(
         controlled_clock=controlled_clock,
         jobs=jobs if jobs is not None else [job(job_id)],
     )
-    evidence = negative_evidence(job_id)
+    job_state = initial["jobs"][job_id]
+    evidence = negative_evidence(
+        job_id,
+        stable_digest=job_state["stable_digest"],
+        learning_epoch=job_state["learning_epoch"],
+        compatibility_digest=job_state["compatibility_digest"],
+    )
     trigger_digest = frozen_trigger_digest(initial, evidence)
     events = [
         *evidence,
@@ -353,6 +415,10 @@ def recorded_candidate(
             job_id,
             trigger_digest,
             LESSONS if lessons is None else lessons,
+            frozen_base_digest=job_state["stable_digest"],
+            frozen_base_revision=job_state["stable_revision"],
+            frozen_learning_epoch=job_state["learning_epoch"],
+            frozen_feedback_revision=job_state["feedback_revision"],
         ),
     ]
     return initial, events
@@ -362,10 +428,16 @@ def admitted_trial(
     controlled_clock: str,
     *,
     adapter: dict[str, str] | None = None,
+    jobs: list[dict[str, Any]] | None = None,
+    lessons: list[str] | None = None,
 ) -> tuple[dict[str, Any], list[ReplayEvent]]:
     """Replay-ready history that ends with one admitted trial."""
 
-    initial, prefix = recorded_candidate(controlled_clock=controlled_clock)
+    initial, prefix = recorded_candidate(
+        controlled_clock=controlled_clock,
+        jobs=jobs,
+        lessons=lessons,
+    )
     candidate = candidates_of(replay(initial=initial, events=prefix))[0]
     admit = candidate_admitted(
         6,
@@ -373,6 +445,10 @@ def admitted_trial(
         "job-a",
         candidate["candidate_record_digest"],
         candidate["replacement_digest"],
+        base_digest=candidate["base_digest"],
+        base_revision=candidate["base_revision"],
+        learning_epoch=candidate["learning_epoch"],
+        feedback_revision=candidate["feedback_revision"],
         adapter=adapter,
     )
     return initial, [*prefix, admit]
@@ -513,6 +589,33 @@ def adapter_receipt(
     )
 
 
+def hard_veto_receipt(
+    sequence: int,
+    occurred_at: str,
+    *,
+    promotion_digest: str,
+    candidate_record_digest: str,
+    replacement_digest: str,
+    trigger_kind: str = "security",
+    receipt_digest: str = "f" * 64,
+    receipt_version: str = "hard-veto/v1",
+) -> ReplayEvent:
+    return event(
+        sequence,
+        occurred_at,
+        "hard_veto_receipt_recorded",
+        {
+            "job_id": "job-a",
+            "promotion_digest": promotion_digest,
+            "candidate_record_digest": candidate_record_digest,
+            "replacement_digest": replacement_digest,
+            "trigger_kind": trigger_kind,
+            "receipt_digest": receipt_digest,
+            "receipt_version": receipt_version,
+        },
+    )
+
+
 def trial_of(initial: dict[str, Any], events: list[ReplayEvent]) -> dict[str, Any]:
     trial: dict[str, Any] = replay(initial=initial, events=events)["state"]["jobs"]["job-a"][
         "trial"
@@ -537,6 +640,166 @@ def trial_subject_digest(trial: dict[str, Any]) -> str:
         "decision_deadline": trial["decision_deadline"],
     }
     return canonical_sha256({"domain": TRIAL_DOMAIN, "value": core})
+
+
+def trial_evaluation_digest(settled: ReplayEvent) -> str:
+    return canonical_sha256({"domain": TRIAL_EVALUATION_DOMAIN, "value": event_json(settled)})
+
+
+def promotable_trial(
+    *,
+    adapter: dict[str, str] | None = None,
+    positive_run_count: int = 2,
+    stable_digest: str = STABLE_DIGEST,
+    lessons: list[str] | None = None,
+) -> tuple[dict[str, Any], list[ReplayEvent]]:
+    initial, admitted = admitted_trial(
+        FIRST_CLOCK,
+        adapter=adapter,
+        jobs=[job("job-a", stable_digest=stable_digest)],
+        lessons=lessons,
+    )
+    trial = trial_of(initial, admitted)
+    next_sequence = 7
+    tail: list[ReplayEvent] = []
+    if adapter is not None:
+        tail.append(
+            adapter_receipt(
+                next_sequence,
+                CONTROL_OCCURRENCE,
+                trial_digest=trial_subject_digest(trial),
+                candidate_digest=trial["replacement_digest"],
+                outcome="pass",
+                binding=adapter,
+            )
+        )
+        next_sequence += 1
+    for run_number in range(1, positive_run_count + 1):
+        tail.append(
+            trial_run_created(
+                next_sequence,
+                CONTROL_OCCURRENCE,
+                trial["candidate_record_digest"],
+                f"trial-run-{run_number}",
+            )
+        )
+        next_sequence += 1
+    for run_number in range(1, positive_run_count + 1):
+        tail.append(
+            trial_run_settled(
+                next_sequence,
+                CONTROL_OCCURRENCE,
+                f"trial-run-{run_number}",
+                "positive",
+            )
+        )
+        next_sequence += 1
+    return initial, [*admitted, *tail]
+
+
+def append_admitted_trial(
+    initial: dict[str, Any],
+    prefix: list[ReplayEvent],
+    *,
+    lessons: list[str],
+) -> list[ReplayEvent]:
+    current = replay(initial=initial, events=prefix)["state"]["jobs"]["job-a"]
+    next_sequence = len(prefix) + 1
+    evidence = [
+        stable_evaluation(
+            next_sequence + offset,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            f"later-stable-run-{offset + 1}",
+            "reusable_issue",
+            ["x"],
+            stable_digest=current["stable_digest"],
+            learning_epoch=current["learning_epoch"],
+            compatibility_digest=current["compatibility_digest"],
+        )
+        for offset in range(2)
+    ]
+    with_evidence = [*prefix, *evidence]
+    evidence_state = replay(initial=initial, events=with_evidence)["state"]["jobs"]["job-a"]
+    trigger = next(
+        record for record in reversed(evidence_state["triggers"]) if not record["closed"]
+    )
+    operation_id = "reflector-later"
+    result_digest = "reflector-result-later"
+    operation = reflector_operation(
+        next_sequence + 2,
+        CONTROL_OCCURRENCE,
+        "job-a",
+        trigger["trigger_digest"],
+        operation_id=operation_id,
+        result_digest=result_digest,
+    )
+    artifact = candidate_artifact(
+        next_sequence + 4,
+        CONTROL_OCCURRENCE,
+        "job-a",
+        trigger["trigger_digest"],
+        lessons,
+        frozen_base_digest=current["stable_digest"],
+        frozen_base_revision=current["stable_revision"],
+        frozen_learning_epoch=current["learning_epoch"],
+        frozen_feedback_revision=current["feedback_revision"],
+        frozen_operation_id=operation_id,
+        frozen_result_digest=result_digest,
+        frozen_source_manifest_digest="source-manifest-later",
+    )
+    candidate_prefix = [*with_evidence, *operation, artifact]
+    candidate = candidates_of(replay(initial=initial, events=candidate_prefix))[-1]
+    admission = candidate_admitted(
+        next_sequence + 5,
+        CONTROL_OCCURRENCE,
+        "job-a",
+        candidate["candidate_record_digest"],
+        candidate["replacement_digest"],
+        base_digest=current["stable_digest"],
+        base_revision=current["stable_revision"],
+        learning_epoch=current["learning_epoch"],
+        feedback_revision=current["feedback_revision"],
+    )
+    return [*candidate_prefix, admission]
+
+
+def append_promotable_trial(
+    initial: dict[str, Any],
+    prefix: list[ReplayEvent],
+    *,
+    lessons: list[str],
+) -> list[ReplayEvent]:
+    trial_prefix = append_admitted_trial(initial, prefix, lessons=lessons)
+    trial = trial_of(initial, trial_prefix)
+    next_sequence = len(trial_prefix) + 1
+    tail = [
+        trial_run_created(
+            next_sequence,
+            CONTROL_OCCURRENCE,
+            trial["candidate_record_digest"],
+            "later-trial-run-1",
+        ),
+        trial_run_created(
+            next_sequence + 1,
+            CONTROL_OCCURRENCE,
+            trial["candidate_record_digest"],
+            "later-trial-run-2",
+        ),
+        trial_run_settled(
+            next_sequence + 2,
+            CONTROL_OCCURRENCE,
+            "later-trial-run-1",
+            "positive",
+        ),
+        trial_run_settled(
+            next_sequence + 3,
+            CONTROL_OCCURRENCE,
+            "later-trial-run-2",
+            "positive",
+        ),
+    ]
+    return [*trial_prefix, *tail]
 
 
 def candidates_of(result: dict[str, Any], job_id: str = "job-a") -> list[dict[str, Any]]:
@@ -2405,6 +2668,765 @@ class LearningReplayTests(unittest.TestCase):
                 self.assertEqual(result["decisions"][-1]["decision"], "fallback")
                 self.assertEqual(result["decisions"][-1]["reason"], f"adapter_{outcome}")
                 self.assertEqual(result["state"]["jobs"]["job-a"]["trial"]["status"], "fallback")
+
+    def test_promotion_retains_exact_frozen_artifacts_and_advances_stable_revision(
+        self,
+    ) -> None:
+        # given
+        binding = adapter_binding()
+        initial, events = promotable_trial(adapter=binding)
+        trial = trial_of(initial, events[:6])
+        settled_events = [event for event in events if event.kind.value == "trial_run_settled"]
+
+        # when
+        result = replay(initial=initial, events=events)
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        promotion = job_state["promotion"]
+        self.assertEqual(job_state["stable_digest"], trial["replacement_digest"])
+        self.assertEqual(job_state["stable_revision"], 1)
+        self.assertEqual(job_state["trial"]["status"], "promoted")
+        cohort = [
+            {
+                "run_id": f"trial-run-{index}",
+                "outcome": "positive",
+                "evaluation_digest": trial_evaluation_digest(settled),
+                "effective_outcome": "positive",
+                "evaluation_required": True,
+                "owner_signal_event_digest": None,
+            }
+            for index, settled in enumerate(settled_events, start=1)
+        ]
+        promotion_core = {
+            "schema_version": 1,
+            "job_id": "job-a",
+            "trial_digest": trial["trial_digest"],
+            "candidate_record_digest": trial["candidate_record_digest"],
+            "replacement_digest": trial["replacement_digest"],
+            "source_manifest_digest": "source-manifest-1",
+            "base_digest": STABLE_DIGEST,
+            "base_revision": 0,
+            "learning_epoch": 0,
+            "feedback_revision": 0,
+            "algorithm_id": ALGORITHM_ID,
+            "job_definition_digest": "job-definition-0",
+            "compatibility_digest": COMPATIBILITY_DIGEST,
+            "adapter": binding,
+            "adapter_receipt": trial_of(initial, events[:7])["adapter_receipt"],
+            "settled_cohort": cohort,
+            "positive_supports": cohort,
+            "promotion_revision": 1,
+            "activated_at": FIRST_CLOCK,
+            "triggering_event": event_json(settled_events[-1]),
+        }
+        expected_digest = canonical_sha256({"domain": PROMOTION_DOMAIN, "value": promotion_core})
+        self.assertEqual(
+            {field: promotion[field] for field in promotion_core if field != "schema_version"},
+            {field: value for field, value in promotion_core.items() if field != "schema_version"},
+        )
+        self.assertEqual(promotion["promotion_digest"], expected_digest)
+        self.assertEqual(promotion["status"], "active")
+        self.assertIsNone(promotion["rollback"])
+        identities = result["decisions"][-1]["artifact_identities"]
+        self.assertEqual(identities["promotion_digest"], expected_digest)
+        self.assertEqual(identities["positive_supports"], cohort)
+
+    def test_stale_promotion_records_nonmutating_pointer_decision(self) -> None:
+        # given
+        initial, admitted = admitted_trial(FIRST_CLOCK)
+        trial = trial_of(initial, admitted)
+        events = [
+            *admitted,
+            trial_run_created(
+                7,
+                CONTROL_OCCURRENCE,
+                trial["candidate_record_digest"],
+                "trial-run-1",
+            ),
+            trial_run_created(
+                8,
+                CONTROL_OCCURRENCE,
+                trial["candidate_record_digest"],
+                "trial-run-2",
+            ),
+            trial_run_settled(9, CONTROL_OCCURRENCE, "trial-run-1", "positive"),
+            run_signal(
+                10,
+                CONTROL_OCCURRENCE,
+                "job-a",
+                "run-1",
+                "result_useful",
+                revision=1,
+            ),
+            trial_run_settled(11, CONTROL_OCCURRENCE, "trial-run-2", "positive"),
+        ]
+
+        # when
+        result = replay(initial=initial, events=events)
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertEqual(job_state["stable_digest"], STABLE_DIGEST)
+        self.assertEqual(job_state["stable_revision"], 0)
+        self.assertIsNone(job_state["promotion"])
+        self.assertEqual(job_state["trial"]["status"], "stale_promotion")
+        self.assertEqual(result["decisions"][-1]["decision"], "stale_promotion")
+        self.assertIn(
+            "feedback_revision",
+            result["decisions"][-1]["artifact_identities"]["failed_predicates"],
+        )
+
+    def test_same_initial_state_and_events_produce_identical_replay_receipt(self) -> None:
+        # given
+        initial, events = promotable_trial()
+
+        # when
+        first = replay(initial=initial, events=events)
+        second = replay(initial=initial, events=events)
+
+        # then
+        self.assertEqual(dumps(first["receipt"]), dumps(second["receipt"]))
+        self.assertEqual(first["receipt"]["final_state_sha256"], canonical_sha256(first["state"]))
+        self.assertEqual(
+            first["receipt"]["decision_receipt_sha256s"],
+            [canonical_sha256(decision) for decision in first["decisions"]],
+        )
+        promotion = first["state"]["jobs"]["job-a"]["promotion"]
+        self.assertIsNotNone(promotion)
+        self.assertEqual(
+            first["decisions"][-1]["artifact_identities"]["promotion_digest"],
+            promotion["promotion_digest"],
+        )
+
+    def test_exact_owner_controls_roll_back_only_the_active_promotion(self) -> None:
+        # given
+        rows = ("candidate_reject", "promotion_rollback")
+
+        # when / then
+        for signal in rows:
+            with self.subTest(signal=signal):
+                initial, promoted_events = promotable_trial()
+                promoted = replay(initial=initial, events=promoted_events)
+                promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+                next_sequence = len(promoted_events) + 1
+                trigger = (
+                    candidate_signal(
+                        next_sequence,
+                        CONTROL_OCCURRENCE,
+                        "job-a",
+                        promotion["candidate_record_digest"],
+                        "candidate_reject",
+                        revision=1,
+                    )
+                    if signal == "candidate_reject"
+                    else promotion_signal(
+                        next_sequence,
+                        CONTROL_OCCURRENCE,
+                        "job-a",
+                        promotion["promotion_digest"],
+                        revision=1,
+                    )
+                )
+                result = replay(initial=initial, events=[*promoted_events, trigger])
+                job_state = result["state"]["jobs"]["job-a"]
+                self.assertEqual(job_state["stable_digest"], STABLE_DIGEST)
+                self.assertEqual(job_state["stable_revision"], 2)
+                self.assertEqual(job_state["promotion"]["status"], "rolled_back")
+                self.assertEqual(result["decisions"][-1]["decision"], "rollback")
+                identities = result["decisions"][-1]["artifact_identities"]
+                self.assertEqual(identities["promotion_digest"], promotion["promotion_digest"])
+                self.assertEqual(identities["base_digest"], STABLE_DIGEST)
+                self.assertEqual(identities["before_stable_revision"], 1)
+                self.assertEqual(identities["after_stable_revision"], 2)
+
+    def test_rejecting_successor_trial_candidate_falls_back_without_rolling_back_active_promotion(
+        self,
+    ) -> None:
+        # given
+        initial, promoted_events = promotable_trial()
+        promoted = replay(initial=initial, events=promoted_events)
+        promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+        successor_events = append_admitted_trial(
+            initial,
+            promoted_events,
+            lessons=["Keep the promoted deadline format while adding the direct source."],
+        )
+        successor = replay(initial=initial, events=successor_events)
+        successor_trial = successor["state"]["jobs"]["job-a"]["trial"]
+        rejection = candidate_signal(
+            len(successor_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            successor_trial["candidate_record_digest"],
+            "candidate_reject",
+            revision=1,
+        )
+
+        # when
+        result = replay(initial=initial, events=[*successor_events, rejection])
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertEqual(job_state["stable_digest"], promotion["replacement_digest"])
+        self.assertEqual(job_state["stable_revision"], 1)
+        self.assertEqual(job_state["promotion"]["status"], "active")
+        self.assertEqual(job_state["trial"]["status"], "fallback")
+        self.assertEqual(job_state["trial"]["trial_digest"], successor_trial["trial_digest"])
+        new_decisions = result["decisions"][len(successor["decisions"]) :]
+        self.assertEqual([decision["decision"] for decision in new_decisions], ["fallback"])
+        self.assertEqual(new_decisions[0]["reason"], "hard_veto")
+
+        # given
+        later_assignment = trial_run_created(
+            len(successor_events) + 2,
+            CONTROL_OCCURRENCE,
+            successor_trial["candidate_record_digest"],
+            "rejected-successor-run",
+        )
+
+        # when
+        with self.assertRaises(LearningContractError) as caught:
+            replay(
+                initial=initial,
+                events=[*successor_events, rejection, later_assignment],
+            )
+
+        # then
+        self.assertIn("policy.no_open_trial", requirements(caught.exception))
+
+    def test_rollback_atomically_falls_back_dependent_trial_and_blocks_assignment(self) -> None:
+        # given
+        initial, promoted_events = promotable_trial()
+        promoted = replay(initial=initial, events=promoted_events)
+        promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+        successor_events = append_admitted_trial(
+            initial,
+            promoted_events,
+            lessons=["Keep the promoted deadline format and add one bounded example."],
+        )
+        successor = replay(initial=initial, events=successor_events)
+        successor_trial = successor["state"]["jobs"]["job-a"]["trial"]
+        rollback = promotion_signal(
+            len(successor_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            promotion["promotion_digest"],
+            revision=1,
+        )
+
+        # when
+        result = replay(initial=initial, events=[*successor_events, rollback])
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertEqual(job_state["stable_digest"], STABLE_DIGEST)
+        self.assertEqual(job_state["stable_revision"], 2)
+        self.assertEqual(job_state["promotion"]["status"], "rolled_back")
+        self.assertEqual(job_state["trial"]["status"], "fallback")
+        self.assertEqual(job_state["trial"]["trial_digest"], successor_trial["trial_digest"])
+        new_decisions = result["decisions"][len(successor["decisions"]) :]
+        self.assertEqual(
+            [decision["decision"] for decision in new_decisions],
+            ["fallback", "rollback"],
+        )
+        fallback = new_decisions[0]
+        rollback_decision = new_decisions[1]
+        self.assertEqual(fallback["reason"], "promotion_rollback_invalidated_base")
+        self.assertEqual(
+            fallback["artifact_identities"]["invalidating_promotion_digest"],
+            promotion["promotion_digest"],
+        )
+        self.assertEqual(fallback["before_state_sha256"], rollback_decision["before_state_sha256"])
+        self.assertEqual(fallback["after_state_sha256"], rollback_decision["after_state_sha256"])
+
+        # given
+        later_assignment = trial_run_created(
+            len(successor_events) + 2,
+            CONTROL_OCCURRENCE,
+            successor_trial["candidate_record_digest"],
+            "obsolete-successor-run",
+        )
+
+        # when
+        with self.assertRaises(LearningContractError) as caught:
+            replay(initial=initial, events=[*successor_events, rollback, later_assignment])
+
+        # then
+        self.assertIn("policy.no_open_trial", requirements(caught.exception))
+
+    def test_owner_rollback_distinguishes_historical_from_unknown_promotion_subject(self) -> None:
+        # given
+        initial, promoted_events = promotable_trial()
+        first = replay(initial=initial, events=promoted_events)
+        first_promotion = first["state"]["jobs"]["job-a"]["promotion"]
+        second_events = append_promotable_trial(
+            initial,
+            promoted_events,
+            lessons=["Keep the exact promoted deadline and add the retained source."],
+        )
+        second = replay(initial=initial, events=second_events)
+        second_promotion = second["state"]["jobs"]["job-a"]["promotion"]
+        historical = promotion_signal(
+            len(second_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            first_promotion["promotion_digest"],
+            revision=1,
+        )
+        unknown = promotion_signal(
+            len(second_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "0" * 64,
+            revision=1,
+        )
+
+        # when
+        historical_result = replay(initial=initial, events=[*second_events, historical])
+        with self.assertRaises(LearningContractError) as caught:
+            replay(initial=initial, events=[*second_events, unknown])
+
+        # then
+        historical_job = historical_result["state"]["jobs"]["job-a"]
+        self.assertEqual(historical_job["stable_digest"], second_promotion["replacement_digest"])
+        self.assertEqual(historical_job["stable_revision"], 2)
+        self.assertEqual(historical_job["promotion"]["status"], "active")
+        self.assertEqual(historical_result["decisions"][-1]["decision"], "stale_rollback")
+        self.assertIn(
+            "trigger_identity",
+            historical_result["decisions"][-1]["artifact_identities"]["failed_predicates"],
+        )
+        self.assertIn("policy.unknown_subject", requirements(caught.exception))
+
+    def test_rollback_restores_only_direct_promoted_base_and_increments_revision(self) -> None:
+        # given
+        initial, first_events = promotable_trial()
+        first = replay(initial=initial, events=first_events)
+        first_promotion = first["state"]["jobs"]["job-a"]["promotion"]
+        second_events = append_promotable_trial(
+            initial,
+            first_events,
+            lessons=["Keep the exact deadline and retain the immediately promoted source."],
+        )
+        second = replay(initial=initial, events=second_events)
+        second_promotion = second["state"]["jobs"]["job-a"]["promotion"]
+        rollback = promotion_signal(
+            len(second_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            second_promotion["promotion_digest"],
+            revision=1,
+        )
+
+        # when
+        result = replay(initial=initial, events=[*second_events, rollback])
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertNotEqual(first_promotion["replacement_digest"], STABLE_DIGEST)
+        self.assertEqual(second_promotion["base_digest"], first_promotion["replacement_digest"])
+        self.assertEqual(job_state["stable_digest"], first_promotion["replacement_digest"])
+        self.assertEqual(job_state["stable_revision"], 3)
+        self.assertEqual(job_state["promotion"]["status"], "rolled_back")
+        self.assertEqual(result["decisions"][-1]["decision"], "rollback")
+        self.assertEqual(
+            result["decisions"][-1]["artifact_identities"]["after_stable_revision"],
+            3,
+        )
+
+    def test_owner_feedback_rolls_back_only_below_two_exact_positive_supports(self) -> None:
+        # given
+        rows = ("result_not_useful", "result_correction", "evaluation_dispute")
+
+        # when / then
+        for signal in rows:
+            with self.subTest(signal=signal):
+                initial, promoted_events = promotable_trial()
+                promoted = replay(initial=initial, events=promoted_events)
+                promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+                support = promotion["positive_supports"][1]
+                next_sequence = len(promoted_events) + 1
+                if signal == "evaluation_dispute":
+                    trigger = owner_signal(
+                        next_sequence,
+                        CONTROL_OCCURRENCE,
+                        "job-a",
+                        signal,
+                        subject_kind="evaluation",
+                        subject_digest=support["evaluation_digest"],
+                        run_id=support["run_id"],
+                        revision=1,
+                    )
+                else:
+                    trigger = run_signal(
+                        next_sequence,
+                        CONTROL_OCCURRENCE,
+                        "job-a",
+                        support["run_id"],
+                        signal,
+                        revision=1,
+                        payload=(
+                            {"correction_text": "The answer should name the retained deadline."}
+                            if signal == "result_correction"
+                            else None
+                        ),
+                    )
+                try:
+                    result = replay(initial=initial, events=[*promoted_events, trigger])
+                except LearningContractError as error:
+                    self.fail(f"exact retained support was rejected: {error}")
+                job_state = result["state"]["jobs"]["job-a"]
+                self.assertEqual(job_state["stable_digest"], STABLE_DIGEST)
+                self.assertEqual(job_state["stable_revision"], 2)
+                self.assertEqual(result["decisions"][-1]["decision"], "rollback")
+                remaining = result["decisions"][-1]["artifact_identities"][
+                    "remaining_positive_supports"
+                ]
+                self.assertEqual([entry["run_id"] for entry in remaining], ["trial-run-1"])
+
+        # given
+        three_initial, three_events = promotable_trial(positive_run_count=3)
+        three_promoted = replay(initial=three_initial, events=three_events)
+        three_promotion = three_promoted["state"]["jobs"]["job-a"]["promotion"]
+        retained = run_signal(
+            len(three_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "trial-run-2",
+            "result_not_useful",
+            revision=1,
+        )
+
+        # when
+        retained_result = replay(initial=three_initial, events=[*three_events, retained])
+
+        # then
+        retained_job = retained_result["state"]["jobs"]["job-a"]
+        self.assertEqual(retained_job["stable_digest"], three_promotion["replacement_digest"])
+        self.assertEqual(retained_job["stable_revision"], 1)
+        self.assertEqual(retained_job["promotion"]["status"], "active")
+
+        # given
+        first_support_invalidated = run_signal(
+            len(three_events) + 2,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "trial-run-1",
+            "result_not_useful",
+            revision=1,
+        )
+
+        # when
+        threshold_result = replay(
+            initial=three_initial,
+            events=[*three_events, retained, first_support_invalidated],
+        )
+
+        # then
+        self.assertEqual(threshold_result["decisions"][-1]["decision"], "rollback")
+        threshold_remaining = threshold_result["decisions"][-1]["artifact_identities"][
+            "remaining_positive_supports"
+        ]
+        self.assertEqual([entry["run_id"] for entry in threshold_remaining], ["trial-run-3"])
+
+    def test_post_promotion_adapter_requires_exact_critical_or_regression(self) -> None:
+        # given
+        binding = adapter_binding()
+        initial, promoted_events = promotable_trial(adapter=binding)
+        promoted = replay(initial=initial, events=promoted_events)
+        promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+
+        # when / then
+        for outcome in ("pass", "inconclusive"):
+            with self.subTest(non_veto_outcome=outcome):
+                receipt = adapter_receipt(
+                    len(promoted_events) + 1,
+                    CONTROL_OCCURRENCE,
+                    trial_digest=promotion["promotion_digest"],
+                    candidate_digest=promotion["replacement_digest"],
+                    outcome=outcome,
+                    subject_kind="promotion",
+                    binding=binding,
+                )
+                result = replay(initial=initial, events=[*promoted_events, receipt])
+                job_state = result["state"]["jobs"]["job-a"]
+                self.assertEqual(job_state["stable_digest"], promotion["replacement_digest"])
+                self.assertEqual(job_state["stable_revision"], 1)
+                self.assertEqual(job_state["promotion"]["status"], "active")
+
+        for outcome in ("critical", "regression"):
+            with self.subTest(veto_outcome=outcome):
+                receipt = adapter_receipt(
+                    len(promoted_events) + 1,
+                    CONTROL_OCCURRENCE,
+                    trial_digest=promotion["promotion_digest"],
+                    candidate_digest=promotion["replacement_digest"],
+                    outcome=outcome,
+                    subject_kind="promotion",
+                    binding=binding,
+                )
+                result = replay(initial=initial, events=[*promoted_events, receipt])
+                job_state = result["state"]["jobs"]["job-a"]
+                self.assertEqual(job_state["stable_digest"], STABLE_DIGEST)
+                self.assertEqual(job_state["stable_revision"], 2)
+                self.assertEqual(job_state["promotion"]["status"], "rolled_back")
+                self.assertEqual(result["decisions"][-1]["decision"], "rollback")
+                self.assertEqual(result["decisions"][-1]["reason"], f"adapter_{outcome}")
+
+        mismatch_rows: list[tuple[str, dict[str, Any]]] = [
+            ("subject_digest", {"subject_digest": "other-promotion"}),
+            ("candidate_digest", {"envelope_overrides": {"candidate_digest": "f" * 64}}),
+            ("adapter_id", {"envelope_overrides": {"adapter_id": "other-adapter"}}),
+            ("adapter_version", {"envelope_overrides": {"adapter_version": "v2"}}),
+            ("dataset_digest", {"envelope_overrides": {"dataset_digest": "f" * 64}}),
+            ("oracle_digest", {"envelope_overrides": {"oracle_digest": "f" * 64}}),
+            ("gates_digest", {"envelope_overrides": {"gates_digest": "f" * 64}}),
+            (
+                "execution_surface_digest",
+                {"envelope_overrides": {"execution_surface_digest": "f" * 64}},
+            ),
+        ]
+        for name, overrides in mismatch_rows:
+            with self.subTest(stale_identity=name):
+                receipt = adapter_receipt(
+                    len(promoted_events) + 1,
+                    CONTROL_OCCURRENCE,
+                    trial_digest=promotion["promotion_digest"],
+                    candidate_digest=promotion["replacement_digest"],
+                    outcome="critical",
+                    subject_kind="promotion",
+                    binding=binding,
+                    **overrides,
+                )
+                result = replay(initial=initial, events=[*promoted_events, receipt])
+                job_state = result["state"]["jobs"]["job-a"]
+                self.assertEqual(job_state["stable_digest"], promotion["replacement_digest"])
+                self.assertEqual(job_state["stable_revision"], 1)
+                self.assertEqual(job_state["promotion"]["status"], "active")
+                self.assertEqual(result["decisions"][-1]["decision"], "stale_rollback")
+                self.assertIn(
+                    "trigger_identity",
+                    result["decisions"][-1]["artifact_identities"]["failed_predicates"],
+                )
+
+    def test_adapter_receipt_is_stale_when_promotion_froze_no_adapter(self) -> None:
+        # given
+        initial, promoted_events = promotable_trial(adapter=None)
+        promoted = replay(initial=initial, events=promoted_events)
+        promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+        receipt = adapter_receipt(
+            len(promoted_events) + 1,
+            CONTROL_OCCURRENCE,
+            trial_digest=promotion["promotion_digest"],
+            candidate_digest=promotion["replacement_digest"],
+            outcome="critical",
+            subject_kind="promotion",
+        )
+
+        # when
+        result = replay(initial=initial, events=[*promoted_events, receipt])
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertEqual(job_state["stable_digest"], promotion["replacement_digest"])
+        self.assertEqual(job_state["stable_revision"], 1)
+        self.assertEqual(job_state["promotion"]["status"], "active")
+        self.assertEqual(result["decisions"][-1]["decision"], "stale_rollback")
+        self.assertEqual(
+            result["decisions"][-1]["before_state_sha256"],
+            result["decisions"][-1]["after_state_sha256"],
+        )
+        self.assertIn(
+            "trigger_identity",
+            result["decisions"][-1]["artifact_identities"]["failed_predicates"],
+        )
+
+    def test_exact_hard_veto_receipt_rolls_back_and_retains_trigger_identity(self) -> None:
+        # given
+        initial, promoted_events = promotable_trial()
+        promoted = replay(initial=initial, events=promoted_events)
+        promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+        receipt = hard_veto_receipt(
+            len(promoted_events) + 1,
+            CONTROL_OCCURRENCE,
+            promotion_digest=promotion["promotion_digest"],
+            candidate_record_digest=promotion["candidate_record_digest"],
+            replacement_digest=promotion["replacement_digest"],
+            trigger_kind="corruption",
+            receipt_digest="9" * 64,
+            receipt_version="hard-veto/v1",
+        )
+
+        # when
+        try:
+            result = replay(initial=initial, events=[*promoted_events, receipt])
+        except LearningContractError as error:
+            self.fail(f"exact hard-veto receipt was rejected: {error}")
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertEqual(job_state["stable_digest"], STABLE_DIGEST)
+        self.assertEqual(job_state["stable_revision"], 2)
+        self.assertEqual(result["decisions"][-1]["decision"], "rollback")
+        self.assertEqual(result["decisions"][-1]["reason"], "hard_veto_corruption")
+        self.assertEqual(
+            job_state["promotion"]["rollback"]["triggering_event"], event_json(receipt)
+        )
+        identities = result["decisions"][-1]["artifact_identities"]
+        self.assertEqual(identities["source_kind"], "hard_veto_receipt")
+        self.assertEqual(identities["triggering_event"], event_json(receipt))
+
+    def test_stale_rollback_records_stale_decision_without_pointer_change(self) -> None:
+        # given
+        retained_base = "candidate-newer-than-request"
+        initial, promoted_events = promotable_trial(stable_digest=retained_base)
+        promoted = replay(initial=initial, events=promoted_events)
+        promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+        exact = promotion_signal(
+            len(promoted_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            promotion["promotion_digest"],
+            revision=1,
+        )
+        rolled_back_events = [*promoted_events, exact]
+        stale = promotion_signal(
+            len(rolled_back_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            promotion["promotion_digest"],
+            revision=2,
+            supersedes_revision=1,
+        )
+
+        # when
+        result = replay(initial=initial, events=[*rolled_back_events, stale])
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        decision = result["decisions"][-1]
+        self.assertEqual(job_state["stable_digest"], retained_base)
+        self.assertEqual(job_state["stable_revision"], 2)
+        self.assertEqual(decision["decision"], "stale_rollback")
+        self.assertEqual(decision["before_state_sha256"], decision["after_state_sha256"])
+        self.assertIn("promotion_status", decision["artifact_identities"]["failed_predicates"])
+        self.assertIn("stable_digest", decision["artifact_identities"]["failed_predicates"])
+        self.assertIn("stable_revision", decision["artifact_identities"]["failed_predicates"])
+
+    def test_each_reachable_rollback_identity_mismatch_is_stale(self) -> None:
+        # given
+        initial, promoted_events = promotable_trial()
+        promoted = replay(initial=initial, events=promoted_events)
+        promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+        mismatch_rows = [
+            (
+                "promotion",
+                hard_veto_receipt(
+                    len(promoted_events) + 1,
+                    CONTROL_OCCURRENCE,
+                    promotion_digest="other-promotion",
+                    candidate_record_digest=promotion["candidate_record_digest"],
+                    replacement_digest=promotion["replacement_digest"],
+                ),
+            ),
+            (
+                "candidate",
+                hard_veto_receipt(
+                    len(promoted_events) + 1,
+                    CONTROL_OCCURRENCE,
+                    promotion_digest=promotion["promotion_digest"],
+                    candidate_record_digest="f" * 64,
+                    replacement_digest=promotion["replacement_digest"],
+                ),
+            ),
+            (
+                "replacement",
+                hard_veto_receipt(
+                    len(promoted_events) + 1,
+                    CONTROL_OCCURRENCE,
+                    promotion_digest=promotion["promotion_digest"],
+                    candidate_record_digest=promotion["candidate_record_digest"],
+                    replacement_digest="f" * 64,
+                ),
+            ),
+        ]
+
+        # when / then
+        for name, receipt in mismatch_rows:
+            with self.subTest(identity=name):
+                result = replay(initial=initial, events=[*promoted_events, receipt])
+                job_state = result["state"]["jobs"]["job-a"]
+                self.assertEqual(job_state["stable_digest"], promotion["replacement_digest"])
+                self.assertEqual(job_state["stable_revision"], 1)
+                self.assertEqual(result["decisions"][-1]["decision"], "stale_rollback")
+                self.assertIn(
+                    "trigger_identity",
+                    result["decisions"][-1]["artifact_identities"]["failed_predicates"],
+                )
+
+        # given
+        exact_rollback = promotion_signal(
+            len(promoted_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            promotion["promotion_digest"],
+            revision=1,
+        )
+        first_rollback_events = [*promoted_events, exact_rollback]
+        second_events = append_promotable_trial(
+            initial,
+            first_rollback_events,
+            lessons=["Retain the exact promotion identity before rollback."],
+        )
+        second_result = replay(initial=initial, events=second_events)
+        second_promotion = second_result["state"]["jobs"]["job-a"]["promotion"]
+        stale_prior_receipt = hard_veto_receipt(
+            len(second_events) + 1,
+            CONTROL_OCCURRENCE,
+            promotion_digest=promotion["promotion_digest"],
+            candidate_record_digest=promotion["candidate_record_digest"],
+            replacement_digest=promotion["replacement_digest"],
+        )
+
+        # when
+        result = replay(initial=initial, events=[*second_events, stale_prior_receipt])
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertNotEqual(second_promotion["promotion_digest"], promotion["promotion_digest"])
+        self.assertEqual(job_state["stable_digest"], second_promotion["replacement_digest"])
+        self.assertEqual(job_state["stable_revision"], second_promotion["promotion_revision"])
+        self.assertEqual(result["decisions"][-1]["decision"], "stale_rollback")
+        self.assertIn(
+            "trigger_identity",
+            result["decisions"][-1]["artifact_identities"]["failed_predicates"],
+        )
+
+    def test_post_promotion_reusable_issue_enters_new_window_without_rollback(self) -> None:
+        # given
+        initial, promoted_events = promotable_trial()
+        promoted = replay(initial=initial, events=promoted_events)
+        promotion = promoted["state"]["jobs"]["job-a"]["promotion"]
+        ordinary = stable_evaluation(
+            len(promoted_events) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "post-promotion-run",
+            "reusable_issue",
+            ["x"],
+            stable_digest=promotion["replacement_digest"],
+        )
+
+        # when
+        result = replay(initial=initial, events=[*promoted_events, ordinary])
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertEqual(job_state["stable_digest"], promotion["replacement_digest"])
+        self.assertEqual(job_state["stable_revision"], 1)
+        self.assertEqual(job_state["promotion"]["status"], "active")
+        self.assertEqual(job_state["evaluations"][-1]["run_id"], "post-promotion-run")
 
 
 if __name__ == "__main__":
