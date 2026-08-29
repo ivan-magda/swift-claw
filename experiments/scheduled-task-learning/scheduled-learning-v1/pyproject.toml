@@ -1,0 +1,45 @@
+[project]
+name = "scheduled-learning-v1"
+version = "0.1.0"
+description = "Deterministic scheduled-learning v1 replay and page validation harness."
+requires-python = ">=3.11"
+dependencies = [
+    "swift-claw-benchmark-core",
+    "page-benchmark",
+]
+
+[tool.uv.sources]
+swift-claw-benchmark-core = { path = "../benchmark-core" }
+page-benchmark = { path = "../page-change" }
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.4",
+    "mypy==1.19.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["scheduled_learning_v1", "page_change_m3", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF", "S", "N", "PL"]
+ignore = [
+    # Function/branch/argument-count complexity rules. page-change already
+    # carries the same exception; several harness orchestration functions are
+    # expected to exceed these thresholds too. Tracked as follow-up work there.
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR0917",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+strict = true
+explicit_package_bases = true
+files = ["scheduled_learning_v1", "page_change_m3", "tests"]
