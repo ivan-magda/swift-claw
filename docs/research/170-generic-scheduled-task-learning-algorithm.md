@@ -44,7 +44,7 @@ Version 1 deliberately has:
 - one candidate rather than a candidate pool;
 - sequential bounded exposure rather than an online bandit or concurrent A/B test;
 - whole-set replacement rather than lesson patches or append-only growth;
-- deterministic precedence units rather than model confidence or calibrated probability.
+- categorical precedence rather than model confidence or calibrated probability.
 
 ## 2. Versioned parameters
 
@@ -62,8 +62,6 @@ per-job policy variants.
 | Evidence | maximum compatible stable evaluations | 5 |
 | Evidence | maximum evidence age at reflection cutoff | 30 days |
 | Evidence | automatic reflection support | 2 distinct negative runs with the same exact issue code |
-| Signals | evaluator directional weight | 1 |
-| Signals | authenticated owner directional weight | 2 |
 | Candidate | maximum lesson count | 3 |
 | Candidate | maximum UTF-8 bytes per lesson | 512 |
 | Candidate | maximum UTF-8 bytes for all lesson texts | 1536 |
@@ -74,16 +72,14 @@ per-job policy variants.
 | Trial | tolerated negative runs | 0 |
 | Trial | assignment deadline | 30 days after admission |
 | Trial | decision deadline | 7 days after the assignment deadline |
-| Operations | evaluator calls per job per rolling 24 hours | 5 |
-| Operations | reflector calls per job per rolling 24 hours | 1 |
 | Operations | evaluator maximum output | 512 tokens |
 | Operations | reflector maximum output | 768 tokens |
 | Retention | unreferenced evidence and feedback payload | 30 days |
 | Retention | compact decision and provenance receipts | 90 days |
 
-The existing global and proactive USD/token breakers remain authoritative. A missing learning budget
-may defer or terminate a learning operation, but it never delays task-result persistence or owner
-delivery.
+The existing global and proactive USD/token breakers remain authoritative. A breaker denial closes
+the exact operation as `failed_no_call(budget_denied)` and never delays task-result persistence or
+owner delivery. Version 1 does not requeue that logical operation after a budget denial.
 
 Version 1 exposes no owner-facing or per-job overrides for these values.
 
@@ -102,7 +98,7 @@ Trusted code derives one `compatibility_digest` from exact equality of:
 - context schema, tool-catalog, policy and skill-set versions;
 - configured primary route and actual terminal provider/model route;
 - evaluator provider/model route;
-- optional adapter ID and task-input schema version, or the canonical `none` value.
+- optional adapter ID/version and task-input schema version, or the canonical `none` value.
 
 The compatibility projection excludes run IDs, timestamps, task input, final output, model-visible
 carrier bytes and evidence digests. Those values belong to provenance, not compatibility.
@@ -121,41 +117,50 @@ starts a new window.
 
 ## 4. Effective owner and evaluator signals
 
-Weights are deterministic precedence units. They are not confidence scores, probabilities or a
-claim that one signal is statistically twice as accurate as another.
+For each run, trusted code resolves exactly one effective outcome:
 
-### 4.1 Base evaluator vote
+```text
+positive | negative(issue_codes) | neutral
+```
 
-| Evaluator result | Directional vote | Meaning |
-|---|---:|---|
-| `no_issue` | `+1` | heuristic support for the output |
-| `reusable_issue` | `-1` | heuristic evidence of a reusable problem; carries bounded exact issue codes |
-| `transient_issue` | `0` | not behavioral evidence |
-| `uncertain` | `0` | not positive or negative evidence |
+These categories are decision inputs. They are not confidence scores, probabilities or evidence
+strength claims.
+
+### 4.1 Base evaluator outcome
+
+| Evaluator result | Effective outcome | Meaning |
+|---|---|---|
+| `no_issue` | `positive` | heuristic support for the output |
+| `reusable_issue` | `negative(issue_codes)` | heuristic evidence of a reusable problem with bounded exact issue codes |
+| `transient_issue` | `neutral` | not behavioral evidence |
+| `uncertain` | `neutral` | not positive or negative evidence |
 
 ### 4.2 Owner precedence
 
-For one exact run/evaluation subject, trusted code computes one effective vote in this order:
+For one exact run/evaluation subject, trusted code computes one effective outcome in this order:
 
 1. An effective hard veto is recorded separately and stops dependent admission or promotion.
-2. The latest unsuperseded owner outcome signal wins: `result useful = +2`, `result not useful = -2`,
-   `result correction = -2` plus its bounded correction payload.
-3. Otherwise, an owner `evaluation confirm` changes a non-zero evaluator vote to the same sign with
-   magnitude `2`; it does not add another vote.
-4. Otherwise, the evaluator vote is used.
+2. The latest unsuperseded owner result signal wins. `result useful` is `positive`; `result not
+   useful` is `negative`; `result correction` is `negative` and carries its bounded correction
+   payload as a direct one-run reflection trigger.
+3. Otherwise, `evaluation confirm` keeps the evaluator outcome and records the separate
+   `owner_confirmed` evidence-strength claim.
+4. Otherwise, trusted code uses the evaluator outcome.
 
-An `evaluation dispute` removes that evaluator vote from dependent decisions and is a hard veto for
+An `evaluation dispute` removes that evaluator outcome from dependent decisions and is a hard veto for
 any candidate, trial or promotion whose source manifest requires it. A separate effective owner
 outcome signal may still describe the run, but the disputed evaluation itself remains unusable.
 
-Candidate-level controls do not become quality votes:
+Candidate-level controls do not become quality outcomes:
 
-- `candidate approve` permits admission through the common gate but contributes zero trial support;
+- `candidate approve` creates one immutable successor candidate record with the same replacement
+  lesson-set digest, a predecessor edge, the exact approval event and the newly frozen feedback
+  revision. The predecessor becomes superseded for admission;
 - `candidate reject` hard-vetoes the exact candidate or trial;
 - `candidate edit` hard-vetoes the old candidate and creates a new immutable candidate with a new
   digest that must pass every gate again.
 
-At most one directional vote exists per run. Multiple feedback events do not multiply support; the
+At most one effective outcome exists per run. Multiple feedback events do not multiply support; the
 append-only log and supersession links determine the one effective owner signal at the frozen cutoff.
 
 A negative evaluator run uses its exact evaluator issue codes. An owner correction is its own direct
@@ -164,11 +169,10 @@ trigger. An owner `not useful` signal without an evaluator issue code uses the f
 
 ### 4.3 Hard vetoes
 
-The following outrank every heuristic or owner-support count:
+The following outrank every positive outcome:
 
 - authenticated evaluation dispute or candidate rejection bound to an exact dependency;
-- deterministic adapter `critical` or `regression` receipt for the exact candidate and execution
-  surface;
+- exact frozen-adapter `critical` or `regression` receipt for the candidate and execution surface;
 - security-policy, secret-leakage, corruption or invariant-violation receipt;
 - job cancellation, purge barrier, stale learning epoch or stale base/candidate compare-and-swap.
 
@@ -182,7 +186,7 @@ two distinct positive trial runs.
 Automatic reflection is permitted when the compatible stable window contains at least two distinct
 runs with:
 
-- a negative effective vote; and
+- a negative effective outcome; and
 - the same exact issue code.
 
 One run counts at most once for one issue code. Positive and neutral runs do not erase a recurring
@@ -196,8 +200,11 @@ second matching occurrence because it is an authenticated statement of desired b
 attempt to infer recurrence from one model evaluation.
 
 An owner candidate edit bypasses reflection and directly creates a new immutable replacement
-candidate. Candidate approval may admit an already-existing candidate after one eligible source run,
-but it cannot create a candidate from nothing and never bypasses validation or trial outcomes.
+candidate. Candidate approval may admit only the immutable successor record described in section
+4.2 after one eligible source run. It cannot create a candidate from nothing and never bypasses
+validation or trial outcomes. The successor remains eligible only while its predecessor, base and
+learning epoch still match, the predecessor remains unadmitted and the newly frozen feedback
+revision remains current. It does not regenerate lesson bytes or count as a second trial.
 
 A plain `not useful` signal remains one negative run. Without a correction payload it needs another
 matching negative run for automatic reflection.
@@ -238,7 +245,8 @@ line-ending normalization and surrounding-whitespace removal before digesting. A
 - a lesson over 512 UTF-8 bytes;
 - total lesson text over 1536 UTF-8 bytes;
 - a replacement digest identical to the current stable digest;
-- a replacement lesson-set digest already closed against the same base and algorithm version;
+- a replacement lesson-set digest already closed against the same base and algorithm version, unless
+  this record is the single approval successor of that exact current unadmitted predecessor;
 - any M1 schema, Unicode, secret-leakage, job, epoch, base or source-binding violation.
 
 The reflector is instructed to preserve still-useful incumbent rules, merge overlapping rules and
@@ -270,7 +278,7 @@ of these assignment boundaries closes the trial cohort:
 
 - three run assignments have been consumed;
 - 30 days have passed since admission;
-- a hard veto or negative trial vote closes the trial;
+- a hard veto or negative trial outcome closes the trial;
 - two positive settled trial runs exist and no already-assigned run remains unsettled.
 
 The M1 fire transaction remains authoritative: an assignment is consumed only when a run is created,
@@ -278,18 +286,30 @@ and a created run consumes exposure even if it later fails technically.
 
 Each exact trial run resolves to:
 
-- **positive:** eligible, settled, evaluated, effective directional vote greater than zero;
-- **negative:** eligible, settled, evaluated, effective directional vote less than zero;
+- **positive:** eligible, settled, evaluated, effective outcome `positive`;
+- **negative:** eligible, settled, evaluated, effective outcome `negative`;
 - **neutral:** technical/infrastructure failure, ineligible evidence, missing evaluation,
-  `transient_issue`, `uncertain` or zero effective vote.
+  `transient_issue`, `uncertain` or effective outcome `neutral`.
 
 A neutral run consumes exposure but supplies no promotion support. One negative run closes the trial
 immediately to fallback. Hard vetoes close it immediately. Two positive distinct runs close further
 assignment early, but promotion still waits for every already-assigned run to settle.
 
-After assignment closes, the trial may drain for seven more days. If any assigned run remains
-unsettled at the decision deadline, the cohort is incomplete and falls back. Version 1 never promotes
-while an assigned run could later contradict the decision.
+At admission, the trial pins two immutable absolute timestamps:
+
+```text
+assignmentDeadline = admittedAt + 30 days
+decisionDeadline = admittedAt + 37 days
+```
+
+These deadlines are maximum bounds, not minimum waiting periods. Early assignment closure changes
+neither timestamp. Code decides immediately once assignment is closed and every assigned run has
+settled. If any assigned run remains unsettled at the decision deadline, the cohort is incomplete and
+falls back. Version 1 never promotes while an assigned run could later contradict the decision.
+
+All reflection, fallback, promotion and rollback decisions are event-driven and occur as soon as
+their count-based conditions are satisfied. Time windows are maximum freshness and expiry bounds;
+they never impose a minimum waiting period.
 
 There is no concurrent stable control arm in production v1. The frozen pre-trial stable evidence
 window is the heuristic baseline. Controlled clean-vs-candidate comparison belongs to the M3 harness,
@@ -304,6 +324,8 @@ A candidate promotes only when all of the following are true in the M1 decision 
 - assignment is closed and every assigned run is settled;
 - at least two distinct trial runs are positive;
 - no trial run is negative;
+- no deterministic adapter was frozen, or the exact frozen adapter has a `pass` receipt for the
+  candidate lesson-set digest and execution surface;
 - no owner, deterministic, security or consistency veto is effective;
 - job, epoch, algorithm, candidate, replacement, base and feedback revisions still match;
 - the stable pointer and revision still identify the recorded base;
@@ -312,7 +334,10 @@ A candidate promotes only when all of the following are true in the M1 decision 
 The transaction writes the immutable decision receipt, compare-and-swaps the stable pointer and
 closes the exact trial. Candidate approval by itself is never promotion evidence.
 
-Promotion based only on evaluator votes remains a heuristic activation. Owner signals and a
+The promotion receipt binds the complete settled cohort and every positive trial run in it. Rollback
+recomputes remaining support from that fixed set; it never selects a different subset later.
+
+Promotion based only on evaluator outcomes remains a heuristic activation. Owner signals and a
 deterministic adapter may strengthen the separately recorded evidence claim, but activation state
 and evidence strength remain different axes.
 
@@ -320,19 +345,24 @@ and evidence strength remain different axes.
 
 Fallback closes the exact trial and leaves the stable pointer untouched. It occurs on:
 
-- any negative trial vote;
+- any negative trial outcome;
 - any hard veto;
-- fewer than two positive runs after exposure closes;
+- fewer than two positive runs after assignment is closed and every assigned run has settled;
+- a frozen deterministic adapter has no exact `pass` receipt when the trial closes;
 - an incomplete cohort at the decision deadline;
-- assignment or decision expiry;
-- job cancellation or purge;
+- job cancellation;
 - stale epoch/base/feedback/version predicates;
 - decision-time corruption or compare-and-swap loss.
 
+Purge closes the trial through the M1 epoch barrier and resets derived state. It is not fallback and
+does not preserve the stable pointer.
+
 A closed replacement lesson-set digest is not automatically retried against the same base under the
-same algorithm version. New evidence must produce different lesson bytes, an owner edit must change
-the replacement digest, or a newer algorithm version must make a new decision. This prevents trial
-loops hidden behind a new candidate-record manifest.
+same algorithm version. The single approval successor is not a retry because its exact predecessor
+was never admitted to a trial and is atomically superseded by the same approval transaction.
+Otherwise, new evidence must produce different lesson bytes, an owner edit must change the
+replacement digest, or a newer algorithm version must make a new decision. This prevents trial loops
+hidden behind a new candidate-record manifest.
 
 ## 9. Rollback
 
@@ -345,8 +375,8 @@ Version 1 rollback triggers are deliberately narrow:
 - authenticated owner rejection or explicit rollback of the exact active candidate;
 - owner `not useful`, correction or evaluation dispute that invalidates one of the exact positive
   trial runs used by the promotion and leaves fewer than two valid positive support runs;
-- deterministic adapter `critical` or `regression` receipt bound to the exact active candidate and
-  execution surface;
+- `critical` or `regression` receipt from the adapter frozen by the exact active promotion and bound
+  to its candidate and execution surface;
 - security, secret-leakage, corruption or invariant-violation receipt bound to that promotion.
 
 An ordinary later heuristic `reusable_issue` on a new active run does not immediately roll back the
@@ -360,16 +390,16 @@ digest cannot be re-admitted against the same base under `scheduled-learning/v1`
 
 ## 10. Route, budget and retention policy
 
-Evaluation and reflection use the scheduled job's configured provider/model route. Version 1 adds no
-separate learning router, model committee or self-review model. Existing retry and fallback behavior
-may select an actual terminal route; that exact route is recorded, and evidence from another route
-falls into another compatibility window.
+Evaluation and reflection use the existing configured provider route used by scheduled jobs. Version
+1 adds no separate learning router, model committee or self-review model. Existing retry and fallback
+behavior may select an actual terminal route; that exact route is recorded, and evidence from another
+route falls into another compatibility window.
 
-Per job, at most five evaluator operations and one reflector operation may start in a rolling
-24-hour period. Additional sealed evidence remains durable and may be considered later while it is
-still inside the 30-day evidence window. Each logical operation makes one structured model call with
-the output caps in the parameter table. No second model call repairs malformed semantic content; a
-schema-invalid result fails the operation.
+Each eligible run permits at most one logical evaluator operation. Each frozen trigger permits at
+most one logical reflector operation. Both use the existing global and proactive breakers. Each
+logical operation makes one structured model call with the output caps in the parameter table. No
+second model call repairs malformed semantic content; a schema-invalid result fails the operation.
+Existing provider-level retry rules remain unchanged.
 
 Full unreferenced evidence, evaluation excerpts and feedback payloads may be removed after 30 days.
 Compact digests, versions, decision receipts and provenance edges remain for 90 days. Anything
@@ -380,17 +410,31 @@ stronger than ordinary retention.
 ## 11. Deterministic adapters and page-change benchmark
 
 The generic algorithm understands only a versioned deterministic receipt bound to exact subject and
-execution-surface digests. It does not know how an adapter computes the receipt.
+execution-surface digests. It does not know how an adapter computes the receipt. At admission, a
+trial freezes either no deterministic adapter or one exact adapter ID and version. When an adapter is
+frozen, the gate also pins the existing M1 dataset, oracle, gate and execution-surface versions that
+its receipt must match.
 
-- Adapter `critical` or `regression` is a hard veto.
-- Adapter `pass` may upgrade the scoped evidence claim after the generic trial requirements pass.
-- Adapter `pass` never bypasses two positive trial runs, owner/security vetoes or compare-and-swap
-  predicates.
+- When no adapter is frozen, promotion requires no deterministic receipt.
+- When an adapter is frozen, promotion also requires an exact `pass` receipt for the candidate
+  lesson-set digest and execution surface.
+- An exact frozen-adapter `critical` or `regression` receipt is an immediate hard veto.
+- A missing or inconclusive receipt prevents promotion and causes fallback when the trial closes.
+- An exact frozen-adapter `pass` may upgrade the scoped evidence claim, but it never bypasses two
+  positive trial runs, owner/security vetoes or compare-and-swap predicates.
 
 Page-change monitoring is the first M3 adapter and benchmark only. Its corpus, split, scorer, oracle,
 critical-failure definitions and numeric regression gates must be frozen in a fresh M3 validation
 artifact before outputs are observed. None of those page-specific concepts or thresholds enter
 `scheduled-learning/v1`.
+
+The M0 synthesized lesson artifact was derived from gold-informed feedback and is permanently
+ineligible as an M3 stable set, reflection input, candidate seed, candidate, example or trial
+artifact.
+
+M3 candidate synthesis may use only M1-compliant blind evaluations and authenticated owner signals.
+Deterministic oracle data may be used only after candidate freeze to produce a scoped verification
+receipt.
 
 Issue 118 Protocol 0.6 and its M0 evidence remain historical scenario-selection artifacts. They are
 not rewritten and cannot provide a new production verification receipt.
@@ -401,28 +445,30 @@ not rewritten and cannot provide a new production verification receipt.
 on compatible stable evaluation or owner feedback:
   if open trial: record signal only; do not reflect
   freeze latest 5 compatible stable evaluations within 30 days
-  resolve one effective vote per run
+  resolve one effective outcome per run
 
   if owner correction:
     trigger = direct-owner trigger
   else:
-    trigger = any exact issue code with negative votes from >= 2 distinct runs
+    trigger = any exact issue code in negative outcomes from >= 2 distinct runs
 
   if no trigger or trigger already attempted: stop
   run one reflection operation
   validate one complete replacement candidate
   if invalid, no-op, duplicate or vetoed: close trigger without retry
+  freeze the optional deterministic adapter and its exact gate identity
   admit one trial only if exact job/base/epoch/budget predicates still match
 
 on settled trial run:
-  resolve effective vote
-  if hard veto or vote < 0: fallback immediately
+  resolve effective outcome
+  if hard veto or outcome is negative: fallback immediately
   if two positive runs and no assigned run is unsettled: close assignment
   else continue until three assignments or assignment deadline
 
 on closed assignment:
   wait for all assigned runs until decision deadline
-  if >= 2 positive and 0 negative and every exact predicate holds: promote by CAS
+  if >= 2 positive and 0 negative and the frozen adapter requirement is satisfied
+     and every exact predicate holds: promote by CAS
   else: fallback, stable remains unchanged
 
 on exact post-promotion hard trigger:
