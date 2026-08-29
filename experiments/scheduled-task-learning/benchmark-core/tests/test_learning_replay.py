@@ -17,6 +17,7 @@ STABLE_DIGEST = "stable-0"
 COMPATIBILITY_DIGEST = "compatibility-0"
 CANDIDATE_RECORD_DOMAIN = "scheduled-learning/v1/candidate-record"
 CANDIDATE_SOURCE_DOMAIN = "scheduled-learning/v1/candidate-source"
+TRIAL_DOMAIN = "scheduled-learning/v1/trial"
 LESSONS = ["Quote the exact deadline in the first sentence."]
 
 FIRST_CLOCK = "2026-01-31T00:00:00Z"
@@ -217,37 +218,25 @@ def reflector_operation(
     operation_kind: str = "reflector",
     status: str = "succeeded",
 ) -> list[ReplayEvent]:
-    started = event(
+    started = operation_started(
         sequence,
         occurred_at,
-        "operation_started",
-        {
-            "job_id": job_id,
-            "operation_id": operation_id,
-            "operation_kind": operation_kind,
-            "attempt_generation": 1,
-            "carrier_digest": "carrier-1",
-            "route_digest": "route-1",
-            "provider_call_id": "provider-call-1",
-            "manifest_digest": "manifest-1",
-            "freeze_commit": "freeze-commit-1",
-            "invocation_core_digest": "invocation-core-1",
-            "trigger_digest": trigger_digest if operation_kind == "reflector" else None,
-        },
+        job_id=job_id,
+        kind=operation_kind,
+        generation=1,
+        operation_id=operation_id,
+        trigger_digest=trigger_digest if operation_kind == "reflector" else None,
     )
-    finished = event(
+    finished = operation_finished(
         sequence + 1,
         occurred_at,
-        "operation_finished",
-        {
-            "job_id": job_id,
-            "operation_id": operation_id,
-            "operation_kind": operation_kind,
-            "attempt_generation": 1,
-            "status": status,
-            "result_digest": result_digest,
-            "usage_digest": None if status == "failed_no_call" else "usage-1",
-        },
+        job_id=job_id,
+        kind=operation_kind,
+        generation=1,
+        operation_id=operation_id,
+        status=status,
+        result_digest=result_digest,
+        usage_digest=None if status == "failed_no_call" else "usage-1",
     )
     return [started, finished]
 
@@ -344,12 +333,13 @@ def recorded_candidate(
     jobs: list[dict[str, Any]] | None = None,
     lessons: list[str] | None = None,
     job_id: str = "job-a",
+    controlled_clock: str = FIRST_CLOCK,
 ) -> tuple[dict[str, Any], list[ReplayEvent]]:
     """Replay-ready prefix that ends with one valid unadmitted reflector candidate."""
 
     initial = initial_state(
         algorithm_id=ALGORITHM_ID,
-        controlled_clock=FIRST_CLOCK,
+        controlled_clock=controlled_clock,
         jobs=jobs if jobs is not None else [job(job_id)],
     )
     evidence = negative_evidence(job_id)
@@ -366,6 +356,187 @@ def recorded_candidate(
         ),
     ]
     return initial, events
+
+
+def admitted_trial(
+    controlled_clock: str,
+    *,
+    adapter: dict[str, str] | None = None,
+) -> tuple[dict[str, Any], list[ReplayEvent]]:
+    """Replay-ready history that ends with one admitted trial."""
+
+    initial, prefix = recorded_candidate(controlled_clock=controlled_clock)
+    candidate = candidates_of(replay(initial=initial, events=prefix))[0]
+    admit = candidate_admitted(
+        6,
+        CONTROL_OCCURRENCE,
+        "job-a",
+        candidate["candidate_record_digest"],
+        candidate["replacement_digest"],
+        adapter=adapter,
+    )
+    return initial, [*prefix, admit]
+
+
+def operation_started(
+    sequence: int,
+    occurred_at: str,
+    *,
+    job_id: str = "job-a",
+    kind: str,
+    generation: int,
+    operation_id: str,
+    trigger_digest: str | None = None,
+) -> ReplayEvent:
+    return event(
+        sequence,
+        occurred_at,
+        "operation_started",
+        {
+            "job_id": job_id,
+            "operation_id": operation_id,
+            "operation_kind": kind,
+            "attempt_generation": generation,
+            "carrier_digest": f"carrier-{operation_id}",
+            "route_digest": "route-1",
+            "provider_call_id": f"provider-{operation_id}",
+            "manifest_digest": "manifest-1",
+            "freeze_commit": "freeze-commit-1",
+            "invocation_core_digest": f"invocation-{operation_id}",
+            "trigger_digest": trigger_digest,
+        },
+    )
+
+
+def operation_finished(
+    sequence: int,
+    occurred_at: str,
+    *,
+    job_id: str = "job-a",
+    kind: str,
+    generation: int,
+    operation_id: str,
+    status: str = "succeeded",
+    result_digest: str = "result-1",
+    usage_digest: str | None = "usage-1",
+) -> ReplayEvent:
+    return event(
+        sequence,
+        occurred_at,
+        "operation_finished",
+        {
+            "job_id": job_id,
+            "operation_id": operation_id,
+            "operation_kind": kind,
+            "attempt_generation": generation,
+            "status": status,
+            "result_digest": result_digest,
+            "usage_digest": usage_digest,
+        },
+    )
+
+
+def controller_started(sequence: int, occurred_at: str, *, generation: int) -> ReplayEvent:
+    return event(
+        sequence,
+        occurred_at,
+        "controller_started",
+        {"controller_generation": generation},
+    )
+
+
+def clock_advanced(sequence: int, occurred_at: str) -> ReplayEvent:
+    return event(sequence, occurred_at, "clock_advanced", {})
+
+
+def trial_run_created(
+    sequence: int,
+    occurred_at: str,
+    candidate_record_digest: str,
+    run_id: str,
+) -> ReplayEvent:
+    return event(
+        sequence,
+        occurred_at,
+        "trial_run_created",
+        {
+            "job_id": "job-a",
+            "candidate_record_digest": candidate_record_digest,
+            "run_id": run_id,
+        },
+    )
+
+
+def trial_run_settled(
+    sequence: int,
+    occurred_at: str,
+    run_id: str,
+    outcome: str,
+) -> ReplayEvent:
+    return event(
+        sequence,
+        occurred_at,
+        "trial_run_settled",
+        {"job_id": "job-a", "run_id": run_id, "outcome": outcome},
+    )
+
+
+def adapter_receipt(
+    sequence: int,
+    occurred_at: str,
+    *,
+    trial_digest: str,
+    candidate_digest: str,
+    outcome: str,
+    binding: dict[str, str] | None = None,
+    subject_kind: str = "trial",
+    subject_digest: str | None = None,
+    envelope_overrides: dict[str, str] | None = None,
+) -> ReplayEvent:
+    envelope = {
+        **(adapter_binding() if binding is None else binding),
+        "candidate_digest": candidate_digest,
+        "outcome": outcome,
+        "receipt_digest": "e" * 64,
+        **({} if envelope_overrides is None else envelope_overrides),
+    }
+    return event(
+        sequence,
+        occurred_at,
+        "adapter_receipt_recorded",
+        {
+            "job_id": "job-a",
+            "subject_kind": subject_kind,
+            "subject_digest": trial_digest if subject_digest is None else subject_digest,
+            "envelope": envelope,
+        },
+    )
+
+
+def trial_of(initial: dict[str, Any], events: list[ReplayEvent]) -> dict[str, Any]:
+    trial: dict[str, Any] = replay(initial=initial, events=events)["state"]["jobs"]["job-a"][
+        "trial"
+    ]
+    return trial
+
+
+def trial_subject_digest(trial: dict[str, Any]) -> str:
+    core = {
+        "schema_version": 1,
+        "job_id": "job-a",
+        "candidate_record_digest": trial["candidate_record_digest"],
+        "replacement_digest": trial["replacement_digest"],
+        "base_digest": trial["base_digest"],
+        "base_revision": trial["base_revision"],
+        "learning_epoch": trial["learning_epoch"],
+        "feedback_revision": trial["feedback_revision"],
+        "algorithm_id": trial["algorithm_id"],
+        "adapter": trial["adapter"],
+        "admitted_at": trial["admitted_at"],
+        "assignment_deadline": trial["assignment_deadline"],
+        "decision_deadline": trial["decision_deadline"],
+    }
+    return canonical_sha256({"domain": TRIAL_DOMAIN, "value": core})
 
 
 def candidates_of(result: dict[str, Any], job_id: str = "job-a") -> list[dict[str, Any]]:
@@ -1271,7 +1442,28 @@ class LearningReplayTests(unittest.TestCase):
         self.assertEqual(job_state["trial"]["assignment_deadline"], "2026-03-02T00:00:00Z")
         self.assertEqual(job_state["trial"]["decision_deadline"], "2026-03-09T00:00:00Z")
         self.assertEqual(job_state["trial"]["adapter"], frozen_adapter)
+        trial_core = {
+            "schema_version": 1,
+            "job_id": "job-a",
+            "candidate_record_digest": digest,
+            "replacement_digest": replacement,
+            "base_digest": STABLE_DIGEST,
+            "base_revision": 0,
+            "learning_epoch": 0,
+            "feedback_revision": 0,
+            "algorithm_id": ALGORITHM_ID,
+            "adapter": frozen_adapter,
+            "admitted_at": FIRST_CLOCK,
+            "assignment_deadline": "2026-03-02T00:00:00Z",
+            "decision_deadline": "2026-03-09T00:00:00Z",
+        }
+        expected_trial_digest = canonical_sha256({"domain": TRIAL_DOMAIN, "value": trial_core})
+        self.assertEqual(job_state["trial"]["trial_digest"], expected_trial_digest)
         self.assertEqual(result["decisions"][-1]["artifact_identities"]["adapter"], frozen_adapter)
+        self.assertEqual(
+            result["decisions"][-1]["artifact_identities"]["trial_digest"],
+            expected_trial_digest,
+        )
         self.assertTrue(job_state["candidates"][0]["admitted"])
         self.assertEqual(
             job_state["closed_replacements"],
@@ -1573,6 +1765,646 @@ class LearningReplayTests(unittest.TestCase):
                 ],
             )
         self.assertIn("policy.hard_veto", requirements(vetoed.exception))
+
+    def test_controller_started_marks_prior_started_operation_interrupted_unknown(self) -> None:
+        # given
+        simple_initial = initial_state(
+            algorithm_id=ALGORITHM_ID,
+            controlled_clock="2026-01-01T00:00:00Z",
+            jobs=[job("job-a")],
+        )
+        reflector_initial = initial_state(
+            algorithm_id=ALGORITHM_ID,
+            controlled_clock=FIRST_CLOCK,
+            jobs=[job("job-a")],
+        )
+        evidence = negative_evidence()
+        trigger_digest = frozen_trigger_digest(reflector_initial, evidence)
+        rows = [
+            (
+                "task",
+                simple_initial,
+                [
+                    operation_started(
+                        1,
+                        "2026-01-01T00:00:00Z",
+                        kind="task",
+                        generation=1,
+                        operation_id="task-1",
+                    ),
+                    controller_started(2, "2026-01-01T00:00:01Z", generation=2),
+                ],
+                "task-1",
+            ),
+            (
+                "evaluator",
+                simple_initial,
+                [
+                    operation_started(
+                        1,
+                        "2026-01-01T00:00:00Z",
+                        kind="evaluator",
+                        generation=1,
+                        operation_id="eval-1",
+                    ),
+                    controller_started(2, "2026-01-01T00:00:01Z", generation=2),
+                ],
+                "eval-1",
+            ),
+            (
+                "reflector",
+                reflector_initial,
+                [
+                    *evidence,
+                    operation_started(
+                        3,
+                        REFLECTION_OCCURRENCE,
+                        kind="reflector",
+                        generation=1,
+                        operation_id="reflector-1",
+                        trigger_digest=trigger_digest,
+                    ),
+                    controller_started(4, "2026-01-03T00:00:01Z", generation=2),
+                ],
+                "reflector-1",
+            ),
+        ]
+
+        # when
+        results = [
+            (kind, operation_id, replay(initial=initial, events=events))
+            for kind, initial, events, operation_id in rows
+        ]
+
+        # then
+        for kind, operation_id, result in results:
+            with self.subTest(operation_kind=kind):
+                operation = result["state"]["jobs"]["job-a"]["operations"][operation_id]
+                self.assertEqual(operation["status"], "interrupted_unknown")
+                self.assertEqual(result["state"]["controller_generation"], 2)
+
+    def test_controller_restart_covers_all_operation_kinds_and_exact_next_generation(self) -> None:
+        # given
+        initial = initial_state(
+            algorithm_id=ALGORITHM_ID,
+            controlled_clock="2026-01-01T00:00:00Z",
+            jobs=[job("job-a")],
+        )
+        events = [
+            operation_started(
+                1,
+                "2026-01-01T00:00:00Z",
+                kind="evaluator",
+                generation=1,
+                operation_id="eval-1",
+            ),
+            controller_started(2, "2026-01-01T00:00:01Z", generation=3),
+        ]
+
+        # when
+        with self.assertRaises(LearningContractError) as caught:
+            replay(initial=initial, events=events)
+
+        # then
+        self.assertIn("policy.controller_generation", requirements(caught.exception))
+
+    def test_end_of_log_does_not_synthesize_interruption_or_clock_advance(self) -> None:
+        # given
+        simple_initial = initial_state(
+            algorithm_id=ALGORITHM_ID,
+            controlled_clock="2026-01-01T00:00:00Z",
+            jobs=[job("job-a")],
+        )
+        reflector_initial = initial_state(
+            algorithm_id=ALGORITHM_ID,
+            controlled_clock=FIRST_CLOCK,
+            jobs=[job("job-a")],
+        )
+        evidence = negative_evidence()
+        trigger_digest = frozen_trigger_digest(reflector_initial, evidence)
+        operation_rows = [
+            (
+                "task",
+                simple_initial,
+                [
+                    operation_started(
+                        1,
+                        "2026-01-01T00:00:00Z",
+                        kind="task",
+                        generation=1,
+                        operation_id="task-1",
+                    )
+                ],
+                "task-1",
+            ),
+            (
+                "evaluator",
+                simple_initial,
+                [
+                    operation_started(
+                        1,
+                        "2026-01-01T00:00:00Z",
+                        kind="evaluator",
+                        generation=1,
+                        operation_id="eval-1",
+                    )
+                ],
+                "eval-1",
+            ),
+            (
+                "reflector",
+                reflector_initial,
+                [
+                    *evidence,
+                    operation_started(
+                        3,
+                        REFLECTION_OCCURRENCE,
+                        kind="reflector",
+                        generation=1,
+                        operation_id="reflector-1",
+                        trigger_digest=trigger_digest,
+                    ),
+                ],
+                "reflector-1",
+            ),
+        ]
+        trial_initial, admitted = admitted_trial("2026-01-01T00:00:00Z")
+        trial = trial_of(trial_initial, admitted)
+        created = trial_run_created(
+            7,
+            CONTROL_OCCURRENCE,
+            trial["candidate_record_digest"],
+            "trial-run-1",
+        )
+
+        # when
+        operation_results = [
+            (kind, operation_id, replay(initial=initial, events=events))
+            for kind, initial, events, operation_id in operation_rows
+        ]
+        trial_result = replay(initial=trial_initial, events=[*admitted, created])
+
+        # then
+        for kind, operation_id, result in operation_results:
+            with self.subTest(operation_kind=kind):
+                operation = result["state"]["jobs"]["job-a"]["operations"][operation_id]
+                self.assertEqual(operation["status"], "started")
+        trial_state = trial_result["state"]["jobs"]["job-a"]["trial"]
+        self.assertEqual(trial_result["state"]["controlled_clock"], "2026-01-01T00:00:00Z")
+        self.assertIsNone(trial_state["assignment_closed_at"])
+        self.assertEqual(trial_state["status"], "open")
+        self.assertFalse(
+            any(item["decision"] in {"promoted", "fallback"} for item in trial_result["decisions"])
+        )
+
+    def test_operation_events_reject_unknown_nonterminal_or_mismatched_identity(self) -> None:
+        # given
+        initial = initial_state(
+            algorithm_id=ALGORITHM_ID,
+            controlled_clock="2026-01-01T00:00:00Z",
+            jobs=[job("job-a")],
+        )
+        started = operation_started(
+            1,
+            "2026-01-01T00:00:00Z",
+            kind="evaluator",
+            generation=1,
+            operation_id="eval-1",
+        )
+        finished = operation_finished(
+            2,
+            "2026-01-01T00:00:01Z",
+            kind="evaluator",
+            generation=1,
+            operation_id="eval-1",
+        )
+
+        # when
+        with self.assertRaises(LearningContractError) as unknown_kind:
+            operation_started(
+                1,
+                "2026-01-01T00:00:00Z",
+                kind="planner",
+                generation=1,
+                operation_id="planner-1",
+            )
+        with self.assertRaises(LearningContractError) as nonterminal_status:
+            operation_finished(
+                2,
+                "2026-01-01T00:00:01Z",
+                kind="evaluator",
+                generation=1,
+                operation_id="eval-1",
+                status="started",
+            )
+        with self.assertRaises(LearningContractError) as unknown_operation:
+            replay(
+                initial=initial,
+                events=[
+                    started,
+                    operation_finished(
+                        2,
+                        "2026-01-01T00:00:01Z",
+                        kind="evaluator",
+                        generation=1,
+                        operation_id="eval-other",
+                    ),
+                ],
+            )
+        with self.assertRaises(LearningContractError) as wrong_generation:
+            replay(
+                initial=initial,
+                events=[
+                    started,
+                    operation_finished(
+                        2,
+                        "2026-01-01T00:00:01Z",
+                        kind="evaluator",
+                        generation=2,
+                        operation_id="eval-1",
+                    ),
+                ],
+            )
+        with self.assertRaises(LearningContractError) as wrong_kind:
+            replay(
+                initial=initial,
+                events=[
+                    started,
+                    operation_finished(
+                        2,
+                        "2026-01-01T00:00:01Z",
+                        kind="task",
+                        generation=1,
+                        operation_id="eval-1",
+                    ),
+                ],
+            )
+        with self.assertRaises(LearningContractError) as rebound_result:
+            replay(
+                initial=initial,
+                events=[
+                    started,
+                    finished,
+                    operation_finished(
+                        3,
+                        "2026-01-01T00:00:02Z",
+                        kind="evaluator",
+                        generation=1,
+                        operation_id="eval-1",
+                        result_digest="result-2",
+                        usage_digest="usage-2",
+                    ),
+                ],
+            )
+
+        # then
+        self.assertIn("schema.closed_enums", requirements(unknown_kind.exception))
+        self.assertIn("schema.closed_enums", requirements(nonterminal_status.exception))
+        self.assertIn("policy.unknown_operation", requirements(unknown_operation.exception))
+        self.assertIn("policy.operation_identity", requirements(wrong_generation.exception))
+        self.assertIn("policy.operation_identity", requirements(wrong_kind.exception))
+        self.assertIn("policy.operation_identity", requirements(rebound_result.exception))
+
+    def test_created_neutral_trial_run_consumes_assignment(self) -> None:
+        # given
+        initial, admitted = admitted_trial(FIRST_CLOCK)
+        trial = trial_of(initial, admitted)
+        created = trial_run_created(
+            7,
+            CONTROL_OCCURRENCE,
+            trial["candidate_record_digest"],
+            "trial-run-1",
+        )
+        settled = trial_run_settled(8, CONTROL_OCCURRENCE, "trial-run-1", "neutral")
+
+        # when
+        created_result = replay(initial=initial, events=[*admitted, created])
+        settled_result = replay(initial=initial, events=[*admitted, created, settled])
+
+        # then
+        created_assignments = created_result["state"]["jobs"]["job-a"]["trial"]["assignments"]
+        self.assertEqual(len(created_assignments), 1)
+        self.assertEqual(created_assignments[0]["run_id"], "trial-run-1")
+        self.assertEqual(created_assignments[0]["status"], "created")
+        settled_assignment = settled_result["state"]["jobs"]["job-a"]["trial"]["assignments"][0]
+        self.assertEqual(settled_assignment["status"], "settled")
+        self.assertEqual(settled_assignment["outcome"], "neutral")
+        self.assertEqual(settled_result["state"]["jobs"]["job-a"]["trial"]["status"], "open")
+
+    def test_trial_run_is_known_owner_signal_subject_and_advances_feedback_revision(self) -> None:
+        # given
+        initial, admitted = admitted_trial(FIRST_CLOCK)
+        trial = trial_of(initial, admitted)
+        created = trial_run_created(
+            7,
+            CONTROL_OCCURRENCE,
+            trial["candidate_record_digest"],
+            "trial-run-1",
+        )
+        useful = run_signal(
+            8,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "trial-run-1",
+            "result_useful",
+            revision=1,
+        )
+
+        # when
+        result = replay(initial=initial, events=[*admitted, created, useful])
+
+        # then
+        job_state = result["state"]["jobs"]["job-a"]
+        self.assertEqual(job_state["feedback_revision"], 1)
+        self.assertEqual(job_state["owner_signals"][-1]["subject_digest"], "trial-run-1")
+        self.assertEqual(job_state["trial"]["status"], "open")
+
+    def test_trial_closure_requires_bounded_settled_runs_and_frozen_adapter_evidence(
+        self,
+    ) -> None:
+        # given
+        generic_initial, generic_admitted = admitted_trial(FIRST_CLOCK)
+        generic_trial = trial_of(generic_initial, generic_admitted)
+        generic_candidate = generic_trial["candidate_record_digest"]
+        frozen_initial, frozen_admitted = admitted_trial(FIRST_CLOCK, adapter=adapter_binding())
+        frozen_trial = trial_of(frozen_initial, frozen_admitted)
+        frozen_candidate = frozen_trial["candidate_record_digest"]
+        generic_created = [
+            trial_run_created(7, CONTROL_OCCURRENCE, generic_candidate, "trial-run-1"),
+            trial_run_created(8, CONTROL_OCCURRENCE, generic_candidate, "trial-run-2"),
+            trial_run_created(9, CONTROL_OCCURRENCE, generic_candidate, "trial-run-3"),
+        ]
+        fourth = trial_run_created(10, CONTROL_OCCURRENCE, generic_candidate, "trial-run-4")
+        unsettled_tail = [
+            *generic_created,
+            trial_run_settled(10, CONTROL_OCCURRENCE, "trial-run-1", "positive"),
+            trial_run_settled(11, CONTROL_OCCURRENCE, "trial-run-2", "positive"),
+        ]
+        negative_tail = [
+            trial_run_created(7, CONTROL_OCCURRENCE, generic_candidate, "trial-run-1"),
+            trial_run_created(8, CONTROL_OCCURRENCE, generic_candidate, "trial-run-2"),
+            trial_run_settled(9, CONTROL_OCCURRENCE, "trial-run-1", "negative"),
+        ]
+        generic_positive_tail = [
+            trial_run_created(7, CONTROL_OCCURRENCE, generic_candidate, "trial-run-1"),
+            trial_run_created(8, CONTROL_OCCURRENCE, generic_candidate, "trial-run-2"),
+            trial_run_settled(9, CONTROL_OCCURRENCE, "trial-run-1", "positive"),
+            trial_run_settled(10, CONTROL_OCCURRENCE, "trial-run-2", "positive"),
+        ]
+        frozen_positive_tail = [
+            trial_run_created(7, CONTROL_OCCURRENCE, frozen_candidate, "trial-run-1"),
+            trial_run_created(8, CONTROL_OCCURRENCE, frozen_candidate, "trial-run-2"),
+            trial_run_settled(9, CONTROL_OCCURRENCE, "trial-run-1", "positive"),
+            trial_run_settled(10, CONTROL_OCCURRENCE, "trial-run-2", "positive"),
+        ]
+        inconclusive = adapter_receipt(
+            7,
+            CONTROL_OCCURRENCE,
+            trial_digest=trial_subject_digest(frozen_trial),
+            candidate_digest=frozen_trial["replacement_digest"],
+            outcome="inconclusive",
+        )
+        inconclusive_tail = [
+            inconclusive,
+            trial_run_created(8, CONTROL_OCCURRENCE, frozen_candidate, "trial-run-1"),
+            trial_run_created(9, CONTROL_OCCURRENCE, frozen_candidate, "trial-run-2"),
+            trial_run_settled(10, CONTROL_OCCURRENCE, "trial-run-1", "positive"),
+            trial_run_settled(11, CONTROL_OCCURRENCE, "trial-run-2", "positive"),
+        ]
+
+        # when
+        with self.assertRaises(LearningContractError) as over_limit:
+            replay(initial=generic_initial, events=[*generic_admitted, *generic_created, fourth])
+        unsettled = replay(initial=generic_initial, events=[*generic_admitted, *unsettled_tail])
+        negative = replay(initial=generic_initial, events=[*generic_admitted, *negative_tail])
+        generic_positive = replay(
+            initial=generic_initial,
+            events=[*generic_admitted, *generic_positive_tail],
+        )
+        frozen_missing = replay(
+            initial=frozen_initial,
+            events=[*frozen_admitted, *frozen_positive_tail],
+        )
+        before_inconclusive_closure = replay(
+            initial=frozen_initial,
+            events=[*frozen_admitted, inconclusive],
+        )
+        after_inconclusive_closure = replay(
+            initial=frozen_initial,
+            events=[*frozen_admitted, *inconclusive_tail],
+        )
+
+        # then
+        self.assertIn("policy.assignment_limit", requirements(over_limit.exception))
+        unsettled_trial = unsettled["state"]["jobs"]["job-a"]["trial"]
+        self.assertEqual(unsettled_trial["status"], "open")
+        self.assertIsNotNone(unsettled_trial["assignment_closed_at"])
+        self.assertEqual(negative["decisions"][-1]["decision"], "fallback")
+        self.assertEqual(negative["decisions"][-1]["reason"], "negative_trial_run")
+        self.assertEqual(generic_positive["decisions"][-1]["decision"], "promoted")
+        self.assertEqual(frozen_missing["decisions"][-1]["decision"], "fallback")
+        self.assertEqual(frozen_missing["decisions"][-1]["reason"], "adapter_pass_missing")
+        self.assertEqual(
+            before_inconclusive_closure["state"]["jobs"]["job-a"]["trial"]["status"],
+            "open",
+        )
+        self.assertEqual(after_inconclusive_closure["decisions"][-1]["decision"], "fallback")
+        self.assertEqual(
+            after_inconclusive_closure["decisions"][-1]["reason"],
+            "adapter_inconclusive",
+        )
+
+    def test_clock_advanced_closes_assignment_at_30_days_and_falls_back_at_37_days(
+        self,
+    ) -> None:
+        # given
+        initial, admitted = admitted_trial("2026-01-01T00:00:00Z")
+        trial = trial_of(initial, admitted)
+        created = trial_run_created(
+            7,
+            CONTROL_OCCURRENCE,
+            trial["candidate_record_digest"],
+            "trial-run-1",
+        )
+        future_ordinary = trial_run_created(
+            7,
+            "2026-02-01T00:00:00Z",
+            trial["candidate_record_digest"],
+            "future-ordinary-run",
+        )
+        assignment_close = clock_advanced(8, "2026-01-31T00:00:00Z")
+        before_decision_close = clock_advanced(9, "2026-02-06T23:59:59Z")
+        decision_close = clock_advanced(10, "2026-02-07T00:00:00Z")
+
+        # when
+        ordinary_result = replay(initial=initial, events=[*admitted, future_ordinary])
+        closed_assignment = replay(
+            initial=initial,
+            events=[*admitted, created, assignment_close],
+        )
+        before_decision = replay(
+            initial=initial,
+            events=[*admitted, created, assignment_close, before_decision_close],
+        )
+        result = replay(
+            initial=initial,
+            events=[
+                *admitted,
+                created,
+                assignment_close,
+                before_decision_close,
+                decision_close,
+            ],
+        )
+
+        # then
+        ordinary_trial = ordinary_result["state"]["jobs"]["job-a"]["trial"]
+        self.assertEqual(ordinary_result["state"]["controlled_clock"], "2026-01-01T00:00:00Z")
+        self.assertIsNone(ordinary_trial["assignment_closed_at"])
+        self.assertEqual(ordinary_trial["status"], "open")
+        self.assertEqual(
+            closed_assignment["state"]["jobs"]["job-a"]["trial"]["assignment_closed_at"],
+            "2026-01-31T00:00:00Z",
+        )
+        self.assertEqual(closed_assignment["state"]["jobs"]["job-a"]["trial"]["status"], "open")
+        before_decision_trial = before_decision["state"]["jobs"]["job-a"]["trial"]
+        self.assertEqual(before_decision_trial["status"], "open")
+        self.assertFalse(
+            any(item["decision"] == "fallback" for item in before_decision["decisions"])
+        )
+        self.assertEqual(result["decisions"][-1]["decision"], "fallback")
+        self.assertEqual(result["decisions"][-1]["reason"], "decision_deadline_incomplete")
+
+    def test_adapter_receipt_requires_exact_subject_frozen_identity_and_candidate(self) -> None:
+        # given
+        initial, admitted = admitted_trial(FIRST_CLOCK, adapter=adapter_binding())
+        trial = trial_of(initial, admitted)
+        mismatch_rows: list[tuple[str, dict[str, Any]]] = [
+            ("subject_kind", {"subject_kind": "promotion"}),
+            ("subject_digest", {"subject_digest": "f" * 64}),
+            ("candidate", {"envelope_overrides": {"candidate_digest": "f" * 64}}),
+            ("dataset", {"envelope_overrides": {"dataset_digest": "f" * 64}}),
+            ("oracle", {"envelope_overrides": {"oracle_digest": "f" * 64}}),
+            ("gates", {"envelope_overrides": {"gates_digest": "f" * 64}}),
+            (
+                "execution_surface",
+                {"envelope_overrides": {"execution_surface_digest": "f" * 64}},
+            ),
+        ]
+
+        # when / then
+        for name, overrides in mismatch_rows:
+            with self.subTest(row=name):
+                with self.assertRaises(LearningContractError) as caught:
+                    replay(
+                        initial=initial,
+                        events=[
+                            *admitted,
+                            adapter_receipt(
+                                7,
+                                CONTROL_OCCURRENCE,
+                                trial_digest=trial_subject_digest(trial),
+                                candidate_digest=trial["replacement_digest"],
+                                outcome="pass",
+                                **overrides,
+                            ),
+                        ],
+                    )
+                expected = (
+                    "policy.adapter_subject"
+                    if name.startswith("subject_")
+                    else "policy.adapter_binding"
+                )
+                self.assertIn(expected, requirements(caught.exception))
+
+    def test_adapter_receipt_rejects_each_identity_mismatch(self) -> None:
+        # given
+        initial, admitted = admitted_trial(FIRST_CLOCK, adapter=adapter_binding())
+        trial = trial_of(initial, admitted)
+        rows = [
+            ("adapter_id", {"adapter_id": "other-adapter"}),
+            ("adapter_version", {"adapter_version": "v2"}),
+        ]
+
+        # when / then
+        for name, envelope_overrides in rows:
+            with self.subTest(row=name):
+                with self.assertRaises(LearningContractError) as caught:
+                    replay(
+                        initial=initial,
+                        events=[
+                            *admitted,
+                            adapter_receipt(
+                                7,
+                                CONTROL_OCCURRENCE,
+                                trial_digest=trial_subject_digest(trial),
+                                candidate_digest=trial["replacement_digest"],
+                                outcome="pass",
+                                envelope_overrides=envelope_overrides,
+                            ),
+                        ],
+                    )
+                self.assertIn("policy.adapter_binding", requirements(caught.exception))
+
+    def test_exact_pass_plus_two_positives_promotes_and_critical_falls_back(self) -> None:
+        # given
+        initial, admitted = admitted_trial(FIRST_CLOCK, adapter=adapter_binding())
+        trial = trial_of(initial, admitted)
+        candidate = trial["candidate_record_digest"]
+        passed = adapter_receipt(
+            7,
+            CONTROL_OCCURRENCE,
+            trial_digest=trial_subject_digest(trial),
+            candidate_digest=trial["replacement_digest"],
+            outcome="pass",
+        )
+        positive_tail = [
+            passed,
+            trial_run_created(8, CONTROL_OCCURRENCE, candidate, "trial-run-1"),
+            trial_run_created(9, CONTROL_OCCURRENCE, candidate, "trial-run-2"),
+            trial_run_settled(10, CONTROL_OCCURRENCE, "trial-run-1", "positive"),
+            trial_run_settled(11, CONTROL_OCCURRENCE, "trial-run-2", "positive"),
+        ]
+        insufficient_tail = [
+            passed,
+            trial_run_created(8, CONTROL_OCCURRENCE, candidate, "trial-run-1"),
+            trial_run_created(9, CONTROL_OCCURRENCE, candidate, "trial-run-2"),
+            trial_run_created(10, CONTROL_OCCURRENCE, candidate, "trial-run-3"),
+            trial_run_settled(11, CONTROL_OCCURRENCE, "trial-run-1", "positive"),
+            trial_run_settled(12, CONTROL_OCCURRENCE, "trial-run-2", "neutral"),
+            trial_run_settled(13, CONTROL_OCCURRENCE, "trial-run-3", "neutral"),
+        ]
+
+        # when
+        pass_only = replay(initial=initial, events=[*admitted, passed])
+        promoted = replay(initial=initial, events=[*admitted, *positive_tail])
+        insufficient = replay(initial=initial, events=[*admitted, *insufficient_tail])
+        veto_results = []
+        for outcome in ("critical", "regression"):
+            veto = adapter_receipt(
+                7,
+                CONTROL_OCCURRENCE,
+                trial_digest=trial_subject_digest(trial),
+                candidate_digest=trial["replacement_digest"],
+                outcome=outcome,
+            )
+            veto_results.append((outcome, replay(initial=initial, events=[*admitted, veto])))
+
+        # then
+        self.assertEqual(pass_only["state"]["jobs"]["job-a"]["trial"]["status"], "open")
+        self.assertEqual(promoted["decisions"][-1]["decision"], "promoted")
+        self.assertEqual(promoted["state"]["jobs"]["job-a"]["trial"]["status"], "promoted")
+        self.assertEqual(insufficient["decisions"][-1]["decision"], "fallback")
+        self.assertEqual(insufficient["decisions"][-1]["reason"], "insufficient_positive_runs")
+        self.assertEqual(
+            promoted["state"]["jobs"]["job-a"]["trial"]["trial_digest"],
+            trial_subject_digest(trial),
+        )
+        for outcome, result in veto_results:
+            with self.subTest(adapter_outcome=outcome):
+                self.assertEqual(result["decisions"][-1]["decision"], "fallback")
+                self.assertEqual(result["decisions"][-1]["reason"], f"adapter_{outcome}")
+                self.assertEqual(result["state"]["jobs"]["job-a"]["trial"]["status"], "fallback")
 
 
 if __name__ == "__main__":

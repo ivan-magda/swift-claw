@@ -20,9 +20,11 @@ from benchmark_learning.learning_contract import (
     LearningContractError,
     ReplayEvent,
     ReplayEventKind,
+    adapter_envelope_json,
     canonical_event_log,
     decision_receipt,
     event_json,
+    parse_adapter_envelope,
     replay_receipt,
 )
 
@@ -36,6 +38,8 @@ _EVIDENCE_WINDOW_SIZE = 5
 _NEGATIVE_RUNS_FOR_TRIGGER = 2
 _ASSIGNMENT_DEADLINE_DAYS = 30
 _DECISION_DEADLINE_DAYS = 37
+_MAX_TRIAL_ASSIGNMENTS = 3
+_POSITIVE_TRIAL_RUNS = 2
 _MAX_LESSONS = 3
 _MAX_LESSON_BYTES = 512
 _MAX_LESSON_SET_BYTES = 1536
@@ -47,6 +51,7 @@ _OWNER_NOT_USEFUL_CODE = "owner_not_useful"
 _TRIGGER_DOMAIN = "scheduled-learning/v1/trigger"
 _CANDIDATE_RECORD_DOMAIN = "scheduled-learning/v1/candidate-record"
 _CANDIDATE_SOURCE_DOMAIN = "scheduled-learning/v1/candidate-source"
+_TRIAL_DOMAIN = "scheduled-learning/v1/trial"
 
 _INITIAL_JOB_KEYS = {
     "job_id",
@@ -304,6 +309,25 @@ def _trigger(job: dict[str, Any], digest: Any) -> dict[str, Any] | None:
     return None
 
 
+def _open_trial(job: dict[str, Any]) -> dict[str, Any] | None:
+    trial = job["trial"]
+    if trial is None or trial["status"] != "open":
+        return None
+    open_trial: dict[str, Any] = trial
+    return open_trial
+
+
+def _trial_assignment(job: dict[str, Any], run_id: Any) -> dict[str, Any] | None:
+    trial = job["trial"]
+    if trial is None:
+        return None
+    for record in trial["assignments"]:
+        if record["run_id"] == run_id:
+            assignment: dict[str, Any] = record
+            return assignment
+    return None
+
+
 def _decision(
     *,
     before: dict[str, Any],
@@ -477,7 +501,7 @@ def _maybe_trigger(
     event: ReplayEvent,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     job = state["jobs"][job_id]
-    if job["cancelled"] or not job["repeatable"] or job["trial"] is not None:
+    if job["cancelled"] or not job["repeatable"] or _open_trial(job) is not None:
         return state, []
     trigger = _qualifying_trigger(state, job)
     if trigger is None or _trigger(job, trigger["trigger_digest"]) is not None:
@@ -518,7 +542,20 @@ def _apply_controller_started(
             f"$.payload.controller_generation must equal {expected}",
         )
     _require_valid(issues)
-    return {**state, "controller_generation": expected}, []
+    jobs: dict[str, Any] = {}
+    for job_id, job in state["jobs"].items():
+        operations = {
+            operation_id: {
+                **record,
+                "status": "interrupted_unknown",
+            }
+            if record["status"] == "started" and record["attempt_generation"] < expected
+            else record
+            for operation_id, record in job["operations"].items()
+        }
+        jobs[job_id] = {**job, "operations": operations}
+    after = {**state, "controller_generation": expected, "jobs": jobs}
+    return _reconcile_all(after, event)
 
 
 def _apply_clock_advanced(
@@ -533,7 +570,7 @@ def _apply_clock_advanced(
             "$.occurred_at must not precede the controlled clock",
         )
     _require_valid(issues)
-    return {**state, "controlled_clock": event.occurred_at}, []
+    return _reconcile_all({**state, "controlled_clock": event.occurred_at}, event)
 
 
 def _apply_operation_started(
@@ -635,7 +672,10 @@ def _subject_issues(
         issue(issues, "policy.signal_subject", "$.payload.signal cannot target this subject kind")
         return
     if kind == "run":
-        recorded = any(entry["run_id"] == payload["run_id"] for entry in job["evaluations"])
+        recorded = (
+            any(entry["run_id"] == payload["run_id"] for entry in job["evaluations"])
+            or _trial_assignment(job, payload["run_id"]) is not None
+        )
         if not recorded:
             issue(issues, "policy.unknown_subject", "$.payload.run_id is not a recorded run")
         elif payload["subject_digest"] != payload["run_id"]:
@@ -748,9 +788,13 @@ def _apply_owner_signal(
     _supersession_issues(job, payload, issues)
     _require_valid(issues)
     state = _replace_job(state, _record_owner_signal(job, event))
+    decisions: list[dict[str, Any]] = []
     if payload["subject_kind"] == "candidate":
-        return _apply_candidate_control(state, event), []
-    return _maybe_trigger(state, payload["job_id"], event)
+        state = _apply_candidate_control(state, event)
+    else:
+        state, decisions = _maybe_trigger(state, payload["job_id"], event)
+    state, trial_decisions = _reconcile_job(state, payload["job_id"], event)
+    return state, [*decisions, *trial_decisions]
 
 
 # MARK: - Candidate lessons and digests
@@ -1269,7 +1313,7 @@ def _admission_issues(
         issue(issues, "policy.job_not_repeatable", "$.payload.job_id is not a repeatable job")
     if job["cancelled"]:
         issue(issues, "policy.job_cancelled", "$.payload.job_id is cancelled")
-    if job["trial"] is not None:
+    if _open_trial(job) is not None:
         issue(issues, "policy.open_trial", "$.payload.job_id already has an open trial")
     if candidate["admitted"]:
         issue(issues, "policy.candidate_already_admitted", "$.payload names an admitted candidate")
@@ -1339,7 +1383,12 @@ def _apply_candidate_admitted(
     _admission_issues(state, job, candidate, payload, issues)
     _require_valid(issues)
     admitted_at = state["controlled_clock"]
-    trial = {
+    assignment_deadline = _shift_days(admitted_at, _ASSIGNMENT_DEADLINE_DAYS)
+    decision_deadline = _shift_days(admitted_at, _DECISION_DEADLINE_DAYS)
+    adapter = _copy_body(payload["adapter"])
+    trial_core = {
+        "schema_version": _SCHEMA_VERSION,
+        "job_id": job["job_id"],
         "candidate_record_digest": payload["candidate_record_digest"],
         "replacement_digest": payload["replacement_digest"],
         "base_digest": payload["base_digest"],
@@ -1347,12 +1396,19 @@ def _apply_candidate_admitted(
         "learning_epoch": payload["learning_epoch"],
         "feedback_revision": payload["feedback_revision"],
         "algorithm_id": state["algorithm_id"],
-        "adapter": _copy_body(payload["adapter"]),
+        "adapter": adapter,
         "admitted_at": admitted_at,
-        "assignment_deadline": _shift_days(admitted_at, _ASSIGNMENT_DEADLINE_DAYS),
-        "decision_deadline": _shift_days(admitted_at, _DECISION_DEADLINE_DAYS),
+        "assignment_deadline": assignment_deadline,
+        "decision_deadline": decision_deadline,
+    }
+    trial = {
+        **{field: value for field, value in trial_core.items() if field != "schema_version"},
+        "trial_digest": canonical_sha256({"domain": _TRIAL_DOMAIN, "value": trial_core}),
         "assignments": [],
+        "assignment_closed_at": None,
+        "adapter_receipt": None,
         "status": "open",
+        "decided_at": None,
     }
     closed = _closed_replacement_key(state, job, payload["replacement_digest"])
     updated = {
@@ -1379,9 +1435,298 @@ def _apply_candidate_admitted(
             "adapter": trial["adapter"],
             "assignment_deadline": trial["assignment_deadline"],
             "decision_deadline": trial["decision_deadline"],
+            "trial_digest": trial["trial_digest"],
         },
     )
     return after, [receipt]
+
+
+# MARK: - Trial lifecycle
+
+
+def _effective_trial_outcome(job: dict[str, Any], assignment: dict[str, Any]) -> str | None:
+    if assignment["status"] != "settled":
+        return None
+    signal = _effective_signal(job, "run", assignment["run_id"])
+    if signal is not None:
+        if signal["signal"] == "result_useful":
+            return "positive"
+        if signal["signal"] in {"result_not_useful", "result_correction"}:
+            return "negative"
+    outcome: str = assignment["outcome"]
+    return outcome
+
+
+def _trial_artifact_identities(job: dict[str, Any], trial: dict[str, Any]) -> dict[str, Any]:
+    assignments = [
+        {
+            **assignment,
+            "effective_outcome": _effective_trial_outcome(job, assignment),
+        }
+        for assignment in trial["assignments"]
+    ]
+    return {
+        "job_id": job["job_id"],
+        "trial_digest": trial["trial_digest"],
+        "candidate_record_digest": trial["candidate_record_digest"],
+        "replacement_digest": trial["replacement_digest"],
+        "base_digest": trial["base_digest"],
+        "base_revision": trial["base_revision"],
+        "learning_epoch": trial["learning_epoch"],
+        "feedback_revision": trial["feedback_revision"],
+        "adapter": trial["adapter"],
+        "adapter_receipt": trial["adapter_receipt"],
+        "assignments": assignments,
+        "positive_run_ids": sorted(
+            assignment["run_id"]
+            for assignment in assignments
+            if assignment["effective_outcome"] == "positive"
+        ),
+    }
+
+
+def _close_trial(
+    state: dict[str, Any],
+    job: dict[str, Any],
+    trial: dict[str, Any],
+    event: ReplayEvent,
+    *,
+    decision: str,
+    reason: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    closed_trial = {
+        **trial,
+        "assignment_closed_at": trial["assignment_closed_at"] or state["controlled_clock"],
+        "status": decision,
+        "decided_at": state["controlled_clock"],
+    }
+    after = _replace_job(state, {**job, "trial": closed_trial})
+    receipt = _decision(
+        before=state,
+        after=after,
+        event=event,
+        decision=decision,
+        reason=reason,
+        artifact_identities=_trial_artifact_identities(job, closed_trial),
+    )
+    return after, [receipt]
+
+
+def _immediate_trial_decision(
+    job: dict[str, Any],
+    trial: dict[str, Any],
+    outcomes: list[str | None],
+) -> tuple[str, str] | None:
+    candidate = _candidate(job, trial["candidate_record_digest"])
+    if candidate is not None and candidate["vetoed"]:
+        return "fallback", "hard_veto"
+    adapter_receipt = trial["adapter_receipt"]
+    adapter_outcome = None if adapter_receipt is None else adapter_receipt["outcome"]
+    if adapter_outcome in {"critical", "regression"}:
+        return "fallback", f"adapter_{adapter_outcome}"
+    if "negative" in outcomes:
+        return "fallback", "negative_trial_run"
+    return None
+
+
+def _closed_trial_decision(
+    state: dict[str, Any],
+    trial: dict[str, Any],
+    *,
+    all_settled: bool,
+    positive_count: int,
+) -> tuple[str, str] | None:
+    if state["controlled_clock"] >= trial["decision_deadline"] and not all_settled:
+        return "fallback", "decision_deadline_incomplete"
+    if trial["assignment_closed_at"] is None or not all_settled:
+        return None
+    if positive_count < _POSITIVE_TRIAL_RUNS:
+        return "fallback", "insufficient_positive_runs"
+    adapter_receipt = trial["adapter_receipt"]
+    if trial["adapter"] is not None and adapter_receipt is None:
+        return "fallback", "adapter_pass_missing"
+    if adapter_receipt is not None and adapter_receipt["outcome"] == "inconclusive":
+        return "fallback", "adapter_inconclusive"
+    return "promoted", "trial_evidence_satisfied"
+
+
+def _reconcile_job(
+    state: dict[str, Any],
+    job_id: str,
+    event: ReplayEvent,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    job = state["jobs"][job_id]
+    trial = _open_trial(job)
+    if trial is None:
+        return state, []
+
+    outcomes = [_effective_trial_outcome(job, assignment) for assignment in trial["assignments"]]
+    immediate = _immediate_trial_decision(job, trial, outcomes)
+    if immediate is not None:
+        decision, reason = immediate
+        return _close_trial(
+            state,
+            job,
+            trial,
+            event,
+            decision=decision,
+            reason=reason,
+        )
+
+    all_settled = all(assignment["status"] == "settled" for assignment in trial["assignments"])
+    positive_count = outcomes.count("positive")
+    assignment_should_close = (
+        len(trial["assignments"]) >= _MAX_TRIAL_ASSIGNMENTS
+        or state["controlled_clock"] >= trial["assignment_deadline"]
+        or (positive_count >= _POSITIVE_TRIAL_RUNS and all_settled)
+    )
+    if trial["assignment_closed_at"] is None and assignment_should_close:
+        trial = {**trial, "assignment_closed_at": state["controlled_clock"]}
+        job = {**job, "trial": trial}
+        state = _replace_job(state, job)
+    terminal = _closed_trial_decision(
+        state,
+        trial,
+        all_settled=all_settled,
+        positive_count=positive_count,
+    )
+    if terminal is None:
+        return state, []
+    decision, reason = terminal
+    return _close_trial(
+        state,
+        job,
+        trial,
+        event,
+        decision=decision,
+        reason=reason,
+    )
+
+
+def _reconcile_all(
+    state: dict[str, Any],
+    event: ReplayEvent,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    decisions: list[dict[str, Any]] = []
+    for job_id in sorted(state["jobs"]):
+        state, produced = _reconcile_job(state, job_id, event)
+        decisions.extend(produced)
+    return state, decisions
+
+
+def _apply_trial_run_created(
+    state: dict[str, Any],
+    event: ReplayEvent,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    payload = event.payload
+    job = _job_or_raise(state, payload["job_id"])
+    trial = _open_trial(job)
+    if trial is None:
+        _reject("policy.no_open_trial", "$.payload.job_id has no open trial")
+    issues: list[ValidationIssue] = []
+    if payload["candidate_record_digest"] != trial["candidate_record_digest"]:
+        issue(
+            issues,
+            "policy.trial_candidate",
+            "$.payload.candidate_record_digest must equal the open trial candidate",
+        )
+    if trial["assignment_closed_at"] is not None or len(trial["assignments"]) >= (
+        _MAX_TRIAL_ASSIGNMENTS
+    ):
+        issue(
+            issues,
+            "policy.assignment_limit",
+            "$.payload cannot create a run after the trial assignment boundary",
+        )
+    if any(entry["run_id"] == payload["run_id"] for entry in job["evaluations"]) or any(
+        entry["run_id"] == payload["run_id"] for entry in trial["assignments"]
+    ):
+        issue(issues, "policy.duplicate_trial_run", "$.payload.run_id is already recorded")
+    _require_valid(issues)
+    assignment = {"run_id": payload["run_id"], "status": "created", "outcome": None}
+    updated_trial = {**trial, "assignments": [*trial["assignments"], assignment]}
+    state = _replace_job(state, {**job, "trial": updated_trial})
+    return _reconcile_job(state, payload["job_id"], event)
+
+
+def _apply_trial_run_settled(
+    state: dict[str, Any],
+    event: ReplayEvent,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    payload = event.payload
+    job = _job_or_raise(state, payload["job_id"])
+    trial = _open_trial(job)
+    if trial is None:
+        _reject("policy.no_open_trial", "$.payload.job_id has no open trial")
+    assignment = _trial_assignment(job, payload["run_id"])
+    if assignment is None:
+        _reject("policy.unknown_trial_run", "$.payload.run_id is not assigned to this trial")
+    if assignment["status"] != "created":
+        _reject("policy.trial_run_settled", "$.payload.run_id is already settled")
+    assignments = [
+        {**record, "status": "settled", "outcome": payload["outcome"]}
+        if record["run_id"] == payload["run_id"]
+        else record
+        for record in trial["assignments"]
+    ]
+    state = _replace_job(state, {**job, "trial": {**trial, "assignments": assignments}})
+    return _reconcile_job(state, payload["job_id"], event)
+
+
+def _apply_adapter_receipt(
+    state: dict[str, Any],
+    event: ReplayEvent,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    payload = event.payload
+    job = _job_or_raise(state, payload["job_id"])
+    trial = _open_trial(job)
+    if trial is None:
+        _reject("policy.no_open_trial", "$.payload.job_id has no open trial")
+    envelope = adapter_envelope_json(parse_adapter_envelope(payload["envelope"]))
+    issues: list[ValidationIssue] = []
+    if payload["subject_kind"] != "trial" or payload["subject_digest"] != trial["trial_digest"]:
+        issue(
+            issues,
+            "policy.adapter_subject",
+            "$.payload must name the exact open trial subject",
+        )
+    frozen_adapter = trial["adapter"]
+    if frozen_adapter is None:
+        issue(
+            issues,
+            "policy.adapter_binding",
+            "$.payload.envelope is not permitted when the trial froze no adapter",
+        )
+    else:
+        for field in (
+            "adapter_id",
+            "adapter_version",
+            "dataset_digest",
+            "oracle_digest",
+            "gates_digest",
+            "execution_surface_digest",
+        ):
+            if envelope[field] != frozen_adapter[field]:
+                issue(
+                    issues,
+                    "policy.adapter_binding",
+                    f"$.payload.envelope.{field} must equal the frozen trial identity",
+                )
+        if envelope["candidate_digest"] != trial["replacement_digest"]:
+            issue(
+                issues,
+                "policy.adapter_binding",
+                "$.payload.envelope.candidate_digest must equal the trial replacement",
+            )
+    if trial["adapter_receipt"] is not None:
+        issue(
+            issues,
+            "policy.duplicate_adapter_receipt",
+            "$.payload cannot replace the trial adapter receipt",
+        )
+    _require_valid(issues)
+    state = _replace_job(state, {**job, "trial": {**trial, "adapter_receipt": envelope}})
+    return _reconcile_job(state, payload["job_id"], event)
 
 
 # MARK: - Stable evaluations and replay
@@ -1418,6 +1763,9 @@ _HANDLERS: dict[ReplayEventKind, _Handler] = {
     ReplayEventKind.NO_CANDIDATE_RECORDED: _apply_no_candidate,
     ReplayEventKind.CANDIDATE_ARTIFACT_RECORDED: _apply_candidate_artifact,
     ReplayEventKind.CANDIDATE_ADMITTED: _apply_candidate_admitted,
+    ReplayEventKind.TRIAL_RUN_CREATED: _apply_trial_run_created,
+    ReplayEventKind.TRIAL_RUN_SETTLED: _apply_trial_run_settled,
+    ReplayEventKind.ADAPTER_RECEIPT_RECORDED: _apply_adapter_receipt,
 }
 
 
