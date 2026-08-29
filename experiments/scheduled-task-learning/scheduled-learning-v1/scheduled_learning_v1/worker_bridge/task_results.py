@@ -159,6 +159,13 @@ _CONTROLLER_ADMISSION_CAPS = {
     "evaluation-stage-responses-send-cap",
     "evaluation-global-responses-send-cap",
 }
+_TOOL_VIOLATION_CODES = {
+    "expected_one_file_read",
+    "unexpected_tool",
+    "unexpected_file_read_path",
+    "file_read_failed",
+    "unexpected_suspension",
+}
 _MAX_ACTIVE_LESSONS = 3
 _MAX_LESSON_UTF8_BYTES = 512
 
@@ -511,8 +518,8 @@ def _valid_ineligible_failure(outcome: str, critical_code: object, reason: str) 
             critical_code is None and reason in _CONTROLLER_ADMISSION_CAPS
         )
     if outcome == "tool_contract_failure":
-        has_critical_code = isinstance(critical_code, str) and bool(critical_code)
-        return has_critical_code and reason == "task_contract_failure"
+        valid_code = isinstance(critical_code, str) and critical_code in _TOOL_VIOLATION_CODES
+        return valid_code and reason == "task_contract_failure"
     if outcome == "policy_mismatch":
         return False
     if outcome == "harness_failure":

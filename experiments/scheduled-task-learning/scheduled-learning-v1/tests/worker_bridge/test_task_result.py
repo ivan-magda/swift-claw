@@ -178,6 +178,21 @@ class TaskResultTests(unittest.TestCase):
             # then
             self.assertEqual(result["status"], "failed")
 
+    def test_completed_result_requires_non_null_output_counts(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = task_core(root)
+            call = TaskAttemptCall(core, root / "invocation.json", root / "result.json")
+            valid = task_result(core)
+            without_counts = {key: value for key, value in valid.items() if key != "output_counts"}
+            null_counts = {**valid, "output_counts": None}
+
+            # when / then
+            for name, changed in (("missing", without_counts), ("null", null_counts)):
+                with self.subTest(counts=name), self.assertRaises(ValueError):
+                    validate_task_result(call, changed)
+
     def test_rejects_outcome_specific_failure_shape_mutations(self) -> None:
         # given
         with TemporaryDirectory() as temporary:
@@ -249,3 +264,20 @@ class TaskResultTests(unittest.TestCase):
             ):
                 with self.subTest(completed_shape=outcome), self.assertRaises(ValueError):
                     validate_task_result(call, {**valid, "outcome": outcome})
+
+    def test_rejects_unknown_nonempty_tool_contract_critical_code(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = task_core(root)
+            call = TaskAttemptCall(core, root / "invocation.json", root / "result.json")
+            changed = {
+                **task_result(core),
+                "outcome": "tool_contract_failure",
+                "critical_code": "invented_tool_violation",
+                "replacement_reason": "task_contract_failure",
+            }
+
+            # when / then
+            with self.assertRaises(ValueError):
+                validate_task_result(call, changed)

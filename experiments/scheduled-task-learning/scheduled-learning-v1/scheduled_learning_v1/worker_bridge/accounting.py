@@ -72,6 +72,8 @@ def validate_usage(
     if usage.get("provider_call_id") != provider_call_id:
         raise ValueError("usage provider-call ID does not bind to request")
     reported = _reported_total(usage, completion_cap)
+    if reported is not None and sends - not_started <= 0:
+        raise ValueError("reported learning usage requires an accountable send")
     accounted = _integer(usage, "accounted_tokens")
     reported_rows = 1 if reported is not None else 0
     expected = (reported or 0) + (sends - not_started - reported_rows) * missing_usage_token_proxy

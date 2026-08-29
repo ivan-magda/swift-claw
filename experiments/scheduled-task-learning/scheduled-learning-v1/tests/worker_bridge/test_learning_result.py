@@ -150,3 +150,29 @@ class LearningResultTests(unittest.TestCase):
             self.assertEqual(validate_learning_result(call, failed)["accounted_tokens"], 0)
             with self.assertRaises(ValueError):
                 validate_learning_result(call, response)
+
+    def test_rejects_zero_send_failed_usage_with_reported_terminal_row(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = learning_core(root)
+            call = LearningCall("evaluator", core, root / "request.json", root / "result.json")
+            request = write_authorized_request(call.request_path, core)
+            reported_usage = {
+                "provider_call_id": core["provider_call_id"],
+                "responses_sends": 0,
+                "proven_not_started_responses_sends": 0,
+                "prompt_tokens": 132_256,
+                "completion_tokens": 512,
+                "reported_total_tokens": 132_768,
+                "accounted_tokens": 0,
+                "is_estimated": False,
+            }
+            changed = {
+                **learning_result(core, "failed", request_sha256=canonical_sha256(request)),
+                "usage": reported_usage,
+            }
+
+            # when / then
+            with self.assertRaises(ValueError):
+                validate_learning_result(call, changed)
