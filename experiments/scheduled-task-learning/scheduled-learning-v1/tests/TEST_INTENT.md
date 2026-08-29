@@ -167,3 +167,21 @@ The two fix-round tests are non-redundant: one proves the candidate is derived f
 lesson data rather than a caller digest; the table proves each separate envelope projection reacts to
 its own changed identity. The existing full-receipt hash test remains the only check that an
 envelope-only identity change does not alter receipt bytes.
+
+## One-shot Swift worker bridge (Task 5)
+
+| Risk | Production branch or seam | Nearest existing test | Unique reachable mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| A bridge launches a second subprocess or swaps the evaluator command for the task command | `worker_bridge/bridge.py::WorkerBridge._run` subprocess boundary | `Tests/ClawEvaluationTests/Learning/Call/EvaluationLearningCallTests` runs Swift worker internals, never Python subprocess argv or durability | Invoke `subprocess.run` twice, or replace `learning-call --request` with `worker --invocation` | `test_process_launch::ProcessLaunchTests::test_launches_one_exact_learning_command_and_bounds_stdout_diagnostics` |
+| The final closed request lacks the committed start-event authorization, or uses an independently-derived event identity | `worker_bridge/requests.py::bind_authorization` and `bridge.py` use of `CommittedEvent` | `Tests/ClawEvaluationTests/Learning/Call/EvaluationLearningCallContractTests` verifies Swift admission against a prebuilt event but cannot observe Python's journal append-return binding | Omit `authorization`, use an event filename guessed from sequence, or rehash a different event object | `test_authorization::AuthorizationTests::test_writes_only_the_committed_start_event_path_and_sha_as_authorization` |
+| A task result from another carrier is accepted | `worker_bridge/task_results.py::validate_task_result` | `Tests/ClawEvaluationTests/Learning/EvaluationLearningWorkerTests` checks Swift task materialization but never Python result-to-call binding | Compare only job ID and accept a substituted `learning_carrier_sha256` | `test_task_result::TaskResultTests::test_rejects_malformed_and_substituted_carrier_results` |
+| A malformed/cross-operation evaluator or reflector result is accepted, or an output cap is ignored | `worker_bridge/learning_results.py::validate_learning_result` | `Tests/ClawEvaluationTests/Learning/Call/EvaluationLearningCallContractTests` owns Swift result construction, not Python terminal classification | Ignore `kind`/`operation_id`, or change `>` to `>=` at 513/769 completion tokens | `test_learning_result::LearningResultTests::test_rejects_wrong_kind_and_cross_operation_and_enforces_exact_completion_caps` and `::test_reflector_accepts_768_and_rejects_769_completion_tokens` |
+| Python double-subtracts reported usage, counts a failed-no-call send, or ignores the retry cap | `worker_bridge/accounting.py::validate_usage` | `Tests/ClawEvaluationTests/Learning/Call/EvaluationLearningCallRunnerTests` verifies the worker formula but cannot observe this Python revalidation | Subtract the terminal row twice, permit four sends, or permit nonzero failed-no-call sends | `test_accounting::AccountingTests::test_recomputes_reported_and_missing_usage_without_a_second_subtraction` and `::test_failed_no_call_is_zero_sends_and_handed_off_usage_is_bounded` |
+
+### Redundancy pass (`docs/TESTING.md` §9.1)
+
+The five groups protect separate seams: subprocess command/diagnostic behavior, returned-event
+authorization, task-carrier binding, learning-result identity/caps, and accounting arithmetic. The
+nearest Swift worker tests cannot observe Python's event durability or subprocess command line; they
+remain the authority for Swift tool freedom and network policy. Each test asserts public output or a
+durable input/result record, so behavior-preserving helper extraction or formatting leaves it green.
