@@ -169,6 +169,39 @@ import Testing
     #expect(error != nil)
   }
 
+  @Test func restartRejectsACanonicalCarrierWithAStaleLessonDigest() throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let staleDigest = String(repeating: "f", count: 64)
+    let fixture = try makeLearningWorkspaceFixture(
+      root: root,
+      attemptID: "restart-stale-lesson-digest",
+      split: "sealed",
+      stage: "sealed-post-restart",
+      condition: .postRestartLessonConditioned,
+      lessonSource: .durableActive,
+      hasPromotionReceipt: true,
+      expectedLessonSetDigest: staleDigest
+    )
+    let observedDigest = SHA256Digest.hex(Data(fixture.lessonSetText.utf8))
+
+    // when
+    let error = #expect(throws: EvaluationWorkspaceError.self) {
+      _ = try EvaluationWorkspaceMaterializer.resetLearning(
+        configuration: fixture.configuration
+      )
+    }
+
+    // then — omitting the common carrier/configuration digest guard admits stale restart input.
+    guard case .lessonDigestMismatch(let expected, let observed) = error else {
+      Issue.record("restart carrier did not fail at the common lesson digest binding")
+      return
+    }
+    #expect(expected == staleDigest)
+    #expect(observed == observedDigest)
+  }
+
   @Test func cleanRejectsANoncanonicalEmptySet() throws {
     // given
     let root = try makeEvaluationTestRoot()

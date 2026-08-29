@@ -332,6 +332,7 @@ enum InvalidCallResultMutation: String, CaseIterable, Sendable {
   case failedWithReportedModel
   case failedNoCallWithUsage
   case failedNoCallWithOutput
+  case failedNoCallWithOutputDigestOnly
   case failedNoCallWithoutFailureCode
   case failedNoCallWithFinishReason
   case failedNoCallWithReportedModel
@@ -373,8 +374,9 @@ enum InvalidCallResultMutation: String, CaseIterable, Sendable {
         output: nil,
         usage: validUsage
       )
-    case .failedNoCallWithUsage, .failedNoCallWithOutput, .failedNoCallWithoutFailureCode,
-      .failedNoCallWithFinishReason, .failedNoCallWithReportedModel:
+    case .failedNoCallWithUsage, .failedNoCallWithOutput, .failedNoCallWithOutputDigestOnly,
+      .failedNoCallWithoutFailureCode, .failedNoCallWithFinishReason,
+      .failedNoCallWithReportedModel:
       baseline = try result(
         fixture: fixture,
         outcome: .failedNoCall,
@@ -401,6 +403,8 @@ enum InvalidCallResultMutation: String, CaseIterable, Sendable {
     case .failedWithOutput, .failedNoCallWithOutput:
       object["output"] = "partial"
       object["output_sha256"] = SHA256Digest.hex(Data("partial".utf8))
+    case .failedNoCallWithOutputDigestOnly:
+      object["output_sha256"] = SHA256Digest.hex(Data("absent output".utf8))
     case .failedWithoutFailureCode, .failedNoCallWithoutFailureCode:
       object["failure_code"] = NSNull()
     case .failedWithFinishReason, .failedNoCallWithFinishReason:
