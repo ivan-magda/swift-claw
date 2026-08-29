@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "development": ["pc-development-07", "pc-development-08"],
+  "regression": ["pc-regression-04", "pc-regression-05", "pc-regression-06"],
+  "sealed": ["pc-sealed-05", "pc-sealed-06"]
+}

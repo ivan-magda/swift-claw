@@ -72,3 +72,49 @@ because conformance never runs through that layer at all.
 No redundant test forms apply: each test targets a distinct journal/controller seam (path/digest
 binding, sequence ordering, collision rejection, disk-truth loading, receipt publication, state/decision
 publication, reopened durability) with no repeated baseline case or unconstructible scenario.
+
+## Fresh M3 page-change data and closed carriers (Task 3)
+
+`page_benchmark`'s own suite (`experiments/scheduled-task-learning/page-change/tests/test_validation.py`,
+`tests/test_fixtures.py`) exercises `validate_source`/`validate_gold` and Protocol 0.6's fixture
+tooling directly against Protocol 0.6's 13-fixture corpus; it never imports `page_change_m3`, never
+constructs an evaluator/reflector carrier, and has no concept of a second, disjoint fresh corpus. So
+for every mutant below, "nearest existing page test" is nearest only in the sense that it happens to
+call the same reused validator function — it structurally cannot observe a bug confined to the M3
+carrier-construction or fresh-fixture-independence boundary this task adds.
+
+| Risk | Production branch or seam | Nearest existing test | Unique reachable mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| The evaluator or reflector carrier silently leaks a scoring/candidate/oracle field (directly or nested inside its own "closed" sub-object) to the model | `page_change_m3/materialize.py::build_evaluator_carrier` / `build_reflector_carrier` | `page-change/tests/test_validation.py` (nearest reused-validator case, but it only checks `page_benchmark`'s own attempt/gold/lesson-candidate schemas, never an M3 carrier) | Add `"active_lessons": task["active_lessons"]` (or any of `candidate_digest`/`trial`/`score`/`gold`/`oracle`) to the evaluator carrier, or leave an evaluation's `oracle`/`score` key un-stripped in `build_reflector_carrier`'s blind summary | `test_carrier_visibility::EvaluatorCarrierVisibilityTests::test_evaluator_carrier_excludes_lessons_and_scoring_context` and `::ReflectorCarrierVisibilityTests::test_reflector_carrier_strips_an_oracle_field_from_an_evaluation_summary` |
+| `materialize_task` substitutes the clean/trial lesson set (returns a non-empty set for clean, or drops/mutates the effective set for trial) | `page_change_m3/materialize.py::materialize_task` | none in `page-change` (its own `materialize.py` builds page-change's own `target_class`-object lesson schema, a different shape, for a different, frozen corpus) | Return `active_lessons.lessons` as a copy of some default/stale list instead of the exact `[normalize_lesson_text(text) for text in lessons]` result, so clean silently carries a non-empty set or trial silently drops entries | `test_materialization::TaskMaterializationTests::test_clean_condition_uses_the_canonical_empty_lesson_set` and `::test_trial_condition_carries_the_exact_effective_lesson_set` |
+| A fresh M3 fixture reuses Protocol 0.6/M0 fixture content (same before/after HTML and region IDs under a new fixture ID), or the committed fresh split drifts from exactly 2/3/2 | `page_change_m3/fixtures.py::verify_fixture_independence` | `page-change/tests/test_fixtures.py::FixtureContractTests::test_all_fixtures_and_split_quotas_are_valid` (nearest: `page_benchmark.fixtures.validate_repository` checks Protocol 0.6's own split counts and cross-fixture literal/mechanism uniqueness *within* its one corpus, but has no concept of a second, sibling corpus to be disjoint from) | Copy an existing Protocol 0.6 fixture's `task` object into a fresh source under a new frozen fixture ID, or delete/duplicate one of the seven frozen fresh source/gold files | `test_fixture_boundary::FixtureBoundaryTests::test_a_fresh_source_reusing_protocol_06_task_content_is_rejected` and `::test_an_incomplete_fresh_corpus_fails_the_exact_split_count_check` |
+| `materialize_task` accepts a page-valid source whose `fixture_id` is not one of the seven frozen fresh M3 IDs (e.g. a Protocol 0.6/M0 ID slipping in through this path) | `page_change_m3/materialize.py::materialize_task` (membership check against `fixtures.ALL_FRESH_FIXTURE_IDS`) | `page-change/tests/test_validation.py` (nearest, but `validate_source` alone accepts any pattern-matching fixture ID from any split; it has no concept of "fresh M3" membership) | Remove or bypass the `source["fixture_id"] not in ALL_FRESH_FIXTURE_IDS` check, letting a Protocol 0.6-shaped `fixture_id` (e.g. `pc-development-01`) materialize through the M3 path | `test_materialization::TaskMaterializationTests::test_materialize_task_rejects_a_source_outside_the_frozen_fresh_set` |
+| A superficially well-shaped fresh source (all required keys present) with a page-invalid nested value (e.g. a malformed `region_id`) is accepted instead of failing through the reused `page_benchmark.validation.validate_source` boundary | `page_change_m3/materialize.py::materialize_task` → `page_change_m3/validation.py::require_valid_source` | `page-change/tests/test_validation.py` (validates the same function directly, but never through the M3 `materialize_task` call boundary) | Skip or swallow the `require_valid_source(source)` call (or catch and discard its `ContractError`) before constructing the carrier | `test_materialization::TaskMaterializationTests::test_page_invalid_source_fails_through_the_reused_page_validator` |
+
+### Redundancy pass (`docs/TESTING.md` §9.1)
+
+1. **Mutants killed:** the five listed above — evaluator/reflector visibility leakage (including a
+   nested oracle field inside a blind evaluation summary), clean/trial lesson-set substitution,
+   Protocol 0.6/M0 fixture-content or split-count drift, a non-fresh fixture ID slipping through
+   `materialize_task`, and a skipped reused-validator call.
+2. **Production branch/seam:** `page_change_m3/materialize.py` (carrier construction and lesson-set
+   handling), `page_change_m3/validation.py` (closed carrier shapes), and `page_change_m3/fixtures.py`
+   (fresh fixture discovery and Protocol 0.6/M0 independence) — the fresh-data boundary this task adds
+   between the reused page validator and the generic reducer's evaluator/reflector operations.
+3. **Nearest existing test and why it misses each mutant:** `page-change`'s own suite calls
+   `validate_source`/`validate_gold`/`validate_lesson_candidate` directly against Protocol 0.6's
+   13-fixture corpus and page-change's own lesson-candidate schema; it never imports `page_change_m3`,
+   never constructs an evaluator/reflector carrier, and has no concept of a second, disjoint fresh
+   corpus or a fresh-fixture membership gate — every mutant above is invisible to it by construction,
+   no matter how similar the reused validator call looks.
+4. **Behavior-preserving refactor stays green:** yes — renaming internal helpers (e.g. `_fence_untrusted`,
+   `_blind_evaluation_summary`), reordering the seven fixtures' construction, or reformatting the
+   committed JSON's whitespace outside canonical `dumps` form does not change any assertion's outcome.
+
+No redundant test forms apply: each test targets a distinct carrier-construction, lesson-set, or
+fixture-independence seam with no repeated baseline case, DM/group/topic variant, or unconstructible
+scenario. `test_materialize_task_preserves_the_exact_task_object_without_stringifying_it` and
+`test_materialize_task_normalizes_lesson_text_before_carrying_it` are additional, narrower assertions
+kept in `test_materialization.py` because they name their own distinct mutants (task-object
+stringification/loss, and a normalization no-op) not covered by the five rows above; they are not
+duplicated here since neither is the nearest-test citation for a Protocol 0.6 comparison.

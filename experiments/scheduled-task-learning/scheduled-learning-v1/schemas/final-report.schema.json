@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/scheduled-learning-v1/final-report.schema.json",
+  "title": "ScheduledLearningV1FinalReport",
+  "description": "The complete or incomplete M3 final report built by Task 7's reporting builder. It binds the manifest digest, the freeze commit identity from the verified owner approval, ordered event/receipt digests, candidate/base/promoted digests, the page adapter receipt digest, active/restart evidence, and every frozen threshold next to its observed value. It reads thresholds from the manifest only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "manifest_sha256",
+    "freeze_commit",
+    "event_log_sha256",
+    "replay_receipt_sha256",
+    "decision_receipt_sha256s",
+    "base_digest",
+    "candidate_digest",
+    "promoted_digest",
+    "page_adapter_receipt_sha256",
+    "active_evidence",
+    "restart_evidence",
+    "thresholds",
+    "m4_blocked"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "status": { "enum": ["complete", "incomplete_failed"] },
+    "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "freeze_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "event_log_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "replay_receipt_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "decision_receipt_sha256s": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    },
+    "base_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "candidate_digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "promoted_digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "page_adapter_receipt_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "active_evidence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["score", "threshold", "passed"],
+      "properties": {
+        "score": { "type": "number" },
+        "threshold": { "type": "number" },
+        "passed": { "type": "boolean" }
+      }
+    },
+    "restart_evidence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["score", "threshold", "passed", "promoted_digest_matched"],
+      "properties": {
+        "score": { "type": "number" },
+        "threshold": { "type": "number" },
+        "passed": { "type": "boolean" },
+        "promoted_digest_matched": { "type": "boolean" }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_candidate_score",
+        "minimum_mean_delta",
+        "minimum_active_score",
+        "minimum_restart_active_score"
+      ],
+      "properties": {
+        "minimum_candidate_score": { "type": "number" },
+        "minimum_mean_delta": { "type": "number" },
+        "minimum_active_score": { "type": "number" },
+        "minimum_restart_active_score": { "type": "number" }
+      }
+    },
+    "m4_blocked": { "type": "boolean" }
+  }
+}

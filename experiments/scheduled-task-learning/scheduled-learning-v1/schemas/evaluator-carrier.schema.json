@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/scheduled-learning-v1/evaluator-carrier.schema.json",
+  "title": "ScheduledLearningV1EvaluatorCarrier",
+  "description": "The closed, tool-free evaluator input. Excludes lesson text/identity, trial condition, candidate identity, prior score, promotion state, gold, oracle, and expected direction by construction. Produced by build_evaluator_carrier.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "task", "raw_output", "run"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "task_id": { "type": "string", "pattern": "^page-[0-9a-f]{12}$" },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before_html", "after_html", "region_ids"],
+      "properties": {
+        "before_html": { "type": "string", "minLength": 1, "maxLength": 30000 },
+        "after_html": { "type": "string", "minLength": 1, "maxLength": 30000 },
+        "region_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^region-[0-9a-f]{10}$" }
+        }
+      }
+    },
+    "raw_output": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id"],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    }
+  }
+}

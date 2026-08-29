@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "adapter_pass_rule": {
+    "minimum_valid_pairs": 2,
+    "maximum_valid_pairs": 3,
+    "minimum_candidate_score": 90,
+    "minimum_mean_delta": 10,
+    "allow_critical_result": false,
+    "allow_negative_delta": false
+  },
+  "active_and_restart_gates": {
+    "minimum_active_score": 90,
+    "minimum_restart_active_score": 90
+  },
+  "aggregate_budgets": {
+    "task_attempts": 10,
+    "evaluator_calls": 5,
+    "reflector_calls": 1,
+    "responses_sends": 38,
+    "accounted_tokens": 120000
+  },
+  "responses_sends_per_operation": {
+    "task": 2,
+    "evaluator": 3,
+    "reflector": 3
+  }
+}

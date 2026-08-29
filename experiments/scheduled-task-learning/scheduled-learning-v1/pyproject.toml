@@ -43,3 +43,10 @@ ignore = [
 strict = true
 explicit_package_bases = true
 files = ["scheduled_learning_v1", "page_change_m3", "tests"]
+
+[[tool.mypy.overrides]]
+# page-change's `page_benchmark` predates this package and ships no `py.typed`
+# marker; it is still fully annotated. Suppress only the missing-marker
+# warning for this reused-as-a-library import, not its own type errors.
+module = "page_benchmark.*"
+ignore_missing_imports = true

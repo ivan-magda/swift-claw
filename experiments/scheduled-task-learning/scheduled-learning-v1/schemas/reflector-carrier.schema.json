@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/scheduled-learning-v1/reflector-carrier.schema.json",
+  "title": "ScheduledLearningV1ReflectorCarrier",
+  "description": "The closed, tool-free reflector input: the current complete stable lesson set, compatible blind evaluation summaries, qualifying exact issue codes, and bounded owner payloads. Every lesson and owner payload is separately fenced as untrusted data. Produced by build_reflector_carrier.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "stable_lessons", "evaluations", "issue_codes", "owner_payloads"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "stable_lessons": {
+      "type": "array",
+      "maxItems": 3,
+      "items": { "type": "string", "minLength": 1, "maxLength": 4200 }
+    },
+    "evaluations": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id", "outcome", "issue_codes"],
+        "properties": {
+          "task_id": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "outcome": {
+            "enum": ["no_issue", "reusable_issue", "transient_issue", "uncertain"]
+          },
+          "issue_codes": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        }
+      }
+    },
+    "issue_codes": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
+    "owner_payloads": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "type": "string", "minLength": 1, "maxLength": 4200 }
+    }
+  }
+}
