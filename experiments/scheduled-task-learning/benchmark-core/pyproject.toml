@@ -5,13 +5,17 @@ description = "Scenario-neutral deterministic benchmark primitives for Swift Cla
 requires-python = ">=3.11"
 dependencies = []
 
+[tool.setuptools]
+packages = ["benchmark_core", "benchmark_learning"]
+
 [tool.setuptools.package-data]
 benchmark_core = ["py.typed"]
+benchmark_learning = ["py.typed"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["benchmark_core"]
+src = ["benchmark_core", "benchmark_learning", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF", "S", "N", "PL"]
@@ -19,4 +23,4 @@ ignore = ["PLR0912", "PLR0913", "PLR0917"]
 
 [tool.mypy]
 strict = true
-files = ["benchmark_core"]
+files = ["benchmark_core", "benchmark_learning", "tests"]
