@@ -18,6 +18,7 @@ from .requests import (
     LearningCall,
     TaskAttemptCall,
     bind_authorization,
+    bound_contract,
     core_digest,
     write_closed_input,
 )
@@ -72,10 +73,11 @@ class WorkerBridge:
     ) -> dict[str, object]:
         if not input_path.is_absolute() or not result_path.is_absolute():
             raise ValueError("worker input and result paths must be absolute")
+        contract = bound_contract(core, operation_kind)
         start = self.journal.append(
             "operation_started",
             _utc_now(),
-            _start_payload(core, operation_kind),
+            _start_payload(core, operation_kind, contract),
         )
         write_closed_input(input_path, bind_authorization(core, start.path, start.sha256))
         completed = subprocess.run(  # noqa: S603 -- executable and sole input path are absolute bindings
@@ -133,16 +135,17 @@ class WorkerBridge:
         )
 
 
-def _start_payload(core: dict[str, object], operation_kind: str) -> dict[str, object]:
+def _start_payload(
+    core: dict[str, object], operation_kind: str, contract: dict[str, object]
+) -> dict[str, object]:
     manifest = _object(core.get("manifest"))
     carrier = _object(core.get("carrier"))
-    route = _object(core.get("route"))
-    if operation_kind in {"evaluator", "reflector"}:
-        route = _route_from_manifest(manifest, operation_kind)
+    configuration = _object(contract.get("configuration"))
+    route = _object(contract.get("route"))
     return {
         "attempt_generation": core.get("attempt_generation"),
-        "carrier_digest": carrier.get("sha256", core.get("carrier_digest")),
-        "freeze_commit": core.get("freeze_commit", "e" * 40),
+        "carrier_digest": carrier.get("sha256", configuration.get("carrier_sha256")),
+        "freeze_commit": contract.get("freeze_commit"),
         "invocation_core_digest": core_digest(core),
         "job_id": core.get("job_id"),
         "manifest_digest": manifest.get("manifest_sha256", core.get("manifest_digest")),
@@ -150,13 +153,7 @@ def _start_payload(core: dict[str, object], operation_kind: str) -> dict[str, ob
         "operation_kind": operation_kind,
         "provider_call_id": core.get("provider_call_id"),
         "route_digest": canonical_sha256(route),
-        "trigger_digest": core.get("trigger_digest") if operation_kind == "reflector" else None,
     }
-
-
-def _route_from_manifest(manifest: dict[str, object], operation_kind: str) -> dict[str, object]:
-    execution = _object(manifest.get("swift_execution"))
-    return _object(execution.get(f"{operation_kind}_route"))
 
 
 def _object(value: object) -> dict[str, object]:

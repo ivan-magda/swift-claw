@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import cast
 
 from .accounting import validate_usage
-from .requests import LearningCall, core_digest
+from .requests import LearningCall, bound_contract, core_digest
 
 
 def validate_learning_result(call: LearningCall, result: dict[str, object]) -> dict[str, object]:
     """Fail closed unless this exact learning operation produced a bounded result."""
 
     core = call.request_core
+    contract = bound_contract(core, call.kind)
     _require_result_identity(result, core, call.kind)
     provenance = _object(result, "provenance")
     manifest = _object(core, "manifest")
@@ -24,15 +25,24 @@ def validate_learning_result(call: LearningCall, result: dict[str, object]) -> d
         or provenance.get("carrier_sha256") != carrier.get("sha256")
     ):
         raise ValueError("learning result provenance does not bind to closed request")
-    if result.get("provider_reference") in (None, "") or result.get("wire_model") in (None, ""):
-        raise ValueError("learning result lacks frozen route identity")
-    retry_budget = _integer(result, "retry_budget")
+    route = _object(contract, "route")
+    for result_key, route_key in (
+        ("provider_reference", "provider_reference"),
+        ("wire_model", "wire_model"),
+        ("retry_budget", "retry_budget"),
+        ("max_output_tokens", "max_output_tokens"),
+        ("max_output_utf8_bytes", "max_output_utf8_bytes"),
+        ("max_output_graphemes", "max_output_graphemes"),
+    ):
+        if result.get(result_key) != route.get(route_key):
+            raise ValueError("learning result changed frozen route")
+    retry_budget = _integer(route, "retry_budget")
     maximum = 512 if call.kind == "evaluator" else 768
-    if _integer(result, "max_output_tokens") != maximum:
+    if _integer(route, "max_output_tokens") != maximum:
         raise ValueError("learning result changed frozen completion cap")
     if (
-        _integer(result, "max_output_utf8_bytes") <= 0
-        or _integer(result, "max_output_graphemes") <= 0
+        _integer(route, "max_output_utf8_bytes") <= 0
+        or _integer(route, "max_output_graphemes") <= 0
     ):
         raise ValueError("learning result changed local output limits")
     outcome = result.get("outcome")
@@ -49,7 +59,7 @@ def validate_learning_result(call: LearningCall, result: dict[str, object]) -> d
         usage,
         str(core["provider_call_id"]),
         retry_budget,
-        _missing_proxy(core),
+        _integer(contract, "missing_usage_token_proxy"),
         maximum,
     )
     return {**result, "status": str(outcome), "accounted_tokens": accounted}
@@ -61,13 +71,6 @@ def _require_result_identity(result: dict[str, object], core: dict[str, object],
             raise ValueError(f"learning result {key} does not bind to request")
     if result.get("kind") != kind:
         raise ValueError("learning result kind does not bind to request")
-
-
-def _missing_proxy(core: dict[str, object]) -> int:
-    projection = core.get("missing_usage_token_proxy")
-    if isinstance(projection, int) and not isinstance(projection, bool) and projection > 0:
-        return projection
-    return 100
 
 
 def _object(value: dict[str, object], key: str) -> dict[str, object]:

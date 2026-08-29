@@ -251,24 +251,24 @@ def _apply_operation_started(
         )
     trigger = None
     if payload["operation_kind"] == "reflector":
-        trigger = _trigger(job, payload["trigger_digest"])
+        trigger = _trigger(job, payload["operation_id"])
         if trigger is None:
             issue(
                 issues,
                 "policy.unknown_trigger",
-                "$.payload.trigger_digest is not a frozen trigger",
+                "$.payload.operation_id is not a frozen trigger",
             )
         elif trigger["closed"]:
             issue(
                 issues,
                 "policy.closed_trigger",
-                "$.payload.trigger_digest is already closed",
+                "$.payload.operation_id is already closed",
             )
         elif trigger["attempted"]:
             issue(
                 issues,
                 "policy.attempted_trigger",
-                "$.payload.trigger_digest already owns a reflector attempt",
+                "$.payload.operation_id already owns a reflector attempt",
             )
         if trigger is not None:
             _trigger_snapshot_issues(job, trigger, issues)
@@ -284,7 +284,7 @@ def _apply_operation_started(
                 "attempted": True,
                 "operation_id": payload["operation_id"],
             }
-            if entry["trigger_digest"] == payload["trigger_digest"]
+            if entry["trigger_digest"] == payload["operation_id"]
             else entry
             for entry in triggers
         ]
