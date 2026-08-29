@@ -146,6 +146,19 @@ _FAILURE_OUTCOMES = {
     "policy_mismatch",
     "harness_failure",
 }
+_ELIGIBLE_REPLACEMENT_REASONS = {
+    "transport_failure",
+    "credential_refresh_exhausted",
+    "deadline",
+    "process_interruption",
+    "partial_stream_without_completed_terminal",
+}
+_CONTROLLER_ADMISSION_CAPS = {
+    "evaluation-stage-accounted-token-threshold",
+    "evaluation-global-accounted-token-threshold",
+    "evaluation-stage-responses-send-cap",
+    "evaluation-global-responses-send-cap",
+}
 _MAX_ACTIVE_LESSONS = 3
 _MAX_LESSON_UTF8_BYTES = 512
 
@@ -176,6 +189,7 @@ def validate_task_result(call: TaskAttemptCall, result: dict[str, object]) -> di
             raise ValueError("completed task result has an invalid terminal shape")
         status = "completed"
     elif outcome in _FAILURE_OUTCOMES:
+        _require_failure_shape(result, cast(str, outcome))
         status = "failed"
     else:
         raise ValueError("task result has an unknown outcome")
@@ -196,7 +210,9 @@ def _require_result_schema(result: dict[str, object]) -> None:
         raise ValueError("task result workspace has non-canonical fields")
     _require_exact_object(workspace, "carrier_receipt", _RECEIPT_KEYS)
     output_counts = result.get("output_counts")
-    if not isinstance(output_counts, dict) or set(output_counts) != _OUTPUT_COUNT_KEYS:
+    if output_counts is not None and (
+        not isinstance(output_counts, dict) or set(output_counts) != _OUTPUT_COUNT_KEYS
+    ):
         raise ValueError("scheduled task result output counts have non-canonical fields")
     http = _require_exact_object(result, "http", _HTTP_KEYS)
     sends = http.get("responsesSends")
@@ -322,6 +338,12 @@ def _require_carrier_bindings(
         or workspace.get("lesson_source") != configuration.get("lesson_source")
         or workspace.get("lesson_set_path") != configuration.get("lesson_artifact_path")
         or workspace.get("lesson_set_digest") != lesson_digest
+        or result.get("lesson_set_id") != ""
+        or result.get("lesson_ids") != []
+        or workspace.get("lesson_set_id") != ""
+        or workspace.get("lesson_ids") != []
+        or receipt.get("lesson_set_id") != ""
+        or receipt.get("lesson_ids") != []
         or result.get("lesson_set_id") != workspace.get("lesson_set_id")
         or result.get("lesson_ids") != workspace.get("lesson_ids")
         or result.get("lesson_set_id") != receipt.get("lesson_set_id")
@@ -369,7 +391,12 @@ def _require_route_and_output(result: dict[str, object], route: dict[str, object
         raise ValueError("task output must be text or absent")
     maximum_bytes = _integer(route, "max_output_utf8_bytes")
     maximum_graphemes = _integer(route, "max_output_graphemes")
-    output_counts = _object(result, "output_counts")
+    output_counts_value = result.get("output_counts")
+    if output_counts_value is None:
+        if result.get("outcome") == "completed":
+            raise ValueError("completed task result requires output counts")
+        return
+    output_counts = cast(dict[str, object], output_counts_value)
     counted_bytes = _integer(output_counts, "utf8Bytes")
     counted_graphemes = _integer(output_counts, "graphemes")
     limit_exceeded = output_counts.get("limitExceeded")
@@ -412,6 +439,13 @@ def _require_accounting(
     usage = cast(list[dict[str, object]], result["usage"])
     if usage and usage[0].get("provider_call_id") != call.invocation_core.get("provider_call_id"):
         raise ValueError("task first usage row does not bind pre-minted provider call")
+    for row in usage:
+        if (
+            row.get("run_id") != result.get("run_id")
+            or row.get("session_id") != result.get("session_id")
+            or row.get("model") != route.get("wire_model")
+        ):
+            raise ValueError("task usage row does not bind result and frozen route identity")
     return validate_task_usage(
         len(sends),
         proven_not_started,
@@ -419,6 +453,73 @@ def _require_accounting(
         _integer(contract, "missing_usage_token_proxy"),
         _integer(route, "max_output_tokens"),
     )
+
+
+def _require_failure_shape(result: dict[str, object], outcome: str) -> None:
+    critical_code = result.get("critical_code")
+    raw_output = result.get("raw_output")
+    disposition = result.get("replacement_disposition")
+    reason = result.get("replacement_reason")
+    if (
+        not isinstance(disposition, str)
+        or disposition not in {"eligible", "ineligible"}
+        or not isinstance(reason, str)
+        or not reason
+    ):
+        raise ValueError("failed task result has an invalid replacement shape")
+    if raw_output is not None and outcome != "tool_contract_failure":
+        raise ValueError("failed task result has an invalid raw output")
+    if disposition == "eligible":
+        if (
+            outcome != "provider_failure"
+            or critical_code is not None
+            or reason not in _ELIGIBLE_REPLACEMENT_REASONS
+        ):
+            raise ValueError("failed task result has an invalid replacement eligibility")
+    elif not _valid_ineligible_failure(outcome, critical_code, reason):
+        raise ValueError("failed task result has an invalid outcome-specific shape")
+
+
+def _valid_ineligible_failure(outcome: str, critical_code: object, reason: str) -> bool:
+    if outcome == "provider_failure":
+        ordinary_reasons = {
+            "provider_terminal",
+            "credential_refresh_completed",
+            "credential_state_unavailable",
+        }
+        return (critical_code is None and reason in ordinary_reasons) or (
+            critical_code == "vision_unsupported" and reason == "vision_unsupported"
+        )
+    if outcome == "authentication_required":
+        return critical_code is None and reason == "authentication"
+    if outcome == "access_denied":
+        return critical_code is None and reason == "access"
+    if outcome == "quota_limited":
+        return critical_code is None and reason == "quota"
+    if outcome == "invalid_provider_state":
+        return critical_code == "invalid_provider_state" and reason == "invalid_provider_state"
+    if outcome == "local_output_limit":
+        return critical_code == "local_output_limit" and reason == "local_output_limit"
+    if outcome == "model_identity_mismatch":
+        valid_code = isinstance(critical_code, str) and critical_code in {
+            "model_identity_mismatch",
+            "wire_model_mismatch",
+        }
+        return valid_code and reason == "model_identity_mismatch"
+    if outcome == "budget_stopped":
+        return (critical_code == "tool_budget_stop" and reason == "budget_or_tool_deviation") or (
+            critical_code is None and reason in _CONTROLLER_ADMISSION_CAPS
+        )
+    if outcome == "tool_contract_failure":
+        has_critical_code = isinstance(critical_code, str) and bool(critical_code)
+        return has_critical_code and reason == "task_contract_failure"
+    if outcome == "policy_mismatch":
+        return False
+    if outcome == "harness_failure":
+        has_critical_code = isinstance(critical_code, str) and bool(critical_code)
+        allowed_reasons = {"harness_integrity_failure", "preflight_budget_exhausted"}
+        return has_critical_code and reason in allowed_reasons
+    return False
 
 
 def _require_exact_object(value: dict[str, object], key: str, keys: set[str]) -> dict[str, object]:

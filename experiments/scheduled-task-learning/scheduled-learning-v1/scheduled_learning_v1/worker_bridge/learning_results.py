@@ -126,7 +126,12 @@ def _classify_outcome(
             raise ValueError("failed_no_call result has an invalid terminal shape")
         return {**result, "status": "failed_no_call", "accounted_tokens": 0}
     if outcome == "response":
-        if result.get("failure_code") is not None or not isinstance(result.get("output"), str):
+        if (
+            result.get("failure_code") is not None
+            or not isinstance(result.get("output"), str)
+            or usage is None
+            or not _positive_integer(usage.get("responses_sends"))
+        ):
             raise ValueError("response result has an invalid terminal shape")
     elif outcome == "failed":
         if (
@@ -241,3 +246,7 @@ def _integer(value: dict[str, object], key: str) -> int:
     if isinstance(candidate, bool) or not isinstance(candidate, int):
         raise ValueError(f"{key} must be an integer")
     return candidate
+
+
+def _positive_integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0

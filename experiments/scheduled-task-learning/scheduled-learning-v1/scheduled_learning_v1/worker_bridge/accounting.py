@@ -59,10 +59,16 @@ def validate_usage(
         raise ValueError("invalid worker usage") from error
     if not (0 <= sends <= retry_budget and 0 <= not_started <= sends):
         raise ValueError("worker send counts exceed frozen retry budget")
-    if sends == 0:
-        if allow_no_usage and not_started == 0:
-            return 0
-        raise ValueError("handed-off worker result has zero sends")
+    if (
+        sends == 0
+        and allow_no_usage
+        and set(usage)
+        == {
+            "responses_sends",
+            "proven_not_started_responses_sends",
+        }
+    ):
+        return 0
     if usage.get("provider_call_id") != provider_call_id:
         raise ValueError("usage provider-call ID does not bind to request")
     reported = _reported_total(usage, completion_cap)

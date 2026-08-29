@@ -118,3 +118,35 @@ class LearningResultTests(unittest.TestCase):
                     validate_learning_result(call, changed)
             with self.assertRaises(ValueError):
                 validate_learning_result(call, {**valid, "invented": True})
+
+    def test_failed_result_accepts_zero_sends_but_response_still_requires_a_send(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = learning_core(root)
+            call = LearningCall("evaluator", core, root / "request.json", root / "result.json")
+            request = write_authorized_request(call.request_path, core)
+            request_sha256 = canonical_sha256(request)
+            zero_send_usage = {
+                "provider_call_id": core["provider_call_id"],
+                "responses_sends": 0,
+                "proven_not_started_responses_sends": 0,
+                "prompt_tokens": None,
+                "completion_tokens": None,
+                "reported_total_tokens": None,
+                "accounted_tokens": 0,
+                "is_estimated": False,
+            }
+            failed = {
+                **learning_result(core, "failed", request_sha256=request_sha256),
+                "usage": zero_send_usage,
+            }
+            response = {
+                **learning_result(core, request_sha256=request_sha256),
+                "usage": zero_send_usage,
+            }
+
+            # when / then
+            self.assertEqual(validate_learning_result(call, failed)["accounted_tokens"], 0)
+            with self.assertRaises(ValueError):
+                validate_learning_result(call, response)
