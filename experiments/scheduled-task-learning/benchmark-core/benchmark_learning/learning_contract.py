@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from benchmark_core.canonical import SHA256_HEX
+from benchmark_core.canonical import SHA256_HEX, canonical_sha256, dumps
 from benchmark_core.contract_validation import (
     ContractError,
     ValidationIssue,
@@ -230,6 +230,11 @@ _LESSON_TEXT_BOUNDS = (0, 8192)
 _ISSUE_CODE_COUNT_BOUNDS = (0, 32)
 _OPAQUE_STRING_BOUNDS = (1, 128)
 
+# Domain separators bind each receipt's identity to its own receipt kind, so a decision receipt
+# and a replay receipt with coincidentally identical field bytes never collide on ID.
+_DECISION_DOMAIN = "scheduled-learning/v1/decision"
+_REPLAY_DOMAIN = "scheduled-learning/v1/replay"
+
 
 def _opaque_string_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None:
     bounded_string(value, *_OPAQUE_STRING_BOUNDS, path, issues)
@@ -269,6 +274,34 @@ def _issue_codes_issues(value: Any, path: str, issues: list[ValidationIssue]) ->
     bounded_list(value, *_ISSUE_CODE_COUNT_BOUNDS, path, issues, unique=True)
     for index, code in enumerate(value):
         _opaque_string_issues(code, f"{path}[{index}]", issues)
+
+
+def _has_only_string_keys(value: Any) -> bool:
+    if isinstance(value, dict):
+        return all(
+            isinstance(key, str) and _has_only_string_keys(item) for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return all(_has_only_string_keys(item) for item in value)
+    return True
+
+
+def _canonical_object_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None:
+    if not isinstance(value, dict) or not _has_only_string_keys(value):
+        issue(issues, "schema.single_object", f"{path} must be a canonical JSON object")
+        return
+    try:
+        dumps(value)
+    except (TypeError, ValueError):
+        issue(issues, "schema.single_object", f"{path} must be canonically serializable")
+
+
+def _decision_list_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None:
+    if not isinstance(value, list):
+        issue(issues, "schema.bounded_values", f"{path} must be an array")
+        return
+    for index, item in enumerate(value):
+        _canonical_object_issues(item, f"{path}[{index}]", issues)
 
 
 def _adapter_binding_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None:
@@ -663,3 +696,71 @@ def canonical_event_log(events: list[ReplayEvent]) -> dict[str, Any]:
     except ContractError as error:
         raise LearningContractError(list(error.issues)) from error
     return {"schema_version": 1, "events": [event_json(event) for event in events]}
+
+
+def decision_receipt(
+    *,
+    algorithm_id: str,
+    decision: str,
+    reason: str,
+    triggering_event_sha256: str,
+    before_state_sha256: str,
+    after_state_sha256: str,
+    artifact_identities: dict[str, Any],
+) -> dict[str, Any]:
+    """Build one canonical decision receipt with a domain-separated `decision_id`."""
+
+    issues: list[ValidationIssue] = []
+    _opaque_string_issues(algorithm_id, "$.algorithm_id", issues)
+    _opaque_string_issues(decision, "$.decision", issues)
+    _opaque_string_issues(reason, "$.reason", issues)
+    _sha256_issues(triggering_event_sha256, "$.triggering_event_sha256", issues)
+    _sha256_issues(before_state_sha256, "$.before_state_sha256", issues)
+    _sha256_issues(after_state_sha256, "$.after_state_sha256", issues)
+    _canonical_object_issues(artifact_identities, "$.artifact_identities", issues)
+    try:
+        _require_valid(issues)
+    except ContractError as error:
+        raise LearningContractError(list(error.issues)) from error
+
+    core = {
+        "schema_version": 1,
+        "algorithm_id": algorithm_id,
+        "decision": decision,
+        "reason": reason,
+        "triggering_event_sha256": triggering_event_sha256,
+        "before_state_sha256": before_state_sha256,
+        "after_state_sha256": after_state_sha256,
+        "artifact_identities": artifact_identities,
+    }
+    decision_hash = canonical_sha256({"domain": _DECISION_DOMAIN, "value": core})
+    return {**core, "decision_id": f"decision-{decision_hash[:12]}"}
+
+
+def replay_receipt(
+    *,
+    algorithm_id: str,
+    events: list[ReplayEvent],
+    decisions: list[dict[str, Any]],
+    final_state: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the canonical whole-replay receipt with a domain-separated `receipt_id`."""
+
+    issues: list[ValidationIssue] = []
+    _opaque_string_issues(algorithm_id, "$.algorithm_id", issues)
+    _decision_list_issues(decisions, "$.decisions", issues)
+    _canonical_object_issues(final_state, "$.final_state", issues)
+    try:
+        _require_valid(issues)
+    except ContractError as error:
+        raise LearningContractError(list(error.issues)) from error
+
+    core = {
+        "schema_version": 1,
+        "algorithm_id": algorithm_id,
+        "events_sha256": canonical_sha256(canonical_event_log(events)),
+        "decision_receipt_sha256s": [canonical_sha256(item) for item in decisions],
+        "final_state_sha256": canonical_sha256(final_state),
+    }
+    replay_hash = canonical_sha256({"domain": _REPLAY_DOMAIN, "value": core})
+    return {**core, "receipt_id": f"replay-{replay_hash[:12]}"}
