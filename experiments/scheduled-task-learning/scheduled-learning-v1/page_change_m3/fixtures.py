@@ -87,6 +87,28 @@ def verify_fixture_independence(root: Path | str) -> None:
     fresh_sources: list[tuple[Path, dict[str, Any]]] = []
     fresh_golds: list[tuple[Path, dict[str, Any]]] = []
     for split, fixture_ids in FRESH_SPLIT_FIXTURE_IDS.items():
+        source_directory = root / "corpus" / split
+        gold_directory = root / "gold" / split
+        source_paths = sorted(source_directory.glob("*.source.json"))
+        gold_paths = sorted(gold_directory.glob("*.gold.json"))
+        expected_source_paths = {
+            fresh_source_path(root, split, fixture_id) for fixture_id in fixture_ids
+        }
+        expected_gold_paths = {
+            fresh_gold_path(root, split, fixture_id) for fixture_id in fixture_ids
+        }
+        if set(source_paths) != expected_source_paths:
+            issue(
+                issues,
+                "fixtures.exact_split_counts",
+                f"{split} sources must match the frozen fixture inventory exactly",
+            )
+        if set(gold_paths) != expected_gold_paths:
+            issue(
+                issues,
+                "fixtures.exact_split_counts",
+                f"{split} gold records must match the frozen fixture inventory exactly",
+            )
         for fixture_id in fixture_ids:
             source_path = fresh_source_path(root, split, fixture_id)
             if source_path.is_file():

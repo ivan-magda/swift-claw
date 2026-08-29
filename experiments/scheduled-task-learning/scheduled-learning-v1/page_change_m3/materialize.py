@@ -7,6 +7,7 @@ imports this one.
 
 from __future__ import annotations
 
+import html
 import unicodedata
 from typing import Any
 
@@ -105,7 +106,8 @@ def build_evaluator_carrier(task: dict[str, Any], output: str) -> dict[str, Any]
 def _fence_untrusted(category: str, index: int, text: str) -> str:
     """Mark one untrusted text span so a prompt cannot mistake it for an instruction."""
 
-    return f'<untrusted data="{category}" index="{index}">{text}</untrusted>'
+    escaped_text = html.escape(text, quote=False)
+    return f'<untrusted data="{category}" index="{index}">{escaped_text}</untrusted>'
 
 
 def _blind_evaluation_summary(evaluation: dict[str, Any]) -> dict[str, Any]:

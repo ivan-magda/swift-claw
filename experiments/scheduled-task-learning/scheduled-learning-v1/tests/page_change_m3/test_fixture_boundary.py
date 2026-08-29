@@ -87,6 +87,28 @@ class FixtureBoundaryTests(unittest.TestCase):
                 {issue.requirement for issue in raised.exception.issues},
             )
 
+    def test_an_extra_fresh_fixture_fails_the_exact_split_inventory_check(self) -> None:
+        # given
+        extras = (
+            ("corpus", "pc-development-99.source.json", support.real_fresh_source),
+            ("gold", "pc-development-99.gold.json", support.real_fresh_gold),
+        )
+
+        for directory, filename, loader in extras:
+            with self.subTest(directory=directory), tempfile.TemporaryDirectory() as root:
+                root_path = Path(root)
+                _seed_valid_fresh_corpus(root_path)
+                extra = root_path / directory / "development" / filename
+                extra.write_text(json.dumps(loader("pc-development-07", "development")))
+
+                # when / then
+                with self.assertRaises(ContractError) as raised:
+                    verify_fixture_independence(root_path)
+                self.assertIn(
+                    "fixtures.exact_split_counts",
+                    {issue.requirement for issue in raised.exception.issues},
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
