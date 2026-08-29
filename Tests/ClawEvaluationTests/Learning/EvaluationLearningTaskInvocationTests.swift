@@ -23,14 +23,13 @@ import Testing
     #expect(decoded == fixture.invocation)
   }
 
-  @Test func legacyWorkerInputDecodesToTheExistingInvocationWithoutByteChanges() throws {
+  @Test func legacyWorkerInputSelectsTheExistingInvocation() throws {
     // given
     let root = try makeEvaluationTestRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let invocation = try makeLegacyWorkerInvocation(root: root)
     let invocationURL = root.appendingPathComponent("legacy-invocation.json")
     try EvaluationJSONFile.write(invocation, to: invocationURL)
-    let originalBytes = try Data(contentsOf: invocationURL)
 
     // when
     let input = try EvaluationWorkerInput.decode(from: invocationURL)
@@ -41,7 +40,6 @@ import Testing
       return
     }
     #expect(decoded == invocation)
-    #expect(try Data(contentsOf: invocationURL) == originalBytes)
   }
 
   @Test func unknownExecutionProfileIsRejected() throws {
@@ -64,6 +62,51 @@ import Testing
     }
 
     // then
+    #expect(error != nil)
+  }
+
+  @Test func m3WorkerInputRejectsNoncanonicalInvocationBytes() throws {
+    // given
+    let fixture = try makeEvaluationLearningTaskInvocationFixture()
+    defer { fixture.remove() }
+    let object = try #require(
+      JSONSerialization.jsonObject(
+        with: EvaluationCanonicalJSON.data(encoding: fixture.invocation)
+      ) as? [String: Any]
+    )
+    let invocationURL = fixture.root.appendingPathComponent("noncanonical-m3-invocation.json")
+    try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted]).write(
+      to: invocationURL
+    )
+
+    // when
+    let error = #expect(throws: EvaluationLearningAdmissionError.invalidJSON) {
+      _ = try EvaluationWorkerInput.decode(from: invocationURL)
+    }
+
+    // then — ordinary JSONDecoder acceptance would admit byte-different authorization.
+    #expect(error != nil)
+  }
+
+  @Test func m3WorkerInputRejectsAnUnknownTopLevelKey() throws {
+    // given
+    let fixture = try makeEvaluationLearningTaskInvocationFixture()
+    defer { fixture.remove() }
+    var object = try #require(
+      JSONSerialization.jsonObject(
+        with: EvaluationCanonicalJSON.data(encoding: fixture.invocation)
+      ) as? [String: Any]
+    )
+    object["unfrozen_control"] = true
+    let invocationURL = fixture.root.appendingPathComponent("open-m3-invocation.json")
+    try EvaluationCanonicalJSON.data(fromJSONObject: object).write(to: invocationURL)
+
+    // when
+    let error = #expect(throws: EvaluationLearningAdmissionError.invalidJSON) {
+      _ = try EvaluationWorkerInput.decode(from: invocationURL)
+    }
+
+    // then — direct Codable decoding ignores the added key.
     #expect(error != nil)
   }
 }

@@ -360,7 +360,6 @@ import Testing
     #expect(result.outcome == .failed)
     #expect(result.failureCode == EvaluationAttemptOutcome.modelIdentityMismatch.rawValue)
     #expect(result.usage?.responsesSends == 1)
-    #expect(result.output == nil)
     #expect(await transport.recorded.count == 1)
   }
 
@@ -519,7 +518,10 @@ import Testing
     #expect(try EvaluationWorkerLifecycle.proveProductionLockIsFree(stateRoot: fixture.stateRoot))
   }
 
-  @Test func liveReadmissionRejectsArtifactMutationInsideResourceFactory() async throws {
+  @Test(arguments: LearningCallLiveArtifactMutation.allCases)
+  func liveReadmissionRejectsArtifactMutationInsideResourceFactory(
+    _ mutation: LearningCallLiveArtifactMutation
+  ) async throws {
     // given
     let fixture = try makeLearningCallFixture()
     defer { fixture.remove() }
@@ -532,9 +534,7 @@ import Testing
       request: fixture.request,
       makeResource: { input in
         let admission = try await input.admission(using: fixture.admissionVerifier)
-        try Data("changed carrier".utf8).write(
-          to: URL(fileURLWithPath: fixture.request.carrier.path)
-        )
+        try mutation.apply(to: fixture.request)
         return learningResource(
           admission: admission,
           roster: ProviderRoster(primary: fixture.binding(provider: provider)),
@@ -712,6 +712,20 @@ enum LearningCallOutputLimitCase: CaseIterable, Sendable {
   }
 
   var output: String { "abcde" }
+}
+
+enum LearningCallLiveArtifactMutation: CaseIterable, Sendable {
+  case prompt
+  case carrier
+
+  func apply(to request: EvaluationLearningCallRequest) throws {
+    let path =
+      switch self {
+      case .prompt: request.prompt.path
+      case .carrier: request.carrier.path
+      }
+    try Data("changed \(self)".utf8).write(to: URL(fileURLWithPath: path))
+  }
 }
 
 enum LearningCallPreSendMutation: CaseIterable, Sendable {

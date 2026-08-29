@@ -285,27 +285,6 @@ package struct EvaluationLearningCallUsage: Codable, Sendable, Equatable {
     isEstimated = accountableSends > rows.count
   }
 
-  static func recordingFailure(
-    providerCallID: ProviderCallID,
-    error: any Error,
-    recorder: EvaluationHTTPRecorder,
-    missingUsageTokenProxy: Int
-  ) async throws -> Self {
-    if ProviderFailureAccounting.classify(error) == .notStarted {
-      let before = await recorder.snapshot()
-      let unresolved = before.responsesSends.count - before.provenNotStartedResponsesSends
-      try await recorder.recordProvenNotStartedResponsesSends(unresolved)
-    }
-    let snapshot = await recorder.snapshot()
-    return try Self(
-      providerCallID: providerCallID,
-      responsesSends: snapshot.responsesSends.count,
-      provenNotStartedResponsesSends: snapshot.provenNotStartedResponsesSends,
-      terminalUsage: nil,
-      missingUsageTokenProxy: missingUsageTokenProxy
-    )
-  }
-
   package func validate(
     providerCallID: ProviderCallID,
     retryBudget: Int,

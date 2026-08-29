@@ -10,6 +10,37 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EvaluationWorkerBootstrapTests {
+  @Test(arguments: LearningWorkerAdmissionMutation.allCases)
+  func eachWorkerOwnedLearningAdmissionBindingRejectsBeforeExternalWork(
+    _ mutation: LearningWorkerAdmissionMutation
+  ) async throws {
+    // given
+    let fixture = try makeEvaluationLearningTaskInvocationFixture()
+    defer { fixture.remove() }
+    let verifier = StaticEvaluationLearningTaskAdmissionVerifier(
+      context: mutation.apply(to: fixture.admissionContext)
+    )
+    let provider = SequenceProvider(scriptedTwoRoundResponses())
+    let resourceCalls = EvaluationAsyncCounter()
+
+    // when
+    let error = await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
+      _ = try await EvaluationWorker().runResult(
+        invocation: fixture.invocation,
+        admissionVerifier: verifier,
+        makeResource: { _ in
+          await resourceCalls.increment()
+          return makeEvaluationLearningLiveResource(provider: provider)
+        }
+      )
+    }
+
+    // then — omitting the selected cross-binding reaches resource/provider construction.
+    #expect(error != nil)
+    #expect(await resourceCalls.value == 0)
+    #expect(await provider.requests.isEmpty)
+  }
+
   @Test func mismatchedEvaluationRootIsRejectedBeforeExternalWork() async throws {
     // given
     let fixture = try makeEvaluationLearningTaskInvocationFixture()
@@ -304,6 +335,94 @@ private actor EvaluationAsyncCounter {
 
   func increment() {
     value += 1
+  }
+}
+
+enum LearningWorkerAdmissionMutation: String, CaseIterable, Sendable {
+  case jobID
+  case operationID
+  case attemptGeneration
+  case providerCallID
+  case manifestSHA256
+  case freezeCommit
+  case missingUsageTokenProxy
+  case taskAttempts
+  case evaluatorCalls
+  case reflectorCalls
+  case responsesSends
+  case accountedTokens
+  case providerReference
+  case wireModel
+  case retryBudget
+  case maxOutputTokens
+  case maxOutputUTF8Bytes
+  case maxOutputGraphemes
+
+  func apply(
+    to context: EvaluationLearningAdmissionContext
+  ) -> EvaluationLearningAdmissionContext {
+    var taskAttempts = context.budgets.taskAttempts
+    var evaluatorCalls = context.budgets.evaluatorCalls
+    var reflectorCalls = context.budgets.reflectorCalls
+    var responsesSends = context.budgets.responsesSends
+    var accountedTokens = context.budgets.accountedTokens
+    switch self {
+    case .taskAttempts:
+      taskAttempts = 0
+    case .evaluatorCalls:
+      evaluatorCalls = 0
+    case .reflectorCalls:
+      reflectorCalls = 0
+    case .responsesSends:
+      responsesSends = 0
+    case .accountedTokens:
+      accountedTokens = 0
+    default:
+      break
+    }
+    let budgets = EvaluationLearningApprovedBudgets(
+      taskAttempts: taskAttempts,
+      evaluatorCalls: evaluatorCalls,
+      reflectorCalls: reflectorCalls,
+      responsesSends: responsesSends,
+      accountedTokens: accountedTokens
+    )
+    let route = EvaluationLearningRouteBinding(
+      providerReference: self == .providerReference
+        ? "changed/provider" : context.route.providerReference,
+      wireModel: self == .wireModel ? "changed-model" : context.route.wireModel,
+      retryBudget: self == .retryBudget ? context.route.retryBudget + 1 : context.route.retryBudget,
+      maxOutputTokens:
+        self == .maxOutputTokens
+        ? context.route.maxOutputTokens + 1 : context.route.maxOutputTokens,
+      maxOutputUTF8Bytes:
+        self == .maxOutputUTF8Bytes
+        ? context.route.maxOutputUTF8Bytes + 1 : context.route.maxOutputUTF8Bytes,
+      maxOutputGraphemes:
+        self == .maxOutputGraphemes
+        ? context.route.maxOutputGraphemes + 1 : context.route.maxOutputGraphemes
+    )
+    return EvaluationLearningAdmissionContext(
+      jobID: self == .jobID ? "changed-job" : context.jobID,
+      operationID: self == .operationID ? "changed-operation" : context.operationID,
+      attemptGeneration:
+        self == .attemptGeneration
+        ? context.attemptGeneration + 1 : context.attemptGeneration,
+      providerCallID:
+        self == .providerCallID
+        ? ProviderCallID(rawValue: "00000000-0000-0000-0000-000000000099")
+        : context.providerCallID,
+      manifestSHA256:
+        self == .manifestSHA256 ? String(repeating: "9", count: 64) : context.manifestSHA256,
+      freezeCommit:
+        self == .freezeCommit ? String(repeating: "9", count: 40) : context.freezeCommit,
+      executableSHA256: context.executableSHA256,
+      missingUsageTokenProxy:
+        self == .missingUsageTokenProxy
+        ? context.missingUsageTokenProxy + 1 : context.missingUsageTokenProxy,
+      budgets: budgets,
+      route: route
+    )
   }
 }
 

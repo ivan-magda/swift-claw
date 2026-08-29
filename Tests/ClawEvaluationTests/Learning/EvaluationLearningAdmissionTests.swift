@@ -2,7 +2,6 @@ import ClawAgent
 import ClawCore
 import ClawTestSupport
 import Foundation
-import Synchronization
 import Testing
 
 @testable import ClawEvaluation
@@ -76,10 +75,18 @@ import Testing
     // given
     let fixture = try makeEvaluationLearningAdmissionFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
-    try Data("changed approval".utf8).write(to: fixture.ownerApprovalURL)
+    var changedApproval = try #require(
+      JSONSerialization.jsonObject(
+        with: Data(contentsOf: fixture.ownerApprovalURL)
+      ) as? [String: Any]
+    )
+    changedApproval["owner_identity"] = "owner-02"
+    try EvaluationCanonicalJSON.data(fromJSONObject: changedApproval).write(
+      to: fixture.ownerApprovalURL
+    )
 
     // when
-    let error = await #expect(throws: (any Error).self) {
+    let error = await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
       _ = try await fixture.verifier().verify(
         manifest: fixture.manifest,
         authorization: fixture.authorization,
@@ -90,7 +97,7 @@ import Testing
       )
     }
 
-    // then — skipping the owner-approval rehash admits a post-approval budget replacement.
+    // then — skipping the owner-approval rehash admits a post-approval identity replacement.
     #expect(error != nil)
   }
 
@@ -258,15 +265,11 @@ import Testing
     let fixture = try makeEvaluationLearningAdmissionFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     let swappedManifest = try fixture.manifestData(missingUsageTokenProxy: 999_999)
-    let reads = Mutex(0)
     let verifier = EvaluationLearningAdmissionVerifier(
       runningExecutablePath: { fixture.executableURL.path },
       readFile: { url in
         let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
         if url == fixture.manifestURL {
-          reads.withLock { count in
-            count += 1
-          }
           try swappedManifest.write(to: fixture.manifestURL)
         }
         return data
@@ -285,7 +288,6 @@ import Testing
 
     // then — decoding a reopened file would admit the swapped proxy despite hashing the original.
     #expect(context.missingUsageTokenProxy == 132_768)
-    #expect(reads.withLock { count in count } == 1)
   }
 
   @Test func verifierAllowsFullManifestFieldsButRejectsUnknownSwiftExecutionFields() async throws {

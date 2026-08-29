@@ -1,5 +1,4 @@
 import ClawCore
-import ClawTestSupport
 import Foundation
 import Testing
 
@@ -171,64 +170,6 @@ import Testing
     )
   }
 
-  @Test(arguments: FailureAccountingFixture.allCases)
-  func failedCallClassifiesHandoffWithoutPersistingProviderText(
-    _ failure: FailureAccountingFixture
-  ) async throws {
-    // given
-    let fixture = try makeEvaluationLearningCallFixture()
-    defer { fixture.remove() }
-    let providerText = "secret-provider-body"
-    let recorder = EvaluationHTTPRecorder(
-      base: ScriptedHTTPExecutor([
-        .stream(HTTPStreamHead(statusCode: 200, headers: [:]), [])
-      ]),
-      expectedWireModel: fixture.context.route.wireModel,
-      maximumResponsesSends: fixture.context.route.retryBudget
-    )
-    _ = try await recorder.openStream(callRequest(wireModel: fixture.context.route.wireModel))
-    let providerError: any Error =
-      switch failure {
-      case .notStarted:
-        ProviderFailure(
-          cause: .terminal(status: 400, message: providerText),
-          accounting: .notStarted
-        )
-      case .mayHaveStarted:
-        ProviderFailure(
-          cause: .transportFailure(message: providerText),
-          accounting: .mayHaveStarted(observing: 0)
-        )
-      }
-
-    // when
-    let usage = try await EvaluationLearningCallUsage.recordingFailure(
-      providerCallID: fixture.request.providerCallID,
-      error: providerError,
-      recorder: recorder,
-      missingUsageTokenProxy: fixture.context.missingUsageTokenProxy
-    )
-    let result = try EvaluationLearningCallResult(
-      request: fixture.request,
-      requestSHA256: try canonicalRequestSHA256(for: fixture.request),
-      outcome: .failed,
-      failureCode: .providerFailure,
-      output: nil,
-      finishReason: nil,
-      reportedModel: nil,
-      usage: usage,
-      admissionContext: fixture.context
-    )
-    let encoded = try EvaluationCanonicalJSON.data(encoding: result)
-
-    // then
-    #expect(usage.responsesSends == 1)
-    #expect(usage.provenNotStartedResponsesSends == failure.expectedProvenNotStartedSends)
-    #expect(usage.accountedTokens == failure.expectedAccountedTokens)
-    #expect(usage.isEstimated == failure.expectedEstimated)
-    #expect(String(bytes: encoded, encoding: .utf8)?.contains(providerText) == false)
-  }
-
   @Test func failedNoCallIsTheOnlyTerminalShapeWithoutUsage() throws {
     // given
     let fixture = try makeEvaluationLearningCallFixture()
@@ -295,28 +236,11 @@ import Testing
     // given
     let fixture = try makeEvaluationLearningCallFixture()
     defer { fixture.remove() }
-    let validUsage = try EvaluationLearningCallUsage(
-      providerCallID: fixture.request.providerCallID,
-      responsesSends: 1,
-      provenNotStartedResponsesSends: 0,
-      terminalUsage: nil,
-      missingUsageTokenProxy: fixture.context.missingUsageTokenProxy
-    )
-    let values = mutation.values(validUsage: validUsage)
+    let candidate = try mutation.candidate(fixture: fixture)
 
     // when
     let error = #expect(throws: EvaluationLearningAdmissionError.invalidBinding) {
-      _ = try EvaluationLearningCallResult(
-        request: fixture.request,
-        requestSHA256: try canonicalRequestSHA256(for: fixture.request),
-        outcome: values.outcome,
-        failureCode: values.failureCode,
-        output: values.output,
-        finishReason: nil,
-        reportedModel: nil,
-        usage: values.usage,
-        admissionContext: fixture.context
-      )
+      try candidate.validate(missingUsageTokenProxy: fixture.context.missingUsageTokenProxy)
     }
 
     // then
@@ -395,45 +319,121 @@ enum InvalidCallRequestMutation: String, CaseIterable, Sendable {
   case symlinkedPrompt
 }
 
-enum FailureAccountingFixture: String, CaseIterable, Sendable {
-  case notStarted
-  case mayHaveStarted
-
-  var expectedProvenNotStartedSends: Int {
-    self == .notStarted ? 1 : 0
-  }
-
-  var expectedAccountedTokens: Int {
-    self == .notStarted ? 0 : 100
-  }
-
-  var expectedEstimated: Bool {
-    self == .mayHaveStarted
-  }
-}
-
 enum InvalidCallResultMutation: String, CaseIterable, Sendable {
   case responseWithFailure
+  case responseWithoutOutput
+  case responseWithoutOutputDigest
+  case responseWithoutUsage
+  case responseWithoutPositiveSendUsage
   case failedWithoutUsage
   case failedWithOutput
+  case failedWithoutFailureCode
+  case failedWithFinishReason
+  case failedWithReportedModel
   case failedNoCallWithUsage
+  case failedNoCallWithOutput
+  case failedNoCallWithoutFailureCode
+  case failedNoCallWithFinishReason
+  case failedNoCallWithReportedModel
 
-  func values(validUsage: EvaluationLearningCallUsage) -> (
+  fileprivate func candidate(
+    fixture: EvaluationLearningCallFixture
+  ) throws -> EvaluationLearningCallResult {
+    let validUsage = try EvaluationLearningCallUsage(
+      providerCallID: fixture.request.providerCallID,
+      responsesSends: 1,
+      provenNotStartedResponsesSends: 0,
+      terminalUsage: nil,
+      missingUsageTokenProxy: fixture.context.missingUsageTokenProxy
+    )
+    let zeroSendUsage = try EvaluationLearningCallUsage(
+      providerCallID: fixture.request.providerCallID,
+      responsesSends: 0,
+      provenNotStartedResponsesSends: 0,
+      terminalUsage: nil,
+      missingUsageTokenProxy: fixture.context.missingUsageTokenProxy
+    )
+    let baseline: EvaluationLearningCallResult
+    switch self {
+    case .responseWithFailure, .responseWithoutOutput, .responseWithoutOutputDigest,
+      .responseWithoutUsage, .responseWithoutPositiveSendUsage:
+      baseline = try result(
+        fixture: fixture,
+        outcome: .response,
+        failureCode: nil,
+        output: "{}",
+        usage: validUsage
+      )
+    case .failedWithoutUsage, .failedWithOutput, .failedWithoutFailureCode,
+      .failedWithFinishReason, .failedWithReportedModel:
+      baseline = try result(
+        fixture: fixture,
+        outcome: .failed,
+        failureCode: .providerFailure,
+        output: nil,
+        usage: validUsage
+      )
+    case .failedNoCallWithUsage, .failedNoCallWithOutput, .failedNoCallWithoutFailureCode,
+      .failedNoCallWithFinishReason, .failedNoCallWithReportedModel:
+      baseline = try result(
+        fixture: fixture,
+        outcome: .failedNoCall,
+        failureCode: .budgetStopped,
+        output: nil,
+        usage: nil
+      )
+    }
+    var object = try jsonObject(encoding: baseline)
+    switch self {
+    case .responseWithFailure:
+      object["failure_code"] = EvaluationAttemptOutcome.providerFailure.rawValue
+    case .responseWithoutOutput:
+      object["output"] = NSNull()
+      object["output_sha256"] = NSNull()
+    case .responseWithoutOutputDigest:
+      object["output_sha256"] = NSNull()
+    case .responseWithoutUsage:
+      object["usage"] = NSNull()
+    case .responseWithoutPositiveSendUsage:
+      object["usage"] = try jsonObject(encoding: zeroSendUsage)
+    case .failedWithoutUsage:
+      object["usage"] = NSNull()
+    case .failedWithOutput, .failedNoCallWithOutput:
+      object["output"] = "partial"
+      object["output_sha256"] = SHA256Digest.hex(Data("partial".utf8))
+    case .failedWithoutFailureCode, .failedNoCallWithoutFailureCode:
+      object["failure_code"] = NSNull()
+    case .failedWithFinishReason, .failedNoCallWithFinishReason:
+      object["finish_reason"] = "stop"
+    case .failedWithReportedModel, .failedNoCallWithReportedModel:
+      object["reported_model"] = fixture.context.route.wireModel
+    case .failedNoCallWithUsage:
+      object["usage"] = try jsonObject(encoding: validUsage)
+    }
+    return try JSONDecoder().decode(
+      EvaluationLearningCallResult.self,
+      from: EvaluationCanonicalJSON.data(fromJSONObject: object)
+    )
+  }
+
+  private func result(
+    fixture: EvaluationLearningCallFixture,
     outcome: EvaluationLearningCallOutcome,
     failureCode: EvaluationAttemptOutcome?,
     output: String?,
     usage: EvaluationLearningCallUsage?
-  ) {
-    switch self {
-    case .responseWithFailure:
-      (.response, .providerFailure, "{}", validUsage)
-    case .failedWithoutUsage:
-      (.failed, .providerFailure, nil, nil)
-    case .failedWithOutput:
-      (.failed, .providerFailure, "partial", validUsage)
-    case .failedNoCallWithUsage:
-      (.failedNoCall, .budgetStopped, nil, validUsage)
-    }
+  ) throws -> EvaluationLearningCallResult {
+    try EvaluationLearningCallResult(
+      request: fixture.request,
+      requestSHA256: canonicalRequestSHA256(for: fixture.request),
+      outcome: outcome,
+      failureCode: failureCode,
+      output: output,
+      finishReason: outcome == .response ? "stop" : nil,
+      reportedModel: outcome == .response ? fixture.context.route.wireModel : nil,
+      usage: usage,
+      admissionContext: fixture.context
+    )
   }
 }
 
@@ -506,10 +506,14 @@ private func makeEvaluationLearningCallFixture(
   }
   let carrierURL = mutation == .carrierOutsideEvaluation ? outside : carrierTarget
   let stateURL = mutation == .stateOutsideEvaluation ? outside : state
-  let resultURL =
-    mutation == .resultOutsideState
-    ? evaluation.appendingPathComponent("escaped-result.json")
-    : results.appendingPathComponent("result.json")
+  let resultURL: URL
+  if mutation == .resultOutsideState {
+    resultURL = evaluation.appendingPathComponent("escaped-result.json")
+  } else if mutation == .stateOutsideEvaluation {
+    resultURL = outside.appendingPathComponent("result.json")
+  } else {
+    resultURL = results.appendingPathComponent("result.json")
+  }
   let providerCallID = ProviderCallID(
     rawValue: "00000000-0000-0000-0000-000000000005"
   )
@@ -616,16 +620,5 @@ private func jsonObject<Value: Encodable>(encoding value: Value) throws -> [Stri
     JSONSerialization.jsonObject(
       with: EvaluationCanonicalJSON.data(encoding: value)
     ) as? [String: Any]
-  )
-}
-
-private func callRequest(wireModel: String) -> HTTPRequest {
-  HTTPRequest(
-    method: .post,
-    url: LLMProviderDescriptor.chatGPTResponsesEndpoint,
-    headers: [:],
-    body: Data(#"{"model":"\#(wireModel)"}"#.utf8),
-    timeout: .seconds(1),
-    responseBodyPolicy: .streaming(maximumUnreadBytes: 1_024, errorBytes: 1_024)
   )
 }

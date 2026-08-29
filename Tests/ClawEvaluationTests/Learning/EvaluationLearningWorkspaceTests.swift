@@ -125,43 +125,48 @@ import Testing
     )
   }
 
-  @Test func activeAndRestartRequireTheExactPromotedDigest() throws {
+  @Test(arguments: IncompletePromotedCondition.allCases)
+  func activeAndRestartRequireCompletePromotionReceipts(
+    _ incomplete: IncompletePromotedCondition
+  ) throws {
     // given
     let root = try makeEvaluationTestRoot()
     defer { try? FileManager.default.removeItem(at: root) }
-    let unexpectedDigest = String(repeating: "f", count: 64)
-    let active = try makeLearningWorkspaceFixture(
+    let fixture = try makeLearningWorkspaceFixture(
       root: root,
-      attemptID: "active-digest",
+      attemptID: incomplete.rawValue,
       split: "sealed",
-      stage: "sealed-pre-restart",
-      condition: .lessonConditioned,
-      lessonSource: .artifact,
-      hasPromotionReceipt: true,
-      expectedLessonSetDigest: unexpectedDigest
+      stage: incomplete.isRestart ? "sealed-post-restart" : "sealed-pre-restart",
+      condition: incomplete.isRestart ? .postRestartLessonConditioned : .lessonConditioned,
+      lessonSource: incomplete.isRestart ? .durableActive : .artifact,
+      hasPromotionReceipt: false
     )
-    let restart = try makeLearningWorkspaceFixture(
-      root: root,
-      attemptID: "restart-digest",
-      split: "sealed",
-      stage: "sealed-post-restart",
-      condition: .postRestartLessonConditioned,
-      lessonSource: .durableActive,
-      hasPromotionReceipt: true,
-      expectedLessonSetDigest: unexpectedDigest
+    let receiptURL = root.appendingPathComponent("partial-promotion-receipt.json")
+    let receiptData = try EvaluationCanonicalJSON.data(fromJSONObject: ["schema_version": 1])
+    try receiptData.write(to: receiptURL)
+    var configurationObject = try #require(
+      JSONSerialization.jsonObject(
+        with: EvaluationCanonicalJSON.data(encoding: fixture.configuration)
+      ) as? [String: Any]
+    )
+    if incomplete.hasPath {
+      configurationObject["promotion_receipt_path"] = receiptURL.path
+    }
+    if incomplete.hasDigest {
+      configurationObject["promotion_receipt_sha256"] = SHA256Digest.hex(receiptData)
+    }
+    let candidate = try JSONDecoder().decode(
+      EvaluationAttemptConfiguration.self,
+      from: EvaluationCanonicalJSON.data(fromJSONObject: configurationObject)
     )
 
     // when
-    let activeError = #expect(throws: (any Error).self) {
-      _ = try EvaluationWorkspaceMaterializer.resetLearning(configuration: active.configuration)
-    }
-    let restartError = #expect(throws: (any Error).self) {
-      _ = try EvaluationWorkspaceMaterializer.resetLearning(configuration: restart.configuration)
+    let error = #expect(throws: EvaluationConfigurationError.invalidLessonSource) {
+      try candidate.validate()
     }
 
-    // then — omitting the nested digest comparison admits a different promoted effective set.
-    #expect(activeError != nil)
-    #expect(restartError != nil)
+    // then — each promoted condition requires both independently frozen receipt fields.
+    #expect(error != nil)
   }
 
   @Test func cleanRejectsANoncanonicalEmptySet() throws {
@@ -293,6 +298,27 @@ private struct LearningWorkspaceFixture {
   let configuration: EvaluationAttemptConfiguration
   let lessonSetText: String
   let task: [String: Any]
+}
+
+enum IncompletePromotedCondition: String, CaseIterable, Sendable {
+  case activeMissing = "active-missing"
+  case activePathOnly = "active-path-only"
+  case activeDigestOnly = "active-digest-only"
+  case restartMissing = "restart-missing"
+  case restartPathOnly = "restart-path-only"
+  case restartDigestOnly = "restart-digest-only"
+
+  var isRestart: Bool {
+    rawValue.hasPrefix("restart-")
+  }
+
+  var hasPath: Bool {
+    rawValue.hasSuffix("path-only")
+  }
+
+  var hasDigest: Bool {
+    rawValue.hasSuffix("digest-only")
+  }
 }
 
 private func makeLearningWorkspaceFixture(

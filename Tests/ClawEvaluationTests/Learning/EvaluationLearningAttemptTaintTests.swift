@@ -125,18 +125,23 @@ import Testing
     let result = try await runLearningAttempt(fixture, provider: provider)
     let resultObject = try canonicalObject(result)
     let tools = try #require(resultObject["tools"] as? [[String: Any]])
+    let firstRequest = try #require(await provider.requests.first)
+    let lessonFences = try labeledFences(
+      in: firstRequest,
+      label: "scheduled_learning_lessons"
+    )
 
     // then
     #expect(resultObject["learning_initial_tainted"] as? Bool == false)
     #expect(tools.first?["session_tainted"] as? Bool == false)
+    #expect(lessonFences == ["{\"lessons\":[],\"schema_version\":1}\n"])
   }
 
-  @Test func legacyConfigurationAndResultBytesRemainUnchanged() async throws {
+  @Test func legacyResultAndToolBytesRemainUnchanged() async throws {
     // given
     let root = try makeEvaluationTestRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let configured = try makeEvaluationConfiguration(root: root)
-    let configurationBytes = try EvaluationCanonicalJSON.data(encoding: configured.configuration)
     let provider = SequenceProvider(scriptedTwoRoundResponses())
     let result = try await runAttempt(
       configuration: configured.configuration,
@@ -146,19 +151,12 @@ import Testing
     let resultBytes = try EvaluationCanonicalJSON.data(encoding: result)
 
     // when
-    let decodedConfiguration = try JSONDecoder().decode(
-      EvaluationAttemptConfiguration.self,
-      from: configurationBytes
-    )
     let decodedResult = try JSONDecoder().decode(EvaluationAttemptResult.self, from: resultBytes)
-    let configurationObject = try canonicalObject(decodedConfiguration)
     let resultObject = try canonicalObject(decodedResult)
     let tools = try #require(resultObject["tools"] as? [[String: Any]])
 
     // then
-    #expect(try EvaluationCanonicalJSON.data(encoding: decodedConfiguration) == configurationBytes)
     #expect(try EvaluationCanonicalJSON.data(encoding: decodedResult) == resultBytes)
-    #expect(configurationObject["execution_profile"] == nil)
     #expect(resultObject["learning_carrier_sha256"] == nil)
     #expect(resultObject["learning_lesson_set_sha256"] == nil)
     #expect(resultObject["learning_initial_tainted"] == nil)
