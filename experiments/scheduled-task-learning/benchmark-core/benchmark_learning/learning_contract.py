@@ -92,12 +92,15 @@ _ADAPTER_ENVELOPE_KEYS = {
     "receipt_digest",
 }
 _ADAPTER_OUTCOME_VALUES = tuple(outcome.value for outcome in AdapterOutcome)
-_ADAPTER_DIGEST_FIELDS = (
-    "candidate_digest",
+_ADAPTER_GATE_DIGEST_FIELDS = (
     "dataset_digest",
     "oracle_digest",
     "gates_digest",
     "execution_surface_digest",
+)
+_ADAPTER_DIGEST_FIELDS = (
+    "candidate_digest",
+    *_ADAPTER_GATE_DIGEST_FIELDS,
     "receipt_digest",
 )
 
@@ -137,6 +140,7 @@ _EVENT_PAYLOAD_KEYS: dict[ReplayEventKind, set[str]] = {
         "manifest_digest",
         "freeze_commit",
         "invocation_core_digest",
+        "trigger_digest",
     },
     ReplayEventKind.OPERATION_FINISHED: {
         "job_id",
@@ -219,7 +223,14 @@ _TRIAL_RUN_OUTCOMES = ("positive", "negative", "neutral")
 _ADAPTER_RECEIPT_SUBJECT_KINDS = ("trial", "promotion")
 _HARD_VETO_TRIGGER_KINDS = ("security", "secret_leakage", "corruption", "invariant_violation")
 _EVALUATOR_OUTCOMES = ("no_issue", "reusable_issue", "transient_issue", "uncertain")
-_ADAPTER_BINDING_KEYS = {"adapter_id", "adapter_version"}
+_ADAPTER_BINDING_KEYS = {
+    "adapter_id",
+    "adapter_version",
+    "dataset_digest",
+    "oracle_digest",
+    "gates_digest",
+    "execution_surface_digest",
+}
 
 # Structural-only bounds: they reject pathological input sizes at parse time. The exact
 # ADR-mandated admission numbers (<= 3 lessons, <= 512/1536 UTF-8 bytes, blank/duplicate
@@ -311,6 +322,8 @@ def _adapter_binding_issues(value: Any, path: str, issues: list[ValidationIssue]
         return
     _opaque_string_issues(value.get("adapter_id"), f"{path}.adapter_id", issues)
     _opaque_string_issues(value.get("adapter_version"), f"{path}.adapter_version", issues)
+    for field in _ADAPTER_GATE_DIGEST_FIELDS:
+        _sha256_issues(value.get(field), f"{path}.{field}", issues)
 
 
 def _adapter_envelope_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None:
@@ -403,7 +416,8 @@ def _operation_started_payload_issues(
 ) -> None:
     _opaque_string_issues(payload.get("job_id"), f"{path}.job_id", issues)
     _opaque_string_issues(payload.get("operation_id"), f"{path}.operation_id", issues)
-    closed_enum(payload.get("operation_kind"), _OPERATION_KINDS, f"{path}.operation_kind", issues)
+    operation_kind = payload.get("operation_kind")
+    closed_enum(operation_kind, _OPERATION_KINDS, f"{path}.operation_kind", issues)
     _positive_int_issues(payload.get("attempt_generation"), f"{path}.attempt_generation", issues)
     for field in (
         "carrier_digest",
@@ -414,6 +428,15 @@ def _operation_started_payload_issues(
         "invocation_core_digest",
     ):
         _opaque_string_issues(payload.get(field), f"{path}.{field}", issues)
+    trigger_digest = payload.get("trigger_digest")
+    if operation_kind == "reflector":
+        _opaque_string_issues(trigger_digest, f"{path}.trigger_digest", issues)
+    elif trigger_digest is not None:
+        issue(
+            issues,
+            "schema.bounded_values",
+            f"{path}.trigger_digest must be null for this operation kind",
+        )
 
 
 def _operation_finished_payload_issues(

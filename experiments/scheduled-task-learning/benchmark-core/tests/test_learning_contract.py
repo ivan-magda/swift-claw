@@ -77,6 +77,113 @@ class LearningContractTests(unittest.TestCase):
         envelope = parse_adapter_envelope(valid)
         self.assertEqual(adapter_envelope_json(envelope), valid)
 
+    def test_operation_started_requires_kind_specific_trigger_binding(self) -> None:
+        # given
+        payload: dict[str, Any] = {
+            "job_id": "job-a",
+            "operation_id": "reflector-1",
+            "operation_kind": "reflector",
+            "attempt_generation": 1,
+            "carrier_digest": "carrier-1",
+            "route_digest": "route-1",
+            "provider_call_id": "provider-call-1",
+            "manifest_digest": "manifest-1",
+            "freeze_commit": "freeze-commit-1",
+            "invocation_core_digest": "invocation-core-1",
+            "trigger_digest": "trigger-1",
+        }
+        envelope = {
+            "schema_version": 1,
+            "sequence": 1,
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "kind": "operation_started",
+            "payload": payload,
+        }
+        task_payload = {**payload, "operation_kind": "task", "trigger_digest": None}
+        missing_trigger = {
+            **envelope,
+            "payload": {key: value for key, value in payload.items() if key != "trigger_digest"},
+        }
+        unbound_reflector = {**envelope, "payload": {**payload, "trigger_digest": None}}
+        triggered_task = {**envelope, "payload": {**task_payload, "trigger_digest": "trigger-1"}}
+
+        # when
+        reflector = parse_event(envelope)
+        task = parse_event({**envelope, "payload": task_payload})
+
+        # then
+        self.assertEqual(reflector.payload["trigger_digest"], "trigger-1")
+        self.assertIsNone(task.payload["trigger_digest"])
+        for malformed in (missing_trigger, unbound_reflector, triggered_task):
+            with (
+                self.subTest(payload=malformed["payload"]),
+                self.assertRaises(LearningContractError),
+            ):
+                parse_event(malformed)
+
+    def test_candidate_admitted_requires_complete_adapter_binding(self) -> None:
+        # given
+        adapter = {
+            "adapter_id": "page-change-m3",
+            "adapter_version": "v1",
+            "dataset_digest": "c" * 64,
+            "oracle_digest": "d" * 64,
+            "gates_digest": "e" * 64,
+            "execution_surface_digest": "f" * 64,
+        }
+        payload: dict[str, Any] = {
+            "job_id": "job-a",
+            "candidate_record_digest": "a" * 64,
+            "replacement_digest": "b" * 64,
+            "base_digest": "stable-0",
+            "base_revision": 0,
+            "learning_epoch": 0,
+            "feedback_revision": 0,
+            "adapter": adapter,
+        }
+        envelope = {
+            "schema_version": 1,
+            "sequence": 1,
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "kind": "candidate_admitted",
+            "payload": payload,
+        }
+        partial = {
+            **envelope,
+            "payload": {
+                **payload,
+                "adapter": {"adapter_id": "page-change-m3", "adapter_version": "v1"},
+            },
+        }
+        malformed_digests: list[dict[str, Any]] = [
+            {
+                **envelope,
+                "payload": {**payload, "adapter": {**adapter, field: "not-a-sha256"}},
+            }
+            for field in (
+                "dataset_digest",
+                "oracle_digest",
+                "gates_digest",
+                "execution_surface_digest",
+            )
+        ]
+
+        # when
+        frozen = parse_event(envelope)
+        absent = parse_event({**envelope, "payload": {**payload, "adapter": None}})
+
+        # then
+        self.assertEqual(frozen.payload["adapter"], adapter)
+        self.assertIsNone(absent.payload["adapter"])
+        with self.assertRaises(LearningContractError):
+            parse_event(partial)
+        for malformed in malformed_digests:
+            with (
+                self.subTest(adapter=malformed["payload"]["adapter"]),
+                self.assertRaises(LearningContractError),
+            ):
+                parse_event(malformed)
+
     def test_replay_receipt_is_byte_identical_for_identical_inputs(self) -> None:
         # given
         event = parse_event(
