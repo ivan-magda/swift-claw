@@ -371,6 +371,7 @@ def negative_evidence(
             "run-2",
             "reusable_issue",
             ["x"],
+            logical_occurrence=FIRST_OCCURRENCE,
             stable_digest=stable_digest,
             learning_epoch=learning_epoch,
             compatibility_digest=compatibility_digest,
@@ -1512,7 +1513,14 @@ class LearningReplayTests(unittest.TestCase):
         ]
         second_trigger_events = [
             *evidence,
-            owner_correction(3, REFLECTION_OCCURRENCE, "job-a", "run-1", revision=1),
+            stable_evaluation(
+                3,
+                REFLECTION_OCCURRENCE,
+                "job-a",
+                "run-3",
+                "reusable_issue",
+                ["x"],
+            ),
         ]
         second_trigger_result = replay(initial=initial, events=second_trigger_events)
         first_trigger = second_trigger_result["decisions"][0]["artifact_identities"][
@@ -2786,6 +2794,7 @@ class LearningReplayTests(unittest.TestCase):
         second = replay(initial=initial, events=events)
 
         # then
+        self.assertEqual(set(first), {"state", "decisions", "receipt"})
         self.assertEqual(dumps(first["receipt"]), dumps(second["receipt"]))
         self.assertEqual(first["receipt"]["final_state_sha256"], canonical_sha256(first["state"]))
         self.assertEqual(
@@ -2797,6 +2806,418 @@ class LearningReplayTests(unittest.TestCase):
         self.assertEqual(
             first["decisions"][-1]["artifact_identities"]["promotion_digest"],
             promotion["promotion_digest"],
+        )
+
+    def test_future_evidence_waits_for_explicit_clock_advance(self) -> None:
+        # given
+        initial = initial_state(
+            algorithm_id=ALGORITHM_ID,
+            controlled_clock="2026-01-01T00:00:00Z",
+            jobs=[job("job-a")],
+        )
+        future_evidence = [
+            stable_evaluation(
+                1,
+                "2026-01-01T00:00:00Z",
+                "job-a",
+                "run-1",
+                "reusable_issue",
+                ["x"],
+                logical_occurrence="2026-01-02T00:00:00Z",
+            ),
+            stable_evaluation(
+                2,
+                "2026-01-01T00:00:01Z",
+                "job-a",
+                "run-2",
+                "reusable_issue",
+                ["x"],
+                logical_occurrence="2026-01-02T00:00:00Z",
+            ),
+        ]
+        reach_occurrence = clock_advanced(3, "2026-01-02T00:00:00Z")
+
+        # when
+        before_clock = replay(initial=initial, events=future_evidence)
+        after_clock = replay(initial=initial, events=[*future_evidence, reach_occurrence])
+
+        # then
+        self.assertEqual(before_clock["decisions"], [])
+        self.assertEqual(
+            [decision["decision"] for decision in after_clock["decisions"]],
+            ["reflected"],
+        )
+
+    def test_stale_reflector_snapshot_cannot_rebind_to_current_state(self) -> None:
+        # given
+        initial = initial_state(
+            algorithm_id=ALGORITHM_ID, controlled_clock=FIRST_CLOCK, jobs=[job("job-a")]
+        )
+        evidence = negative_evidence()
+        trigger_digest = frozen_trigger_digest(initial, evidence)
+        start = reflector_operation(
+            3,
+            REFLECTION_OCCURRENCE,
+            "job-a",
+            trigger_digest,
+        )[0]
+        confirm = evaluation_signal(
+            4,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "run-1",
+            "evaluation_confirm",
+            revision=1,
+        )
+        finish = operation_finished(
+            5,
+            CONTROL_OCCURRENCE,
+            kind="reflector",
+            generation=1,
+            operation_id="reflector-1",
+            result_digest="reflector-result-1",
+        )
+        stale_artifact = candidate_artifact(
+            6,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            trigger_digest,
+            LESSONS,
+            frozen_feedback_revision=1,
+        )
+        stale_start = reflector_operation(
+            4,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            trigger_digest,
+            operation_id="reflector-after-feedback",
+        )[0]
+        confirm_before_start = evaluation_signal(
+            3,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "run-1",
+            "evaluation_confirm",
+            revision=1,
+        )
+        base_initial = initial_state(
+            algorithm_id=ALGORITHM_ID, controlled_clock=FIRST_CLOCK, jobs=[job("job-a")]
+        )
+        base_evidence = negative_evidence()
+        third_evaluation = stable_evaluation(
+            3,
+            REFLECTION_OCCURRENCE,
+            "job-a",
+            "run-3",
+            "reusable_issue",
+            ["x"],
+        )
+        base_prefix = [*base_evidence, third_evaluation]
+        trigger_decisions = replay(initial=base_initial, events=base_prefix)["decisions"]
+        old_base_trigger = trigger_decisions[0]["artifact_identities"]["trigger_digest"]
+        current_trigger = trigger_decisions[1]["artifact_identities"]["trigger_digest"]
+        current_operation = reflector_operation(
+            4,
+            REFLECTION_OCCURRENCE,
+            "job-a",
+            current_trigger,
+        )
+        current_artifact = candidate_artifact(
+            6,
+            REFLECTION_OCCURRENCE,
+            "job-a",
+            current_trigger,
+            LESSONS,
+        )
+        candidate_prefix = [*base_prefix, *current_operation, current_artifact]
+        candidate = candidates_of(replay(initial=base_initial, events=candidate_prefix))[0]
+        admission = candidate_admitted(
+            7,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            candidate["candidate_record_digest"],
+            candidate["replacement_digest"],
+        )
+        admitted = [*candidate_prefix, admission]
+        trial = trial_of(base_initial, admitted)
+        promoted_events = [
+            *admitted,
+            trial_run_created(
+                8,
+                CONTROL_OCCURRENCE,
+                trial["candidate_record_digest"],
+                "base-trial-run-1",
+            ),
+            trial_run_created(
+                9,
+                CONTROL_OCCURRENCE,
+                trial["candidate_record_digest"],
+                "base-trial-run-2",
+            ),
+            trial_run_settled(10, CONTROL_OCCURRENCE, "base-trial-run-1", "positive"),
+            trial_run_settled(11, CONTROL_OCCURRENCE, "base-trial-run-2", "positive"),
+        ]
+        stale_base_start = reflector_operation(
+            12,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            old_base_trigger,
+            operation_id="reflector-after-promotion",
+        )[0]
+
+        # when
+        attempted = replay(initial=initial, events=[*evidence, start, confirm, finish])
+        with self.assertRaises(LearningContractError) as artifact_caught:
+            replay(
+                initial=initial,
+                events=[*evidence, start, confirm, finish, stale_artifact],
+            )
+        with self.assertRaises(LearningContractError) as start_caught:
+            replay(initial=initial, events=[*evidence, confirm_before_start, stale_start])
+        promoted = replay(initial=base_initial, events=promoted_events)
+        with self.assertRaises(LearningContractError) as base_caught:
+            replay(
+                initial=base_initial,
+                events=[*promoted_events, stale_base_start],
+            )
+
+        # then
+        trigger = attempted["state"]["jobs"]["job-a"]["triggers"][0]
+        self.assertTrue(trigger["attempted"])
+        self.assertEqual(trigger["operation_id"], "reflector-1")
+        self.assertEqual(candidates_of(attempted), [])
+        self.assertIn("policy.stale_trigger", requirements(artifact_caught.exception))
+        self.assertIn("policy.stale_trigger", requirements(start_caught.exception))
+        promoted_job = promoted["state"]["jobs"]["job-a"]
+        self.assertEqual(promoted_job["stable_digest"], lesson_set_digest(LESSONS))
+        self.assertFalse(promoted_job["triggers"][0]["closed"])
+        self.assertIn("policy.stale_trigger", requirements(base_caught.exception))
+
+    def test_approval_inherits_disputed_dependency_but_owner_edit_remains_independent(
+        self,
+    ) -> None:
+        # given
+        initial, prefix = recorded_candidate()
+        predecessor = candidates_of(replay(initial=initial, events=prefix))[0]
+        dispute = evaluation_signal(
+            6,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "run-1",
+            "evaluation_dispute",
+            revision=1,
+        )
+        approve = candidate_signal(
+            7,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            predecessor["candidate_record_digest"],
+            "candidate_approve",
+            revision=1,
+        )
+        edit = candidate_signal(
+            7,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            predecessor["candidate_record_digest"],
+            "candidate_edit",
+            revision=1,
+            payload={"lessons": ["Use the owner-approved wording."]},
+        )
+        approved = replay(initial=initial, events=[*prefix, dispute, approve])
+        approval_successor = candidates_of(approved)[-1]
+        edited = replay(initial=initial, events=[*prefix, dispute, edit])
+        edit_successor = candidates_of(edited)[-1]
+        approval_admission = candidate_admitted(
+            8,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            approval_successor["candidate_record_digest"],
+            approval_successor["replacement_digest"],
+            feedback_revision=2,
+        )
+        edit_admission = candidate_admitted(
+            8,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            edit_successor["candidate_record_digest"],
+            edit_successor["replacement_digest"],
+            feedback_revision=2,
+        )
+
+        # when
+        with self.assertRaises(LearningContractError) as approval_caught:
+            replay(
+                initial=initial,
+                events=[*prefix, dispute, approve, approval_admission],
+            )
+        edit_result = replay(
+            initial=initial,
+            events=[*prefix, dispute, edit, edit_admission],
+        )
+
+        # then
+        self.assertIn("policy.absent_trigger_support", requirements(approval_caught.exception))
+        self.assertEqual(edit_result["decisions"][-1]["reason"], "owner_edit")
+        self.assertEqual(edit_result["state"]["jobs"]["job-a"]["trial"]["status"], "open")
+
+    def test_lesson_validation_rejects_control_and_format_characters_for_artifact_and_edit(
+        self,
+    ) -> None:
+        # given
+        initial, prefix = recorded_candidate()
+        predecessor = candidates_of(replay(initial=initial, events=prefix))[0]
+        rows = [
+            ("artifact_control", "artifact", "Visible\u0007control"),
+            ("edit_bidi", "edit", "Bidi\u202eoverride"),
+        ]
+
+        # when / then
+        for name, source, lesson in rows:
+            with self.subTest(row=name):
+                with self.assertRaises(LearningContractError) as caught:
+                    if source == "artifact":
+                        artifact_initial, artifact_events = recorded_candidate(lessons=[lesson])
+                        replay(initial=artifact_initial, events=artifact_events)
+                    else:
+                        replay(
+                            initial=initial,
+                            events=[
+                                *prefix,
+                                candidate_signal(
+                                    6,
+                                    CONTROL_OCCURRENCE,
+                                    "job-a",
+                                    predecessor["candidate_record_digest"],
+                                    "candidate_edit",
+                                    revision=1,
+                                    payload={"lessons": [lesson]},
+                                ),
+                            ],
+                        )
+                self.assertIn("policy.lesson_characters", requirements(caught.exception))
+
+    def test_trial_dispute_immediately_falls_back_unless_owner_result_replaces_it(
+        self,
+    ) -> None:
+        # given
+        initial, admitted = admitted_trial(FIRST_CLOCK)
+        trial = trial_of(initial, admitted)
+        created = trial_run_created(
+            7,
+            CONTROL_OCCURRENCE,
+            trial["candidate_record_digest"],
+            "trial-run-1",
+        )
+        settled = trial_run_settled(8, CONTROL_OCCURRENCE, "trial-run-1", "positive")
+        evaluation_digest = trial_evaluation_digest(settled)
+        dispute = owner_signal(
+            9,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "evaluation_dispute",
+            subject_kind="evaluation",
+            subject_digest=evaluation_digest,
+            run_id="trial-run-1",
+            revision=1,
+        )
+        replacement = run_signal(
+            9,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "trial-run-1",
+            "result_useful",
+            revision=1,
+        )
+        replaced_dispute = owner_signal(
+            10,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "evaluation_dispute",
+            subject_kind="evaluation",
+            subject_digest=evaluation_digest,
+            run_id="trial-run-1",
+            revision=1,
+        )
+
+        # when
+        disputed = replay(
+            initial=initial,
+            events=[*admitted, created, settled, dispute],
+        )
+        replaced = replay(
+            initial=initial,
+            events=[
+                *admitted,
+                created,
+                settled,
+                replacement,
+                replaced_dispute,
+            ],
+        )
+
+        # then
+        self.assertEqual(disputed["state"]["jobs"]["job-a"]["trial"]["status"], "fallback")
+        self.assertEqual(disputed["decisions"][-1]["reason"], "hard_veto")
+        replaced_trial = replaced["state"]["jobs"]["job-a"]["trial"]
+        self.assertEqual(replaced_trial["status"], "open")
+
+    def test_run_id_cannot_cross_stable_and_trial_classifications_in_either_order(self) -> None:
+        # given
+        stable_first_initial, stable_first_admitted = admitted_trial(FIRST_CLOCK)
+        stable_first_trial = trial_of(stable_first_initial, stable_first_admitted)
+        stable_first = stable_evaluation(
+            7,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "shared-run",
+            "no_issue",
+            [],
+        )
+        duplicate_trial = trial_run_created(
+            8,
+            CONTROL_OCCURRENCE,
+            stable_first_trial["candidate_record_digest"],
+            "shared-run",
+        )
+        trial_first_initial, promoted = promotable_trial()
+        replacement_trial = append_admitted_trial(
+            trial_first_initial,
+            promoted,
+            lessons=["Use a second replacement."],
+        )
+        replacement_state = replay(
+            initial=trial_first_initial,
+            events=replacement_trial,
+        )["state"]["jobs"]["job-a"]
+        duplicate_stable = stable_evaluation(
+            len(replacement_trial) + 1,
+            CONTROL_OCCURRENCE,
+            "job-a",
+            "trial-run-1",
+            "no_issue",
+            [],
+            stable_digest=replacement_state["stable_digest"],
+            learning_epoch=replacement_state["learning_epoch"],
+            compatibility_digest=replacement_state["compatibility_digest"],
+        )
+
+        # when
+        with self.assertRaises(LearningContractError) as trial_caught:
+            replay(
+                initial=stable_first_initial,
+                events=[*stable_first_admitted, stable_first, duplicate_trial],
+            )
+        with self.assertRaises(LearningContractError) as stable_caught:
+            replay(
+                initial=trial_first_initial,
+                events=[*replacement_trial, duplicate_stable],
+            )
+
+        # then
+        self.assertIn("policy.duplicate_trial_run", requirements(trial_caught.exception))
+        self.assertIn(
+            "policy.trial_run_stable_classification", requirements(stable_caught.exception)
         )
 
     def test_exact_owner_controls_roll_back_only_the_active_promotion(self) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -255,8 +256,23 @@ def _sha256_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None
     bounded_string(value, 64, 64, path, issues, SHA256_HEX)
 
 
+def _is_canonical_utc_whole_second(value: Any) -> bool:
+    if not isinstance(value, str) or _OCCURRED_AT.fullmatch(value) is None:
+        return False
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return False
+    return parsed.strftime("%Y-%m-%dT%H:%M:%SZ") == value
+
+
 def _occurred_at_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None:
-    bounded_string(value, 20, 20, path, issues, _OCCURRED_AT)
+    if not _is_canonical_utc_whole_second(value):
+        issue(
+            issues,
+            "schema.bounded_values",
+            f"{path} must be a canonical RFC3339 UTC whole-second timestamp",
+        )
 
 
 def _nonnegative_int_issues(value: Any, path: str, issues: list[ValidationIssue]) -> None:

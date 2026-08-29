@@ -77,6 +77,41 @@ class LearningContractTests(unittest.TestCase):
         envelope = parse_adapter_envelope(valid)
         self.assertEqual(adapter_envelope_json(envelope), valid)
 
+    def test_event_timestamps_reject_calendar_invalid_instants(self) -> None:
+        # given
+        invalid_events = [
+            {
+                "schema_version": 1,
+                "sequence": 1,
+                "occurred_at": "2026-02-30T00:00:00Z",
+                "kind": "clock_advanced",
+                "payload": {},
+            },
+            {
+                "schema_version": 1,
+                "sequence": 1,
+                "occurred_at": "2026-01-01T00:00:00Z",
+                "kind": "stable_evaluation_recorded",
+                "payload": {
+                    "job_id": "job-a",
+                    "run_id": "run-1",
+                    "operation_id": "evaluator-run-1",
+                    "evaluation_digest": "evaluation-run-1",
+                    "logical_occurrence": "2026-13-01T00:00:00Z",
+                    "learning_epoch": 0,
+                    "compatibility_digest": "compatibility-0",
+                    "stable_digest": "stable-0",
+                    "outcome": "no_issue",
+                    "issue_codes": [],
+                },
+            },
+        ]
+
+        # when / then
+        for invalid in invalid_events:
+            with self.subTest(event=invalid), self.assertRaises(LearningContractError):
+                parse_event(invalid)
+
     def test_operation_started_requires_kind_specific_trigger_binding(self) -> None:
         # given
         payload: dict[str, Any] = {

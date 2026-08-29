@@ -74,6 +74,7 @@ _DERIVED_JOB_KEYS = {
     "candidates",
     "closed_replacements",
     "vetoes",
+    "trial_run_ids",
     "trial",
     "promotion",
     "promotion_history",
@@ -210,6 +211,7 @@ def _new_job(entry: dict[str, Any]) -> dict[str, Any]:
             "candidates": [],
             "closed_replacements": [],
             "vetoes": [],
+            "trial_run_ids": [],
             "trial": None,
             "promotion": None,
             "promotion_history": [],
@@ -392,6 +394,7 @@ def _stable_window(state: dict[str, Any], job: dict[str, Any]) -> list[dict[str,
         and entry["stable_digest"] == job["stable_digest"]
         and entry["compatibility_digest"] == job["compatibility_digest"]
         and entry["logical_occurrence"] >= cutoff
+        and entry["logical_occurrence"] <= state["controlled_clock"]
     ]
     eligible.sort(key=lambda entry: (entry["logical_occurrence"], entry["run_id"]))
     return eligible[-_EVIDENCE_WINDOW_SIZE:]
@@ -602,7 +605,31 @@ def _apply_clock_advanced(
             "$.occurred_at must not precede the controlled clock",
         )
     _require_valid(issues)
-    return _reconcile_all({**state, "controlled_clock": event.occurred_at}, event)
+    state, decisions = _reconcile_all(
+        {**state, "controlled_clock": event.occurred_at},
+        event,
+    )
+    for job_id in sorted(state["jobs"]):
+        state, produced = _maybe_trigger(state, job_id, event)
+        decisions.extend(produced)
+    return state, decisions
+
+
+def _trigger_snapshot_issues(
+    job: dict[str, Any],
+    trigger: dict[str, Any],
+    issues: list[ValidationIssue],
+) -> None:
+    if (
+        trigger["stable_digest"] != job["stable_digest"]
+        or trigger["learning_epoch"] != job["learning_epoch"]
+        or trigger["feedback_revision"] != job["feedback_revision"]
+    ):
+        issue(
+            issues,
+            "policy.stale_trigger",
+            "$.payload.trigger_digest must retain the current job snapshot",
+        )
 
 
 def _apply_operation_started(
@@ -641,6 +668,8 @@ def _apply_operation_started(
                 "policy.attempted_trigger",
                 "$.payload.trigger_digest already owns a reflector attempt",
             )
+        if trigger is not None:
+            _trigger_snapshot_issues(job, trigger, issues)
     _require_valid(issues)
     record = {field: payload[field] for field in _OPERATION_START_FIELDS}
     record.update({"status": "started", "result_digest": None, "usage_digest": None})
@@ -855,6 +884,16 @@ def _lesson_issues(lessons: list[str], path: str, issues: list[ValidationIssue])
         issue(issues, "policy.empty_lesson", f"{path} must not contain an empty normalized lesson")
     if len(set(lessons)) != len(lessons):
         issue(issues, "policy.duplicate_lesson", f"{path} must not repeat a normalized lesson")
+    if any(
+        character != "\n" and unicodedata.category(character) in {"Cc", "Cf"}
+        for text in lessons
+        for character in text
+    ):
+        issue(
+            issues,
+            "policy.lesson_characters",
+            f"{path} must not contain control or Unicode format characters",
+        )
     sizes = [len(text.encode("utf-8")) for text in lessons]
     if any(size > _MAX_LESSON_BYTES for size in sizes):
         issue(issues, "policy.lesson_bytes", f"{path} lessons must be <= {_MAX_LESSON_BYTES} bytes")
@@ -1223,7 +1262,19 @@ def _candidate_artifact_issues(
     issues: list[ValidationIssue],
 ) -> tuple[list[str], str | None]:
     _reflector_result_issues(job, payload, issues)
-    _open_trigger_issues(job, payload, issues)
+    trigger = _open_trigger_issues(job, payload, issues)
+    if trigger is not None:
+        _trigger_snapshot_issues(job, trigger, issues)
+        if (
+            payload["base_digest"] != trigger["stable_digest"]
+            or payload["learning_epoch"] != trigger["learning_epoch"]
+            or payload["feedback_revision"] != trigger["feedback_revision"]
+        ):
+            issue(
+                issues,
+                "policy.stale_trigger",
+                "$.payload frozen facts must equal the bound trigger snapshot",
+            )
     if payload["algorithm_id"] != state["algorithm_id"]:
         issue(issues, "policy.algorithm_mismatch", "$.payload.algorithm_id must match the replay")
     if (
@@ -1334,12 +1385,22 @@ def _trigger_support(job: dict[str, Any], trigger: dict[str, Any]) -> str | None
 
 
 def _admission_support(job: dict[str, Any], candidate: dict[str, Any]) -> str | None:
-    if candidate["origin"] != "reflector":
-        return str(candidate["origin"])
-    trigger = _trigger(job, candidate["trigger_digest"])
+    origin = str(candidate["origin"])
+    source = candidate
+    while source["origin"] == "owner_approval":
+        predecessor = _candidate(job, source["predecessor_candidate_record_digest"])
+        if predecessor is None:
+            return None
+        source = predecessor
+    if source["origin"] != "reflector":
+        return origin
+    trigger = _trigger(job, source["trigger_digest"])
     if trigger is None:
         return None
-    return _trigger_support(job, trigger)
+    support = _trigger_support(job, trigger)
+    if support is None:
+        return None
+    return origin if origin == "owner_approval" else support
 
 
 def _admission_issues(
@@ -1496,8 +1557,24 @@ def _effective_trial_outcome(job: dict[str, Any], assignment: dict[str, Any]) ->
             return "positive"
         if signal["signal"] in {"result_not_useful", "result_correction"}:
             return "negative"
+    judgement = _effective_signal(job, "evaluation", assignment["evaluation_digest"])
+    if judgement is not None and judgement["signal"] == "evaluation_dispute":
+        return None
     outcome: str = assignment["outcome"]
     return outcome
+
+
+def _required_trial_evaluation_disputed(
+    job: dict[str, Any],
+    assignment: dict[str, Any],
+) -> bool:
+    if assignment["status"] != "settled" or assignment["outcome"] != "positive":
+        return False
+    result = _effective_signal(job, "run", assignment["run_id"])
+    if result is not None and result["signal"] in _OWNER_RESULT_SIGNALS:
+        return False
+    judgement = _effective_signal(job, "evaluation", assignment["evaluation_digest"])
+    return judgement is not None and judgement["signal"] == "evaluation_dispute"
 
 
 def _trial_artifact_identities(job: dict[str, Any], trial: dict[str, Any]) -> dict[str, Any]:
@@ -2058,6 +2135,10 @@ def _immediate_trial_decision(
     candidate = _candidate(job, trial["candidate_record_digest"])
     if candidate is not None and candidate["vetoed"]:
         return "fallback", "hard_veto"
+    if any(
+        _required_trial_evaluation_disputed(job, assignment) for assignment in trial["assignments"]
+    ):
+        return "fallback", "hard_veto"
     adapter_receipt = trial["adapter_receipt"]
     adapter_outcome = None if adapter_receipt is None else adapter_receipt["outcome"]
     if adapter_outcome in {"critical", "regression"}:
@@ -2185,8 +2266,9 @@ def _apply_trial_run_created(
             "policy.assignment_limit",
             "$.payload cannot create a run after the trial assignment boundary",
         )
-    if any(entry["run_id"] == payload["run_id"] for entry in job["evaluations"]) or any(
-        entry["run_id"] == payload["run_id"] for entry in trial["assignments"]
+    if (
+        any(entry["run_id"] == payload["run_id"] for entry in job["evaluations"])
+        or payload["run_id"] in job["trial_run_ids"]
     ):
         issue(issues, "policy.duplicate_trial_run", "$.payload.run_id is already recorded")
     _require_valid(issues)
@@ -2197,7 +2279,14 @@ def _apply_trial_run_created(
         "evaluation_digest": None,
     }
     updated_trial = {**trial, "assignments": [*trial["assignments"], assignment]}
-    state = _replace_job(state, {**job, "trial": updated_trial})
+    state = _replace_job(
+        state,
+        {
+            **job,
+            "trial_run_ids": [*job["trial_run_ids"], payload["run_id"]],
+            "trial": updated_trial,
+        },
+    )
     return _reconcile_job(state, payload["job_id"], event)
 
 
@@ -2352,6 +2441,12 @@ def _apply_stable_evaluation(
             issues,
             "policy.duplicate_evaluation",
             "$.payload.evaluation_digest is already recorded",
+        )
+    if payload["run_id"] in job["trial_run_ids"]:
+        issue(
+            issues,
+            "policy.trial_run_stable_classification",
+            "$.payload.run_id was already assigned to a trial",
         )
     _require_valid(issues)
     record = {**payload, "issue_codes": list(payload["issue_codes"])}
