@@ -522,14 +522,18 @@ private extension EvaluationAttemptConfiguration {
       guard
         lessonSource == .clean,
         lessonArtifactPath == nil,
-        hasCompletePromotionReceipt == false,
+        promotionReceiptPath == nil,
+        promotionReceiptSHA256 == nil,
         pageStage != .canary,
         pageStage != .synthesis
       else {
         throw EvaluationConfigurationError.invalidLessonSource
       }
     case .lessonConditioned:
-      let isTrial = pageStage == .regression && hasCompletePromotionReceipt == false
+      let isTrial =
+        pageStage == .regression
+        && promotionReceiptPath == nil
+        && promotionReceiptSHA256 == nil
       let isActive = pageStage == .sealedPreRestart && hasCompletePromotionReceipt
       guard lessonSource == .artifact, isTrial || isActive else {
         throw EvaluationConfigurationError.invalidLessonSource

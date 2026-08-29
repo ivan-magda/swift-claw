@@ -29,15 +29,8 @@ package struct EvaluationLearningLessonSet: Codable, Sendable, Equatable {
     } catch {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
-    guard
-      lessonSet.schemaVersion == 1,
-      lessonSet.lessons.count <= 3,
-      lessonSet.lessons.allSatisfy({ lesson in
-        lesson.isEmpty == false && lesson.lengthOfBytes(using: .utf8) <= 512
-      }),
-      Set(lessonSet.lessons).count == lessonSet.lessons.count,
-      try lessonSet.canonicalData == data
-    else {
+    try validate(lessonSet)
+    guard try lessonSet.canonicalData == data else {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
     return lessonSet
@@ -46,6 +39,19 @@ package struct EvaluationLearningLessonSet: Codable, Sendable, Equatable {
   enum CodingKeys: String, CodingKey {
     case schemaVersion = "schema_version"
     case lessons
+  }
+
+  static func validate(_ lessonSet: Self) throws {
+    guard
+      lessonSet.schemaVersion == 1,
+      lessonSet.lessons.count <= 3,
+      lessonSet.lessons.allSatisfy({ lesson in
+        lesson.isEmpty == false && lesson.lengthOfBytes(using: .utf8) <= 512
+      }),
+      Set(lessonSet.lessons).count == lessonSet.lessons.count
+    else {
+      throw EvaluationLearningAdmissionError.invalidJSON
+    }
   }
 }
 
@@ -69,7 +75,17 @@ package struct EvaluationLearningTaskCarrier: Codable, Sendable, Equatable {
 
   package static func loadCanonical(from url: URL) throws -> (Self, Data) {
     let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
-    let object = try EvaluationLearningClosedJSON.object(from: data)
+    let object: [String: Any]
+    do {
+      guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw EvaluationLearningAdmissionError.invalidJSON
+      }
+      object = decoded
+    } catch let error as EvaluationLearningAdmissionError {
+      throw error
+    } catch {
+      throw EvaluationLearningAdmissionError.invalidJSON
+    }
     guard
       Set(object.keys) == ["active_lessons", "schema_version", "task", "task_id"],
       let activeLessons = object["active_lessons"] as? [String: Any],
@@ -80,19 +96,21 @@ package struct EvaluationLearningTaskCarrier: Codable, Sendable, Equatable {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
 
-    _ = try EvaluationLearningLessonSet.decodeCanonical(
-      EvaluationCanonicalJSON.data(fromJSONObject: activeLessons)
-    )
-
     let carrier: Self
     do {
       carrier = try JSONDecoder().decode(Self.self, from: data)
     } catch {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
-    guard carrier.schemaVersion == 1, carrier.taskID.isEmpty == false else {
+    let canonicalCarrierData = try EvaluationCanonicalJSON.data(encoding: carrier)
+    guard
+      carrier.schemaVersion == 1,
+      carrier.taskID.isEmpty == false,
+      canonicalCarrierData == data
+    else {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
+    try EvaluationLearningLessonSet.validate(carrier.activeLessons)
     return (carrier, data)
   }
 

@@ -195,6 +195,51 @@ import Testing
     #expect(error != nil)
   }
 
+  @Test(arguments: [
+    "clean-path-only",
+    "clean-digest-only",
+    "trial-path-only",
+    "trial-digest-only",
+  ])
+  func cleanAndTrialRejectPartialPromotionReceipts(_ variation: String) throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let isClean = variation.hasPrefix("clean-")
+    let fixture = try makeLearningWorkspaceFixture(
+      root: root,
+      attemptID: variation,
+      split: "regression",
+      stage: "regression",
+      condition: isClean ? .clean : .lessonConditioned,
+      lessonSource: isClean ? .clean : .artifact,
+      hasPromotionReceipt: false,
+      lessons: isClean ? [] : ["candidate lesson"]
+    )
+    var configuration = try #require(
+      JSONSerialization.jsonObject(
+        with: EvaluationCanonicalJSON.data(encoding: fixture.configuration)
+      ) as? [String: Any]
+    )
+    if variation.hasSuffix("path-only") {
+      configuration["promotion_receipt_path"] = root.appendingPathComponent("receipt.json").path
+    } else {
+      configuration["promotion_receipt_sha256"] = String(repeating: "c", count: 64)
+    }
+    let candidate = try JSONDecoder().decode(
+      EvaluationAttemptConfiguration.self,
+      from: EvaluationCanonicalJSON.data(fromJSONObject: configuration)
+    )
+
+    // when
+    let error = #expect(throws: EvaluationConfigurationError.invalidLessonSource) {
+      try candidate.validate()
+    }
+
+    // then — treating a one-sided receipt as absent loses frozen promotion provenance.
+    #expect(error != nil)
+  }
+
   @Test func lessonSetRejectsClosedSchemaAndBoundViolations() throws {
     // given
     let root = try makeEvaluationTestRoot()
