@@ -353,11 +353,11 @@ def _reflector_result_issues(
             "policy.result_binding",
             "$.payload.result_digest must equal the durable operation result",
         )
-    if record["trigger_digest"] != payload["trigger_digest"]:
+    if payload["operation_id"] != payload["trigger_digest"]:
         issue(
             issues,
             "policy.trigger_binding",
-            "$.payload.trigger_digest must equal the operation's frozen trigger",
+            "$.payload.trigger_digest must equal the reflector operation identifier",
         )
 
 

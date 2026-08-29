@@ -4,6 +4,30 @@ from __future__ import annotations
 
 from typing import cast
 
+_LEARNING_USAGE_KEYS = {
+    "provider_call_id",
+    "responses_sends",
+    "proven_not_started_responses_sends",
+    "prompt_tokens",
+    "completion_tokens",
+    "reported_total_tokens",
+    "accounted_tokens",
+    "is_estimated",
+}
+_TASK_USAGE_KEYS = {
+    "provider_call_id",
+    "run_id",
+    "session_id",
+    "model",
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "is_estimated",
+    "cost_usd",
+    "cost_source",
+    "timestamp",
+}
+
 
 def validate_usage(
     usage: dict[str, object] | None,
@@ -24,6 +48,10 @@ def validate_usage(
         if allow_no_usage:
             return 0
         raise ValueError("handed-off worker result requires usage")
+    if set(usage) != _LEARNING_USAGE_KEYS and not (
+        allow_no_usage and set(usage) == {"responses_sends", "proven_not_started_responses_sends"}
+    ):
+        raise ValueError("learning usage has non-canonical fields")
     try:
         sends = _integer(usage, "responses_sends")
         not_started = _integer(usage, "proven_not_started_responses_sends")
@@ -45,6 +73,46 @@ def validate_usage(
         raise ValueError("worker accounted-token total does not match frozen proxy formula")
     if usage.get("is_estimated") is not (sends - not_started > reported_rows):
         raise ValueError("worker usage estimation flag does not match send accounting")
+    return accounted
+
+
+def validate_task_usage(
+    responses_sends: int,
+    proven_not_started_responses_sends: int,
+    usage: list[dict[str, object]],
+    missing_usage_token_proxy: int,
+    completion_cap: int,
+) -> int:
+    """Recompute the task worker's shared send/usage accounting formula."""
+
+    if (
+        responses_sends < 0
+        or proven_not_started_responses_sends < 0
+        or proven_not_started_responses_sends > responses_sends
+        or missing_usage_token_proxy <= 0
+        or completion_cap <= 0
+    ):
+        raise ValueError("invalid task accounting bounds")
+    accountable_sends = responses_sends - proven_not_started_responses_sends
+    if len(usage) > accountable_sends:
+        raise ValueError("task usage has more rows than accountable sends")
+    accounted = 0
+    for row in usage:
+        if set(row) not in (
+            _TASK_USAGE_KEYS,
+            {"prompt_tokens", "completion_tokens", "total_tokens", "is_estimated"},
+        ):
+            raise ValueError("task usage row has non-canonical fields")
+        prompt = _integer(row, "prompt_tokens")
+        completion = _integer(row, "completion_tokens")
+        total = _integer(row, "total_tokens")
+        estimated = row.get("is_estimated")
+        if estimated is not True and estimated is not False:
+            raise ValueError("task usage estimation flag must be boolean")
+        if completion > completion_cap or total != max(0, prompt) + max(0, completion):
+            raise ValueError("task usage row violates frozen bounds")
+        accounted += missing_usage_token_proxy if estimated else total
+    accounted += (accountable_sends - len(usage)) * missing_usage_token_proxy
     return accounted
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from scheduled_learning_v1.worker_bridge.accounting import validate_usage
+from scheduled_learning_v1.worker_bridge.accounting import validate_task_usage, validate_usage
 
 
 class AccountingTests(unittest.TestCase):
@@ -37,3 +37,15 @@ class AccountingTests(unittest.TestCase):
         self.assertEqual(validate_usage(no_call, "id", 3, 100, 768, allow_no_usage=True), 0)
         with self.assertRaises(ValueError):
             validate_usage(too_many, "id", 3, 100, 768, allow_no_usage=True)
+
+    def test_task_rows_use_the_shared_proxy_formula(self) -> None:
+        # given
+        usage: list[dict[str, object]] = [
+            {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18, "is_estimated": False}
+        ]
+
+        # when
+        accounted = validate_task_usage(3, 1, usage, 100, 768)
+
+        # then
+        self.assertEqual(accounted, 118)

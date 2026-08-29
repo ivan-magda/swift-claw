@@ -93,7 +93,6 @@ _OPERATION_START_FIELDS = (
     "manifest_digest",
     "freeze_commit",
     "invocation_core_digest",
-    "trigger_digest",
 )
 
 _POSITIVE_EVALUATOR_OUTCOMES = {"no_issue"}

@@ -93,8 +93,9 @@ class WorkerBridge:
                 "exit_code": completed.returncode,
                 "diagnostics": diagnostics,
             }
-            self._finish(core, operation_kind, terminal, None)
+            self._finish(core, operation_kind, terminal, canonical_sha256(terminal))
             return terminal
+        result: dict[str, object] | None = None
         try:
             result = _load_result(result_path)
             terminal = validate(result)
@@ -104,9 +105,7 @@ class WorkerBridge:
                 "diagnostics": _bounded_diagnostics(diagnostics, str(error)),
             }
         terminal = {**terminal, "diagnostics": diagnostics}
-        result_digest = (
-            canonical_sha256(terminal) if terminal.get("status") != "failed_no_call" else None
-        )
+        result_digest = canonical_sha256(result if result is not None else terminal)
         self._finish(core, operation_kind, terminal, result_digest)
         return terminal
 
@@ -115,7 +114,7 @@ class WorkerBridge:
         core: dict[str, object],
         operation_kind: str,
         terminal: dict[str, object],
-        result_digest: str | None,
+        result_digest: str,
     ) -> None:
         usage_digest = (
             None if terminal.get("status") == "failed_no_call" else _usage_digest(terminal)
@@ -129,7 +128,7 @@ class WorkerBridge:
                 "operation_kind": operation_kind,
                 "attempt_generation": core.get("attempt_generation"),
                 "status": _event_status(str(terminal.get("status"))),
-                "result_digest": result_digest or canonical_sha256(terminal),
+                "result_digest": result_digest,
                 "usage_digest": usage_digest,
             },
         )

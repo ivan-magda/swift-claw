@@ -221,7 +221,6 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
             REFLECTION_OCCURRENCE,
             "job-a",
             trigger_digest,
-            operation_id="reflector-failed",
             status="failed",
         )
         retry = reflector_operation(
@@ -229,21 +228,18 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
             REFLECTION_OCCURRENCE,
             "job-a",
             trigger_digest,
-            operation_id="reflector-retry",
         )[0]
         unknown_start = reflector_operation(
             3,
             REFLECTION_OCCURRENCE,
             "job-a",
             "unknown-trigger",
-            operation_id="reflector-unknown",
         )[0]
         successful_attempt = reflector_operation(
             3,
             REFLECTION_OCCURRENCE,
             "job-a",
             trigger_digest,
-            operation_id="reflector-closed",
         )
         close_trigger = event(
             5,
@@ -251,7 +247,7 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
             "no_candidate_recorded",
             {
                 "job_id": "job-a",
-                "operation_id": "reflector-closed",
+                "operation_id": trigger_digest,
                 "result_digest": "reflector-result-1",
                 "trigger_digest": trigger_digest,
             },
@@ -261,7 +257,6 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
             REFLECTION_OCCURRENCE,
             "job-a",
             trigger_digest,
-            operation_id="reflector-after-close",
         )[0]
 
         # when
@@ -279,7 +274,7 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
         # then
         trigger = attempted["state"]["jobs"]["job-a"]["triggers"][0]
         self.assertTrue(trigger["attempted"])
-        self.assertEqual(trigger["operation_id"], "reflector-failed")
+        self.assertEqual(trigger["operation_id"], trigger_digest)
         self.assertIn("policy.attempted_trigger", requirements(attempted_caught.exception))
         self.assertIn("policy.unknown_trigger", requirements(unknown_caught.exception))
         self.assertIn("policy.closed_trigger", requirements(closed_caught.exception))
@@ -297,7 +292,7 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
             "no_candidate_recorded",
             {
                 "job_id": "job-a",
-                "operation_id": "reflector-1",
+                "operation_id": trigger_digest,
                 "result_digest": "reflector-result-1",
                 "trigger_digest": trigger_digest,
             },
@@ -463,7 +458,7 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
             CONTROL_OCCURRENCE,
             kind="reflector",
             generation=1,
-            operation_id="reflector-1",
+            operation_id=trigger_digest,
             result_digest="reflector-result-1",
         )
         stale_artifact = candidate_artifact(
@@ -479,7 +474,6 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
             CONTROL_OCCURRENCE,
             "job-a",
             trigger_digest,
-            operation_id="reflector-after-feedback",
         )[0]
         confirm_before_start = evaluation_signal(
             3,
@@ -551,7 +545,6 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
             CONTROL_OCCURRENCE,
             "job-a",
             old_base_trigger,
-            operation_id="reflector-after-promotion",
         )[0]
 
         # when
@@ -573,7 +566,7 @@ class LearningReplayCandidateArtifactTests(unittest.TestCase):
         # then
         trigger = attempted["state"]["jobs"]["job-a"]["triggers"][0]
         self.assertTrue(trigger["attempted"])
-        self.assertEqual(trigger["operation_id"], "reflector-1")
+        self.assertEqual(trigger["operation_id"], trigger_digest)
         self.assertEqual(candidates_of(attempted), [])
         self.assertIn("policy.stale_trigger", requirements(artifact_caught.exception))
         self.assertIn("policy.stale_trigger", requirements(start_caught.exception))
