@@ -201,12 +201,40 @@ package enum EvaluationLearningClosedJSON {
     requiredKeys: Set<String>
   ) throws -> Value {
     let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
+    return try decode(type, from: data, requiredKeys: requiredKeys)
+  }
+
+  package static func decode<Value: Decodable>(
+    _ type: Value.Type,
+    from data: Data,
+    requiredKeys: Set<String>
+  ) throws -> Value {
+    let object = try object(from: data)
+    guard Set(object.keys) == requiredKeys else {
+      throw EvaluationLearningAdmissionError.invalidJSON
+    }
+    return try decode(type, from: data, object: object)
+  }
+
+  package static func decode<Value: Decodable>(
+    _ type: Value.Type,
+    from data: Data,
+    object: [String: Any]
+  ) throws -> Value {
+    let value: Value
+    do {
+      value = try JSONDecoder().decode(type, from: data)
+    } catch {
+      throw EvaluationLearningAdmissionError.invalidJSON
+    }
+    _ = object
+    return value
+  }
+
+  package static func object(from data: Data) throws -> [String: Any] {
     let object: [String: Any]
     do {
-      guard
-        let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-        Set(decoded.keys) == requiredKeys
-      else {
+      guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         throw EvaluationLearningAdmissionError.invalidJSON
       }
       object = decoded
@@ -215,17 +243,10 @@ package enum EvaluationLearningClosedJSON {
     } catch {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
-
     guard (try? EvaluationCanonicalJSON.data(fromJSONObject: object)) == data else {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
-    let value: Value
-    do {
-      value = try JSONDecoder().decode(type, from: data)
-    } catch {
-      throw EvaluationLearningAdmissionError.invalidJSON
-    }
-    return value
+    return object
   }
 }
 

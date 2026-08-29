@@ -1,6 +1,8 @@
 import ClawAgent
 import ClawCore
+import ClawTestSupport
 import Foundation
+import Synchronization
 import Testing
 
 @testable import ClawEvaluation
@@ -142,23 +144,29 @@ import Testing
   ])
   func verifierRejectsEachChangedProviderAdmissionField(_ changedField: String) async throws {
     // given
+    let baseline = try makeEvaluationLearningAdmissionFixture()
+    defer { try? FileManager.default.removeItem(at: baseline.root) }
+    let initial = try await baseline.verifier().verify(
+      manifest: baseline.manifest,
+      authorization: baseline.authorization,
+      invocationCoreDigest: baseline.invocationCoreDigest,
+      carrierSHA256: baseline.carrierSHA256,
+      providerCallID: baseline.providerCallID,
+      kind: .evaluator
+    )
     let fixture = try makeEvaluationLearningAdmissionFixture(eventMutation: changedField)
     defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let admission = fixture.liveAdmission(initial: initial)
+    let downstream = RecordingHTTPExecutor(
+      cannedResult: HTTPResult(statusCode: 200, headers: [:], body: Data())
+    )
 
     // when
-    let error = await #expect(throws: (any Error).self) {
-      _ = try await fixture.verifier().verify(
-        manifest: fixture.manifest,
-        authorization: fixture.authorization,
-        invocationCoreDigest: fixture.invocationCoreDigest,
-        carrierSHA256: fixture.carrierSHA256,
-        providerCallID: fixture.providerCallID,
-        kind: .evaluator
-      )
-    }
+    let decision = await admitThenReachDownstream(admission, downstream: downstream)
 
     // then — accepting any row reaches a provider call with a mismatched pre-minted identity.
-    #expect(error != nil)
+    #expect(decision == .deny(cap: "evaluation-learning-integrity"))
+    #expect(await downstream.requests.isEmpty)
   }
 
   @Test(arguments: [
@@ -172,22 +180,102 @@ import Testing
     async throws
   {
     // given
+    let baseline = try makeEvaluationLearningAdmissionFixture()
+    defer { try? FileManager.default.removeItem(at: baseline.root) }
+    let initial = try await baseline.verifier().verify(
+      manifest: baseline.manifest,
+      authorization: baseline.authorization,
+      invocationCoreDigest: baseline.invocationCoreDigest,
+      carrierSHA256: baseline.carrierSHA256,
+      providerCallID: baseline.providerCallID,
+      kind: .evaluator
+    )
     let fixture = try makeEvaluationLearningAdmissionFixture(approvalBudgetMutation: changedBudget)
     defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let admission = fixture.liveAdmission(initial: initial)
+    let downstream = RecordingHTTPExecutor(
+      cannedResult: HTTPResult(statusCode: 200, headers: [:], body: Data())
+    )
 
     // when
+    let decision = await admitThenReachDownstream(admission, downstream: downstream)
+
+    // then — comparing only one budget dimension permits an unapproved aggregate cap.
+    #expect(decision == .deny(cap: "evaluation-learning-integrity"))
+    #expect(await downstream.requests.isEmpty)
+  }
+
+  @Test func verifierUsesOnlyTheManifestBytesItHashes() async throws {
+    // given
+    let fixture = try makeEvaluationLearningAdmissionFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let swappedManifest = try fixture.manifestData(missingUsageTokenProxy: 999_999)
+    let reads = Mutex(0)
+    let verifier = EvaluationLearningAdmissionVerifier(
+      runningExecutablePath: { fixture.executableURL.path },
+      readFile: { url in
+        let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
+        if url == fixture.manifestURL {
+          reads.withLock { count in
+            count += 1
+          }
+          try swappedManifest.write(to: fixture.manifestURL)
+        }
+        return data
+      }
+    )
+
+    // when
+    let context = try await verifier.verify(
+      manifest: fixture.manifest,
+      authorization: fixture.authorization,
+      invocationCoreDigest: fixture.invocationCoreDigest,
+      carrierSHA256: fixture.carrierSHA256,
+      providerCallID: fixture.providerCallID,
+      kind: .evaluator
+    )
+
+    // then — decoding a reopened file would admit the swapped proxy despite hashing the original.
+    #expect(context.missingUsageTokenProxy == 132_768)
+    #expect(reads.withLock { count in count } == 1)
+  }
+
+  @Test func verifierAllowsFullManifestFieldsButRejectsUnknownSwiftExecutionFields() async throws {
+    // given
+    var compatible = try makeEvaluationLearningAdmissionFixture()
+    defer { try? FileManager.default.removeItem(at: compatible.root) }
+    try compatible.addManifestFields([
+      "frozen_paths": ["corpus/page.json", "schemas/evaluator.json"],
+      "schema_version": 1,
+    ])
+    compatible = try compatible.rebindingManifestAndOwnerApproval()
+    var unknownProjection = try makeEvaluationLearningAdmissionFixture()
+    defer { try? FileManager.default.removeItem(at: unknownProjection.root) }
+    try unknownProjection.addUnknownSwiftExecutionField()
+    unknownProjection = try unknownProjection.rebindingManifestAndOwnerApproval()
+
+    // when
+    let context = try await compatible.verifier().verify(
+      manifest: compatible.manifest,
+      authorization: compatible.authorization,
+      invocationCoreDigest: compatible.invocationCoreDigest,
+      carrierSHA256: compatible.carrierSHA256,
+      providerCallID: compatible.providerCallID,
+      kind: .evaluator
+    )
     let error = await #expect(throws: (any Error).self) {
-      _ = try await fixture.verifier().verify(
-        manifest: fixture.manifest,
-        authorization: fixture.authorization,
-        invocationCoreDigest: fixture.invocationCoreDigest,
-        carrierSHA256: fixture.carrierSHA256,
-        providerCallID: fixture.providerCallID,
+      _ = try await unknownProjection.verifier().verify(
+        manifest: unknownProjection.manifest,
+        authorization: unknownProjection.authorization,
+        invocationCoreDigest: unknownProjection.invocationCoreDigest,
+        carrierSHA256: unknownProjection.carrierSHA256,
+        providerCallID: unknownProjection.providerCallID,
         kind: .evaluator
       )
     }
 
-    // then — comparing only one budget dimension permits an unapproved aggregate cap.
+    // then — allowing all nested execution keys lets an unfrozen route-control field through.
+    #expect(context.route == compatible.evaluatorRoute)
     #expect(error != nil)
   }
 
@@ -252,6 +340,44 @@ private struct EvaluationLearningAdmissionFixture {
     EvaluationLearningAdmissionVerifier(runningExecutablePath: { executableURL.path })
   }
 
+  func liveAdmission(initial: EvaluationLearningAdmissionContext) -> EvaluationLearningLiveAdmission
+  {
+    EvaluationLearningLiveAdmission(
+      verifier: verifier(),
+      manifest: manifest,
+      authorization: authorization,
+      invocationCoreDigest: invocationCoreDigest,
+      carrierSHA256: carrierSHA256,
+      providerCallID: providerCallID,
+      kind: .evaluator,
+      initial: initial
+    )
+  }
+
+  func manifestData(missingUsageTokenProxy: Int) throws -> Data {
+    var document = try manifestObject()
+    var execution = try #require(document["swift_execution"] as? [String: Any])
+    execution["missing_usage_token_proxy"] = missingUsageTokenProxy
+    document["swift_execution"] = execution
+    return try EvaluationCanonicalJSON.data(fromJSONObject: document)
+  }
+
+  func addManifestFields(_ fields: [String: Any]) throws {
+    var document = try manifestObject()
+    for (key, value) in fields {
+      document[key] = value
+    }
+    try EvaluationCanonicalJSON.data(fromJSONObject: document).write(to: manifestURL)
+  }
+
+  func addUnknownSwiftExecutionField() throws {
+    var document = try manifestObject()
+    var execution = try #require(document["swift_execution"] as? [String: Any])
+    execution["unfrozen_control"] = true
+    document["swift_execution"] = execution
+    try EvaluationCanonicalJSON.data(fromJSONObject: document).write(to: manifestURL)
+  }
+
   func rebindingManifestAndOwnerApproval() throws -> Self {
     let manifestData = try Data(contentsOf: manifestURL)
     var approval = try #require(
@@ -294,6 +420,12 @@ private struct EvaluationLearningAdmissionFixture {
       taskRoute: taskRoute,
       evaluatorRoute: evaluatorRoute,
       reflectorRoute: reflectorRoute
+    )
+  }
+
+  private func manifestObject() throws -> [String: Any] {
+    try #require(
+      JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any]
     )
   }
 }
@@ -478,4 +610,25 @@ private struct StaticEvaluationLearningAdmissionVerifier: EvaluationLearningAdmi
   ) async throws -> EvaluationLearningAdmissionContext {
     context
   }
+}
+
+private func admitThenReachDownstream(
+  _ admission: EvaluationLearningLiveAdmission,
+  downstream: RecordingHTTPExecutor
+) async -> ProviderRoundTripAdmission {
+  let decision = await admission.evaluate()
+  guard decision == .allow else {
+    return decision
+  }
+  _ = try? await downstream.execute(
+    HTTPRequest(
+      method: .post,
+      url: "https://provider.invalid/v1/responses",
+      headers: [:],
+      body: Data(),
+      timeout: .seconds(1),
+      responseBodyPolicy: .buffered(successBytes: 1_024, errorBytes: 1_024)
+    )
+  )
+  return decision
 }

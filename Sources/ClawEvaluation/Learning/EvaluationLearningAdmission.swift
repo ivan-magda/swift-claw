@@ -99,11 +99,16 @@ package struct EvaluationLearningLiveAdmission: Sendable {
 
 package struct EvaluationLearningAdmissionVerifier: EvaluationLearningAdmissionVerifying {
   private let runningExecutablePath: @Sendable () -> String
+  private let readFile: @Sendable (URL) throws -> Data
 
   package init(
-    runningExecutablePath: @escaping @Sendable () -> String = { CommandLine.arguments[0] }
+    runningExecutablePath: @escaping @Sendable () -> String = { CommandLine.arguments[0] },
+    readFile: @escaping @Sendable (URL) throws -> Data = { url in
+      try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
+    }
   ) {
     self.runningExecutablePath = runningExecutablePath
+    self.readFile = readFile
   }
 
   package func verify(
@@ -124,27 +129,33 @@ package struct EvaluationLearningAdmissionVerifier: EvaluationLearningAdmissionV
     }
 
     let manifestURL = URL(fileURLWithPath: manifest.manifestPath)
-    let manifestData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: manifestURL)
+    let manifestData = try readFile(manifestURL)
     guard SHA256Digest.hex(manifestData) == manifest.manifestSHA256 else {
       throw EvaluationLearningAdmissionError.integrityFailure
     }
-    let projection = try Self.manifestProjection(from: manifestURL)
+    let manifestObject = try EvaluationLearningClosedJSON.object(from: manifestData)
+    let projection = try Self.manifestProjection(from: manifestData, object: manifestObject)
 
     let approvalURL = URL(fileURLWithPath: manifest.ownerApproval.path)
-    let approvalData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: approvalURL)
+    let approvalData = try readFile(approvalURL)
     guard SHA256Digest.hex(approvalData) == manifest.ownerApproval.sha256 else {
       throw EvaluationLearningAdmissionError.integrityFailure
     }
-    let approval = try EvaluationLearningClosedJSON.decode(
-      EvaluationLearningOwnerApprovalProjection.self,
-      from: approvalURL,
-      requiredKeys: [
+    let approvalObject = try EvaluationLearningClosedJSON.object(from: approvalData)
+    try Self.requireExactKeys(
+      approvalObject,
+      keys: [
         "schema_version", "manifest_sha256", "expected_freeze_commit", "budgets", "owner_identity",
         "approved_at",
       ]
     )
+    let approval = try EvaluationLearningClosedJSON.decode(
+      EvaluationLearningOwnerApprovalProjection.self,
+      from: approvalData,
+      object: approvalObject
+    )
     try Self.requireExactObjectKeys(
-      in: approvalURL,
+      in: approvalObject,
       path: ["budgets"],
       keys: [
         "task_attempts", "evaluator_calls", "reflector_calls", "responses_sends",
@@ -154,15 +165,14 @@ package struct EvaluationLearningAdmissionVerifier: EvaluationLearningAdmissionV
     try Self.validate(approval: approval, matching: manifest, projection: projection)
 
     let eventURL = URL(fileURLWithPath: authorization.eventPath)
-    let eventData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: eventURL)
+    let eventData = try readFile(eventURL)
     guard SHA256Digest.hex(eventData) == authorization.eventSHA256 else {
       throw EvaluationLearningAdmissionError.integrityFailure
     }
-    let event = try Self.operationStartedEvent(from: eventURL)
+    let eventObject = try EvaluationLearningClosedJSON.object(from: eventData)
+    let event = try Self.operationStartedEvent(from: eventData, object: eventObject)
 
-    let executableData = try EvaluationPathSecurity.readRegularSingleLinkFile(
-      at: URL(fileURLWithPath: runningExecutablePath())
-    )
+    let executableData = try readFile(URL(fileURLWithPath: runningExecutablePath()))
     guard SHA256Digest.hex(executableData) == projection.executableSHA256 else {
       throw EvaluationLearningAdmissionError.integrityFailure
     }
@@ -294,14 +304,20 @@ private extension EvaluationLearningAdmissionVerifier {
     )
   }
 
-  static func manifestProjection(from url: URL) throws -> EvaluationLearningManifestProjection {
+  static func manifestProjection(
+    from data: Data,
+    object: [String: Any]
+  ) throws -> EvaluationLearningManifestProjection {
+    guard object["budgets"] != nil, object["swift_execution"] != nil else {
+      throw EvaluationLearningAdmissionError.invalidJSON
+    }
     let document = try EvaluationLearningClosedJSON.decode(
       ManifestDocument.self,
-      from: url,
-      requiredKeys: ["budgets", "swift_execution"]
+      from: data,
+      object: object
     )
     try requireExactObjectKeys(
-      in: url,
+      in: object,
       path: ["swift_execution"],
       keys: [
         "evaluator_route", "executable_sha256", "missing_usage_token_proxy", "reflector_route",
@@ -309,7 +325,7 @@ private extension EvaluationLearningAdmissionVerifier {
       ]
     )
     try requireExactObjectKeys(
-      in: url,
+      in: object,
       path: ["budgets"],
       keys: [
         "task_attempts", "evaluator_calls", "reflector_calls", "responses_sends",
@@ -318,7 +334,7 @@ private extension EvaluationLearningAdmissionVerifier {
     )
     for name in ["task_route", "evaluator_route", "reflector_route"] {
       try requireExactObjectKeys(
-        in: url,
+        in: object,
         path: ["swift_execution", name],
         keys: [
           "provider_reference", "wire_model", "retry_budget", "max_output_tokens",
@@ -348,14 +364,21 @@ private extension EvaluationLearningAdmissionVerifier {
     return projection
   }
 
-  static func operationStartedEvent(from url: URL) throws -> OperationStartedEvent {
+  static func operationStartedEvent(
+    from data: Data,
+    object: [String: Any]
+  ) throws -> OperationStartedEvent {
+    try requireExactKeys(
+      object,
+      keys: ["kind", "occurred_at", "payload", "schema_version", "sequence"]
+    )
     let event = try EvaluationLearningClosedJSON.decode(
       OperationStartedEvent.self,
-      from: url,
-      requiredKeys: ["kind", "occurred_at", "payload", "schema_version", "sequence"]
+      from: data,
+      object: object
     )
     try requireExactObjectKeys(
-      in: url,
+      in: object,
       path: ["payload"],
       keys: [
         "attempt_generation", "carrier_digest", "freeze_commit", "invocation_core_digest", "job_id",
@@ -421,14 +444,18 @@ private extension EvaluationLearningAdmissionVerifier {
     return url
   }
 
-  static func requireExactObjectKeys(in url: URL, path: [String], keys: Set<String>) throws {
-    let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
-    var value: Any
-    do {
-      value = try JSONSerialization.jsonObject(with: data)
-    } catch {
+  static func requireExactKeys(_ object: [String: Any], keys: Set<String>) throws {
+    guard Set(object.keys) == keys else {
       throw EvaluationLearningAdmissionError.invalidJSON
     }
+  }
+
+  static func requireExactObjectKeys(
+    in root: [String: Any],
+    path: [String],
+    keys: Set<String>
+  ) throws {
+    var value: Any = root
     for component in path {
       guard let object = value as? [String: Any], let next = object[component] else {
         throw EvaluationLearningAdmissionError.invalidJSON
