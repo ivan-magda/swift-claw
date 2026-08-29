@@ -212,3 +212,37 @@ preserving the rest of a canonical failure. The reported-row case changes only t
 leaving the accepted all-null zero-send failure intact. The completed-count case exercises the completed
 branch that the existing optional failure-count test deliberately does not reach. Each remains green
 under helper extraction because it asserts only the public validator result.
+
+## Freeze manifest and pre-run approval (Task 6)
+
+| Risk | Production branch or seam | Nearest existing test | Unique reachable mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| A bound prompt, corpus member, scorer source, or executable changes after freeze, or runtime-only `results/` and owner-approval outputs are accidentally treated as manifest inputs | `freeze.verify_manifest` shared file-record verifier and excluded runtime locations | `tools/page_change_freeze/tests/test_manifest_core.py::ManifestCoreTests::test_manifest_rejects_changed_bytes` protects Protocol 0.6's descriptor and categories, never this M3 closure | Trust the stored `{path, sha256, bytes}` record without reading the current file, or recursively include `results/` / `freeze/owner-budget-approval.json` | `test_manifest::ManifestTests::test_verifier_rejects_one_changed_declared_file_and_ignores_runtime_outputs` |
+| A new harness source silently expands the frozen code closure, or a symlink substitutes bytes outside the declared repository tree | `freeze.verify_manifest` closure-membership discovery and symlink-safe path traversal | The page-freeze closure test operates on `tools/page_change_freeze`; it never discovers `scheduled_learning_v1` / `page_change_m3` | Compare only listed records and ignore a newly added `.py`, or follow a symlink while hashing | `test_manifest::ManifestTests::test_verifier_rejects_an_extra_harness_source` and `::test_verifier_rejects_a_symlinked_declared_input` |
+| A rehashed manifest changes the configured model route or one operation's output cap | `freeze.verify_manifest` frozen `swift_execution` semantic checks | Worker-bridge tests validate a supplied manifest against Swift admission but do not construct or freeze its route facts | Accept any nonempty route/model or any positive output cap after the binding digest is recomputed | `test_manifest::ManifestTests::test_verifier_rejects_rehashed_route_and_output_cap_substitutions` |
+| A rehashed manifest changes task attempt order while retaining the same fixtures and count | `freeze.verify_manifest` exact ordered `run_order` check | Replay conformance orders semantic events in-memory; it has no M3 task-attempt schedule | Sort by fixture ID or accept any ten entries | `test_manifest::ManifestTests::test_verifier_rejects_a_rehashed_run_order_substitution` |
+| A rehashed manifest widens one owner-review aggregate budget | `freeze.verify_manifest` exact `budgets` check | Worker accounting tests enforce per-result arithmetic, not the cross-run 10/5/1/38/120000 ceiling | Accept any positive budget or compare only key shape | `test_manifest::ManifestTests::test_verifier_rejects_a_rehashed_aggregate_budget_substitution` |
+| A rehashed manifest weakens an adapter, active, or restart threshold that later reporting must source from the manifest | `freeze.verify_manifest` exact committed `gates` check | Adapter tests exercise the current contract file directly but cannot detect a substituted manifest threshold | Accept the gate file digest without carrying and checking its exact threshold object | `test_manifest::ManifestTests::test_verifier_rejects_a_rehashed_gate_substitution` |
+| A rehashed manifest names executable bytes other than the discovered `claw-eval` artifact | `freeze.verify_manifest` executable file-record/hash binding | Python process-launch tests execute a configured fake but never bind it into an M3 freeze | Trust `swift_execution.executable_sha256` without matching the protected executable record | `test_manifest::ManifestTests::test_verifier_rejects_a_rehashed_executable_identity_substitution` |
+| The required `python -m scheduled_learning_v1.freeze build|verify` surface diverges from the public builder/verifier or requires an owner checkpoint during offline freeze construction | `freeze.main` CLI adapter | Package smoke and conformance tests never invoke this module CLI | Dispatch `verify` to a different loader, omit canonical outputs, or require the not-yet-created owner approval | `test_manifest::FreezeCLITests::test_module_cli_builds_and_verifies_without_an_owner_checkpoint` |
+| A missing or budget-substituted owner checkpoint reaches task or learning dispatch | `preflight.verify_pre_run` closed approval schema and exact budget comparison | Page-freeze GitHub approval tests bind a different D6 object; worker bridge only consumes an already-approved object | Default a missing approval, accept an extra/missing key, or accept 39 sends | `test_preflight::PreflightTests::test_missing_or_changed_owner_budget_stops_before_bridge_dispatch` |
+| Approval remains valid after `HEAD` moves, or a non-UTC/non-RFC-3339 approval time is accepted | `preflight.verify_pre_run` freeze-commit and timestamp checks | Existing page-freeze approval binds GitHub comment evidence and cannot observe this local closed object | Omit `git rev-parse HEAD`, compare to a stale cached commit, or accept arbitrary timestamp text | `test_preflight::PreflightTests::test_changed_commit_stops_before_bridge_dispatch` and `::test_noncanonical_approval_timestamp_is_rejected` |
+
+### Redundancy pass (`docs/TESTING.md` §9.1)
+
+1. **Mutants killed:** the ten rows above cover current-byte substitution, dynamic closure growth,
+   symlink traversal, route/output-cap substitution, task-order substitution, aggregate-budget
+   widening, gate-threshold weakening, executable substitution, CLI misrouting, and missing/stale
+   owner authorization.
+2. **Production branch/seam:** `freeze.py` owns deterministic input discovery, canonical manifest
+   construction, semantic verification, and the thin CLI; `preflight.py` alone adds the closed owner
+   object and current-commit gate. Neither module launches a worker.
+3. **Nearest existing test and why it misses each mutant:** Protocol 0.6's page-freeze suite binds a
+   different descriptor, corpus, verifier package, executable, and approval protocol. The M3 worker
+   tests start after a manifest is supplied and therefore cannot observe this package's source
+   closure, aggregate budget, CLI, or current-Git-commit checks. Prompt, corpus, scorer, and
+   executable byte changes intentionally share one representative file-record case; repeating that
+   same verifier path for each file kind would add no mutant.
+4. **Behavior-preserving refactor stays green:** yes — tests call the public builder/verifier or the
+   module CLI and assert accepted/rejected outcomes. Helper extraction, record iteration order, and
+   error wording outside the named semantic field leave them green.
