@@ -9,6 +9,7 @@ from typing import cast
 
 from benchmark_core.canonical import canonical_sha256, dumps, loads_object
 
+from ..frozen_contract import GATES
 from .accounting import validate_task_usage
 from .requests import TaskAttemptCall, bound_contract
 
@@ -437,9 +438,10 @@ def _require_accounting(
     http = _object(result, "http")
     sends = cast(list[dict[str, object]], http["responsesSends"])
     proven_not_started = _integer(http, "provenNotStartedResponsesSends")
-    retry_budget = _integer(route, "retry_budget")
-    if not 1 <= len(sends) <= retry_budget or not 0 <= proven_not_started <= len(sends):
-        raise ValueError("task Responses sends exceed frozen retry budget")
+    sends_by_operation = _object(GATES, "responses_sends_per_operation")
+    maximum_sends = _integer(sends_by_operation, "task")
+    if not 1 <= len(sends) <= maximum_sends or not 0 <= proven_not_started <= len(sends):
+        raise ValueError("task Responses sends exceed frozen operation limit")
     for index, send in enumerate(sends, start=1):
         if send.get("sequence") != index or send.get("requested_model") != route.get("wire_model"):
             raise ValueError("task response send does not bind frozen route")
