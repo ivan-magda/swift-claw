@@ -533,7 +533,10 @@ extension EvaluationWorker {
         )
       }
     )
-    try EvaluationJSONFile.write(result, to: configuration.resultURL)
+    try EvaluationDurablePublication.publish(
+      EvaluationCanonicalJSON.data(encoding: result),
+      to: configuration.resultURL
+    )
     return result
   }
 }
