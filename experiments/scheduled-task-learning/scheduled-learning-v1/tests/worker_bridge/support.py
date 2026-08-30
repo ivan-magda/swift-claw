@@ -16,9 +16,14 @@ WIRE_MODEL = "gpt-5.6-sol"
 
 
 def write_worker(
-    path: Path, result_path: Path, result: dict[str, object], exit_code: int = 0
+    path: Path,
+    result_path: Path,
+    result: dict[str, object],
+    exit_code: int = 0,
+    *,
+    publish_result: bool = True,
 ) -> None:
-    """Create a fake that appends every argv and publishes one result."""
+    """Create a fake that records argv and optionally publishes one result."""
 
     argv_path = path.with_suffix(".argv.jsonl")
     script = (
@@ -34,8 +39,8 @@ def write_worker(
         "    provenance['request_sha256'] = hashlib.sha256(request_bytes).hexdigest()\n"
         f"result_path = pathlib.Path({str(result_path)!r})\n"
         "result_text = json.dumps(result, sort_keys=True, separators=(',', ':')) + '\\n'\n"
-        "result_path.write_text(result_text)\n"
-        "print('diagnostic-' + 'x' * 4096)\n"
+        + ("result_path.write_text(result_text)\n" if publish_result else "")
+        + "print('diagnostic-' + 'x' * 4096)\n"
         f"raise SystemExit({exit_code})\n"
     )
     path.write_text(script, encoding="utf-8")
@@ -117,6 +122,10 @@ def learning_result(
         finish_reason = None
         reported_model = None
     manifest = _dict(core["manifest"])
+    manifest_document = _load_object(Path(str(manifest["manifest_path"])))
+    execution = _dict(manifest_document["swift_execution"])
+    approval_binding = _dict(manifest["owner_approval"])
+    approval = _load_object(Path(str(approval_binding["path"])))
     prompt = _dict(core["prompt"])
     carrier = _dict(core["carrier"])
     return {
@@ -142,8 +151,8 @@ def learning_result(
         "provenance": {
             "request_sha256": request_sha256 or "AUTO",
             "manifest_sha256": manifest["manifest_sha256"],
-            "freeze_commit": "e" * 40,
-            "executable_sha256": "f" * 64,
+            "freeze_commit": approval["expected_freeze_commit"],
+            "executable_sha256": execution["executable_sha256"],
             "prompt_sha256": prompt["sha256"],
             "carrier_sha256": carrier["sha256"],
         },
@@ -311,7 +320,7 @@ def task_result(core: dict[str, object]) -> dict[str, object]:
         "lock_acquisition_id": "123e4567-e89b-12d3-a456-426614174002",
         "run_id": 7,
         "session_id": 8,
-        "conversation_id": "123e4567-e89b-12d3-a456-426614174001:attempt-1",
+        "conversation_id": (f"123e4567-e89b-12d3-a456-426614174001:{configuration['attempt_id']}"),
         "started_at": "2026-08-29T00:00:00Z",
         "finished_at": "2026-08-29T00:00:01Z",
         "duration_milliseconds": 1000,
@@ -350,7 +359,7 @@ def task_result(core: dict[str, object]) -> dict[str, object]:
         "workspace": workspace,
         "learning_carrier_sha256": carrier_sha256,
         "learning_lesson_set_sha256": lesson_digest,
-        "learning_initial_tainted": True,
+        "learning_initial_tainted": bool(_dict(carrier["active_lessons"])["lessons"]),
         "learning_carrier_verified": True,
     }
 

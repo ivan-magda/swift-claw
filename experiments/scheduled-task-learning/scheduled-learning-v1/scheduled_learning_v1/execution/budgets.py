@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from scheduled_learning_v1.evidence_contract import operation_usage
 from scheduled_learning_v1.frozen_contract import AGGREGATE_BUDGETS
 
 
@@ -49,10 +50,8 @@ class AggregateBudget:
     def record(self, terminal: dict[str, object]) -> None:
         """Account one returned terminal and fail immediately on an overshoot."""
 
-        self.responses_sends += _responses_sends(terminal)
-        tokens = terminal.get("accounted_tokens", 0)
-        if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens < 0:
-            raise ValueError("terminal accounted_tokens must be a nonnegative integer")
+        sends, tokens, _ = operation_usage(terminal)
+        self.responses_sends += sends
         self.accounted_tokens += tokens
         if self.responses_sends > int(AGGREGATE_BUDGETS["responses_sends"]):
             raise BudgetExceededError("responses_sends aggregate exceeded")
@@ -72,18 +71,3 @@ class AggregateBudget:
             "stage_responses_send_cap": int(AGGREGATE_BUDGETS["responses_sends"]),
             "global_responses_send_cap": 454,
         }
-
-
-def _responses_sends(terminal: dict[str, object]) -> int:
-    explicit = terminal.get("responses_sends")
-    if isinstance(explicit, int) and not isinstance(explicit, bool) and explicit >= 0:
-        return explicit
-    usage = terminal.get("usage")
-    if isinstance(usage, dict):
-        observed = usage.get("responses_sends", 0)
-        if isinstance(observed, int) and not isinstance(observed, bool) and observed >= 0:
-            return observed
-    requests = terminal.get("responses_requests")
-    if isinstance(requests, list):
-        return len(requests)
-    return 0

@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import cast
 
-from benchmark_core.canonical import canonical_sha256, dumps
+from benchmark_core.canonical import canonical_sha256, dumps, load_object
 from scheduled_learning_v1.replay_controller import EventJournal
 from scheduled_learning_v1.worker_bridge import LearningCall, TaskAttemptCall, WorkerBridge
 
@@ -70,7 +70,13 @@ class ProcessLaunchTests(unittest.TestCase):
             core = learning_core(root)
             result_path = root / "result.json"
             executable = root / "claw-eval"
-            write_worker(executable, result_path, learning_result(core), exit_code=7)
+            write_worker(
+                executable,
+                result_path,
+                learning_result(core),
+                exit_code=7,
+                publish_result=False,
+            )
             bridge = WorkerBridge(executable, EventJournal(root / "evaluation" / "events"))
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
@@ -79,6 +85,75 @@ class ProcessLaunchTests(unittest.TestCase):
 
             # then
             self.assertEqual(terminal["status"], "process_failed")
+
+    def test_nonzero_exit_publishes_canonical_terminal_carrier(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = learning_core(root)
+            result_path = root / "result.json"
+            executable = root / "claw-eval"
+            write_worker(executable, result_path, learning_result(core), exit_code=7)
+            events = root / "evaluation" / "events"
+            bridge = WorkerBridge(executable, EventJournal(events))
+            call = LearningCall("evaluator", core, root / "request.json", result_path)
+
+            # when
+            terminal = bridge.run_learning(call)
+
+            # then
+            terminal_path = result_path.parent / "terminal.json"
+            self.assertEqual(load_object(terminal_path), terminal)
+            self.assertEqual(terminal_path.read_bytes(), dumps(terminal).encode("utf-8"))
+            finish_path = sorted(events.glob("0*.json"))[-1]
+            finish = load_object(finish_path)
+            payload = cast(dict[str, object], finish["payload"])
+            self.assertEqual(payload["result_digest"], canonical_sha256(terminal))
+
+    def test_nonzero_exit_removes_unaccepted_result_before_terminal_publication(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = learning_core(root)
+            result_path = root / "result.json"
+            executable = root / "claw-eval"
+            write_worker(executable, result_path, learning_result(core), exit_code=7)
+            bridge = WorkerBridge(executable, EventJournal(root / "evaluation" / "events"))
+            call = LearningCall("evaluator", core, root / "request.json", result_path)
+
+            # when
+            bridge.run_learning(call)
+
+            # then
+            self.assertFalse(result_path.exists())
+            self.assertTrue((root / "terminal.json").is_file())
+
+    def test_zero_exit_without_result_publishes_reconstructable_terminal(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = learning_core(root)
+            result_path = root / "result.json"
+            executable = root / "claw-eval"
+            write_worker(
+                executable,
+                result_path,
+                learning_result(core),
+                publish_result=False,
+            )
+            events = root / "evaluation" / "events"
+            bridge = WorkerBridge(executable, EventJournal(events))
+            call = LearningCall("evaluator", core, root / "request.json", result_path)
+
+            # when
+            terminal = bridge.run_learning(call)
+
+            # then
+            self.assertEqual(terminal["status"], "schema_invalid")
+            self.assertEqual(load_object(root / "terminal.json"), terminal)
+            finish = load_object(sorted(events.glob("0*.json"))[-1])
+            payload = cast(dict[str, object], finish["payload"])
+            self.assertEqual(payload["result_digest"], canonical_sha256(terminal))
 
     def test_rejects_noncanonical_task_and_learning_cores_before_launch(self) -> None:
         # given

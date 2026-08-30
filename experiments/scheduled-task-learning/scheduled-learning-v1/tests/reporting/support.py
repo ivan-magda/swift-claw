@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import json
+import shutil
+import stat
+import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 from benchmark_core.canonical import canonical_sha256, load_object, write
-from benchmark_learning.learning_contract import parse_event, replay_receipt
+from benchmark_learning.learning_contract import event_json, parse_event, replay_receipt
+from scheduled_learning_v1.execution import run_scored
+from scheduled_learning_v1.execution.budgets import AggregateBudget
+from scheduled_learning_v1.execution.operations import Operations
+from scheduled_learning_v1.worker_bridge import WorkerBridge
 
 from tests.execution.support import run_fake_scored
 
@@ -22,6 +31,115 @@ def result_tree(root: Path, *, complete: bool = True) -> dict[str, object]:
     if complete and report["status"] != "complete":
         raise AssertionError("report support failed to build a complete replay tree")
     return load_object(root / "freeze" / "manifest.json")
+
+
+def artifact_result_tree(root: Path, *, terminal: bool = False) -> dict[str, object]:
+    """Publish operation evidence exclusively through the production artifact writers."""
+
+    root = root.resolve()
+    source = Path(__file__).resolve().parents[2]
+    _copy_frozen_inputs(source, root)
+    manifest = load_object(root / "freeze" / "manifest.json")
+    approval = load_object(root / "freeze" / "owner-budget-approval.json")
+    executable = root / "artifact-worker"
+    _write_artifact_worker(executable, terminal=terminal)
+    approved = datetime.fromisoformat(str(approval["approved_at"]).replace("Z", "+00:00"))
+    timestamp = (approved + timedelta(seconds=1)).astimezone(UTC)
+    fixed_timestamp = timestamp.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    def operations_factory(
+        operation_root: Path,
+        operation_manifest: dict[str, object],
+        operation_approval: dict[str, object],
+        journal: object,
+        budget: AggregateBudget,
+    ) -> Operations:
+        return Operations(
+            operation_root,
+            operation_manifest,
+            operation_approval,
+            budget,
+            journal=cast(Any, journal),
+            bridge=WorkerBridge(executable.resolve(), cast(Any, journal)),
+            verify=_verified_without_io,
+        )
+
+    runtime_identity = {
+        "policy_version": "a" * 16,
+        "system_prompt_sha256": "b" * 64,
+        "proactive_system_prompt_sha256": "c" * 64,
+    }
+    with (
+        patch(
+            "scheduled_learning_v1.execution.lifecycle.verify_pre_run",
+            side_effect=_verified_without_io,
+        ),
+        patch(
+            "scheduled_learning_v1.execution.lifecycle._make_operations",
+            side_effect=operations_factory,
+        ),
+        patch(
+            "scheduled_learning_v1.execution.task_configuration.swift_runtime_identity",
+            return_value=runtime_identity,
+        ),
+        patch(
+            "scheduled_learning_v1.execution.lifecycle._utc_now",
+            return_value=fixed_timestamp,
+        ),
+        patch(
+            "scheduled_learning_v1.worker_bridge.bridge._utc_now",
+            return_value=fixed_timestamp,
+        ),
+    ):
+        run_scored(root)
+    return manifest
+
+
+def _copy_frozen_inputs(source: Path, root: Path) -> None:
+    for directory in ("corpus", "gold", "prompts"):
+        shutil.copytree(source / directory, root / directory)
+    (root / "freeze").mkdir(parents=True)
+    for name in ("manifest.json", "owner-budget-approval.json"):
+        shutil.copy2(source / "freeze" / name, root / "freeze" / name)
+
+
+def _write_artifact_worker(path: Path, *, terminal: bool) -> None:
+    source = Path(__file__).resolve().parents[2]
+    script = (
+        f"#!{sys.executable}\n"
+        "import hashlib, json, pathlib, sys\n"
+        f"sys.path.insert(0, {str(source)!r})\n"
+        "from benchmark_core.canonical import dumps\n"
+        "from tests.worker_bridge.support import learning_result, task_result\n"
+        + ("raise SystemExit(7)\n" if terminal else "")
+        + "input_path = pathlib.Path(sys.argv[-1])\n"
+        + "authorized = json.loads(input_path.read_text(encoding='utf-8'))\n"
+        + "core = {key: value for key, value in authorized.items() if key != 'authorization'}\n"
+        + "if sys.argv[1] == 'worker':\n"
+        + "    configuration = json.loads(pathlib.Path(core['configuration_path']).read_text())\n"
+        + "    result_path = pathlib.Path(configuration['result_path'])\n"
+        + "    result = task_result(core)\n"
+        + "else:\n"
+        + "    result_path = pathlib.Path(core['result_path'])\n"
+        + "    request_sha256 = hashlib.sha256(input_path.read_bytes()).hexdigest()\n"
+        + "    result = learning_result(core, request_sha256=request_sha256)\n"
+        + "    carrier = json.loads(pathlib.Path(core['carrier']['path']).read_text())\n"
+        + "    if core['kind'] == 'evaluator':\n"
+        + "        output = dumps({'schema_version': 1, 'task_id': carrier['task_id'], "
+        + "'outcome': 'reusable_issue', 'issue_codes': ['volatile-counter']})\n"
+        + "    else:\n"
+        + "        output = dumps({'schema_version': 1, 'lessons': []})\n"
+        + "    result['output'] = output\n"
+        + "    result['output_sha256'] = hashlib.sha256(output.encode()).hexdigest()\n"
+        + "result_path.parent.mkdir(parents=True, exist_ok=True)\n"
+        + "result_path.write_text(dumps(result), encoding='utf-8')\n"
+    )
+    path.write_text(script, encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def _verified_without_io(root: Path, approval: dict[str, object]) -> dict[str, object]:
+    return {"status": "verified"}
 
 
 def result_tree_with_nondefault_thresholds(root: Path) -> dict[str, object]:
@@ -117,6 +235,28 @@ def publish_hash_consistent_replay(
     write(root / "results" / "state.json", state)
     write(root / "results" / "decision-receipts.json", decisions)
     write(root / "results" / "replay-receipt.json", receipt)
+    write(root / "results" / "events" / "state.json", state)
+    write(root / "results" / "events" / "decision-receipts.json", decisions)
+    write(root / "results" / "events" / "replay-receipt.json", receipt)
+
+
+def rewrite_finish_event(root: Path, operation_id: str, **changes: object) -> None:
+    """Canonically replace one committed finish event for a verifier mutation."""
+
+    events = root / "results" / "events"
+    for path in sorted(events.glob("0*.json")):
+        value = load_object(path)
+        payload = _object(value.get("payload"), "operation finish payload")
+        if value.get("kind") != "operation_finished" or payload.get("operation_id") != operation_id:
+            continue
+        payload.update(changes)
+        rendered = event_json(parse_event(value))
+        digest = canonical_sha256(rendered)
+        target = events / f"{int(value['sequence']):06d}-{digest}.json"
+        path.unlink()
+        write(target, rendered)
+        return
+    raise AssertionError(f"report support has no finish event for {operation_id}")
 
 
 def _object(value: object, name: str) -> dict[str, Any]:

@@ -12,6 +12,7 @@ from benchmark_learning.learning_replay import replay
 
 from scheduled_learning_v1.replay_bootstrap import initial_replay_state
 
+from .artifact_closure import verify_artifact_closure
 from .builder import report_projection
 
 _EVENT_NAME = re.compile(r"^(\d{6})-([0-9a-f]{64})\.json$")
@@ -26,6 +27,7 @@ def verify_results(root: Path, manifest: dict[str, object]) -> dict[str, object]
         raise ValueError("result verification manifest differs from the committed freeze")
     event_paths = sorted((root / "results" / "events").glob("*.json"))
     events = []
+    event_values: list[dict[str, object]] = []
     for path in event_paths:
         match = _EVENT_NAME.fullmatch(path.name)
         if match is None:
@@ -38,6 +40,14 @@ def verify_results(root: Path, manifest: dict[str, object]) -> dict[str, object]
         if raw != dumps(value).encode("utf-8"):
             raise ValueError("committed event bytes are not canonical")
         events.append(event)
+        event_values.append(
+            {
+                **value,
+                "_event_name": path.name,
+                "_event_sha256": match.group(2),
+            }
+        )
+    artifact_audit = verify_artifact_closure(root, manifest, event_values)
     replay_receipt = load_object(root / "results" / "replay-receipt.json")
     if not isinstance(replay_receipt, dict):
         raise ValueError("replay receipt is missing")
@@ -73,9 +83,12 @@ def verify_results(root: Path, manifest: dict[str, object]) -> dict[str, object]
     report = load_object(root / "results" / "final-report.json")
     if report != report_projection(root):
         raise ValueError("final report differs from committed evidence")
+    self_verifying = artifact_audit["self_verifying"] is True
     return {
         "schema_version": 1,
-        "status": "verified",
+        "status": "verified_self_contained" if self_verifying else "verified_legacy_incomplete",
+        "self_verifying": self_verifying,
+        "unreconstructable_terminal_digests": artifact_audit["unreconstructable_terminal_digests"],
         "manifest_sha256": canonical_sha256(manifest),
         "event_log_sha256": observed_event_digest,
         "final_report_sha256": canonical_sha256(report),

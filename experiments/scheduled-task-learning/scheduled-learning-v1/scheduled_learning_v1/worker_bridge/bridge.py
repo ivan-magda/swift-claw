@@ -11,6 +11,7 @@ from typing import cast
 
 from benchmark_core.canonical import canonical_sha256
 
+from scheduled_learning_v1.evidence_contract import publish_terminal
 from scheduled_learning_v1.replay_controller import EventJournal
 
 from .learning_results import validate_learning_result
@@ -93,6 +94,8 @@ class WorkerBridge:
                 "exit_code": completed.returncode,
                 "diagnostics": diagnostics,
             }
+            result_path.unlink(missing_ok=True)
+            publish_terminal(result_path, terminal)
             self._finish(core, operation_kind, terminal, canonical_sha256(terminal))
             return terminal
         result: dict[str, object] | None = None
@@ -105,6 +108,8 @@ class WorkerBridge:
                 "diagnostics": _bounded_diagnostics(diagnostics, str(error)),
             }
         terminal = {**terminal, "diagnostics": diagnostics}
+        if result is None:
+            publish_terminal(result_path, terminal)
         result_digest = canonical_sha256(result if result is not None else terminal)
         self._finish(core, operation_kind, terminal, result_digest)
         return terminal

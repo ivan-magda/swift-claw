@@ -8,10 +8,10 @@ import unittest
 from pathlib import Path
 from typing import cast
 
-from benchmark_core.canonical import load_object, write
+from benchmark_core.canonical import canonical_sha256, load_object, write
 from scheduled_learning_v1.reporting import build_final_report, verify_results
 
-from .support import publish_hash_consistent_replay, result_tree
+from .support import artifact_result_tree, publish_hash_consistent_replay, rewrite_finish_event
 
 
 class ResultVerificationTests(unittest.TestCase):
@@ -19,19 +19,316 @@ class ResultVerificationTests(unittest.TestCase):
         # given
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest = result_tree(root)
+            manifest = artifact_result_tree(root)
 
             # when
             receipt = verify_results(root, manifest)
 
             # then
-            self.assertEqual(receipt["status"], "verified")
+            self.assertEqual(receipt["status"], "verified_self_contained")
+            self.assertTrue(receipt["self_verifying"])
+            self.assertEqual(receipt["unreconstructable_terminal_digests"], 0)
+
+    def test_changed_auxiliary_projection_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            auxiliary = root / "results" / "events" / "state.json"
+            state = load_object(auxiliary)
+            state["controller_generation"] = 99
+            write(auxiliary, state)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "auxiliary state"):
+                verify_results(root, manifest)
+
+    def test_changed_task_carrier_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            carrier_path = root / "results" / "task-attempts" / "task-0" / "carrier.json"
+            carrier = load_object(carrier_path)
+            carrier["task_id"] = "changed-task"
+            write(carrier_path, carrier)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "task carrier digest"):
+                verify_results(root, manifest)
+
+    def test_changed_task_configuration_binding_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            path = root / "results" / "task-attempts" / "task-0" / "configuration.json"
+            configuration = load_object(path)
+            configuration["fixed_timestamp"] = "2030-01-01T00:00:00Z"
+            write(path, configuration)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "task configuration digest"):
+                verify_results(root, manifest)
+
+    def test_changed_task_invocation_core_binding_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            path = root / "results" / "task-attempts" / "task-0" / "invocation.json"
+            invocation = load_object(path)
+            budget = cast(dict[str, object], invocation["budget"])
+            budget["global_accounted_tokens"] = 1
+            write(path, invocation)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "task invocation core digest"):
+                verify_results(root, manifest)
+
+    def test_changed_task_result_binding_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            path = root / "results" / "task-attempts" / "task-0" / "result.json"
+            result = load_object(path)
+            result["raw_output"] = "changed"
+            write(path, result)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "task result digest"):
+                verify_results(root, manifest)
+
+    def test_changed_task_usage_binding_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            rewrite_finish_event(root, "task-0", usage_digest="0" * 64)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "task usage digest"):
+                verify_results(root, manifest)
+
+    def test_changed_aggregate_budget_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            budget_path = root / "results" / "aggregate-budget.json"
+            budget = load_object(budget_path)
+            budget["task_attempts"] = 3
+            write(budget_path, budget)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "aggregate budget"):
+                verify_results(root, manifest)
+
+    def test_aggregate_reconstruction_counts_heterogeneous_usage(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+
+            # when
+            receipt = verify_results(root, manifest)
+
+            # then
+            self.assertEqual(receipt["status"], "verified_self_contained")
+            self.assertEqual(
+                load_object(root / "results" / "aggregate-budget.json"),
+                {
+                    "schema_version": 1,
+                    "task_attempts": 2,
+                    "evaluator_calls": 2,
+                    "reflector_calls": 1,
+                    "responses_sends": 5,
+                    "accounted_tokens": 1846,
+                },
+            )
+
+    def test_changed_learning_carrier_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            carrier_path = root / "results" / "learning-calls" / "evaluator-task-0" / "carrier.json"
+            carrier = load_object(carrier_path)
+            carrier["operation_id"] = "changed-operation"
+            write(carrier_path, carrier)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "learning carrier digest"):
+                verify_results(root, manifest)
+
+    def test_changed_learning_authorized_request_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            path = root / "results" / "learning-calls" / "evaluator-task-0" / "request.json"
+            request = load_object(path)
+            authorization = cast(dict[str, object], request["authorization"])
+            authorization["event_sha256"] = "0" * 64
+            write(path, request)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "authorization digest"):
+                verify_results(root, manifest)
+
+    def test_changed_learning_authorized_request_core_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            path = root / "results" / "learning-calls" / "evaluator-task-0" / "request.json"
+            request = load_object(path)
+            request["state_root"] = str(root / "changed-learning-state")
+            write(path, request)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "learning request core digest"):
+                verify_results(root, manifest)
+
+    def test_changed_learning_result_binding_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            path = root / "results" / "learning-calls" / "evaluator-task-0" / "result.json"
+            result = load_object(path)
+            result["output"] = "changed"
+            write(path, result)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "learning result digest"):
+                verify_results(root, manifest)
+
+    def test_changed_learning_result_provenance_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            path = root / "results" / "learning-calls" / "evaluator-task-0" / "result.json"
+            result = load_object(path)
+            provenance = cast(dict[str, object], result["provenance"])
+            provenance["request_sha256"] = "0" * 64
+            write(path, result)
+            rewrite_finish_event(
+                root,
+                "evaluator-task-0",
+                result_digest=canonical_sha256(result),
+            )
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "request digest"):
+                verify_results(root, manifest)
+
+    def test_changed_learning_usage_binding_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            rewrite_finish_event(root, "evaluator-task-0", usage_digest="0" * 64)
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "learning usage digest"):
+                verify_results(root, manifest)
+
+    def test_valid_terminal_sidecar_verifies_offline(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root, terminal=True)
+
+            # when
+            receipt = verify_results(root, manifest)
+
+            # then
+            operation = root / "results" / "task-attempts" / "task-0"
+            terminal = load_object(operation / "terminal.json")
+            self.assertEqual(receipt["status"], "verified_self_contained")
+            self.assertEqual(terminal["status"], "process_failed")
+            self.assertFalse((operation / "result.json").exists())
+            self.assertEqual(
+                load_object(root / "results" / "aggregate-budget.json"),
+                {
+                    "schema_version": 1,
+                    "task_attempts": 1,
+                    "evaluator_calls": 0,
+                    "reflector_calls": 0,
+                    "responses_sends": 0,
+                    "accounted_tokens": 0,
+                },
+            )
+
+    def test_future_missing_result_and_terminal_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            result_path = root / "results" / "task-attempts" / "task-0" / "result.json"
+            result_path.unlink()
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "result or terminal"):
+                verify_results(root, manifest)
+
+    def test_unowned_result_artifact_is_rejected(self) -> None:
+        for relative in (
+            "results/invented.json",
+            "results/events/invented.json",
+            "results/learning-state/invented.json",
+            "results/task-attempts/task-0/invented.json",
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
+                # given
+                root = Path(temporary)
+                manifest = artifact_result_tree(root)
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                write(path, {"schema_version": 1})
+
+                # when / then
+                with self.assertRaisesRegex(ValueError, "unowned .*artifact"):
+                    verify_results(root, manifest)
+
+    def test_unknown_operation_directory_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            path = root / "results" / "task-attempts" / "unknown-operation" / "carrier.json"
+            path.parent.mkdir(parents=True)
+            write(path, {"schema_version": 1})
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "operation directory inventory"):
+                verify_results(root, manifest)
+
+    def test_preserved_tree_reports_legacy_incomplete_audit(self) -> None:
+        # given
+        root = Path(__file__).resolve().parents[2]
+        manifest = load_object(root / "freeze" / "manifest.json")
+
+        # when
+        receipt = verify_results(root, manifest)
+
+        # then
+        self.assertEqual(receipt["status"], "verified_legacy_incomplete")
+        self.assertFalse(receipt["self_verifying"])
+        self.assertEqual(receipt["unreconstructable_terminal_digests"], 1)
+        self.assertEqual(
+            receipt["manifest_sha256"],
+            "d16ae90f1e54e866a75af773ae304884906fa943ad937a2e74c00a4638842c07",
+        )
 
     def test_changed_event_byte_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest = result_tree(root)
+            manifest = artifact_result_tree(root)
             event_path = next((root / "results" / "events").glob("0*.json"))
             event_path.write_text(event_path.read_text(encoding="utf-8") + " ", encoding="utf-8")
 
@@ -43,7 +340,7 @@ class ResultVerificationTests(unittest.TestCase):
         # given
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest = result_tree(root)
+            manifest = artifact_result_tree(root)
             state_path = root / "results" / "state.json"
             decisions_path = root / "results" / "decision-receipts.json"
             state = load_object(state_path)
@@ -52,8 +349,7 @@ class ResultVerificationTests(unittest.TestCase):
             self.assertIsInstance(decisions, list)
             typed_decisions = cast(list[dict[str, object]], decisions)
             publish_hash_consistent_replay(root, state, typed_decisions)
-            report = build_final_report(root)
-            self.assertEqual(report["status"], "complete")
+            build_final_report(root)
 
             # when / then
             with self.assertRaisesRegex(ValueError, "persisted state differs from semantic replay"):
@@ -63,7 +359,7 @@ class ResultVerificationTests(unittest.TestCase):
         # given
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest = result_tree(root)
+            manifest = artifact_result_tree(root)
             state = load_object(root / "results" / "state.json")
             decisions = json.loads(
                 (root / "results" / "decision-receipts.json").read_text(encoding="utf-8")
@@ -78,8 +374,7 @@ class ResultVerificationTests(unittest.TestCase):
                     break
             self.assertTrue(changed)
             publish_hash_consistent_replay(root, state, typed_decisions)
-            report = build_final_report(root)
-            self.assertEqual(report["status"], "complete")
+            build_final_report(root)
 
             # when / then
             with self.assertRaisesRegex(
@@ -92,13 +387,13 @@ class ResultVerificationTests(unittest.TestCase):
         # given
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest = result_tree(root)
+            manifest = artifact_result_tree(root)
             receipt_path = root / "results" / "replay-receipt.json"
             receipt = load_object(receipt_path)
             receipt["receipt_id"] = "replay-mutated"
             write(receipt_path, receipt)
-            report = build_final_report(root)
-            self.assertEqual(report["status"], "complete")
+            write(root / "results" / "events" / "replay-receipt.json", receipt)
+            build_final_report(root)
 
             # when / then
             with self.assertRaisesRegex(
