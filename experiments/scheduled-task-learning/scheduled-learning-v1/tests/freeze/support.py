@@ -89,6 +89,8 @@ def create_repository() -> FreezeTestRepository:
         experiment_root=repository_root / PROJECT_PATH,
     )
     repository.git("init", "-q")
+    repository.git("config", "gc.auto", "0")
+    repository.git("config", "maintenance.auto", "false")
     repository.git("config", "user.email", "freeze@example.invalid")
     repository.git("config", "user.name", "Freeze Test")
     repository.commit("test: initialize freeze inputs")
