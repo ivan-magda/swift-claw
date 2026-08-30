@@ -180,10 +180,17 @@ class Operations:
         if not isinstance(raw_output, str):
             raw_output = ""
         http = _object(terminal.get("http"), "task terminal HTTP evidence")
+        tools = terminal.get("tools")
+        if not isinstance(tools, list) or any(not isinstance(tool, dict) for tool in tools):
+            raise ValueError("task terminal tool evidence is invalid")
+        tool_events = [
+            {key: tool[key] for key in ("name", "path", "status")}
+            for tool in cast(list[dict[str, object]], tools)
+        ]
         score_attempt: dict[str, object] = {
             "runtime_outcome": terminal.get("outcome"),
             "raw_output": raw_output,
-            "tool_events": terminal.get("tools"),
+            "tool_events": tool_events,
             "responses_requests": http.get("responsesSends"),
         }
         return {
