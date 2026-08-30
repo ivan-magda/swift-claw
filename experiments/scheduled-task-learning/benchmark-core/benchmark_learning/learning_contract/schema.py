@@ -129,7 +129,6 @@ _EVENT_PAYLOAD_KEYS: dict[ReplayEventKind, set[str]] = {
         "manifest_digest",
         "freeze_commit",
         "invocation_core_digest",
-        "trigger_digest",
     },
     ReplayEventKind.OPERATION_FINISHED: {
         "job_id",

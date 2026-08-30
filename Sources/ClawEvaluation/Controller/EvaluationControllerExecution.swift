@@ -538,6 +538,7 @@ extension EvaluationController {
       kind: .attempt,
       executablePath: context.executablePath,
       invocationPath: invocation.path,
+      credentialStateRoot: configuration.stateRootURL.path,
       sealedOutputKey: configuration.requiresJointUnseal ? context.sealedOutputKey : nil
     )
     let journalKind = Self.journalKind(for: launched.termination)

@@ -1,10 +1,79 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 import Testing
 
 @testable import ClawEvaluation
 
 @Suite struct EvaluationLearningTaskInvocationTests {
+  @Test func pythonTaskArtifactsPassSwiftPathAndIdentityAdmission() async throws {
+    // given
+    let repository = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let fixtureRoot = repository.appendingPathComponent(
+      "experiments/scheduled-task-learning/scheduled-learning-v1/tests/interop/"
+        + "task-admission-fixture",
+      isDirectory: true
+    )
+    let storedInvocationURL = fixtureRoot.appendingPathComponent(
+      "experiments/scheduled-task-learning/scheduled-learning-v1/results/task-attempts/"
+        + "task-0/invocation.json"
+    )
+    let storedInput = try EvaluationWorkerInput.decode(from: storedInvocationURL)
+    guard case .scheduledLearning(let storedInvocation) = storedInput else {
+      Issue.record("Python fixture did not contain a scheduled-learning task invocation")
+      return
+    }
+    let runtimeRepository = URL(fileURLWithPath: storedInvocation.manifest.repositoryRoot)
+    let fixtureLock = try acquirePythonTaskAdmissionFixtureLock()
+    defer { fixtureLock.release() }
+    defer { try? FileManager.default.removeItem(at: runtimeRepository) }
+    let executableURL = try materializePythonTaskAdmissionFixture(
+      fixtureRoot: fixtureRoot,
+      runtimeRepository: runtimeRepository
+    )
+    let invocationURL = URL(fileURLWithPath: storedInvocation.configurationPath)
+      .deletingLastPathComponent()
+      .appendingPathComponent("invocation.json")
+    let input = try EvaluationWorkerInput.decode(from: invocationURL)
+    guard case .scheduledLearning(let invocation) = input else {
+      Issue.record("Python did not emit a scheduled-learning task invocation")
+      return
+    }
+    let configuration = try EvaluationJSONFile.decode(
+      EvaluationAttemptConfiguration.self,
+      from: URL(fileURLWithPath: invocation.configurationPath)
+    )
+    let verifier = EvaluationLearningAdmissionVerifier(
+      runningExecutablePath: { executableURL.path }
+    )
+
+    // when
+    let error = await #expect(throws: PythonAdmissionSentinel.admitted) {
+      _ = try await EvaluationWorker().runResult(
+        invocation: invocation,
+        credentialStateRoot: EvaluationPathSecurity.normalizedSystemTemporaryAlias(
+          runtimeRepository.path
+        ),
+        admissionVerifier: verifier,
+        makeResource: { _, _ in throw PythonAdmissionSentinel.admitted }
+      )
+    }
+
+    // then
+    #expect(error != nil)
+    #expect(configuration.evaluationRoot == invocation.manifest.evaluationRoot)
+    #expect(
+      EvaluationPathSecurity.isStrictlyContained(
+        configuration.resultURL,
+        under: configuration.evaluationRootURL
+      )
+    )
+  }
+
   @Test func workerInputSelectsOnlyTheExplicitM3Profile() throws {
     // given
     let fixture = try makeEvaluationLearningTaskInvocationFixture()
@@ -111,6 +180,65 @@ import Testing
   }
 }
 
+private enum PythonAdmissionSentinel: Error {
+  case admitted
+}
+
+private func acquirePythonTaskAdmissionFixtureLock() throws -> InstanceLock {
+  while true {
+    do {
+      return try InstanceLock(
+        path: "/tmp/swift-claw-scheduled-learning-v1-task-admission-v1.lock"
+      )
+    } catch InstanceLock.LockError.alreadyLocked {
+      Thread.sleep(forTimeInterval: 0.01)
+    }
+  }
+}
+
+private func materializePythonTaskAdmissionFixture(
+  fixtureRoot: URL,
+  runtimeRepository: URL
+) throws -> URL {
+  let manager = FileManager.default
+  try? manager.removeItem(at: runtimeRepository)
+  let relativeExperiment = "experiments/scheduled-task-learning/scheduled-learning-v1"
+  let storedExperiment = fixtureRoot.appendingPathComponent(relativeExperiment, isDirectory: true)
+  let runtimeExperiment = runtimeRepository.appendingPathComponent(
+    relativeExperiment,
+    isDirectory: true
+  )
+  try manager.createDirectory(at: runtimeExperiment, withIntermediateDirectories: true)
+  for directory in ["freeze", "results"] {
+    try manager.copyItem(
+      at: storedExperiment.appendingPathComponent(directory, isDirectory: true),
+      to: runtimeExperiment.appendingPathComponent(directory, isDirectory: true)
+    )
+  }
+  let executableRelativePath = try String(
+    contentsOf: fixtureRoot.appendingPathComponent("executable-path.txt"),
+    encoding: .utf8
+  ).trimmingCharacters(in: .whitespacesAndNewlines)
+  let components = executableRelativePath.split(separator: "/")
+  guard
+    executableRelativePath.hasPrefix("/") == false,
+    components.isEmpty == false,
+    components.contains("..") == false
+  else {
+    throw EvaluationLearningAdmissionError.invalidBinding
+  }
+  let executableURL = runtimeRepository.appendingPathComponent(executableRelativePath)
+  try manager.createDirectory(
+    at: executableURL.deletingLastPathComponent(),
+    withIntermediateDirectories: true
+  )
+  try manager.copyItem(
+    at: fixtureRoot.appendingPathComponent("claw-eval-stub"),
+    to: executableURL
+  )
+  return executableURL
+}
+
 struct EvaluationLearningTaskInvocationFixture {
   let root: URL
   let configuration: EvaluationAttemptConfiguration
@@ -201,11 +329,11 @@ func makeEvaluationLearningTaskInvocationFixture() throws
     executableSHA256: attempt.configuration.provenance.executableSHA256,
     missingUsageTokenProxy: PageEvaluationContract.missingUsageTokenProxy,
     budgets: EvaluationLearningApprovedBudgets(
-      taskAttempts: 1,
-      evaluatorCalls: 1,
+      taskAttempts: 10,
+      evaluatorCalls: 5,
       reflectorCalls: 1,
-      responsesSends: 4,
-      accountedTokens: 10_000
+      responsesSends: 38,
+      accountedTokens: 5_045_184
     ),
     route: route
   )
@@ -224,8 +352,10 @@ func makeEvaluationLearningTaskBudget() -> EvaluationSendBudgetSnapshot {
     globalAccountedTokens: 0,
     stageResponsesSends: 0,
     globalResponsesSends: 0,
-    stageAccountedTokenThreshold: PageEvaluationContract.pageLimits.accountedTokenThreshold,
-    stageResponsesSendCap: PageEvaluationContract.pageLimits.maximumResponsesSends
+    stageAccountedTokenThreshold: 5_045_184,
+    globalAccountedTokenThreshold: 5_045_184,
+    stageResponsesSendCap: 38,
+    globalResponsesSendCap: 38
   )
 }
 
@@ -243,7 +373,14 @@ private func makeLegacyWorkerInvocation(root: URL) throws -> EvaluationWorkerInv
     kind: .attempt,
     configurationPath: configured.configurationURL.path,
     freeze: frozen.inputs,
-    budget: makeEvaluationLearningTaskBudget(),
+    budget: EvaluationSendBudgetSnapshot(
+      stageAccountedTokens: 0,
+      globalAccountedTokens: 0,
+      stageResponsesSends: 0,
+      globalResponsesSends: 0,
+      stageAccountedTokenThreshold: PageEvaluationContract.pageLimits.accountedTokenThreshold,
+      stageResponsesSendCap: PageEvaluationContract.pageLimits.maximumResponsesSends
+    ),
     evaluationRoot: configured.configuration.evaluationRootURL,
     journal: journal,
     attemptIDs: [configured.configuration.attemptID],

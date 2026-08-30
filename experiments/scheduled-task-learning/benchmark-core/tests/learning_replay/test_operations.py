@@ -81,12 +81,11 @@ class LearningReplayOperationTests(unittest.TestCase):
                         REFLECTION_OCCURRENCE,
                         kind="reflector",
                         generation=1,
-                        operation_id="reflector-1",
-                        trigger_digest=trigger_digest,
+                        operation_id=trigger_digest,
                     ),
                     controller_started(4, "2026-01-03T00:00:01Z", generation=2),
                 ],
-                "reflector-1",
+                trigger_digest,
             ),
         ]
 
@@ -181,11 +180,10 @@ class LearningReplayOperationTests(unittest.TestCase):
                         REFLECTION_OCCURRENCE,
                         kind="reflector",
                         generation=1,
-                        operation_id="reflector-1",
-                        trigger_digest=trigger_digest,
+                        operation_id=trigger_digest,
                     ),
                 ],
-                "reflector-1",
+                trigger_digest,
             ),
         ]
         trial_initial, admitted = admitted_trial("2026-01-01T00:00:00Z")

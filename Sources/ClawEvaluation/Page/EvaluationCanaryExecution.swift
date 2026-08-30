@@ -243,6 +243,7 @@ extension EvaluationController {
       kind: .canaryProcess,
       executablePath: request.executablePath,
       invocationPath: invocation.path,
+      credentialStateRoot: configurations[0].stateRootURL.path,
       sealedOutputKey: nil
     )
     let journalKind: EvaluationControllerJournalEventKind =

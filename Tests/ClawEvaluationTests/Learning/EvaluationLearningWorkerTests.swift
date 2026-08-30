@@ -1,6 +1,7 @@
 import ClawCore
 import ClawTestSupport
 import Foundation
+import Synchronization
 import Testing
 
 @testable import ClawEvaluation
@@ -13,14 +14,18 @@ import Testing
     let verifier = StaticEvaluationLearningTaskAdmissionVerifier(
       context: fixture.admissionContext
     )
+    let credentialRoot = try makeEvaluationCredentialStateRoot(under: fixture.root)
+    let resourceCredentialRoot = Mutex<URL?>(nil)
     let provider = SequenceProvider(scriptedTwoRoundResponses())
 
     // when
     let result = try await EvaluationWorker().runResult(
       invocation: fixture.invocation,
+      credentialStateRoot: credentialRoot.path,
       admissionVerifier: verifier,
-      makeResource: { _ in
-        makeEvaluationLearningLiveResource(provider: provider)
+      makeResource: { _, suppliedCredentialRoot in
+        resourceCredentialRoot.withLock { $0 = suppliedCredentialRoot }
+        return makeEvaluationLearningLiveResource(provider: provider)
       }
     )
     let durable = try EvaluationJSONFile.decode(
@@ -34,6 +39,79 @@ import Testing
     #expect(result.inputSHA256 == fixture.configuration.inputSHA256)
     #expect(result.manifestSHA256 == fixture.invocation.manifest.manifestSHA256)
     #expect(result.provenance.freezeCommit == fixture.admissionContext.freezeCommit)
+    #expect(resourceCredentialRoot.withLock { $0 } == credentialRoot)
+  }
+
+  @Test(arguments: LearningTaskCapMutation.allCases)
+  func workerBindsEveryScheduledCapBeforeResourceConstruction(
+    mutation: LearningTaskCapMutation
+  ) async throws {
+    // given
+    let fixture = try makeEvaluationLearningTaskInvocationFixture()
+    defer { fixture.remove() }
+    let invocation = mutation.apply(to: fixture.invocation)
+    let resourceCalls = Mutex(0)
+
+    // when
+    let error = await #expect(throws: EvaluationWorkerInvocationError.invalidBudgetSnapshot) {
+      _ = try await EvaluationWorker().runResult(
+        invocation: invocation,
+        credentialStateRoot: fixture.root.path,
+        admissionVerifier: StaticEvaluationLearningTaskAdmissionVerifier(
+          context: fixture.admissionContext
+        ),
+        makeResource: { _, _ in
+          resourceCalls.withLock { $0 += 1 }
+          throw LearningWorkerSentinel.unexpectedResourceConstruction
+        }
+      )
+    }
+
+    // then
+    #expect(error != nil)
+    #expect(resourceCalls.withLock { $0 } == 0)
+  }
+}
+
+private enum LearningWorkerSentinel: Error {
+  case unexpectedResourceConstruction
+}
+
+enum LearningTaskCapMutation: CaseIterable, Equatable, Sendable {
+  case stageAccountedTokenThreshold
+  case globalAccountedTokenThreshold
+  case stageResponsesSendCap
+  case globalResponsesSendCap
+
+  func apply(to invocation: EvaluationLearningTaskInvocation) -> EvaluationLearningTaskInvocation {
+    let budget = invocation.budget
+    let changed = EvaluationSendBudgetSnapshot(
+      stageAccountedTokens: budget.stageAccountedTokens,
+      globalAccountedTokens: budget.globalAccountedTokens,
+      stageResponsesSends: budget.stageResponsesSends,
+      globalResponsesSends: budget.globalResponsesSends,
+      stageAccountedTokenThreshold: budget.stageAccountedTokenThreshold
+        - (self == .stageAccountedTokenThreshold ? 1 : 0),
+      globalAccountedTokenThreshold: budget.globalAccountedTokenThreshold
+        - (self == .globalAccountedTokenThreshold ? 1 : 0),
+      stageResponsesSendCap: budget.stageResponsesSendCap
+        - (self == .stageResponsesSendCap ? 1 : 0),
+      globalResponsesSendCap: budget.globalResponsesSendCap
+        - (self == .globalResponsesSendCap ? 1 : 0)
+    )
+    return EvaluationLearningTaskInvocation(
+      schemaVersion: invocation.schemaVersion,
+      executionProfile: invocation.executionProfile,
+      jobID: invocation.jobID,
+      operationID: invocation.operationID,
+      attemptGeneration: invocation.attemptGeneration,
+      providerCallID: invocation.providerCallID,
+      configurationPath: invocation.configurationPath,
+      configurationSHA256: invocation.configurationSHA256,
+      manifest: invocation.manifest,
+      budget: changed,
+      authorization: invocation.authorization
+    )
   }
 }
 

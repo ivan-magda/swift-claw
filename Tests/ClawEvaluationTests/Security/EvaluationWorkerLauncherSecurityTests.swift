@@ -24,12 +24,14 @@ extension EvaluationFilesystemSecurityTests {
       kind: .attempt,
       executablePath: executableLink.path,
       invocationPath: invocation.path,
+      credentialStateRoot: root.path,
       sealedOutputKey: nil
     )
     let linkedInvocation = await launcher.launch(
       kind: .attempt,
       executablePath: "/usr/bin/true",
       invocationPath: invocationLink.path,
+      credentialStateRoot: root.path,
       sealedOutputKey: nil
     )
 
@@ -42,21 +44,28 @@ extension EvaluationFilesystemSecurityTests {
     )
   }
 
-  @Test func workerLauncherStartsVerifiedRegularPaths() async throws {
+  @Test func workerLauncherPassesRuntimeOnlyCredentialRootToWorker() async throws {
     // given
     let root = try makeEvaluationTestRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let invocation = root.appendingPathComponent("invocation.json")
     let executable = root.appendingPathComponent("worker.sh")
+    let credentialRoot = root.appendingPathComponent("credential-state", isDirectory: true)
     let observation = root.appendingPathComponent("launcher-observation.txt")
     try Data("{}".utf8).write(to: invocation)
+    try FileManager.default.createDirectory(
+      at: credentialRoot,
+      withIntermediateDirectories: false
+    )
     let script = """
       #!/bin/sh
       IFS= read -r key
       if [ "$1" = "worker" ] && [ "$2" = "--invocation" ] && [ -f "$3" ]; then
-        if [ "$4" = "--sealed-output-key-stdin" ] && [ "$key" = "sealed-key" ]; then
-          printf passed > "$(dirname "$0")/launcher-observation.txt"
-          exit 0
+        if [ "$4" = "--credential-state-root" ] && [ "$5" = "\(credentialRoot.path)" ]; then
+          if [ "$6" = "--sealed-output-key-stdin" ] && [ "$key" = "sealed-key" ]; then
+            printf passed > "$(dirname "$0")/launcher-observation.txt"
+            exit 0
+          fi
         fi
       fi
       exit 9
@@ -69,6 +78,7 @@ extension EvaluationFilesystemSecurityTests {
       kind: .attempt,
       executablePath: executable.path,
       invocationPath: invocation.path,
+      credentialStateRoot: credentialRoot.path,
       sealedOutputKey: Data("sealed-key\n".utf8)
     )
 
@@ -106,6 +116,7 @@ extension EvaluationFilesystemSecurityTests {
       kind: .attempt,
       executablePath: rawExecutable.path,
       invocationPath: rawInvocation.path,
+      credentialStateRoot: root.path,
       sealedOutputKey: nil
     )
 

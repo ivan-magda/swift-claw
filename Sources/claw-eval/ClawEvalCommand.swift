@@ -78,6 +78,9 @@ struct ClawEvalCommand: AsyncParsableCommand {
     @Option(help: "Absolute path to a controller-minted, manifest-bound worker invocation.")
     var invocation: String
 
+    @Option(help: "Canonical external encrypted credential state directory.")
+    var credentialStateRoot: String
+
     @Flag(help: "Read the ephemeral 32-byte sealed-output key from standard input.")
     var sealedOutputKeyStdin = false
 
@@ -90,6 +93,7 @@ struct ClawEvalCommand: AsyncParsableCommand {
           : nil
         let attemptID = try await EvaluationWorker().run(
           invocation: authorized,
+          credentialStateRoot: credentialStateRoot,
           sealedOutputKey: key
         )
         print(attemptID)
@@ -97,7 +101,12 @@ struct ClawEvalCommand: AsyncParsableCommand {
         guard sealedOutputKeyStdin == false else {
           throw ValidationError("scheduled-learning-v1 does not accept a sealed-output key")
         }
-        print(try await EvaluationWorker().run(invocation: authorized))
+        print(
+          try await EvaluationWorker().run(
+            invocation: authorized,
+            credentialStateRoot: credentialStateRoot
+          )
+        )
       }
     }
   }
@@ -111,11 +120,17 @@ struct ClawEvalCommand: AsyncParsableCommand {
     @Option(help: "Absolute path to one manifest-bound learning-call request.")
     var request: String
 
+    @Option(help: "Canonical external encrypted credential state directory.")
+    var credentialStateRoot: String
+
     mutating func run() async throws {
       let value = try EvaluationLearningCallRequest.load(
         from: URL(fileURLWithPath: request)
       )
-      let result = try await EvaluationLearningCall().run(request: value)
+      let result = try await EvaluationLearningCall().run(
+        request: value,
+        credentialStateRoot: credentialStateRoot
+      )
       print(result.operationID)
     }
   }

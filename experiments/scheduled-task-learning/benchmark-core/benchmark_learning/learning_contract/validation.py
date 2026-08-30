@@ -243,15 +243,6 @@ def _operation_started_payload_issues(
         "invocation_core_digest",
     ):
         _opaque_string_issues(payload.get(field), f"{path}.{field}", issues)
-    trigger_digest = payload.get("trigger_digest")
-    if operation_kind == "reflector":
-        _opaque_string_issues(trigger_digest, f"{path}.trigger_digest", issues)
-    elif trigger_digest is not None:
-        issue(
-            issues,
-            "schema.bounded_values",
-            f"{path}.trigger_digest must be null for this operation kind",
-        )
 
 
 def _operation_finished_payload_issues(

@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawSecrets
 import Foundation
 import Testing
 
@@ -14,6 +15,25 @@ func makeEvaluationTestRoot() throws -> URL {
   .appendingPathComponent("swift-claw-evaluation-tests-\(UUID().uuidString)")
   try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
   return root
+}
+
+func makeEvaluationCredentialStateRoot(under root: URL) throws -> URL {
+  let credentialRoot = root.appendingPathComponent("credential-state", isDirectory: true)
+  try FileManager.default.createDirectory(at: credentialRoot, withIntermediateDirectories: true)
+  try EncryptedFileSecretStore.seal(
+    Secrets(telegramBotToken: "123:evaluation", llmApiKey: nil),
+    stateRoot: credentialRoot
+  )
+  try EncryptedLLMCredentialStore(stateRoot: credentialRoot).save(
+    StoredOAuthCredential(
+      profileID: UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xAC)),
+      accessToken: "evaluation-access-token",
+      refreshToken: "evaluation-refresh-token",
+      expiresAt: .distantFuture
+    ),
+    providerID: .openAIChatGPT
+  )
+  return credentialRoot
 }
 
 func makeEvaluationConfiguration(

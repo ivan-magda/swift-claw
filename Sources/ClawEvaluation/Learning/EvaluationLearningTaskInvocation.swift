@@ -70,8 +70,6 @@ package struct EvaluationLearningTaskInvocation: Codable, Sendable, Equatable {
     else {
       throw EvaluationLearningAdmissionError.invalidBinding
     }
-    try budget.validate()
-
     let repository = try Self.absoluteURL(manifest.repositoryRoot)
     let evaluation = try Self.absoluteURL(manifest.evaluationRoot)
     let configuration = try Self.absoluteURL(configurationPath)

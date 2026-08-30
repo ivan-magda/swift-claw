@@ -112,11 +112,11 @@ class LearningContractTests(unittest.TestCase):
             with self.subTest(event=invalid), self.assertRaises(LearningContractError):
                 parse_event(invalid)
 
-    def test_operation_started_requires_kind_specific_trigger_binding(self) -> None:
+    def test_operation_started_matches_the_shared_swift_admission_payload(self) -> None:
         # given
         payload: dict[str, Any] = {
             "job_id": "job-a",
-            "operation_id": "reflector-1",
+            "operation_id": "trigger-1",
             "operation_kind": "reflector",
             "attempt_generation": 1,
             "carrier_digest": "carrier-1",
@@ -125,7 +125,6 @@ class LearningContractTests(unittest.TestCase):
             "manifest_digest": "manifest-1",
             "freeze_commit": "freeze-commit-1",
             "invocation_core_digest": "invocation-core-1",
-            "trigger_digest": "trigger-1",
         }
         envelope = {
             "schema_version": 1,
@@ -134,27 +133,18 @@ class LearningContractTests(unittest.TestCase):
             "kind": "operation_started",
             "payload": payload,
         }
-        task_payload = {**payload, "operation_kind": "task", "trigger_digest": None}
-        missing_trigger = {
-            **envelope,
-            "payload": {key: value for key, value in payload.items() if key != "trigger_digest"},
-        }
-        unbound_reflector = {**envelope, "payload": {**payload, "trigger_digest": None}}
-        triggered_task = {**envelope, "payload": {**task_payload, "trigger_digest": "trigger-1"}}
+        task_payload = {**payload, "operation_id": "task-1", "operation_kind": "task"}
+        extra_trigger = {**envelope, "payload": {**payload, "trigger_digest": "trigger-1"}}
 
         # when
         reflector = parse_event(envelope)
         task = parse_event({**envelope, "payload": task_payload})
 
         # then
-        self.assertEqual(reflector.payload["trigger_digest"], "trigger-1")
-        self.assertIsNone(task.payload["trigger_digest"])
-        for malformed in (missing_trigger, unbound_reflector, triggered_task):
-            with (
-                self.subTest(payload=malformed["payload"]),
-                self.assertRaises(LearningContractError),
-            ):
-                parse_event(malformed)
+        self.assertEqual(reflector.payload, payload)
+        self.assertEqual(task.payload, task_payload)
+        with self.assertRaises(LearningContractError):
+            parse_event(extra_trigger)
 
     def test_candidate_admitted_requires_complete_adapter_binding(self) -> None:
         # given

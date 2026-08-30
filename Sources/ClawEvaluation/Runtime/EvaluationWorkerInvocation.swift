@@ -61,6 +61,25 @@ package struct EvaluationSendBudgetSnapshot: Codable, Sendable, Equatable {
     }
   }
 
+  package func validateScheduledLearning(
+    approvedBudgets: EvaluationLearningApprovedBudgets
+  ) throws {
+    guard
+      stageAccountedTokens >= 0,
+      globalAccountedTokens >= 0,
+      stageResponsesSends >= 0,
+      globalResponsesSends >= 0,
+      approvedBudgets.accountedTokens > 0,
+      approvedBudgets.responsesSends > 0,
+      stageAccountedTokenThreshold == approvedBudgets.accountedTokens,
+      globalAccountedTokenThreshold == approvedBudgets.accountedTokens,
+      stageResponsesSendCap == approvedBudgets.responsesSends,
+      globalResponsesSendCap == approvedBudgets.responsesSends
+    else {
+      throw EvaluationWorkerInvocationError.invalidBudgetSnapshot
+    }
+  }
+
   package func admission(
     _ context: ProviderRoundTripAdmissionContext
   ) -> ProviderRoundTripAdmission {

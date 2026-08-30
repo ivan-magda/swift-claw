@@ -10,10 +10,12 @@ package struct EvaluationLearningCall: Sendable {
   package init() {}
 
   package func run(
-    request: EvaluationLearningCallRequest
+    request: EvaluationLearningCallRequest,
+    credentialStateRoot: String
   ) async throws -> EvaluationLearningCallResult {
     return try await run(
       request: request,
+      credentialStateRoot: credentialStateRoot,
       makeResource: Self.productionResourceFactory()
     )
   }
@@ -36,6 +38,7 @@ package struct EvaluationLearningCall: Sendable {
 
   package func run(
     request: EvaluationLearningCallRequest,
+    credentialStateRoot: String,
     makeResource:
       @escaping @Sendable (
         EvaluationLearningCallResourceFactoryInput
@@ -46,59 +49,92 @@ package struct EvaluationLearningCall: Sendable {
     let requestSHA256 = SHA256Digest.hex(requestData)
     let stateRoot = try EvaluationLearningAdmissionVerifier.absoluteURL(request.stateRoot)
     let resultURL = try EvaluationLearningAdmissionVerifier.absoluteURL(request.resultPath)
+    let evaluationRoot = try EvaluationLearningAdmissionVerifier.absoluteURL(
+      request.manifest.evaluationRoot
+    )
+    let credentialRootURL = try EvaluationCredentialStateRoot.validate(
+      path: credentialStateRoot,
+      evaluationRoot: evaluationRoot
+    )
 
-    return try await EvaluationWorkerLifecycle.withProductionLockOnly(stateRoot: stateRoot) { _ in
-      let prompt = try Self.readArtifact(request.prompt)
-      let carrier = try Self.readArtifact(request.carrier)
-      let factoryInput = EvaluationLearningCallResourceFactoryInput(
-        request: request,
-        requestSHA256: requestSHA256
-      )
-
-      return try await EvaluationWorkerLifecycle.withResource(
-        makeResource: {
-          try await makeResource(factoryInput)
-        },
-        operation: { resource in
-          let context = resource.admission.context
-          try Self.validate(request: request, context: context)
-          guard resource.roster.hasFallback == false else {
-            throw EvaluationLearningAdmissionError.invalidBinding
-          }
-          let result = try await EvaluationLearningCallRunner().run(
-            request: request,
-            requestSHA256: requestSHA256,
-            prompt: prompt,
-            carrier: carrier,
-            binding: resource.roster.primary,
-            admissionContext: context,
-            liveAdmission: {
-              await resource.admission.evaluate()
-            }
-          )
-          let reconciled = try await Self.reconcile(
-            result: result,
-            request: request,
-            requestSHA256: requestSHA256,
-            context: context,
-            resource: resource
-          )
-          let resultData = try EvaluationCanonicalJSON.data(encoding: reconciled)
-          try EvaluationDurablePublication.publishExclusive(resultData, to: resultURL)
-          return reconciled
+    return try await EvaluationWorkerLifecycle.withProductionLock(
+      stateRoot: stateRoot,
+      credentialStateRoot: credentialRootURL,
+      makeResource: {
+        let prompt = try Self.readArtifact(request.prompt)
+        let carrier = try Self.readArtifact(request.carrier)
+        let factoryInput = EvaluationLearningCallResourceFactoryInput(
+          request: request,
+          requestSHA256: requestSHA256,
+          credentialStateRoot: credentialRootURL
+        )
+        let resource = try await makeResource(factoryInput)
+        return EvaluationPreparedLearningCallResource(
+          resource: resource,
+          prompt: prompt,
+          carrier: carrier
+        )
+      },
+      operation: { prepared, _ in
+        let resource = prepared.resource
+        let context = resource.admission.context
+        try Self.validate(request: request, context: context)
+        guard resource.roster.hasFallback == false else {
+          throw EvaluationLearningAdmissionError.invalidBinding
         }
-      )
-    }
+        let result = try await EvaluationLearningCallRunner().run(
+          request: request,
+          requestSHA256: requestSHA256,
+          prompt: prepared.prompt,
+          carrier: prepared.carrier,
+          binding: resource.roster.primary,
+          admissionContext: context,
+          liveAdmission: {
+            await resource.admission.evaluate()
+          }
+        )
+        let reconciled = try await Self.reconcile(
+          result: result,
+          request: request,
+          requestSHA256: requestSHA256,
+          context: context,
+          resource: resource
+        )
+        let resultData = try EvaluationCanonicalJSON.data(encoding: reconciled)
+        try EvaluationDurablePublication.publishExclusive(resultData, to: resultURL)
+        return reconciled
+      }
+    )
+  }
+}
+
+private struct EvaluationPreparedLearningCallResource: EvaluationWorkerResource {
+  let resource: EvaluationLearningCallResource
+  let prompt: String
+  let carrier: String
+
+  func shutdownCredentials() async throws {
+    try await resource.shutdownCredentials()
+  }
+
+  func shutdownTransport() async throws {
+    try await resource.shutdownTransport()
   }
 }
 
 package struct EvaluationLearningCallResourceFactoryInput: Sendable {
   package let request: EvaluationLearningCallRequest
   package let requestSHA256: String
+  package let credentialStateRoot: URL
 
-  package init(request: EvaluationLearningCallRequest, requestSHA256: String) {
+  package init(
+    request: EvaluationLearningCallRequest,
+    requestSHA256: String,
+    credentialStateRoot: URL
+  ) {
     self.request = request
     self.requestSHA256 = requestSHA256
+    self.credentialStateRoot = credentialStateRoot
   }
 
   package func admission(
@@ -213,8 +249,8 @@ package struct EvaluationLearningCallHTTPObservation: Sendable, Equatable {
 
 // MARK: - Live Call Composition
 
-private extension EvaluationLearningCall {
-  static func productionAdmissionVerifier(
+extension EvaluationLearningCall {
+  private static func productionAdmissionVerifier(
     arguments: [String]
   ) -> EvaluationLearningAdmissionVerifier {
     EvaluationLearningAdmissionVerifier(
@@ -224,7 +260,9 @@ private extension EvaluationLearningCall {
     )
   }
 
-  static func readArtifact(_ binding: EvaluationLearningArtifactBinding) throws -> String {
+  fileprivate static func readArtifact(
+    _ binding: EvaluationLearningArtifactBinding
+  ) throws -> String {
     let url = try EvaluationLearningAdmissionVerifier.absoluteURL(binding.path)
     let data = try EvaluationPathSecurity.readRegularSingleLinkFile(at: url)
     guard
@@ -236,7 +274,7 @@ private extension EvaluationLearningCall {
     return text
   }
 
-  static func validate(
+  private static func validate(
     request: EvaluationLearningCallRequest,
     context: EvaluationLearningAdmissionContext
   ) throws {
@@ -266,9 +304,31 @@ private extension EvaluationLearningCall {
     input: EvaluationLearningCallResourceFactoryInput,
     admissionVerifier: any EvaluationLearningAdmissionVerifying
   ) async throws -> EvaluationLearningCallResource {
+    let client = HTTPClient(
+      eventLoopGroupProvider: .singleton,
+      configuration: HTTPClientProfile.protectedEgress.configuration
+    )
+    do {
+      return try await makeLiveResource(
+        input: input,
+        admissionVerifier: admissionVerifier,
+        http: AsyncHTTPExecutor(client: client),
+        closeTransport: { try await client.shutdown() }
+      )
+    } catch {
+      try? await client.shutdown()
+      throw error
+    }
+  }
+
+  static func makeLiveResource(
+    input: EvaluationLearningCallResourceFactoryInput,
+    admissionVerifier: any EvaluationLearningAdmissionVerifying,
+    http: any HTTPExecuting & HTTPStreaming,
+    closeTransport: @escaping @Sendable () async throws -> Void
+  ) async throws -> EvaluationLearningCallResource {
     let admission = try await input.admission(using: admissionVerifier)
     let context = admission.context
-    let stateRoot = try EvaluationLearningAdmissionVerifier.absoluteURL(input.request.stateRoot)
     let route = try LLMProviderRegistry.resolve(
       modelReference: context.route.providerReference,
       configuredBaseURL: ""
@@ -289,52 +349,41 @@ private extension EvaluationLearningCall {
       structuredOutput: .off,
       fallbackRoute: nil
     )
-    let client = HTTPClient(
-      eventLoopGroupProvider: .singleton,
-      configuration: HTTPClientProfile.protectedEgress.configuration
-    )
     let recorder = EvaluationHTTPRecorder(
-      base: AsyncHTTPExecutor(client: client),
+      base: http,
       expectedWireModel: context.route.wireModel,
       maximumResponsesSends: context.route.retryBudget
     )
-    do {
-      let stack = try ProviderStackFactory.make(
-        route: route,
-        settings: settings,
-        loadStaticBearer: { nil },
-        makeManagedCredentialStore: {
-          EncryptedLLMCredentialStore(stateRoot: stateRoot)
-        },
-        http: recorder,
-        buildVersion: "swift-claw-evaluation-v1"
-      )
-      return EvaluationLearningCallResource(
-        admission: admission,
-        roster: ProviderRoster(primary: stack.binding),
-        credentialSource: stack.credentialSource,
-        closeTransport: {
-          try await client.shutdown()
-        },
-        observeHTTP: {
-          let snapshot = await recorder.snapshot()
-          return EvaluationLearningCallHTTPObservation(
-            responsesSends: snapshot.responsesSends.count,
-            provenNotStartedResponsesSends: snapshot.provenNotStartedResponsesSends,
-            hasIntegrityFailures: snapshot.integrityFailures.isEmpty == false
-          )
-        },
-        markProvenNotStarted: { count in
-          try await recorder.recordProvenNotStartedResponsesSends(count)
-        }
-      )
-    } catch {
-      try? await client.shutdown()
-      throw error
-    }
+    let stack = try ProviderStackFactory.make(
+      route: route,
+      settings: settings,
+      loadStaticBearer: { nil },
+      makeManagedCredentialStore: {
+        EncryptedLLMCredentialStore(stateRoot: input.credentialStateRoot)
+      },
+      http: recorder,
+      buildVersion: "swift-claw-evaluation-v1"
+    )
+    return EvaluationLearningCallResource(
+      admission: admission,
+      roster: ProviderRoster(primary: stack.binding),
+      credentialSource: stack.credentialSource,
+      closeTransport: closeTransport,
+      observeHTTP: {
+        let snapshot = await recorder.snapshot()
+        return EvaluationLearningCallHTTPObservation(
+          responsesSends: snapshot.responsesSends.count,
+          provenNotStartedResponsesSends: snapshot.provenNotStartedResponsesSends,
+          hasIntegrityFailures: snapshot.integrityFailures.isEmpty == false
+        )
+      },
+      markProvenNotStarted: { count in
+        try await recorder.recordProvenNotStartedResponsesSends(count)
+      }
+    )
   }
 
-  static func reconcile(
+  private static func reconcile(
     result: EvaluationLearningCallResult,
     request: EvaluationLearningCallRequest,
     requestSHA256: String,

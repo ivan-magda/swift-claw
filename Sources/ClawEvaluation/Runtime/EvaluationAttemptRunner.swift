@@ -44,7 +44,9 @@ struct EvaluationAttemptRunner: Sendable {
     integrityAdmission: @escaping @Sendable () async -> ProviderRoundTripAdmission = { .allow }
   ) async throws -> EvaluationAttemptResult {
     try configuration.validate()
-    try sendBudget.validate()
+    if configuration.executionProfile != .scheduledLearningV1 {
+      try sendBudget.validate()
+    }
     try Self.validate(roster: roster, configuration: configuration)
     try Self.validateProductionPrompts(configuration.provenance)
     if let mismatch = EvaluationPolicyInspector.mismatch(for: configuration) {

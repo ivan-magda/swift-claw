@@ -235,7 +235,6 @@ def reflector_operation(
     job_id: str,
     trigger_digest: str,
     *,
-    operation_id: str = "reflector-1",
     result_digest: str = "reflector-result-1",
     operation_kind: str = "reflector",
     status: str = "succeeded",
@@ -246,8 +245,7 @@ def reflector_operation(
         job_id=job_id,
         kind=operation_kind,
         generation=1,
-        operation_id=operation_id,
-        trigger_digest=trigger_digest if operation_kind == "reflector" else None,
+        operation_id=trigger_digest,
     )
     finished = operation_finished(
         sequence + 1,
@@ -255,7 +253,7 @@ def reflector_operation(
         job_id=job_id,
         kind=operation_kind,
         generation=1,
-        operation_id=operation_id,
+        operation_id=trigger_digest,
         status=status,
         result_digest=result_digest,
         usage_digest=None if status == "failed_no_call" else "usage-1",
@@ -279,17 +277,18 @@ def candidate_artifact(
     frozen_base_revision: int = 0,
     frozen_learning_epoch: int = 0,
     frozen_feedback_revision: int = 0,
-    frozen_operation_id: str = "reflector-1",
+    frozen_operation_id: str | None = None,
     frozen_result_digest: str = "reflector-result-1",
     frozen_source_manifest_digest: str = "source-manifest-1",
     **overrides: Any,
 ) -> ReplayEvent:
     settled = lessons if normalized is None else normalized
+    operation_id = trigger_digest if frozen_operation_id is None else frozen_operation_id
     replacement_digest = lesson_set_digest(settled)
     core = {
         "schema_version": 1,
         "job_id": job_id,
-        "operation_id": frozen_operation_id,
+        "operation_id": operation_id,
         "result_digest": frozen_result_digest,
         "replacement_digest": replacement_digest,
         "lessons": settled,
@@ -303,7 +302,7 @@ def candidate_artifact(
     }
     payload = {
         "job_id": job_id,
-        "operation_id": frozen_operation_id,
+        "operation_id": operation_id,
         "result_digest": frozen_result_digest,
         "candidate_record_digest": canonical_sha256(
             {"domain": CANDIDATE_RECORD_DOMAIN, "value": core}
@@ -462,7 +461,6 @@ def operation_started(
     kind: str,
     generation: int,
     operation_id: str,
-    trigger_digest: str | None = None,
 ) -> ReplayEvent:
     return event(
         sequence,
@@ -479,7 +477,6 @@ def operation_started(
             "manifest_digest": "manifest-1",
             "freeze_commit": "freeze-commit-1",
             "invocation_core_digest": f"invocation-{operation_id}",
-            "trigger_digest": trigger_digest,
         },
     )
 
@@ -724,14 +721,13 @@ def append_admitted_trial(
     trigger = next(
         record for record in reversed(evidence_state["triggers"]) if not record["closed"]
     )
-    operation_id = "reflector-later"
+    operation_id = trigger["trigger_digest"]
     result_digest = "reflector-result-later"
     operation = reflector_operation(
         next_sequence + 2,
         CONTROL_OCCURRENCE,
         "job-a",
         trigger["trigger_digest"],
-        operation_id=operation_id,
         result_digest=result_digest,
     )
     artifact = candidate_artifact(

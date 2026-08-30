@@ -10,6 +10,9 @@ dependencies = [
 [tool.uv.sources]
 swift-claw-benchmark-core = { path = "../benchmark-core" }
 
+[tool.setuptools.packages.find]
+include = ["page_benchmark"]
+
 [dependency-groups]
 dev = [
     "ruff==0.16.4",

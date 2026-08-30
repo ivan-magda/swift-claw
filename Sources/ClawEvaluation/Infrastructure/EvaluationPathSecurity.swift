@@ -22,6 +22,24 @@ enum EvaluationPathSecurity {
     )
   }
 
+  static func normalizedSystemTemporaryAlias(_ path: String) -> String {
+    #if os(macOS)
+      let temporaryAliasPath = "/tmp"
+      let canonicalTemporaryPath = "/private/tmp"
+      guard
+        WorkspacePathContainment.canonicalPath(temporaryAliasPath) == canonicalTemporaryPath,
+        WorkspacePathContainment.isContained(target: path, root: temporaryAliasPath)
+      else {
+        return path
+      }
+
+      let suffix = String(path.dropFirst(temporaryAliasPath.count))
+      return canonicalTemporaryPath + suffix
+    #else
+      return path
+    #endif
+  }
+
   static func relativePath(of candidate: URL, under root: URL) -> String? {
     let candidatePath = normalizedContainmentPath(for: candidate)
     let rootPath = normalizedContainmentPath(for: root)
@@ -249,24 +267,6 @@ private extension EvaluationPathSecurity {
 
   static func normalizedContainmentPath(for path: URL) -> String {
     normalizedSystemTemporaryAlias(path.standardizedFileURL.path)
-  }
-
-  static func normalizedSystemTemporaryAlias(_ path: String) -> String {
-    #if os(macOS)
-      let temporaryAliasPath = "/tmp"
-      let canonicalTemporaryPath = "/private/tmp"
-      guard
-        WorkspacePathContainment.canonicalPath(temporaryAliasPath) == canonicalTemporaryPath,
-        WorkspacePathContainment.isContained(target: path, root: temporaryAliasPath)
-      else {
-        return path
-      }
-
-      let suffix = String(path.dropFirst(temporaryAliasPath.count))
-      return canonicalTemporaryPath + suffix
-    #else
-      return path
-    #endif
   }
 
   static func rejectSymlink(at candidate: URL) throws {
