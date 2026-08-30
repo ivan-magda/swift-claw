@@ -1,7 +1,7 @@
 # Issue #172: M3 scheduled-learning validation protocol
 
 - Status: Proposed; owner approval required before scored calls
-- Protocol version: 1.1
+- Protocol version: 1.2
 - Date: 2026-08-29
 - Decision issue: [#172](https://github.com/ivan-magda/swift-claw/issues/172)
 - Depends on: accepted M1 RFC (Issue 167), accepted `scheduled-learning/v1` algorithm (Issue 170)
@@ -47,6 +47,11 @@ records one frozen `result_correction` owner signal against the first clean run:
 Replay must open an `owner_correction` trigger before the existing reflector, candidate, trial,
 promotion, active, and fresh-process restart flow continues. This protocol validates the accepted
 owner-correction path; it does not validate Protocol v1's failed automatic evaluator trigger.
+
+Protocol v1.2 clarifies the frozen reflector prompt: a concrete nonempty owner correction is itself
+qualifying evidence when evaluator issue codes are empty and should produce one short general lesson
+unless it cannot be generalized safely. `no_candidate` remains valid for genuinely non-actionable
+input. All other Protocol v1.1 inputs, budgets, gates, and operation order remain unchanged.
 
 ## Fixed fixture split
 

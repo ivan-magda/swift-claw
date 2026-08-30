@@ -41,7 +41,7 @@ from .frozen_contract import (
 
 _MANIFEST_KIND = "scheduled-learning-v1-freeze"
 _PROTOCOL_ID = "issue-172-m3"
-_PROTOCOL_VERSION = "1.1"
+_PROTOCOL_VERSION = "1.2"
 
 _FIXTURE_SPLIT: dict[str, object] = {
     "schema_version": SCHEMA_VERSION,

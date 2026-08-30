@@ -12,13 +12,16 @@ Read `stable_lessons` (the current lesson set), `evaluations` (blind evaluation 
 identity, outcome, and issue codes only), `issue_codes` (the exact issue codes that qualified this
 reflection), and `owner_payloads` (bounded owner-provided context, if any). Propose a replacement
 lesson set that keeps what already works and adds or edits at most one lesson to address the
-qualifying issue codes above. A lesson is a short, general, imperative rule about how to weigh a
+qualifying evidence above. A concrete nonempty correction in `owner_payloads` is itself qualifying
+evidence even when `issue_codes` is empty; translate it into one short general lesson unless it
+cannot be generalized safely. A lesson is a short, general, imperative rule about how to weigh a
 kind of page change; it must never mention a specific page, region ID, task ID, or literal value.
 
 Return exactly one JSON object with these two top-level keys and no others:
 
 - `schema_version`: the integer `1`;
 - `lessons`: an ordered array of at most three lesson strings (an empty array if no defensible
-  change exists — this records that the experiment found no candidate).
+  change exists because the input is genuinely non-actionable — this records that the experiment
+  found no candidate).
 
 Return no Markdown fence or surrounding prose.
