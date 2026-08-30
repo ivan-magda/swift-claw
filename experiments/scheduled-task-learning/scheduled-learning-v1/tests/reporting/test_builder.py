@@ -308,6 +308,56 @@ class FinalReportBuilderTests(unittest.TestCase):
             self.assertIsNone(report["decision_receipt_sha256s"])
             self.assertTrue(report["m4_blocked"])
 
+    def test_nonfinite_decision_json_binds_raw_bytes_and_fails_closed(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result_tree(root)
+            decisions_path = root / "results" / "decision-receipts.json"
+            decisions_path.write_bytes(b'[{"value":NaN}]')
+
+            # when
+            report = build_final_report(root)
+
+            # then
+            self.assertEqual(
+                load_object(root / "results" / "final-report.json"),
+                report,
+            )
+            self.assertEqual(report["status"], "incomplete_failed")
+            self.assertEqual(
+                report["decision_receipts_sha256"],
+                _raw_sha256(decisions_path),
+            )
+            self.assertIsNone(report["decision_receipt_sha256s"])
+            self.assertTrue(report["m4_blocked"])
+
+    def test_noncanonical_decision_json_binds_raw_bytes_and_fails_closed(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result_tree(root)
+            decisions_path = root / "results" / "decision-receipts.json"
+            canonical_bytes = decisions_path.read_bytes()
+            self.assertTrue(canonical_bytes.endswith(b"\n"))
+            decisions_path.write_bytes(canonical_bytes + b" ")
+
+            # when
+            report = build_final_report(root)
+
+            # then
+            self.assertEqual(
+                load_object(root / "results" / "final-report.json"),
+                report,
+            )
+            self.assertEqual(report["status"], "incomplete_failed")
+            self.assertEqual(
+                report["decision_receipts_sha256"],
+                _raw_sha256(decisions_path),
+            )
+            self.assertIsNone(report["decision_receipt_sha256s"])
+            self.assertTrue(report["m4_blocked"])
+
     def test_schema_declares_closed_complete_and_incomplete_conditions(self) -> None:
         # given
         schema_path = Path(__file__).resolve().parents[2] / "schemas" / "final-report.schema.json"

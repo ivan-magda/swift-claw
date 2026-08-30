@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
-from benchmark_core.canonical import canonical_sha256, load_object, write
+from benchmark_core.canonical import canonical_sha256, dumps, load_object, write
 
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -299,12 +299,22 @@ def _list(path: Path) -> list[dict[str, Any]] | None:
     if not path.is_file():
         return None
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        value = json.loads(
+            raw.decode("utf-8"),
+            parse_constant=_reject_non_json_constant,
+        )
     except (OSError, UnicodeError, ValueError):
+        return None
+    if raw != dumps(value).encode("utf-8"):
         return None
     if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
         return None
     return cast(list[dict[str, Any]], value)
+
+
+def _reject_non_json_constant(value: str) -> object:
+    raise ValueError(f"non-JSON numeric constant is not allowed: {value}")
 
 
 def _freeze_commit(approval: dict[str, Any]) -> str | None:
