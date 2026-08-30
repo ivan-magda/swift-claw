@@ -365,6 +365,7 @@ private extension EvaluationAttemptRunner {
       now: { fixedDate }
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: "session:\(configuration.attemptID)",
       history: [
         StoredMessage(
           role: .user,

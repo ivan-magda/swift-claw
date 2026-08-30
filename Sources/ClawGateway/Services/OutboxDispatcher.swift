@@ -186,7 +186,9 @@ private extension OutboxDispatcher {
   }
 
   static func floodControlRetryAfter(_ error: any Error) -> Int? {
-    guard case .some(.floodControl(let retryAfter)) = error as? TelegramError else { return nil }
+    guard case .some(.floodControl(let retryAfter)) = error as? TelegramError else {
+      return nil
+    }
     return retryAfter
   }
 }
@@ -201,7 +203,9 @@ private final class FloodControlHolds<Instant: InstantProtocol>: Sendable {
   /// stays the size of the currently-throttled chats.
   func isHeld(_ chatId: Int64, now: Instant) -> Bool {
     notBefore.withLock { held in
-      guard let deadline = held[chatId] else { return false }
+      guard let deadline = held[chatId] else {
+        return false
+      }
       if now < deadline { return true }
       held[chatId] = nil
       return false
