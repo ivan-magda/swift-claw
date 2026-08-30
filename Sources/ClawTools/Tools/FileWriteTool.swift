@@ -12,8 +12,9 @@ import Foundation
 /// re-validated against the live filesystem at execution time, never through the dispatcher's
 /// abandon-on-timeout race. The write is atomic: a temp file in the target's own directory +
 /// `rename(2)`, so a crash in any window leaves the previous file intact. Privileged files
-/// (SOUL/AGENTS/USER/MEMORY .md) are writable — the prompt banner flags them; refusing them in
-/// code was explicitly rejected.
+/// (SOUL/AGENTS/USER/MEMORY .md) are writable in a DM — the prompt banner flags them; refusing
+/// them in code was explicitly rejected. A group topic has no banner and no single owner, so the
+/// gate refuses those names there instead.
 public struct FileWriteTool: Tool {
   /// Refuse absurd payloads before they ever reach an approval prompt. 256 KiB covers any sane
   /// note/config write; a named constant so tests assert the code's own number.

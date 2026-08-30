@@ -195,6 +195,7 @@ import Testing
     let hits = try retriever.searchRelevantMessages(
       query: "quokka",
       currentSessionId: fixture.sessionId,
+      restrictToSessionId: nil,
       windowStartMessageId: nil,
       excludedMessageIds: [],
       limit: 10

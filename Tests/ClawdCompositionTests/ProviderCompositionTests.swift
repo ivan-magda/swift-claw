@@ -25,8 +25,13 @@ private final class InvocationFlag: @unchecked Sendable {
 
 @Suite struct ProviderCompositionTests {
   private static let baseURLKey = "CLAW_LLM_BASE_URL"
+  private static let groupChatsKey = "CLAW_GROUP_CHATS"
 
-  private func config(model: String, baseURL: String?) throws -> AppConfig {
+  private func config(
+    model: String,
+    baseURL: String?,
+    groupChats: String? = nil
+  ) throws -> AppConfig {
     let root = NSTemporaryDirectory() + "clawd-composition-" + UUID().uuidString
     var env = [
       AppConfig.EnvKey.stateRoot: root,
@@ -34,6 +39,9 @@ private final class InvocationFlag: @unchecked Sendable {
     ]
     if let baseURL {
       env[Self.baseURLKey] = baseURL
+    }
+    if let groupChats {
+      env[Self.groupChatsKey] = groupChats
     }
     return try AppConfig.load(environment: env)
   }
@@ -59,7 +67,7 @@ private final class InvocationFlag: @unchecked Sendable {
     )
     composition.makeClients = { instrumentedClients(recorder: recorder) }
     composition.makeManagedStore = makeManagedStore
-    composition.fetchBotUsername = { _, _ in nil }
+    composition.fetchBotIdentity = { _, _ in nil }
     composition.buildDaemon = buildDaemon
     return composition
   }
@@ -92,6 +100,32 @@ private final class InvocationFlag: @unchecked Sendable {
     #expect(box.stack?.roster.primary.costPolicy == .metered)
     #expect(box.stack?.roster.primary.configuredReference == "gpt-4o")
     #expect(box.stack?.roster.hasFallback == false)
+    #expect(await recorder.order == [.llm, .telegram, .tool])
+  }
+
+  @Test func groupModeWithAUsernameLessBotIdentityFailsTheBootAndClosesAll() async throws {
+    // given — group mode configured, and `getMe` returned a bot with no username
+    let recorder = CloseRecorder()
+    var composition = try composition(
+      config: config(
+        model: "gpt-4o",
+        baseURL: "https://api.test/v1",
+        groupChats: "-1001234567890"
+      ),
+      recorder: recorder,
+      makeManagedStore: { _ in FreshCredentialStore(present: false) },
+      buildDaemon: { _, _, _ in
+        Issue.record("assembly must not run when group mode has no bot identity")
+        throw BuildStopped()
+      }
+    )
+    composition.fetchBotIdentity = { _, _ in BotIdentity(id: 900, username: nil) }
+
+    // when / then — the boot fails loudly rather than sitting in a group deaf to every mention,
+    // and every already-created client is closed
+    await #expect(throws: ConfigError.groupModeRequiresBotUsername) {
+      try await composition.compose()
+    }
     #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 

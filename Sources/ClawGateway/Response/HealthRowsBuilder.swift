@@ -107,6 +107,14 @@ public enum HealthRowsBuilder {
       + storageChecks(inputs)
   }
 
+  /// The one spelling of the group-mode row, so a stopped daemon's doctor and a running one report
+  /// the mode in the same words.
+  public static func groupModeCheck(chatCount: Int) -> DoctorReport.Check {
+    let value =
+      chatCount == 0 ? "off" : "on (\(chatCount) chat\(chatCount == 1 ? "" : "s"))"
+    return check("group.mode", value, .config)
+  }
+
   /// The one spelling of the fallback row, so the config-only doctor path and the live health table
   /// can never disagree about the key or the wording.
   public static func fallbackConfiguredCheck(fallbackReference: String?) -> DoctorReport.Check {

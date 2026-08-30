@@ -252,6 +252,17 @@ public enum ClawDatabase {
       try rebuildMessagesWithProviderState(db)
       try rebuildProviderUsageWithCallIdentity(db)
     }
+    migrator.registerMigration("v10") { db in
+      // Telegram's own message id, distinct from `trigger_message_id` (a `messages` row id): it is
+      // the reply target a group answer must address, and it has no other durable home.
+      try db.alter(table: "runs") { table in
+        table.add(column: "trigger_telegram_message_id", .integer)
+      }
+      try db.alter(table: "outbound_deliveries") { table in
+        table.add(column: "message_thread_id", .integer)
+        table.add(column: "reply_to_message_id", .integer)
+      }
+    }
     return migrator
   }
 

@@ -63,8 +63,7 @@ struct StreamingTurnRuntime: Sendable {
   }
 
   func run(
-    chatId: Int64,
-    draftId: Int64,
+    target: TurnProgressTarget,
     request: ChatRequest
   ) async throws -> ChatResponse {
     let snapshot = DraftSnapshot()
@@ -80,13 +79,13 @@ struct StreamingTurnRuntime: Sendable {
         await consumeStream(stream, snapshot: snapshot, box: box)
       },
       auxiliary: { box in
-        await runDraftAndTypingLoop(chatId: chatId, draftId: draftId, snapshot: snapshot, box: box)
+        await runDraftAndTypingLoop(target: target, snapshot: snapshot, box: box)
       }
     )
 
     switch outcome {
     case .response(let response):
-      await sendFinalDraft(response.content, chatId: chatId, draftId: draftId)
+      await sendFinalDraft(response.content, target: target)
       return response
     case .failed(let error):
       throw error
@@ -99,7 +98,7 @@ struct StreamingTurnRuntime: Sendable {
       throw ProviderInferenceCancellation(observing: observedCompletionTokens)
     case .timedOut(.completed(let response)):
       // A completed stream is surfaced as `.response` above; kept exhaustive for the enum.
-      await sendFinalDraft(response.content, chatId: chatId, draftId: draftId)
+      await sendFinalDraft(response.content, target: target)
       return response
     }
   }
@@ -168,8 +167,7 @@ private extension StreamingTurnRuntime {
 
 private extension StreamingTurnRuntime {
   func runDraftAndTypingLoop(
-    chatId: Int64,
-    draftId: Int64,
+    target: TurnProgressTarget,
     snapshot: DraftSnapshot,
     box: ProviderRaceBox
   ) async {
@@ -188,13 +186,18 @@ private extension StreamingTurnRuntime {
 
       if let latest, mayDraft {
         lastSeenVersion = latest.version
-        await sendDraftBounded(latest.content, chatId: chatId, draftId: draftId)
-        sentAnyDraft = true
-        ticksSinceDraft = 0
-      } else if !sentAnyDraft, ticksSinceTyping >= Self.ticksBetweenTyping {
-        // Before the first visible frame the draft bubble doesn't exist yet, so the typing
-        // action is the only progress signal; once a draft is out it takes over (~30s TTL).
-        await typingIndicator.sendTyping(chatId: chatId)
+        if await sendDraftBounded(latest.content, target: target) {
+          sentAnyDraft = true
+          ticksSinceDraft = 0
+        }
+      }
+
+      // Until a draft has actually landed the bubble doesn't exist, so the typing action is the
+      // only progress signal; once one is out it takes over (~30s TTL). Keyed on delivery rather
+      // than on having attempted a send, because a group chat is a sink that accepts no draft at
+      // all — assuming the bubble appeared there would leave the topic with no signal whatever.
+      if !sentAnyDraft, ticksSinceTyping >= Self.ticksBetweenTyping {
+        await typingIndicator.sendTyping(chatId: target.chatId, messageThreadId: target.threadId)
         ticksSinceTyping = 0
       }
 
@@ -208,20 +211,28 @@ private extension StreamingTurnRuntime {
     }
   }
 
-  func sendFinalDraft(_ content: String, chatId: Int64, draftId: Int64) async {
+  func sendFinalDraft(_ content: String, target: TurnProgressTarget) async {
     guard !content.isEmpty, !Task.isCancelled else {
       return
     }
-    await sendDraftBounded(content, chatId: chatId, draftId: draftId)
+    _ = await sendDraftBounded(content, target: target)
   }
 
   /// Awaits the sink but abandons it at `draftSendDeadline`: turn completion must never wedge on a
   /// stalled draft POST. The coordinator owns both children, so the abandoned send is cancelled and
   /// drained rather than left to outlive the turn — a structured replacement for the old detached
-  /// send/deadline race.
-  func sendDraftBounded(_ markdown: String, chatId: Int64, draftId: Int64) async {
-    await ProviderDeadlineCoordinator.sendBounded(timeout: Self.draftSendDeadline, clock: clock) {
-      await draftStreamer.sendDraft(chatId: chatId, draftId: draftId, markdown: markdown)
+  /// send/deadline race. An abandoned send reports no delivery, which is the honest answer.
+  func sendDraftBounded(_ markdown: String, target: TurnProgressTarget) async -> Bool {
+    let delivered = await ProviderDeadlineCoordinator.sendBounded(
+      timeout: Self.draftSendDeadline,
+      clock: clock
+    ) {
+      await draftStreamer.sendDraft(
+        chatId: target.chatId,
+        draftId: target.draftId,
+        markdown: markdown
+      )
     }
+    return delivered ?? false
   }
 }

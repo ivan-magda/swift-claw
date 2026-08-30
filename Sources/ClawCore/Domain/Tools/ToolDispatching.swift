@@ -12,6 +12,9 @@ public struct ToolDispatchContext: Sendable, Equatable {
   /// the context window rolls past the private read that first set it.
   public let sessionHasPrivateData: Bool
   public let approvalAlreadyPending: Bool
+  /// How the conversation is served. A group topic has no approval keyboard and no single owner
+  /// to press it, so the gate resolves consent itself instead of parking a prompt nobody owns.
+  public let mode: ChatMode
 
   public init(
     sessionTainted: Bool,
@@ -19,7 +22,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
     sessionHasPrivateData: Bool,
-    approvalAlreadyPending: Bool
+    approvalAlreadyPending: Bool,
+    mode: ChatMode = .direct
   ) {
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
@@ -27,6 +31,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.runPrivateData = runPrivateData
     self.sessionHasPrivateData = sessionHasPrivateData
     self.approvalAlreadyPending = approvalAlreadyPending
+    self.mode = mode
   }
 }
 

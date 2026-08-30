@@ -124,8 +124,11 @@ import Testing
       heartbeatNoticeChatId: nil
     )
 
-    // then — the notice targets scheduled_jobs.owner_chat_id, no longer silently skipped (A6)
+    // then — the notice targets scheduled_jobs.owner_chat_id, no longer silently skipped (A6),
+    // as the whole-chat row it has always been: a job session belongs to no topic
     #expect(replies == [DegradationReply(chatId: 4242, runId: fixture.runId, text: "unfinished")])
+    let row = try #require(try OutboxStoreGRDB(writer: fixture.queue).pendingOutbound().first)
+    #expect(row.target == .chat(4242))
     #expect(try jobFailedCount(fixture.queue, runId: fixture.runId) == 1)
     let state = try fixture.queue.read { db in
       try String.fetchOne(

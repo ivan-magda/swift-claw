@@ -48,49 +48,17 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
 
   public func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
     try database.writeMapping { db in
-      let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
-        db: db,
-        updateId: inbound.updateId,
-        claimedAt: inbound.ts
-      )
+      let stored = try Self.claimAndInsertMessage(db, inbound)
 
-      guard newlyClaimed else {
-        return ClaimResult(
-          newlyClaimed: false,
-          sessionId: nil,
-          messageId: nil,
-          runId: nil,
-          triggerMessageId: nil
-        )
-      }
-
-      let sessionId = try Self.upsertSession(db, sessionKey: inbound.sessionKey, now: inbound.ts)
-      // Owner-typed input is trusted-tier; machine-derived inbound text (a voice transcript)
-      // arrives `.untrusted` and taints the session in this same fused write, so context assembly
-      // fences it and the exfil gate arms without any tool having run.
-      try db.execute(
-        sql: """
-          INSERT INTO messages(session_id, role, content, provenance, ts)
-          VALUES (?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          sessionId,
-          MessageRole.user.rawValue,
-          inbound.text,
-          inbound.provenance.rawValue,
-          inbound.ts,
-        ]
-      )
-      let messageId = db.lastInsertedRowID
-
-      if inbound.provenance == .untrusted {
-        try RunStoreGRDB.setSessionTainted(db, sessionId: sessionId, now: inbound.ts)
+      guard let sessionId = stored.sessionId, let messageId = stored.messageId else {
+        return stored
       }
 
       try db.execute(
         sql: """
-          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
+            trigger_telegram_message_id)
+          VALUES (?, ?, ?, ?, ?, ?)
           """,
         arguments: [
           sessionId,
@@ -98,6 +66,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
           inbound.ts,
           inbound.ts,
           messageId,
+          inbound.telegramMessageId,
         ]
       )
       let runId = db.lastInsertedRowID
@@ -112,30 +81,75 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
+  public func claimAndPersistObserved(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
+    try database.writeMapping { db in
+      try Self.claimAndInsertMessage(db, inbound)
+    }
+  }
+
+  /// Claim, session upsert, message insert and taint — everything both inbound paths share, so an
+  /// overheard message dedups on the same key an answered one does and carries the same trust tier.
+  /// The run is the caller's, because only one of the two paths owes an answer.
+  private static func claimAndInsertMessage(
+    _ db: Database,
+    _ inbound: InboundMessage
+  ) throws -> ClaimResult {
+    let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
+      db: db,
+      updateId: inbound.updateId,
+      claimedAt: inbound.ts
+    )
+
+    guard newlyClaimed else {
+      return ClaimResult(
+        newlyClaimed: false,
+        sessionId: nil,
+        messageId: nil,
+        runId: nil,
+        triggerMessageId: nil
+      )
+    }
+
+    let sessionId = try upsertSession(db, sessionKey: inbound.sessionKey, now: inbound.ts)
+    // Owner-typed input is trusted-tier; machine-derived inbound text (a voice transcript)
+    // arrives `.untrusted` and taints the session in this same fused write, so context assembly
+    // fences it and the exfil gate arms without any tool having run.
+    try db.execute(
+      sql: """
+        INSERT INTO messages(session_id, role, content, provenance, ts)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+      arguments: [
+        sessionId,
+        MessageRole.user.rawValue,
+        inbound.text,
+        inbound.provenance.rawValue,
+        inbound.ts,
+      ]
+    )
+    let messageId = db.lastInsertedRowID
+
+    if inbound.provenance == .untrusted {
+      try RunStoreGRDB.setSessionTainted(db, sessionId: sessionId, now: inbound.ts)
+    }
+
+    return ClaimResult(
+      newlyClaimed: true,
+      sessionId: sessionId,
+      messageId: messageId,
+      runId: nil,
+      triggerMessageId: nil
+    )
+  }
+
   public func loadContextSnapshot(
     sessionId: Int64,
     throughMessageId: Int64,
     limit: Int
   ) throws(StoreError) -> SessionContextSnapshot {
     try database.readMapping { db in
-      let session = try Row.fetchOne(
-        db,
-        sql: "SELECT window_start_message_id, tainted, has_private_data FROM sessions WHERE id = ?",
-        arguments: [sessionId]
-      )
-
-      let windowStartMessageId: Int64?
-      let isTainted: Bool
-      let hasPrivateData: Bool
-      if let session {
-        windowStartMessageId = session["window_start_message_id"]
-        isTainted = session["tainted"]
-        hasPrivateData = session["has_private_data"]
-      } else {
-        windowStartMessageId = nil
-        isTainted = false
-        hasPrivateData = false
-      }
+      let header = try Self.sessionHeader(db, sessionId: sessionId)
+      let windowStartMessageId = header.windowStartMessageId
 
       // The window is bounded by CONVERSATIONAL rows: find the id of the `limit`-th
       // newest user/assistant row, then load ALL rows from it through the trigger. Tool rows ride
@@ -175,11 +189,12 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
       }
 
       return SessionContextSnapshot(
+        sessionKey: header.sessionKey,
         history: history,
         historyMessageIds: messageIds,
         windowStartMessageId: windowStartMessageId,
-        isTainted: isTainted,
-        hasPrivateData: hasPrivateData
+        isTainted: header.isTainted,
+        hasPrivateData: header.hasPrivateData
       )
     }
   }
@@ -235,6 +250,37 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     return sessionId
   }
 
+  /// The session's own columns: its key (from which every consumer derives the chat mode and the
+  /// forum topic) and the two sticky flags that arm the exfil gate. A session id with no row is
+  /// unreachable through the run path — the claim creates the row before the run — so the empty
+  /// key is a fail-safe that reads as the narrowest mode.
+  static func sessionHeader(_ db: Database, sessionId: Int64) throws -> SessionHeader {
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT session_key, window_start_message_id, tainted, has_private_data
+        FROM sessions WHERE id = ?
+        """,
+      arguments: [sessionId]
+    )
+
+    guard let row else {
+      return SessionHeader(
+        sessionKey: "",
+        windowStartMessageId: nil,
+        isTainted: false,
+        hasPrivateData: false
+      )
+    }
+
+    return SessionHeader(
+      sessionKey: row["session_key"],
+      windowStartMessageId: row["window_start_message_id"],
+      isTainted: row["tainted"],
+      hasPrivateData: row["has_private_data"]
+    )
+  }
+
   /// Decodes a `messages` row, failing **closed** on an unrecognized persisted enum value:
   /// `provenance` is the trust tier — a corrupted value must not silently become the
   /// permissive `.trusted` and unfence content the moment assembly keys off it. Same rule as
@@ -263,4 +309,12 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
       providerState: ProviderStateCoding.decode(row)
     )
   }
+}
+
+/// The `sessions` row behind a context snapshot, read once alongside the window.
+struct SessionHeader {
+  let sessionKey: String
+  let windowStartMessageId: Int64?
+  let isTainted: Bool
+  let hasPrivateData: Bool
 }

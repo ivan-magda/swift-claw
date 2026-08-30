@@ -36,20 +36,12 @@ struct RunComposition {
     EncryptedLLMCredentialStore(stateRoot: stateRoot)
   }
 
-  /// Reads the bot identity for command-mention parsing. Injectable so a composition test never opens
-  /// a socket to Telegram. A transient failure is logged with its consequence — mention parsing falls
-  /// back to bare commands — so a daemon that boots while Telegram is unreachable does not run its
-  /// whole lifetime with degraded `/cmd@bot` handling and no operator signal.
-  var fetchBotUsername: @Sendable (TelegramClient, Logger) async -> String? = { transport, logger in
-    do {
-      return try await transport.getMe().username
-    } catch {
-      logger.warning(
-        "failed to fetch bot identity; command mentions will require bare commands: \(error)"
-      )
-      return nil
-    }
-  }
+  /// Reads the bot identity for command-mention parsing and group addressing. Injectable so a
+  /// composition test never opens a socket to Telegram. A transient failure is logged with its
+  /// consequence — mention parsing falls back to bare commands — so a daemon that boots while
+  /// Telegram is unreachable does not run its whole lifetime with degraded `/cmd@bot` handling and
+  /// no operator signal.
+  var fetchBotIdentity: @Sendable (TelegramClient, Logger) async -> BotIdentity? = Self.readIdentity
 
   /// Assembles the daemon bundle from the roster and the shared cooldown. Injectable so a test
   /// forces a post-clients build failure and proves every already-created client is closed rather
@@ -75,7 +67,13 @@ struct RunComposition {
     )
 
     do {
-      let botUsername = await fetchBotUsername(transport, logger)
+      let botIdentity = await fetchBotIdentity(transport, logger)
+      // Group mode recognizes an addressed message by the bot's @name. Without that name the daemon
+      // would sit in every configured group hearing nothing, so an unknown identity is fatal here
+      // rather than a warning the operator finds days later.
+      if config.groupChats.isEmpty == false, botIdentity?.username == nil {
+        throw ConfigError.groupModeRequiresBotUsername
+      }
 
       let builder = DaemonBuilder(
         config: config,
@@ -83,7 +81,7 @@ struct RunComposition {
         stores: stores,
         toolExecutor: clients.tool.executor,
         transport: transport,
-        botUsername: botUsername,
+        botIdentity: botIdentity,
         mcp: mcp,
         logger: logger,
         makeManagedStore: { makeManagedStore(config.stateRoot) }
@@ -117,6 +115,25 @@ extension RunComposition {
     _ cooldown: PrimaryRouteCooldown<ContinuousClock>
   ) async throws -> DaemonRuntimeBundle {
     try await builder.build(rosterStack: stack, cooldown: cooldown)
+  }
+}
+
+// MARK: - Bot Identity
+
+extension RunComposition {
+  /// The live `getMe` read behind `fetchBotIdentity`.
+  static func readIdentity(
+    _ transport: TelegramClient,
+    _ logger: Logger
+  ) async -> BotIdentity? {
+    do {
+      return try await transport.getMe()
+    } catch {
+      logger.warning(
+        "failed to fetch bot identity; command mentions will require bare commands: \(error)"
+      )
+      return nil
+    }
   }
 }
 

@@ -414,6 +414,27 @@ import Testing
     // then — `doctor --check-config` is where a config echo belongs; the group line stays for state
     #expect(summary.contains("fallback_configured") == false)
   }
+
+  @Test func groupModeRowReadsOffWithNoConfiguredChats() {
+    // given / when
+    let row = HealthRowsBuilder.groupModeCheck(chatCount: 0)
+
+    // then
+    #expect(row.key == "group.mode")
+    #expect(row.value == "off")
+    #expect(row.group == .config)
+    #expect(row.ok)
+  }
+
+  @Test func groupModeRowCountsTheConfiguredChats() {
+    // given / when
+    let one = HealthRowsBuilder.groupModeCheck(chatCount: 1)
+    let several = HealthRowsBuilder.groupModeCheck(chatCount: 3)
+
+    // then
+    #expect(one.value == "on (1 chat)")
+    #expect(several.value == "on (3 chats)")
+  }
 }
 
 private extension HealthRowsBuilderTests {

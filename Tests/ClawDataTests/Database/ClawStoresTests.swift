@@ -39,6 +39,7 @@ import Testing
     let recall = try stores.retriever.searchRelevantMessages(
       query: "swift",
       currentSessionId: 1,
+      restrictToSessionId: nil,
       windowStartMessageId: nil,
       excludedMessageIds: [],
       limit: 5

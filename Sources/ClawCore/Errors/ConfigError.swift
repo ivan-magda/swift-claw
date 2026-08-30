@@ -1,5 +1,6 @@
 public enum ConfigError: Error, Sendable, Equatable {
   case invalidAllowlist(String)
+  case invalidGroupChats(String)
   case unwritableStateRoot(String)
   case missingLLMBaseURL
   case missingLLMModel
@@ -20,6 +21,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidApprovalExpiry(String)
   case invalidWebFetchExemptCIDR(String)
   case heartbeatOwnerUnresolved(allowlistCount: Int)
+  case groupModeRequiresBotUsername
   case invalidExecImage(String)
   case invalidExecImageRegistry(String)
   case execImageRegistryNotAllowed(String)
