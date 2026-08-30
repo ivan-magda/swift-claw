@@ -6,16 +6,17 @@ algorithm (Issue 170) through one page-change adapter, per the M3 spec
 frozen validation protocol (`docs/research/172-validation-protocol.md`). Its offline checks never call
 a model, and it does not modify production Swift targets.
 
-## Archival status
+## Fresh-run readiness
 
-This checked-out revision is an **archival HEAD** containing post-run hardening. The preserved
-`freeze/owner-budget-approval.json` and `results/` are historical evidence from the authorized run;
-their bytes remain unchanged. That old freeze and approval do not verify or authorize the current
-source tree, and `freeze verify` must not be presented as verification of this HEAD.
+This checkout is prepared for a new scheduled-learning run. The historical canonical owner
+approval and results are not part of the current tree; their exact bytes remain recoverable from
+commits `01fd1637` and `6d0a8077`.
 
-Do not run `scored` from this archival HEAD. Any future live run requires a fresh freeze over the
-then-current source followed by new explicit owner authorization for that exact freeze. The
-historical approval is not reusable.
+The committed `freeze/manifest-input.json` and `freeze/manifest.json` are the fresh checkpoint for
+the current source, protocol, budget, and release executable. A freeze is not authorization. Do not
+run `scored` until the owner explicitly approves the exact manifest SHA-256, freeze commit, release
+executable SHA-256, and budget `10/5/1/38/5,045,184`. A prior general “go,” M0 authorization,
+historical M3 approval, or issue approval does not authorize this run.
 
 This package is a fresh, scenario-neutral experiment root. It reuses the completed replay-core
 contracts from `benchmark_learning.learning_contract` / `benchmark_learning.learning_replay` and the
@@ -38,7 +39,7 @@ Run all checks from this directory:
 scripts/lint.sh
 scripts/test.sh
 uv run python -B -m scheduled_learning_v1.conformance .
-uv run python -B -m scheduled_learning_v1.run verify-results --root .
+uv run python -B -m scheduled_learning_v1.freeze verify .
 ```
 
 `scripts/lint.sh` runs Ruff (format + lint) and Mypy strict over `scheduled_learning_v1`,
@@ -53,8 +54,10 @@ inputs, and the workflow never invokes the scored command.
 This package depends on `swift-claw-benchmark-core` and `page-benchmark` through local `uv` path
 sources (`../benchmark-core`, `../page-change`); `uv.lock` pins the resolved dependency graph.
 
-Verify the preserved committed results offline with:
+Verify the fresh freeze offline before requesting owner authorization:
 
 ```sh
-uv run python -B -m scheduled_learning_v1.run verify-results --root .
+uv run python -B -m scheduled_learning_v1.freeze verify .
 ```
+
+Before approval exists, successful output ends with `owner_approval=absent`.
