@@ -62,7 +62,7 @@ def emit_fixture(source_repository: Path, output: Path) -> None:
                 approval,
                 AggregateBudget(),
                 journal=journal,
-                bridge=WorkerBridge(executable, journal),
+                bridge=WorkerBridge(executable, journal, runtime_root.resolve()),
                 verify=_verified_without_io,
                 dispatch_bounds=lambda kind: (1, 1),
             )

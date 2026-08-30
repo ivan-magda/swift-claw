@@ -413,3 +413,38 @@ remain green.
    `- name` while keeping sibling `uses` and `with`; scalar quoting, inline comments, YAML ordering,
    nested non-executable action inputs, and path-filter layout may also change while the exact
    executable CI and checkout-credential surfaces remain the same.
+
+## Live-readiness follow-up: external credential state (Task 1)
+
+| Risk | Production branch or seam | Nearest existing test | Unique reachable mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| Either public Python execution path starts without an explicit canonical credential root, or dispatches a different root than the caller supplied | `scheduled_learning_v1.run` scored/internal-active argparse and dispatch branches | `test_restart::RestartTests::test_scored_cli_accepts_exact_canonical_paths` binds only the M3 root, manifest, and approval and cannot observe a missing or rewritten credential root | Make the option optional/defaulted, canonicalize a symlinked spelling silently, omit the argument from `run_scored`, or pass the M3 root to `run_active` | `test_restart::RestartTests::test_scored_and_active_cli_require_and_forward_the_exact_credential_root` |
+| The fresh Python restart drops or substitutes the parent process's credential root | `execution.lifecycle::_launch_restart` subprocess argv | `test_restart::RestartTests::test_parent_passes_exact_promoted_digest_in_fresh_python_argv` observes only the promoted digest | Omit `--credential-state-root`, pass `root/results/state`, or recompute another root during restart | `test_restart::RestartTests::test_parent_passes_exact_promoted_digest_and_credential_root_in_fresh_python_argv` |
+| Task, evaluator, or reflector subprocesses omit the runtime-only credential root, disagree about it, or leak it into committed request/result/event evidence | `Operations` construction into `WorkerBridge._run` argv and the authorization/evidence writers | Existing exact-command tests stop at the input path and use no credential root; authorization tests inspect committed JSON but have no secret-root sentinel | Append the flag only for tasks, select learning private state for evaluators/reflectors, or add the credential root to a request core/start/finish payload | `test_process_launch::ProcessLaunchTests::test_task_evaluator_and_reflector_share_one_runtime_only_credential_root` |
+| Credential-root threading moves M3 lessons, the active pointer, or learning publication into the credential tree, or leaves temporary learning state durable | `Operations.run_task` lesson materialization and `_run_learning` private publication plus `WorkerBridge.run_learning` cleanup | The private-state archival test checks one learning path but has no distinct external credential tree; lifecycle lesson tests have no credential argument | Derive lesson/private state from `credential_state_root`, copy credential artifacts into results, or stop removing `.private-learning-state/<operation>` | `test_process_launch::ProcessLaunchTests::test_task_evaluator_and_reflector_share_one_runtime_only_credential_root` and `test_lifecycle::LifecycleTests::test_passing_flow_assigns_only_candidate_trials_and_reaches_active` |
+| The Swift lifecycle locks only M3 state, reverses the fixed order, releases either lock before credential shutdown, changes the M3 acquisition identity, or double-locks equal roots | `EvaluationWorkerLifecycle.withProductionLock` two-root acquisition and `withResource` cleanup | `EvaluationWorkerLifecycleTests.workerLifecycleOwnsTheProductionLockAndShutsDownInOrder` has one root and cannot distinguish the second lock or coalescing | Acquire credentials first, omit the credential lock, release around the resource, mint the operation UUID from the credential lock, or acquire the same path twice | `EvaluationWorkerLifecycleTests.twoRootLifecycleKeepsBothLocksThroughCredentialShutdown`, `twoRootLifecycleAcquiresM3StateBeforeCredentialState`, and `twoRootLifecycleCoalescesEqualRoots` |
+| A noncanonical, symlink-crossing, M3-contained, or production credential root reaches lock acquisition, credential loading, or HTTP construction | `EvaluationCredentialStateRoot` validation before both worker and learning resource factories | `EvaluationFilesystemSecurityTests` checks generic path primitives but not the credential/M3/production separation policy; worker admission tests validate only frozen M3 paths | Standardize instead of reject lexical traversal, resolve through a symlink, accept `results/credentials`, or permit `~/.swift-claw` | `EvaluationWorkerLifecycleTests.credentialRootRejectsEvaluationProductionNoncanonicalAndSymlinkPaths` and `EvaluationLearningCallTests.unsafeCredentialRootStopsBeforeLearningResourceConstruction` |
+| Task or learning composition opens the M3/private-learning credential path instead of the supplied external encrypted store | `EvaluationLiveResourceFactory` and `EvaluationLearningCall.makeLiveResource` managed-store closures | Managed-provider tests inject an in-memory credential store directly and cannot observe which encrypted root production composition selected | Construct `EncryptedLLMCredentialStore` from `configuration.stateRootURL` or `request.stateRoot`, ignore the external root, or fall back to a logged-out store | `EvaluationWorkerBootstrapTests.productionCompositionLoadsOnlyTheExternalEncryptedCredentialStore` and `EvaluationLearningCallTests.productionLearningCompositionUsesExternalEncryptedCredentials` |
+| A held external credential lock still permits worker or learning resource/HTTP dispatch | two-root lock acquisition before `makeResource` in worker and learning entry points | The existing learning resource-factory lock test contends only on M3 state; worker bootstrap tests do not hold any process lock | Construct the resource before acquiring the credential lock or treat credential-lock contention as advisory | `EvaluationWorkerBootstrapTests.heldCredentialLockStopsLearningTaskBeforeResourceOrProviderWork` and `EvaluationLearningCallTests.heldCredentialLockStopsBeforeLearningResourceConstruction` |
+
+### Pre-commit redundancy pass (`docs/TESTING.md` §9.1)
+
+1. **Mutants killed:** each retained row reaches a separate branch: scored CLI, internal-active CLI,
+   restart argv, task argv, learning argv and cleanup, M3-first acquisition, credential-lock
+   acquisition, equal-root coalescing, credential-shutdown ordering, four root-policy rejections,
+   task composition, learning composition, and task/learning lock contention.
+2. **Production seams:** Python carries one opaque canonical runtime value without serializing it;
+   Swift validates it, locks M3 then credentials, composes the existing encrypted store, and shuts
+   that source down while both locks remain held.
+3. **Nearest existing coverage:** prior CLI and bridge tests owned only M3 paths and input argv;
+   prior lifecycle coverage had one lock; managed-provider tests injected in-memory credentials;
+   filesystem tests did not express M3/production separation. None catches the named external-root
+   substitution, leakage, ordering, coalescing, or composition mutants.
+4. **Behavior-preserving refactor:** retained assertions observe only required argv, absence from
+   evidence, lock availability/order, typed root rejection, encrypted-store composition, zero fake
+   HTTP sends, and zero provider/resource entry. Helper extraction and internal layout changes stay
+   green.
+
+The existing passing lifecycle test remains the primary owner of lesson/active-state provenance;
+the new bridge test adds the distinct external-root sentinel and private-state cleanup observation
+without duplicating the lesson transition matrix.

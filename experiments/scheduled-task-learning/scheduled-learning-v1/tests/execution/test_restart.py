@@ -20,20 +20,62 @@ from .support import frozen_tree, run_fake_scored
 
 
 class RestartTests(unittest.TestCase):
-    def test_scored_cli_accepts_exact_canonical_paths(self) -> None:
+    def test_scored_and_active_cli_require_and_forward_the_exact_credential_root(self) -> None:
         # given
-        with tempfile.TemporaryDirectory() as temporary:
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            tempfile.TemporaryDirectory() as credential_temporary,
+        ):
             root = Path(temporary)
+            credential_root = Path(credential_temporary).resolve()
             frozen_tree(root)
-            dispatched: list[Path] = []
+            promoted_digest = "a" * 64
+            scored_dispatches: list[tuple[Path, Path]] = []
+            active_dispatches: list[tuple[Path, int, Path]] = []
 
-            def scored(path: Path) -> dict[str, object]:
-                dispatched.append(path)
+            def scored(path: Path, credential: Path) -> dict[str, object]:
+                scored_dispatches.append((path, credential))
                 return {"status": "complete"}
 
-            # when
+            def active(path: Path, generation: int, credential: Path) -> dict[str, object]:
+                active_dispatches.append((path, generation, credential))
+                return {"status": "complete"}
+
+            # when / then
             output = io.StringIO()
-            with patch("scheduled_learning_v1.run.run_scored", scored), redirect_stdout(output):
+            with (
+                patch("scheduled_learning_v1.run.run_scored", scored),
+                patch("scheduled_learning_v1.run.run_active", active),
+                patch(
+                    "scheduled_learning_v1.run._replayed_promoted_digest",
+                    return_value=promoted_digest,
+                ),
+                redirect_stdout(output),
+            ):
+                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    main(
+                        [
+                            "scored",
+                            "--root",
+                            str(root),
+                            "--manifest",
+                            str(root / "freeze" / "manifest.json"),
+                            "--approval",
+                            str(root / "freeze" / "owner-budget-approval.json"),
+                        ]
+                    )
+                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    main(
+                        [
+                            "active",
+                            "--root",
+                            str(root),
+                            "--generation",
+                            "3",
+                            "--promoted-digest",
+                            promoted_digest,
+                        ]
+                    )
                 main(
                     [
                         "scored",
@@ -43,12 +85,34 @@ class RestartTests(unittest.TestCase):
                         str(root / "freeze" / "manifest.json"),
                         "--approval",
                         str(root / "freeze" / "owner-budget-approval.json"),
+                        "--credential-state-root",
+                        str(credential_root),
+                    ]
+                )
+                main(
+                    [
+                        "active",
+                        "--root",
+                        str(root),
+                        "--generation",
+                        "3",
+                        "--promoted-digest",
+                        promoted_digest,
+                        "--credential-state-root",
+                        str(credential_root),
                     ]
                 )
 
             # then
-            self.assertEqual(dispatched, [root.resolve()])
-            self.assertEqual(output.getvalue(), "status=complete\n")
+            self.assertEqual(
+                scored_dispatches,
+                [(root.resolve(), credential_root.resolve())],
+            )
+            self.assertEqual(
+                active_dispatches,
+                [(root.resolve(), 3, credential_root.resolve())],
+            )
+            self.assertEqual(output.getvalue(), "status=complete\nstatus=complete\n")
 
     def test_scored_cli_rejects_noncanonical_frozen_paths_before_dispatch(self) -> None:
         # given
@@ -70,6 +134,8 @@ class RestartTests(unittest.TestCase):
                         str(root / "freeze" / "owner-budget-approval.json"),
                         "--approval",
                         str(root / "freeze" / "manifest.json"),
+                        "--credential-state-root",
+                        str(root.parent.resolve()),
                     ]
                 )
             run_scored.assert_not_called()
@@ -103,14 +169,22 @@ class RestartTests(unittest.TestCase):
                         str(root / "freeze" / "owner-budget-approval.json"),
                         "--minimum-active-score",
                         "0",
+                        "--credential-state-root",
+                        str(root.parent.resolve()),
                     ]
                 )
             self.assertEqual(dispatched, [])
 
-    def test_parent_passes_exact_promoted_digest_in_fresh_python_argv(self) -> None:
+    def test_parent_passes_exact_promoted_digest_and_credential_root_in_fresh_python_argv(
+        self,
+    ) -> None:
         # given
-        with tempfile.TemporaryDirectory() as temporary:
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            tempfile.TemporaryDirectory() as credential_temporary,
+        ):
             root = Path(temporary)
+            credential_root = Path(credential_temporary).resolve()
             expected = "a" * 64
             observed: list[str] = []
 
@@ -120,11 +194,19 @@ class RestartTests(unittest.TestCase):
 
             # when
             with patch("scheduled_learning_v1.execution.lifecycle.subprocess.run", run):
-                _launch_restart(root, 3, expected)
+                _launch_restart(root, 3, expected, credential_root)
 
             # then
             self.assertEqual(observed[0], sys.executable)
-            self.assertEqual(observed[-2:], ["--promoted-digest", expected])
+            self.assertEqual(
+                observed[-4:],
+                [
+                    "--promoted-digest",
+                    expected,
+                    "--credential-state-root",
+                    str(credential_root),
+                ],
+            )
 
     def test_fresh_process_reconstructs_promotion_and_reports_restart_score_failure(self) -> None:
         # given / when / then
@@ -161,13 +243,14 @@ from unittest.mock import patch
 import scheduled_learning_v1.run as run
 root = Path({str(root)!r})
 marker = Path({str(marker)!r})
-def active(path, generation):
+def active(path, generation, credential_state_root):
     marker.write_text('entered', encoding='utf-8')
     return {{'status': 'incomplete_failed'}}
 with patch.object(run, 'run_active', active):
     run.main([
         'active', '--root', str(root), '--generation', '3',
         '--promoted-digest', {"f" * 64!r},
+        '--credential-state-root', str(root.parent.resolve()),
     ])
 """
 
@@ -227,6 +310,7 @@ with (
     run.main([
         'active', '--root', str(root), '--generation', '3',
         '--promoted-digest', {promoted_digest!r},
+        '--credential-state-root', str(root.parent.resolve()),
     ])
 """
 
@@ -289,6 +373,7 @@ with (
     run.main([
         'active', '--root', str(root), '--generation', '3',
         '--promoted-digest', {promoted_digest!r},
+        '--credential-state-root', str(root.parent.resolve()),
     ])
 write(root / 'results' / 'restart-task-input.json', captured['operations'].task_inputs[0])
 """

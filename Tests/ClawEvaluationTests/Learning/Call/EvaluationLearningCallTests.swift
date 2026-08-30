@@ -10,6 +10,83 @@ import Testing
 @testable import ClawLLM
 
 @Suite struct EvaluationLearningCallTests {
+  @Test func productionLearningCompositionUsesExternalEncryptedCredentials() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let credentialRoot = try makeEvaluationCredentialStateRoot(under: fixture.root)
+    let transport = ScriptedHTTPExecutor([])
+    let input = EvaluationLearningCallResourceFactoryInput(
+      request: fixture.request,
+      requestSHA256: fixture.requestSHA256,
+      credentialStateRoot: credentialRoot
+    )
+
+    // when
+    let resource = try await EvaluationLearningCall.makeLiveResource(
+      input: input,
+      admissionVerifier: fixture.admissionVerifier,
+      http: transport,
+      closeTransport: {}
+    )
+    try await resource.shutdownCredentials()
+    try await resource.shutdownTransport()
+
+    // then — the private M3 call state has no encrypted credential material.
+    #expect(await transport.recorded.isEmpty)
+  }
+
+  @Test func unsafeCredentialRootStopsBeforeLearningResourceConstruction() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let construction = LearningCallConstructionCounter()
+
+    // when
+    let error = await #expect(
+      throws: EvaluationCredentialStateRootError.evaluationStateForbidden
+    ) {
+      _ = try await EvaluationLearningCall().run(
+        request: fixture.request,
+        credentialStateRoot: fixture.stateRoot.path,
+        makeResource: { _ in
+          await construction.increment()
+          throw LearningCallConstructionSentinel.entered
+        }
+      )
+    }
+
+    // then
+    #expect(error != nil)
+    #expect(await construction.value == 0)
+  }
+
+  @Test func heldCredentialLockStopsBeforeLearningResourceConstruction() async throws {
+    // given
+    let fixture = try makeLearningCallFixture()
+    defer { fixture.remove() }
+    let credentialRoot = try makeEvaluationCredentialStateRoot(under: fixture.root)
+    let lock = try InstanceLock(path: SecretStatePaths(stateRoot: credentialRoot).instanceLock.path)
+    defer { lock.release() }
+    let construction = LearningCallConstructionCounter()
+
+    // when
+    let error = await #expect(throws: InstanceLock.LockError.alreadyLocked) {
+      _ = try await EvaluationLearningCall().run(
+        request: fixture.request,
+        credentialStateRoot: credentialRoot.path,
+        makeResource: { _ in
+          await construction.increment()
+          throw LearningCallConstructionSentinel.entered
+        }
+      )
+    }
+
+    // then
+    #expect(error != nil)
+    #expect(await construction.value == 0)
+  }
+
   @Test func productionSelectsArgumentZeroBeforeMissingCredentialFailure() async throws {
     // given
     let fixture = try makeLearningCallFixture()
@@ -31,6 +108,7 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
+      credentialStateRoot: fixture.root.path,
       makeResource: EvaluationLearningCall.productionResourceFactory(
         arguments: [fixture.executableURL.path, decoyExecutableURL.path]
       )
@@ -62,6 +140,7 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
+      credentialStateRoot: fixture.root.path,
       makeResource: { input in
         try await makeLearningResource(
           input: input,
@@ -103,6 +182,7 @@ import Testing
     await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
       try await EvaluationLearningCall().run(
         request: fixture.request,
+        credentialStateRoot: fixture.root.path,
         makeResource: { input in
           try await makeLearningResource(
             input: input,
@@ -142,6 +222,7 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
+      credentialStateRoot: fixture.root.path,
       makeResource: { input in
         let admission = try await input.admission(using: fixture.admissionVerifier)
         try mutation.apply(to: fixture.request)
@@ -177,6 +258,7 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
+      credentialStateRoot: fixture.root.path,
       makeResource: { input in
         let lockPath = SecretStatePaths(stateRoot: fixture.stateRoot).instanceLock.path
         do {
@@ -219,6 +301,7 @@ import Testing
     await #expect(throws: (any Error).self) {
       try await EvaluationLearningCall().run(
         request: fixture.request,
+        credentialStateRoot: fixture.root.path,
         makeResource: { input in
           try await makeLearningResource(
             input: input,
@@ -260,6 +343,7 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
+      credentialStateRoot: fixture.root.path,
       makeResource: { input in
         let admission = try await input.admission(using: fixture.admissionVerifier)
         await lifecycle.recordStartupAdmission(admission.context)
@@ -304,6 +388,18 @@ import Testing
     #expect(await provider.requests.count == 1)
     #expect(lockIsFree)
   }
+}
+
+private actor LearningCallConstructionCounter {
+  private(set) var value = 0
+
+  func increment() {
+    value += 1
+  }
+}
+
+private enum LearningCallConstructionSentinel: Error {
+  case entered
 }
 
 // MARK: - Fixture

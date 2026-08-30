@@ -72,6 +72,7 @@ def artifact_result_tree(
         operation_approval: dict[str, object],
         journal: object,
         budget: AggregateBudget,
+        credential_state_root: Path,
     ) -> Operations:
         return Operations(
             operation_root,
@@ -79,7 +80,7 @@ def artifact_result_tree(
             operation_approval,
             budget,
             journal=cast(Any, journal),
-            bridge=WorkerBridge(executable.resolve(), cast(Any, journal)),
+            bridge=WorkerBridge(executable.resolve(), cast(Any, journal), credential_state_root),
             verify=_verified_without_io,
             dispatch_bounds=lambda kind: ({"task": 2, "evaluator": 3, "reflector": 3}[kind], 3),
         )
@@ -112,7 +113,7 @@ def artifact_result_tree(
         ),
         patch("scheduled_learning_v1.execution.lifecycle._launch_restart"),
     ):
-        run_scored(root)
+        run_scored(root, root.parent.resolve())
     if approval_accounted_token_limit is not None:
         approval = load_object(root / "freeze" / "owner-budget-approval.json")
         approval_budget = _object(approval.get("budgets"), "owner approval budgets")
@@ -190,7 +191,7 @@ def _write_artifact_worker(path: Path, *, terminal: bool, active_evidence: bool)
         "from tests.execution.support import _low_attempt, _perfect_attempt\n"
         "from tests.worker_bridge.support import learning_result, task_result\n"
         + ("raise SystemExit(7)\n" if terminal else "")
-        + "input_path = pathlib.Path(sys.argv[-1])\n"
+        + "input_path = pathlib.Path(sys.argv[3])\n"
         + "authorized = json.loads(input_path.read_text(encoding='utf-8'))\n"
         + "core = {key: value for key, value in authorized.items() if key != 'authorization'}\n"
         + "if sys.argv[1] == 'worker':\n"

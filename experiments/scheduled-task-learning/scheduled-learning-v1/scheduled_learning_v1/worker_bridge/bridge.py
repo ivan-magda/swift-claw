@@ -32,11 +32,22 @@ _DIAGNOSTIC_LIMIT = 1024
 class WorkerBridge:
     """Bridge already-materialized calls to one Swift process each."""
 
-    def __init__(self, executable: Path, journal: EventJournal) -> None:
+    def __init__(
+        self, executable: Path, journal: EventJournal, credential_state_root: Path
+    ) -> None:
         executable = Path(executable)
         if not executable.is_absolute():
             raise ValueError("claw-eval executable must be absolute")
+        credential_state_root = Path(credential_state_root)
+        resolved_credential_root = credential_state_root.resolve(strict=True)
+        if (
+            not credential_state_root.is_absolute()
+            or credential_state_root != resolved_credential_root
+            or not resolved_credential_root.is_dir()
+        ):
+            raise ValueError("credential state root must be an existing canonical directory")
         self._executable = executable
+        self._credential_state_root = resolved_credential_root
         self.journal = journal
 
     def run_task(self, call: TaskAttemptCall) -> dict[str, object]:
@@ -101,7 +112,13 @@ class WorkerBridge:
         )
         write_closed_input(input_path, bind_authorization(core, start.path, start.sha256))
         completed = subprocess.run(  # noqa: S603 -- executable and sole input path are absolute bindings
-            [str(self._executable), *command, str(input_path)],
+            [
+                str(self._executable),
+                *command,
+                str(input_path),
+                "--credential-state-root",
+                str(self._credential_state_root),
+            ],
             check=False,
             capture_output=True,
             text=True,

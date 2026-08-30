@@ -24,7 +24,7 @@ class AuthorizationTests(unittest.TestCase):
             executable = root / "claw-eval"
             write_worker(executable, result_path, learning_result(core))
             journal = ReturnedCommittedJournal(root / "evaluation" / "events")
-            bridge = WorkerBridge(executable, cast(EventJournal, journal))
+            bridge = WorkerBridge(executable, cast(EventJournal, journal), root.resolve())
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
             # when
@@ -50,7 +50,7 @@ class AuthorizationTests(unittest.TestCase):
             executable = root / "claw-eval"
             write_worker(executable, result_path, learning_result(core))
             journal = ReturnedCommittedJournal(root / "evaluation" / "events")
-            bridge = WorkerBridge(executable, cast(EventJournal, journal))
+            bridge = WorkerBridge(executable, cast(EventJournal, journal), root.resolve())
             call = LearningCall("reflector", core, root / "request.json", result_path)
 
             # when

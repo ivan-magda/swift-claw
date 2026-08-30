@@ -51,6 +51,7 @@ class Operations:
         *,
         journal: EventJournal | None = None,
         bridge: object | None = None,
+        credential_state_root: Path | None = None,
         verify: Callable[[Path, dict[str, object]], dict[str, object]] = verify_pre_run,
         pair_scorer: Callable[
             [dict[str, object], dict[str, object]], dict[str, object]
@@ -72,7 +73,9 @@ class Operations:
         else:
             if journal is None:
                 raise ValueError("a journal is required when constructing the real bridge")
-            self.bridge = WorkerBridge(self._executable(), journal)
+            if credential_state_root is None:
+                raise ValueError("a credential state root is required for the real bridge")
+            self.bridge = WorkerBridge(self._executable(), journal, credential_state_root)
 
     def dispatch_task(self, call: object) -> dict[str, object]:
         """Reserve, freshly verify, and enter the Swift task bridge without intervening I/O."""

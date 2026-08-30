@@ -18,8 +18,9 @@ import Testing
     // when
     let result = try await EvaluationWorker().runResult(
       invocation: fixture.invocation,
+      credentialStateRoot: fixture.root.path,
       admissionVerifier: verifier,
-      makeResource: { _ in
+      makeResource: { _, _ in
         makeEvaluationLearningLiveResource(provider: provider)
       }
     )

@@ -41,6 +41,7 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
+      credentialStateRoot: fixture.root.path,
       makeResource: { input in
         try await makeLearningResource(
           input: input,
@@ -83,6 +84,7 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
+      credentialStateRoot: fixture.root.path,
       makeResource: { input in
         try await makeLearningResource(
           input: input,
@@ -118,6 +120,7 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
+      credentialStateRoot: fixture.root.path,
       makeResource: { input in
         try await makeLearningResource(
           input: input,

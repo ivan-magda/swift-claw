@@ -10,6 +10,61 @@ import Testing
 @testable import ClawSecrets
 
 @Suite struct EvaluationWorkerBootstrapTests {
+  @Test func productionCompositionLoadsOnlyTheExternalEncryptedCredentialStore() async throws {
+    // given
+    let root = try makeEvaluationTestRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let configured = try makeEvaluationConfiguration(root: root)
+    let credentialRoot = try makeEvaluationCredentialStateRoot(under: root)
+    let transport = ScriptedHTTPExecutor([])
+
+    // when
+    let resource = try await EvaluationLiveResourceFactory.make(
+      configuration: configured.configuration,
+      credentialStateRoot: credentialRoot,
+      http: transport,
+      closeTransport: {}
+    )
+    try await resource.shutdownCredentials()
+    try await resource.shutdownTransport()
+
+    // then — the M3 state root has no encrypted credential material, so using it would fail here.
+    #expect(await transport.recorded.isEmpty)
+  }
+
+  @Test func heldCredentialLockStopsLearningTaskBeforeResourceOrProviderWork() async throws {
+    // given
+    let fixture = try makeEvaluationLearningTaskInvocationFixture()
+    defer { fixture.remove() }
+    let credentialRoot = try makeEvaluationCredentialStateRoot(under: fixture.root)
+    let credentialLock = try InstanceLock(
+      path: SecretStatePaths(stateRoot: credentialRoot).instanceLock.path
+    )
+    defer { credentialLock.release() }
+    let provider = SequenceProvider(scriptedTwoRoundResponses())
+    let resourceCalls = EvaluationAsyncCounter()
+
+    // when
+    let error = await #expect(throws: InstanceLock.LockError.alreadyLocked) {
+      _ = try await EvaluationWorker().runResult(
+        invocation: fixture.invocation,
+        credentialStateRoot: credentialRoot.path,
+        admissionVerifier: StaticEvaluationLearningTaskAdmissionVerifier(
+          context: fixture.admissionContext
+        ),
+        makeResource: { _, _ in
+          await resourceCalls.increment()
+          return makeEvaluationLearningLiveResource(provider: provider)
+        }
+      )
+    }
+
+    // then
+    #expect(error != nil)
+    #expect(await resourceCalls.value == 0)
+    #expect(await provider.requests.isEmpty)
+  }
+
   @Test(arguments: LearningWorkerAdmissionMutation.allCases)
   func eachWorkerOwnedLearningAdmissionBindingRejectsBeforeExternalWork(
     _ mutation: LearningWorkerAdmissionMutation
@@ -27,8 +82,9 @@ import Testing
     let error = await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
       _ = try await EvaluationWorker().runResult(
         invocation: fixture.invocation,
+        credentialStateRoot: fixture.root.path,
         admissionVerifier: verifier,
-        makeResource: { _ in
+        makeResource: { _, _ in
           await resourceCalls.increment()
           return makeEvaluationLearningLiveResource(provider: provider)
         }
@@ -83,8 +139,9 @@ import Testing
     let error = await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
       _ = try await EvaluationWorker().runResult(
         invocation: invocation,
+        credentialStateRoot: fixture.root.path,
         admissionVerifier: verifier,
-        makeResource: { _ in
+        makeResource: { _, _ in
           await resourceCalls.increment()
           return makeEvaluationLearningLiveResource(provider: provider)
         }
@@ -114,8 +171,9 @@ import Testing
     let error = await #expect(throws: EvaluationLearningAdmissionError.integrityFailure) {
       _ = try await EvaluationWorker().runResult(
         invocation: fixture.invocation,
+        credentialStateRoot: fixture.root.path,
         admissionVerifier: verifier,
-        makeResource: { _ in
+        makeResource: { _, _ in
           await resourceCalls.increment()
           return makeEvaluationLearningLiveResource(provider: provider)
         }
@@ -174,10 +232,11 @@ import Testing
     let error = await #expect(throws: (any Error).self) {
       _ = try await EvaluationWorker().runResult(
         invocation: invocation,
+        credentialStateRoot: fixture.root.path,
         admissionVerifier: StaticEvaluationLearningTaskAdmissionVerifier(
           context: fixture.admissionContext
         ),
-        makeResource: { _ in
+        makeResource: { _, _ in
           await resourceCalls.increment()
           return makeEvaluationLearningLiveResource(provider: provider)
         }
@@ -202,8 +261,9 @@ import Testing
     // when
     let result = try await EvaluationWorker().runResult(
       invocation: fixture.invocation,
+      credentialStateRoot: fixture.root.path,
       admissionVerifier: verifier,
-      makeResource: { _ in
+      makeResource: { _, _ in
         makeEvaluationLearningLiveResource(provider: provider)
       }
     )
@@ -256,6 +316,7 @@ import Testing
     {
       _ = try await EvaluationWorker().runResult(
         invocation: invocation,
+        credentialStateRoot: root.path,
         freezeVerifier: freezeVerifier
       )
     }
@@ -374,6 +435,7 @@ import Testing
     ) {
       _ = try await EvaluationWorker().runResult(
         invocation: invocation,
+        credentialStateRoot: root.path,
         freezeVerifier: StaticEvaluationFreezeVerifier(context: context)
       )
     }

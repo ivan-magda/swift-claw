@@ -157,7 +157,7 @@ class LifecycleTests(unittest.TestCase):
 
             # when
             with patch("scheduled_learning_v1.execution.lifecycle._make_operations", factory):
-                report = run_scored(root)
+                report = run_scored(root, root.parent.resolve())
 
             # then
             self.assertEqual(report["status"], "incomplete_failed")
@@ -202,7 +202,7 @@ class LifecycleTests(unittest.TestCase):
 
             # when
             with patch("scheduled_learning_v1.execution.lifecycle._make_operations", factory):
-                report = run_scored(root)
+                report = run_scored(root, root.parent.resolve())
 
             # then
             self.assertEqual(report["status"], "incomplete_failed")

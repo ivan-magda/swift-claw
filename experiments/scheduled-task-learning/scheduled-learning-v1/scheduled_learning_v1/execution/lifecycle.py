@@ -38,7 +38,7 @@ _MIN_TRIGGER_RUNS = 2
 _SHA256_LENGTH = 64
 
 
-def run_scored(root: Path) -> dict[str, object]:
+def run_scored(root: Path, credential_state_root: Path) -> dict[str, object]:
     """Execute the owner-authorized ten-row scored lifecycle exactly once."""
 
     root = Path(root).resolve(strict=True)
@@ -51,16 +51,18 @@ def run_scored(root: Path) -> dict[str, object]:
         journal = EventJournal(results / "events")
         controller = ReplayController(journal, initial=initial_replay_state(manifest, approval))
         budget = AggregateBudget()
-        operations = _make_operations(root, manifest, approval, journal, budget)
+        operations = _make_operations(
+            root, manifest, approval, journal, budget, credential_state_root
+        )
         _start_process(root, journal, controller, 2)
-        _run_parent(root, manifest, controller, journal, operations)
+        _run_parent(root, manifest, controller, journal, operations, credential_state_root)
     except Exception as error:
         refresh_replay(root)
         _write_failure(root, error)
     return build_final_report(root)
 
 
-def run_active(root: Path, generation: int) -> dict[str, object]:
+def run_active(root: Path, generation: int, credential_state_root: Path) -> dict[str, object]:
     """Replay a promoted tree and execute only the post-restart active row."""
 
     root = Path(root).resolve(strict=True)
@@ -81,7 +83,9 @@ def run_active(root: Path, generation: int) -> dict[str, object]:
         if generation != int(replayed["state"]["controller_generation"]) + 1:
             raise ValueError("restart generation must be the next replay generation")
         budget = _budget_from_results(root)
-        operations = _make_operations(root, manifest, approval, journal, budget)
+        operations = _make_operations(
+            root, manifest, approval, journal, budget, credential_state_root
+        )
         _start_process(root, journal, controller, generation)
         row = _run_order(manifest)[9]
         attempt = operations.run_task(
@@ -123,6 +127,7 @@ def _run_parent(
     controller: ReplayController,
     journal: EventJournal,
     operations: Operations,
+    credential_state_root: Path,
 ) -> None:
     evaluations: list[dict[str, object]] = []
     run_order = _run_order(manifest)
@@ -261,7 +266,7 @@ def _run_parent(
     if _score(active_score) < threshold:
         return
     generation = int(replayed["state"]["controller_generation"]) + 1
-    _launch_restart(root, generation, selected_digest)
+    _launch_restart(root, generation, selected_digest, credential_state_root)
 
 
 def _start_process(
@@ -279,11 +284,21 @@ def _make_operations(
     approval: dict[str, object],
     journal: EventJournal,
     budget: AggregateBudget,
+    credential_state_root: Path,
 ) -> Operations:
-    return Operations(root, manifest, approval, budget, journal=journal)
+    return Operations(
+        root,
+        manifest,
+        approval,
+        budget,
+        journal=journal,
+        credential_state_root=credential_state_root,
+    )
 
 
-def _launch_restart(root: Path, generation: int, promoted_digest: str) -> None:
+def _launch_restart(
+    root: Path, generation: int, promoted_digest: str, credential_state_root: Path
+) -> None:
     completed = subprocess.run(  # noqa: S603 -- fixed interpreter/module and frozen arguments
         [
             sys.executable,
@@ -297,6 +312,8 @@ def _launch_restart(root: Path, generation: int, promoted_digest: str) -> None:
             str(generation),
             "--promoted-digest",
             promoted_digest,
+            "--credential-state-root",
+            str(credential_state_root),
         ],
         check=False,
         capture_output=True,

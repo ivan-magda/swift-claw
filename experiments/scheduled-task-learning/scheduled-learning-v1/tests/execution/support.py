@@ -400,8 +400,11 @@ def run_fake_scored(
         captured["operations"] = operations
         return operations
 
-    def restart_runner(path: Path, generation: int, digest: str) -> None:
+    credential_state_root = root.parent.resolve()
+
+    def restart_runner(path: Path, generation: int, digest: str, credential_root: Path) -> None:
         captured["restart_digest"] = digest
+        captured["credential_state_root"] = credential_root
         if restart_boundary:
             write_restart(path, digest, 100)
 
@@ -414,7 +417,7 @@ def run_fake_scored(
         patch("scheduled_learning_v1.execution.lifecycle._utc_now", return_value=FIXED_TIME),
         patch("scheduled_learning_v1.execution.lifecycle._launch_restart", restart_runner),
     ):
-        report = run_scored(root)
+        report = run_scored(root, credential_state_root)
     operations = captured["operations"]
     if not isinstance(operations, FakeOperations):
         raise AssertionError("fake lifecycle did not construct operations")

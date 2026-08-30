@@ -42,7 +42,7 @@ class ProcessLaunchTests(unittest.TestCase):
             executable = root / "claw-eval"
             write_worker(executable, published_result, learning_result(core))
             events = root / "evaluation" / "events"
-            bridge = WorkerBridge(executable, EventJournal(events))
+            bridge = WorkerBridge(executable, EventJournal(events), root.resolve())
             call = LearningCall("evaluator", core, root / "request.json", archived_result)
 
             # when
@@ -68,7 +68,9 @@ class ProcessLaunchTests(unittest.TestCase):
             result_path = root / "result.json"
             executable = root / "claw-eval"
             write_worker(executable, result_path, learning_result(core))
-            bridge = WorkerBridge(executable, EventJournal(root / "evaluation" / "events"))
+            bridge = WorkerBridge(
+                executable, EventJournal(root / "evaluation" / "events"), root.resolve()
+            )
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
             # when
@@ -77,7 +79,15 @@ class ProcessLaunchTests(unittest.TestCase):
             # then
             self.assertEqual(
                 argv_records(executable),
-                [["learning-call", "--request", str(call.request_path)]],
+                [
+                    [
+                        "learning-call",
+                        "--request",
+                        str(call.request_path),
+                        "--credential-state-root",
+                        str(root.resolve()),
+                    ]
+                ],
             )
             self.assertLessEqual(len(str(terminal["diagnostics"])), 1024)
             self.assertTrue(result_path.is_file())
@@ -94,7 +104,9 @@ class ProcessLaunchTests(unittest.TestCase):
             result_path = root / "result.json"
             executable = root / "claw-eval"
             write_worker(executable, result_path, task_result(core))
-            bridge = WorkerBridge(executable, EventJournal(root / "evaluation" / "events"))
+            bridge = WorkerBridge(
+                executable, EventJournal(root / "evaluation" / "events"), root.resolve()
+            )
             call = TaskAttemptCall(core, root / "invocation.json", result_path)
 
             # when
@@ -103,9 +115,94 @@ class ProcessLaunchTests(unittest.TestCase):
             # then
             self.assertEqual(
                 argv_records(executable),
-                [["worker", "--invocation", str(call.invocation_path)]],
+                [
+                    [
+                        "worker",
+                        "--invocation",
+                        str(call.invocation_path),
+                        "--credential-state-root",
+                        str(root.resolve()),
+                    ]
+                ],
             )
             self.assertEqual(terminal["status"], "completed")
+
+    def test_task_evaluator_and_reflector_share_one_runtime_only_credential_root(self) -> None:
+        # given
+        with (
+            TemporaryDirectory() as temporary,
+            TemporaryDirectory() as credential_temporary,
+        ):
+            root = Path(temporary)
+            credential_root = Path(credential_temporary).resolve()
+            commands: list[list[str]] = []
+
+            # when
+            task_root = root / "task"
+            task_root.mkdir()
+            task_core_value = task_core(task_root)
+            task_result_path = task_root / "result.json"
+            task_executable = task_root / "claw-eval"
+            write_worker(task_executable, task_result_path, task_result(task_core_value))
+            task_call = TaskAttemptCall(
+                task_core_value,
+                task_root / "invocation.json",
+                task_result_path,
+            )
+            WorkerBridge(
+                task_executable,
+                EventJournal(task_root / "evaluation" / "events"),
+                credential_root,
+            ).run_task(task_call)
+            commands.extend(argv_records(task_executable))
+
+            for kind in ("evaluator", "reflector"):
+                learning_root = root / kind
+                learning_root.mkdir()
+                core = learning_core(learning_root, kind)
+                result_path = learning_root / "result.json"
+                executable = learning_root / "claw-eval"
+                write_worker(executable, result_path, learning_result(core))
+                call = LearningCall(kind, core, learning_root / "request.json", result_path)
+                WorkerBridge(
+                    executable,
+                    EventJournal(learning_root / "evaluation" / "events"),
+                    credential_root,
+                ).run_learning(call)
+                commands.extend(argv_records(executable))
+                self.assertFalse(Path(str(core["state_root"])).exists())
+
+            # then
+            self.assertEqual(
+                commands,
+                [
+                    [
+                        "worker",
+                        "--invocation",
+                        str(task_call.invocation_path),
+                        "--credential-state-root",
+                        str(credential_root),
+                    ],
+                    [
+                        "learning-call",
+                        "--request",
+                        str(root / "evaluator" / "request.json"),
+                        "--credential-state-root",
+                        str(credential_root),
+                    ],
+                    [
+                        "learning-call",
+                        "--request",
+                        str(root / "reflector" / "request.json"),
+                        "--credential-state-root",
+                        str(credential_root),
+                    ],
+                ],
+            )
+            evidence = "\n".join(
+                path.read_text(encoding="utf-8") for path in sorted(root.rglob("*.json"))
+            )
+            self.assertNotIn(str(credential_root), evidence)
 
     def test_nonzero_exit_is_a_closed_terminal_result(self) -> None:
         # given
@@ -121,7 +218,9 @@ class ProcessLaunchTests(unittest.TestCase):
                 exit_code=7,
                 publish_result=False,
             )
-            bridge = WorkerBridge(executable, EventJournal(root / "evaluation" / "events"))
+            bridge = WorkerBridge(
+                executable, EventJournal(root / "evaluation" / "events"), root.resolve()
+            )
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
             # when
@@ -139,7 +238,7 @@ class ProcessLaunchTests(unittest.TestCase):
             executable = root / "claw-eval"
             write_worker(executable, result_path, learning_result(core), exit_code=7)
             events = root / "evaluation" / "events"
-            bridge = WorkerBridge(executable, EventJournal(events))
+            bridge = WorkerBridge(executable, EventJournal(events), root.resolve())
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
             # when
@@ -162,7 +261,9 @@ class ProcessLaunchTests(unittest.TestCase):
             result_path = root / "result.json"
             executable = root / "claw-eval"
             write_worker(executable, result_path, learning_result(core), exit_code=7)
-            bridge = WorkerBridge(executable, EventJournal(root / "evaluation" / "events"))
+            bridge = WorkerBridge(
+                executable, EventJournal(root / "evaluation" / "events"), root.resolve()
+            )
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
             # when
@@ -186,7 +287,7 @@ class ProcessLaunchTests(unittest.TestCase):
                 publish_result=False,
             )
             events = root / "evaluation" / "events"
-            bridge = WorkerBridge(executable, EventJournal(events))
+            bridge = WorkerBridge(executable, EventJournal(events), root.resolve())
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
             # when
@@ -209,7 +310,7 @@ class ProcessLaunchTests(unittest.TestCase):
             executable = root / "claw-eval"
             write_worker(executable, result_path, invalid_result)
             events = root / "evaluation" / "events"
-            bridge = WorkerBridge(executable, EventJournal(events))
+            bridge = WorkerBridge(executable, EventJournal(events), root.resolve())
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
             # when
@@ -234,7 +335,7 @@ class ProcessLaunchTests(unittest.TestCase):
             executable = root / "claw-eval"
             write_malformed_result_worker(executable, result_path)
             events = root / "evaluation" / "events"
-            bridge = WorkerBridge(executable, EventJournal(events))
+            bridge = WorkerBridge(executable, EventJournal(events), root.resolve())
             call = LearningCall("evaluator", core, root / "request.json", result_path)
 
             # when
@@ -351,21 +452,25 @@ class ProcessLaunchTests(unittest.TestCase):
                 WorkerBridge(
                     task_executable,
                     EventJournal(task_root / "evaluation" / "events"),
+                    task_root.resolve(),
                 ).run_task(task_call)
             with self.assertRaises(ValueError):
                 WorkerBridge(
                     task_executable,
                     EventJournal(task_root / "evaluation" / "events"),
+                    task_root.resolve(),
                 ).run_task(changed_budget_call)
             with self.assertRaises(ValueError):
                 WorkerBridge(
                     learning_executable,
                     EventJournal(learning_root / "evaluation" / "events"),
+                    learning_root.resolve(),
                 ).run_learning(learning_call)
             with self.assertRaises(ValueError):
                 WorkerBridge(
                     route_executable,
                     EventJournal(route_root / "evaluation" / "events"),
+                    route_root.resolve(),
                 ).run_task(changed_route_call)
             self.assertFalse(task_executable.with_suffix(".argv.jsonl").exists())
             self.assertFalse(learning_executable.with_suffix(".argv.jsonl").exists())
