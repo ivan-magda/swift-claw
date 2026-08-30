@@ -4,13 +4,7 @@ import ClawCore
 import ClawHTTP
 import ClawLLM
 import ClawSecrets
-import ClawSubprocess
 import Foundation
-
-protocol EvaluationWorkerResource: Sendable {
-  func shutdownCredentials() async throws
-  func shutdownTransport() async throws
-}
 
 struct EvaluationLiveFreezeAdmission: Sendable {
   let verifier: any EvaluationFreezeVerifying
@@ -31,92 +25,6 @@ struct EvaluationLiveFreezeAdmission: Sendable {
       return .deny(cap: "evaluation-freeze-integrity")
     }
   }
-}
-
-enum EvaluationWorkerLifecycle {
-  package static func withProductionLock<Resource: EvaluationWorkerResource, Value: Sendable>(
-    stateRoot: URL,
-    makeResource: @Sendable () async throws -> Resource,
-    operation: @Sendable (Resource, UUID) async throws -> Value
-  ) async throws -> Value {
-    try await withProductionLockOnly(stateRoot: stateRoot) { lockAcquisitionID in
-      try await withResource(makeResource: makeResource) { resource in
-        try await operation(resource, lockAcquisitionID)
-      }
-    }
-  }
-
-  package static func withProductionLockOnly<Value: Sendable>(
-    stateRoot: URL,
-    operation: @Sendable (UUID) async throws -> Value
-  ) async throws -> Value {
-    try EvaluationPathSecurity.ensurePrivateDirectory(at: stateRoot)
-
-    let lockPath = SecretStatePaths(stateRoot: stateRoot).instanceLock.path
-    let lock = try InstanceLock(path: lockPath)
-    let lockAcquisitionID = UUID()
-    do {
-      let value = try await operation(lockAcquisitionID)
-      lock.release()
-      return value
-    } catch {
-      lock.release()
-      throw error
-    }
-  }
-
-  static func proveProductionLockIsFree(stateRoot: URL) throws -> Bool {
-    try EvaluationPathSecurity.ensurePrivateDirectory(at: stateRoot)
-    let lock = try InstanceLock(path: SecretStatePaths(stateRoot: stateRoot).instanceLock.path)
-    lock.release()
-    return true
-  }
-
-  package static func withResource<Resource: EvaluationWorkerResource, Value: Sendable>(
-    makeResource: @Sendable () async throws -> Resource,
-    operation: @Sendable (Resource) async throws -> Value
-  ) async throws -> Value {
-    let resource = try await makeResource()
-    let value: Value
-    do {
-      value = try await operation(resource)
-    } catch let operationError {
-      var cleanupErrors: [String] = []
-      do {
-        try await resource.shutdownCredentials()
-      } catch {
-        cleanupErrors.append("credentials:\(String(reflecting: error))")
-      }
-      do {
-        try await resource.shutdownTransport()
-      } catch {
-        cleanupErrors.append("transport:\(String(reflecting: error))")
-      }
-      guard cleanupErrors.isEmpty else {
-        throw EvaluationWorkerLifecycleError.operationAndCleanupFailed(
-          operation: String(reflecting: operationError),
-          cleanup: cleanupErrors
-        )
-      }
-      throw operationError
-    }
-    do {
-      try await resource.shutdownCredentials()
-    } catch {
-      try? await resource.shutdownTransport()
-      throw error
-    }
-    do {
-      try await resource.shutdownTransport()
-    } catch {
-      throw error
-    }
-    return value
-  }
-}
-
-enum EvaluationWorkerLifecycleError: Error, Sendable, Equatable {
-  case operationAndCleanupFailed(operation: String, cleanup: [String])
 }
 
 struct EvaluationWorkerBatchConfiguration: Codable, Sendable, Equatable {
@@ -167,6 +75,7 @@ struct EvaluationLiveResource: EvaluationWorkerResource {
 enum EvaluationLiveResourceFactory {
   package static func make(
     configuration: EvaluationAttemptConfiguration,
+    credentialStateRoot: URL,
     progressRecorder: EvaluationAttemptProgressRecorder? = nil
   ) async throws -> EvaluationLiveResource {
     let client = HTTPClient(
@@ -174,8 +83,29 @@ enum EvaluationLiveResourceFactory {
       configuration: HTTPClientProfile.protectedEgress.configuration
     )
     let executor = AsyncHTTPExecutor(client: client)
+    do {
+      return try await make(
+        configuration: configuration,
+        credentialStateRoot: credentialStateRoot,
+        progressRecorder: progressRecorder,
+        http: executor,
+        closeTransport: { try await client.shutdown() }
+      )
+    } catch {
+      try? await client.shutdown()
+      throw error
+    }
+  }
+
+  static func make(
+    configuration: EvaluationAttemptConfiguration,
+    credentialStateRoot: URL,
+    progressRecorder: EvaluationAttemptProgressRecorder? = nil,
+    http: any HTTPExecuting & HTTPStreaming,
+    closeTransport: @escaping @Sendable () async throws -> Void
+  ) async throws -> EvaluationLiveResource {
     let recorder = EvaluationHTTPRecorder(
-      base: executor,
+      base: http,
       expectedWireModel: configuration.wireModel,
       maximumResponsesSends: PageEvaluationContract.maximumResponsesSendsPerAttempt,
       progressRecorder: progressRecorder,
@@ -196,27 +126,22 @@ enum EvaluationLiveResourceFactory {
       fallbackRoute: nil
     )
 
-    do {
-      let stack = try ProviderStackFactory.make(
-        route: route,
-        settings: settings,
-        loadStaticBearer: { nil },
-        makeManagedCredentialStore: {
-          EncryptedLLMCredentialStore(stateRoot: configuration.stateRootURL)
-        },
-        http: recorder,
-        buildVersion: "swift-claw-evaluation-v1"
-      )
-      return EvaluationLiveResource(
-        roster: ProviderRoster(primary: stack.binding),
-        httpRecorder: recorder,
-        credentialSource: stack.credentialSource,
-        closeTransport: { try await client.shutdown() }
-      )
-    } catch {
-      try? await client.shutdown()
-      throw error
-    }
+    let stack = try ProviderStackFactory.make(
+      route: route,
+      settings: settings,
+      loadStaticBearer: { nil },
+      makeManagedCredentialStore: {
+        EncryptedLLMCredentialStore(stateRoot: credentialStateRoot)
+      },
+      http: recorder,
+      buildVersion: "swift-claw-evaluation-v1"
+    )
+    return EvaluationLiveResource(
+      roster: ProviderRoster(primary: stack.binding),
+      httpRecorder: recorder,
+      credentialSource: stack.credentialSource,
+      closeTransport: closeTransport
+    )
   }
 }
 
@@ -225,10 +150,12 @@ package struct EvaluationWorker: Sendable {
 
   package func run(
     invocation: EvaluationWorkerInvocation,
+    credentialStateRoot: String,
     sealedOutputKey: Data? = nil
   ) async throws -> String {
     try await runResult(
       invocation: invocation,
+      credentialStateRoot: credentialStateRoot,
       sealedOutputKey: sealedOutputKey,
       freezeVerifier: EvaluationLiveFreezeVerifier()
     ).attemptID
@@ -237,6 +164,7 @@ package struct EvaluationWorker: Sendable {
   // swiftlint:disable:next function_body_length
   func runResult(
     invocation: EvaluationWorkerInvocation,
+    credentialStateRoot: String,
     sealedOutputKey: Data? = nil,
     freezeVerifier: any EvaluationFreezeVerifying
   ) async throws -> EvaluationAttemptResult {
@@ -252,6 +180,10 @@ package struct EvaluationWorker: Sendable {
       throw EvaluationWorkerInvocationError.invalidConfigurationSnapshot
     }
     let configuration = try snapshot.decodeAttempt()
+    let credentialRootURL = try EvaluationCredentialStateRoot.validateLegacy(
+      path: credentialStateRoot,
+      expectedStateRoot: configuration.stateRootURL
+    )
     let freeze = try await freezeVerifier.verifyLocal(invocation.freeze)
     let liveAdmission = EvaluationLiveFreezeAdmission(
       verifier: freezeVerifier,
@@ -298,9 +230,11 @@ package struct EvaluationWorker: Sendable {
       }
       return try await EvaluationWorkerLifecycle.withProductionLock(
         stateRoot: configuration.stateRootURL,
+        credentialStateRoot: credentialRootURL,
         makeResource: {
           try await EvaluationLiveResourceFactory.make(
             configuration: configuration,
+            credentialStateRoot: credentialRootURL,
             progressRecorder: progressRecorder
           )
         },
@@ -425,6 +359,7 @@ package struct EvaluationWorker: Sendable {
             makeResource: {
               try await EvaluationLiveResourceFactory.make(
                 configuration: attempt,
+                credentialStateRoot: attempt.stateRootURL,
                 progressRecorder: progressRecorder
               )
             },
@@ -478,9 +413,176 @@ package struct EvaluationWorker: Sendable {
   }
 }
 
+extension EvaluationWorker {
+  package func run(
+    invocation: EvaluationLearningTaskInvocation,
+    credentialStateRoot: String
+  ) async throws -> String {
+    try await runResult(
+      invocation: invocation,
+      credentialStateRoot: credentialStateRoot,
+      admissionVerifier: EvaluationLearningAdmissionVerifier()
+    ).attemptID
+  }
+
+  // swiftlint:disable:next function_body_length
+  func runResult(
+    invocation: EvaluationLearningTaskInvocation,
+    credentialStateRoot: String,
+    admissionVerifier: any EvaluationLearningAdmissionVerifying,
+    makeResource:
+      @escaping @Sendable (
+        EvaluationAttemptConfiguration, URL
+      ) async throws -> EvaluationLiveResource = { configuration, credentialRoot in
+        try await EvaluationLiveResourceFactory.make(
+          configuration: configuration,
+          credentialStateRoot: credentialRoot
+        )
+      }
+  ) async throws -> EvaluationAttemptResult {
+    try invocation.validate()
+    let configurationURL = URL(fileURLWithPath: invocation.configurationPath)
+    let configurationData = try EvaluationPathSecurity.readRegularSingleLinkFile(
+      at: configurationURL
+    )
+    guard SHA256Digest.hex(configurationData) == invocation.configurationSHA256 else {
+      throw EvaluationLearningAdmissionError.integrityFailure
+    }
+    let configuration = try JSONDecoder().decode(
+      EvaluationAttemptConfiguration.self,
+      from: configurationData
+    )
+    try configuration.validate()
+    let credentialRootURL = try EvaluationCredentialStateRoot.validate(
+      path: credentialStateRoot,
+      evaluationRoot: configuration.evaluationRootURL
+    )
+    guard
+      configuration.executionProfile == invocation.executionProfile,
+      let carrierSHA256 = configuration.carrierSHA256
+    else {
+      throw EvaluationLearningAdmissionError.integrityFailure
+    }
+
+    let initialAdmission = try await admissionVerifier.verify(
+      manifest: invocation.manifest,
+      authorization: invocation.authorization,
+      invocationCoreDigest: invocation.core.sha256,
+      carrierSHA256: carrierSHA256,
+      providerCallID: invocation.providerCallID,
+      kind: .task
+    )
+    try Self.validateLearningAdmission(
+      initialAdmission,
+      invocation: invocation,
+      configuration: configuration
+    )
+    try invocation.budget.validateScheduledLearning(
+      approvedBudgets: initialAdmission.budgets
+    )
+    try EvaluationWorkspaceMaterializer.verifyPromotionReceipt(configuration: configuration)
+    let liveAdmission = EvaluationLearningLiveAdmission(
+      verifier: admissionVerifier,
+      manifest: invocation.manifest,
+      authorization: invocation.authorization,
+      invocationCoreDigest: invocation.core.sha256,
+      carrierSHA256: carrierSHA256,
+      providerCallID: invocation.providerCallID,
+      kind: .task,
+      initial: initialAdmission
+    )
+
+    guard FileManager.default.fileExists(atPath: configuration.resultURL.path) == false else {
+      throw EvaluationWorkerError.staleResult
+    }
+    guard
+      FileManager.default.fileExists(
+        atPath: EvaluationWorkerFailureEvidence.url(for: configuration.resultURL).path
+      ) == false
+    else {
+      throw EvaluationWorkerError.staleFailureEvidence
+    }
+    try EvaluationPathSecurity.rejectSymlinkComponents(
+      in: [
+        configuration.evaluationRootURL,
+        configuration.stateRootURL,
+        configuration.workspaceRootURL,
+      ]
+    )
+
+    let result = try await EvaluationWorkerLifecycle.withProductionLock(
+      stateRoot: configuration.stateRootURL,
+      credentialStateRoot: credentialRootURL,
+      makeResource: {
+        try await makeResource(configuration, credentialRootURL)
+      },
+      operation: { resource, lockAcquisitionID in
+        try await EvaluationAttemptRunner(
+          roster: resource.roster,
+          httpRecorder: resource.httpRecorder,
+          providerCallIDGenerator: EvaluationLearningProviderCallIDGenerator(
+            first: invocation.providerCallID
+          )
+        ).run(
+          configuration: configuration,
+          sendBudget: invocation.budget,
+          lockAcquisitionID: lockAcquisitionID,
+          integrityAdmission: {
+            await liveAdmission.evaluate()
+          }
+        )
+      }
+    )
+    try EvaluationDurablePublication.publish(
+      EvaluationCanonicalJSON.data(encoding: result),
+      to: configuration.resultURL
+    )
+    return result
+  }
+}
+
 enum EvaluationWorkerError: Error, Sendable, Equatable {
   case invalidCanaryProcessConfiguration
+  case staleResult
   case staleFailureEvidence
   case sealedOutputKeyRequired
   case unexpectedSealedOutputKey
+}
+
+private extension EvaluationWorker {
+  static func validateLearningAdmission(
+    _ admission: EvaluationLearningAdmissionContext,
+    invocation: EvaluationLearningTaskInvocation,
+    configuration: EvaluationAttemptConfiguration
+  ) throws {
+    let route = admission.route
+    let budgets = admission.budgets
+    guard
+      admission.jobID == invocation.jobID,
+      admission.operationID == invocation.operationID,
+      admission.attemptGeneration == invocation.attemptGeneration,
+      admission.providerCallID == invocation.providerCallID,
+      admission.manifestSHA256 == invocation.manifest.manifestSHA256,
+      admission.manifestSHA256 == configuration.approval.manifestSHA256,
+      admission.freezeCommit == configuration.provenance.freezeCommit,
+      admission.executableSHA256 == configuration.provenance.executableSHA256,
+      configuration.evaluationRoot == invocation.manifest.evaluationRoot,
+      admission.missingUsageTokenProxy == PageEvaluationContract.missingUsageTokenProxy,
+      budgets.taskAttempts > 0,
+      budgets.evaluatorCalls > 0,
+      budgets.reflectorCalls > 0,
+      budgets.responsesSends > 0,
+      budgets.accountedTokens > 0,
+      route.providerReference == configuration.providerReference,
+      route.providerReference == PageEvaluationContract.providerReference,
+      route.wireModel == configuration.wireModel,
+      route.wireModel == PageEvaluationContract.wireModel,
+      route.retryBudget == PageEvaluationContract.runBudget.retryBudget,
+      route.maxOutputTokens == PageEvaluationContract.runBudget.maxOutputTokens,
+      route.maxOutputUTF8Bytes == PageEvaluationContract.outputLimits.maximumUTF8Bytes,
+      route.maxOutputGraphemes == PageEvaluationContract.outputLimits.maximumGraphemes
+    else {
+      throw EvaluationLearningAdmissionError.integrityFailure
+    }
+  }
 }

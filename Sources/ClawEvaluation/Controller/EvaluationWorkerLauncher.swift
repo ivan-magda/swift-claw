@@ -17,6 +17,7 @@ protocol EvaluationWorkerLaunching: Sendable {
     kind: EvaluationWorkerInvocationKind,
     executablePath: String,
     invocationPath: String,
+    credentialStateRoot: String,
     sealedOutputKey: Data?
   ) async -> EvaluationWorkerLaunchResult
 }
@@ -26,32 +27,59 @@ struct EvaluationSubprocessWorkerLauncher: EvaluationWorkerLaunching {
     kind: EvaluationWorkerInvocationKind,
     executablePath: String,
     invocationPath: String,
+    credentialStateRoot: String,
     sealedOutputKey: Data?
   ) async -> EvaluationWorkerLaunchResult {
     let rawExecutable = URL(fileURLWithPath: executablePath)
     let rawInvocation = URL(fileURLWithPath: invocationPath)
+    let rawCredentialStateRoot = URL(
+      fileURLWithPath: credentialStateRoot,
+      isDirectory: true
+    )
+    let protectedPaths =
+      kind == .attempt
+      ? [rawExecutable, rawInvocation, rawCredentialStateRoot]
+      : [rawExecutable, rawInvocation]
     do {
-      try EvaluationPathSecurity.rejectSymlinkComponents(
-        in: [rawExecutable, rawInvocation]
-      )
+      try EvaluationPathSecurity.rejectSymlinkComponents(in: protectedPaths)
     } catch {
       return EvaluationWorkerLaunchResult(termination: .rejected, processID: nil)
     }
     let executable = rawExecutable.standardizedFileURL
     let invocation = rawInvocation.standardizedFileURL
+    let credentialRoot = rawCredentialStateRoot.standardizedFileURL
     guard
       FileManager.default.isExecutableFile(atPath: executable.path),
       FileManager.default.isReadableFile(atPath: invocation.path)
     else {
       return EvaluationWorkerLaunchResult(termination: .rejected, processID: nil)
     }
+    if kind == .attempt {
+      var isCredentialDirectory: ObjCBool = false
+      guard
+        FileManager.default.fileExists(
+          atPath: credentialRoot.path,
+          isDirectory: &isCredentialDirectory
+        ),
+        isCredentialDirectory.boolValue
+      else {
+        return EvaluationWorkerLaunchResult(termination: .rejected, processID: nil)
+      }
+    }
+    var arguments = [
+      kind == .attempt ? "worker" : "canary-process",
+      "--invocation", invocation.path,
+    ]
+    if kind == .attempt {
+      arguments.append(contentsOf: ["--credential-state-root", credentialRoot.path])
+    }
+    if sealedOutputKey != nil {
+      arguments.append("--sealed-output-key-stdin")
+    }
     let runner = SwiftSubprocessRunner(executablePath: executable.path)
     let result = await runner.run(
       SubprocessCommand(
-        arguments: [
-          kind == .attempt ? "worker" : "canary-process",
-          "--invocation", invocation.path,
-        ] + (sealedOutputKey == nil ? [] : ["--sealed-output-key-stdin"]),
+        arguments: arguments,
         timeout: .seconds(
           (kind == .attempt ? 1 : 2) * PageEvaluationContract.runBudget.wallClockDeadlineSeconds
             + 30

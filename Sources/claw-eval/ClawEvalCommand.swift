@@ -10,6 +10,7 @@ struct ClawEvalCommand: AsyncParsableCommand {
     subcommands: [
       Page.self,
       Worker.self,
+      LearningCall.self,
       CanaryProcess.self,
       InspectPolicy.self,
       AuthLogin.self,
@@ -77,23 +78,60 @@ struct ClawEvalCommand: AsyncParsableCommand {
     @Option(help: "Absolute path to a controller-minted, manifest-bound worker invocation.")
     var invocation: String
 
+    @Option(help: "Canonical external encrypted credential state directory.")
+    var credentialStateRoot: String
+
     @Flag(help: "Read the ephemeral 32-byte sealed-output key from standard input.")
     var sealedOutputKeyStdin = false
 
     mutating func run() async throws {
-      let url = URL(fileURLWithPath: invocation)
-      let authorized = try EvaluationJSONFile.decode(EvaluationWorkerInvocation.self, from: url)
+      switch try EvaluationWorkerInput.decode(from: URL(fileURLWithPath: invocation)) {
+      case .legacy(let authorized):
+        let key =
+          sealedOutputKeyStdin
+          ? FileHandle.standardInput.readDataToEndOfFile()
+          : nil
+        let attemptID = try await EvaluationWorker().run(
+          invocation: authorized,
+          credentialStateRoot: credentialStateRoot,
+          sealedOutputKey: key
+        )
+        print(attemptID)
+      case .scheduledLearning(let authorized):
+        guard sealedOutputKeyStdin == false else {
+          throw ValidationError("scheduled-learning-v1 does not accept a sealed-output key")
+        }
+        print(
+          try await EvaluationWorker().run(
+            invocation: authorized,
+            credentialStateRoot: credentialStateRoot
+          )
+        )
+      }
+    }
+  }
 
-      let key =
-        sealedOutputKeyStdin
-        ? FileHandle.standardInput.readDataToEndOfFile()
-        : nil
-      let attemptID = try await EvaluationWorker().run(
-        invocation: authorized,
-        sealedOutputKey: key
+  struct LearningCall: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+      commandName: "learning-call",
+      abstract: "Run one isolated scheduled-learning evaluator or reflector call."
+    )
+
+    @Option(help: "Absolute path to one manifest-bound learning-call request.")
+    var request: String
+
+    @Option(help: "Canonical external encrypted credential state directory.")
+    var credentialStateRoot: String
+
+    mutating func run() async throws {
+      let value = try EvaluationLearningCallRequest.load(
+        from: URL(fileURLWithPath: request)
       )
-
-      print(attemptID)
+      let result = try await EvaluationLearningCall().run(
+        request: value,
+        credentialStateRoot: credentialStateRoot
+      )
+      print(result.operationID)
     }
   }
 

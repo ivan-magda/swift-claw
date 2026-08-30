@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/scheduled-learning-v1/reflector-output.schema.json",
+  "title": "ScheduledLearningV1ReflectorOutput",
+  "description": "The closed raw reflector model response: at most three replacement lesson strings, or an empty list to record no_candidate. Schema-invalid output stops the scored run; there is no repair call.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "lessons"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "lessons": {
+      "type": "array",
+      "maxItems": 3,
+      "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+    }
+  }
+}

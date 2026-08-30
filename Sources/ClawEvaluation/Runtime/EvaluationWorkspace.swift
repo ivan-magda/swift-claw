@@ -6,7 +6,7 @@ import Foundation
 
 typealias EvaluationCanonicalJSON = CanonicalJSON
 
-struct EvaluationCarrierReceipt: Codable, Sendable, Equatable {
+package struct EvaluationCarrierReceipt: Codable, Sendable, Equatable {
   package let sourceSHA256: String
   package let taskID: String
   package let lessonSource: EvaluationLessonSource
@@ -47,7 +47,7 @@ struct EvaluationCarrierReceipt: Codable, Sendable, Equatable {
     case promotionReceiptSHA256 = "promotion_receipt_sha256"
   }
 
-  func encode(to encoder: Encoder) throws {
+  package func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(sourceSHA256, forKey: .sourceSHA256)
     try container.encode(taskID, forKey: .taskID)
@@ -60,7 +60,7 @@ struct EvaluationCarrierReceipt: Codable, Sendable, Equatable {
   }
 }
 
-struct EvaluationWorkspaceMaterialization: Codable, Sendable, Equatable {
+package struct EvaluationWorkspaceMaterialization: Codable, Sendable, Equatable {
   package let workspaceWasEmptyAtStart: Bool
   package let inputWasRegenerated: Bool
   package let inputPath: String
@@ -130,6 +130,12 @@ struct EvaluationWorkspaceMaterialization: Codable, Sendable, Equatable {
   }
 }
 
+package struct EvaluationLearningTaskMaterialization: Sendable {
+  package let workspace: EvaluationWorkspaceMaterialization
+  package let carrier: EvaluationLearningTaskCarrier
+  package let lessonSetText: String
+}
+
 struct EvaluationActiveLessonPointer: Codable, Sendable, Equatable {
   package let schemaVersion: Int
   package let lessonSetID: String
@@ -149,6 +155,148 @@ struct EvaluationActiveLessonPointer: Codable, Sendable, Equatable {
 }
 
 enum EvaluationWorkspaceMaterializer {
+  // swiftlint:disable:next function_body_length
+  package static func resetLearning(
+    configuration: EvaluationAttemptConfiguration,
+    fileManager: FileManager = .default
+  ) throws -> EvaluationLearningTaskMaterialization {
+    try configuration.validate()
+    guard
+      configuration.executionProfile == .scheduledLearningV1,
+      let carrierPath = configuration.carrierPath,
+      let carrierSHA256 = configuration.carrierSHA256
+    else {
+      throw EvaluationWorkspaceError.invalidSourceArtifact
+    }
+    try verifyPromotionReceipt(configuration: configuration)
+
+    let workspace = configuration.workspaceRootURL
+    let source = URL(fileURLWithPath: configuration.sourceArtifactPath).standardizedFileURL
+    let carrierURL = URL(fileURLWithPath: carrierPath).standardizedFileURL
+    let lessonURL = configuration.lessonArtifactPath.map {
+      URL(fileURLWithPath: $0).standardizedFileURL
+    }
+    try EvaluationPathSecurity.rejectSymlinkComponents(
+      in: [
+        configuration.evaluationRootURL, configuration.stateRootURL, workspace, source, carrierURL,
+      ]
+        + [lessonURL].compactMap { $0 }
+    )
+    guard
+      EvaluationPathSecurity.isStrictlyContained(source, under: workspace) == false,
+      EvaluationPathSecurity.isStrictlyContained(carrierURL, under: workspace) == false,
+      lessonURL.map({ EvaluationPathSecurity.isStrictlyContained($0, under: workspace) == false })
+        ?? true
+    else {
+      throw EvaluationWorkspaceError.sourceArtifactInsideWorkspace
+    }
+
+    let sourceData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: source)
+    let sourceDigest = SHA256Digest.hex(sourceData)
+    guard sourceDigest == configuration.sourceSHA256 else {
+      throw EvaluationWorkspaceError.sourceDigestMismatch(
+        expected: configuration.sourceSHA256,
+        observed: sourceDigest
+      )
+    }
+    let sourceObject = try object(from: sourceData, source: true)
+    guard
+      Set(sourceObject.keys)
+        == Set(["schema_version", "fixture_id", "task_id", "family_id", "split", "task"]),
+      CanonicalJSON.integer(sourceObject["schema_version"]) == 1,
+      sourceObject["fixture_id"] as? String == configuration.fixtureID,
+      sourceObject["task_id"] as? String == configuration.taskID,
+      let sourceTask = sourceObject["task"] as? [String: Any]
+    else {
+      throw EvaluationWorkspaceError.invalidSourceArtifact
+    }
+
+    let (carrier, carrierData) = try EvaluationLearningTaskCarrier.loadCanonical(from: carrierURL)
+    let carrierDigest = SHA256Digest.hex(carrierData)
+    guard carrierDigest == carrierSHA256 else {
+      throw EvaluationWorkspaceError.inputDigestMismatch(
+        expected: carrierSHA256,
+        observed: carrierDigest
+      )
+    }
+    guard carrierDigest == configuration.inputSHA256 else {
+      throw EvaluationWorkspaceError.inputDigestMismatch(
+        expected: configuration.inputSHA256,
+        observed: carrierDigest
+      )
+    }
+    guard
+      carrier.taskID == configuration.taskID,
+      try EvaluationCanonicalJSON.data(encoding: carrier.task)
+        == EvaluationCanonicalJSON.data(fromJSONObject: sourceTask)
+    else {
+      throw EvaluationWorkspaceError.invalidSourceArtifact
+    }
+
+    let lessonSetData = try carrier.activeLessons.canonicalData
+    let lessonSetDigest = SHA256Digest.hex(lessonSetData)
+    guard lessonSetDigest == configuration.lessonSetDigest else {
+      throw EvaluationWorkspaceError.lessonDigestMismatch(
+        expected: configuration.lessonSetDigest,
+        observed: lessonSetDigest
+      )
+    }
+    try validateLearningLessonSource(
+      configuration: configuration,
+      carrierLessons: carrier.activeLessons,
+      lessonURL: lessonURL
+    )
+
+    guard let inputText = String(bytes: carrierData, encoding: .utf8) else {
+      throw EvaluationWorkspaceError.inputIsNotUTF8
+    }
+    guard inputText.count <= PageEvaluationContract.maximumInputGraphemes else {
+      throw EvaluationWorkspaceError.inputGraphemeLimitExceeded(inputText.count)
+    }
+
+    let workspaceWasEmptyAtStart = try resetWorkspace(at: workspace, fileManager: fileManager)
+    let destination = workspace.appendingPathComponent(PageEvaluationContract.inputFileName)
+    try durableReplace(carrierData, at: destination)
+
+    let finalNames = try fileManager.contentsOfDirectory(atPath: workspace.path).sorted()
+    guard finalNames == [PageEvaluationContract.inputFileName] else {
+      throw EvaluationWorkspaceError.unexpectedWorkspaceContents(finalNames)
+    }
+
+    let receipt = EvaluationCarrierReceipt(
+      sourceSHA256: sourceDigest,
+      taskID: configuration.taskID,
+      lessonSource: configuration.lessonSource,
+      lessonSetSHA256: lessonSetDigest,
+      lessonSetID: "",
+      lessonIDs: [],
+      inputSHA256: carrierDigest,
+      promotionReceiptSHA256: configuration.promotionReceiptSHA256
+    )
+    let workspaceMaterialization = EvaluationWorkspaceMaterialization(
+      workspaceWasEmptyAtStart: workspaceWasEmptyAtStart,
+      inputWasRegenerated: false,
+      inputPath: destination.path,
+      inputSHA256: carrierDigest,
+      inputByteCount: carrierData.count,
+      sourceArtifactPath: source.path,
+      sourceSHA256: sourceDigest,
+      taskID: configuration.taskID,
+      lessonSource: configuration.lessonSource,
+      lessonSetPath: lessonURL?.path,
+      lessonSetDigest: lessonSetDigest,
+      lessonSetID: "",
+      lessonIDs: [],
+      carrierReceipt: receipt,
+      carrierReceiptSHA256: try EvaluationFrozenArtifactPublication(encoding: receipt).sha256
+    )
+    return EvaluationLearningTaskMaterialization(
+      workspace: workspaceMaterialization,
+      carrier: carrier,
+      lessonSetText: String(decoding: lessonSetData, as: UTF8.self)
+    )
+  }
+
   // swiftlint:disable:next function_body_length
   package static func reset(
     configuration: EvaluationAttemptConfiguration,
@@ -312,11 +460,62 @@ enum EvaluationWorkspaceMaterializer {
   }
 }
 
+extension EvaluationWorkspaceMaterializer {
+  package static func verifyPromotionReceipt(
+    configuration: EvaluationAttemptConfiguration
+  ) throws {
+    guard
+      let receiptPath = configuration.promotionReceiptPath,
+      let expectedDigest = configuration.promotionReceiptSHA256
+    else {
+      return
+    }
+    let receiptURL = URL(fileURLWithPath: receiptPath).standardizedFileURL
+    let receiptData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: receiptURL)
+    let observedDigest = SHA256Digest.hex(receiptData)
+    guard observedDigest == expectedDigest else {
+      throw EvaluationPromotionReceiptError.digestMismatch(
+        expected: expectedDigest,
+        observed: observedDigest
+      )
+    }
+  }
+}
+
 private extension EvaluationWorkspaceMaterializer {
   struct ResolvedLessonSet {
     let object: [String: Any]
     let path: URL?
     let digest: String
+  }
+
+  static func validateLearningLessonSource(
+    configuration: EvaluationAttemptConfiguration,
+    carrierLessons: EvaluationLearningLessonSet,
+    lessonURL: URL?
+  ) throws {
+    switch configuration.lessonSource {
+    case .clean:
+      guard carrierLessons.lessons.isEmpty else {
+        throw EvaluationWorkspaceError.invalidLessonArtifact
+      }
+    case .artifact:
+      guard let lessonURL else {
+        throw EvaluationWorkspaceError.missingLessonArtifact
+      }
+      let artifactData = try EvaluationPathSecurity.readRegularSingleLinkFile(at: lessonURL)
+      let artifactLessons = try EvaluationLearningLessonSet.decodeCanonical(artifactData)
+      guard
+        try artifactLessons.sha256 == configuration.lessonSetDigest,
+        artifactLessons.lessons == carrierLessons.lessons
+      else {
+        throw EvaluationWorkspaceError.invalidLessonArtifact
+      }
+    case .durableActive:
+      guard lessonURL == nil else {
+        throw EvaluationWorkspaceError.invalidLessonArtifact
+      }
+    }
   }
 
   // swiftlint:disable:next function_parameter_count
@@ -691,6 +890,10 @@ enum EvaluationWorkspaceError: Error, Sendable, Equatable {
   case inputIsNotUTF8
   case inputGraphemeLimitExceeded(Int)
   case unexpectedWorkspaceContents([String])
+}
+
+enum EvaluationPromotionReceiptError: Error, Sendable, Equatable {
+  case digestMismatch(expected: String, observed: String)
 }
 
 package enum EvaluationJSONFile {

@@ -1,0 +1,1 @@
+"""Cross-language admission fixtures."""

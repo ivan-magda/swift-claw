@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/scheduled-learning-v1/evaluator-output.schema.json",
+  "title": "ScheduledLearningV1EvaluatorOutput",
+  "description": "The closed raw evaluator model response. Schema-invalid output is a terminal invalid result; there is no repair call.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "outcome", "issue_codes"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "task_id": { "type": "string", "pattern": "^page-[0-9a-f]{12}$" },
+    "outcome": {
+      "enum": ["no_issue", "reusable_issue", "transient_issue", "uncertain"]
+    },
+    "issue_codes": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    }
+  }
+}

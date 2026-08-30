@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawSecrets
 import Foundation
 import Testing
 
@@ -16,8 +17,30 @@ func makeEvaluationTestRoot() throws -> URL {
   return root
 }
 
+func makeEvaluationCredentialStateRoot(under root: URL) throws -> URL {
+  let credentialRoot = root.appendingPathComponent("credential-state", isDirectory: true)
+  try FileManager.default.createDirectory(at: credentialRoot, withIntermediateDirectories: true)
+  try EncryptedFileSecretStore.seal(
+    Secrets(telegramBotToken: "123:evaluation", llmApiKey: nil),
+    stateRoot: credentialRoot
+  )
+  try EncryptedLLMCredentialStore(stateRoot: credentialRoot).save(
+    StoredOAuthCredential(
+      profileID: UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xAC)),
+      accessToken: "evaluation-access-token",
+      refreshToken: "evaluation-refresh-token",
+      expiresAt: .distantFuture
+    ),
+    providerID: .openAIChatGPT
+  )
+  return credentialRoot
+}
+
 func makeEvaluationConfiguration(
   root: URL,
+  executionProfile: EvaluationLearningExecutionProfile? = nil,
+  carrierPath: String? = nil,
+  carrierSHA256: String? = nil,
   attemptID: String = "attempt-1",
   fixtureID: String = "pc-development-01",
   split: String = "development",
@@ -32,6 +55,9 @@ func makeEvaluationConfiguration(
   activeLessons: [String: Any]? = nil,
   publishLessonAsActive: Bool = false,
   sourceArtifactPath: String? = nil,
+  task: [String: Any] = [:],
+  inputSHA256: String? = nil,
+  lessonSetDigestOverride: String? = nil,
   lessonArtifactPath: String? = nil,
   promotionReceiptPath: String? = nil,
   promotionReceiptSHA256: String? = nil,
@@ -53,7 +79,7 @@ func makeEvaluationConfiguration(
     "fixture_id": fixtureID,
     "schema_version": 1,
     "split": split,
-    "task": [:],
+    "task": task,
     "task_id": "page-000000000001",
   ])
   let emptyLessonObject: [String: Any] = [
@@ -72,7 +98,7 @@ func makeEvaluationConfiguration(
   let input = try EvaluationCanonicalJSON.data(fromJSONObject: [
     "active_lessons": selectedLessons,
     "schema_version": 1,
-    "task": [:],
+    "task": task,
     "task_id": "page-000000000001",
   ])
   let prompt = Data("Read input.json exactly once and return one JSON object.".utf8)
@@ -115,6 +141,9 @@ func makeEvaluationConfiguration(
   )
   let resultURL = results.appendingPathComponent("\(attemptID).json")
   let configuration = EvaluationAttemptConfiguration(
+    executionProfile: executionProfile,
+    carrierPath: carrierPath,
+    carrierSHA256: carrierSHA256,
     attemptID: attemptID,
     fixtureID: fixtureID,
     taskID: "page-000000000001",
@@ -127,7 +156,7 @@ func makeEvaluationConfiguration(
     evaluationRoot: evaluation.path,
     sourceArtifactPath: sourceURL.path,
     sourceSHA256: SHA256Digest.hex(source),
-    inputSHA256: SHA256Digest.hex(input),
+    inputSHA256: inputSHA256 ?? SHA256Digest.hex(input),
     lessonSource: lessonSource,
     lessonArtifactPath: lessonSource == .artifact ? lessonURL.path : nil,
     promotionReceiptPath: promotionReceiptPath,
@@ -138,7 +167,7 @@ func makeEvaluationConfiguration(
     resultPath: resultURL.path,
     fixedTimestamp: "2026-08-26T00:00:00Z",
     protocolSHA256: digest,
-    lessonSetDigest: SHA256Digest.hex(lessonData),
+    lessonSetDigest: lessonSetDigestOverride ?? SHA256Digest.hex(lessonData),
     expectedPolicyVersion: expectedPolicyVersion
       ?? EvaluationPolicyInspector.policyVersion(evaluationRootURL: evaluation),
     approval: approval,

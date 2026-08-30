@@ -2,7 +2,7 @@ import ClawAgent
 import ClawCore
 import Foundation
 
-struct EvaluationSendBudgetSnapshot: Codable, Sendable, Equatable {
+package struct EvaluationSendBudgetSnapshot: Codable, Sendable, Equatable {
   package static let stageAccountedTokenCap = "evaluation-stage-accounted-token-threshold"
   package static let globalAccountedTokenCap = "evaluation-global-accounted-token-threshold"
   package static let stageResponsesSendCapName = "evaluation-stage-responses-send-cap"
@@ -61,6 +61,25 @@ struct EvaluationSendBudgetSnapshot: Codable, Sendable, Equatable {
     }
   }
 
+  package func validateScheduledLearning(
+    approvedBudgets: EvaluationLearningApprovedBudgets
+  ) throws {
+    guard
+      stageAccountedTokens >= 0,
+      globalAccountedTokens >= 0,
+      stageResponsesSends >= 0,
+      globalResponsesSends >= 0,
+      approvedBudgets.accountedTokens > 0,
+      approvedBudgets.responsesSends > 0,
+      stageAccountedTokenThreshold == approvedBudgets.accountedTokens,
+      globalAccountedTokenThreshold == approvedBudgets.accountedTokens,
+      stageResponsesSendCap == approvedBudgets.responsesSends,
+      globalResponsesSendCap == approvedBudgets.responsesSends
+    else {
+      throw EvaluationWorkerInvocationError.invalidBudgetSnapshot
+    }
+  }
+
   package func admission(
     _ context: ProviderRoundTripAdmissionContext
   ) -> ProviderRoundTripAdmission {
@@ -92,7 +111,7 @@ struct EvaluationSendBudgetSnapshot: Codable, Sendable, Equatable {
     return .allow
   }
 
-  package func advanced(by result: EvaluationAttemptResult) -> Self {
+  func advanced(by result: EvaluationAttemptResult) -> Self {
     Self(
       stageAccountedTokens: SaturatingArithmetic.sum(stageAccountedTokens, result.accountedTokens),
       globalAccountedTokens: SaturatingArithmetic.sum(
