@@ -1,0 +1,1 @@
+{"lessons":["Treat routine changes to operational counters, gauges, and refresh timestamps as volatile noise unless they signal a durable commitment, availability change, obligation, deadline, or price change."],"schema_version":1}
