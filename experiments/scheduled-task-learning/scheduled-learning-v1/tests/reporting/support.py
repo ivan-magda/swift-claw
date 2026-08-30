@@ -131,6 +131,10 @@ def artifact_result_tree(
             return_value=fixed_timestamp,
         ),
         patch(
+            "scheduled_learning_v1.execution.lifecycle._write_failure",
+            side_effect=_raise_fixture_failure,
+        ),
+        patch(
             "scheduled_learning_v1.worker_bridge.bridge._utc_now",
             return_value=fixed_timestamp,
         ),
@@ -139,10 +143,6 @@ def artifact_result_tree(
         admitted_contract,
     ):
         run_scored(root, root.parent.resolve())
-    failure_path = root / "results" / "failure.json"
-    if failure_path.is_file():
-        failure = load_object(failure_path)
-        raise AssertionError(f"report support lifecycle failed: {failure.get('error')}")
     if approval_accounted_token_limit is not None:
         approval = load_object(root / "freeze" / "owner-budget-approval.json")
         approval_budget = _object(approval.get("budgets"), "owner approval budgets")
@@ -255,6 +255,10 @@ def _write_artifact_worker(path: Path, *, terminal: bool, active_evidence: bool)
 
 def _verified_without_io(root: Path, approval: dict[str, object]) -> dict[str, object]:
     return {"status": "verified"}
+
+
+def _raise_fixture_failure(_root: Path, error: Exception, _credential_state_root: Path) -> None:
+    raise error
 
 
 def result_tree_with_nondefault_thresholds(root: Path) -> dict[str, object]:
