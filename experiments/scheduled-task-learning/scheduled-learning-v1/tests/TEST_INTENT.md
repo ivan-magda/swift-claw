@@ -338,3 +338,24 @@ and a self-verifying result tree.
 No reducer or adapter outcome matrix is repeated here. The lifecycle keeps only the representative
 post-trial regression owned by its distinct active-dispatch branch; Task 4 and the 24-case replay
 corpus remain the primary owners of adapter taxonomy and reducer transitions.
+
+## Dedicated offline CI contract
+
+| Risk | Production branch or seam | Nearest existing test | Unique mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| The dedicated workflow invokes the live command, receives credentials, substitutes an unapproved action/command, or drops a required offline check | GitHub Actions workflow scalar-step and checkout-step surface in `python-scheduled-learning-v1.yml` | `scripts/test.sh` and the Python runner tests execute package behavior after a process starts; they never load GitHub workflow YAML and cannot observe CI credentials or commands | Add the scored command; add a quoted/unquoted `env` key or whitespace-varied `${{ secrets.* }}` reference; remove, duplicate, enable, or move either checkout step's `persist-credentials: false` outside its exact `with` parent; replace an allowlisted scalar `uses`/`run` value; or delete one required offline command. Quoted scalars, key whitespace, inline comments, and a behavior-preserving `- name` before sibling `uses`/`with` must not bypass or falsely fail the contract | `test_ci_contract::CIContractTests::test_workflow_runs_only_the_complete_offline_allowlist_without_credentials` |
+
+### Pre-commit redundancy pass (`docs/TESTING.md` §9.1)
+
+1. **Mutant killed:** the workflow gains a live/credentialed/substituted step, enables checkout
+   credentials, or loses a required offline step while the package itself remains unchanged.
+2. **Production seam:** normalized quoted or unquoted scalar GitHub Actions keys/values grouped by
+   each `steps` sequence item: the exact `uses`/`run` multiset, no `env` or whitespace-varied secret
+   reference, and exactly one `with.persist-credentials: false` path in each checkout step with no
+   extra setting.
+3. **Nearest existing test:** Python runner, lifecycle, and conformance tests start below GitHub
+   Actions and do not read the workflow file, so none can observe this mutant.
+4. **Behavior-preserving refactor stays green:** yes. A checkout may add or change a leading
+   `- name` while keeping sibling `uses` and `with`; scalar quoting, key whitespace, inline comments,
+   YAML ordering, and path-filter layout may also change while the exact executable CI and
+   checkout-credential surfaces remain the same.

@@ -36,6 +36,11 @@ uv run python -B -m scheduled_learning_v1.freeze verify .
 `benchmark-core/benchmark_learning` source roots. `scripts/test.sh` runs the package's `unittest`
 suite. Both are offline: no network access, no model credentials, no live provider call.
 
+The dedicated `python-scheduled-learning-v1.yml` workflow runs only `scripts/lint.sh`,
+`scripts/test.sh`, and the replay conformance command above. Its jobs have no environment or secret
+inputs, and the workflow never invokes the scored command. The owner must pass the checkpoint below
+before live execution.
+
 This package depends on `swift-claw-benchmark-core` and `page-benchmark` through local `uv` path
 sources (`../benchmark-core`, `../page-change`); `uv.lock` pins the resolved dependency graph.
 

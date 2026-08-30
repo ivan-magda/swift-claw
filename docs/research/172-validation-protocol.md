@@ -146,7 +146,11 @@ without a fresh owner authorization.
 
 ## Live execution is outside CI
 
-CI runs only deterministic, offline checks: unit tests, the replay conformance corpus, and static
-freeze/manifest verification. It performs no network call and holds no model credential. The
-authorized scored run (Task 9 of the implementation plan) is a separate, manually invoked step that
-never runs inside a CI workflow.
+The dedicated `python-scheduled-learning-v1.yml` workflow runs only the package lint script, unit
+tests, and the replay conformance corpus. Its two jobs receive no environment or secret inputs, and
+a static package test enforces its complete action/command allowlist. Those harness commands make no
+model/provider call, and the workflow never invokes the scored command.
+
+Before the live run, freeze verification checks the exact committed manifest bytes. The owner runs
+the scored command from Task 9 of the implementation plan by hand after passing the budget
+checkpoint. CI never runs that command.
