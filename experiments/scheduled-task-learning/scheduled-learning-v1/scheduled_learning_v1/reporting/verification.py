@@ -10,6 +10,7 @@ from benchmark_core.canonical import canonical_sha256, dumps, load_object
 from benchmark_learning.learning_contract import canonical_event_log, event_json, parse_event
 from benchmark_learning.learning_replay import replay
 
+from scheduled_learning_v1.freeze import verify_manifest
 from scheduled_learning_v1.replay_bootstrap import initial_replay_state
 
 from .artifact_closure import verify_artifact_closure
@@ -25,6 +26,10 @@ def verify_results(root: Path, manifest: dict[str, object]) -> dict[str, object]
     stored_manifest = load_object(root / "freeze" / "manifest.json")
     if stored_manifest != manifest:
         raise ValueError("result verification manifest differs from the committed freeze")
+    if (root / "results" / "active-evidence.json").exists() or (
+        root / "results" / "restart-evidence.json"
+    ).exists():
+        verify_manifest(root, manifest)
     event_paths = sorted((root / "results" / "events").glob("*.json"))
     events = []
     event_values: list[dict[str, object]] = []
