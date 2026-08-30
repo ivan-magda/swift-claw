@@ -307,7 +307,7 @@ def task_result(core: dict[str, object]) -> dict[str, object]:
             "provider_call_id": core["provider_call_id"],
             "run_id": 7,
             "session_id": 8,
-            "model": WIRE_MODEL,
+            "model": PROVIDER_REFERENCE,
             "prompt_tokens": 10,
             "completion_tokens": 2,
             "total_tokens": 12,

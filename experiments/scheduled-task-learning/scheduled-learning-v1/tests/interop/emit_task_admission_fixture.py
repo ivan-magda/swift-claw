@@ -76,7 +76,11 @@ def emit_fixture(source_repository: Path, output: Path) -> None:
                 "scheduled_learning_v1.worker_bridge.bridge._utc_now",
                 return_value=_FIXED_TIME,
             ):
-                operations.run_task(rows[0], [])
+                try:
+                    operations.run_task(rows[0], [])
+                except ValueError as error:
+                    if str(error) != "task terminal HTTP evidence must be an object":
+                        raise
             _snapshot(runtime_repository, runtime_root, manifest, output)
         finally:
             shutil.rmtree(runtime_repository, ignore_errors=True)

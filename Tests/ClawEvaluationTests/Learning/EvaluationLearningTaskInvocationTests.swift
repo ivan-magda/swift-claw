@@ -55,7 +55,9 @@ import Testing
     let error = await #expect(throws: PythonAdmissionSentinel.admitted) {
       _ = try await EvaluationWorker().runResult(
         invocation: invocation,
-        credentialStateRoot: runtimeRepository.resolvingSymlinksInPath().path,
+        credentialStateRoot: EvaluationPathSecurity.normalizedSystemTemporaryAlias(
+          runtimeRepository.path
+        ),
         admissionVerifier: verifier,
         makeResource: { _, _ in throw PythonAdmissionSentinel.admitted }
       )

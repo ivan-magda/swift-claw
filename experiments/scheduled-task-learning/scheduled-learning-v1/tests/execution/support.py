@@ -32,7 +32,10 @@ class RecordingBridge:
                 "status": "completed",
                 "accounted_tokens": 0,
                 "responses_sends": 0,
+                "outcome": "completed",
                 "raw_output": "{}",
+                "http": {"responsesSends": []},
+                "tools": [],
             }
             if terminal is None
             else terminal
@@ -201,8 +204,14 @@ class FakeOperations:
             if requested_score < _ACTIVE_SCORE_THRESHOLD
             else _perfect_attempt(source, gold)
         )
-        raw_output = dumps(raw_attempt)
-        result = {"raw_output": raw_output}
+        raw_attempt = {**raw_attempt, "responses_requests": []}
+        raw_output = cast(str, raw_attempt["raw_output"])
+        result = {
+            "outcome": raw_attempt["runtime_outcome"],
+            "raw_output": raw_output,
+            "tools": raw_attempt["tool_events"],
+            "http": {"responsesSends": []},
+        }
         result_path = self.root / "results" / "task-attempts" / operation_id / "result.json"
         result_path.parent.mkdir(parents=True, exist_ok=True)
         write(result_path, result)
@@ -249,6 +258,7 @@ class FakeOperations:
         trigger_digest: str,
         evaluations: list[dict[str, object]],
         issue_codes: list[str],
+        owner_payloads: list[str] | None = None,
     ) -> dict[str, object]:
         self.reflector_calls += 1
         self.reflector_evaluations = [dict(item) for item in evaluations]
@@ -437,8 +447,13 @@ def write_restart(root: Path, digest: str, score: float) -> None:
     fixture_id = str(row["fixture_id"])
     source = load_object(root / "corpus" / "sealed" / f"{fixture_id}.source.json")
     gold = load_object(root / "gold" / "sealed" / f"{fixture_id}.gold.json")
-    raw_attempt = _perfect_attempt(source, gold)
-    result = {"raw_output": dumps(raw_attempt)}
+    raw_attempt = {**_perfect_attempt(source, gold), "responses_requests": []}
+    result = {
+        "outcome": raw_attempt["runtime_outcome"],
+        "raw_output": raw_attempt["raw_output"],
+        "tools": raw_attempt["tool_events"],
+        "http": {"responsesSends": []},
+    }
     result_path = root / "results" / "task-attempts" / "task-9" / "result.json"
     result_path.parent.mkdir(parents=True, exist_ok=True)
     write(result_path, result)
