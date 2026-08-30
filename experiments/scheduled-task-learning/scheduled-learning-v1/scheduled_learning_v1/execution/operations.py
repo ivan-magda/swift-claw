@@ -179,11 +179,13 @@ class Operations:
         raw_output = terminal.get("raw_output")
         if not isinstance(raw_output, str):
             raw_output = ""
-        raw_attempt: dict[str, object]
-        try:
-            raw_attempt = cast(dict[str, object], loads_object(raw_output))
-        except ValueError:
-            raw_attempt = {}
+        http = _object(terminal.get("http"), "task terminal HTTP evidence")
+        score_attempt: dict[str, object] = {
+            "runtime_outcome": terminal.get("outcome"),
+            "raw_output": raw_output,
+            "tool_events": terminal.get("tools"),
+            "responses_requests": http.get("responsesSends"),
+        }
         return {
             **terminal,
             "operation_id": operation_id,
@@ -193,7 +195,7 @@ class Operations:
             "condition": row["condition"],
             "task_result_digest": self._operation_result_digest(operation_id, terminal),
             "raw_output": raw_output,
-            "attempt": {"source": source, "gold": gold, "attempt": raw_attempt},
+            "attempt": {"source": source, "gold": gold, "attempt": score_attempt},
         }
 
     def run_evaluator(self, task: dict[str, object]) -> dict[str, object]:
