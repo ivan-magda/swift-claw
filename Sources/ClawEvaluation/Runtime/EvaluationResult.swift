@@ -33,7 +33,7 @@ struct EvaluationUsageRecord: Codable, Sendable, Equatable {
   package let isEstimated: Bool
   package let costUSD: Double
   package let costSource: String
-  package let timestamp: Date
+  package let timestamp: String
 
   package init(_ usage: ProviderUsage) {
     providerCallID = usage.providerCallID.rawValue
@@ -49,7 +49,9 @@ struct EvaluationUsageRecord: Codable, Sendable, Equatable {
     isEstimated = usage.isEstimated
     costUSD = usage.costUSD
     costSource = usage.costSource.rawValue
-    timestamp = usage.ts
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    timestamp = formatter.string(from: usage.ts)
   }
 
   enum CodingKeys: String, CodingKey {
