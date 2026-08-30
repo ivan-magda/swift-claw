@@ -164,7 +164,8 @@ class WorkerBridge:
                     self._credential_state_root,
                 ),
             }
-        terminal = {**terminal, "diagnostics": diagnostics}
+        if "diagnostics" not in terminal:
+            terminal = {**terminal, "diagnostics": diagnostics}
         if result is None:
             publish_terminal(result_path, terminal)
         result_digest = canonical_sha256(result if result is not None else terminal)
