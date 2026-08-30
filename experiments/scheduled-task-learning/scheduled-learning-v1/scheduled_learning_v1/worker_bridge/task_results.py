@@ -378,8 +378,8 @@ def _require_process_identity(result: dict[str, object], configuration: dict[str
         raise ValueError("task result process or lock UUID is invalid") from error
     process_id = result.get("process_id")
     if (
-        canonical_uuid != process_uuid
-        or canonical_lock != lock_acquisition_id
+        canonical_uuid != str(process_uuid).lower()
+        or canonical_lock != str(lock_acquisition_id).lower()
         or not _positive_integer(process_id)
         or result.get("conversation_id") != f"{canonical_uuid}:{configuration['attempt_id']}"
         or not _positive_integer(result.get("run_id"))
