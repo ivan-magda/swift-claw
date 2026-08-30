@@ -20,7 +20,7 @@ AGGREGATE_BUDGETS: dict[str, int] = {
     "evaluator_calls": 5,
     "reflector_calls": 1,
     "responses_sends": 38,
-    "accounted_tokens": 120_000,
+    "accounted_tokens": 5_045_184,
 }
 TASK_ROUTE: dict[str, object] = {
     "provider_reference": "openai-chatgpt/gpt-5.6-sol",

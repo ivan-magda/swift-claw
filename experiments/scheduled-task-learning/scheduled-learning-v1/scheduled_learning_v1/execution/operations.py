@@ -166,7 +166,7 @@ class Operations:
             "configuration_path": str(configuration_path),
             "configuration_sha256": _sha256(configuration_path),
             "manifest": self._manifest_binding(operation_approval),
-            "budget": self.budget.task_snapshot(),
+            "budget": self.budget.task_snapshot(self.manifest, operation_approval),
         }
         terminal = self._dispatch_task(
             TaskAttemptCall(

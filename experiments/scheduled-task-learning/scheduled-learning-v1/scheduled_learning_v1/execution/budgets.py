@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from scheduled_learning_v1.evidence_contract import operation_usage
-from scheduled_learning_v1.frozen_contract import AGGREGATE_BUDGETS
+from scheduled_learning_v1.frozen_contract import AGGREGATE_BUDGETS, json_exactly_matches
 
 
 class BudgetExceededError(RuntimeError):
@@ -78,16 +78,29 @@ class AggregateBudget:
         if self.accounted_tokens > int(AGGREGATE_BUDGETS["accounted_tokens"]):
             raise BudgetExceededError("accounted_tokens aggregate exceeded")
 
-    def task_snapshot(self) -> dict[str, int]:
-        """Return the legacy Swift task worker's admitted global/stage snapshot."""
+    def task_snapshot(
+        self,
+        manifest: dict[str, object],
+        approval: dict[str, object],
+    ) -> dict[str, int]:
+        """Return the task worker snapshot bound to both admitted budget objects."""
+
+        manifest_budgets = manifest.get("budgets")
+        approval_budgets = approval.get("budgets")
+        if not json_exactly_matches(manifest_budgets, AGGREGATE_BUDGETS):
+            raise ValueError("task snapshot manifest budgets differ from admitted M3 budgets")
+        if not json_exactly_matches(approval_budgets, AGGREGATE_BUDGETS):
+            raise ValueError("task snapshot approval budgets differ from admitted M3 budgets")
+        accounted_tokens = int(AGGREGATE_BUDGETS["accounted_tokens"])
+        responses_sends = int(AGGREGATE_BUDGETS["responses_sends"])
 
         return {
             "stage_accounted_tokens": self.accounted_tokens,
             "global_accounted_tokens": self.accounted_tokens,
             "stage_responses_sends": self.responses_sends,
             "global_responses_sends": self.responses_sends,
-            "stage_accounted_token_threshold": int(AGGREGATE_BUDGETS["accounted_tokens"]),
-            "global_accounted_token_threshold": 4_350_000,
-            "stage_responses_send_cap": int(AGGREGATE_BUDGETS["responses_sends"]),
-            "global_responses_send_cap": 454,
+            "stage_accounted_token_threshold": accounted_tokens,
+            "global_accounted_token_threshold": accounted_tokens,
+            "stage_responses_send_cap": responses_sends,
+            "global_responses_send_cap": responses_sends,
         }

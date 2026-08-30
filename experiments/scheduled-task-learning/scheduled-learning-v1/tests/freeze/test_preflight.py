@@ -39,6 +39,16 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(actual["status"], "verified")
         self.assertEqual(actual["freeze_commit"], expected_commit)
         self.assertEqual(actual["budgets"], self.manifest["budgets"])
+        self.assertEqual(
+            actual["budgets"],
+            {
+                "task_attempts": 10,
+                "evaluator_calls": 5,
+                "reflector_calls": 1,
+                "responses_sends": 38,
+                "accounted_tokens": 5_045_184,
+            },
+        )
 
     def test_missing_or_changed_owner_budget_is_rejected(self) -> None:
         # given

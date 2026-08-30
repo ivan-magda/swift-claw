@@ -477,6 +477,9 @@ extension EvaluationWorker {
       invocation: invocation,
       configuration: configuration
     )
+    try invocation.budget.validateScheduledLearning(
+      approvedBudgets: initialAdmission.budgets
+    )
     try EvaluationWorkspaceMaterializer.verifyPromotionReceipt(configuration: configuration)
     let liveAdmission = EvaluationLearningLiveAdmission(
       verifier: admissionVerifier,

@@ -14,6 +14,13 @@ import Testing
   }
 
   private static let pageLimits = PageEvaluationContract.pageLimits
+  private static let scheduledBudgets = EvaluationLearningApprovedBudgets(
+    taskAttempts: 10,
+    evaluatorCalls: 5,
+    reflectorCalls: 1,
+    responsesSends: 38,
+    accountedTokens: 5_045_184
+  )
 
   private static let boundaryCases = [
     BoundaryCase(
@@ -107,5 +114,129 @@ import Testing
 
     // then
     #expect(admission == .deny(cap: EvaluationSendBudgetSnapshot.stageAccountedTokenCap))
+  }
+
+  @Test func scheduledLearningValidationAcceptsExactAdmittedCaps() throws {
+    // given
+    let snapshot = Self.scheduledSnapshot(accountedTokens: 0, responsesSends: 0)
+
+    // when / then
+    try snapshot.validateScheduledLearning(approvedBudgets: Self.scheduledBudgets)
+  }
+
+  @Test(arguments: ScheduledCapMutation.allCases)
+  private func scheduledLearningValidationRejectsAnyChangedAdmittedCap(
+    mutation: ScheduledCapMutation
+  ) {
+    // given
+    let snapshot = mutation.apply(
+      to: Self.scheduledSnapshot(accountedTokens: 0, responsesSends: 0)
+    )
+
+    // when / then
+    #expect(throws: EvaluationWorkerInvocationError.invalidBudgetSnapshot) {
+      try snapshot.validateScheduledLearning(approvedBudgets: Self.scheduledBudgets)
+    }
+  }
+
+  @Test func scheduledLearningAdmissionReachesActiveAndRestartBeforeExactExhaustion() {
+    // given
+    let proxy = PageEvaluationContract.missingUsageTokenProxy
+    let empty = ProviderRoundTripAdmissionContext(
+      roundTripIndex: 1,
+      priorRecordedTokens: 0,
+      priorResponsesSends: 0
+    )
+    let oneMissingUsageSend = ProviderRoundTripAdmissionContext(
+      roundTripIndex: 2,
+      priorRecordedTokens: proxy,
+      priorResponsesSends: 1,
+      priorMissingUsageRecordedTokens: proxy,
+      priorMissingUsageResponsesSends: 1
+    )
+    let active = Self.scheduledSnapshot(accountedTokens: 34 * proxy, responsesSends: 34)
+    let restart = Self.scheduledSnapshot(accountedTokens: 36 * proxy, responsesSends: 36)
+
+    // when
+    let admissions = [
+      active.admission(empty),
+      active.admission(oneMissingUsageSend),
+      restart.admission(empty),
+      restart.admission(oneMissingUsageSend),
+    ]
+    let sendOverflow = Self.scheduledSnapshot(
+      accountedTokens: 0,
+      responsesSends: 38
+    ).admission(empty)
+    let tokenOverflow = Self.scheduledSnapshot(
+      accountedTokens: Self.scheduledBudgets.accountedTokens,
+      responsesSends: 0
+    ).admission(empty)
+
+    // then
+    #expect(admissions.allSatisfy { $0 == .allow })
+    #expect(sendOverflow == .deny(cap: EvaluationSendBudgetSnapshot.stageResponsesSendCapName))
+    #expect(tokenOverflow == .deny(cap: EvaluationSendBudgetSnapshot.stageAccountedTokenCap))
+  }
+
+  @Test func legacyValidationKeepsProtocolPointSixCaps() throws {
+    // given
+    let legacy = EvaluationSendBudgetSnapshot(
+      stageAccountedTokens: 0,
+      globalAccountedTokens: 0,
+      stageResponsesSends: 0,
+      globalResponsesSends: 0,
+      stageAccountedTokenThreshold: Self.pageLimits.accountedTokenThreshold,
+      globalAccountedTokenThreshold: 4_350_000,
+      stageResponsesSendCap: Self.pageLimits.maximumResponsesSends,
+      globalResponsesSendCap: 454
+    )
+    let scheduled = Self.scheduledSnapshot(accountedTokens: 0, responsesSends: 0)
+
+    // when / then
+    try legacy.validate()
+    #expect(throws: EvaluationWorkerInvocationError.invalidBudgetSnapshot) {
+      try scheduled.validate()
+    }
+  }
+
+  private static func scheduledSnapshot(
+    accountedTokens: Int,
+    responsesSends: Int
+  ) -> EvaluationSendBudgetSnapshot {
+    EvaluationSendBudgetSnapshot(
+      stageAccountedTokens: accountedTokens,
+      globalAccountedTokens: accountedTokens,
+      stageResponsesSends: responsesSends,
+      globalResponsesSends: responsesSends,
+      stageAccountedTokenThreshold: scheduledBudgets.accountedTokens,
+      globalAccountedTokenThreshold: scheduledBudgets.accountedTokens,
+      stageResponsesSendCap: scheduledBudgets.responsesSends,
+      globalResponsesSendCap: scheduledBudgets.responsesSends
+    )
+  }
+}
+
+private enum ScheduledCapMutation: CaseIterable, Equatable, Sendable {
+  case stageAccountedTokenThreshold
+  case globalAccountedTokenThreshold
+  case stageResponsesSendCap
+  case globalResponsesSendCap
+
+  func apply(to snapshot: EvaluationSendBudgetSnapshot) -> EvaluationSendBudgetSnapshot {
+    EvaluationSendBudgetSnapshot(
+      stageAccountedTokens: snapshot.stageAccountedTokens,
+      globalAccountedTokens: snapshot.globalAccountedTokens,
+      stageResponsesSends: snapshot.stageResponsesSends,
+      globalResponsesSends: snapshot.globalResponsesSends,
+      stageAccountedTokenThreshold: snapshot.stageAccountedTokenThreshold
+        - (self == .stageAccountedTokenThreshold ? 1 : 0),
+      globalAccountedTokenThreshold: snapshot.globalAccountedTokenThreshold
+        - (self == .globalAccountedTokenThreshold ? 1 : 0),
+      stageResponsesSendCap: snapshot.stageResponsesSendCap
+        - (self == .stageResponsesSendCap ? 1 : 0),
+      globalResponsesSendCap: snapshot.globalResponsesSendCap
+        - (self == .globalResponsesSendCap ? 1 : 0)
+    )
   }
 }

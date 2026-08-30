@@ -55,7 +55,7 @@ inspecting any result.
 | Evaluator calls | 5 |
 | Reflector calls | 1 |
 | Responses sends | 38 |
-| Accounted tokens | 120,000 |
+| Accounted tokens | 5,045,184 |
 
 The ten task attempts are two development clean runs, three paired regression clean controls, three
 candidate trial runs, one active run, and one post-restart active run. The five evaluator calls
@@ -66,6 +66,10 @@ trip). Evaluator and reflector calls keep the existing provider retry budget of 
 hard Responses-send ceiling is therefore `10 * 2 + (5 + 1) * 3 = 38`. Each budget is an aggregate
 pre-dispatch guard: the runner checks remaining headroom before starting the next attempt or call,
 never after.
+
+The accounted-token ceiling conservatively assumes every authorized Responses send omits usage and
+therefore charges the frozen 132,768-token missing-usage proxy: `38 * 132,768 = 5,045,184`. This
+changes neither the operation order, per-operation output caps, nor either retry policy.
 
 ## Adapter pass rule
 
@@ -136,7 +140,7 @@ A scored run additionally requires one owner-authorized approval object, created
 freeze commit exists, with exact keys `schema_version`, `manifest_sha256`, `expected_freeze_commit`,
 `budgets`, `owner_identity`, and `approved_at` (an RFC 3339 UTC timestamp). Its `budgets` object has
 exact keys `task_attempts`, `evaluator_calls`, `reflector_calls`, `responses_sends`, and
-`accounted_tokens`, matching the values in the table above (10/5/1/38/120000).
+`accounted_tokens`, matching the values in the table above (10/5/1/38/5045184).
 
 The runner requires `approval["expected_freeze_commit"] == git rev-parse HEAD` at verification time.
 Authorization is never inferred from issue approval, CI success, or a prior run: the owner

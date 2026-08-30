@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from benchmark_core.canonical import canonical_sha256, load_object, write
 from scheduled_learning_v1.execution.budgets import AggregateBudget
 from scheduled_learning_v1.execution.operations import Operations
+from scheduled_learning_v1.frozen_contract import AGGREGATE_BUDGETS
 from scheduled_learning_v1.replay_controller import EventJournal
 from scheduled_learning_v1.worker_bridge import WorkerBridge
 
@@ -104,9 +105,11 @@ def _copy_inputs(source_repository: Path, runtime_repository: Path) -> None:
 def _fixture_manifest(source_repository: Path) -> dict[str, object]:
     source = source_repository / _EXPERIMENT_PATH / "freeze" / "manifest.json"
     manifest = load_object(source)
+    manifest["budgets"] = dict(AGGREGATE_BUDGETS)
     execution = _object(manifest["swift_execution"], "swift execution")
     execution["executable_sha256"] = hashlib.sha256(_STUB_BYTES).hexdigest()
     bindings = _object(manifest["binding_sha256"], "binding digests")
+    bindings["budgets"] = canonical_sha256(manifest["budgets"])
     bindings["swift_execution"] = canonical_sha256(execution)
     executable = _executable_relative_path(manifest)
     inputs = _object(manifest["inputs"], "inputs")

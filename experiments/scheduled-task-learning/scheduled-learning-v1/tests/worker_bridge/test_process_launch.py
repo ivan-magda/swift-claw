@@ -9,6 +9,7 @@ from typing import cast
 from benchmark_core.canonical import canonical_sha256, dumps, load_object
 from scheduled_learning_v1.replay_controller import EventJournal
 from scheduled_learning_v1.worker_bridge import LearningCall, TaskAttemptCall, WorkerBridge
+from scheduled_learning_v1.worker_bridge.requests import bound_contract
 
 from .support import (
     argv_records,
@@ -511,3 +512,36 @@ class ProcessLaunchTests(unittest.TestCase):
             self.assertFalse(task_executable.with_suffix(".argv.jsonl").exists())
             self.assertFalse(learning_executable.with_suffix(".argv.jsonl").exists())
             self.assertFalse(route_executable.with_suffix(".argv.jsonl").exists())
+
+    def test_rejects_each_task_snapshot_cap_mismatch_before_launch(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = task_core(root)
+            budget = cast(dict[str, object], core["budget"])
+
+            # when
+            admitted = bound_contract(core, "task")
+
+            # then
+            admitted_approval = cast(dict[str, object], admitted["approval"])
+            self.assertEqual(
+                admitted_approval["budgets"],
+                {
+                    "task_attempts": 10,
+                    "evaluator_calls": 5,
+                    "reflector_calls": 1,
+                    "responses_sends": 38,
+                    "accounted_tokens": 5_045_184,
+                },
+            )
+            for field in (
+                "stage_accounted_token_threshold",
+                "global_accounted_token_threshold",
+                "stage_responses_send_cap",
+                "global_responses_send_cap",
+            ):
+                changed_budget = {**budget, field: cast(int, budget[field]) - 1}
+                changed_core = {**core, "budget": changed_budget}
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    bound_contract(changed_core, "task")

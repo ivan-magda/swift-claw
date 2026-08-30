@@ -327,11 +327,11 @@ func makeEvaluationLearningTaskInvocationFixture() throws
     executableSHA256: attempt.configuration.provenance.executableSHA256,
     missingUsageTokenProxy: PageEvaluationContract.missingUsageTokenProxy,
     budgets: EvaluationLearningApprovedBudgets(
-      taskAttempts: 1,
-      evaluatorCalls: 1,
+      taskAttempts: 10,
+      evaluatorCalls: 5,
       reflectorCalls: 1,
-      responsesSends: 4,
-      accountedTokens: 10_000
+      responsesSends: 38,
+      accountedTokens: 5_045_184
     ),
     route: route
   )
@@ -350,8 +350,10 @@ func makeEvaluationLearningTaskBudget() -> EvaluationSendBudgetSnapshot {
     globalAccountedTokens: 0,
     stageResponsesSends: 0,
     globalResponsesSends: 0,
-    stageAccountedTokenThreshold: PageEvaluationContract.pageLimits.accountedTokenThreshold,
-    stageResponsesSendCap: PageEvaluationContract.pageLimits.maximumResponsesSends
+    stageAccountedTokenThreshold: 5_045_184,
+    globalAccountedTokenThreshold: 5_045_184,
+    stageResponsesSendCap: 38,
+    globalResponsesSendCap: 38
   )
 }
 
@@ -369,7 +371,14 @@ private func makeLegacyWorkerInvocation(root: URL) throws -> EvaluationWorkerInv
     kind: .attempt,
     configurationPath: configured.configurationURL.path,
     freeze: frozen.inputs,
-    budget: makeEvaluationLearningTaskBudget(),
+    budget: EvaluationSendBudgetSnapshot(
+      stageAccountedTokens: 0,
+      globalAccountedTokens: 0,
+      stageResponsesSends: 0,
+      globalResponsesSends: 0,
+      stageAccountedTokenThreshold: PageEvaluationContract.pageLimits.accountedTokenThreshold,
+      stageResponsesSendCap: PageEvaluationContract.pageLimits.maximumResponsesSends
+    ),
     evaluationRoot: configured.configuration.evaluationRootURL,
     journal: journal,
     attemptIDs: [configured.configuration.attemptID],

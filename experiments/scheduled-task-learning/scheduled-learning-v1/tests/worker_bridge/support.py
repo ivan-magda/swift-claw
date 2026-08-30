@@ -259,10 +259,10 @@ def task_core(root: Path) -> dict[str, object]:
             "global_accounted_tokens": 0,
             "stage_responses_sends": 0,
             "global_responses_sends": 0,
-            "stage_accounted_token_threshold": 1000,
-            "global_accounted_token_threshold": 4_350_000,
-            "stage_responses_send_cap": 3,
-            "global_responses_send_cap": 454,
+            "stage_accounted_token_threshold": 5_045_184,
+            "global_accounted_token_threshold": 5_045_184,
+            "stage_responses_send_cap": 38,
+            "global_responses_send_cap": 38,
         },
     }
 
@@ -390,11 +390,11 @@ def task_result(core: dict[str, object]) -> dict[str, object]:
 
 def _manifest(root: Path) -> tuple[dict[str, object], dict[str, object]]:
     budgets = {
-        "task_attempts": 1,
-        "evaluator_calls": 1,
+        "task_attempts": 10,
+        "evaluator_calls": 5,
         "reflector_calls": 1,
-        "responses_sends": 3,
-        "accounted_tokens": 1000,
+        "responses_sends": 38,
+        "accounted_tokens": 5_045_184,
     }
     learning_route = {
         "provider_reference": PROVIDER_REFERENCE,

@@ -17,7 +17,7 @@
     "evaluator_calls": 5,
     "reflector_calls": 1,
     "responses_sends": 38,
-    "accounted_tokens": 120000
+    "accounted_tokens": 5045184
   },
   "responses_sends_per_operation": {
     "task": 2,

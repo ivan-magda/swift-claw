@@ -153,8 +153,6 @@ _TASK_APPROVAL_KEYS = {
 }
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
-_GLOBAL_ACCOUNTED_TOKEN_THRESHOLD = 4_350_000
-_GLOBAL_RESPONSES_SEND_CAP = 454
 
 
 @dataclass(frozen=True)
@@ -264,6 +262,7 @@ def bound_contract(core: dict[str, object], kind: str) -> dict[str, object]:
         "approval": approval,
     }
     if kind == "task":
+        _validate_task_budget(core, budgets, approval_budgets)
         configuration_data = _absolute(core.get("configuration_path")).read_bytes()
         if _sha256(configuration_data) != core.get("configuration_sha256"):
             raise ValueError("configuration digest does not bind to invocation")
@@ -316,9 +315,9 @@ def _validate_core(core: dict[str, object], kind: str) -> None:
                 )
             )
             or cast(int, budget["stage_accounted_token_threshold"]) <= 0
-            or budget["global_accounted_token_threshold"] != _GLOBAL_ACCOUNTED_TOKEN_THRESHOLD
+            or cast(int, budget["global_accounted_token_threshold"]) <= 0
             or cast(int, budget["stage_responses_send_cap"]) <= 0
-            or budget["global_responses_send_cap"] != _GLOBAL_RESPONSES_SEND_CAP
+            or cast(int, budget["global_responses_send_cap"]) <= 0
         ):
             raise ValueError("task budget does not match the Swift admission contract")
         return
@@ -370,6 +369,27 @@ def _validate_configuration(
     for key in ("carrier_sha256", "input_sha256", "lesson_set_digest"):
         _require_sha(configuration.get(key), f"configuration {key}")
     _absolute(configuration.get("carrier_path"))
+
+
+def _validate_task_budget(
+    core: dict[str, object],
+    manifest_budgets: dict[str, object],
+    approval_budgets: dict[str, object],
+) -> None:
+    budget = _required_object(core, "budget")
+    accounted_tokens = _positive_integer(manifest_budgets, "accounted_tokens")
+    responses_sends = _positive_integer(manifest_budgets, "responses_sends")
+    if not json_exactly_matches(approval_budgets, manifest_budgets):
+        raise ValueError("task budget approval differs from manifest")
+    expected = {
+        "stage_accounted_token_threshold": accounted_tokens,
+        "global_accounted_token_threshold": accounted_tokens,
+        "stage_responses_send_cap": responses_sends,
+        "global_responses_send_cap": responses_sends,
+    }
+    for key, value in expected.items():
+        if not json_exactly_matches(budget.get(key), value):
+            raise ValueError("task budget does not match admitted manifest and approval")
 
 
 def _validate_route(route: dict[str, object]) -> None:
