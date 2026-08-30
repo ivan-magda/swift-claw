@@ -10,8 +10,8 @@ from benchmark_core.canonical import canonical_sha256, write
 from scheduled_learning_v1.execution import run_scored
 from scheduled_learning_v1.execution.budgets import AggregateBudget
 from scheduled_learning_v1.execution.operations import Operations
-from scheduled_learning_v1.execution.replay import JOB_ID
 from scheduled_learning_v1.frozen_contract import AGGREGATE_BUDGETS, GATES
+from scheduled_learning_v1.replay_bootstrap import JOB_ID
 from scheduled_learning_v1.worker_bridge import LearningCall
 
 FIXED_TIME = "2026-08-30T00:00:00Z"
@@ -55,6 +55,8 @@ def recording_operations(
 ) -> tuple[Operations, RecordingBridge]:
     """Construct real operation dispatch around a recording external boundary."""
 
+    (root / "freeze").mkdir(parents=True, exist_ok=True)
+    write(root / "freeze" / "owner-budget-approval.json", {})
     bridge = RecordingBridge(terminal)
     operations = Operations(root, {}, {}, budget, bridge=bridge, verify=_verified_without_io)
     return operations, bridge

@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from typing import cast
+from unittest.mock import patch
 
 from benchmark_core.canonical import load_object
+from scheduled_learning_v1.execution import run_scored
 
-from .support import run_fake_scored
+from .support import frozen_tree, run_fake_scored
 
 
 class LifecycleTests(unittest.TestCase):
@@ -135,6 +138,111 @@ class LifecycleTests(unittest.TestCase):
             first_bytes = result_bytes(first)
             second_bytes = result_bytes(second)
             self.assertEqual(first_bytes, second_bytes)
+
+    def test_malformed_manifest_still_publishes_bound_incomplete_report(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frozen_tree(root)
+            manifest_path = root / "freeze" / "manifest.json"
+            approval_path = root / "freeze" / "owner-budget-approval.json"
+            failure_path = root / "results" / "failure.json"
+            manifest_path.write_bytes(b'{"schema_version":')
+            entries = 0
+
+            def factory(*args: object, **kwargs: object) -> object:
+                nonlocal entries
+                entries += 1
+                raise AssertionError("malformed freeze reached external operation construction")
+
+            # when
+            with patch("scheduled_learning_v1.execution.lifecycle._make_operations", factory):
+                report = run_scored(root)
+
+            # then
+            self.assertEqual(report["status"], "incomplete_failed")
+            self.assertTrue(report["m4_blocked"])
+            self.assertEqual(entries, 0)
+            self.assertEqual(
+                report["manifest_sha256"],
+                hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                report["owner_approval_sha256"],
+                hashlib.sha256(approval_path.read_bytes()).hexdigest(),
+            )
+            self.assertTrue(failure_path.is_file())
+            self.assertEqual(
+                report["failure_sha256"],
+                hashlib.sha256(failure_path.read_bytes()).hexdigest(),
+            )
+            self.assertIsNone(report["thresholds"])
+            self.assertIsNone(report["event_log_sha256"])
+            self.assertIsNone(report["replay_receipt_sha256"])
+            self.assertIsNone(report["decision_receipt_sha256s"])
+            self.assertIsNone(report["active_evidence"])
+            self.assertIsNone(report["restart_evidence"])
+            self.assertEqual(load_object(root / "results" / "final-report.json"), report)
+
+    def test_malformed_approval_still_publishes_manifest_bound_incomplete_report(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frozen_tree(root)
+            manifest_path = root / "freeze" / "manifest.json"
+            approval_path = root / "freeze" / "owner-budget-approval.json"
+            failure_path = root / "results" / "failure.json"
+            approval_path.write_bytes(b'{"schema_version":')
+            entries = 0
+
+            def factory(*args: object, **kwargs: object) -> object:
+                nonlocal entries
+                entries += 1
+                raise AssertionError("malformed approval reached external operation construction")
+
+            # when
+            with patch("scheduled_learning_v1.execution.lifecycle._make_operations", factory):
+                report = run_scored(root)
+
+            # then
+            self.assertEqual(report["status"], "incomplete_failed")
+            self.assertTrue(report["m4_blocked"])
+            self.assertEqual(entries, 0)
+            self.assertEqual(
+                report["manifest_sha256"],
+                hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(
+                report["owner_approval_sha256"],
+                hashlib.sha256(approval_path.read_bytes()).hexdigest(),
+            )
+            self.assertTrue(failure_path.is_file())
+            self.assertEqual(
+                report["failure_sha256"],
+                hashlib.sha256(failure_path.read_bytes()).hexdigest(),
+            )
+            self.assertIsNone(report["freeze_commit"])
+            self.assertEqual(
+                report["thresholds"],
+                {
+                    "adapter_pass_rule": {
+                        "minimum_valid_pairs": 2,
+                        "maximum_valid_pairs": 3,
+                        "minimum_candidate_score": 90,
+                        "minimum_mean_delta": 10,
+                        "allow_critical_result": False,
+                        "allow_negative_delta": False,
+                    },
+                    "minimum_active_score": 90,
+                    "minimum_restart_active_score": 90,
+                },
+            )
+            self.assertIsNone(report["event_log_sha256"])
+            self.assertIsNone(report["replay_receipt_sha256"])
+            self.assertIsNone(report["decision_receipt_sha256s"])
+            self.assertIsNone(report["active_evidence"])
+            self.assertIsNone(report["restart_evidence"])
+            self.assertEqual(load_object(root / "results" / "final-report.json"), report)
 
 
 def load_events(root: Path) -> list[dict[str, object]]:

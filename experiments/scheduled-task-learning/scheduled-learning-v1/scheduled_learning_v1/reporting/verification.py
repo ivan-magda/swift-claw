@@ -6,8 +6,11 @@ import json
 import re
 from pathlib import Path
 
-from benchmark_core.canonical import canonical_sha256, load_object
+from benchmark_core.canonical import canonical_sha256, dumps, load_object
 from benchmark_learning.learning_contract import canonical_event_log, event_json, parse_event
+from benchmark_learning.learning_replay import replay
+
+from scheduled_learning_v1.replay_bootstrap import initial_replay_state
 
 from .builder import report_projection
 
@@ -32,8 +35,6 @@ def verify_results(root: Path, manifest: dict[str, object]) -> dict[str, object]
         event = parse_event(value)
         if canonical_sha256(event_json(event)) != match.group(2):
             raise ValueError("committed event filename digest does not match its event")
-        from benchmark_core.canonical import dumps  # noqa: PLC0415
-
         if raw != dumps(value).encode("utf-8"):
             raise ValueError("committed event bytes are not canonical")
         events.append(event)
@@ -53,6 +54,22 @@ def verify_results(root: Path, manifest: dict[str, object]) -> dict[str, object]
         canonical_sha256(item) for item in decisions
     ]:
         raise ValueError("decision digest order differs from the replay receipt")
+    approval = load_object(root / "freeze" / "owner-budget-approval.json")
+    semantic = replay(
+        initial=initial_replay_state(manifest, approval),
+        events=events,
+    )
+    _require_projection(root / "results" / "state.json", semantic["state"], "state")
+    _require_projection(
+        root / "results" / "decision-receipts.json",
+        semantic["decisions"],
+        "decisions",
+    )
+    _require_projection(
+        root / "results" / "replay-receipt.json",
+        semantic["receipt"],
+        "replay receipt",
+    )
     report = load_object(root / "results" / "final-report.json")
     if report != report_projection(root):
         raise ValueError("final report differs from committed evidence")
@@ -63,3 +80,8 @@ def verify_results(root: Path, manifest: dict[str, object]) -> dict[str, object]
         "event_log_sha256": observed_event_digest,
         "final_report_sha256": canonical_sha256(report),
     }
+
+
+def _require_projection(path: Path, expected: object, name: str) -> None:
+    if path.read_bytes() != dumps(expected).encode("utf-8"):
+        raise ValueError(f"persisted {name} differs from semantic replay")

@@ -13,16 +13,18 @@ from page_change_m3.materialize import normalize_lesson_text
 
 from scheduled_learning_v1 import ALGORITHM_ID
 from scheduled_learning_v1.preflight import verify_pre_run
+from scheduled_learning_v1.replay_bootstrap import (
+    EMPTY_LESSON_SET,
+    JOB_ID,
+    compatibility_digest,
+    initial_replay_state,
+)
 from scheduled_learning_v1.replay_controller import EventJournal, ReplayController
 from scheduled_learning_v1.reporting import build_final_report
 
 from .budgets import AggregateBudget
 from .operations import Operations
 from .replay import (
-    EMPTY_LESSON_SET,
-    JOB_ID,
-    compatibility_digest,
-    initial_replay_state,
     promoted_digest,
     promoted_lessons,
     refresh_replay,
@@ -63,6 +65,8 @@ def run_active(root: Path, generation: int) -> dict[str, object]:
 
     root = Path(root).resolve(strict=True)
     try:
+        if (root / "results" / "failure.json").is_file():
+            raise ValueError("failure-marked result trees never resume")
         manifest, approval = _frozen_inputs(root)
         verify_pre_run(root, approval)
         if (root / "results" / "restart-evidence.json").exists():

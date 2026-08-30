@@ -1,61 +1,16 @@
-"""Deterministic M3 replay bootstrap, publication, and promoted-state selection."""
+"""Deterministic M3 replay publication and promoted-state selection."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from benchmark_core.canonical import canonical_sha256, load_object, write
-from benchmark_learning.learning_replay import initial_state
+from benchmark_core.canonical import load_object, write
 
-from scheduled_learning_v1 import ALGORITHM_ID
+from scheduled_learning_v1.replay_bootstrap import JOB_ID, initial_replay_state
 from scheduled_learning_v1.replay_controller import EventJournal, ReplayController
 
-JOB_ID = "page-change-m3"
-EMPTY_LESSON_SET = {"schema_version": 1, "lessons": []}
 _SHA256_LENGTH = 64
-
-
-def initial_replay_state(
-    manifest: dict[str, object], approval: dict[str, object]
-) -> dict[str, Any]:
-    """Derive the one nine-field M3 job bootstrap from frozen projections."""
-
-    controlled_clock = _whole_second(str(approval["approved_at"]))
-    return initial_state(
-        algorithm_id=ALGORITHM_ID,
-        controlled_clock=controlled_clock,
-        jobs=[
-            {
-                "job_id": JOB_ID,
-                "repeatable": True,
-                "cancelled": False,
-                "learning_epoch": 0,
-                "job_definition_digest": canonical_sha256(
-                    {
-                        "algorithm_id": manifest["algorithm_id"],
-                        "job_id": JOB_ID,
-                        "protocol": manifest["protocol"],
-                        "run_order": manifest["run_order"],
-                    }
-                ),
-                "stable_digest": canonical_sha256(EMPTY_LESSON_SET),
-                "stable_revision": 0,
-                "compatibility_digest": compatibility_digest(manifest),
-                "feedback_revision": 0,
-            }
-        ],
-    )
-
-
-def compatibility_digest(manifest: dict[str, object]) -> str:
-    """Bind replay compatibility to the frozen page identities and task route."""
-
-    execution = _object(manifest.get("swift_execution"), "swift execution")
-    return canonical_sha256(
-        {"identities": manifest["identities"], "task_execution": execution["task_route"]}
-    )
 
 
 def replay_and_publish(root: Path, controller: ReplayController) -> dict[str, Any]:
@@ -142,8 +97,3 @@ def _required_digest(value: object, name: str) -> str:
     if not isinstance(value, str) or len(value) != _SHA256_LENGTH:
         raise ValueError(f"{name} digest is invalid")
     return value
-
-
-def _whole_second(value: str) -> str:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    return parsed.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")

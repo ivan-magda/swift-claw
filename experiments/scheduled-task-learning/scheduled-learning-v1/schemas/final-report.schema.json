@@ -2,43 +2,62 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://swift-claw.local/scheduled-task-learning/scheduled-learning-v1/final-report.schema.json",
   "title": "ScheduledLearningV1FinalReport",
-  "description": "The complete or incomplete M3 final report built by Task 7's reporting builder. It binds the manifest digest, the freeze commit identity from the verified owner approval, ordered event/receipt digests, candidate/base/promoted digests, the page adapter receipt digest, active/restart evidence, and every frozen threshold next to its observed value. It reads thresholds from the manifest only.",
+  "description": "The fail-closed M3 report binds raw durable artifact bytes, ordered replay decisions, the exact frozen gate object, and the observations needed to evaluate every gate. Complete reports require every semantic binding; incomplete reports use null when a semantic value is unavailable.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "status",
     "manifest_sha256",
+    "owner_approval_sha256",
     "freeze_commit",
     "event_log_sha256",
     "replay_receipt_sha256",
+    "decision_receipts_sha256",
     "decision_receipt_sha256s",
     "base_digest",
     "candidate_digest",
+    "candidate_artifact_sha256",
     "promoted_digest",
+    "promotion_receipt_sha256",
     "page_adapter_receipt_sha256",
+    "adapter_evidence",
+    "active_evidence_sha256",
     "active_evidence",
+    "restart_evidence_sha256",
     "restart_evidence",
+    "failure_sha256",
     "thresholds",
     "m4_blocked"
   ],
-  "properties": {
-    "schema_version": { "const": 1 },
-    "status": { "enum": ["complete", "incomplete_failed"] },
-    "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "freeze_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-    "event_log_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "replay_receipt_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "decision_receipt_sha256s": {
-      "type": "array",
-      "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sha256OrNull": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "numberOrNull": { "type": ["number", "null"] },
+    "adapterEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "pair_count",
+        "valid_pair_count",
+        "minimum_candidate_score",
+        "mean_delta",
+        "critical_result_present",
+        "negative_delta_present"
+      ],
+      "properties": {
+        "outcome": { "type": "string" },
+        "pair_count": { "type": "integer", "minimum": 0 },
+        "valid_pair_count": { "type": "integer", "minimum": 0 },
+        "minimum_candidate_score": { "$ref": "#/$defs/numberOrNull" },
+        "mean_delta": { "$ref": "#/$defs/numberOrNull" },
+        "critical_result_present": { "type": "boolean" },
+        "negative_delta_present": { "type": "boolean" }
+      }
     },
-    "base_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "candidate_digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
-    "promoted_digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
-    "page_adapter_receipt_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
-    "active_evidence": {
-      "type": ["object", "null"],
+    "activeEvidence": {
+      "type": "object",
       "additionalProperties": false,
       "required": ["score", "threshold", "passed"],
       "properties": {
@@ -47,8 +66,8 @@
         "passed": { "type": "boolean" }
       }
     },
-    "restart_evidence": {
-      "type": ["object", "null"],
+    "restartEvidence": {
+      "type": "object",
       "additionalProperties": false,
       "required": ["score", "threshold", "passed", "promoted_digest_matched"],
       "properties": {
@@ -62,18 +81,115 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "minimum_candidate_score",
-        "minimum_mean_delta",
+        "adapter_pass_rule",
         "minimum_active_score",
         "minimum_restart_active_score"
       ],
       "properties": {
-        "minimum_candidate_score": { "type": "number" },
-        "minimum_mean_delta": { "type": "number" },
+        "adapter_pass_rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimum_valid_pairs",
+            "maximum_valid_pairs",
+            "minimum_candidate_score",
+            "minimum_mean_delta",
+            "allow_critical_result",
+            "allow_negative_delta"
+          ],
+          "properties": {
+            "minimum_valid_pairs": { "type": "integer", "minimum": 0 },
+            "maximum_valid_pairs": { "type": "integer", "minimum": 0 },
+            "minimum_candidate_score": { "type": "number" },
+            "minimum_mean_delta": { "type": "number" },
+            "allow_critical_result": { "type": "boolean" },
+            "allow_negative_delta": { "type": "boolean" }
+          }
+        },
         "minimum_active_score": { "type": "number" },
         "minimum_restart_active_score": { "type": "number" }
       }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "status": { "enum": ["complete", "incomplete_failed"] },
+    "manifest_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "owner_approval_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "freeze_commit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+    "event_log_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "replay_receipt_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "decision_receipts_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "decision_receipt_sha256s": {
+      "type": ["array", "null"],
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "base_digest": { "$ref": "#/$defs/sha256OrNull" },
+    "candidate_digest": { "$ref": "#/$defs/sha256OrNull" },
+    "candidate_artifact_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "promoted_digest": { "$ref": "#/$defs/sha256OrNull" },
+    "promotion_receipt_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "page_adapter_receipt_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "adapter_evidence": {
+      "oneOf": [{ "$ref": "#/$defs/adapterEvidence" }, { "type": "null" }]
+    },
+    "active_evidence_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "active_evidence": {
+      "oneOf": [{ "$ref": "#/$defs/activeEvidence" }, { "type": "null" }]
+    },
+    "restart_evidence_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "restart_evidence": {
+      "oneOf": [{ "$ref": "#/$defs/restartEvidence" }, { "type": "null" }]
+    },
+    "failure_sha256": { "$ref": "#/$defs/sha256OrNull" },
+    "thresholds": {
+      "oneOf": [{ "$ref": "#/$defs/thresholds" }, { "type": "null" }]
     },
     "m4_blocked": { "type": "boolean" }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "complete" } } },
+      "then": {
+        "properties": {
+          "manifest_sha256": { "$ref": "#/$defs/sha256" },
+          "owner_approval_sha256": { "$ref": "#/$defs/sha256" },
+          "freeze_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "event_log_sha256": { "$ref": "#/$defs/sha256" },
+          "replay_receipt_sha256": { "$ref": "#/$defs/sha256" },
+          "decision_receipts_sha256": { "$ref": "#/$defs/sha256" },
+          "decision_receipt_sha256s": { "type": "array" },
+          "base_digest": { "$ref": "#/$defs/sha256" },
+          "candidate_digest": { "$ref": "#/$defs/sha256" },
+          "candidate_artifact_sha256": { "$ref": "#/$defs/sha256" },
+          "promoted_digest": { "$ref": "#/$defs/sha256" },
+          "promotion_receipt_sha256": { "$ref": "#/$defs/sha256" },
+          "page_adapter_receipt_sha256": { "$ref": "#/$defs/sha256" },
+          "adapter_evidence": {
+            "allOf": [
+              { "$ref": "#/$defs/adapterEvidence" },
+              {
+                "properties": {
+                  "minimum_candidate_score": { "type": "number" },
+                  "mean_delta": { "type": "number" }
+                }
+              }
+            ]
+          },
+          "active_evidence_sha256": { "$ref": "#/$defs/sha256" },
+          "active_evidence": { "$ref": "#/$defs/activeEvidence" },
+          "restart_evidence_sha256": { "$ref": "#/$defs/sha256" },
+          "restart_evidence": { "$ref": "#/$defs/restartEvidence" },
+          "failure_sha256": { "type": "null" },
+          "thresholds": { "$ref": "#/$defs/thresholds" },
+          "m4_blocked": { "const": false }
+        }
+      },
+      "else": {
+        "properties": {
+          "m4_blocked": { "const": true }
+        }
+      }
+    }
+  ]
 }

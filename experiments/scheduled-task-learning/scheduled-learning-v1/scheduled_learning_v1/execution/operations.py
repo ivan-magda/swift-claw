@@ -19,7 +19,10 @@ from page_change_m3 import (
     materialize_task,
     score_pair,
 )
+from scheduled_learning_v1.freeze_inputs import load_canonical_object
+from scheduled_learning_v1.frozen_contract import json_exactly_matches
 from scheduled_learning_v1.preflight import verify_pre_run
+from scheduled_learning_v1.replay_bootstrap import JOB_ID
 from scheduled_learning_v1.replay_controller import EventJournal
 from scheduled_learning_v1.worker_bridge import (
     LearningCall,
@@ -28,7 +31,6 @@ from scheduled_learning_v1.worker_bridge import (
 )
 
 from .budgets import AggregateBudget
-from .replay import JOB_ID
 from .task_configuration import build_task_configuration, executable_path, manifest_binding
 
 _MAX_REFLECTOR_LESSONS = 3
@@ -73,8 +75,15 @@ class Operations:
     def dispatch_task(self, call: object) -> dict[str, object]:
         """Reserve, freshly verify, and enter the Swift task bridge without intervening I/O."""
 
+        return self._dispatch_task(call)
+
+    def _dispatch_task(
+        self,
+        call: object,
+        prepared_approval: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         self.budget.reserve("task")
-        self.verify(self.root, self.approval)
+        self._verify_boundary(prepared_approval)
         terminal = cast(Any, self.bridge).run_task(call)
         self.budget.record(terminal)
         self._publish_budget()
@@ -83,8 +92,15 @@ class Operations:
     def dispatch_learning(self, call: LearningCall) -> dict[str, object]:
         """Reserve, freshly verify, and enter one Swift learning bridge."""
 
+        return self._dispatch_learning(call)
+
+    def _dispatch_learning(
+        self,
+        call: LearningCall,
+        prepared_approval: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         self.budget.reserve(call.kind)
-        self.verify(self.root, self.approval)
+        self._verify_boundary(prepared_approval)
         terminal = cast(Any, self.bridge).run_learning(call)
         self.budget.record(terminal)
         self._publish_budget()
@@ -98,6 +114,7 @@ class Operations:
     ) -> dict[str, object]:
         """Materialize one frozen schedule row and validate its task terminal projection."""
 
+        operation_approval = self._current_approval()
         split = _split(row)
         fixture_id = str(row["fixture_id"])
         source = load_object(fresh_source_path(self.root, split, fixture_id))
@@ -115,7 +132,7 @@ class Operations:
         configuration = build_task_configuration(
             self.root,
             self.manifest,
-            self.approval,
+            operation_approval,
             row,
             source,
             carrier_path,
@@ -133,15 +150,16 @@ class Operations:
             "provider_call_id": _uuid(operation_id),
             "configuration_path": str(configuration_path),
             "configuration_sha256": _sha256(configuration_path),
-            "manifest": self._manifest_binding(),
+            "manifest": self._manifest_binding(operation_approval),
             "budget": self.budget.task_snapshot(),
         }
-        terminal = self.dispatch_task(
+        terminal = self._dispatch_task(
             TaskAttemptCall(
                 invocation_core=core,
                 invocation_path=invocation_path,
                 result_path=result_path,
-            )
+            ),
+            operation_approval,
         )
         raw_output = terminal.get("raw_output")
         if not isinstance(raw_output, str):
@@ -192,7 +210,7 @@ class Operations:
     ) -> dict[str, object]:
         """Freshly verify immediately before the trusted paired scorer."""
 
-        self.verify(self.root, self.approval)
+        self._verify_boundary()
         return self.pair_scorer(_attempt(clean), _attempt(candidate))
 
     def build_adapter(
@@ -200,7 +218,6 @@ class Operations:
     ) -> tuple[dict[str, object], dict[str, object]]:
         """Seal the post-freeze page receipt under the exact manifest identities."""
 
-        self.verify(self.root, self.approval)
         identities = _object(self.manifest.get("identities"), "page identities")
         frozen = {
             key: str(identities[key])
@@ -213,17 +230,19 @@ class Operations:
                 "execution_surface_digest",
             )
         }
+        self._verify_boundary()
         return build_adapter_receipt(lessons, pairs, frozen)
 
     def score_active(self, attempt: dict[str, object], *, restart: bool) -> dict[str, object]:
         """Freshly verify immediately before the trusted active/restart score."""
 
-        self.verify(self.root, self.approval)
+        self._verify_boundary()
         return self.active_scorer(_attempt(attempt), "restart" if restart else "active")
 
     def _run_learning(
         self, operation_id: str, kind: str, carrier: dict[str, object]
     ) -> dict[str, object]:
+        operation_approval = self._current_approval()
         directory = self.root / "results" / "learning-calls" / operation_id
         directory.mkdir(parents=True, exist_ok=True)
         carrier_path = directory / "carrier.json"
@@ -243,7 +262,7 @@ class Operations:
             "prompt": {"path": str(prompt_path), "sha256": _sha256(prompt_path)},
             "carrier": {"path": str(carrier_path), "sha256": _sha256(carrier_path)},
             "result_path": str(result_path),
-            "manifest": self._manifest_binding(),
+            "manifest": self._manifest_binding(operation_approval),
         }
         call = LearningCall(
             kind=cast(Any, kind),
@@ -251,7 +270,7 @@ class Operations:
             request_path=request_path,
             result_path=result_path,
         )
-        return self.dispatch_learning(call)
+        return self._dispatch_learning(call, operation_approval)
 
     def _lesson_artifact(
         self, directory: Path, lessons: list[str], row: dict[str, object]
@@ -293,9 +312,28 @@ class Operations:
                     return generation
         raise ValueError("task or learning call has no committed controller generation")
 
-    def _manifest_binding(self) -> dict[str, object]:
+    def _manifest_binding(self, approval: dict[str, object]) -> dict[str, object]:
         approval_path = self.root / "freeze" / "owner-budget-approval.json"
-        return manifest_binding(self.root, self.manifest, approval_path)
+        binding = manifest_binding(self.root, self.manifest, approval_path)
+        owner_approval = _object(binding.get("owner_approval"), "owner approval binding")
+        if owner_approval.get("sha256") != canonical_sha256(approval):
+            raise ValueError("operation approval binding differs from the approved object")
+        return binding
+
+    def _current_approval(self) -> dict[str, object]:
+        current = load_canonical_object(self.root / "freeze" / "owner-budget-approval.json")
+        if not json_exactly_matches(current, self.approval):
+            raise ValueError("owner approval changed after initial verification")
+        return current
+
+    def _verify_boundary(
+        self, prepared_approval: dict[str, object] | None = None
+    ) -> dict[str, object]:
+        current = self._current_approval()
+        if prepared_approval is not None and not json_exactly_matches(current, prepared_approval):
+            raise ValueError("operation approval changed during materialization")
+        self.verify(self.root, current)
+        return current
 
     def _executable(self) -> Path:
         return executable_path(self.root, self.manifest)

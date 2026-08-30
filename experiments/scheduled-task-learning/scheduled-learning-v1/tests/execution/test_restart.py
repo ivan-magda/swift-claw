@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import cast
 from unittest.mock import patch
 
-from benchmark_core.canonical import load_object
+from benchmark_core.canonical import load_object, write
 from scheduled_learning_v1.execution.lifecycle import _launch_restart
 from scheduled_learning_v1.run import main
 
@@ -183,6 +183,74 @@ with patch.object(run, 'run_active', active):
             self.assertNotEqual(child.returncode, 0)
             self.assertFalse(marker.exists())
             self.assertFalse((root / "results" / "restart-evidence.json").exists())
+
+    def test_failure_marked_tree_is_not_resumed_by_fresh_active_process(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            promoted_digest = self._promoted_tree(root)
+            event_names = sorted(path.name for path in (root / "results" / "events").glob("*.json"))
+            write(
+                root / "results" / "failure.json",
+                {"schema_version": 1, "status": "incomplete_failed", "error": "parent failed"},
+            )
+            factory_marker = root / "restart-operations-built"
+            task_marker = root / "restart-task-entered"
+            scorer_marker = root / "restart-scorer-entered"
+            script = f"""
+from pathlib import Path
+from unittest.mock import patch
+from benchmark_core.canonical import load_object
+from tests.execution.support import FIXED_TIME, FakeOperations, verified_receipt
+import scheduled_learning_v1.execution.lifecycle as lifecycle
+import scheduled_learning_v1.run as run
+root = Path({str(root)!r})
+factory_marker = Path({str(factory_marker)!r})
+task_marker = Path({str(task_marker)!r})
+scorer_marker = Path({str(scorer_marker)!r})
+manifest = load_object(root / 'freeze' / 'manifest.json')
+class MarkingOperations(FakeOperations):
+    def run_task(self, row, lessons, promotion_receipt=None):
+        task_marker.write_text('entered', encoding='utf-8')
+        return super().run_task(row, lessons, promotion_receipt)
+    def score_active(self, attempt, *, restart):
+        scorer_marker.write_text('entered', encoding='utf-8')
+        return super().score_active(attempt, restart=restart)
+def factory(*args, **kwargs):
+    factory_marker.write_text('built', encoding='utf-8')
+    return MarkingOperations(args[3], generation=3)
+with (
+    patch.object(lifecycle, 'verify_pre_run', return_value=verified_receipt(manifest)),
+    patch.object(lifecycle, '_make_operations', factory),
+    patch.object(lifecycle, '_utc_now', return_value=FIXED_TIME),
+):
+    run.main([
+        'active', '--root', str(root), '--generation', '3',
+        '--promoted-digest', {promoted_digest!r},
+    ])
+"""
+
+            # when
+            child = subprocess.run(  # noqa: S603 -- fresh interpreter executes fixed wrapper
+                [sys.executable, "-B", "-c", script],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            # then
+            self.assertEqual(child.returncode, 0, child.stderr)
+            self.assertFalse(factory_marker.exists())
+            self.assertFalse(task_marker.exists())
+            self.assertFalse(scorer_marker.exists())
+            self.assertEqual(
+                sorted(path.name for path in (root / "results" / "events").glob("*.json")),
+                event_names,
+            )
+            self.assertFalse((root / "results" / "restart-evidence.json").exists())
+            report = load_object(root / "results" / "final-report.json")
+            self.assertEqual(report["status"], "incomplete_failed")
+            self.assertTrue(report["m4_blocked"])
 
     def _promoted_tree(self, root: Path) -> str:
         report, _, _ = run_fake_scored(

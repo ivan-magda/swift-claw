@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from typing import cast
+from unittest.mock import patch
 
 from benchmark_core.canonical import load_object, write
 from scheduled_learning_v1.execution.budgets import AggregateBudget
@@ -15,7 +16,8 @@ from scheduled_learning_v1.preflight import verify_pre_run
 from scheduled_learning_v1.worker_bridge import TaskAttemptCall
 from scheduled_learning_v1.worker_bridge.requests import bound_contract
 
-from tests.execution.support import RecordingBridge
+from page_change_m3 import build_adapter_receipt
+from tests.execution.support import RecordingBridge, learning_call
 from tests.freeze.support import (
     REAL_REPOSITORY_ROOT,
     FreezeTestRepository,
@@ -119,6 +121,108 @@ class MidRunPreflightTests(unittest.TestCase):
             operations.score_pair({"attempt": {}}, {"attempt": {}})
         self.assertEqual(bridge.calls, 1)
         self.assertEqual(scores, 0)
+
+    def test_owner_approval_drift_stops_every_next_boundary(self) -> None:
+        # given
+        repository, manifest, approval = self._authorized_repository()
+        bridge = RecordingBridge()
+        pair_scores = 0
+        active_scores = 0
+        adapter_entries = 0
+
+        def pair_scorer(
+            clean: dict[str, object], candidate: dict[str, object]
+        ) -> dict[str, object]:
+            nonlocal pair_scores
+            pair_scores += 1
+            return {"delta": 10}
+
+        def active_scorer(attempt: dict[str, object], stage: str) -> dict[str, object]:
+            nonlocal active_scores
+            active_scores += 1
+            return {"score": 95}
+
+        def observed_adapter(
+            lessons: list[str],
+            pairs: list[dict[str, object]],
+            identities: dict[str, str],
+        ) -> tuple[dict[str, object], dict[str, object]]:
+            nonlocal adapter_entries
+            adapter_entries += 1
+            return build_adapter_receipt(lessons, pairs, identities)
+
+        operations = Operations(
+            repository.experiment_root,
+            manifest,
+            approval,
+            AggregateBudget(),
+            bridge=bridge,
+            verify=verify_pre_run,
+            pair_scorer=pair_scorer,
+            active_scorer=active_scorer,
+        )
+        rows = cast(list[dict[str, object]], manifest["run_order"])
+        first_task = operations.run_task(rows[0], [])
+        changed = dict(approval)
+        changed["owner_identity"] = "owner:substituted"
+        write(
+            repository.experiment_root / "freeze" / "owner-budget-approval.json",
+            changed,
+        )
+        boundaries = (
+            ("task bridge", lambda: operations.run_task(rows[1], [])),
+            ("learning bridge", lambda: operations.run_evaluator(first_task)),
+            (
+                "pair scorer",
+                lambda: operations.score_pair({"attempt": {}}, {"attempt": {}}),
+            ),
+            ("adapter", lambda: operations.build_adapter([], [])),
+            ("active scorer", lambda: operations.score_active({"attempt": {}}, restart=False)),
+        )
+
+        # when / then
+        with patch(
+            "scheduled_learning_v1.execution.operations.build_adapter_receipt",
+            side_effect=observed_adapter,
+        ):
+            for name, boundary in boundaries:
+                with self.subTest(boundary=name), self.assertRaises(ValueError):
+                    boundary()
+        self.assertEqual(bridge.calls, 1)
+        self.assertEqual(pair_scores, 0)
+        self.assertEqual(adapter_entries, 0)
+        self.assertEqual(active_scores, 0)
+
+    def test_equal_valued_numeric_approval_type_drift_stops_direct_dispatch(self) -> None:
+        # given
+        for kind in ("task", "learning"):
+            with self.subTest(boundary=kind):
+                repository, manifest, approval = self._authorized_repository()
+                bridge = RecordingBridge()
+                operations = Operations(
+                    repository.experiment_root,
+                    manifest,
+                    approval,
+                    AggregateBudget(),
+                    bridge=bridge,
+                    verify=lambda root, current: {"status": "verified"},
+                )
+                changed = dict(approval)
+                changed["schema_version"] = 1.0
+                write(
+                    repository.experiment_root / "freeze" / "owner-budget-approval.json",
+                    changed,
+                )
+
+                # when / then
+                with self.assertRaises(ValueError):
+                    if kind == "task":
+                        operations.dispatch_task(object())
+                    else:
+                        operations.dispatch_learning(
+                            learning_call(repository.experiment_root, "evaluator")
+                        )
+                self.assertEqual(bridge.calls, 0)
 
     def _authorized_repository(
         self,
