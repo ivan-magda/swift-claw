@@ -34,7 +34,7 @@ SwiftPM package, executable `clawd`. The dependency graph is a layered DAG: **se
 
 ## Code style
 
-- **Lint gate = `scripts/lint.sh`** over `Sources`, `Tests`, `Package.swift` — three tools: Apple swift-format owns general layout (`.swift-format`), a targeted SwiftFormat pass owns the layout rules Apple cannot express (`BuildTools/guard-bodies.swiftformat`), and SwiftLint owns correctness and idiom (`.swiftlint.yml`, also the source of truth for identifier limits and the domain exceptions they allow). Run `scripts/lint.sh --fix`, read the diff it produced, then `scripts/lint.sh` to check. All three must pass before committing (CI enforces it).
+- **Lint gate = `scripts/lint.sh`** — three tools: Apple swift-format owns general layout (`.swift-format`), a targeted SwiftFormat pass owns the layout rules Apple cannot express (`BuildTools/guard-bodies.swiftformat`), and SwiftLint owns correctness and idiom (`.swiftlint.yml`, also the source of truth for identifier limits and the domain exceptions they allow). Run `scripts/lint.sh --fix`, read the diff it produced, then `scripts/lint.sh` to check. All three must pass before committing (CI enforces it).
 - **Guard bodies are always multiline** — never `guard condition else { return }`. `--fix` expands it for you; the gate rejects it if you skip that.
 - **A line over width 100 is the one shape `--fix` never converges on** — hoist a subexpression into a named local first.
 - **Closure bodies go on their own line** — break after `in`, even for a single expression. The lint gate does not enforce this one.
