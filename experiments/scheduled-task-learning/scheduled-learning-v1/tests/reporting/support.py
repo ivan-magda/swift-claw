@@ -131,10 +131,6 @@ def artifact_result_tree(
             return_value=fixed_timestamp,
         ),
         patch(
-            "scheduled_learning_v1.execution.lifecycle._write_failure",
-            side_effect=_raise_fixture_failure,
-        ),
-        patch(
             "scheduled_learning_v1.worker_bridge.bridge._utc_now",
             return_value=fixed_timestamp,
         ),
@@ -257,8 +253,12 @@ def _verified_without_io(root: Path, approval: dict[str, object]) -> dict[str, o
     return {"status": "verified"}
 
 
-def _raise_fixture_failure(_root: Path, error: Exception, _credential_state_root: Path) -> None:
-    raise error
+def report_test_root(temporary: str) -> Path:
+    """Create the scheduled-learning depth expected by task provenance."""
+
+    root = Path(temporary) / "repository/experiments/scheduled-learning-v1"
+    root.mkdir(parents=True)
+    return root
 
 
 def result_tree_with_nondefault_thresholds(root: Path) -> dict[str, object]:

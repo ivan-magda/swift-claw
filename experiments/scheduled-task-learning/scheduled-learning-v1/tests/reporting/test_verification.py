@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from pathlib import Path
 from typing import cast
 
 from benchmark_core.canonical import canonical_sha256, load_object, write
@@ -15,14 +14,19 @@ from scheduled_learning_v1.reporting import build_final_report, verify_results
 
 from tests.freeze.support import approval_for, create_repository
 
-from .support import artifact_result_tree, publish_hash_consistent_replay, rewrite_finish_event
+from .support import (
+    artifact_result_tree,
+    publish_hash_consistent_replay,
+    report_test_root,
+    rewrite_finish_event,
+)
 
 
 class ResultVerificationTests(unittest.TestCase):
     def test_valid_tree_verifies_offline(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
 
             # when
@@ -36,7 +40,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_auxiliary_projection_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             auxiliary = root / "results" / "events" / "state.json"
             state = load_object(auxiliary)
@@ -50,7 +54,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_task_carrier_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             carrier_path = root / "results" / "task-attempts" / "task-0" / "carrier.json"
             carrier = load_object(carrier_path)
@@ -64,7 +68,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_task_configuration_binding_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             path = root / "results" / "task-attempts" / "task-0" / "configuration.json"
             configuration = load_object(path)
@@ -78,7 +82,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_task_invocation_core_binding_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             path = root / "results" / "task-attempts" / "task-0" / "invocation.json"
             invocation = load_object(path)
@@ -93,7 +97,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_task_result_binding_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             path = root / "results" / "task-attempts" / "task-0" / "result.json"
             result = load_object(path)
@@ -107,7 +111,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_task_usage_binding_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             rewrite_finish_event(root, "task-0", usage_digest="0" * 64)
 
@@ -118,7 +122,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_aggregate_budget_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             budget_path = root / "results" / "aggregate-budget.json"
             budget = load_object(budget_path)
@@ -132,7 +136,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_reconstructed_budget_must_fit_manifest_and_owner_authorization(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             result_path = root / "results" / "task-attempts" / "task-0" / "result.json"
             result = load_object(result_path)
@@ -165,7 +169,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_reconstructed_budget_must_fit_manifest_when_owner_limit_is_higher(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(
                 root,
                 manifest_accounted_token_limit=1_845,
@@ -185,7 +189,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_reconstructed_budget_must_fit_owner_when_manifest_limit_is_higher(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(
                 root,
                 manifest_accounted_token_limit=2_000,
@@ -243,7 +247,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_aggregate_reconstruction_counts_heterogeneous_usage(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
 
             # when
@@ -266,7 +270,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_learning_carrier_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             carrier_path = root / "results" / "learning-calls" / "evaluator-task-0" / "carrier.json"
             carrier = load_object(carrier_path)
@@ -280,7 +284,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_learning_authorized_request_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             path = root / "results" / "learning-calls" / "evaluator-task-0" / "request.json"
             request = load_object(path)
@@ -295,7 +299,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_learning_authorized_request_core_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             path = root / "results" / "learning-calls" / "evaluator-task-0" / "request.json"
             request = load_object(path)
@@ -309,7 +313,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_learning_result_binding_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             path = root / "results" / "learning-calls" / "evaluator-task-0" / "result.json"
             result = load_object(path)
@@ -323,7 +327,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_learning_result_provenance_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             path = root / "results" / "learning-calls" / "evaluator-task-0" / "result.json"
             result = load_object(path)
@@ -343,7 +347,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_learning_usage_binding_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             rewrite_finish_event(root, "evaluator-task-0", usage_digest="0" * 64)
 
@@ -354,7 +358,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_valid_terminal_sidecar_verifies_offline(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root, terminal=True)
 
             # when
@@ -381,7 +385,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_future_missing_result_and_terminal_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             result_path = root / "results" / "task-attempts" / "task-0" / "result.json"
             result_path.unlink()
@@ -398,7 +402,7 @@ class ResultVerificationTests(unittest.TestCase):
         ):
             with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
                 # given
-                root = Path(temporary)
+                root = report_test_root(temporary)
                 manifest = artifact_result_tree(root)
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -411,7 +415,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_leaked_private_learning_state_root_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             leaked = (
                 root / "results" / ".private-learning-state" / "evaluator-task-0" / "result.json"
@@ -432,7 +436,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_forged_legacy_worker_failure_sidecar_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             operation = root / "results" / "task-attempts" / "task-0"
             configuration = load_object(operation / "configuration.json")
@@ -458,7 +462,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_unknown_operation_directory_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             path = root / "results" / "task-attempts" / "unknown-operation" / "carrier.json"
             path.parent.mkdir(parents=True)
@@ -471,7 +475,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_changed_event_byte_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             event_path = next((root / "results" / "events").glob("0*.json"))
             event_path.write_text(event_path.read_text(encoding="utf-8") + " ", encoding="utf-8")
@@ -483,7 +487,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_self_consistent_impossible_state_is_rejected_by_semantic_replay(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             state_path = root / "results" / "state.json"
             decisions_path = root / "results" / "decision-receipts.json"
@@ -502,7 +506,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_self_consistent_decision_mutation_is_rejected_by_semantic_replay(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             state = load_object(root / "results" / "state.json")
             decisions = json.loads(
@@ -530,7 +534,7 @@ class ResultVerificationTests(unittest.TestCase):
     def test_self_consistent_receipt_mutation_is_rejected_by_semantic_replay(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = report_test_root(temporary)
             manifest = artifact_result_tree(root)
             receipt_path = root / "results" / "replay-receipt.json"
             receipt = load_object(receipt_path)
