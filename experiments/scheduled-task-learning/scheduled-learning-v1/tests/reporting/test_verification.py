@@ -7,11 +7,13 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import cast
-from unittest.mock import patch
 
 from benchmark_core.canonical import canonical_sha256, load_object, write
+from scheduled_learning_v1.freeze import build_manifest
 from scheduled_learning_v1.frozen_contract import AGGREGATE_BUDGETS
 from scheduled_learning_v1.reporting import build_final_report, verify_results
+
+from tests.freeze.support import approval_for, create_repository
 
 from .support import artifact_result_tree, publish_hash_consistent_replay, rewrite_finish_event
 
@@ -209,8 +211,16 @@ class ResultVerificationTests(unittest.TestCase):
             ("score", "score", 99),
             ("critical codes", "critical_codes", ["critical.invalid"]),
         ):
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
+            with self.subTest(name=name):
+                repository = create_repository()
+                self.addCleanup(repository.cleanup)
+                root = repository.experiment_root
+                manifest = build_manifest(root)
+                write(root / "freeze" / "manifest.json", manifest)
+                write(
+                    root / "freeze" / "owner-budget-approval.json",
+                    approval_for(repository, manifest),
+                )
                 manifest = artifact_result_tree(root, active_evidence=True)
                 path = root / "results" / "active-evidence.json"
                 evidence = load_object(path)
@@ -219,13 +229,10 @@ class ResultVerificationTests(unittest.TestCase):
 
                 # when
                 report = build_final_report(root)
-                with (
-                    patch("scheduled_learning_v1.reporting.verification.verify_manifest"),
-                    self.assertRaisesRegex(
-                        ValueError,
-                        "active evidence is not bound to its frozen task result",
-                    ) as raised,
-                ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "active evidence is not bound to its frozen task result",
+                ) as raised:
                     verify_results(root, manifest)
 
                 # then

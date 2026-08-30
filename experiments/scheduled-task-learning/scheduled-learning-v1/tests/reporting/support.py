@@ -22,6 +22,7 @@ from scheduled_learning_v1.reporting import build_final_report
 from scheduled_learning_v1.worker_bridge import WorkerBridge
 
 from tests.execution.support import run_fake_scored
+from tests.freeze.support import rehash_binding
 
 
 def result_tree(root: Path, *, complete: bool = True) -> dict[str, object]:
@@ -48,7 +49,8 @@ def artifact_result_tree(
 
     root = root.resolve()
     source = Path(__file__).resolve().parents[2]
-    _copy_frozen_inputs(source, root)
+    if not (root / "freeze" / "manifest.json").is_file():
+        _copy_frozen_inputs(source, root)
     manifest = load_object(root / "freeze" / "manifest.json")
     approval = load_object(root / "freeze" / "owner-budget-approval.json")
     if manifest_accounted_token_limit is not None:
@@ -155,6 +157,7 @@ def _copy_frozen_inputs(source: Path, root: Path) -> None:
     manifest_path = root / "freeze" / "manifest.json"
     manifest = load_object(manifest_path)
     manifest["budgets"] = dict(AGGREGATE_BUDGETS)
+    rehash_binding(manifest, "budgets")
     write(manifest_path, manifest)
     approval_path = root / "freeze" / "owner-budget-approval.json"
     approval = load_object(approval_path)
