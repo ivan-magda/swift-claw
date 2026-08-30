@@ -6,6 +6,7 @@ import json
 import shutil
 import stat
 import sys
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -16,6 +17,7 @@ from benchmark_learning.learning_contract import event_json, parse_event, replay
 from scheduled_learning_v1.execution import run_scored
 from scheduled_learning_v1.execution.budgets import AggregateBudget
 from scheduled_learning_v1.execution.operations import Operations
+from scheduled_learning_v1.frozen_contract import AGGREGATE_BUDGETS
 from scheduled_learning_v1.reporting import build_final_report
 from scheduled_learning_v1.worker_bridge import WorkerBridge
 
@@ -90,6 +92,25 @@ def artifact_result_tree(
         "system_prompt_sha256": "b" * 64,
         "proactive_system_prompt_sha256": "c" * 64,
     }
+    task_snapshot = AggregateBudget.task_snapshot
+    admitted_snapshot = (
+        patch.object(
+            AggregateBudget,
+            "task_snapshot",
+            new=lambda budget, _manifest, _approval: task_snapshot(
+                budget,
+                {"budgets": dict(AGGREGATE_BUDGETS)},
+                {"budgets": dict(AGGREGATE_BUDGETS)},
+            ),
+        )
+        if manifest_accounted_token_limit is not None
+        else nullcontext()
+    )
+    admitted_contract = (
+        patch("scheduled_learning_v1.worker_bridge.requests._validate_task_budget")
+        if manifest_accounted_token_limit is not None
+        else nullcontext()
+    )
     with (
         patch(
             "scheduled_learning_v1.execution.lifecycle.verify_pre_run",
@@ -112,6 +133,8 @@ def artifact_result_tree(
             return_value=fixed_timestamp,
         ),
         patch("scheduled_learning_v1.execution.lifecycle._launch_restart"),
+        admitted_snapshot,
+        admitted_contract,
     ):
         run_scored(root, root.parent.resolve())
     if approval_accounted_token_limit is not None:
@@ -129,6 +152,15 @@ def _copy_frozen_inputs(source: Path, root: Path) -> None:
     (root / "freeze").mkdir(parents=True)
     for name in ("manifest.json", "owner-budget-approval.json"):
         shutil.copy2(source / "freeze" / name, root / "freeze" / name)
+    manifest_path = root / "freeze" / "manifest.json"
+    manifest = load_object(manifest_path)
+    manifest["budgets"] = dict(AGGREGATE_BUDGETS)
+    write(manifest_path, manifest)
+    approval_path = root / "freeze" / "owner-budget-approval.json"
+    approval = load_object(approval_path)
+    approval["manifest_sha256"] = canonical_sha256(manifest)
+    approval["budgets"] = dict(AGGREGATE_BUDGETS)
+    write(approval_path, approval)
 
 
 def _write_artifact_worker(path: Path, *, terminal: bool, active_evidence: bool) -> None:
