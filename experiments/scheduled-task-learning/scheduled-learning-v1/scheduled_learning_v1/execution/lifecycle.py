@@ -141,20 +141,14 @@ def _run_parent(
         evaluated = operations.run_evaluator(task)
         evaluation = _evaluation(evaluated, task)
         evaluations.append(evaluation)
-        timestamp = _utc_now()
-        journal.append("clock_advanced", timestamp, {})
         journal.append(
             "stable_evaluation_recorded",
-            timestamp,
-            _evaluation_payload(
-                task,
-                evaluated,
-                evaluation,
-                compatibility_digest(manifest),
-                timestamp,
-            ),
+            _utc_now(),
+            _evaluation_payload(task, evaluated, evaluation, compatibility_digest(manifest)),
         )
         replayed = replay_and_publish(root, controller)
+    journal.append("clock_advanced", _utc_now(), {})
+    replayed = replay_and_publish(root, controller)
     job = replay_job(replayed)
     trigger = _open_trigger(job)
     owner_payloads: list[str] = []
@@ -412,14 +406,13 @@ def _evaluation_payload(
     evaluated: dict[str, object],
     evaluation: dict[str, object],
     compatibility_digest: str,
-    logical_occurrence: str,
 ) -> dict[str, object]:
     return {
         "job_id": JOB_ID,
         "run_id": task["run_id"],
         "operation_id": evaluated["operation_id"],
         "evaluation_digest": canonical_sha256(evaluation),
-        "logical_occurrence": logical_occurrence,
+        "logical_occurrence": _utc_now(),
         "learning_epoch": 0,
         "compatibility_digest": compatibility_digest,
         "stable_digest": canonical_sha256(EMPTY_LESSON_SET),
