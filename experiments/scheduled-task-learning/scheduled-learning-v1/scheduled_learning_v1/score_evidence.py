@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-from benchmark_core.canonical import canonical_sha256, loads_object
+from benchmark_core.canonical import canonical_sha256
 from page_benchmark.scorer import score
 from page_change_m3.oracle import sealed_score
 
@@ -75,8 +75,27 @@ def score_evidence_projection(
             "score gold",
         )
         raw_output = task_result.get("raw_output")
-        attempt = loads_object(raw_output) if isinstance(raw_output, str) else {}
-    except (OSError, RecursionError, UnicodeError, ValueError):
+        if not isinstance(raw_output, str):
+            raw_output = ""
+        http = task_result.get("http")
+        tools = task_result.get("tools")
+        if (
+            not isinstance(http, dict)
+            or not isinstance(tools, list)
+            or any(not isinstance(tool, dict) for tool in tools)
+        ):
+            return None
+        tool_events = [
+            {key: tool[key] for key in ("name", "path", "status")}
+            for tool in cast(list[dict[str, object]], tools)
+        ]
+        attempt = {
+            "runtime_outcome": task_result.get("outcome"),
+            "raw_output": raw_output,
+            "tool_events": tool_events,
+            "responses_requests": http.get("responsesSends"),
+        }
+    except (KeyError, OSError, RecursionError, UnicodeError, ValueError):
         return None
     task_result_digest = canonical_sha256(task_result)
     scorer_sha256 = canonical_sha256(Path(score.__code__.co_filename).read_text(encoding="utf-8"))
