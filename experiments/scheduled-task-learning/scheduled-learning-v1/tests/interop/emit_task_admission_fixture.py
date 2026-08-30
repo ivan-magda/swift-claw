@@ -23,6 +23,8 @@ from scheduled_learning_v1.frozen_contract import AGGREGATE_BUDGETS
 from scheduled_learning_v1.replay_controller import EventJournal
 from scheduled_learning_v1.worker_bridge import WorkerBridge
 
+from tests.freeze.support import approval_for_commit
+
 _RUNTIME_REPOSITORY = Path(
     "/tmp/swift-claw-scheduled-learning-v1-task-admission-v1"  # noqa: S108 -- flocked fixture
 )
@@ -32,6 +34,8 @@ _RUNTIME_LOCK = Path(
 _EXPERIMENT_PATH = Path("experiments/scheduled-task-learning/scheduled-learning-v1")
 _FIXED_TIME = "2026-08-30T00:00:00Z"
 _STUB_BYTES = b"#!/bin/sh\nexit 7\n"
+# Keep the exact-byte fixture independent of unrelated test-only commits.
+_TEST_FREEZE_COMMIT = "f" * 40
 
 
 def emit_fixture(source_repository: Path, output: Path) -> None:
@@ -47,7 +51,7 @@ def emit_fixture(source_repository: Path, output: Path) -> None:
         try:
             _copy_inputs(source_repository, runtime_repository)
             manifest = _fixture_manifest(source_repository)
-            approval = _fixture_approval(source_repository, manifest)
+            approval = _fixture_approval(manifest)
             write(runtime_root / "freeze" / "manifest.json", manifest)
             write(runtime_root / "freeze" / "owner-budget-approval.json", approval)
             executable = _write_stub_executable(runtime_root, manifest)
@@ -123,15 +127,8 @@ def _fixture_manifest(source_repository: Path) -> dict[str, object]:
     return manifest
 
 
-def _fixture_approval(
-    source_repository: Path,
-    manifest: dict[str, object],
-) -> dict[str, object]:
-    path = source_repository / _EXPERIMENT_PATH / "freeze" / "owner-budget-approval.json"
-    approval = load_object(path)
-    approval["manifest_sha256"] = canonical_sha256(manifest)
-    approval["budgets"] = dict(_object(manifest["budgets"], "manifest budgets"))
-    return approval
+def _fixture_approval(manifest: dict[str, object]) -> dict[str, object]:
+    return approval_for_commit(manifest, expected_commit=_TEST_FREEZE_COMMIT)
 
 
 def _write_stub_executable(root: Path, manifest: dict[str, object]) -> Path:

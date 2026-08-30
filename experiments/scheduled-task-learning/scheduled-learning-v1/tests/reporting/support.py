@@ -22,7 +22,7 @@ from scheduled_learning_v1.reporting import build_final_report
 from scheduled_learning_v1.worker_bridge import WorkerBridge
 
 from tests.execution.support import run_fake_scored
-from tests.freeze.support import rehash_binding
+from tests.freeze.support import approval_for_repository, rehash_binding
 
 
 def result_tree(root: Path, *, complete: bool = True) -> dict[str, object]:
@@ -152,18 +152,14 @@ def _copy_frozen_inputs(source: Path, root: Path) -> None:
     for directory in ("corpus", "gold", "prompts"):
         shutil.copytree(source / directory, root / directory)
     (root / "freeze").mkdir(parents=True)
-    for name in ("manifest.json", "owner-budget-approval.json"):
-        shutil.copy2(source / "freeze" / name, root / "freeze" / name)
     manifest_path = root / "freeze" / "manifest.json"
+    shutil.copy2(source / "freeze" / "manifest.json", manifest_path)
     manifest = load_object(manifest_path)
     manifest["budgets"] = dict(AGGREGATE_BUDGETS)
     rehash_binding(manifest, "budgets")
     write(manifest_path, manifest)
     approval_path = root / "freeze" / "owner-budget-approval.json"
-    approval = load_object(approval_path)
-    approval["manifest_sha256"] = canonical_sha256(manifest)
-    approval["budgets"] = dict(AGGREGATE_BUDGETS)
-    write(approval_path, approval)
+    write(approval_path, approval_for_repository(source, manifest))
 
 
 def _write_artifact_worker(path: Path, *, terminal: bool, active_evidence: bool) -> None:

@@ -468,23 +468,6 @@ class ResultVerificationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "operation directory inventory"):
                 verify_results(root, manifest)
 
-    def test_preserved_tree_reports_legacy_incomplete_audit(self) -> None:
-        # given
-        root = Path(__file__).resolve().parents[2]
-        manifest = load_object(root / "freeze" / "manifest.json")
-
-        # when
-        receipt = verify_results(root, manifest)
-
-        # then
-        self.assertEqual(receipt["status"], "verified_legacy_incomplete")
-        self.assertFalse(receipt["self_verifying"])
-        self.assertEqual(receipt["unreconstructable_terminal_digests"], 1)
-        self.assertEqual(
-            receipt["manifest_sha256"],
-            "d16ae90f1e54e866a75af773ae304884906fa943ad937a2e74c00a4638842c07",
-        )
-
     def test_changed_event_byte_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:

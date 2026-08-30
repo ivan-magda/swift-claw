@@ -130,17 +130,41 @@ def approval_for(
     *,
     expected_commit: str | None = None,
 ) -> dict[str, object]:
+    return approval_for_commit(
+        manifest,
+        expected_commit=expected_commit or repository.git("rev-parse", "HEAD"),
+    )
+
+
+def approval_for_commit(
+    manifest: dict[str, object],
+    *,
+    expected_commit: str,
+) -> dict[str, object]:
     budgets = manifest["budgets"]
     if not isinstance(budgets, dict):
         raise AssertionError("test manifest budgets must be an object")
     return {
         "schema_version": 1,
         "manifest_sha256": canonical_sha256(manifest),
-        "expected_freeze_commit": expected_commit or repository.git("rev-parse", "HEAD"),
+        "expected_freeze_commit": expected_commit,
         "budgets": dict(budgets),
         "owner_identity": "owner:test",
         "approved_at": "2026-08-30T00:00:00Z",
     }
+
+
+def approval_for_repository(
+    repository_root: Path,
+    manifest: dict[str, object],
+) -> dict[str, object]:
+    completed = subprocess.run(  # noqa: S603 -- source repository owns the temporary approval
+        ["git", "-C", str(repository_root), "rev-parse", "HEAD"],  # noqa: S607
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return approval_for_commit(manifest, expected_commit=completed.stdout.strip())
 
 
 def rehash_binding(manifest: dict[str, object], name: str) -> None:
