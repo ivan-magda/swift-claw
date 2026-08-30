@@ -38,6 +38,10 @@ def write_worker(
         "    request_bytes = pathlib.Path(sys.argv[-1]).read_bytes()\n"
         "    provenance['request_sha256'] = hashlib.sha256(request_bytes).hexdigest()\n"
         f"result_path = pathlib.Path({str(result_path)!r})\n"
+        "if result.get('kind') in {'evaluator', 'reflector'}:\n"
+        "    request = json.loads(pathlib.Path(sys.argv[-1]).read_text())\n"
+        "    result_path = pathlib.Path(request['result_path'])\n"
+        "result_path.parent.mkdir(parents=True, exist_ok=True)\n"
         "result_text = json.dumps(result, sort_keys=True, separators=(',', ':')) + '\\n'\n"
         + ("result_path.write_text(result_text)\n" if publish_result else "")
         + "print('diagnostic-' + 'x' * 4096)\n"
@@ -52,8 +56,12 @@ def write_malformed_result_worker(path: Path, result_path: Path) -> None:
 
     script = (
         "#!/usr/bin/env python3\n"
-        "import pathlib\n"
-        f"pathlib.Path({str(result_path)!r}).write_text('{{', encoding='utf-8')\n"
+        "import json, pathlib, sys\n"
+        f"result_path = pathlib.Path({str(result_path)!r})\n"
+        "request = json.loads(pathlib.Path(sys.argv[-1]).read_text())\n"
+        "result_path = pathlib.Path(request.get('result_path', result_path))\n"
+        "result_path.parent.mkdir(parents=True, exist_ok=True)\n"
+        "result_path.write_text('{', encoding='utf-8')\n"
     )
     path.write_text(script, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)

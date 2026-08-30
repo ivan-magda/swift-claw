@@ -129,7 +129,7 @@ class RestartTests(unittest.TestCase):
     def test_fresh_process_reconstructs_promotion_and_reports_restart_score_failure(self) -> None:
         # given / when / then
         for name, restart_score, expected_status in (
-            ("passing restart", 96, "complete"),
+            ("passing restart", 100, "complete"),
             ("below restart gate", 89, "incomplete_failed"),
         ):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
@@ -275,7 +275,9 @@ import scheduled_learning_v1.run as run
 root = Path({str(root)!r})
 manifest = load_object(root / 'freeze' / 'manifest.json')
 def factory(*args, **kwargs):
-    operations = FakeOperations(args[3], restart_score={restart_score!r}, generation=3)
+    operations = FakeOperations(
+        root, manifest, args[3], restart_score={restart_score!r}, generation=3
+    )
     captured['operations'] = operations
     return operations
 captured = {{}}

@@ -15,9 +15,20 @@ from scheduled_learning_v1.reporting import verify_results
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Run or verify the scheduled-learning M3 harness.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Verify the archival M3 evidence, or run only after a fresh freeze and new explicit "
+            "owner authorization."
+        )
+    )
     commands = parser.add_subparsers(dest="command", required=True)
-    scored = commands.add_parser("scored", help="run the owner-authorized live lifecycle")
+    scored = commands.add_parser(
+        "scored",
+        help="run a newly frozen and newly authorized lifecycle; archival HEAD is ineligible",
+        description=(
+            "Run a newly frozen and newly authorized lifecycle; archival HEAD is ineligible."
+        ),
+    )
     scored.add_argument("--root", required=True)
     scored.add_argument("--manifest", required=True)
     scored.add_argument("--approval", required=True)

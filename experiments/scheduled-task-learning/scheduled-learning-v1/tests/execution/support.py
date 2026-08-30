@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from unittest.mock import patch
 
-from benchmark_core.canonical import canonical_sha256, write
+from benchmark_core.canonical import canonical_sha256, dumps, load_object, loads_object, write
+from page_change_m3.oracle import sealed_score
 from scheduled_learning_v1.execution import run_scored
 from scheduled_learning_v1.execution.budgets import AggregateBudget
 from scheduled_learning_v1.execution.operations import Operations
@@ -16,6 +18,7 @@ from scheduled_learning_v1.worker_bridge import LearningCall
 
 FIXED_TIME = "2026-08-30T00:00:00Z"
 _TRIGGER_EVALUATION_COUNT = 2
+_ACTIVE_SCORE_THRESHOLD = 90
 
 
 class RecordingBridge:
@@ -52,13 +55,25 @@ def recording_operations(
     root: Path,
     budget: AggregateBudget,
     terminal: dict[str, object] | None = None,
+    *,
+    missing_usage_token_proxy: int = 1,
 ) -> tuple[Operations, RecordingBridge]:
     """Construct real operation dispatch around a recording external boundary."""
 
     (root / "freeze").mkdir(parents=True, exist_ok=True)
     write(root / "freeze" / "owner-budget-approval.json", {})
     bridge = RecordingBridge(terminal)
-    operations = Operations(root, {}, {}, budget, bridge=bridge, verify=_verified_without_io)
+    manifest = {
+        "swift_execution": {"missing_usage_token_proxy": missing_usage_token_proxy},
+        "gates": {
+            "responses_sends_per_operation": {
+                "task": 2,
+                "evaluator": 3,
+                "reflector": 3,
+            }
+        },
+    }
+    operations = Operations(root, manifest, {}, budget, bridge=bridge, verify=_verified_without_io)
     return operations, bridge
 
 
@@ -79,6 +94,9 @@ def _verified_without_io(root: Path, approval: dict[str, object]) -> dict[str, o
 
 def frozen_tree(root: Path) -> tuple[dict[str, object], dict[str, object]]:
     (root / "freeze").mkdir(parents=True)
+    source_root = Path(__file__).resolve().parents[2]
+    for directory in ("corpus", "gold"):
+        shutil.copytree(source_root / directory, root / directory)
     manifest: dict[str, object] = {
         "schema_version": 1,
         "algorithm_id": "scheduled-learning/v1",
@@ -117,14 +135,18 @@ class FakeOperations:
 
     def __init__(
         self,
+        root: Path,
+        manifest: dict[str, object],
         journal: Any,
         *,
         lessons: list[str] | None = None,
         adapter_outcome: str = "pass",
-        active_score: float = 95,
-        restart_score: float = 96,
+        active_score: float = 100,
+        restart_score: float = 100,
         generation: int = 2,
     ) -> None:
+        self.root = root
+        self.manifest = manifest
         self.journal = journal
         self.lessons = ["Ignore volatile deployment counters."] if lessons is None else lessons
         self.adapter_outcome = adapter_outcome
@@ -159,21 +181,46 @@ class FakeOperations:
             }
         )
         operation_id = f"task-{row['order_index']}"
-        self._operation(operation_id, "task")
         order_index = row["order_index"]
         if not isinstance(order_index, int) or isinstance(order_index, bool):
             raise AssertionError("fake row index must be an integer")
-        task_id = f"page-{order_index:012x}"
+        split = "sealed" if row["stage"] in {"active", "restart"} else str(row["stage"])
+        fixture_id = str(row["fixture_id"])
+        source = load_object(self.root / "corpus" / split / f"{fixture_id}.source.json")
+        gold = load_object(self.root / "gold" / split / f"{fixture_id}.gold.json")
+        task_id = str(source["task_id"])
+        requested_score = (
+            self.restart_score
+            if row["stage"] == "restart"
+            else self.active_score
+            if row["stage"] == "active"
+            else 100
+        )
+        raw_attempt = (
+            _low_attempt(source, gold)
+            if requested_score < _ACTIVE_SCORE_THRESHOLD
+            else _perfect_attempt(source, gold)
+        )
+        raw_output = dumps(raw_attempt)
+        result = {"raw_output": raw_output}
+        result_path = self.root / "results" / "task-attempts" / operation_id / "result.json"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        write(result_path, result)
+        result_digest = canonical_sha256(result)
+        self._operation(operation_id, "task", result_digest=result_digest)
         return {
             "status": "completed",
             "operation_id": operation_id,
             "run_id": operation_id,
             "task_id": task_id,
-            "raw_output": "{}",
+            "fixture_id": fixture_id,
+            "condition": row["condition"],
+            "task_result_digest": result_digest,
+            "raw_output": raw_output,
             "attempt": {
-                "source": {"fixture_id": row["fixture_id"]},
-                "gold": {},
-                "attempt": {"task_id": task_id},
+                "source": source,
+                "gold": gold,
+                "attempt": raw_attempt,
             },
         }
 
@@ -250,17 +297,48 @@ class FakeOperations:
 
     def score_active(self, attempt: dict[str, object], *, restart: bool) -> dict[str, object]:
         self.active_scores += 1
-        score = self.restart_score if restart else self.active_score
-        return {"score": score, "critical_codes": [], "score_receipt_digest": "6" * 64}
+        trusted = attempt["attempt"]
+        if not isinstance(trusted, dict):
+            raise AssertionError("fake active attempt must be an object")
+        source = trusted["source"]
+        gold = trusted["gold"]
+        raw_attempt = trusted["attempt"]
+        identities = self.manifest["identities"]
+        if not isinstance(identities, dict):
+            raise AssertionError("fake manifest identities must be an object")
+        sealed = sealed_score(
+            trusted,
+            "restart" if restart else "active",
+        )
+        return {
+            **sealed,
+            "operation_id": attempt["operation_id"],
+            "task_id": attempt["task_id"],
+            "task_result_digest": attempt["task_result_digest"],
+            "fixture_id": attempt["fixture_id"],
+            "condition": attempt["condition"],
+            "scoring_condition": "restart" if restart else "active",
+            "source_sha256": canonical_sha256(source),
+            "gold_sha256": canonical_sha256(gold),
+            "attempt_sha256": canonical_sha256(raw_attempt),
+            "oracle_digest": identities["oracle_digest"],
+        }
 
-    def _operation(self, operation_id: str, kind: str) -> str:
+    def _operation(
+        self,
+        operation_id: str,
+        kind: str,
+        *,
+        result_digest: str | None = None,
+    ) -> str:
         shared = {
             "job_id": JOB_ID,
             "operation_id": operation_id,
             "operation_kind": kind,
             "attempt_generation": self.generation,
         }
-        result_digest = canonical_sha256({"operation_id": operation_id})
+        if result_digest is None:
+            result_digest = canonical_sha256({"operation_id": operation_id})
         self.journal.append(
             "operation_started",
             FIXED_TIME,
@@ -305,13 +383,15 @@ def run_fake_scored(
     restart_boundary: bool = True,
     lessons: list[str] | None = None,
     adapter_outcome: str = "pass",
-    active_score: float = 95,
+    active_score: float = 100,
 ) -> tuple[dict[str, object], FakeOperations, str | None]:
     manifest, _ = frozen_tree(root)
     captured: dict[str, object] = {}
 
     def factory(*args: object, **kwargs: object) -> FakeOperations:
         operations = FakeOperations(
+            root,
+            manifest,
             args[3],
             lessons=lessons,
             adapter_outcome=adapter_outcome,
@@ -323,7 +403,7 @@ def run_fake_scored(
     def restart_runner(path: Path, generation: int, digest: str) -> None:
         captured["restart_digest"] = digest
         if restart_boundary:
-            write_restart(path, digest, 96)
+            write_restart(path, digest, 100)
 
     with (
         patch(
@@ -343,16 +423,102 @@ def run_fake_scored(
 
 
 def write_restart(root: Path, digest: str, score: float) -> None:
+    manifest = load_object(root / "freeze" / "manifest.json")
+    rows = manifest["run_order"]
+    identities = manifest["identities"]
+    if not isinstance(rows, list) or not isinstance(identities, dict):
+        raise AssertionError("fake restart manifest is malformed")
+    row = rows[9]
+    if not isinstance(row, dict):
+        raise AssertionError("fake restart row is malformed")
+    fixture_id = str(row["fixture_id"])
+    source = load_object(root / "corpus" / "sealed" / f"{fixture_id}.source.json")
+    gold = load_object(root / "gold" / "sealed" / f"{fixture_id}.gold.json")
+    raw_attempt = _perfect_attempt(source, gold)
+    result = {"raw_output": dumps(raw_attempt)}
+    result_path = root / "results" / "task-attempts" / "task-9" / "result.json"
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    write(result_path, result)
+    sealed = sealed_score(
+        {"source": source, "gold": gold, "attempt": raw_attempt},
+        "restart",
+    )
     write(
         root / "results" / "restart-evidence.json",
         {
             "schema_version": 1,
+            **sealed,
             "score": score,
-            "score_receipt_digest": "6" * 64,
             "promoted_digest": digest,
-            "promoted_digest_matched": True,
+            "operation_id": "task-9",
+            "task_id": source["task_id"],
+            "task_result_digest": canonical_sha256(result),
+            "fixture_id": fixture_id,
+            "condition": row["condition"],
+            "scoring_condition": "restart",
+            "source_sha256": canonical_sha256(source),
+            "gold_sha256": canonical_sha256(gold),
+            "attempt_sha256": canonical_sha256(raw_attempt),
+            "oracle_digest": identities["oracle_digest"],
         },
     )
+
+
+def _perfect_attempt(
+    source: dict[str, object],
+    gold: dict[str, object],
+) -> dict[str, object]:
+    atoms = gold["atoms"]
+    if not isinstance(atoms, list):
+        raise AssertionError("fake gold atoms must be a list")
+    material = [item for item in atoms if isinstance(item, dict) and item.get("kind") == "material"]
+    noise = [item for item in atoms if isinstance(item, dict) and item.get("kind") == "noise"]
+    output = {
+        "schema_version": 1,
+        "task_id": source["task_id"],
+        "verdict": gold["expected_verdict"],
+        "material_region_ids": [item["region_id"] for item in material],
+        "ignored_region_ids": [item["region_id"] for item in noise],
+        "evidence": [
+            {
+                "region_id": item["region_id"],
+                "before": item["before"],
+                "after": item["after"],
+            }
+            for item in material
+        ],
+    }
+    return {
+        "runtime_outcome": "completed",
+        "raw_output": dumps(output),
+        "tool_events": [{"name": "file_read", "path": "input.json", "status": "succeeded"}],
+    }
+
+
+def _low_attempt(
+    source: dict[str, object],
+    gold: dict[str, object],
+) -> dict[str, object]:
+    attempt = _perfect_attempt(source, gold)
+    raw_output = attempt["raw_output"]
+    if not isinstance(raw_output, str):
+        raise AssertionError("fake raw output must be text")
+    output = loads_object(raw_output)
+    atoms = gold["atoms"]
+    if not isinstance(atoms, list) or any(not isinstance(item, dict) for item in atoms):
+        raise AssertionError("fake gold atoms must be objects")
+    typed_atoms = cast(list[dict[str, object]], atoms)
+    output["material_region_ids"] = [item["region_id"] for item in typed_atoms]
+    output["ignored_region_ids"] = []
+    output["evidence"] = [
+        {
+            "region_id": item["region_id"],
+            "before": item["before"],
+            "after": item["after"],
+        }
+        for item in typed_atoms
+    ]
+    return {**attempt, "raw_output": dumps(output)}
 
 
 def _run_order() -> list[dict[str, object]]:

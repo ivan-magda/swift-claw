@@ -22,10 +22,19 @@ class AggregateBudget:
     responses_sends: int = 0
     accounted_tokens: int = 0
 
-    def reserve(self, kind: str) -> None:
-        """Reserve one model call only after current usage remains dispatchable."""
+    def reserve(
+        self,
+        kind: str,
+        *,
+        maximum_responses_sends: int,
+        maximum_accounted_tokens: int,
+    ) -> None:
+        """Reserve one call only when its worst-case accounting fits authorization."""
 
-        self.guard_dispatch()
+        self.guard_dispatch(
+            maximum_responses_sends=maximum_responses_sends,
+            maximum_accounted_tokens=maximum_accounted_tokens,
+        )
         field = {
             "task": "task_attempts",
             "evaluator": "evaluator_calls",
@@ -39,12 +48,23 @@ class AggregateBudget:
             raise BudgetExceededError(f"{field} aggregate exhausted")
         setattr(self, field, observed + 1)
 
-    def guard_dispatch(self) -> None:
-        """Reject external work when a send or token aggregate is already exhausted."""
+    def guard_dispatch(
+        self,
+        *,
+        maximum_responses_sends: int = 1,
+        maximum_accounted_tokens: int = 1,
+    ) -> None:
+        """Reject work unless the next operation's complete bound fits."""
 
-        if self.responses_sends >= int(AGGREGATE_BUDGETS["responses_sends"]):
+        if maximum_responses_sends <= 0 or maximum_accounted_tokens <= 0:
+            raise ValueError("dispatch maxima must be positive integers")
+        if self.responses_sends + maximum_responses_sends > int(
+            AGGREGATE_BUDGETS["responses_sends"]
+        ):
             raise BudgetExceededError("responses_sends aggregate exhausted")
-        if self.accounted_tokens >= int(AGGREGATE_BUDGETS["accounted_tokens"]):
+        if self.accounted_tokens + maximum_accounted_tokens > int(
+            AGGREGATE_BUDGETS["accounted_tokens"]
+        ):
             raise BudgetExceededError("accounted_tokens aggregate exhausted")
 
     def record(self, terminal: dict[str, object]) -> None:

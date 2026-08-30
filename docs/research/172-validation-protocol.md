@@ -154,3 +154,11 @@ model/provider call, and the workflow never invokes the scored command.
 Before the live run, freeze verification checks the exact committed manifest bytes. The owner runs
 the scored command from Task 9 of the implementation plan by hand after passing the budget
 checkpoint. CI never runs that command.
+
+## Post-run archival ruling
+
+The checked-out post-run hardening revision is archival. The preserved owner approval and result
+tree remain evidence for their original freeze commit only; they do not verify or authorize the
+current source bytes. No re-freeze or replacement approval is part of this hardening wave. A future
+live execution requires a fresh freeze of the then-current closure and new explicit owner
+authorization for that exact manifest before any provider dispatch.

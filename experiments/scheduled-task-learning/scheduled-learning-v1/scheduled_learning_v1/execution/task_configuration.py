@@ -72,7 +72,7 @@ def build_task_configuration(
     promotion_digest = _sha256(promotion_receipt) if promotion_receipt is not None else None
     manifest_digest = canonical_sha256(manifest)
     freeze_commit = str(approval["expected_freeze_commit"])
-    evaluation_root = result_path.parent / "evaluation"
+    evaluation_root = root / "results"
     runtime_identity = swift_runtime_identity(root.parents[2], evaluation_root)
     provenance = _provenance(manifest, route, runtime_identity, freeze_commit)
     order_index = row["order_index"]
@@ -134,7 +134,7 @@ def build_task_configuration(
             "manifest_sha256": manifest_digest,
             "approved_manifest_sha256": manifest_digest,
             "approval_comment_url": (
-                "https://github.com/jetbrains/swift-claw/issues/118#issuecomment-118001"
+                "https://github.com/ivan-magda/swift-claw/issues/118#issuecomment-118001"
             ),
             "approval_body_sha256": approval_digest,
         },

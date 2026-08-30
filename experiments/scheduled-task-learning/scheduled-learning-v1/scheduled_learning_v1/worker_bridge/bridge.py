@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
-from benchmark_core.canonical import canonical_sha256
+from benchmark_core.canonical import canonical_sha256, dumps, write
 
 from scheduled_learning_v1.evidence_contract import publish_terminal
 from scheduled_learning_v1.replay_controller import EventJournal
@@ -53,14 +54,26 @@ class WorkerBridge:
     def run_learning(self, call: LearningCall) -> dict[str, object]:
         """Authorize, launch once, and close one evaluator/reflector terminal record."""
 
-        return self._run(
-            core=call.request_core,
-            input_path=call.request_path,
-            result_path=call.result_path,
-            command=("learning-call", "--request"),
-            operation_kind=call.kind,
-            validate=lambda result: validate_learning_result(call, result),
-        )
+        result_value = call.request_core.get("result_path")
+        state_value = call.request_core.get("state_root")
+        if not isinstance(result_value, str) or not isinstance(state_value, str):
+            raise ValueError("learning state and result paths must be strings")
+        published_result_path = Path(result_value)
+        private_state_root = Path(state_value)
+        if not published_result_path.is_absolute() or not private_state_root.is_absolute():
+            raise ValueError("learning state and result paths must be absolute")
+        try:
+            return self._run(
+                core=call.request_core,
+                input_path=call.request_path,
+                result_path=call.result_path,
+                published_result_path=published_result_path,
+                command=("learning-call", "--request"),
+                operation_kind=call.kind,
+                validate=lambda result: validate_learning_result(call, result),
+            )
+        finally:
+            _remove_private_state(private_state_root)
 
     def _run(
         self,
@@ -68,11 +81,17 @@ class WorkerBridge:
         core: dict[str, object],
         input_path: Path,
         result_path: Path,
+        published_result_path: Path | None = None,
         command: tuple[str, str],
         operation_kind: str,
         validate: Callable[[dict[str, object]], dict[str, object]],
     ) -> dict[str, object]:
-        if not input_path.is_absolute() or not result_path.is_absolute():
+        publication = result_path if published_result_path is None else published_result_path
+        if (
+            not input_path.is_absolute()
+            or not result_path.is_absolute()
+            or not publication.is_absolute()
+        ):
             raise ValueError("worker input and result paths must be absolute")
         contract = bound_contract(core, operation_kind)
         start = self.journal.append(
@@ -94,15 +113,23 @@ class WorkerBridge:
                 "exit_code": completed.returncode,
                 "diagnostics": diagnostics,
             }
-            result_path.unlink(missing_ok=True)
+            publication.unlink(missing_ok=True)
             publish_terminal(result_path, terminal)
             self._finish(core, operation_kind, terminal, canonical_sha256(terminal))
             return terminal
         result: dict[str, object] | None = None
         try:
-            result = _load_result(result_path)
+            result = _load_result(publication)
             terminal = validate(result)
+            if publication != result_path:
+                if result_path.exists():
+                    raise ValueError("durable learning result already exists")
+                result_path.parent.mkdir(parents=True, exist_ok=True)
+                write(result_path, result)
+                if result_path.read_bytes() != publication.read_bytes():
+                    raise ValueError("durable learning result differs from accepted bytes")
         except (OSError, ValueError, json.JSONDecodeError) as error:
+            publication.unlink(missing_ok=True)
             result_path.unlink(missing_ok=True)
             result = None
             terminal = {
@@ -167,11 +194,22 @@ def _object(value: object) -> dict[str, object]:
 
 
 def _load_result(path: Path) -> dict[str, object]:
-    with path.open(encoding="utf-8") as stream:
-        value = json.load(stream)
+    raw = path.read_bytes()
+    value = json.loads(raw.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError("worker result must be one JSON object")
-    return cast(dict[str, object], value)
+    result = cast(dict[str, object], value)
+    if raw != dumps(result).encode("utf-8"):
+        raise ValueError("worker result must be canonical JSON")
+    return result
+
+
+def _remove_private_state(path: Path | None) -> None:
+    if path is not None and path.exists():
+        shutil.rmtree(path)
+        parent = path.parent
+        if parent.name == ".private-learning-state" and not any(parent.iterdir()):
+            parent.rmdir()
 
 
 def _usage_digest(terminal: dict[str, object]) -> str:

@@ -98,12 +98,12 @@ class FinalReportBuilderTests(unittest.TestCase):
             self.assertEqual(report["promoted_digest"], identities["replacement_digest"])
             self.assertEqual(
                 report["active_evidence"],
-                {"score": 95, "threshold": 94, "passed": True},
+                {"score": 100, "threshold": 94, "passed": True},
             )
             self.assertEqual(
                 report["restart_evidence"],
                 {
-                    "score": 96,
+                    "score": 100,
                     "threshold": 95,
                     "passed": True,
                     "promoted_digest_matched": True,
@@ -201,6 +201,65 @@ class FinalReportBuilderTests(unittest.TestCase):
             )
             self.assertEqual(report["active_evidence_sha256"], _raw_sha256(active_path))
             self.assertEqual(report["restart_evidence_sha256"], _raw_sha256(restart_path))
+
+    def test_active_and_restart_evidence_is_closed_and_bound_to_frozen_tasks(self) -> None:
+        # given
+        for name, path_name, key, value, remove in (
+            ("cross-task active", "active-evidence.json", "operation_id", "task-9", False),
+            ("missing active", "active-evidence.json", "gold_sha256", None, True),
+            ("invented restart", "restart-evidence.json", "invented", True, False),
+            (
+                "forged restart receipt",
+                "restart-evidence.json",
+                "score_receipt_digest",
+                "f" * 64,
+                False,
+            ),
+        ):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result_tree(root)
+                path = root / "results" / path_name
+                evidence = load_object(path)
+                if remove:
+                    evidence.pop(key)
+                else:
+                    evidence[key] = value
+                write(path, evidence)
+
+                # when
+                report = build_final_report(root)
+
+                # then
+                self.assertEqual(report["status"], "incomplete_failed")
+                self.assertTrue(report["m4_blocked"])
+
+    def test_score_evidence_rejects_each_rebound_production_identity(self) -> None:
+        # given
+        for name, key, value in (
+            ("task result digest", "task_result_digest", "f" * 64),
+            ("fixture", "fixture_id", "pc-sealed-06"),
+            ("condition", "condition", "post_restart_active"),
+            ("source", "source_sha256", "f" * 64),
+            ("gold", "gold_sha256", "f" * 64),
+            ("attempt", "attempt_sha256", "f" * 64),
+            ("scorer", "scorer_sha256", "f" * 64),
+            ("oracle", "oracle_digest", "f" * 64),
+        ):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result_tree(root)
+                path = root / "results" / "active-evidence.json"
+                evidence = load_object(path)
+                evidence[key] = value
+                write(path, evidence)
+
+                # when
+                report = build_final_report(root)
+
+                # then
+                self.assertEqual(report["status"], "incomplete_failed")
+                self.assertTrue(report["m4_blocked"])
 
     def test_replay_decision_digest_binding_is_required_for_completion(self) -> None:
         # given

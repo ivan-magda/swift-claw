@@ -125,6 +125,105 @@ class ResultVerificationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "aggregate budget"):
                 verify_results(root, manifest)
 
+    def test_reconstructed_budget_must_fit_manifest_and_owner_authorization(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            result_path = root / "results" / "task-attempts" / "task-0" / "result.json"
+            result = load_object(result_path)
+            result["accounted_tokens"] = 120_001
+            write(result_path, result)
+            rewrite_finish_event(root, "task-0", result_digest=canonical_sha256(result))
+            budget_path = root / "results" / "aggregate-budget.json"
+            budget = load_object(budget_path)
+            budget["accounted_tokens"] = 121_835
+            write(budget_path, budget)
+            state = load_object(root / "results" / "state.json")
+            decisions = json.loads(
+                (root / "results" / "decision-receipts.json").read_text(encoding="utf-8")
+            )
+            self.assertIsInstance(decisions, list)
+            publish_hash_consistent_replay(root, state, cast(list[dict[str, object]], decisions))
+            build_final_report(root)
+
+            # when
+            with self.assertRaisesRegex(ValueError, "authorized accounted_tokens") as raised:
+                verify_results(root, manifest)
+
+            # then
+            self.assertIsInstance(raised.exception, ValueError)
+
+    def test_reconstructed_budget_must_fit_manifest_when_owner_limit_is_higher(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(
+                root,
+                manifest_accounted_token_limit=1_845,
+                approval_accounted_token_limit=2_000,
+            )
+
+            # when
+            with self.assertRaisesRegex(
+                ValueError,
+                "^reconstructed total exceeds manifest authorized accounted_tokens$",
+            ) as raised:
+                verify_results(root, manifest)
+
+            # then
+            self.assertIsInstance(raised.exception, ValueError)
+
+    def test_reconstructed_budget_must_fit_owner_when_manifest_limit_is_higher(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(
+                root,
+                manifest_accounted_token_limit=2_000,
+                approval_accounted_token_limit=1_845,
+            )
+
+            # when
+            with self.assertRaisesRegex(
+                ValueError,
+                "^reconstructed total exceeds owner authorized accounted_tokens$",
+            ) as raised:
+                verify_results(root, manifest)
+
+            # then
+            self.assertIsInstance(raised.exception, ValueError)
+
+    def test_offline_verification_rejects_rebound_active_score_evidence(self) -> None:
+        # given
+        for name, key, value in (
+            ("task identity", "task_id", "task-other"),
+            ("scoring condition", "scoring_condition", "restart"),
+            ("promoted lessons", "promoted_digest", "f" * 64),
+            ("score", "score", 99),
+            ("critical codes", "critical_codes", ["critical.invalid"]),
+        ):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                manifest = artifact_result_tree(root, active_evidence=True)
+                path = root / "results" / "active-evidence.json"
+                evidence = load_object(path)
+                evidence[key] = value
+                write(path, evidence)
+
+                # when
+                report = build_final_report(root)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "active evidence is not bound to its frozen task result",
+                ) as raised:
+                    verify_results(root, manifest)
+
+                # then
+                self.assertEqual(report["status"], "incomplete_failed")
+                self.assertTrue(report["m4_blocked"])
+                self.assertIsInstance(raised.exception, ValueError)
+
     def test_aggregate_reconstruction_counts_heterogeneous_usage(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
@@ -279,7 +378,6 @@ class ResultVerificationTests(unittest.TestCase):
         for relative in (
             "results/invented.json",
             "results/events/invented.json",
-            "results/learning-state/invented.json",
             "results/task-attempts/task-0/invented.json",
         ):
             with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
@@ -293,6 +391,27 @@ class ResultVerificationTests(unittest.TestCase):
                 # when / then
                 with self.assertRaisesRegex(ValueError, "unowned .*artifact"):
                     verify_results(root, manifest)
+
+    def test_leaked_private_learning_state_root_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            leaked = (
+                root / "results" / ".private-learning-state" / "evaluator-task-0" / "result.json"
+            )
+            leaked.parent.mkdir(parents=True)
+            write(leaked, {"schema_version": 1})
+
+            # when
+            with self.assertRaisesRegex(
+                ValueError,
+                "unowned result artifact: .private-learning-state",
+            ) as raised:
+                verify_results(root, manifest)
+
+            # then
+            self.assertIsInstance(raised.exception, ValueError)
 
     def test_forged_legacy_worker_failure_sidecar_is_rejected(self) -> None:
         # given

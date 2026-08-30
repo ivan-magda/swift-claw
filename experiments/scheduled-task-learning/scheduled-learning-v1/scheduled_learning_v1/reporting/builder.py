@@ -10,6 +10,8 @@ from typing import Any, cast
 
 from benchmark_core.canonical import canonical_sha256, dumps, load_object, write
 
+from scheduled_learning_v1.score_evidence import score_evidence_projection
+
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -56,10 +58,20 @@ def _report(root: Path) -> dict[str, object]:
     promoted_digest = _promotion_digest(promotion)
     active_threshold = thresholds.get("minimum_active_score") if thresholds else None
     restart_threshold = thresholds.get("minimum_restart_active_score") if thresholds else None
-    active_evidence = _score_evidence(active, active_threshold)
-    restart_evidence = _restart_evidence(
+    active_evidence = score_evidence_projection(
+        root,
+        manifest,
+        active,
+        active_threshold,
+        8,
+        promoted_digest,
+    )
+    restart_evidence = score_evidence_projection(
+        root,
+        manifest,
         restart,
         restart_threshold,
+        9,
         promoted_digest,
     )
     adapter_evidence = _adapter_evidence(adapter)
@@ -256,33 +268,6 @@ def _complete_pair(value: object) -> bool:
         ):
             return False
     return True
-
-
-def _score_evidence(value: dict[str, Any], threshold: object) -> dict[str, object] | None:
-    score = value.get("score")
-    if not _is_number(score) or not _is_number(threshold):
-        return None
-    numeric_score = cast(int | float, score)
-    numeric_threshold = cast(int | float, threshold)
-    return {
-        "score": numeric_score,
-        "threshold": numeric_threshold,
-        "passed": numeric_score >= numeric_threshold,
-    }
-
-
-def _restart_evidence(
-    value: dict[str, Any], threshold: object, promoted_digest: str | None
-) -> dict[str, object] | None:
-    evidence = _score_evidence(value, threshold)
-    if evidence is None:
-        return None
-    matched = bool(
-        value.get("promoted_digest_matched") is True
-        and promoted_digest is not None
-        and value.get("promoted_digest") == promoted_digest
-    )
-    return {**evidence, "promoted_digest_matched": matched}
 
 
 def _load(path: Path) -> dict[str, Any]:

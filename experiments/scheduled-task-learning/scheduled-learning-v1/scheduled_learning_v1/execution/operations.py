@@ -56,14 +56,16 @@ class Operations:
             [dict[str, object], dict[str, object]], dict[str, object]
         ] = score_pair,
         active_scorer: Callable[[dict[str, object], str], dict[str, object]] = sealed_score,
+        dispatch_bounds: Callable[[str], tuple[int, int]] | None = None,
     ) -> None:
-        self.root = Path(root).resolve()
+        self.root = Path(root).absolute()
         self.manifest = manifest
         self.approval = approval
         self.budget = budget
         self.verify = verify
         self.pair_scorer = pair_scorer
         self.active_scorer = active_scorer
+        self.dispatch_bounds = dispatch_bounds
         self.journal = journal
         if bridge is not None:
             self.bridge = bridge
@@ -82,7 +84,12 @@ class Operations:
         call: object,
         prepared_approval: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        self.budget.reserve("task")
+        maximum_sends, maximum_tokens = self._dispatch_bounds("task")
+        self.budget.reserve(
+            "task",
+            maximum_responses_sends=maximum_sends,
+            maximum_accounted_tokens=maximum_tokens,
+        )
         self._verify_boundary(prepared_approval)
         terminal = cast(Any, self.bridge).run_task(call)
         self.budget.record(terminal)
@@ -99,7 +106,12 @@ class Operations:
         call: LearningCall,
         prepared_approval: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        self.budget.reserve(call.kind)
+        maximum_sends, maximum_tokens = self._dispatch_bounds(call.kind)
+        self.budget.reserve(
+            call.kind,
+            maximum_responses_sends=maximum_sends,
+            maximum_accounted_tokens=maximum_tokens,
+        )
         self._verify_boundary(prepared_approval)
         terminal = cast(Any, self.bridge).run_learning(call)
         self.budget.record(terminal)
@@ -174,6 +186,9 @@ class Operations:
             "operation_id": operation_id,
             "run_id": operation_id,
             "task_id": source["task_id"],
+            "fixture_id": fixture_id,
+            "condition": row["condition"],
+            "task_result_digest": self._operation_result_digest(operation_id, terminal),
             "raw_output": raw_output,
             "attempt": {"source": source, "gold": gold, "attempt": raw_attempt},
         }
@@ -237,7 +252,28 @@ class Operations:
         """Freshly verify immediately before the trusted active/restart score."""
 
         self._verify_boundary()
-        return self.active_scorer(_attempt(attempt), "restart" if restart else "active")
+        trusted_attempt = _attempt(attempt)
+        score_evidence = self.active_scorer(
+            trusted_attempt,
+            "restart" if restart else "active",
+        )
+        identities = _object(self.manifest.get("identities"), "page identities")
+        source = _object(trusted_attempt.get("source"), "active source")
+        gold = _object(trusted_attempt.get("gold"), "active gold")
+        raw_attempt = _object(trusted_attempt.get("attempt"), "active attempt")
+        return {
+            **score_evidence,
+            "operation_id": attempt["operation_id"],
+            "task_id": attempt["task_id"],
+            "task_result_digest": attempt["task_result_digest"],
+            "fixture_id": attempt["fixture_id"],
+            "condition": attempt["condition"],
+            "scoring_condition": "restart" if restart else "active",
+            "source_sha256": canonical_sha256(source),
+            "gold_sha256": canonical_sha256(gold),
+            "attempt_sha256": canonical_sha256(raw_attempt),
+            "oracle_digest": identities["oracle_digest"],
+        }
 
     def _run_learning(
         self, operation_id: str, kind: str, carrier: dict[str, object]
@@ -248,6 +284,8 @@ class Operations:
         carrier_path = directory / "carrier.json"
         request_path = directory / "request.json"
         result_path = directory / "result.json"
+        private_state = self.root / "results" / ".private-learning-state" / operation_id
+        published_result_path = private_state / "result.json"
         write(carrier_path, carrier)
         prompt_path = self.root / "prompts" / f"{kind}.md"
         core: dict[str, object] = {
@@ -258,10 +296,10 @@ class Operations:
             "attempt_generation": self._attempt_generation(),
             "provider_call_id": _uuid(operation_id),
             "kind": kind,
-            "state_root": str(self.root / "results" / "learning-state"),
+            "state_root": str(private_state),
             "prompt": {"path": str(prompt_path), "sha256": _sha256(prompt_path)},
             "carrier": {"path": str(carrier_path), "sha256": _sha256(carrier_path)},
-            "result_path": str(result_path),
+            "result_path": str(published_result_path),
             "manifest": self._manifest_binding(operation_approval),
         }
         call = LearningCall(
@@ -286,9 +324,15 @@ class Operations:
             self.root / "results" / "task-attempts" / str(operation_id) / "carrier.json"
         )
 
-    def _operation_result_digest(self, operation_id: str) -> str:
+    def _operation_result_digest(
+        self,
+        operation_id: str,
+        terminal: dict[str, object] | None = None,
+    ) -> str:
         journal = getattr(self.bridge, "journal", None)
         if not isinstance(journal, EventJournal):
+            if terminal is not None:
+                return canonical_sha256(terminal)
             raise ValueError("real learning bridge did not expose its committed journal")
         for event in reversed(journal.load()):
             if (
@@ -334,6 +378,28 @@ class Operations:
             raise ValueError("operation approval changed during materialization")
         self.verify(self.root, current)
         return current
+
+    def _dispatch_bounds(self, kind: str) -> tuple[int, int]:
+        if self.dispatch_bounds is not None:
+            return self.dispatch_bounds(kind)
+        execution = _object(self.manifest.get("swift_execution"), "swift execution")
+        missing_usage = execution.get("missing_usage_token_proxy")
+        gates = _object(self.manifest.get("gates"), "manifest gates")
+        sends_by_kind = _object(
+            gates.get("responses_sends_per_operation"),
+            "responses sends per operation",
+        )
+        maximum_sends = sends_by_kind.get(kind)
+        if (
+            not isinstance(missing_usage, int)
+            or isinstance(missing_usage, bool)
+            or missing_usage <= 0
+            or not isinstance(maximum_sends, int)
+            or isinstance(maximum_sends, bool)
+            or maximum_sends <= 0
+        ):
+            raise ValueError("manifest has no positive dispatch accounting bound")
+        return maximum_sends, maximum_sends * missing_usage
 
     def _executable(self) -> Path:
         return executable_path(self.root, self.manifest)

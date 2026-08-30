@@ -49,4 +49,5 @@ def sealed_score(attempt: dict[str, object], condition: str) -> dict[str, object
         "score": record["score_result"]["score"],
         "critical_codes": record["score_result"]["critical_codes"],
         "score_receipt_digest": record["score_receipt_digest"],
+        "scorer_sha256": scorer_digest,
     }

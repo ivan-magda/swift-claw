@@ -39,6 +39,7 @@ class MidRunPreflightTests(unittest.TestCase):
             AggregateBudget(),
             bridge=bridge,
             verify=verify_pre_run,
+            dispatch_bounds=_test_dispatch_bounds,
         )
         rows = manifest["run_order"]
         self.assertIsInstance(rows, list)
@@ -82,6 +83,7 @@ class MidRunPreflightTests(unittest.TestCase):
             AggregateBudget(),
             bridge=bridge,
             verify=verify_pre_run,
+            dispatch_bounds=_test_dispatch_bounds,
         )
         operations.dispatch_task(object())
         prompt = repository.experiment_root / "prompts" / "task.md"
@@ -111,6 +113,7 @@ class MidRunPreflightTests(unittest.TestCase):
             bridge=bridge,
             verify=verify_pre_run,
             pair_scorer=scorer,
+            dispatch_bounds=_test_dispatch_bounds,
         )
         operations.dispatch_task(object())
         prompt = repository.experiment_root / "prompts" / "evaluator.md"
@@ -160,6 +163,7 @@ class MidRunPreflightTests(unittest.TestCase):
             verify=verify_pre_run,
             pair_scorer=pair_scorer,
             active_scorer=active_scorer,
+            dispatch_bounds=_test_dispatch_bounds,
         )
         rows = cast(list[dict[str, object]], manifest["run_order"])
         first_task = operations.run_task(rows[0], [])
@@ -206,6 +210,7 @@ class MidRunPreflightTests(unittest.TestCase):
                     AggregateBudget(),
                     bridge=bridge,
                     verify=lambda root, current: {"status": "verified"},
+                    dispatch_bounds=_test_dispatch_bounds,
                 )
                 changed = dict(approval)
                 changed["schema_version"] = 1.0
@@ -234,6 +239,10 @@ class MidRunPreflightTests(unittest.TestCase):
         approval = approval_for(repository, manifest)
         write(repository.experiment_root / "freeze" / "owner-budget-approval.json", approval)
         return repository, manifest, approval
+
+
+def _test_dispatch_bounds(_kind: str) -> tuple[int, int]:
+    return 1, 1
 
 
 if __name__ == "__main__":

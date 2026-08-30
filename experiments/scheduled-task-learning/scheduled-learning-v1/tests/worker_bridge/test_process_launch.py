@@ -22,6 +22,44 @@ from .support import (
 
 
 class ProcessLaunchTests(unittest.TestCase):
+    def test_learning_result_is_admitted_from_private_state_then_archived_byte_exactly(
+        self,
+    ) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            private_state = root / "evaluation" / ".private-learning-state" / "evaluator-1"
+            published_result = private_state / "result.json"
+            archived_result = root / "evaluation" / "learning-calls" / "evaluator-1" / "result.json"
+            private_state.mkdir(parents=True)
+            archived_result.parent.mkdir(parents=True)
+            core = {
+                **learning_core(root),
+                "operation_id": "evaluator-1",
+                "state_root": str(private_state),
+                "result_path": str(published_result),
+            }
+            executable = root / "claw-eval"
+            write_worker(executable, published_result, learning_result(core))
+            events = root / "evaluation" / "events"
+            bridge = WorkerBridge(executable, EventJournal(events))
+            call = LearningCall("evaluator", core, root / "request.json", archived_result)
+
+            # when
+            terminal = bridge.run_learning(call)
+
+            # then
+            self.assertEqual(terminal["status"], "response")
+            self.assertEqual(
+                archived_result.read_bytes(), dumps(load_object(archived_result)).encode()
+            )
+            self.assertFalse(private_state.exists())
+            finish = load_object(sorted(events.glob("0*.json"))[-1])
+            payload = cast(dict[str, object], finish["payload"])
+            self.assertEqual(
+                payload["result_digest"], canonical_sha256(load_object(archived_result))
+            )
+
     def test_launches_one_exact_learning_command_and_bounds_stdout_diagnostics(self) -> None:
         # given
         with TemporaryDirectory() as temporary:

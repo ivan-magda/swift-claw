@@ -164,7 +164,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     build = commands.add_parser("build", help="build canonical manifest inputs and manifest")
     build.add_argument("root", nargs="?", default=".")
-    verify = commands.add_parser("verify", help="verify one experiment root")
+    verify = commands.add_parser(
+        "verify",
+        help="verify a current candidate freeze; it does not validate the archival HEAD",
+    )
     verify.add_argument("root")
     arguments = parser.parse_args(argv)
     root = Path(cast(str, arguments.root))

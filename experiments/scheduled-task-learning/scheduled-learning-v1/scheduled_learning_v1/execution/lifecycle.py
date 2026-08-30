@@ -97,7 +97,6 @@ def run_active(root: Path, generation: int) -> dict[str, object]:
                 "schema_version": 1,
                 **score,
                 "promoted_digest": selected_digest,
-                "promoted_digest_matched": True,
             },
         )
         replay_and_publish(root, controller)
@@ -253,7 +252,10 @@ def _run_parent(
     active = operations.run_task(run_order[8], lessons, root / "results" / "promotion-receipt.json")
     _require_task(active)
     active_score = operations.score_active(active, restart=False)
-    write(root / "results" / "active-evidence.json", {"schema_version": 1, **active_score})
+    write(
+        root / "results" / "active-evidence.json",
+        {"schema_version": 1, **active_score, "promoted_digest": selected_digest},
+    )
     replayed = replay_and_publish(root, controller)
     threshold = _active_threshold(manifest, restart=False)
     if _score(active_score) < threshold:

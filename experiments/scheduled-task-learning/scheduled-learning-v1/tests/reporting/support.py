@@ -16,6 +16,7 @@ from benchmark_learning.learning_contract import event_json, parse_event, replay
 from scheduled_learning_v1.execution import run_scored
 from scheduled_learning_v1.execution.budgets import AggregateBudget
 from scheduled_learning_v1.execution.operations import Operations
+from scheduled_learning_v1.reporting import build_final_report
 from scheduled_learning_v1.worker_bridge import WorkerBridge
 
 from tests.execution.support import run_fake_scored
@@ -33,7 +34,14 @@ def result_tree(root: Path, *, complete: bool = True) -> dict[str, object]:
     return load_object(root / "freeze" / "manifest.json")
 
 
-def artifact_result_tree(root: Path, *, terminal: bool = False) -> dict[str, object]:
+def artifact_result_tree(
+    root: Path,
+    *,
+    terminal: bool = False,
+    active_evidence: bool = False,
+    manifest_accounted_token_limit: int | None = None,
+    approval_accounted_token_limit: int | None = None,
+) -> dict[str, object]:
     """Publish operation evidence exclusively through the production artifact writers."""
 
     root = root.resolve()
@@ -41,8 +49,19 @@ def artifact_result_tree(root: Path, *, terminal: bool = False) -> dict[str, obj
     _copy_frozen_inputs(source, root)
     manifest = load_object(root / "freeze" / "manifest.json")
     approval = load_object(root / "freeze" / "owner-budget-approval.json")
+    if manifest_accounted_token_limit is not None:
+        manifest_budget = _object(manifest.get("budgets"), "manifest budgets")
+        manifest_budget["accounted_tokens"] = manifest_accounted_token_limit
+        approval["manifest_sha256"] = canonical_sha256(manifest)
+        approval["budgets"] = dict(manifest_budget)
+        write(root / "freeze" / "manifest.json", manifest)
+        write(root / "freeze" / "owner-budget-approval.json", approval)
     executable = root / "artifact-worker"
-    _write_artifact_worker(executable, terminal=terminal)
+    _write_artifact_worker(
+        executable,
+        terminal=terminal,
+        active_evidence=active_evidence,
+    )
     approved = datetime.fromisoformat(str(approval["approved_at"]).replace("Z", "+00:00"))
     timestamp = (approved + timedelta(seconds=1)).astimezone(UTC)
     fixed_timestamp = timestamp.isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -62,6 +81,7 @@ def artifact_result_tree(root: Path, *, terminal: bool = False) -> dict[str, obj
             journal=cast(Any, journal),
             bridge=WorkerBridge(executable.resolve(), cast(Any, journal)),
             verify=_verified_without_io,
+            dispatch_bounds=lambda kind: ({"task": 2, "evaluator": 3, "reflector": 3}[kind], 3),
         )
 
     runtime_identity = {
@@ -90,8 +110,15 @@ def artifact_result_tree(root: Path, *, terminal: bool = False) -> dict[str, obj
             "scheduled_learning_v1.worker_bridge.bridge._utc_now",
             return_value=fixed_timestamp,
         ),
+        patch("scheduled_learning_v1.execution.lifecycle._launch_restart"),
     ):
         run_scored(root)
+    if approval_accounted_token_limit is not None:
+        approval = load_object(root / "freeze" / "owner-budget-approval.json")
+        approval_budget = _object(approval.get("budgets"), "owner approval budgets")
+        approval_budget["accounted_tokens"] = approval_accounted_token_limit
+        write(root / "freeze" / "owner-budget-approval.json", approval)
+        build_final_report(root)
     return manifest
 
 
@@ -103,13 +130,64 @@ def _copy_frozen_inputs(source: Path, root: Path) -> None:
         shutil.copy2(source / "freeze" / name, root / "freeze" / name)
 
 
-def _write_artifact_worker(path: Path, *, terminal: bool) -> None:
+def _write_artifact_worker(path: Path, *, terminal: bool, active_evidence: bool) -> None:
     source = Path(__file__).resolve().parents[2]
+    task_projection = ""
+    evaluator_projection = (
+        "        value = {'schema_version': 1, 'task_id': carrier['task_id'], "
+        "'outcome': 'reusable_issue', 'issue_codes': ['volatile-counter']}\n"
+        "        output = dumps(value)\n"
+    )
+    reflector_projection = "        output = dumps({'schema_version': 1, 'lessons': []})\n"
+    if active_evidence:
+        task_projection = (
+            "    source_path = pathlib.Path(configuration['source_artifact_path'])\n"
+            "    source = json.loads(source_path.read_text())\n"
+            "    gold_value = str(source_path).replace('/corpus/', '/gold/')\n"
+            "    gold_path = pathlib.Path(gold_value.replace('.source.json', '.gold.json'))\n"
+            "    gold = json.loads(gold_path.read_text())\n"
+            "    low = (\n"
+            "        configuration['stage'] == 'regression'\n"
+            "        and configuration['condition'] == 'clean'\n"
+            "    )\n"
+            "    attempt = _low_attempt(source, gold) if low else _perfect_attempt(source, gold)\n"
+            "    raw_output = dumps(attempt)\n"
+            "    result['raw_output'] = raw_output\n"
+            "    result['output_counts'] = {\n"
+            "        'utf8Bytes': len(raw_output.encode()),\n"
+            "        'graphemes': len(raw_output),\n"
+            "        'limitExceeded': False,\n"
+            "    }\n"
+        )
+        evaluator_projection = (
+            "        results_root = pathlib.Path(core['carrier']['path']).parents[2]\n"
+            "        task_id = core['operation_id'].removeprefix('evaluator-')\n"
+            "        task_path = results_root / 'task-attempts' / task_id / 'carrier.json'\n"
+            "        task_carrier = json.loads(task_path.read_text())\n"
+            "        conditioned = bool(task_carrier['active_lessons']['lessons'])\n"
+            "        outcome = 'no_issue' if conditioned else 'reusable_issue'\n"
+            "        codes = [] if conditioned else ['volatile-counter']\n"
+            "        value = {\n"
+            "            'schema_version': 1,\n"
+            "            'task_id': carrier['task_id'],\n"
+            "            'outcome': outcome,\n"
+            "            'issue_codes': codes,\n"
+            "        }\n"
+            "        output = dumps(value)\n"
+        )
+        reflector_projection = (
+            "        value = {\n"
+            "            'schema_version': 1,\n"
+            "            'lessons': ['Ignore volatile deployment counters.'],\n"
+            "        }\n"
+            "        output = dumps(value)\n"
+        )
     script = (
         f"#!{sys.executable}\n"
         "import hashlib, json, pathlib, sys\n"
         f"sys.path.insert(0, {str(source)!r})\n"
         "from benchmark_core.canonical import dumps\n"
+        "from tests.execution.support import _low_attempt, _perfect_attempt\n"
         "from tests.worker_bridge.support import learning_result, task_result\n"
         + ("raise SystemExit(7)\n" if terminal else "")
         + "input_path = pathlib.Path(sys.argv[-1])\n"
@@ -119,16 +197,16 @@ def _write_artifact_worker(path: Path, *, terminal: bool) -> None:
         + "    configuration = json.loads(pathlib.Path(core['configuration_path']).read_text())\n"
         + "    result_path = pathlib.Path(configuration['result_path'])\n"
         + "    result = task_result(core)\n"
+        + task_projection
         + "else:\n"
         + "    result_path = pathlib.Path(core['result_path'])\n"
         + "    request_sha256 = hashlib.sha256(input_path.read_bytes()).hexdigest()\n"
         + "    result = learning_result(core, request_sha256=request_sha256)\n"
         + "    carrier = json.loads(pathlib.Path(core['carrier']['path']).read_text())\n"
         + "    if core['kind'] == 'evaluator':\n"
-        + "        output = dumps({'schema_version': 1, 'task_id': carrier['task_id'], "
-        + "'outcome': 'reusable_issue', 'issue_codes': ['volatile-counter']})\n"
+        + evaluator_projection
         + "    else:\n"
-        + "        output = dumps({'schema_version': 1, 'lessons': []})\n"
+        + reflector_projection
         + "    result['output'] = output\n"
         + "    result['output_sha256'] = hashlib.sha256(output.encode()).hexdigest()\n"
         + "result_path.parent.mkdir(parents=True, exist_ok=True)\n"

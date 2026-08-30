@@ -10,6 +10,7 @@ from typing import Any, cast
 from benchmark_core.canonical import canonical_sha256
 
 from scheduled_learning_v1.evidence_contract import canonical_object, operation_usage
+from scheduled_learning_v1.score_evidence import score_evidence_projection
 
 _LEGACY_MANIFEST_SHA256 = "d16ae90f1e54e866a75af773ae304884906fa943ad937a2e74c00a4638842c07"
 _LEGACY_TERMINAL_SHA256 = "f6aac70171a8f99901acdff398d5f6d3f688a0738cd3e91d1b3a1308e6674576"
@@ -27,9 +28,16 @@ _ROOT_FILES = {
     "restart-evidence.json",
     "state.json",
 }
-_ROOT_DIRECTORIES = {"events", "learning-calls", "learning-state", "task-attempts"}
+_ROOT_DIRECTORIES = {"events", "learning-calls", "task-attempts"}
 _AUXILIARY = ("state.json", "decision-receipts.json", "replay-receipt.json")
 _EVENT_NAME = re.compile(r"^\d{6}-[0-9a-f]{64}\.json$")
+_BUDGET_FIELDS = {
+    "task_attempts",
+    "evaluator_calls",
+    "reflector_calls",
+    "responses_sends",
+    "accounted_tokens",
+}
 
 
 def verify_artifact_closure(
@@ -99,6 +107,8 @@ def verify_artifact_closure(
     budget = canonical_object(results / "aggregate-budget.json", "aggregate budget")
     if budget != totals:
         raise ValueError("aggregate budget differs from committed operation evidence")
+    _verify_authorized_budget(root, manifest, totals)
+    _verify_score_evidence(root, manifest, finishes)
     return {
         "self_verifying": not legacy_digests,
         "unreconstructable_terminal_digests": len(legacy_digests),
@@ -192,10 +202,19 @@ def _verify_learning(
     if start.get("carrier_digest") != canonical_sha256(carrier):
         raise ValueError("learning carrier digest differs from start event")
     _require_path_suffix(binding.get("path"), ("learning-calls", operation_id, "carrier.json"))
-    _require_path_suffix(core.get("result_path"), ("learning-calls", operation_id, "result.json"))
+    _require_path_suffix(core.get("state_root"), (".private-learning-state", operation_id))
+    _require_path_suffix(
+        core.get("result_path"),
+        (".private-learning-state", operation_id, "result.json"),
+    )
     _verify_common_core(core, manifest, manifest_digest, start, operation_id)
     _verify_route(manifest, _kind(start), start)
-    sends, tokens, legacy = _verify_closure(directory, core.get("result_path"), finish, "learning")
+    sends, tokens, legacy = _verify_closure(
+        directory,
+        str(directory / "result.json"),
+        finish,
+        "learning",
+    )
     result_path = directory / "result.json"
     if result_path.is_file():
         result = canonical_object(result_path, "learning result")
@@ -362,13 +381,77 @@ def _verify_root_inventory(results: Path) -> None:
     missing = required - names
     if missing:
         raise ValueError(f"required result artifact is missing: {sorted(missing)[0]}")
-    learning_state = results / "learning-state"
-    if learning_state.is_dir():
-        state_names = {path.name for path in learning_state.iterdir()}
-        if state_names - {"clawd.lock"}:
-            raise ValueError("unowned learning-state artifact")
-        if any(not path.is_file() for path in learning_state.iterdir()):
-            raise ValueError("unowned learning-state artifact")
+
+
+def _verify_authorized_budget(
+    root: Path,
+    manifest: dict[str, object],
+    totals: dict[str, int],
+) -> None:
+    manifest_budget = _object(manifest.get("budgets"), "manifest budgets")
+    approval = canonical_object(
+        root / "freeze" / "owner-budget-approval.json",
+        "owner approval",
+    )
+    approval_budget = _object(approval.get("budgets"), "owner approval budgets")
+    if set(manifest_budget) != _BUDGET_FIELDS or set(approval_budget) != _BUDGET_FIELDS:
+        raise ValueError("authorized budget inventory is not closed")
+    for field in _BUDGET_FIELDS:
+        manifest_limit = _nonnegative_integer(manifest_budget.get(field), field)
+        approval_limit = _nonnegative_integer(approval_budget.get(field), field)
+        if totals[field] > manifest_limit:
+            raise ValueError(f"reconstructed total exceeds manifest authorized {field}")
+        if totals[field] > approval_limit:
+            raise ValueError(f"reconstructed total exceeds owner authorized {field}")
+        if manifest_limit != approval_limit:
+            raise ValueError(f"manifest and owner authorized {field} differ")
+
+
+def _verify_score_evidence(
+    root: Path,
+    manifest: dict[str, object],
+    finishes: dict[str, dict[str, object]],
+) -> None:
+    evidence_paths = [
+        root / "results" / "active-evidence.json",
+        root / "results" / "restart-evidence.json",
+    ]
+    if not any(path.is_file() for path in evidence_paths):
+        return
+    gates = _object(manifest.get("gates"), "manifest gates")
+    thresholds = _object(
+        gates.get("active_and_restart_gates"),
+        "active and restart gates",
+    )
+    promotion = canonical_object(root / "results" / "promotion-receipt.json", "promotion")
+    identities = _object(promotion.get("artifact_identities"), "promotion identities")
+    promoted_digest = identities.get("replacement_digest")
+    if not isinstance(promoted_digest, str):
+        raise ValueError("promotion has no replacement digest")
+    for name, order_index, threshold_name in (
+        ("active", 8, "minimum_active_score"),
+        ("restart", 9, "minimum_restart_active_score"),
+    ):
+        path = root / "results" / f"{name}-evidence.json"
+        if not path.is_file():
+            continue
+        evidence = canonical_object(path, f"{name} evidence")
+        operation_id = f"task-{order_index}"
+        finish = finishes.get(operation_id)
+        expected_result_digest = finish.get("result_digest") if finish is not None else None
+        projection = score_evidence_projection(
+            root,
+            cast(dict[str, Any], manifest),
+            cast(dict[str, Any], evidence),
+            thresholds.get(threshold_name),
+            order_index,
+            promoted_digest,
+            expected_result_digest=(
+                str(expected_result_digest) if expected_result_digest is not None else ""
+            ),
+        )
+        if projection is None:
+            raise ValueError(f"{name} evidence is not bound to its frozen task result")
 
 
 def _verify_directory_names(root: Path, expected: set[str]) -> None:
@@ -412,6 +495,12 @@ def _object(value: object, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be an object")
     return cast(dict[str, Any], value)
+
+
+def _nonnegative_integer(value: object, name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"authorized {name} must be a nonnegative integer")
+    return value
 
 
 def _sha256(path: Path) -> str:
