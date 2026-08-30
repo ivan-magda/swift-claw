@@ -34,6 +34,7 @@ _COPY_DIRECTORIES = (
 _COPY_FILES = (
     "Package.resolved",
     "Package.swift",
+    "Sources/ClawAgent/Context/SystemPrompt.swift",
     "docs/research/172-validation-protocol.md",
 )
 
