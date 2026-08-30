@@ -1,1 +1,0 @@
-{"lessons":["Treat frequently refreshed counters, gauges, and timestamps as volatile noise unless they signal a durable change in commitments, availability, obligations, deadlines, or prices."],"schema_version":1}
