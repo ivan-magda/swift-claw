@@ -1,9 +1,10 @@
-import json
 import re
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import NamedTuple
+from typing import cast
+
+import yaml
 
 EXPECTED_STEPS = Counter(
     {
@@ -15,124 +16,128 @@ EXPECTED_STEPS = Counter(
     }
 )
 EXPECTED_CHECKOUTS = 2
-ENTRY_PATTERN = re.compile(
-    r"^(?P<indent>[ ]*)(?P<sequence>-[ ]+)?"
-    r"(?P<key>\"(?:\\.|[^\"\\])*\"|'(?:''|[^'])*'|[A-Za-z][A-Za-z0-9-]*)"
-    r"[ \t]*:[ \t]*(?P<value>.*)$"
+EXPECTED_JOBS = {"lint", "test"}
+SUPPORTED_JOB_KEYS = {"runs-on", "steps", "timeout-minutes"}
+SUPPORTED_STEP_KEYS = {"name", "run", "uses", "with"}
+SECRET_CONTEXT_PATTERN = re.compile(
+    r"\$\{\{(?:(?!\}\}).)*\bsecrets\b(?:(?!\}\}).)*\}\}",
+    re.DOTALL,
 )
-QUOTED_SCALAR_PATTERN = re.compile(r'^("(?:\\.|[^"\\])*"|\'(?:\'\'|[^\'])*\')(.*)$')
-SECRET_REFERENCE_PATTERN = re.compile(r"\$\{\{\s*secrets\.")
 
 
-class _ScalarEntry(NamedTuple):
-    indent: int
-    sequence_item: bool
-    key: str
-    value: str | None
-
-
-def _scalar_entries(workflow: str) -> list[_ScalarEntry]:
-    entries: list[_ScalarEntry] = []
-    for line in workflow.splitlines():
-        match = ENTRY_PATTERN.fullmatch(line)
-        if match is None:
-            continue
-        key = _scalar(match.group("key"))
-        if key is None:
-            continue
-        entries.append(
-            _ScalarEntry(
-                indent=len(match.group("indent")),
-                sequence_item=match.group("sequence") is not None,
-                key=key,
-                value=_scalar(match.group("value")),
-            )
-        )
-    return entries
-
-
-def _scalar(raw: str) -> str | None:
-    stripped = raw.strip()
-    if not stripped:
+def _mapping(value: object) -> dict[object, object] | None:
+    if not isinstance(value, dict):
         return None
-    quoted = QUOTED_SCALAR_PATTERN.fullmatch(stripped)
-    if quoted is not None:
-        token, trailing = quoted.groups()
-        if trailing and (not trailing[0].isspace() or not trailing.lstrip().startswith("#")):
+    return cast(dict[object, object], value)
+
+
+def _sequence(value: object) -> list[object] | None:
+    if not isinstance(value, list):
+        return None
+    return cast(list[object], value)
+
+
+def _contains_forbidden_data(value: object) -> bool:
+    if isinstance(value, str):
+        return SECRET_CONTEXT_PATTERN.search(value) is not None
+    mapping = _mapping(value)
+    if mapping is not None:
+        return any(
+            key == "env" or _contains_forbidden_data(key) or _contains_forbidden_data(child)
+            for key, child in mapping.items()
+        )
+    sequence = _sequence(value)
+    return sequence is not None and any(_contains_forbidden_data(child) for child in sequence)
+
+
+def _values_for_key(value: object, expected_key: str) -> list[object]:
+    mapping = _mapping(value)
+    if mapping is not None:
+        values = [child for key, child in mapping.items() if key == expected_key]
+        for key, child in mapping.items():
+            values.extend(_values_for_key(key, expected_key))
+            values.extend(_values_for_key(child, expected_key))
+        return values
+    sequence = _sequence(value)
+    if sequence is None:
+        return []
+    values = []
+    for child in sequence:
+        values.extend(_values_for_key(child, expected_key))
+    return values
+
+
+def _workflow_steps(document: object) -> list[dict[object, object]] | None:
+    root = _mapping(document)
+    if root is None or _contains_forbidden_data(root):
+        return None
+    jobs = _mapping(root.get("jobs"))
+    if jobs is None or set(jobs) != EXPECTED_JOBS:
+        return None
+
+    steps: list[dict[object, object]] = []
+    for job_name in sorted(EXPECTED_JOBS):
+        job = _mapping(jobs.get(job_name))
+        if job is None or not set(job).issubset(SUPPORTED_JOB_KEYS):
             return None
-        if token.startswith('"'):
-            decoded = json.loads(token)
-            return decoded if isinstance(decoded, str) else None
-        return token[1:-1].replace("''", "'")
-    comment = re.search(r"[ \t]+#", stripped)
-    value = stripped[: comment.start()] if comment is not None else stripped
-    return value.rstrip() or None
+        job_steps = _sequence(job.get("steps"))
+        if job_steps is None:
+            return None
+        for value in job_steps:
+            step = _mapping(value)
+            if step is None or not set(step).issubset(SUPPORTED_STEP_KEYS):
+                return None
+            if "with" in step and _mapping(step["with"]) is None:
+                return None
+            steps.append(step)
+    return steps
 
 
-def _sequence_groups(entries: list[_ScalarEntry]) -> list[list[_ScalarEntry]]:
-    groups: list[list[_ScalarEntry]] = []
-    index = 0
-    while index < len(entries):
-        first = entries[index]
-        if not first.sequence_item:
-            index += 1
-            continue
-        group = [first]
-        index += 1
-        while index < len(entries):
-            candidate = entries[index]
-            if candidate.indent < first.indent or (
-                candidate.sequence_item and candidate.indent == first.indent
-            ):
-                break
-            group.append(candidate)
-            index += 1
-        groups.append(group)
-    return groups
+def _executable_steps(steps: list[dict[object, object]]) -> list[str] | None:
+    executables: list[str] = []
+    for step in steps:
+        executable_keys = [key for key in ("uses", "run") if key in step]
+        if len(executable_keys) != 1:
+            return None
+        value = step[executable_keys[0]]
+        if not isinstance(value, str):
+            return None
+        executables.append(value)
+    return executables
 
 
-def _entry_paths(group: list[_ScalarEntry]) -> list[tuple[tuple[str, ...], _ScalarEntry]]:
-    parents: list[tuple[int, str]] = []
-    paths: list[tuple[tuple[str, ...], _ScalarEntry]] = []
-    for entry in group:
-        mapping_indent = entry.indent + (2 if entry.sequence_item else 0)
-        while parents and parents[-1][0] >= mapping_indent:
-            parents.pop()
-        path = (*[key for _, key in parents], entry.key)
-        paths.append((path, entry))
-        if entry.value is None:
-            parents.append((mapping_indent, entry.key))
-    return paths
+def _is_false_input(value: object) -> bool:
+    return value is False or (isinstance(value, str) and value == "false")
 
 
-def _checkout_credentials_are_disabled(entries: list[_ScalarEntry]) -> bool:
-    checkout_groups = []
-    for group in _sequence_groups(entries):
-        paths = _entry_paths(group)
-        if any(path == ("uses",) and entry.value == "actions/checkout@v7" for path, entry in paths):
-            checkout_groups.append(paths)
-    if len(checkout_groups) != EXPECTED_CHECKOUTS:
+def _checkout_credentials_are_disabled(
+    document: object,
+    steps: list[dict[object, object]],
+) -> bool:
+    checkout_steps = [step for step in steps if step.get("uses") == "actions/checkout@v7"]
+    if len(checkout_steps) != EXPECTED_CHECKOUTS:
         return False
-    for paths in checkout_groups:
-        settings = [entry.value for path, entry in paths if path == ("with", "persist-credentials")]
-        if settings != ["false"]:
+    for step in checkout_steps:
+        inputs = _mapping(step.get("with"))
+        if inputs is None or not _is_false_input(inputs.get("persist-credentials")):
             return False
-    all_settings = [entry for entry in entries if entry.key == "persist-credentials"]
-    return len(all_settings) == EXPECTED_CHECKOUTS and all(
-        entry.value == "false" for entry in all_settings
-    )
+    settings = _values_for_key(document, "persist-credentials")
+    return len(settings) == EXPECTED_CHECKOUTS and all(_is_false_input(value) for value in settings)
 
 
 def _workflow_satisfies_contract(workflow: str) -> bool:
-    entries = _scalar_entries(workflow)
-    actual_steps = Counter(
-        entry.value for entry in entries if entry.key in {"uses", "run"} and entry.value is not None
-    )
+    try:
+        document: object = yaml.safe_load(workflow)
+    except yaml.YAMLError:
+        return False
+    steps = _workflow_steps(document)
+    if steps is None:
+        return False
+    executables = _executable_steps(steps)
     return (
-        actual_steps == EXPECTED_STEPS
-        and all(entry.key != "env" for entry in entries)
-        and SECRET_REFERENCE_PATTERN.search(workflow) is None
-        and _checkout_credentials_are_disabled(entries)
+        executables is not None
+        and Counter(executables) == EXPECTED_STEPS
+        and _checkout_credentials_are_disabled(document, steps)
     )
 
 
@@ -166,7 +171,29 @@ class CIContractTests(unittest.TestCase):
             "      - uses: actions/checkout@v7\n        with:",
             "      - name: Checkout source\n        uses: actions/checkout@v7\n        with:",
         )
+        nested_action_input_syntax = workflow.replace(
+            '          version: "0.12.5"',
+            '          version: "0.12.5"\n          run: metadata-not-a-command',
+            1,
+        )
         rejected_mutations = {
+            "flow-map live run": workflow.replace(
+                "      - name: Run replay conformance",
+                "      - {run: uv run python -B -m scheduled_learning_v1.run scored --root .}\n"
+                "      - name: Run replay conformance",
+            ),
+            "flow-map attacker action": workflow.replace(
+                "      - name: Run scripts/lint.sh",
+                "      - {uses: attacker/action@v1}\n      - name: Run scripts/lint.sh",
+            ),
+            "bracket secret reference": workflow.replace(
+                "name: Python Scheduled Learning V1",
+                "name: ${{ secrets['MODEL_TOKEN'] }}",
+            ),
+            "extra reusable-workflow job": workflow.replace(
+                "jobs:\n",
+                "jobs:\n  delegated:\n    uses: attacker/workflows/.github/workflows/live.yml@v1\n",
+            ),
             "quoted env key": workflow.replace(
                 "  test:\n",
                 '  test:\n    "env" :\n      MODEL_TOKEN: placeholder\n',
@@ -199,6 +226,9 @@ class CIContractTests(unittest.TestCase):
         workflow_is_closed = _workflow_satisfies_contract(workflow)
         alternate_syntax_is_closed = _workflow_satisfies_contract(alternate_scalar_syntax)
         named_checkout_syntax_is_closed = _workflow_satisfies_contract(named_checkout_syntax)
+        nested_action_input_syntax_is_closed = _workflow_satisfies_contract(
+            nested_action_input_syntax
+        )
         mutation_results = {
             label: _workflow_satisfies_contract(mutation)
             for label, mutation in rejected_mutations.items()
@@ -211,3 +241,4 @@ class CIContractTests(unittest.TestCase):
                 self.assertFalse(accepted)
         self.assertTrue(alternate_syntax_is_closed)
         self.assertTrue(named_checkout_syntax_is_closed)
+        self.assertTrue(nested_action_input_syntax_is_closed)
