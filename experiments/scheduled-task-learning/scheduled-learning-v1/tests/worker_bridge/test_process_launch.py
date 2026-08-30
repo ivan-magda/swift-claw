@@ -16,6 +16,7 @@ from .support import (
     learning_result,
     task_core,
     task_result,
+    write_malformed_result_worker,
     write_worker,
 )
 
@@ -41,6 +42,11 @@ class ProcessLaunchTests(unittest.TestCase):
                 [["learning-call", "--request", str(call.request_path)]],
             )
             self.assertLessEqual(len(str(terminal["diagnostics"])), 1024)
+            self.assertTrue(result_path.is_file())
+            self.assertFalse((root / "terminal.json").exists())
+            finish = load_object(sorted((root / "evaluation" / "events").glob("0*.json"))[-1])
+            payload = cast(dict[str, object], finish["payload"])
+            self.assertEqual(payload["result_digest"], canonical_sha256(load_object(result_path)))
 
     def test_launches_one_exact_task_command(self) -> None:
         # given
@@ -151,6 +157,57 @@ class ProcessLaunchTests(unittest.TestCase):
             # then
             self.assertEqual(terminal["status"], "schema_invalid")
             self.assertEqual(load_object(root / "terminal.json"), terminal)
+            finish = load_object(sorted(events.glob("0*.json"))[-1])
+            payload = cast(dict[str, object], finish["payload"])
+            self.assertEqual(payload["result_digest"], canonical_sha256(terminal))
+
+    def test_zero_exit_removes_canonical_result_that_fails_validation(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = learning_core(root)
+            result_path = root / "result.json"
+            invalid_result = {**learning_result(core), "operation_id": "other-operation"}
+            executable = root / "claw-eval"
+            write_worker(executable, result_path, invalid_result)
+            events = root / "evaluation" / "events"
+            bridge = WorkerBridge(executable, EventJournal(events))
+            call = LearningCall("evaluator", core, root / "request.json", result_path)
+
+            # when
+            terminal = bridge.run_learning(call)
+
+            # then
+            self.assertEqual(terminal["status"], "schema_invalid")
+            self.assertFalse(result_path.exists())
+            terminal_path = root / "terminal.json"
+            self.assertEqual(load_object(terminal_path), terminal)
+            self.assertEqual(terminal_path.read_bytes(), dumps(terminal).encode("utf-8"))
+            finish = load_object(sorted(events.glob("0*.json"))[-1])
+            payload = cast(dict[str, object], finish["payload"])
+            self.assertEqual(payload["result_digest"], canonical_sha256(terminal))
+
+    def test_zero_exit_removes_malformed_result_before_terminal_publication(self) -> None:
+        # given
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = learning_core(root)
+            result_path = root / "result.json"
+            executable = root / "claw-eval"
+            write_malformed_result_worker(executable, result_path)
+            events = root / "evaluation" / "events"
+            bridge = WorkerBridge(executable, EventJournal(events))
+            call = LearningCall("evaluator", core, root / "request.json", result_path)
+
+            # when
+            terminal = bridge.run_learning(call)
+
+            # then
+            self.assertEqual(terminal["status"], "schema_invalid")
+            self.assertFalse(result_path.exists())
+            terminal_path = root / "terminal.json"
+            self.assertEqual(load_object(terminal_path), terminal)
+            self.assertEqual(terminal_path.read_bytes(), dumps(terminal).encode("utf-8"))
             finish = load_object(sorted(events.glob("0*.json"))[-1])
             payload = cast(dict[str, object], finish["payload"])
             self.assertEqual(payload["result_digest"], canonical_sha256(terminal))

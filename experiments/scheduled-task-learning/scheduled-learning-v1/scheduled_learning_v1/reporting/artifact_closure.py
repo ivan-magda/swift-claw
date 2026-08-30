@@ -137,7 +137,6 @@ def _verify_task(
         "invocation.json",
         "lessons.json",
         "result.json",
-        "result.json.worker-failure.json",
         "terminal.json",
         "evaluation",
     }

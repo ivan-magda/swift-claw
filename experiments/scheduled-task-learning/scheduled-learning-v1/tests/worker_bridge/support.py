@@ -47,6 +47,18 @@ def write_worker(
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+def write_malformed_result_worker(path: Path, result_path: Path) -> None:
+    """Create a zero-exit fake that publishes malformed result bytes."""
+
+    script = (
+        "#!/usr/bin/env python3\n"
+        "import pathlib\n"
+        f"pathlib.Path({str(result_path)!r}).write_text('{{', encoding='utf-8')\n"
+    )
+    path.write_text(script, encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
 def argv_records(executable: Path) -> list[list[str]]:
     return [
         json.loads(line) for line in executable.with_suffix(".argv.jsonl").read_text().splitlines()

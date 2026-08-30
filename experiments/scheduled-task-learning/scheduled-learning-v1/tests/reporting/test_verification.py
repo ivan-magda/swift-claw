@@ -294,6 +294,32 @@ class ResultVerificationTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "unowned .*artifact"):
                     verify_results(root, manifest)
 
+    def test_forged_legacy_worker_failure_sidecar_is_rejected(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = artifact_result_tree(root)
+            operation = root / "results" / "task-attempts" / "task-0"
+            configuration = load_object(operation / "configuration.json")
+            invocation = load_object(operation / "invocation.json")
+            manifest_binding = cast(dict[str, object], invocation["manifest"])
+            write(
+                operation / "result.json.worker-failure.json",
+                {
+                    "schema_version": 1,
+                    "invocation_id": "00000000-0000-0000-0000-000000000000",
+                    "configuration_sha256": invocation["configuration_sha256"],
+                    "attempt_id": configuration["attempt_id"],
+                    "manifest_sha256": manifest_binding["manifest_sha256"],
+                    "classification": "carrier_failure",
+                    "reason": "source_digest_mismatch",
+                },
+            )
+
+            # when / then
+            with self.assertRaisesRegex(ValueError, "task operation has an unowned artifact"):
+                verify_results(root, manifest)
+
     def test_unknown_operation_directory_is_rejected(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:

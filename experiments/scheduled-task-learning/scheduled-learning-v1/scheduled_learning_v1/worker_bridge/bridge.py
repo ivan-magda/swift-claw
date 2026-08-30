@@ -103,6 +103,8 @@ class WorkerBridge:
             result = _load_result(result_path)
             terminal = validate(result)
         except (OSError, ValueError, json.JSONDecodeError) as error:
+            result_path.unlink(missing_ok=True)
+            result = None
             terminal = {
                 "status": "schema_invalid",
                 "diagnostics": _bounded_diagnostics(diagnostics, str(error)),
