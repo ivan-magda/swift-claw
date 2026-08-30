@@ -4,6 +4,7 @@ import ClawSecrets
 import ClawSubprocess
 import ClawTestSupport
 import Foundation
+import Synchronization
 import Testing
 
 @testable import ClawEvaluation
@@ -133,6 +134,8 @@ import Testing
     // given
     let fixture = try makeLearningCallFixture()
     defer { fixture.remove() }
+    let credentialRoot = try makeEvaluationCredentialStateRoot(under: fixture.root)
+    let resourceInput = Mutex<EvaluationLearningCallResourceFactoryInput?>(nil)
     let provider = SequenceProvider([fixture.response(content: "unreachable")])
     let lifecycle = LearningCallLifecycleProbe()
     let recorder = learningRecorder(fixture: fixture)
@@ -140,9 +143,10 @@ import Testing
     // when
     let result = try await EvaluationLearningCall().run(
       request: fixture.request,
-      credentialStateRoot: fixture.root.path,
+      credentialStateRoot: credentialRoot.path,
       makeResource: { input in
-        try await makeLearningResource(
+        resourceInput.withLock { $0 = input }
+        return try await makeLearningResource(
           input: input,
           fixture: fixture,
           roster: ProviderRoster(primary: fixture.binding(provider: provider)),
@@ -159,11 +163,15 @@ import Testing
     let lockIsFree = try EvaluationWorkerLifecycle.proveProductionLockIsFree(
       stateRoot: fixture.stateRoot
     )
+    let http = await recorder.snapshot()
 
     // then
     #expect(result == durable)
     #expect(result.outcome == .failedNoCall)
     #expect(result.usage == nil)
+    #expect(resourceInput.withLock { $0?.credentialStateRoot } == credentialRoot)
+    #expect(http.responsesSends.isEmpty)
+    #expect(http.credentialHTTPCalls == 0)
     #expect(await provider.requests.isEmpty)
     #expect(await lifecycle.credentialShutdownCount == 1)
     #expect(await lifecycle.transportShutdownCount == 1)

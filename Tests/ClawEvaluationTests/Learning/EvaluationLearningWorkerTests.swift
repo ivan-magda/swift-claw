@@ -14,15 +14,18 @@ import Testing
     let verifier = StaticEvaluationLearningTaskAdmissionVerifier(
       context: fixture.admissionContext
     )
+    let credentialRoot = try makeEvaluationCredentialStateRoot(under: fixture.root)
+    let resourceCredentialRoot = Mutex<URL?>(nil)
     let provider = SequenceProvider(scriptedTwoRoundResponses())
 
     // when
     let result = try await EvaluationWorker().runResult(
       invocation: fixture.invocation,
-      credentialStateRoot: fixture.root.path,
+      credentialStateRoot: credentialRoot.path,
       admissionVerifier: verifier,
-      makeResource: { _, _ in
-        makeEvaluationLearningLiveResource(provider: provider)
+      makeResource: { _, suppliedCredentialRoot in
+        resourceCredentialRoot.withLock { $0 = suppliedCredentialRoot }
+        return makeEvaluationLearningLiveResource(provider: provider)
       }
     )
     let durable = try EvaluationJSONFile.decode(
@@ -36,6 +39,7 @@ import Testing
     #expect(result.inputSHA256 == fixture.configuration.inputSHA256)
     #expect(result.manifestSHA256 == fixture.invocation.manifest.manifestSHA256)
     #expect(result.provenance.freezeCommit == fixture.admissionContext.freezeCommit)
+    #expect(resourceCredentialRoot.withLock { $0 } == credentialRoot)
   }
 
   @Test(arguments: LearningTaskCapMutation.allCases)

@@ -10,13 +10,70 @@ from pathlib import Path
 from typing import cast
 from unittest.mock import patch
 
-from benchmark_core.canonical import load_object
+from benchmark_core.canonical import load_object, write
 from scheduled_learning_v1.execution import run_scored
+from scheduled_learning_v1.execution.budgets import AggregateBudget
+from scheduled_learning_v1.execution.lifecycle import _make_operations
+from scheduled_learning_v1.replay_controller import EventJournal
+from scheduled_learning_v1.worker_bridge import TaskAttemptCall
+
+from tests.worker_bridge.support import argv_records, task_core, task_result, write_worker
 
 from .support import frozen_tree, run_fake_scored
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_operations_handoff_forwards_external_credential_root_to_worker(self) -> None:
+        # given
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            tempfile.TemporaryDirectory() as credential_temporary,
+        ):
+            repository = Path(temporary).resolve() / "repository"
+            root = repository / "experiments" / "scheduled-task-learning" / "scheduled-learning-v1"
+            root.mkdir(parents=True)
+            credential_root = Path(credential_temporary).resolve()
+            core = task_core(root)
+            result_path = root / "result.json"
+            executable = repository / ".build" / "release" / "claw-eval"
+            executable.parent.mkdir(parents=True)
+            write_worker(executable, result_path, task_result(core))
+            approval = load_object(root / "approval.json")
+            freeze = root / "freeze"
+            freeze.mkdir()
+            write(freeze / "owner-budget-approval.json", approval)
+            manifest: dict[str, object] = {
+                "inputs": {"groups": {"executable": [".build/release/claw-eval"]}},
+                "swift_execution": {"missing_usage_token_proxy": 132_768},
+                "gates": {"responses_sends_per_operation": {"task": 2}},
+            }
+            operations = _make_operations(
+                root,
+                manifest,
+                approval,
+                EventJournal(root / "results" / "events"),
+                AggregateBudget(),
+                credential_root,
+            )
+
+            def verify_without_io(
+                path: Path, current_approval: dict[str, object]
+            ) -> dict[str, object]:
+                return {"status": "verified"}
+
+            operations.verify = verify_without_io
+            call = TaskAttemptCall(core, root / "invocation.json", result_path)
+
+            # when
+            operations.dispatch_task(call)
+
+            # then
+            command = argv_records(executable)[0]
+            self.assertEqual(
+                command[-2:],
+                ["--credential-state-root", str(credential_root)],
+            )
+
     def test_passing_flow_assigns_only_candidate_trials_and_reaches_active(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:

@@ -489,3 +489,21 @@ parsing in isolation; its fake executable accepts only the exact required worker
 shape. Existing success-path argv, nonzero-terminal, and CLI-required-option tests remain valuable
 but cannot catch these three mutants. The legacy admission assertion owns the separate exact-root
 check that preserves Protocol 0.6 without weakening scheduled-learning's external-root policy.
+
+## Live-readiness follow-up: Task 4 credential forwarding test value
+
+| Risk | Production branch or seam | Nearest existing test | Unique reachable mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| Python lifecycle composition substitutes the M3 root before the real worker bridge is built | `execution.lifecycle::_make_operations` through `Operations.__init__` into `WorkerBridge` | CLI tests stop at `run_scored`; direct bridge argv tests construct `WorkerBridge` themselves | Pass `root` from `_make_operations`, or use `self.root` instead of `credential_state_root` when `Operations` constructs the bridge | `test_lifecycle::LifecycleTests::test_operations_handoff_forwards_external_credential_root_to_worker` |
+| The scheduled-learning task worker validates and locks the external root but gives its M3 state root to production resource composition | scheduled `EvaluationWorker.runResult` `makeResource(configuration, credentialRootURL)` boundary | The encrypted-store factory test calls the factory directly; the held-lock test never enters the resource closure | Replace the closure argument with `configuration.stateRootURL` while keeping validation and two-root locking correct | `EvaluationLearningWorkerTests.m3AttemptCompletesWithoutALegacyJournalOrRunOrder` |
+| The learning call validates and locks the external root but puts its private call state into the production factory input | `EvaluationLearningCall.run` construction of `EvaluationLearningCallResourceFactoryInput` | The direct factory test supplies its own input; the held-lock test never constructs one | Set `credentialStateRoot: stateRoot` in the factory input while keeping validation and locking on the external root | `EvaluationLearningCallTests.liveAdmissionDenialPublishesFailedNoCallAndCleansUp` |
+
+### Task 4 redundancy pass
+
+The Python test owns only the lifecycle-to-real-bridge handoff and inspects only the trailing root
+argument; direct bridge coverage remains the sole owner of full task/evaluator/reflector command
+shapes. The two Swift assertions reach separate public composition boundaries and preserve their
+existing behavioral outcomes. Direct encrypted-store tests remain the composition owners, while
+held-lock tests remain the pre-construction owners. Deleting or substituting any one forwarding
+line fails only its named primary test; helper extraction that preserves the observed factory input
+and subprocess argv remains green.
