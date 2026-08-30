@@ -18,8 +18,12 @@ public struct TelegramPollerService: Service {
 
   /// Re-sent on every call: omitting it would reuse the previous server-side setting. Approval
   /// inline buttons are delivered as `callback_query`, so it joins direct messages and edits — the
-  /// callback branch in `MessageRouter` handles them ahead of `normalize`.
-  private static let allowedUpdates = ["message", "edited_message", "callback_query"]
+  /// callback branch in `MessageRouter` handles them ahead of `normalize`. `my_chat_member` is
+  /// asked for by name because Telegram never sends it otherwise, and being added to a room is the
+  /// only moment that room's chat id is announced to an operator who has to configure it.
+  private static let allowedUpdates = [
+    "message", "edited_message", "callback_query", "my_chat_member",
+  ]
 
   /// Back-off windows that stop a persistent fault from becoming a tight re-poll loop.
   private enum Backoff {

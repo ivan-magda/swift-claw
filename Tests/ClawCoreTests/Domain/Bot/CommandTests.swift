@@ -168,4 +168,31 @@ import Testing
     // then
     #expect(command == .skills)
   }
+
+  @Test(arguments: [
+    (Command.remember(.invalid), true),
+    (.memory(.review), true),
+    (.schedule(.list), true),
+    (.pause(jobId: 1), true),
+    (.resume(jobId: 1), true),
+    (.runNow(jobId: 1), true),
+    (.cancelJob(jobId: 1), true),
+    (.start, false),
+    (.stop, false),
+    (.new, false),
+    (.help, false),
+    (.doctor, false),
+    (.mcp, false),
+    (.skills, false),
+    (.plain("hello"), false),
+  ])
+  func ownerScopedCommandsAreDirectOnly(command: Command, expected: Bool) {
+    // given — the command and expected scope come from the parameter table
+
+    // when
+    let isDirectOnly = command.isDirectOnly
+
+    // then
+    #expect(isDirectOnly == expected)
+  }
 }

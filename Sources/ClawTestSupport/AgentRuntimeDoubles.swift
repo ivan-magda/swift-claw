@@ -51,6 +51,23 @@ public actor SequenceProvider: LLMProvider {
   }
 }
 
+/// Holds a provider response until the supplied gate opens. Progress-signal tests pair it with a
+/// gate-opening typing double to pin "typing before response" without scheduler timing.
+public actor GatedProvider: LLMProvider {
+  private let gate: TypingReleaseGate
+  private let response: ChatResponse
+
+  public init(gate: TypingReleaseGate, response: ChatResponse) {
+    self.gate = gate
+    self.response = response
+  }
+
+  public func complete(request: ChatRequest) async throws -> ChatResponse {
+    await gate.awaitRelease()
+    return response
+  }
+}
+
 /// Never returns within the deadline: sleeps an hour so the injected no-op `sleep` lets the
 /// wall-clock deadline win the race deterministically. The post-sleep throw is unreachable under
 /// an injected clock (the sleep is cancelled) and only names the brownout it stands in for.

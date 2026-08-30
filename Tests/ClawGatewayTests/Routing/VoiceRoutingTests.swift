@@ -9,13 +9,20 @@ import Testing
 
 @testable import ClawGateway
 
-private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> RawUpdate {
+private func voiceUpdate(
+  id: Int64,
+  from: Int64,
+  durationSeconds: Int = 8,
+  chat: Int64? = nil,
+  chatKind: ChatKind = .private,
+  replyToUserId: Int64? = nil
+) -> RawUpdate {
   RawUpdate(
     updateId: id,
     message: RawMessage(
       messageId: id,
       fromUserId: from,
-      chatId: from,
+      chatId: chat ?? from,
       text: nil,
       caption: nil,
       mediaKind: VoiceAttachment.mediaKindDescription,
@@ -24,7 +31,10 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
         durationSeconds: durationSeconds,
         mimeType: "audio/ogg",
         fileSizeBytes: 4
-      )
+      ),
+      chatKind: chatKind,
+      replyToMessageId: replyToUserId == nil ? nil : 5,
+      replyToUserId: replyToUserId
     ),
     editedMessage: nil
   )
@@ -43,6 +53,7 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
 
   private func makeHarness(
     allowed: [Int64],
+    groupChats: Set<Int64> = [],
     voiceEnabled: Bool = true,
     fetcher: StubMediaFetcher = StubMediaFetcher(),
     transcriber: any VoiceTranscribing = StubVoiceTranscriber(),
@@ -78,8 +89,8 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: pendingConfirmations,
-      botUsername: "claw_bot",
-      accessControl: AccessControl(allowlist: allowlist),
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
+      accessControl: AccessControl(allowlist: allowlist, groupChats: groupChats),
       delivery: transport,
       turnRunner: dispatcher,
       imageCache: ImageCache(),
@@ -308,5 +319,56 @@ private func voiceUpdate(id: Int64, from: Int64, durationSeconds: Int = 8) -> Ra
     let sent = await harness.transport.sent
     #expect(sent.map(\.text) == [VoiceMessageService.Failure.downloadFailed.ownerReplyText])
     #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func anUnaddressedGroupVoiceNoteIsNeverDownloadedOrTranscribed() async throws {
+    // given — an attendee talks to the room, not to the bot
+    let transcriber = StubVoiceTranscriber()
+    let harness = try makeHarness(
+      allowed: [42],
+      groupChats: [-1_001],
+      transcriber: transcriber
+    )
+    defer { try? FileManager.default.removeItem(at: harness.staging) }
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: voiceUpdate(id: 1, from: 7, chat: -1_001, chatKind: .supergroup)
+    )
+
+    // then — addressing is decided before the content switch, so not a byte is fetched
+    #expect(outcome == .skipped)
+    #expect(await harness.fetcher.calls.isEmpty)
+    #expect(await transcriber.callCount == 0)
+    #expect(await harness.transport.sent.isEmpty)
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func aGroupVoiceNoteRepliedToTheBotIsTranscribed() async throws {
+    // given — the same note, this time sent as a reply to something the bot said
+    let transcriber = StubVoiceTranscriber()
+    let harness = try makeHarness(
+      allowed: [42],
+      groupChats: [-1_001],
+      transcriber: transcriber
+    )
+    defer { try? FileManager.default.removeItem(at: harness.staging) }
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: voiceUpdate(
+        id: 1,
+        from: 7,
+        chat: -1_001,
+        chatKind: .supergroup,
+        replyToUserId: 900
+      )
+    )
+    await harness.dispatcher.waitForCalls(atLeast: 1)
+
+    // then
+    #expect(outcome == .processed)
+    #expect(await transcriber.callCount == 1)
+    #expect(await harness.dispatcher.calls.count == 1)
   }
 }

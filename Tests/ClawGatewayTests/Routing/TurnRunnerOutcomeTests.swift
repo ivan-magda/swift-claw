@@ -91,6 +91,7 @@ import Testing
       runId: fixture.runId,
       sessionId: fixture.sessionId,
       chatId: 7,
+      mode: .direct,
       ownerNotices: [],
       origin: .interactive
     )

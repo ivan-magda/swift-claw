@@ -50,6 +50,7 @@ extension DaemonBuilder {
       // daily USD-cap DM against dollars earlier metered usage rang up.
       breaker: BudgetBreaker(budget: config.budget, costPolicy: costPolicy),
       delivery: transport,
+      ownerChatId: config.heartbeatOwnerChatId,
       parker: coordination.deferredParker,
       approvalExpirySeconds: config.approvalExpirySeconds,
       logger: logger
@@ -66,7 +67,7 @@ extension DaemonBuilder {
     return ApprovalCallbackHandler.make(
       processed: stores.processed,
       delivery: transport,
-      accessControl: AccessControl(allowlist: stores.allowlist),
+      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: []),
       approvals: stores.approvals,
       audit: stores.audit,
       coordinator: coordination.approvalCoordinator,

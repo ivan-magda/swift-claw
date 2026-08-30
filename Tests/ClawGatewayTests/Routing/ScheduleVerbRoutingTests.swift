@@ -37,8 +37,11 @@ import Testing
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
-      botUsername: "claw_bot",
-      accessControl: AccessControl(allowlist: AllowlistStoreGRDB(writer: queue)),
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
+      accessControl: AccessControl(
+        allowlist: AllowlistStoreGRDB(writer: queue),
+        groupChats: []
+      ),
       delivery: transport,
       turnRunner: dispatcher,
       imageCache: ImageCache(),

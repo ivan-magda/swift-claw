@@ -2,7 +2,16 @@
 /// clear API, so the runtime re-issues it on an interval during a turn. The concrete impl
 /// is Telegram-backed and injected by the gateway; tests use a recording mock.
 public protocol TypingIndicator: Sendable {
-  func sendTyping(chatId: Int64) async
+  /// `messageThreadId` is the forum topic the pulse belongs to; absent in a DM, where the whole
+  /// chat is the destination.
+  func sendTyping(chatId: Int64, messageThreadId: Int64?) async
+}
+
+extension TypingIndicator {
+  /// The whole-chat spelling every DM pulse and every callerless notice uses.
+  public func sendTyping(chatId: Int64) async {
+    await sendTyping(chatId: chatId, messageThreadId: nil)
+  }
 }
 
 public enum TypingIndicatorTiming {
@@ -11,6 +20,7 @@ public enum TypingIndicatorTiming {
 
 public func withTypingPulse<Result>(
   chatId: Int64,
+  messageThreadId: Int64? = nil,
   indicator: any TypingIndicator,
   clock: any Clock<Duration>,
   every interval: Duration = TypingIndicatorTiming.reissueInterval,
@@ -19,7 +29,7 @@ public func withTypingPulse<Result>(
   try await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask {
       while !Task.isCancelled {
-        await indicator.sendTyping(chatId: chatId)
+        await indicator.sendTyping(chatId: chatId, messageThreadId: messageThreadId)
         try? await clock.sleep(for: interval)
       }
     }

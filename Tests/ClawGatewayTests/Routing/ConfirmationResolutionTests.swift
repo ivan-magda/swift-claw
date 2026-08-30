@@ -1,7 +1,6 @@
 import ClawCore
-import ClawData
+import ClawTestSupport
 import Foundation
-import GRDB
 import Testing
 
 @testable import ClawGateway
@@ -210,7 +209,12 @@ import Testing
   @Test func pendingLookupFailureFailsClosedInsteadOfLeakingAYesIntoATurn() async throws {
     // given
     let harness = try MemoryRoutingHarness.make(
-      routerSessionMessages: { FindSessionFailingSessions(inner: $0) }
+      routerSessionMessages: {
+        FakeSessionMessageStore(
+          failures: [.findSession: .unexpected("lookup lost")],
+          delegatingTo: $0
+        )
+      }
     )
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 1, from: 42, text: "/remember project: ship 3a")
@@ -226,45 +230,5 @@ import Testing
     let sessionId = try harness.ownerSessionId()
     #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) != nil)
     #expect(await harness.dispatcher.calls.isEmpty)
-  }
-}
-
-private struct FindSessionFailingSessions: SessionMessageStore {
-  let inner: SessionMessageStoreGRDB
-
-  func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64 {
-    try inner.loadOrCreateSession(sessionKey: sessionKey, now: now)
-  }
-
-  func claimAndPersistInbound(_ inbound: InboundMessage) throws(StoreError) -> ClaimResult {
-    try inner.claimAndPersistInbound(inbound)
-  }
-
-  func claimCommandUpdate(
-    updateId: Int64,
-    sessionKey: String,
-    now: Date
-  ) throws(StoreError) -> CommandClaim {
-    try inner.claimCommandUpdate(updateId: updateId, sessionKey: sessionKey, now: now)
-  }
-
-  func findSession(sessionKey: String) throws(StoreError) -> Int64? {
-    throw StoreError.unexpected("lookup lost")
-  }
-
-  func loadContextSnapshot(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> SessionContextSnapshot {
-    try inner.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: throughMessageId,
-      limit: limit
-    )
-  }
-
-  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {
-    try inner.resetWindowAndDetaint(sessionId: sessionId, now: now)
   }
 }

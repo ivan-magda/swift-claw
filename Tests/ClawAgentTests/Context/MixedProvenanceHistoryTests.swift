@@ -69,6 +69,7 @@ import Testing
 @Suite struct MixedProvenanceRenderingTests {
   private func makeSnapshot(_ history: [StoredMessage]) -> SessionContextSnapshot {
     SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: history,
       historyMessageIds: Array(1...Int64(history.count)),
       windowStartMessageId: nil,

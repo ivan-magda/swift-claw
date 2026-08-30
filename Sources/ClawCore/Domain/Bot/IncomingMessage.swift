@@ -4,17 +4,21 @@ public struct RawUpdate: Sendable, Equatable {
   public let message: RawMessage?
   public let editedMessage: RawMessage?
   public let callback: RawCallback?
+  /// The bot's own membership changing in a chat. Carries no message and is only ever logged.
+  public let myChatMember: RawChatMemberUpdate?
 
   public init(
     updateId: Int64,
     message: RawMessage?,
     editedMessage: RawMessage?,
-    callback: RawCallback? = nil
+    callback: RawCallback? = nil,
+    myChatMember: RawChatMemberUpdate? = nil
   ) {
     self.updateId = updateId
     self.message = message
     self.editedMessage = editedMessage
     self.callback = callback
+    self.myChatMember = myChatMember
   }
 }
 
@@ -72,6 +76,20 @@ public struct RawMessage: Sendable, Equatable {
   public let mediaKind: String?
   public let voice: VoiceAttachment?
   public let photo: PhotoAttachment?
+  public let chatKind: ChatKind
+  /// The room's name, for the operator-facing log that is the only way to learn an unlisted
+  /// group's chat id. Absent in a DM.
+  public let chatTitle: String?
+  /// The forum topic. Absent in the General topic and in every non-forum chat, and never coerced
+  /// to a topic id — the General topic and topic 1 are two different conversations.
+  public let messageThreadId: Int64?
+  public let replyToMessageId: Int64?
+  public let replyToUserId: Int64?
+  public let senderDisplayName: String?
+  /// The message was sent on behalf of a chat (anonymous admin, channel post): the sender id
+  /// identifies no human.
+  public let hasSenderChat: Bool
+  public let migratedToChatId: Int64?
 
   public init(
     messageId: Int64,
@@ -81,7 +99,15 @@ public struct RawMessage: Sendable, Equatable {
     caption: String?,
     mediaKind: String?,
     voice: VoiceAttachment? = nil,
-    photo: PhotoAttachment? = nil
+    photo: PhotoAttachment? = nil,
+    chatKind: ChatKind = .private,
+    chatTitle: String? = nil,
+    messageThreadId: Int64? = nil,
+    replyToMessageId: Int64? = nil,
+    replyToUserId: Int64? = nil,
+    senderDisplayName: String? = nil,
+    hasSenderChat: Bool = false,
+    migratedToChatId: Int64? = nil
   ) {
     self.messageId = messageId
     self.fromUserId = fromUserId
@@ -91,6 +117,14 @@ public struct RawMessage: Sendable, Equatable {
     self.mediaKind = mediaKind
     self.voice = voice
     self.photo = photo
+    self.chatKind = chatKind
+    self.chatTitle = chatTitle
+    self.messageThreadId = messageThreadId
+    self.replyToMessageId = replyToMessageId
+    self.replyToUserId = replyToUserId
+    self.senderDisplayName = senderDisplayName
+    self.hasSenderChat = hasSenderChat
+    self.migratedToChatId = migratedToChatId
   }
 }
 
@@ -108,6 +142,15 @@ public struct IncomingMessage: Sendable, Equatable {
   public let chatId: Int64
   public let content: Content
   public let isEdited: Bool
+  public let chatKind: ChatKind
+  /// The room's name, absent in a DM.
+  public let chatTitle: String?
+  /// The forum topic, absent in the General topic and in every non-forum chat.
+  public let messageThreadId: Int64?
+  public let replyToMessageId: Int64?
+  public let replyToUserId: Int64?
+  public let senderDisplayName: String?
+  public let migratedToChatId: Int64?
 
   public init(
     updateId: Int64,
@@ -115,7 +158,14 @@ public struct IncomingMessage: Sendable, Equatable {
     userId: Int64,
     chatId: Int64,
     content: Content,
-    isEdited: Bool
+    isEdited: Bool,
+    chatKind: ChatKind = .private,
+    chatTitle: String? = nil,
+    messageThreadId: Int64? = nil,
+    replyToMessageId: Int64? = nil,
+    replyToUserId: Int64? = nil,
+    senderDisplayName: String? = nil,
+    migratedToChatId: Int64? = nil
   ) {
     self.updateId = updateId
     self.messageId = messageId
@@ -123,10 +173,19 @@ public struct IncomingMessage: Sendable, Equatable {
     self.chatId = chatId
     self.content = content
     self.isEdited = isEdited
+    self.chatKind = chatKind
+    self.chatTitle = chatTitle
+    self.messageThreadId = messageThreadId
+    self.replyToMessageId = replyToMessageId
+    self.replyToUserId = replyToUserId
+    self.senderDisplayName = senderDisplayName
+    self.migratedToChatId = migratedToChatId
   }
 
   /// Pure normalization (no I/O). Returns nil when there's nothing actionable:
-  /// no message/edited_message, no numeric sender, or empty content.
+  /// no message/edited_message, no numeric sender, empty content, or a sender that is a chat
+  /// rather than a person (anonymous admin, channel post) — the id such a message carries belongs
+  /// to Telegram's relay bot, so allowing on it would allow anyone posting behind the chat.
   /// A photo and its caption are one message and travel together as `.photo`; written text outranks
   /// a *voice* attachment, because a transcript and a caption are two texts with no natural merge,
   /// so a captioned voice stays a text message. A caption on media with no usable attachment counts
@@ -134,7 +193,8 @@ public struct IncomingMessage: Sendable, Equatable {
   public static func normalize(from raw: RawUpdate) -> IncomingMessage? {
     guard
       let message = raw.message ?? raw.editedMessage,
-      let fromUserId = message.fromUserId
+      let fromUserId = message.fromUserId,
+      !message.hasSenderChat
     else {
       return nil
     }
@@ -160,7 +220,14 @@ public struct IncomingMessage: Sendable, Equatable {
       userId: fromUserId,
       chatId: message.chatId,
       content: content,
-      isEdited: raw.message == nil && raw.editedMessage != nil
+      isEdited: raw.message == nil && raw.editedMessage != nil,
+      chatKind: message.chatKind,
+      chatTitle: message.chatTitle,
+      messageThreadId: message.messageThreadId,
+      replyToMessageId: message.replyToMessageId,
+      replyToUserId: message.replyToUserId,
+      senderDisplayName: message.senderDisplayName,
+      migratedToChatId: message.migratedToChatId
     )
   }
 }

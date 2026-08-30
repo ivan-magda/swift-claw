@@ -25,7 +25,7 @@ struct DaemonBuilder: Sendable {
   let toolExecutor: any HTTPExecuting & HTTPStreaming
 
   let transport: TelegramClient
-  let botUsername: String?
+  let botIdentity: BotIdentity?
 
   let mcp: MCPBootInputs
 
@@ -141,7 +141,7 @@ struct DaemonBuilder: Sendable {
   /// waiter, and the scheduler.
   struct RunnerConsumers {
     let poller: TelegramPollerService
-    let outbox: OutboxDispatcher
+    let outbox: OutboxDispatcher<ContinuousClock>
     let approvals: ApprovalFabric
     let scheduler: SchedulerService
     let heartbeatOwner: Int64?

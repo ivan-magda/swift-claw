@@ -116,7 +116,7 @@ enum CompositionAcceptance {
       stores: try EnvironmentLoader.openStores(config: config),
       toolExecutor: http,
       transport: TelegramClient(token: secrets.telegramBotToken, http: http),
-      botUsername: nil,
+      botIdentity: nil,
       mcp: mcp,
       logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() }),
       makeManagedStore: { FreshCredentialStore(present: false) }
@@ -321,7 +321,7 @@ struct CompositionAcceptanceHarness {
       }
     }
     composition.makeManagedStore = { _ in managedStore() }
-    composition.fetchBotUsername = { _, _ in nil }
+    composition.fetchBotIdentity = { _, _ in nil }
     composition.buildDaemon = { builder, rosterStack, cooldown in
       capture.record(builder: builder, rosterStack: rosterStack, cooldown: cooldown)
       return try await RunComposition.assembleDaemon(builder, rosterStack, cooldown)

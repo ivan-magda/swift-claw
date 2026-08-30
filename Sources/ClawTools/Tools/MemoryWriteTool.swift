@@ -54,6 +54,8 @@ public struct MemoryWriteTool: Tool {
 
   public var timeout: Duration { .seconds(5) }
 
+  public var executesOnlyViaApproval: Bool { true }
+
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     switch MemoryWriteArguments.parse(arguments, sessionId: nil) {
     case .invalid(let reason):
