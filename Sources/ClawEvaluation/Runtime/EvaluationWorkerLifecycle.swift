@@ -53,9 +53,15 @@ enum EvaluationCredentialStateRoot {
       throw EvaluationCredentialStateRootError.noncanonical
     }
     let candidate = URL(fileURLWithPath: path, isDirectory: true)
+    let standardizedPath = EvaluationPathSecurity.normalizedSystemTemporaryAlias(
+      candidate.standardizedFileURL.path
+    )
+    let resolvedPath = EvaluationPathSecurity.normalizedSystemTemporaryAlias(
+      candidate.resolvingSymlinksInPath().path
+    )
     guard
-      candidate.standardizedFileURL.path == path,
-      candidate.resolvingSymlinksInPath().path == path
+      standardizedPath == path,
+      resolvedPath == path
     else {
       throw EvaluationCredentialStateRootError.noncanonical
     }

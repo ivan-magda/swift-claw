@@ -189,6 +189,39 @@ import Testing
     )
   }
 
+  #if os(macOS)
+    @Test func credentialRootAcceptsCanonicalPrivateTemporaryPathAndRejectsAlias() throws {
+      // given
+      let directoryName = "swift-claw-credential-state-\(UUID().uuidString)"
+      let canonicalRoot = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+        .appendingPathComponent(directoryName, isDirectory: true)
+      let evaluationRoot = canonicalRoot.appendingPathComponent("evaluation", isDirectory: true)
+      let credentialRoot = canonicalRoot.appendingPathComponent("credentials", isDirectory: true)
+      let aliasCredentialRoot = URL(fileURLWithPath: "/tmp", isDirectory: true)
+        .appendingPathComponent(directoryName, isDirectory: true)
+        .appendingPathComponent("credentials", isDirectory: true)
+      try FileManager.default.createDirectory(at: evaluationRoot, withIntermediateDirectories: true)
+      try FileManager.default.createDirectory(at: credentialRoot, withIntermediateDirectories: true)
+      defer { try? FileManager.default.removeItem(at: canonicalRoot) }
+
+      // when
+      let validated = try EvaluationCredentialStateRoot.validate(
+        path: credentialRoot.path,
+        evaluationRoot: evaluationRoot
+      )
+      let aliasError = #expect(throws: EvaluationCredentialStateRootError.noncanonical) {
+        try EvaluationCredentialStateRoot.validate(
+          path: aliasCredentialRoot.path,
+          evaluationRoot: evaluationRoot
+        )
+      }
+
+      // then
+      #expect(validated.path == credentialRoot.path)
+      #expect(aliasError != nil)
+    }
+  #endif
+
   @Test func operationAndCredentialShutdownFailureStillClosesTransportAndFailsIntegrity() async {
     // given
     let events = LifecycleEvents()
