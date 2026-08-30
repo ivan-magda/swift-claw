@@ -290,7 +290,7 @@ def _load(path: Path) -> dict[str, Any]:
         return {}
     try:
         value = load_object(path)
-    except (OSError, UnicodeError, ValueError):
+    except (OSError, RecursionError, UnicodeError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
 
@@ -302,7 +302,7 @@ def _list(path: Path) -> list[dict[str, Any]] | None:
         raw = path.read_bytes()
         value = json.loads(raw.decode("utf-8"))
         canonical = dumps(value).encode("utf-8")
-    except (OSError, TypeError, UnicodeError, ValueError):
+    except (OSError, RecursionError, TypeError, UnicodeError, ValueError):
         return None
     if raw != canonical:
         return None

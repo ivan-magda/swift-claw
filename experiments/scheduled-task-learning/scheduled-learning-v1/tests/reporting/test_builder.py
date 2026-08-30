@@ -288,6 +288,29 @@ class FinalReportBuilderTests(unittest.TestCase):
             self.assertIsNone(report["active_evidence"])
             self.assertTrue(report["m4_blocked"])
 
+    def test_deeply_nested_active_evidence_binds_raw_bytes_and_fails_closed(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result_tree(root)
+            active_path = root / "results" / "active-evidence.json"
+            final_report_path = root / "results" / "final-report.json"
+            nesting_depth = 30_000
+            active_path.write_bytes(
+                b'{"value":' + (b"[" * nesting_depth) + b"0" + (b"]" * nesting_depth) + b"}\n"
+            )
+            final_report_path.unlink()
+
+            # when
+            report = build_final_report(root)
+
+            # then
+            self.assertEqual(load_object(final_report_path), report)
+            self.assertEqual(report["status"], "incomplete_failed")
+            self.assertEqual(report["active_evidence_sha256"], _raw_sha256(active_path))
+            self.assertIsNone(report["active_evidence"])
+            self.assertTrue(report["m4_blocked"])
+
     def test_malformed_decision_list_binds_raw_bytes_and_fails_closed(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
@@ -300,6 +323,32 @@ class FinalReportBuilderTests(unittest.TestCase):
             report = build_final_report(root)
 
             # then
+            self.assertEqual(report["status"], "incomplete_failed")
+            self.assertEqual(
+                report["decision_receipts_sha256"],
+                _raw_sha256(decisions_path),
+            )
+            self.assertIsNone(report["decision_receipt_sha256s"])
+            self.assertTrue(report["m4_blocked"])
+
+    def test_deeply_nested_decision_list_binds_raw_bytes_and_fails_closed(self) -> None:
+        # given
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result_tree(root)
+            decisions_path = root / "results" / "decision-receipts.json"
+            final_report_path = root / "results" / "final-report.json"
+            nesting_depth = 30_000
+            decisions_path.write_bytes(
+                b'[{"value":' + (b"[" * nesting_depth) + b"0" + (b"]" * nesting_depth) + b"}]\n"
+            )
+            final_report_path.unlink()
+
+            # when
+            report = build_final_report(root)
+
+            # then
+            self.assertEqual(load_object(final_report_path), report)
             self.assertEqual(report["status"], "incomplete_failed")
             self.assertEqual(
                 report["decision_receipts_sha256"],
