@@ -95,6 +95,28 @@ def create_repository() -> FreezeTestRepository:
     return repository
 
 
+def point_swiftpm_release_alias(
+    repository: FreezeTestRepository,
+    target_triple: str,
+    *,
+    executable_bytes: bytes | None = None,
+) -> Path:
+    alias = repository.repository_root / ".build" / "release"
+    if executable_bytes is None:
+        executable = alias / "claw-eval"
+        executable_bytes = executable.read_bytes()
+        executable.unlink()
+        alias.rmdir()
+    else:
+        alias.unlink()
+    physical = repository.repository_root / ".build" / target_triple / "release" / "claw-eval"
+    physical.parent.mkdir(parents=True)
+    physical.write_bytes(executable_bytes)
+    physical.chmod(physical.stat().st_mode | stat.S_IXUSR)
+    alias.symlink_to(Path(target_triple) / "release", target_is_directory=True)
+    return physical
+
+
 def publish_manifest(repository: FreezeTestRepository, manifest: dict[str, object]) -> str:
     manifest_path = repository.experiment_root / "freeze" / "manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)

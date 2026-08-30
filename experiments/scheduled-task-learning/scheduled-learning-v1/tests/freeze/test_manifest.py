@@ -10,6 +10,7 @@ from scheduled_learning_v1.freeze import build_manifest, verify_manifest
 from .support import (
     FreezeTestRepository,
     create_repository,
+    point_swiftpm_release_alias,
     rehash_binding,
     run_module,
 )
@@ -153,6 +154,7 @@ class FreezeCLITests(unittest.TestCase):
         # given
         repository = create_repository()
         self.addCleanup(repository.cleanup)
+        point_swiftpm_release_alias(repository, "test-triple")
 
         # when
         built = run_module("build", str(repository.experiment_root))
@@ -164,6 +166,26 @@ class FreezeCLITests(unittest.TestCase):
         self.assertTrue((repository.experiment_root / "freeze" / "manifest-input.json").is_file())
         self.assertTrue((repository.experiment_root / "freeze" / "manifest.json").is_file())
         self.assertIn("owner_approval=absent", verified.stdout)
+
+    def test_module_cli_verify_rejects_release_alias_retargeting(self) -> None:
+        # given
+        repository = create_repository()
+        self.addCleanup(repository.cleanup)
+        original = point_swiftpm_release_alias(repository, "test-triple")
+        built = run_module("build", str(repository.experiment_root))
+        point_swiftpm_release_alias(
+            repository,
+            "alternate-triple",
+            executable_bytes=original.read_bytes(),
+        )
+
+        # when
+        verified = run_module("verify", str(repository.experiment_root))
+
+        # then
+        self.assertEqual(built.returncode, 0, built.stderr)
+        self.assertNotEqual(verified.returncode, 0)
+        self.assertIn("executable closure membership changed", verified.stderr)
 
     def test_module_cli_verify_rejects_a_changed_bound_input(self) -> None:
         # given

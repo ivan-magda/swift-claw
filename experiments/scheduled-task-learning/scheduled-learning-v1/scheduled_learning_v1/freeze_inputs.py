@@ -281,7 +281,17 @@ def _require_inventory(name: str, observed: list[str], expected: Sequence[str]) 
 
 
 def _executable_path(repository_root: Path) -> str:
-    relative = ".build/release/claw-eval"
+    alias = repository_root / ".build" / "release" / "claw-eval"
+    try:
+        physical = alias.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("cannot resolve the release claw-eval artifact") from error
+    try:
+        relative = physical.relative_to(repository_root).as_posix()
+    except ValueError as error:
+        raise ValueError(
+            "the release claw-eval artifact must remain inside the repository"
+        ) from error
     candidate = rooted_regular_file(repository_root, relative)
     mode = candidate.stat().st_mode
     if not stat.S_ISREG(mode) or mode & stat.S_IXUSR == 0:

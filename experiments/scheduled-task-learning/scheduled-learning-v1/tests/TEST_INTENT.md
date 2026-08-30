@@ -225,7 +225,8 @@ under helper extraction because it asserts only the public validator result.
 | A rehashed manifest widens one owner-review aggregate budget | `freeze.verify_manifest` exact `budgets` check | Worker accounting tests enforce per-result arithmetic, not the cross-run 10/5/1/38/120000 ceiling | Accept any positive budget or compare only key shape | `test_manifest::ManifestTests::test_verifier_rejects_a_rehashed_aggregate_budget_substitution` |
 | A rehashed manifest weakens an adapter, active, or restart threshold that later reporting must source from the manifest | `freeze.verify_manifest` exact committed `gates` check | Adapter tests exercise the current contract file directly but cannot detect a substituted manifest threshold | Accept the gate file digest without carrying and checking its exact threshold object | `test_manifest::ManifestTests::test_verifier_rejects_a_rehashed_gate_substitution` |
 | A rehashed manifest names executable bytes other than the discovered `claw-eval` artifact | `freeze.verify_manifest` executable file-record/hash binding | Python process-launch tests execute a configured fake but never bind it into an M3 freeze | Trust `swift_execution.executable_sha256` without matching the protected executable record | `test_manifest::ManifestTests::test_verifier_rejects_a_rehashed_executable_identity_substitution` |
-| The required `python -m scheduled_learning_v1.freeze build|verify` surface cannot produce and verify canonical outputs offline, or requires an owner checkpoint during freeze construction | `freeze.main` CLI adapter | Package smoke and conformance tests never invoke this module CLI | Omit canonical build output, or require the not-yet-created owner approval | `test_manifest::FreezeCLITests::test_module_cli_builds_and_verifies_without_an_owner_checkpoint` |
+| The required `python -m scheduled_learning_v1.freeze build|verify` surface cannot produce and verify canonical outputs offline from SwiftPM's real `.build/release` alias, binds the alias instead of its physical repository-relative executable, or requires an owner checkpoint during freeze construction | `_executable_path` discovery plus the `freeze.main` CLI adapter | Package smoke and conformance tests never invoke this module CLI; manifest unit fixtures previously fabricated `.build/release` as a direct directory | Pass the expected SwiftPM release alias to the generic no-symlink file verifier instead of strictly resolving and rebinding its physical in-repository target, omit canonical build output, or require the not-yet-created owner approval | `test_manifest::FreezeCLITests::test_module_cli_builds_and_verifies_without_an_owner_checkpoint` |
+| CLI `verify` accepts `.build/release` retargeting to another physical executable path when the replacement bytes are identical | rediscovered `executable` closure membership in `freeze.verify_manifest` | The changed-bound-input CLI test mutates prompt bytes at one unchanged path; executable-identity substitution changes the manifest hash projection, not the discovered physical member path | Compare only executable bytes/digest, or keep the originally resolved executable path cached instead of rediscovering the current alias target | `test_manifest::FreezeCLITests::test_module_cli_verify_rejects_release_alias_retargeting` |
 | CLI `verify` regenerates or trusts stored data instead of invoking the public verifier | `freeze.main` verify dispatch | The CLI happy path remains green if verification is bypassed | Mutate a bound prompt after CLI build and still exit zero | `test_manifest::FreezeCLITests::test_module_cli_verify_rejects_a_changed_bound_input` |
 | A fully valid manifest and approval fail to return the closed verified receipt | `preflight.verify_pre_run` accepted return path | Rejection tests cannot detect an unconditional failure or a receipt assembled from stale values | Reject every approval, or return a receipt without the current freeze commit and exact budgets | `test_preflight::PreflightTests::test_unchanged_freeze_and_owner_checkpoint_are_verified` |
 | A missing or value-substituted owner budget is accepted | `preflight.verify_pre_run` closed approval and exact budget comparison | Manifest budget verification protects the stored manifest, not the separately authorized budget object | Default a missing approval or accept 39 sends | `test_preflight::PreflightTests::test_missing_or_changed_owner_budget_is_rejected` |
@@ -237,7 +238,8 @@ under helper extraction because it asserts only the public validator result.
 ### Redundancy pass (`docs/TESTING.md` §9.1)
 
 1. **Mutants killed:** the rows above cover current-byte substitution, dynamic closure growth,
-   symlink traversal, route/output-cap substitution, JSON type coercion, task-order substitution,
+   symlink traversal, strict in-repository SwiftPM alias resolution, identical-byte alias retargeting,
+   route/output-cap substitution, JSON type coercion, task-order substitution,
    aggregate-budget widening, gate-threshold weakening, executable substitution, CLI verification
    bypass, and accepted/rejected/stale owner-authorization branches.
 2. **Production branch/seam:** `freeze.py` owns manifest build/verify/CLI orchestration,
@@ -250,10 +252,15 @@ under helper extraction because it asserts only the public validator result.
    tests start after a manifest is supplied and therefore cannot observe this package's source
    closure, aggregate budget, CLI, or current-Git-commit checks. Prompt, corpus, scorer, and
    executable byte changes intentionally share one representative file-record case; repeating that
-   same verifier path for each file kind would add no mutant.
+   same verifier path for each file kind would add no mutant. The realistic-alias CLI case owns the
+   expected SwiftPM discovery alias before generic file verification; the generic symlink rejection
+   case must continue rejecting symlinks in every already-bound path. The retarget case uses
+   identical bytes at a different physical member, so neither the happy alias case nor any
+   same-path byte mutation can kill its closure-membership mutant.
 4. **Behavior-preserving refactor stays green:** yes — tests call the public builder/verifier or the
-   module CLI and assert accepted/rejected outcomes. Helper extraction, record iteration order, and
-   error wording outside the named semantic field leave them green.
+   module CLI and assert accepted/rejected outcomes. Changing the target triple, alias-resolution
+   implementation, helper extraction, record iteration order, and error wording outside the named
+   semantic field leave them green.
 
 ## Directed scored lifecycle and offline report verification (Task 7)
 
