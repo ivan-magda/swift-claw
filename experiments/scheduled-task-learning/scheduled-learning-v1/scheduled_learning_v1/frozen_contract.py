@@ -41,6 +41,19 @@ EVALUATOR_ROUTE: dict[str, object] = {
 }
 REFLECTOR_ROUTE: dict[str, object] = {**EVALUATOR_ROUTE, "max_output_tokens": 768}
 MISSING_USAGE_TOKEN_PROXY = 132_768
+OWNER_CORRECTION: dict[str, object] = {
+    "after_clean_evaluations": 2,
+    "signal": "result_correction",
+    "target_run_order_index": 0,
+    "payload": {
+        "correction_text": (
+            "For this job, frequently refreshed operational counters, gauges, and refresh "
+            "timestamps are volatile noise unless they represent a durable commitment, "
+            "availability change, obligation, deadline, or price change. The clean result "
+            "incorrectly treated counter or gauge changes as material."
+        )
+    },
+}
 GATES: dict[str, object] = {
     "schema_version": SCHEMA_VERSION,
     "adapter_pass_rule": {
@@ -61,6 +74,7 @@ GATES: dict[str, object] = {
         "evaluator": LEARNING_RETRY_BUDGET,
         "reflector": LEARNING_RETRY_BUDGET,
     },
+    "owner_correction_fallback": OWNER_CORRECTION,
 }
 
 

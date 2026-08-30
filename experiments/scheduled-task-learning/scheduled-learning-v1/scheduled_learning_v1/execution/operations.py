@@ -212,10 +212,11 @@ class Operations:
         trigger_digest: str,
         evaluations: list[dict[str, object]],
         issue_codes: list[str],
+        owner_payloads: list[str] | None = None,
     ) -> dict[str, object]:
         """Run the one reflector using its immutable trigger digest as operation ID."""
 
-        carrier = build_reflector_carrier([], evaluations, issue_codes, [])
+        carrier = build_reflector_carrier([], evaluations, issue_codes, owner_payloads or [])
         terminal = self._run_learning(trigger_digest, "reflector", carrier)
         result_digest = self._operation_result_digest(trigger_digest)
         lessons = _reflector_output(terminal.get("output"))

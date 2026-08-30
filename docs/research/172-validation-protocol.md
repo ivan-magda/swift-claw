@@ -1,7 +1,7 @@
 # Issue #172: M3 scheduled-learning validation protocol
 
 - Status: Proposed; owner approval required before scored calls
-- Protocol version: 1.0
+- Protocol version: 1.1
 - Date: 2026-08-29
 - Decision issue: [#172](https://github.com/ivan-magda/swift-claw/issues/172)
 - Depends on: accepted M1 RFC (Issue 167), accepted `scheduled-learning/v1` algorithm (Issue 170)
@@ -32,6 +32,21 @@ reuse, mutate, or generalize any Protocol 0.6 artifact:
 
 M3's algorithm identity is `scheduled-learning/v1`; Protocol 0.6 has no algorithm identity because
 it predates the generic reducer.
+
+## Protocol v1.1 owner-correction path
+
+Protocol v1.1 keeps the Protocol v1 corpus, gold, prompts, reducer, budgets, and run order unchanged.
+After both clean evaluations, if the evaluator has not opened an automatic trigger, the harness
+records one frozen `result_correction` owner signal against the first clean run:
+
+> For this job, frequently refreshed operational counters, gauges, and refresh timestamps are
+> volatile noise unless they represent a durable commitment, availability change, obligation,
+> deadline, or price change. The clean result incorrectly treated counter or gauge changes as
+> material.
+
+Replay must open an `owner_correction` trigger before the existing reflector, candidate, trial,
+promotion, active, and fresh-process restart flow continues. This protocol validates the accepted
+owner-correction path; it does not validate Protocol v1's failed automatic evaluator trigger.
 
 ## Fixed fixture split
 

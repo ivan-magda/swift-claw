@@ -13,6 +13,7 @@ from page_change_m3.materialize import normalize_lesson_text
 
 from scheduled_learning_v1 import ALGORITHM_ID
 from scheduled_learning_v1.evidence_contract import redact_credential_state_root
+from scheduled_learning_v1.frozen_contract import OWNER_CORRECTION
 from scheduled_learning_v1.preflight import verify_pre_run
 from scheduled_learning_v1.replay_bootstrap import (
     EMPTY_LESSON_SET,
@@ -131,10 +132,12 @@ def _run_parent(
     credential_state_root: Path,
 ) -> None:
     evaluations: list[dict[str, object]] = []
+    clean_run_ids: list[str] = []
     run_order = _run_order(manifest)
     for row in run_order[:2]:
         task = operations.run_task(row, [])
         _require_task(task)
+        clean_run_ids.append(str(task["run_id"]))
         evaluated = operations.run_evaluator(task)
         evaluation = _evaluation(evaluated, task)
         evaluations.append(evaluation)
@@ -145,11 +148,41 @@ def _run_parent(
         )
         replayed = replay_and_publish(root, controller)
     job = replay_job(replayed)
-    trigger_digest = _open_trigger_digest(job)
+    trigger = _open_trigger(job)
+    owner_payloads: list[str] = []
+    if trigger is None:
+        correction_payload = _object(OWNER_CORRECTION["payload"], "owner correction payload")
+        correction_text = str(correction_payload["correction_text"])
+        revision = int(job["feedback_revision"]) + 1
+        first_clean_run_id = clean_run_ids[0]
+        journal.append(
+            "owner_signal_recorded",
+            _utc_now(),
+            {
+                "job_id": JOB_ID,
+                "subject_kind": "run",
+                "subject_digest": first_clean_run_id,
+                "run_id": first_clean_run_id,
+                "signal": OWNER_CORRECTION["signal"],
+                "payload": {"correction_text": correction_text},
+                "revision": revision,
+                "supersedes_revision": None,
+            },
+        )
+        replayed = replay_and_publish(root, controller)
+        job = replay_job(replayed)
+        trigger = _open_trigger(job)
+        if trigger is None or trigger.get("support") != "owner_correction":
+            raise ValueError(
+                "owner correction replay did not produce an open owner_correction trigger"
+            )
+        owner_payloads = [correction_text]
+    trigger_digest = _required_digest(trigger.get("trigger_digest"), "reflector trigger")
     reflector = operations.run_reflector(
         trigger_digest,
         evaluations,
         _qualifying_issue_codes(evaluations),
+        owner_payloads,
     )
     if reflector.get("status") != "response":
         raise ValueError("reflector did not return a valid response")
@@ -399,14 +432,14 @@ def _run_order(manifest: dict[str, object]) -> list[dict[str, object]]:
     return [cast(dict[str, object], row) for row in value if isinstance(row, dict)]
 
 
-def _open_trigger_digest(job: dict[str, Any]) -> str:
+def _open_trigger(job: dict[str, Any]) -> dict[str, Any] | None:
     triggers = job.get("triggers")
     if not isinstance(triggers, list):
-        raise ValueError("stable evaluations did not produce a trigger")
+        return None
     for trigger in reversed(triggers):
         if isinstance(trigger, dict) and trigger.get("closed") is False:
-            return _required_digest(trigger.get("trigger_digest"), "reflector trigger")
-    raise ValueError("stable evaluations did not produce an open trigger")
+            return cast(dict[str, Any], trigger)
+    return None
 
 
 def _promotion_status(job: dict[str, Any]) -> str | None:
