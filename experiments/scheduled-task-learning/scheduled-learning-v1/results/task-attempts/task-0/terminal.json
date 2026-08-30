@@ -1,1 +1,0 @@
-{"diagnostics":"Error: Unknown option '--credential-state-root'\nUsage: claw-eval worker --invocation <invocation> [--sealed-output-key-stdin]\n  See 'claw-eval worker --help' for more information.","exit_code":64,"status":"process_failed"}
