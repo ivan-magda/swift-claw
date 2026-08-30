@@ -308,13 +308,13 @@ class FinalReportBuilderTests(unittest.TestCase):
             self.assertIsNone(report["decision_receipt_sha256s"])
             self.assertTrue(report["m4_blocked"])
 
-    def test_nonfinite_decision_json_binds_raw_bytes_and_fails_closed(self) -> None:
+    def test_overflowed_decision_number_binds_raw_bytes_and_fails_closed(self) -> None:
         # given
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             result_tree(root)
             decisions_path = root / "results" / "decision-receipts.json"
-            decisions_path.write_bytes(b'[{"value":NaN}]')
+            decisions_path.write_bytes(b'[{"value":1e400}]')
 
             # when
             report = build_final_report(root)

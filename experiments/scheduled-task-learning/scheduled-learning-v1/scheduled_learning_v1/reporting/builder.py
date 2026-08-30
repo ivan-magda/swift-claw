@@ -300,21 +300,15 @@ def _list(path: Path) -> list[dict[str, Any]] | None:
         return None
     try:
         raw = path.read_bytes()
-        value = json.loads(
-            raw.decode("utf-8"),
-            parse_constant=_reject_non_json_constant,
-        )
-    except (OSError, UnicodeError, ValueError):
+        value = json.loads(raw.decode("utf-8"))
+        canonical = dumps(value).encode("utf-8")
+    except (OSError, TypeError, UnicodeError, ValueError):
         return None
-    if raw != dumps(value).encode("utf-8"):
+    if raw != canonical:
         return None
     if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
         return None
     return cast(list[dict[str, Any]], value)
-
-
-def _reject_non_json_constant(value: str) -> object:
-    raise ValueError(f"non-JSON numeric constant is not allowed: {value}")
 
 
 def _freeze_commit(approval: dict[str, Any]) -> str | None:
