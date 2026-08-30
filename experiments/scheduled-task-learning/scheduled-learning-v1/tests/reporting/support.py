@@ -139,6 +139,10 @@ def artifact_result_tree(
         admitted_contract,
     ):
         run_scored(root, root.parent.resolve())
+    failure_path = root / "results" / "failure.json"
+    if failure_path.is_file():
+        failure = load_object(failure_path)
+        raise AssertionError(f"report support lifecycle failed: {failure.get('error')}")
     if approval_accounted_token_limit is not None:
         approval = load_object(root / "freeze" / "owner-budget-approval.json")
         approval_budget = _object(approval.get("budgets"), "owner approval budgets")
