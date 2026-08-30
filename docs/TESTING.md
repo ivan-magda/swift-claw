@@ -100,6 +100,7 @@ A flaky test — one that passes and fails with no change to code — is worse t
 - **DRY the "how-to"** — extract fixtures, builders, and scripted doubles into helpers so mechanics appear once.
 - **DAMP the "what"** — keep the scenario narrative (arrange / act / assert) descriptive and legible in the test body. A test should read as a self-contained specification.
 - Follow **Given-When-Then**: separate the body with `// given` / `// when` / `// then` (see `CLAUDE.md`).
+- **One nameable responsibility per test file** — when a suite grows a second one, split it into a sibling file rather than appending. This is the `CLAUDE.md` "extract before you extend" rule at the test seam.
 
 ### 7.1 One source of truth for every value
 
@@ -198,6 +199,7 @@ A test in this repo:
 - [ ] synchronizes on a **gate or emitted signal**, never a `sleep`;
 - [ ] builds its **own fresh environment** and cleans up; does not depend on order;
 - [ ] reads as a spec: **Given-When-Then**, DAMP narrative, DRY mechanics;
+- [ ] lives in a suite file covering **one nameable behavior area**, not an accumulated grab-bag;
 - [ ] maps to a **reachable production branch, state transition, external seam, or independent failure mode**;
 - [ ] uses one representative when multiple inputs traverse the same unconditional path;
 - [ ] names a mutant that the nearest existing test would not kill;

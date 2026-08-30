@@ -18,8 +18,20 @@ SwiftPM package, executable `clawd`. The dependency graph is a layered DAG: **se
 
 ## Architectural invariants
 
+- **Build for today's requirement, not a predicted one.** Prefer the simplest correct, testable,
+  maintainable design for the current requirements and the changes realistically next in line. Do
+  not add indirection, extension points, or hypothetical edge-case handling without a concrete
+  scenario, a demonstrated benefit, or a named risk. A seam that buys a test double or holds a
+  layer boundary is earned; a generic parameter, config knob, or protocol added for a second
+  implementation nobody has asked for is not.
 - **Search before you add.** Before introducing a constant, helper, type, test double, or pattern, grep the protocol/seam and the shared support module for a semantic equivalent, and reuse or promote it when the contracts match. Do not merge two concepts into one abstraction because they look alike.
 - **Name the domain, not the literal.** Elevate one-offs into typed domain abstractions — no magic strings: branch and assert on the enum `rawValue` or named constant the production code already emits, never a duplicated literal.
+- **Cohesive files over monoliths — extract before you extend.** When a file no longer holds
+  in your head as one responsibility, name its responsibilities and move them into sibling files
+  *before* making the next change; when three or more of those files form one subsystem, group
+  them in a directory behind one small entry point. Keep the dependency graph directed and the
+  public API unchanged across the extraction. Do not split on line count alone, or into
+  one-function files.
 - **Clean-room, not blinkered.** Where a task calls for comparative design work, study OpenClaw, Hermes, and the author's prior `swift-claude-code`, and borrow their ideas and hard-won practices freely. Banned is transcription: no copied code, no line-by-line ports — re-derive each borrowed idea in our own design and Swift.
 - **Swift 6 strict concurrency.** Shared mutable in-memory state lives in actors; domain types are `Sendable` value types. GRDB stores are the deliberate exception — thin `Sendable` wrappers over `any DatabaseWriter` that lean on GRDB's own serialization; do not put an actor around them.
 - **Concurrency trap:** a Swift actor does NOT serialize across `await`. The per-session lane chains a stored `Task` (`var currentTurn`), it does not rely on actor isolation alone — `docs/ARCHITECTURE.md` §5.
