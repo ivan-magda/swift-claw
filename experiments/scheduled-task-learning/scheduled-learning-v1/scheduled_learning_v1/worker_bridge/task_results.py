@@ -452,7 +452,7 @@ def _require_accounting(
         if (
             row.get("run_id") != result.get("run_id")
             or row.get("session_id") != result.get("session_id")
-            or row.get("model") != route.get("wire_model")
+            or row.get("model") != route.get("provider_reference")
         ):
             raise ValueError("task usage row does not bind result and frozen route identity")
     return validate_task_usage(
