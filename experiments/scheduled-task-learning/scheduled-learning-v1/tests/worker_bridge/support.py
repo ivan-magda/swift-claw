@@ -22,10 +22,13 @@ def write_worker(
     exit_code: int = 0,
     *,
     publish_result: bool = True,
+    diagnostic: str | None = None,
+    diagnostic_stderr: str | None = None,
 ) -> None:
     """Create a fake that records argv and optionally publishes one result."""
 
     argv_path = path.with_suffix(".argv.jsonl")
+    selected_diagnostic = diagnostic if diagnostic is not None else ("diagnostic-" + "x" * 4096)
     script = (
         "#!/usr/bin/env python3\n"
         "import hashlib, json, pathlib, sys\n"
@@ -44,8 +47,9 @@ def write_worker(
         "result_path.parent.mkdir(parents=True, exist_ok=True)\n"
         "result_text = json.dumps(result, sort_keys=True, separators=(',', ':')) + '\\n'\n"
         + ("result_path.write_text(result_text)\n" if publish_result else "")
-        + "print('diagnostic-' + 'x' * 4096)\n"
-        f"raise SystemExit({exit_code})\n"
+        + f"print({selected_diagnostic!r})\n"
+        + (f"print({diagnostic_stderr!r}, file=sys.stderr)\n" if diagnostic_stderr else "")
+        + f"raise SystemExit({exit_code})\n"
     )
     path.write_text(script, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)

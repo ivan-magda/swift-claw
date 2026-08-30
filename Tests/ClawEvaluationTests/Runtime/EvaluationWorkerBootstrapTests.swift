@@ -316,7 +316,7 @@ import Testing
     {
       _ = try await EvaluationWorker().runResult(
         invocation: invocation,
-        credentialStateRoot: root.path,
+        credentialStateRoot: configured.configuration.stateRootURL.path,
         freezeVerifier: freezeVerifier
       )
     }
@@ -435,7 +435,7 @@ import Testing
     ) {
       _ = try await EvaluationWorker().runResult(
         invocation: invocation,
-        credentialStateRoot: root.path,
+        credentialStateRoot: configured.configuration.stateRootURL.path,
         freezeVerifier: StaticEvaluationFreezeVerifier(context: context)
       )
     }

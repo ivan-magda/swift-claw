@@ -11,21 +11,13 @@ enum EvaluationCredentialStateRootError: Error, Sendable, Equatable {
   case noncanonical
   case unavailable
   case evaluationStateForbidden
+  case legacyStateMismatch
   case productionStateForbidden
 }
 
 enum EvaluationCredentialStateRoot {
   static func validate(path: String, evaluationRoot: URL) throws -> URL {
-    guard path.hasPrefix("/") else {
-      throw EvaluationCredentialStateRootError.noncanonical
-    }
-    let candidate = URL(fileURLWithPath: path, isDirectory: true)
-    guard
-      candidate.standardizedFileURL.path == path,
-      candidate.resolvingSymlinksInPath().path == path
-    else {
-      throw EvaluationCredentialStateRootError.noncanonical
-    }
+    let candidate = try canonicalCandidate(path: path)
     let isEvaluationState = EvaluationPathSecurity.isContainedOrEqual(
       candidate,
       under: evaluationRoot
@@ -43,6 +35,34 @@ enum EvaluationCredentialStateRoot {
     guard isProductionState == false else {
       throw EvaluationCredentialStateRootError.productionStateForbidden
     }
+    try requireExistingDirectory(candidate, path: path)
+    return candidate
+  }
+
+  static func validateLegacy(path: String, expectedStateRoot: URL) throws -> URL {
+    let candidate = try canonicalCandidate(path: path)
+    guard candidate.path == expectedStateRoot.standardizedFileURL.path else {
+      throw EvaluationCredentialStateRootError.legacyStateMismatch
+    }
+    try EvaluationPathSecurity.rejectSymlinkComponents(in: [candidate])
+    return candidate
+  }
+
+  private static func canonicalCandidate(path: String) throws -> URL {
+    guard path.hasPrefix("/") else {
+      throw EvaluationCredentialStateRootError.noncanonical
+    }
+    let candidate = URL(fileURLWithPath: path, isDirectory: true)
+    guard
+      candidate.standardizedFileURL.path == path,
+      candidate.resolvingSymlinksInPath().path == path
+    else {
+      throw EvaluationCredentialStateRootError.noncanonical
+    }
+    return candidate
+  }
+
+  private static func requireExistingDirectory(_ candidate: URL, path: String) throws {
     var isDirectory: ObjCBool = false
     guard
       FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
@@ -51,7 +71,6 @@ enum EvaluationCredentialStateRoot {
       throw EvaluationCredentialStateRootError.unavailable
     }
     try EvaluationPathSecurity.rejectSymlinkComponents(in: [candidate])
-    return candidate
   }
 }
 

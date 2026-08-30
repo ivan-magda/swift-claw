@@ -12,7 +12,10 @@ from typing import cast
 
 from benchmark_core.canonical import canonical_sha256, dumps, write
 
-from scheduled_learning_v1.evidence_contract import publish_terminal
+from scheduled_learning_v1.evidence_contract import (
+    publish_terminal,
+    redact_credential_state_root,
+)
 from scheduled_learning_v1.replay_controller import EventJournal
 
 from .learning_results import validate_learning_result
@@ -123,7 +126,11 @@ class WorkerBridge:
             capture_output=True,
             text=True,
         )
-        diagnostics = _bounded_diagnostics(completed.stdout, completed.stderr)
+        diagnostics = _bounded_diagnostics(
+            completed.stdout,
+            completed.stderr,
+            self._credential_state_root,
+        )
         if completed.returncode != 0:
             terminal = {
                 "status": "process_failed",
@@ -151,7 +158,11 @@ class WorkerBridge:
             result = None
             terminal = {
                 "status": "schema_invalid",
-                "diagnostics": _bounded_diagnostics(diagnostics, str(error)),
+                "diagnostics": _bounded_diagnostics(
+                    diagnostics,
+                    str(error),
+                    self._credential_state_root,
+                ),
             }
         terminal = {**terminal, "diagnostics": diagnostics}
         if result is None:
@@ -244,9 +255,9 @@ def _event_status(status: str) -> str:
     return "failed"
 
 
-def _bounded_diagnostics(stdout: str, stderr: str) -> str:
+def _bounded_diagnostics(stdout: str, stderr: str, credential_state_root: Path) -> str:
     value = "\n".join(part for part in (stdout, stderr) if part).strip()
-    return value[:_DIAGNOSTIC_LIMIT]
+    return redact_credential_state_root(value, credential_state_root)[:_DIAGNOSTIC_LIMIT]
 
 
 def _utc_now() -> str:

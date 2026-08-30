@@ -180,9 +180,9 @@ package struct EvaluationWorker: Sendable {
       throw EvaluationWorkerInvocationError.invalidConfigurationSnapshot
     }
     let configuration = try snapshot.decodeAttempt()
-    let credentialRootURL = try EvaluationCredentialStateRoot.validate(
+    let credentialRootURL = try EvaluationCredentialStateRoot.validateLegacy(
       path: credentialStateRoot,
-      evaluationRoot: configuration.evaluationRootURL
+      expectedStateRoot: configuration.stateRootURL
     )
     let freeze = try await freezeVerifier.verifyLocal(invocation.freeze)
     let liveAdmission = EvaluationLiveFreezeAdmission(

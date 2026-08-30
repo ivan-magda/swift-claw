@@ -134,6 +134,7 @@ actor ScriptedEvaluationWorkerLauncher: EvaluationWorkerLaunching {
     kind: EvaluationWorkerInvocationKind,
     executablePath _: String,
     invocationPath: String,
+    credentialStateRoot _: String,
     sealedOutputKey: Data?
   ) async -> EvaluationWorkerLaunchResult {
     do {

@@ -229,6 +229,42 @@ class ProcessLaunchTests(unittest.TestCase):
             # then
             self.assertEqual(terminal["status"], "process_failed")
 
+    def test_failed_worker_redacts_credential_root_from_committed_diagnostics(self) -> None:
+        # given
+        with (
+            TemporaryDirectory() as temporary,
+            TemporaryDirectory() as credential_temporary,
+        ):
+            root = Path(temporary)
+            credential_root = Path(credential_temporary).resolve()
+            core = task_core(root)
+            result_path = root / "result.json"
+            executable = root / "claw-eval"
+            write_worker(
+                executable,
+                result_path,
+                task_result(core),
+                exit_code=7,
+                publish_result=False,
+                diagnostic="worker failed",
+                diagnostic_stderr=str(credential_root),
+            )
+            events = root / "evaluation" / "events"
+            bridge = WorkerBridge(executable, EventJournal(events), credential_root)
+            call = TaskAttemptCall(core, root / "invocation.json", result_path)
+
+            # when
+            terminal = bridge.run_task(call)
+
+            # then
+            committed = "\n".join(
+                path.read_text(encoding="utf-8")
+                for path in [root / "terminal.json", *sorted(events.glob("*.json"))]
+            )
+            self.assertEqual(terminal["status"], "process_failed")
+            self.assertIn("[credential-state-root]", committed)
+            self.assertNotIn(str(credential_root), committed)
+
     def test_nonzero_exit_publishes_canonical_terminal_carrier(self) -> None:
         # given
         with TemporaryDirectory() as temporary:

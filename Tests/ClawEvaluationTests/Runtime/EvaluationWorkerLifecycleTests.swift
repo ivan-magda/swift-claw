@@ -133,6 +133,7 @@ import Testing
     let root = try makeEvaluationTestRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let evaluationRoot = root.appendingPathComponent("evaluation")
+    let legacyStateRoot = evaluationRoot.appendingPathComponent("state")
     let externalRoot = root.appendingPathComponent("credential-state")
     let symlinkRoot = root.appendingPathComponent("credential-link")
     try FileManager.default.createDirectory(at: evaluationRoot, withIntermediateDirectories: true)
@@ -173,6 +174,18 @@ import Testing
         path: externalRoot.path,
         evaluationRoot: evaluationRoot
       ).path == externalRoot.path
+    )
+    #expect(throws: EvaluationCredentialStateRootError.legacyStateMismatch) {
+      try EvaluationCredentialStateRoot.validateLegacy(
+        path: externalRoot.path,
+        expectedStateRoot: legacyStateRoot
+      )
+    }
+    #expect(
+      try EvaluationCredentialStateRoot.validateLegacy(
+        path: legacyStateRoot.path,
+        expectedStateRoot: legacyStateRoot
+      ).path == legacyStateRoot.path
     )
   }
 

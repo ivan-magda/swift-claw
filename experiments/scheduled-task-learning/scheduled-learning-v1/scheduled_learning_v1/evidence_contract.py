@@ -8,6 +8,14 @@ from typing import cast
 
 from benchmark_core.canonical import canonical_sha256, dumps, loads_object, write
 
+_CREDENTIAL_STATE_ROOT_REDACTION = "[credential-state-root]"
+
+
+def redact_credential_state_root(value: str, credential_state_root: Path) -> str:
+    """Remove the exact runtime-only credential root before durable evidence publication."""
+
+    return value.replace(str(credential_state_root), _CREDENTIAL_STATE_ROOT_REDACTION)
+
 
 def canonical_object(path: Path, name: str) -> dict[str, object]:
     """Load one canonical JSON object without interpreting its provenance."""

@@ -12,6 +12,7 @@ from benchmark_core.canonical import canonical_sha256, load_object, write
 from page_change_m3.materialize import normalize_lesson_text
 
 from scheduled_learning_v1 import ALGORITHM_ID
+from scheduled_learning_v1.evidence_contract import redact_credential_state_root
 from scheduled_learning_v1.preflight import verify_pre_run
 from scheduled_learning_v1.replay_bootstrap import (
     EMPTY_LESSON_SET,
@@ -58,7 +59,7 @@ def run_scored(root: Path, credential_state_root: Path) -> dict[str, object]:
         _run_parent(root, manifest, controller, journal, operations, credential_state_root)
     except Exception as error:
         refresh_replay(root)
-        _write_failure(root, error)
+        _write_failure(root, error, credential_state_root)
     return build_final_report(root)
 
 
@@ -106,7 +107,7 @@ def run_active(root: Path, generation: int, credential_state_root: Path) -> dict
         replay_and_publish(root, controller)
     except Exception as error:
         refresh_replay(root)
-        _write_failure(root, error)
+        _write_failure(root, error, credential_state_root)
     return build_final_report(root)
 
 
@@ -320,7 +321,10 @@ def _launch_restart(
         text=True,
     )
     if completed.returncode != 0:
-        diagnostic = (completed.stdout + completed.stderr)[:1024]
+        diagnostic = redact_credential_state_root(
+            completed.stdout + completed.stderr,
+            credential_state_root,
+        )[:1024]
         raise RuntimeError(f"fresh active process failed: {diagnostic}")
 
 
@@ -528,12 +532,19 @@ def _budget_from_results(root: Path) -> AggregateBudget:
     )
 
 
-def _write_failure(root: Path, error: Exception) -> None:
+def _write_failure(root: Path, error: Exception, credential_state_root: Path) -> None:
     results = root / "results"
     results.mkdir(parents=True, exist_ok=True)
     write(
         results / "failure.json",
-        {"schema_version": 1, "status": "incomplete_failed", "error": str(error)[:1024]},
+        {
+            "schema_version": 1,
+            "status": "incomplete_failed",
+            "error": redact_credential_state_root(
+                str(error),
+                credential_state_root,
+            )[:1024],
+        },
     )
 
 

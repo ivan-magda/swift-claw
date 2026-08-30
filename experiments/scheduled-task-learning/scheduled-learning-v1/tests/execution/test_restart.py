@@ -13,7 +13,7 @@ from typing import cast
 from unittest.mock import patch
 
 from benchmark_core.canonical import load_object, write
-from scheduled_learning_v1.execution.lifecycle import _launch_restart
+from scheduled_learning_v1.execution.lifecycle import _launch_restart, _write_failure
 from scheduled_learning_v1.run import main
 
 from .support import frozen_tree, run_fake_scored
@@ -207,6 +207,33 @@ class RestartTests(unittest.TestCase):
                     str(credential_root),
                 ],
             )
+
+    def test_failed_active_child_redacts_credential_root_from_failure_evidence(self) -> None:
+        # given
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            tempfile.TemporaryDirectory() as credential_temporary,
+        ):
+            root = Path(temporary)
+            credential_root = Path(credential_temporary).resolve()
+
+            def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                diagnostic = f"failed argv: {' '.join(command)}"
+                return subprocess.CompletedProcess(command, 9, "active failed", diagnostic)
+
+            # when
+            with (
+                patch("scheduled_learning_v1.execution.lifecycle.subprocess.run", run),
+                self.assertRaises(RuntimeError) as captured,
+            ):
+                _launch_restart(root, 3, "a" * 64, credential_root)
+
+            # then
+            self.assertNotIn(str(credential_root), str(captured.exception))
+            _write_failure(root, captured.exception, credential_root)
+            failure_path = root / "results" / "failure.json"
+            self.assertIn("[credential-state-root]", failure_path.read_text(encoding="utf-8"))
+            self.assertNotIn(str(credential_root), failure_path.read_text(encoding="utf-8"))
 
     def test_fresh_process_reconstructs_promotion_and_reports_restart_score_failure(self) -> None:
         # given / when / then

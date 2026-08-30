@@ -448,3 +448,22 @@ remain green.
 The existing passing lifecycle test remains the primary owner of lesson/active-state provenance;
 the new bridge test adds the distinct external-root sentinel and private-state cleanup observation
 without duplicating the lesson transition matrix.
+
+## Live-readiness follow-up: Task 1 reviewer fix round 1
+
+| Risk | Production branch or seam | Nearest existing test | Unique reachable mutant | Primary test |
+| --- | --- | --- | --- | --- |
+| A failed Swift worker echoes its argv and the runtime-only credential root is committed in terminal or event diagnostics | `WorkerBridge._run` subprocess output through bounded diagnostics and terminal publication | Existing nonzero-exit tests assert closed terminal shape but use a root-free fixed diagnostic | Bound without exact-value redaction, or redact only stdout while stderr/error composition remains raw | `test_process_launch::ProcessLaunchTests::test_failed_worker_redacts_credential_root_from_committed_diagnostics` |
+| A failed fresh active process echoes its argv and the root is persisted in `failure.json` | `execution.lifecycle::_launch_restart` and `_write_failure` | Restart argv coverage uses a zero exit and never crosses the failure evidence boundary | Include raw child stdout/stderr in `RuntimeError` or serialize a credential-bearing exception unchanged | `test_restart::RestartTests::test_failed_active_child_redacts_credential_root_from_failure_evidence` |
+| The real Protocol 0.6 controller launcher omits the now-mandatory worker credential option | `EvaluationWorkerLaunching` contract through `EvaluationSubprocessWorkerLauncher` argv | Launcher security coverage checks invocation and sealed-key stdin but predates credential argv | Omit the root, serialize it into the invocation instead, or pass a root different from the legacy configuration state | `EvaluationFilesystemSecurityTests.workerLauncherPassesRuntimeOnlyCredentialRootToWorker` |
+| A Protocol 0.6 worker accepts an arbitrary runtime credential root instead of its established configured state | legacy `EvaluationWorker.runResult` credential-root admission | External-root validation rejects M3 containment by design and cannot preserve the legacy credential location | Delete the exact legacy state-root equality check while leaving generic canonical validation intact | `EvaluationWorkerLifecycleTests.credentialRootRejectsEvaluationProductionNoncanonicalAndSymlinkPaths` |
+
+### Fix-round redundancy pass
+
+The two diagnostic tests own distinct persisted failure carriers: per-operation terminal/event JSON
+and lifecycle `failure.json`. Neither subsumes the other because the subprocesses, exception path,
+and writers differ. The launcher test owns the production subprocess contract rather than command
+parsing in isolation; its fake executable accepts only the exact required worker argv and stdin
+shape. Existing success-path argv, nonzero-terminal, and CLI-required-option tests remain valuable
+but cannot catch these three mutants. The legacy admission assertion owns the separate exact-root
+check that preserves Protocol 0.6 without weakening scheduled-learning's external-root policy.
