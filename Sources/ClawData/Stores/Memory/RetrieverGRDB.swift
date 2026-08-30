@@ -12,6 +12,7 @@ public struct RetrieverGRDB: Retriever {
   public func searchRelevantMessages(
     query: String,
     currentSessionId: Int64,
+    restrictToSessionId: Int64?,
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int
@@ -36,6 +37,11 @@ public struct RetrieverGRDB: Retriever {
           AND m.provenance = '\(Provenance.trusted.rawValue)'
         """
       var arguments: StatementArguments = [pattern]
+
+      if let onlySessionId = restrictToSessionId {
+        sql += "\n  AND m.session_id = ?"
+        arguments += [onlySessionId]
+      }
 
       if let windowStart = windowStartMessageId {
         // Dedup against the current session's in-window range.

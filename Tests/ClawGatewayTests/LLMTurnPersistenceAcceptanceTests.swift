@@ -253,7 +253,7 @@ actor Gate {
 /// the lane commits without sending, then `dispatcher.drainOnce()` delivers PENDING outbox rows.
 struct Stack {
   let router: MessageRouter
-  let dispatcher: OutboxDispatcher
+  let dispatcher: OutboxDispatcher<ContinuousClock>
   let transport: RecordingTransport
   let provider: RecordingProvider
   let signal: OutboxSignal
@@ -279,7 +279,7 @@ struct StopNewStack {
 
 struct StreamingStack {
   let router: MessageRouter
-  let dispatcher: OutboxDispatcher
+  let dispatcher: OutboxDispatcher<ContinuousClock>
   let transport: RecordingTransport
   let provider: StreamingAcceptanceProvider
   let signal: OutboxSignal
@@ -388,8 +388,8 @@ func makeStack(
     memory: MemoryStoreGRDB(writer: writer),
     memoryCommands: MemoryCommandStoreGRDB(writer: writer),
     pendingConfirmations: PendingConfirmationRegistry(),
-    botUsername: "claw_bot",
-    accessControl: AccessControl(allowlist: allowlist),
+    botIdentity: BotIdentity(id: 900, username: "claw_bot"),
+    accessControl: AccessControl(allowlist: allowlist, groupChats: []),
     delivery: transport,
     turnRunner: turnRunner,
     imageCache: imageCache,
@@ -486,8 +486,8 @@ func makeStreamingStack(
     memory: MemoryStoreGRDB(writer: writer),
     memoryCommands: MemoryCommandStoreGRDB(writer: writer),
     pendingConfirmations: PendingConfirmationRegistry(),
-    botUsername: "claw_bot",
-    accessControl: AccessControl(allowlist: allowlist),
+    botIdentity: BotIdentity(id: 900, username: "claw_bot"),
+    accessControl: AccessControl(allowlist: allowlist, groupChats: []),
     delivery: transport,
     turnRunner: turnRunner,
     imageCache: imageCache,
@@ -576,8 +576,8 @@ func makeStopNewStack(
     memory: MemoryStoreGRDB(writer: writer),
     memoryCommands: MemoryCommandStoreGRDB(writer: writer),
     pendingConfirmations: PendingConfirmationRegistry(),
-    botUsername: "claw_bot",
-    accessControl: AccessControl(allowlist: allowlist),
+    botIdentity: BotIdentity(id: 900, username: "claw_bot"),
+    accessControl: AccessControl(allowlist: allowlist, groupChats: []),
     delivery: transport,
     turnRunner: turnRunner,
     imageCache: imageCache,

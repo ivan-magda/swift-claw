@@ -50,7 +50,13 @@ public struct CommandStoreGRDB: CommandStore {
         decision: .cancelled,
         now: now
       )
-      try Self.insertStopAudits(db, sessionId: sessionId, runIds: cancelledRunIds, now: now)
+      try Self.insertStopAudits(
+        db,
+        actor: Self.commandActor(for: sessionKey),
+        sessionId: sessionId,
+        runIds: cancelledRunIds,
+        now: now
+      )
 
       return StopCommandResult(
         newlyClaimed: true,
@@ -63,6 +69,7 @@ public struct CommandStoreGRDB: CommandStore {
 
   private static func insertStopAudits(
     _ db: Database,
+    actor: AuditActor,
     sessionId: Int64,
     runIds: [Int64],
     now: Date
@@ -71,7 +78,7 @@ public struct CommandStoreGRDB: CommandStore {
       try AuditLogGRDB.insertAudit(
         db,
         AuditEvent(
-          actor: .owner,
+          actor: actor,
           action: .turnCancelled,
           argsRedacted: "/stop",
           decision: "nothing_to_stop",
@@ -86,7 +93,7 @@ public struct CommandStoreGRDB: CommandStore {
       try AuditLogGRDB.insertAudit(
         db,
         AuditEvent(
-          actor: .owner,
+          actor: actor,
           action: .turnCancelled,
           argsRedacted: "/stop",
           decision: "cancelled",
@@ -132,7 +139,13 @@ public struct CommandStoreGRDB: CommandStore {
 
       try afterSupersedeAndDetaintForTesting()
 
-      try Self.insertNewAudits(db, sessionId: sessionId, runIds: supersededRunIds, now: now)
+      try Self.insertNewAudits(
+        db,
+        actor: Self.commandActor(for: sessionKey),
+        sessionId: sessionId,
+        runIds: supersededRunIds,
+        now: now
+      )
 
       return NewCommandResult(
         newlyClaimed: true,
@@ -145,6 +158,7 @@ public struct CommandStoreGRDB: CommandStore {
 
   private static func insertNewAudits(
     _ db: Database,
+    actor: AuditActor,
     sessionId: Int64,
     runIds: [Int64],
     now: Date
@@ -153,7 +167,7 @@ public struct CommandStoreGRDB: CommandStore {
       try AuditLogGRDB.insertAudit(
         db,
         AuditEvent(
-          actor: .owner,
+          actor: actor,
           action: .turnSuperseded,
           argsRedacted: "/new",
           decision: "fresh_window",
@@ -168,7 +182,7 @@ public struct CommandStoreGRDB: CommandStore {
       try AuditLogGRDB.insertAudit(
         db,
         AuditEvent(
-          actor: .owner,
+          actor: actor,
           action: .turnSuperseded,
           argsRedacted: "/new",
           decision: "superseded",
@@ -178,5 +192,9 @@ public struct CommandStoreGRDB: CommandStore {
         )
       )
     }
+  }
+
+  private static func commandActor(for sessionKey: String) -> AuditActor {
+    SessionKey.mode(from: sessionKey) == .group ? .groupMember : .owner
   }
 }

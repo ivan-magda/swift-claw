@@ -147,8 +147,9 @@ actor StreamingProvider: LLMProvider {
 actor RecordingDrafts: RichDraftStreaming {
   private(set) var drafts: [(chatId: Int64, draftId: Int64, markdown: String)] = []
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool {
     drafts.append((chatId, draftId, markdown))
+    return true
   }
 }
 
@@ -163,9 +164,10 @@ actor ReleasingRecordingDrafts: RichDraftStreaming {
     self.gate = gate
   }
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool {
     drafts.append((chatId, draftId, markdown))
     await gate.release()
+    return true
   }
 }
 
@@ -244,26 +246,6 @@ func toolRoundTripStreamRounds() -> [[StreamEvent]] {
   ]
 }
 
-/// Releases `gate` once typing has been issued `releaseAfter` times, so a test can hold the
-/// provider's first token back until the runtime has proven it keeps the indicator alive.
-actor CountingReleaseTyping: TypingIndicator {
-  private(set) var calls = 0
-  private let releaseAfter: Int
-  private let gate: TypingReleaseGate
-
-  init(releaseAfter: Int, gate: TypingReleaseGate) {
-    self.releaseAfter = releaseAfter
-    self.gate = gate
-  }
-
-  func sendTyping(chatId: Int64) async {
-    calls += 1
-    if calls >= releaseAfter {
-      await gate.release()
-    }
-  }
-}
-
 /// Blocks the send whose markdown equals the full reply until released, so a test can observe
 /// whether the turn awaits its final draft or abandons it.
 actor BlockingFinalDrafts: RichDraftStreaming {
@@ -281,10 +263,10 @@ actor BlockingFinalDrafts: RichDraftStreaming {
     self.finalMarkdown = finalMarkdown
   }
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool {
     drafts.append(markdown)
     guard markdown == finalMarkdown, !released else {
-      return
+      return true
     }
     finalBlocked = true
     for waiter in observeWaiters {
@@ -294,6 +276,7 @@ actor BlockingFinalDrafts: RichDraftStreaming {
     await withCheckedContinuation { continuation in
       blockWaiters.append(continuation)
     }
+    return true
   }
 
   func waitUntilFinalBlocked() async {
@@ -333,10 +316,10 @@ actor BlockingDrafts: RichDraftStreaming {
   private var cancelled = false
   private var firstSendBlocked = false
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async {
+  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool {
     drafts.append((chatId, draftId, markdown))
     guard drafts.count == 1, !released else {
-      return
+      return true
     }
     firstSendBlocked = true
     for waiter in blockedWaiters {
@@ -356,6 +339,7 @@ actor BlockingDrafts: RichDraftStreaming {
     } onCancel: {
       Task { await self.cancelWaiters() }
     }
+    return true
   }
 
   func waitUntilFirstSendBlocked() async {
@@ -588,7 +572,7 @@ func waitForTurnResult(
     // then
     let (content, _, _) = try requireCompleted(try #require(outcome).result)
     #expect(content == "hi")
-    #expect(await typing.calls >= 3)
+    #expect(await typing.pulses.count >= 3)
   }
 
   @Test func emptyFirstDeltaNeverProducesABlankDraft() async throws {

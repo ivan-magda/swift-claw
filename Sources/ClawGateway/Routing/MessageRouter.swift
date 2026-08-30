@@ -20,6 +20,7 @@ public enum HandleOutcome: Sendable, Equatable {
 /// `handle` is the single place the outcome returns to the poller.
 public struct MessageRouter: Sendable {
   private let botUsername: String?
+  private let addressing: AddressingResolver
 
   private let accessControl: AccessControl
   private let replies: ReplySender
@@ -43,7 +44,7 @@ public struct MessageRouter: Sendable {
     memory: any MemoryStore,
     memoryCommands: any MemoryCommandStore,
     pendingConfirmations: PendingConfirmationRegistry,
-    botUsername: String?,
+    botIdentity: BotIdentity?,
     accessControl: AccessControl,
     delivery: any MessageDelivery,
     turnRunner: any TurnDispatching,
@@ -59,7 +60,8 @@ public struct MessageRouter: Sendable {
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
-    self.botUsername = botUsername
+    self.botUsername = botIdentity?.username
+    self.addressing = AddressingResolver(identity: botIdentity)
 
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
@@ -146,21 +148,45 @@ private extension MessageRouter {
       return await approvalCallbacks.handle(callback, updateId: rawUpdate.updateId)
     }
 
+    if let observed = noteObservedEvent(in: rawUpdate) {
+      return observed
+    }
+
     guard let message = IncomingMessage.normalize(from: rawUpdate) else {
-      logger.debug("update \(rawUpdate.updateId) has nothing actionable, skipping")
+      let dropped = rawUpdate.message ?? rawUpdate.editedMessage
+      if dropped?.hasSenderChat == true {
+        logger.debug("update \(rawUpdate.updateId) was sent on behalf of a chat, skipping")
+      } else {
+        logger.debug("update \(rawUpdate.updateId) has nothing actionable, skipping")
+      }
       return .skipped
     }
 
-    let isAllowed = accessControl.isAllowed(userId: message.userId)
+    let decision = accessControl.decide(
+      chatKind: message.chatKind,
+      chatId: message.chatId,
+      userId: message.userId
+    )
+    let mode: ChatMode
+    switch decision {
+    case .allowed(let allowed):
+      mode = allowed
+    case .denied(let denial):
+      return await denyAccess(denial, rawUpdate: rawUpdate, message: message)
+    }
+
+    // Resolved once, ahead of the content switch, so an overheard photo or voice note is never
+    // downloaded: in a room the bot listens to everything and acts only on what names it.
+    guard addressing.isAddressed(message, mode: mode) else {
+      return await observe(rawUpdate: rawUpdate, message: message, mode: mode)
+    }
 
     switch message.content {
     case .unsupported(let kind):
-      // Never reveal capabilities to a stranger; the owner gets a specific "can't read X yet".
-      let reply = isAllowed ? Self.unsupportedMediaText(kind: kind) : Self.privateBotText
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
-        text: reply
+        target: .reply(to: message, mode: mode),
+        text: Self.unsupportedMediaText(kind: kind)
       )
     case .photo(let attachment, let caption):
       return try await routeImage(
@@ -168,38 +194,100 @@ private extension MessageRouter {
         caption: caption,
         rawUpdate: rawUpdate,
         message: message,
-        isAllowed: isAllowed
+        mode: mode
       )
     case .voice(let attachment):
-      return try await routeVoice(
-        attachment,
-        rawUpdate: rawUpdate,
-        message: message,
-        isAllowed: isAllowed
-      )
+      return try await routeVoice(attachment, rawUpdate: rawUpdate, message: message, mode: mode)
     case .text(let text):
       let command = Command.parse(text, botUsername: botUsername)
-      if isAllowed {
-        return try await routeAllowed(command, rawUpdate: rawUpdate, message: message)
-      }
-      return await denyAccess(command, rawUpdate: rawUpdate, message: message)
+      return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
     }
+  }
+
+  /// The two updates the daemon can only take note of: its own membership changing, and Telegram
+  /// replacing a chat id under a running configuration. Both run ahead of `normalize`, which would
+  /// drop them as contentless — and the generic drop line is exactly the wrong trace for an event
+  /// whose whole value is that an operator sees it.
+  func noteObservedEvent(in rawUpdate: RawUpdate) -> HandleOutcome? {
+    if let membership = rawUpdate.myChatMember {
+      logMembership(membership, updateId: rawUpdate.updateId)
+      return .skipped
+    }
+    let inbound = rawUpdate.message ?? rawUpdate.editedMessage
+    if let inbound, let newChatId = inbound.migratedToChatId {
+      logMigration(from: inbound, to: newChatId)
+      return .skipped
+    }
+    return nil
+  }
+
+  /// Membership is observed, never acted on: an allowlist lives in configuration, so a room the
+  /// bot was just added to still says nothing until an operator puts its id there. The log is how
+  /// they learn the id, and how a silent removal or a rights change stops looking like a bug.
+  func logMembership(_ membership: RawChatMemberUpdate, updateId: Int64) {
+    let title = membership.chatTitle ?? "(untitled)"
+    let actor = membership.actorDisplayName ?? membership.actorUserId.map(String.init) ?? "someone"
+    let transition = "\(membership.oldStatus.apiValue) → \(membership.newStatus.apiValue)"
+    let room = "chat \(membership.chatId) \"\(title)\" (\(membership.chatKind.apiValue))"
+    switch membership.change {
+    case .added:
+      logger.notice("\(actor) added the bot to \(room): \(transition)")
+    case .removed:
+      logger.notice("\(actor) removed the bot from \(room): \(transition)")
+    case .updated:
+      logger.notice("\(actor) changed the bot's rights in \(room): \(transition)")
+    case .unchanged:
+      logger.debug("membership update \(updateId) changed nothing in \(room): \(transition)")
+    }
+  }
+
+  /// Telegram replaces a group's chat id when it upgrades to a supergroup, and the old id stops
+  /// existing. Rewriting `CLAW_GROUP_CHATS` at runtime would silently re-point an access grant at
+  /// an id nobody approved, so the daemon does the opposite: it goes quiet in that room and says
+  /// exactly what to edit.
+  func logMigration(from message: RawMessage, to newChatId: Int64) {
+    let title = message.chatTitle ?? "(untitled)"
+    logger.error(
+      """
+      chat \(message.chatId) "\(title)" was upgraded to a supergroup and is now chat \(newChatId); \
+      clawd will ignore it until CLAW_GROUP_CHATS lists \(newChatId) — update clawd.env and restart
+      """
+    )
+  }
+
+  /// The overheard branch. Only typed words are kept: a sticker, a voice note and a photo all
+  /// need bytes the bot deliberately never fetched for a message that did not name it, so there is
+  /// nothing of them to write down. The room's transcript therefore holds what was said in it, and
+  /// no placeholder for what was shown.
+  func observe(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async -> HandleOutcome {
+    guard case .text(let text) = message.content else {
+      logger.debug(
+        "update \(rawUpdate.updateId) in chat \(message.chatId) does not address the bot, skipping"
+      )
+      return .skipped
+    }
+    return await turnDispatch.observe(
+      rawUpdate: rawUpdate,
+      message: message,
+      text: text,
+      mode: mode
+    )
   }
 
   func routeVoice(
     _ attachment: VoiceAttachment,
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    isAllowed: Bool
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    guard isAllowed else {
-      return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
-    }
-
     guard let voice else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: Self.unsupportedMediaText(kind: VoiceAttachment.mediaKindDescription)
       )
     }
@@ -210,14 +298,15 @@ private extension MessageRouter {
         rawUpdate: rawUpdate,
         message: message,
         text: transcript,
-        provenance: .untrusted
+        mode: mode,
+        source: .untrusted
       )
     case .failure(.storageFull):
-      return await replies.storageFull(chatId: message.chatId)
+      return await replies.storageFull(target: .reply(to: message, mode: mode))
     case .failure(let failure):
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: failure.ownerReplyText
       )
     }
@@ -237,24 +326,22 @@ private extension MessageRouter {
     caption: String?,
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    isAllowed: Bool
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    guard isAllowed else {
-      return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
-    }
-
     guard let images else {
       return try await routeImageWithoutService(
         caption: caption,
         rawUpdate: rawUpdate,
-        message: message
+        message: message,
+        mode: mode
       )
     }
 
     // After both guards, so neither a stranger nor a disabled service is ever told the bot is
     // awake. Whether the pulse lands is not checked and cannot be: the action auto-expires
     // server-side, so one that never arrives is no reason to fail a photo the owner is waiting on.
-    await typing?.sendTyping(chatId: message.chatId)
+    let target = DeliveryTarget.reply(to: message, mode: mode)
+    await typing?.sendTyping(chatId: target.chatId, messageThreadId: target.messageThreadId)
 
     switch await images.materialize(attachment) {
     case .success(let image):
@@ -262,13 +349,14 @@ private extension MessageRouter {
         rawUpdate: rawUpdate,
         message: message,
         text: ImageMarkers.photoContent(caption: caption),
-        provenance: .untrusted,
+        mode: mode,
+        source: .untrusted,
         image: image
       )
     case .failure(let failure):
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: failure.ownerReplyText
       )
     }
@@ -287,12 +375,13 @@ private extension MessageRouter {
   func routeImageWithoutService(
     caption: String?,
     rawUpdate: RawUpdate,
-    message: IncomingMessage
+    message: IncomingMessage,
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
     guard let caption, caption.isEmpty == false else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
       )
     }
@@ -301,67 +390,114 @@ private extension MessageRouter {
       rawUpdate: rawUpdate,
       message: message,
       text: ImageMarkers.photoContent(caption: caption),
-      provenance: .untrusted
+      mode: mode,
+      source: .untrusted
     )
   }
 
-  /// Default-deny, applied ONCE for every command: a stranger's /start gets THEIR own id to
-  /// request access (never the allowlist, never a turn); everything else is the private-bot line.
+  /// Default-deny, applied ONCE for every update, before the content switch — so a refused photo
+  /// or voice note is never downloaded. A stranger's /start gets THEIR own id to request access
+  /// (never the allowlist, never a turn); every other DM refusal is the private-bot line, which is
+  /// also all a stranger may learn about unsupported media.
+  ///
+  /// An unlisted chat is answered with silence but still logged: the id and title are the only way
+  /// an operator can learn what to put in `CLAW_GROUP_CHATS`, since the bot says nothing in a room
+  /// until that id is already configured.
   func denyAccess(
-    _ command: Command,
+    _ denial: AccessDenial,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async -> HandleOutcome {
-    if case .start = command {
+    switch denial {
+    case .unlistedChat:
+      let title = message.chatTitle ?? "(untitled)"
+      logger.info(
+        """
+        ignoring update \(rawUpdate.updateId) from unlisted chat \(message.chatId) "\(title)" (\(message.chatKind.apiValue))
+        """
+      )
+      return .skipped
+    case .privateStranger:
+      guard isStart(message.content) else {
+        return await replies.sendPrivateBot(
+          updateId: rawUpdate.updateId,
+          target: .chat(message.chatId)
+        )
+      }
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .chat(message.chatId),
         text: Self.unauthorizedStartText(userId: message.userId)
       )
     }
-    return await replies.sendPrivateBot(updateId: rawUpdate.updateId, chatId: message.chatId)
   }
 
-  // swiftlint:disable:next cyclomatic_complexity
+  /// True only for `/start` — the one refusal that answers with the sender's own id.
+  func isStart(_ content: IncomingMessage.Content) -> Bool {
+    guard case .text(let text) = content else {
+      return false
+    }
+    if case .start = Command.parse(text, botUsername: botUsername) {
+      return true
+    }
+    return false
+  }
+
+  // A flat dispatch table: one case per command, each delegating in a line or two. Splitting it
+  // would only hide half the table behind a name.
+  // swiftlint:disable:next cyclomatic_complexity function_body_length
   func routeAllowed(
     _ command: Command,
     rawUpdate: RawUpdate,
-    message: IncomingMessage
+    message: IncomingMessage,
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
+    // Refused here rather than inside each handler, so a room never reaches the code that parks a
+    // confirmation: with nothing parked, the next plain line in the topic is only ever a message.
+    if mode == .group, command.isDirectOnly {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        target: .reply(to: message, mode: mode),
+        text: CommandReplies.directOnly
+      )
+    }
+
     switch command {
     case .start:
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        target: .reply(to: message, mode: mode),
         text: Self.welcomeText
       )
     case .help:
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
-        chatId: message.chatId,
-        text: CommandReplies.help
+        target: .reply(to: message, mode: mode),
+        text: CommandReplies.help(mode: mode)
       )
     case .doctor:
-      return await sendHealth(rawUpdate: rawUpdate, message: message, section: nil)
+      return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: nil)
     case .mcp:
-      return await sendHealth(rawUpdate: rawUpdate, message: message, section: .mcp)
+      return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: .mcp)
     case .skills:
-      return await sendSkills(rawUpdate: rawUpdate, message: message)
+      return await sendSkills(rawUpdate: rawUpdate, message: message, mode: mode)
     case .stop:
-      return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message)
+      return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message, mode: mode)
     case .new:
-      return try await commandHandlers.new(rawUpdate: rawUpdate, message: message)
+      return try await commandHandlers.new(rawUpdate: rawUpdate, message: message, mode: mode)
     case .remember(let rememberCommand):
       return try await commandHandlers.remember(
         rawUpdate: rawUpdate,
         message: message,
-        command: rememberCommand
+        command: rememberCommand,
+        mode: mode
       )
     case .memory(let memoryCommand):
       return try await commandHandlers.memory(
         rawUpdate: rawUpdate,
         message: message,
-        command: memoryCommand
+        command: memoryCommand,
+        mode: mode
       )
     case .schedule(let scheduleCommand):
       return try await routeSchedule(scheduleCommand, rawUpdate: rawUpdate, message: message)
@@ -386,7 +522,7 @@ private extension MessageRouter {
         jobId: jobId
       )
     case .plain(let plainText):
-      return try await routePlain(plainText, rawUpdate: rawUpdate, message: message)
+      return try await routePlain(plainText, rawUpdate: rawUpdate, message: message, mode: mode)
     }
   }
 
@@ -396,24 +532,29 @@ private extension MessageRouter {
   func sendHealth(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
+    mode: ChatMode,
     section: DoctorGroup?
   ) async -> HandleOutcome {
     let report = await doctor.report()
     return await replies.sendCanned(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .reply(to: message, mode: mode),
       text: section.map(report.renderTelegramGroup) ?? report.renderTelegramSummary()
     )
   }
 
   /// A fresh scan on every request keeps the owner view aligned with the workspace on disk. The
   /// router only renders it; scanning and presentation remain owned by their existing seams.
-  func sendSkills(rawUpdate: RawUpdate, message: IncomingMessage) async -> HandleOutcome {
+  func sendSkills(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async -> HandleOutcome {
     let scan = await doctor.scanSkills()
     let diagnostics = SkillDiagnostics(scan: scan, skillsCap: ContextBudget.default.skillsCap)
     return await replies.sendCanned(
       updateId: rawUpdate.updateId,
-      chatId: message.chatId,
+      target: .reply(to: message, mode: mode),
       text: diagnostics.render()
     )
   }
@@ -433,19 +574,32 @@ private extension MessageRouter {
 
   /// Plain text first offers itself to any parked confirmation for the session; only an
   /// unclaimed message becomes a durable turn.
+  ///
+  /// A room skips the offer outright instead of being trusted to come up empty. Nothing can park
+  /// there — the two families that park are refused in `routeAllowed` — and skipping keeps it that
+  /// way even if a third one is ever added: a "yes" typed in a topic is just a word.
   func routePlain(
     _ text: String,
     rawUpdate: RawUpdate,
-    message: IncomingMessage
+    message: IncomingMessage,
+    mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    if let resolved = try await confirmations.resolve(
+    if mode == .direct {
+      let resolved = try await confirmations.resolve(
+        rawUpdate: rawUpdate,
+        message: message,
+        text: text
+      )
+      if let resolved {
+        return resolved
+      }
+    }
+    return try await turnDispatch.dispatch(
       rawUpdate: rawUpdate,
       message: message,
-      text: text
-    ) {
-      return resolved
-    }
-    return try await turnDispatch.dispatch(rawUpdate: rawUpdate, message: message, text: text)
+      text: text,
+      mode: mode
+    )
   }
 }
 

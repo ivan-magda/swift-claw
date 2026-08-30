@@ -34,9 +34,13 @@ public protocol MemoryCommandStore: Sendable {
 }
 
 public protocol Retriever: Sendable {
+  /// `restrictToSessionId` confines the search to one session's own rows. A group topic passes its
+  /// own id: every attendee's line is stored trusted, so an unrestricted search would read one
+  /// room's words into another room's prompt. `nil` keeps the cross-session reach a DM relies on.
   func searchRelevantMessages(
     query: String,
     currentSessionId: Int64,
+    restrictToSessionId: Int64?,
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int

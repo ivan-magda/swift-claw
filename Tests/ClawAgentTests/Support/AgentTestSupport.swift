@@ -50,22 +50,6 @@ actor StubProvider: LLMProvider {
   }
 }
 
-/// A provider whose `complete` blocks until `gate` is released (i.e. until typing has fired once).
-actor GatedProvider: LLMProvider {
-  private let gate: TypingReleaseGate
-  private let response: ChatResponse
-
-  init(gate: TypingReleaseGate, response: ChatResponse) {
-    self.gate = gate
-    self.response = response
-  }
-
-  func complete(request: ChatRequest) async throws -> ChatResponse {
-    await gate.awaitRelease()
-    return response
-  }
-}
-
 /// Usage store recording rows; can throw a scripted error on the Nth write. A lock-guarded class,
 /// not an actor: `UsageStore` is a synchronous (non-`async`) protocol, mirroring production
 /// `UsageStoreGRDB` — a `Sendable` value type whose thread safety comes from GRDB's writer, not

@@ -59,6 +59,7 @@ extension TurnRunner {
     }
 
     return SessionContextSnapshot(
+      sessionKey: snapshot.sessionKey,
       history: history,
       historyMessageIds: snapshot.historyMessageIds,
       windowStartMessageId: snapshot.windowStartMessageId,

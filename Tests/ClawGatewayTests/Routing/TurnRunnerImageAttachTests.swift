@@ -23,6 +23,7 @@ import Testing
   @Test func eachImageStaysOnItsOwnMessageThroughTheRowsSanitizingDrops() throws {
     // given — a leading orphaned tool row, which sanitizing drops and every later position shifts by
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .tool, content: "orphan", provenance: .untrusted, toolCallId: "gone"),
         StoredMessage(role: .user, content: "first caption", provenance: .untrusted),
@@ -137,6 +138,7 @@ import Testing
     let overBudget = ImagePart(data: hugeBytes, mediaType: .jpeg, width: 4_000, height: 3_000)
     let rolledPast = ImagePart(data: hugeBytes, mediaType: .png, width: 4_000, height: 3_000)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "older caption", provenance: .untrusted),
         StoredMessage(role: .user, content: "newer caption", provenance: .untrusted),

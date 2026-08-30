@@ -80,6 +80,57 @@ import Testing
     #expect(config.allowlist.isEmpty)
   }
 
+  @Test func absentGroupChatsMeansGroupModeOff() throws {
+    // given
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.groupChats.isEmpty)
+  }
+
+  @Test(arguments: [
+    ("blank", "", Set<Int64>()),
+    ("blank with whitespace", "   ", Set<Int64>()),
+    ("one id", "-1001234567890", Set<Int64>([-1_001_234_567_890])),
+    (
+      "several ids",
+      "-1001234567890, -1009876543210",
+      Set<Int64>([-1_001_234_567_890, -1_009_876_543_210])
+    ),
+  ]) func groupChatsParseAsAnIdSet(
+    description: String,
+    raw: String,
+    expected: Set<Int64>
+  ) throws {
+    // given
+    let env = envWithLLM([
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+      EnvKey.groupChats: raw,
+    ])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then
+    #expect(config.groupChats == expected)
+  }
+
+  @Test func malformedGroupChatsFailsClosed() {
+    // given
+    let env = envWithLLM([
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+      EnvKey.groupChats: "-1001234567890, notachatid",
+    ])
+
+    // then
+    #expect(throws: ConfigError.invalidGroupChats("notachatid")) {
+      _ = try AppConfig.load(environment: env)
+    }
+  }
+
   @Test func defaultsPollTimeoutTo30() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])

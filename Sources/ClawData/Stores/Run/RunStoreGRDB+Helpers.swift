@@ -198,11 +198,13 @@ extension RunStoreGRDB {
     chunk: OutboxChunk,
     now: Date
   ) throws -> Bool {
+    let target = try outboxTarget(db, runId: runId, chatId: chunk.chatId)
     try db.execute(
       sql: """
         INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-          payload_hash, approval_id, reply_markup, status, created_ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
+          payload_hash, approval_id, reply_markup, message_thread_id, reply_to_message_id,
+          status, created_ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
         """,
       arguments: [
         runId,
@@ -213,10 +215,41 @@ extension RunStoreGRDB {
         chunk.payloadHash,
         chunk.approvalId,
         chunk.replyMarkup,
+        target.messageThreadId,
+        target.replyToMessageId,
         now,
       ]
     )
     return db.changesCount > 0
+  }
+
+  /// Where a run's answer belongs, read from the run itself rather than passed in by whoever
+  /// enqueued the chunk: every producer (a finished turn, an approval prompt, a boot notice) then
+  /// lands in the same topic, and a row committed before a restart still knows its topic after one.
+  /// A direct-mode run resolves to the plain chat target, unchanged from before group mode.
+  static func outboxTarget(
+    _ db: Database,
+    runId: Int64,
+    chatId: Int64
+  ) throws -> DeliveryTarget {
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT sessions.session_key AS session_key,
+          runs.trigger_telegram_message_id AS trigger_telegram_message_id
+        FROM runs JOIN sessions ON sessions.id = runs.session_id
+        WHERE runs.id = ?
+        """,
+      arguments: [runId]
+    )
+    guard let row, SessionKey.mode(from: row["session_key"]) == .group else {
+      return .chat(chatId)
+    }
+    return DeliveryTarget(
+      chatId: chatId,
+      messageThreadId: SessionKey.threadId(from: row["session_key"]),
+      replyToMessageId: row["trigger_telegram_message_id"]
+    )
   }
 
   /// A run's earlier commits may already occupy outbox steps (the suspend prompt at step 0),

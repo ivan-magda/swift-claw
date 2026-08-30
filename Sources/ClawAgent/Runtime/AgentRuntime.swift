@@ -224,7 +224,9 @@ public struct AgentRuntime: Sendable {
     todayUSD: Double,
     origin: RunOrigin = .interactive,
     proactiveTodayUSD: Double = 0,
-    carryOver: ResumeUsage? = nil
+    carryOver: ResumeUsage? = nil,
+    mode: ChatMode = .direct,
+    threadId: Int64? = nil
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDefinitions
@@ -244,7 +246,13 @@ public struct AgentRuntime: Sendable {
     // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
     // ties the round-trips, tool calls, and outcome of a single turn together.
     var turnLog = logger
-    for (key, value) in Self.turnMetadata(runId: runId, sessionId: sessionId) {
+    let metadata = Self.turnMetadata(
+      runId: runId,
+      sessionId: sessionId,
+      mode: mode,
+      threadId: threadId
+    )
+    for (key, value) in metadata {
       turnLog[metadataKey: key] = value
     }
     let turnStart = ContinuousClock.now
@@ -361,8 +369,7 @@ public struct AgentRuntime: Sendable {
         do {
           response = try await roundTrip(
             provider: active.binding.provider,
-            chatId: chatId,
-            draftId: runId,
+            target: TurnProgressTarget(chatId: chatId, threadId: threadId, draftId: runId),
             request: request,
             deadlineSeconds: max(1, Int((deadline - ContinuousClock.now).components.seconds))
           )
@@ -459,7 +466,7 @@ public struct AgentRuntime: Sendable {
       recordedRunTokens += intermediate.promptTokens + intermediate.completionTokens
       recordedRunUSD += intermediate.costUSD
 
-      await typingIndicator.sendTyping(chatId: chatId)
+      await typingIndicator.sendTyping(chatId: chatId, messageThreadId: threadId)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
         proposedToolCalls += 1
@@ -477,7 +484,8 @@ public struct AgentRuntime: Sendable {
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
           sessionHasPrivateData: sessionHasPrivateData,
-          approvalAlreadyPending: pendingSuspension != nil
+          approvalAlreadyPending: pendingSuspension != nil,
+          mode: mode
         )
 
         guard let toolDispatcher else {
@@ -561,8 +569,21 @@ public struct AgentRuntime: Sendable {
 private extension AgentRuntime {
   /// The correlation fields stamped on every developer log line for one turn, so a single
   /// `grep run=<id>` ties the turn's round-trips, tool calls, and outcome together.
-  static func turnMetadata(runId: Int64, sessionId: Int64) -> Logger.Metadata {
-    ["run": "\(runId)", "session": "\(sessionId)"]
+  /// Only a group turn stamps the conversation's shape, so a DM's log lines stay exactly as they
+  /// were and a group turn is greppable by topic.
+  static func turnMetadata(
+    runId: Int64,
+    sessionId: Int64,
+    mode: ChatMode = .direct,
+    threadId: Int64? = nil
+  ) -> Logger.Metadata {
+    var metadata: Logger.Metadata = ["run": "\(runId)", "session": "\(sessionId)"]
+    guard mode == .group else {
+      return metadata
+    }
+    metadata["mode"] = "\(mode.rawValue)"
+    metadata["topic"] = "\(threadId.map(String.init) ?? "general")"
+    return metadata
   }
 
   /// Emits the one finished line for a turn; its level reflects severity — completed → info,
@@ -661,15 +682,14 @@ private extension AgentRuntime {
   /// error; the loop maps it.
   func roundTrip(
     provider: any LLMProvider,
-    chatId: Int64,
-    draftId: Int64,
+    target: TurnProgressTarget,
     request: ChatRequest,
     deadlineSeconds: Int
   ) async throws -> ChatResponse {
     guard streamingEnabled else {
       return try await runTypingTurn(
         provider: provider,
-        chatId: chatId,
+        target: target,
         request: request,
         deadlineSeconds: deadlineSeconds
       )
@@ -683,8 +703,7 @@ private extension AgentRuntime {
     do {
       return try await runStreamingTurn(
         provider: provider,
-        chatId: chatId,
-        draftId: draftId,
+        target: target,
         request: request,
         deadlineSeconds: deadlineSeconds
       )
@@ -698,7 +717,7 @@ private extension AgentRuntime {
       // silently defeat the one-time buffered fallback.
       return try await runTypingTurn(
         provider: provider,
-        chatId: chatId,
+        target: target,
         request: request,
         deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart)
       )
@@ -715,8 +734,7 @@ private extension AgentRuntime {
 
   func runStreamingTurn(
     provider: any LLMProvider,
-    chatId: Int64,
-    draftId: Int64,
+    target: TurnProgressTarget,
     request: ChatRequest,
     deadlineSeconds: Int
   ) async throws -> ChatResponse {
@@ -727,12 +745,12 @@ private extension AgentRuntime {
       wallClockDeadlineSeconds: deadlineSeconds,
       clock: clock
     )
-    return try await runtime.run(chatId: chatId, draftId: draftId, request: request)
+    return try await runtime.run(target: target, request: request)
   }
 
   func runTypingTurn(
     provider: any LLMProvider,
-    chatId: Int64,
+    target: TurnProgressTarget,
     request: ChatRequest,
     deadlineSeconds: Int
   ) async throws -> ChatResponse {
@@ -742,7 +760,7 @@ private extension AgentRuntime {
       wallClockDeadlineSeconds: deadlineSeconds,
       clock: clock
     )
-    return try await runtime.run(chatId: chatId, request: request)
+    return try await runtime.run(target: target, request: request)
   }
 }
 
