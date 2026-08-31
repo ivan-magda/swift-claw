@@ -258,6 +258,22 @@ import Testing
     #expect(states[env.firstRunId] == RunState.cancelled.rawValue)
   }
 
+  @Test func groupCommandsAttributeTheirAuditsToAGroupMember() throws {
+    // given
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let commands = CommandStoreGRDB(writer: queue)
+    let sessionKey = SessionKey.telegramTopic(chatId: -1_001, threadId: 77)
+
+    // when
+    _ = try commands.applyStop(updateId: 1, sessionKey: sessionKey, now: Date())
+    _ = try commands.applyNew(updateId: 2, sessionKey: sessionKey, now: Date())
+
+    // then
+    let actors = try auditRows(queue).map { row in row["actor"] as String }
+    #expect(actors == [AuditActor.groupMember.rawValue, AuditActor.groupMember.rawValue])
+  }
+
   @Test func crashAfterClaimRollsBackClaimAndAllowsRetry() throws {
     // given
     let env = try fixture()

@@ -39,10 +39,11 @@ public struct TurnRunner: TurnDispatching {
   package let imageCache: ImageCache
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
   private let notifyOutbox: @Sendable () -> Void
-  /// Post-commit daily kill-switch + the delivery port for its owner DM. Both `nil` in tests that
-  /// don't exercise the breaker (the DM is best-effort and out-of-band from the durable outbox).
+  /// Post-commit daily kill-switch and its best-effort owner-DM delivery port.
   private let breaker: BudgetBreaker?
   private let delivery: (any MessageDelivery)?
+  /// The config-resolved owner DM for process-wide notices raised by a group turn.
+  private let ownerChatId: Int64?
   /// The turn's clock. Sourcing the budget "today" window from an injected now (defaulting to the
   /// real clock) keeps the proactive/global daily-spend boundary deterministic under test — the
   /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
@@ -72,6 +73,7 @@ public struct TurnRunner: TurnDispatching {
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     delivery: (any MessageDelivery)? = nil,
+    ownerChatId: Int64? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
     // No default: an ask-tier suspend parks the lane on this seam, and a composition site that
     // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
@@ -93,6 +95,7 @@ public struct TurnRunner: TurnDispatching {
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.delivery = delivery
+    self.ownerChatId = ownerChatId
 
     self.now = now
     self.parker = parker
@@ -149,6 +152,7 @@ public struct TurnRunner: TurnDispatching {
 
     // Real session taint: the gate reads `(session ∪ run)`, so a session already tainted by a
     // prior turn keeps the exfil gate armed from this run's very first tool call.
+    let mode = SessionKey.mode(from: inputs.snapshot.sessionKey)
     let outcome = try await agent.runTurn(
       runId: runId,
       sessionId: sessionId,
@@ -160,7 +164,9 @@ public struct TurnRunner: TurnDispatching {
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
       origin: origin,
-      proactiveTodayUSD: inputs.proactiveTodayUSD
+      proactiveTodayUSD: inputs.proactiveTodayUSD,
+      mode: mode,
+      threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey)
     )
 
     try await commit(
@@ -168,6 +174,7 @@ public struct TurnRunner: TurnDispatching {
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
+      mode: mode,
       ownerNotices: inputs.buildResult.ownerNotices,
       origin: origin
     )
@@ -210,6 +217,7 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
+    let mode = SessionKey.mode(from: inputs.snapshot.sessionKey)
     let outcome: TurnOutcome
     do {
       outcome = try await agent.runTurn(
@@ -224,7 +232,9 @@ public struct TurnRunner: TurnDispatching {
         todayUSD: inputs.todayUSD,
         origin: origin,
         proactiveTodayUSD: inputs.proactiveTodayUSD,
-        carryOver: carryOver
+        carryOver: carryOver,
+        mode: mode,
+        threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey)
       )
     } catch {
       failResume(runId: runId, stage: "turn", error: error)
@@ -237,6 +247,7 @@ public struct TurnRunner: TurnDispatching {
         runId: runId,
         sessionId: sessionId,
         chatId: chatId,
+        mode: mode,
         ownerNotices: inputs.buildResult.ownerNotices,
         origin: origin
       )
@@ -249,9 +260,9 @@ public struct TurnRunner: TurnDispatching {
 // MARK: - Per-Run Turn Inputs
 
 private extension TurnRunner {
-  /// The run's origin, read without a re-pick-up. A missing or unreadable origin ends the resume:
-  /// the prompt wording, the budget pool, and the gate's owner-present check all key on it, so
-  /// guessing one would resume the turn under the wrong policy.
+  /// The run's origin, read without a re-pick-up. The prompt wording, the budget pool, and the
+  /// gate's owner-present check all key on it, so a missing or unreadable origin ends the resume
+  /// rather than guessing — a resume runs inside the waiter's `park`, so both resolve in-band.
   func resumeOrigin(runId: Int64) -> RunOrigin? {
     do {
       guard let origin = try runs.runOrigin(runId: runId) else {
@@ -346,6 +357,7 @@ extension TurnRunner {
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
+    mode: ChatMode,
     ownerNotices: [String],
     origin: RunOrigin
   ) async throws {
@@ -353,6 +365,7 @@ extension TurnRunner {
       runId: runId,
       sessionId: sessionId,
       chatId: chatId,
+      mode: mode,
       ownerNotices: ownerNotices,
       origin: origin,
       committedAt: Date()
@@ -417,17 +430,9 @@ private extension TurnRunner {
     case .committed:
       try auditCompleted(content: content, suppressedAck: suppressHeartbeatAck, in: context)
       notifyOutbox()
-      await notifyDailyCapIfTripped(
-        chatId: context.chatId,
-        runId: context.runId,
-        sessionId: context.sessionId
-      )
+      await notifyDailyCapIfTripped(in: context)
     case .usageRecordedAfterTerminal:
-      await notifyDailyCapIfTripped(
-        chatId: context.chatId,
-        runId: context.runId,
-        sessionId: context.sessionId
-      )
+      await notifyDailyCapIfTripped(in: context)
     case .ignored:
       return
     }
@@ -493,11 +498,7 @@ private extension TurnRunner {
       at: context.committedAt
     )
     if commitResult != .ignored {
-      await notifyDailyCapIfTripped(
-        chatId: context.chatId,
-        runId: context.runId,
-        sessionId: context.sessionId
-      )
+      await notifyDailyCapIfTripped(in: context)
     }
   }
 
@@ -527,11 +528,7 @@ private extension TurnRunner {
       at: context.committedAt
     )
     if context.origin != .interactive, cap == BudgetGate.proactivePerDayCap {
-      await notifyProactiveCapIfTripped(
-        chatId: context.chatId,
-        runId: context.runId,
-        sessionId: context.sessionId
-      )
+      await notifyProactiveCapIfTripped(in: context)
     }
   }
 
@@ -703,11 +700,7 @@ private extension TurnRunner {
   /// the breaker whether to DM the owner — `shouldNotifyTrip` is idempotent per UTC day, so calling
   /// this from both the `.completed` and `.degraded` branches still yields at most one DM. The DM and
   /// its audit are best-effort (`try?`): a failed send is acceptable, unlike a failed refusal.
-  func notifyDailyCapIfTripped(
-    chatId: Int64,
-    runId: Int64,
-    sessionId: Int64
-  ) async {
+  func notifyDailyCapIfTripped(in context: CommitContext) async {
     guard let breaker, let delivery else {
       return
     }
@@ -726,14 +719,16 @@ private extension TurnRunner {
       return
     }
 
-    _ = try? await delivery.sendMessage(chatId: chatId, text: Degradation.dailyCapTripped)
+    if let target = ownerNoticeTarget(for: context) {
+      _ = try? await delivery.sendMessage(chatId: target, text: Degradation.dailyCapTripped)
+    }
     try? audit.appendAudit(
       AuditEvent(
         actor: .system,
         action: .budgetTripped,
         decision: "daily_cap",
-        runId: runId,
-        sessionId: sessionId,
+        runId: context.runId,
+        sessionId: context.sessionId,
         ts: Date()
       )
     )
@@ -742,11 +737,7 @@ private extension TurnRunner {
   /// Post-commit proactive-cap owner DM: once per UTC day via the breaker's second latch.
   /// The trip itself is already durable (the run FAILED with the cap named); DM + audit are
   /// best-effort, mirroring `notifyDailyCapIfTripped`.
-  func notifyProactiveCapIfTripped(
-    chatId: Int64,
-    runId: Int64,
-    sessionId: Int64
-  ) async {
+  func notifyProactiveCapIfTripped(in context: CommitContext) async {
     guard let breaker, let delivery else {
       return
     }
@@ -756,16 +747,22 @@ private extension TurnRunner {
       return
     }
 
-    _ = try? await delivery.sendMessage(chatId: chatId, text: Degradation.proactiveCapTripped)
+    if let target = ownerNoticeTarget(for: context) {
+      _ = try? await delivery.sendMessage(chatId: target, text: Degradation.proactiveCapTripped)
+    }
     try? audit.appendAudit(
       AuditEvent(
         actor: .system,
         action: .budgetTripped,
         decision: "proactive_per_day",
-        runId: runId,
-        sessionId: sessionId,
+        runId: context.runId,
+        sessionId: context.sessionId,
         ts: Date()
       )
     )
+  }
+
+  func ownerNoticeTarget(for context: CommitContext) -> Int64? {
+    context.mode == .group ? ownerChatId : context.chatId
   }
 }

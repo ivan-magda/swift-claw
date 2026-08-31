@@ -3,6 +3,7 @@ import Foundation
 public struct AppConfig: Sendable, Equatable {
   public enum EnvKey {
     static let allowlist = "CLAW_ALLOWLIST"
+    static let groupChats = "CLAW_GROUP_CHATS"
     /// Public because the auth commands resolve the same state root without loading this config.
     /// The daemon and `clawd auth` have to read the one variable, or they diverge on where an
     /// owner's credentials live.
@@ -99,6 +100,9 @@ public struct AppConfig: Sendable, Equatable {
   }
 
   public let allowlist: Set<Int64>
+  /// The chat ids group mode serves. Empty means group mode is off and `clawd` answers only the
+  /// owner's DM.
+  public let groupChats: Set<Int64>
   public let stateRoot: URL
   public let pollTimeoutSeconds: Int
 
@@ -133,6 +137,7 @@ public struct AppConfig: Sendable, Equatable {
 
   public init(
     allowlist: Set<Int64>,
+    groupChats: Set<Int64>,
     stateRoot: URL,
     pollTimeoutSeconds: Int,
     llm: LLMConfig,
@@ -154,6 +159,7 @@ public struct AppConfig: Sendable, Equatable {
     mcpConfigSource: MCPConfigSource
   ) {
     self.allowlist = allowlist
+    self.groupChats = groupChats
     self.stateRoot = stateRoot
     self.pollTimeoutSeconds = pollTimeoutSeconds
 
@@ -183,7 +189,14 @@ public struct AppConfig: Sendable, Equatable {
   /// are loaded separately via `SecretStore` and injected at the composition root. An empty
   /// allowlist is allowed so onboarding can still boot.
   public static func load(environment env: [String: String]) throws -> AppConfig {
-    let allowlist = try parseAllowlist(from: env[EnvKey.allowlist])
+    let allowlist = try parseIdSet(
+      from: env[EnvKey.allowlist],
+      invalid: ConfigError.invalidAllowlist
+    )
+    let groupChats = try parseIdSet(
+      from: env[EnvKey.groupChats],
+      invalid: ConfigError.invalidGroupChats
+    )
     let stateRoot = try StateRootResolver.createStateRoot(for: env[EnvKey.stateRoot])
     let pollTimeoutSeconds =
       env[EnvKey.pollTimeout].flatMap(Int.init) ?? EnvDefaults.pollTimeoutSeconds
@@ -219,6 +232,7 @@ public struct AppConfig: Sendable, Equatable {
 
     return AppConfig(
       allowlist: allowlist,
+      groupChats: groupChats,
       stateRoot: stateRoot,
       pollTimeoutSeconds: pollTimeoutSeconds,
       llm: llm,
@@ -631,10 +645,16 @@ extension AppConfig {
   }
 }
 
-// MARK: - Allowlist
+// MARK: - Numeric Id Sets
 
 private extension AppConfig {
-  static func parseAllowlist(from environmentValue: String?) throws -> Set<Int64> {
+  /// Parses one comma-separated list of Telegram ids. The caller names the error so a bad entry
+  /// points at the variable it came from; both lists share this parser so they can never disagree
+  /// about whitespace or emptiness.
+  static func parseIdSet(
+    from environmentValue: String?,
+    invalid: (String) -> ConfigError
+  ) throws -> Set<Int64> {
     guard
       let environmentValue = environmentValue?.trimmingCharacters(in: .whitespaces),
       !environmentValue.isEmpty
@@ -642,19 +662,19 @@ private extension AppConfig {
       return []
     }
 
-    var allowlist = Set<Int64>()
+    var ids = Set<Int64>()
 
     for part in environmentValue.split(separator: ",") {
       let trimmed = part.trimmingCharacters(in: .whitespaces)
 
       guard let id = Int64(trimmed) else {
-        throw ConfigError.invalidAllowlist(trimmed)
+        throw invalid(trimmed)
       }
 
-      allowlist.insert(id)
+      ids.insert(id)
     }
 
-    return allowlist
+    return ids
   }
 }
 

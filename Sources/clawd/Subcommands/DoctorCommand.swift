@@ -39,6 +39,7 @@ struct DoctorCommand: AsyncParsableCommand {
     }
     report.add(key: "config", value: "OK", group: .config)
     report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)", group: .config)
+    report.add(contentsOf: [HealthRowsBuilder.groupModeCheck(chatCount: config.groupChats.count)])
     if checkConfig {
       addConfigDetailRows(to: &report, config: config)
       report.add(contentsOf: await sandboxRows(config: config, live: false))

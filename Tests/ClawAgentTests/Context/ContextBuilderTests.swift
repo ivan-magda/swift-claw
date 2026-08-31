@@ -21,6 +21,7 @@ struct ContextBuilderTests {
       )
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "hello", provenance: .trusted),
         StoredMessage(role: .assistant, content: "hi", provenance: .trusted),
@@ -68,6 +69,7 @@ struct ContextBuilderTests {
       )
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
@@ -98,6 +100,7 @@ struct ContextBuilderTests {
       )
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
@@ -152,6 +155,7 @@ struct ContextBuilderTests {
       workspace: FakeWorkspace(files: [.memory: .overCap(count: 2_201)])
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
@@ -182,6 +186,7 @@ struct ContextBuilderTests {
     let memoryStore = FakeMemoryStore(items: [high, normal])
     let builder = makeBuilder(memoryStore: memoryStore)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [StoredMessage(role: .user, content: "question", provenance: .trusted)],
       historyMessageIds: [44],
       windowStartMessageId: 0,
@@ -217,6 +222,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(retriever: retriever)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "first", provenance: .trusted),
         StoredMessage(role: .assistant, content: "answer", provenance: .trusted),
@@ -236,6 +242,7 @@ struct ContextBuilderTests {
     let call = try #require(retriever.calls.first)
     #expect(call.query == "latest query")  // the latest user message, not older history
     #expect(call.currentSessionId == 42)
+    #expect(call.restrictToSessionId == nil)  // a DM still recalls across its own past sessions
     #expect(call.windowStartMessageId == 7)
     #expect(call.excludedMessageIds == [10, 11, 12])  // current history excluded from recall
     // the recall candidate limit from its source of truth, not the literal 20
@@ -244,6 +251,29 @@ struct ContextBuilderTests {
       .content.text
     #expect(untrusted.contains("label=\"recall\""))
     #expect(untrusted.contains(BudgetFitter.truncationMarker))
+  }
+
+  @Test func groupModeRestrictsRecallToTheTopicSession() throws {
+    // given — a snapshot whose key says the conversation is a forum topic
+    let retriever = FakeRetriever()
+    let builder = makeBuilder(retriever: retriever)
+    let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramTopic(chatId: -1_001, threadId: 11),
+      history: [
+        StoredMessage(role: .user, content: "latest query", provenance: .trusted)
+      ],
+      historyMessageIds: [10],
+      windowStartMessageId: 7,
+      isTainted: false,
+      hasPrivateData: false
+    )
+
+    // when
+    _ = try builder.assemble(snapshot: snapshot, sessionId: 77, origin: .interactive)
+
+    // then — the search never reaches another topic's rows
+    let call = try #require(retriever.calls.first)
+    #expect(call.restrictToSessionId == 77)
   }
 
   @Test func skillsRenderAsUntrustedIndexWithoutSettingPrivateAccess() throws {
@@ -260,6 +290,7 @@ struct ContextBuilderTests {
       )
     )
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [],
       historyMessageIds: [],
       windowStartMessageId: 0,
@@ -500,6 +531,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "old", provenance: .trusted),
         StoredMessage(role: .assistant, content: "middle", provenance: .trusted),
@@ -532,6 +564,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "o", provenance: .trusted),
         StoredMessage(role: .assistant, content: "oversized middle", provenance: .trusted),
@@ -566,6 +599,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "what is the meaning of this", provenance: .trusted)
       ],
@@ -600,6 +634,7 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(retriever: retriever)
     let snapshot = SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "follow the tournament daily", provenance: .trusted)
       ],
@@ -652,6 +687,7 @@ extension ContextBuilderTests {
   /// kind the renderer can meet, with state on the anchors alone.
   private func statefulSnapshot() -> SessionContextSnapshot {
     SessionContextSnapshot(
+      sessionKey: SessionKey.telegramDM(chatId: 42),
       history: [
         StoredMessage(role: .user, content: "fetch the page", provenance: .trusted),
         StoredMessage(
@@ -772,6 +808,7 @@ private func makeBuilder(
 
 private func emptySnapshot() -> SessionContextSnapshot {
   SessionContextSnapshot(
+    sessionKey: SessionKey.telegramDM(chatId: 42),
     history: [],
     historyMessageIds: [],
     windowStartMessageId: 0,
@@ -866,6 +903,7 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
   struct Call: Sendable, Equatable {
     let query: String
     let currentSessionId: Int64
+    let restrictToSessionId: Int64?
     let windowStartMessageId: Int64?
     let excludedMessageIds: [Int64]
     let limit: Int
@@ -881,6 +919,7 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
   func searchRelevantMessages(
     query: String,
     currentSessionId: Int64,
+    restrictToSessionId: Int64?,
     windowStartMessageId: Int64?,
     excludedMessageIds: [Int64],
     limit: Int
@@ -889,6 +928,7 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
       Call(
         query: query,
         currentSessionId: currentSessionId,
+        restrictToSessionId: restrictToSessionId,
         windowStartMessageId: windowStartMessageId,
         excludedMessageIds: excludedMessageIds,
         limit: limit

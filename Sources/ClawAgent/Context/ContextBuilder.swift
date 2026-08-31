@@ -323,6 +323,7 @@ private extension ContextBuilder {
       hits = try retriever.searchRelevantMessages(
         query: query,
         currentSessionId: sessionId,
+        restrictToSessionId: recallRestriction(for: snapshot, sessionId: sessionId),
         windowStartMessageId: snapshot.windowStartMessageId,
         excludedMessageIds: snapshot.historyMessageIds,
         limit: Self.recallCandidateLimit
@@ -348,6 +349,14 @@ private extension ContextBuilder {
     }
 
     return section(id: .recall, cap: cap, units: units)
+  }
+
+  /// A group topic recalls only its own past; a DM keeps its reach across the owner's sessions.
+  func recallRestriction(for snapshot: SessionContextSnapshot, sessionId: Int64) -> Int64? {
+    switch SessionKey.mode(from: snapshot.sessionKey) {
+    case .direct: nil
+    case .group: sessionId
+    }
   }
 
   func latestUserMessage(in history: [StoredMessage]) -> String? {

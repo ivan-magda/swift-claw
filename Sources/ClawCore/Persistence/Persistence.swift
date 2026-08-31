@@ -95,7 +95,13 @@ public enum CostSource: String, Sendable, Equatable {
 
 public enum SessionKey {
   private static let dmPrefix = "tg:dm:"
+  private static let topicPrefix = "tg:topic:"
   private static let jobPrefix = "sched:job:"
+
+  /// The forum's General topic carries no `message_thread_id`, so its key needs a suffix that no
+  /// thread id can ever produce. A numeric coercion (0, or topic 1) would fuse two distinct
+  /// conversations into one session.
+  private static let generalTopicSuffix = "general"
 
   /// The heartbeat's dedicated persistent session. No chat id in the key —
   /// the delivery target is resolved from config, so `chatId(from:)` stays nil by design.
@@ -105,6 +111,26 @@ public enum SessionKey {
     "\(dmPrefix)\(chatId)"
   }
 
+  /// One session per forum topic. `threadId` is nil in the General topic and in a non-forum group,
+  /// which both collapse onto the chat's single General key — correct, since a non-forum group has
+  /// exactly one conversation.
+  public static func telegramTopic(chatId: Int64, threadId: Int64?) -> String {
+    let suffix = threadId.map(String.init) ?? generalTopicSuffix
+    return "\(topicPrefix)\(chatId):\(suffix)"
+  }
+
+  /// The one place a key is minted from an inbound message. Routing resolves the mode once and
+  /// every handler funnels through here, so a topic can never be dropped on one path and honored
+  /// on another.
+  public static func telegram(for message: IncomingMessage, mode: ChatMode) -> String {
+    switch mode {
+    case .direct:
+      telegramDM(chatId: message.chatId)
+    case .group:
+      telegramTopic(chatId: message.chatId, threadId: message.messageThreadId)
+    }
+  }
+
   /// A job's dedicated session, created lazily at first fire. No chat id in the key —
   /// the delivery target is `scheduled_jobs.owner_chat_id`, so `chatId(from:)` stays nil by design.
   public static func scheduledJob(id: Int64) -> String {
@@ -112,7 +138,32 @@ public enum SessionKey {
   }
 
   public static func chatId(from key: String) -> Int64? {
-    key.hasPrefix(dmPrefix) ? Int64(key.dropFirst(dmPrefix.count)) : nil
+    if key.hasPrefix(dmPrefix) {
+      return Int64(key.dropFirst(dmPrefix.count))
+    }
+    guard let body = topicBody(of: key), let separator = body.lastIndex(of: ":") else {
+      return nil
+    }
+    return Int64(body[body.startIndex..<separator])
+  }
+
+  /// The mode a session is being served in, recovered from its key alone — the derivation every
+  /// consumer that holds only a session id (and therefore only its key) depends on. Scheduled-job
+  /// and heartbeat sessions are the owner's own, so they read `.direct`.
+  public static func mode(from key: String) -> ChatMode {
+    key.hasPrefix(topicPrefix) ? .group : .direct
+  }
+
+  /// The forum topic to deliver into, or nil for the General topic and for every non-topic key.
+  public static func threadId(from key: String) -> Int64? {
+    guard let body = topicBody(of: key), let separator = body.lastIndex(of: ":") else {
+      return nil
+    }
+    return Int64(body[body.index(after: separator)...])
+  }
+
+  private static func topicBody(of key: String) -> Substring? {
+    key.hasPrefix(topicPrefix) ? key.dropFirst(topicPrefix.count) : nil
   }
 }
 
@@ -124,6 +175,10 @@ public struct InboundMessage: Sendable, Equatable {
   public let text: String
   public let isEdited: Bool
   public let provenance: Provenance
+  /// Telegram's id for the message that triggered this turn, nil for an inbound with no Telegram
+  /// origin (a scheduled job). It is the reply target an answer addresses, and the fused claim is
+  /// the only write that touches the run row it belongs on.
+  public let telegramMessageId: Int64?
   public let ts: Date
 
   public init(
@@ -134,6 +189,7 @@ public struct InboundMessage: Sendable, Equatable {
     text: String,
     isEdited: Bool,
     provenance: Provenance = .trusted,
+    telegramMessageId: Int64? = nil,
     ts: Date
   ) {
     self.updateId = updateId
@@ -143,6 +199,7 @@ public struct InboundMessage: Sendable, Equatable {
     self.text = text
     self.isEdited = isEdited
     self.provenance = provenance
+    self.telegramMessageId = telegramMessageId
     self.ts = ts
   }
 }
@@ -198,6 +255,9 @@ public struct StoredMessage: Sendable, Equatable {
 }
 
 public struct SessionContextSnapshot: Sendable, Equatable {
+  /// The owning session's key, carried so a consumer holding only a `sessionId` can still derive
+  /// the chat mode and the forum topic without a second read.
+  public let sessionKey: String
   public let history: [StoredMessage]
   public let historyMessageIds: [Int64]
   public let windowStartMessageId: Int64?
@@ -207,12 +267,14 @@ public struct SessionContextSnapshot: Sendable, Equatable {
   public let hasPrivateData: Bool
 
   public init(
+    sessionKey: String,
     history: [StoredMessage],
     historyMessageIds: [Int64],
     windowStartMessageId: Int64?,
     isTainted: Bool,
     hasPrivateData: Bool
   ) {
+    self.sessionKey = sessionKey
     self.history = history
     self.historyMessageIds = historyMessageIds
     self.windowStartMessageId = windowStartMessageId
@@ -322,6 +384,19 @@ public struct OutboxRow: Sendable, Equatable {
   public let payload: String
   public let approvalId: Int64?
   public let replyMarkup: String?
+  /// Stamped at enqueue from the run itself, so a row delivers into the topic that asked even
+  /// after a restart, when no router is left to say where the answer belongs. Both nil in a DM.
+  public let messageThreadId: Int64?
+  public let replyToMessageId: Int64?
+
+  /// Where this row goes, as the delivery seam takes it.
+  public var target: DeliveryTarget {
+    DeliveryTarget(
+      chatId: chatId,
+      messageThreadId: messageThreadId,
+      replyToMessageId: replyToMessageId
+    )
+  }
 
   public init(
     runId: Int64,
@@ -329,13 +404,17 @@ public struct OutboxRow: Sendable, Equatable {
     chatId: Int64,
     payload: String,
     approvalId: Int64? = nil,
-    replyMarkup: String? = nil
+    replyMarkup: String? = nil,
+    messageThreadId: Int64? = nil,
+    replyToMessageId: Int64? = nil
   ) {
     self.runId = runId
     self.stepIndex = stepIndex
     self.chatId = chatId
     self.payload = payload
     self.approvalId = approvalId
+    self.messageThreadId = messageThreadId
+    self.replyToMessageId = replyToMessageId
     self.replyMarkup = replyMarkup
   }
 }
@@ -416,6 +495,7 @@ public struct DegradedTurn: Sendable, Equatable {
 /// typo'd actor; persisted via `rawValue` at the store seam.
 public enum AuditActor: String, Sendable, Equatable {
   case owner
+  case groupMember = "group_member"
   case assistant
   case system
 }

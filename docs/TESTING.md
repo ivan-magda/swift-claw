@@ -3,7 +3,7 @@
 |             |                                                                                                                |
 | ----------- | -------------------------------------------------------------------------------------------------------------- |
 | **Status**  | Normative testing conventions                                                                                  |
-| **Date**    | 2026-07-08                                                                                                     |
+| **Date**    | 2026-08-25                                                                                                     |
 | **Owner**   | Ivan Magda                                                                                                     |
 | **Related** | [`ARCHITECTURE.md`](./ARCHITECTURE.md) (esp. §12 untrusted data) · [`../CLAUDE.md`](../CLAUDE.md) (code style) |
 
@@ -100,6 +100,7 @@ A flaky test — one that passes and fails with no change to code — is worse t
 - **DRY the "how-to"** — extract fixtures, builders, and scripted doubles into helpers so mechanics appear once.
 - **DAMP the "what"** — keep the scenario narrative (arrange / act / assert) descriptive and legible in the test body. A test should read as a self-contained specification.
 - Follow **Given-When-Then**: separate the body with `// given` / `// when` / `// then` (see `CLAUDE.md`).
+- **One nameable responsibility per test file** — when a suite grows a second one, split it into a sibling file rather than appending. This is the `CLAUDE.md` "extract before you extend" rule at the test seam.
 
 ### 7.1 One source of truth for every value
 
@@ -118,6 +119,46 @@ Pin the load-bearing part of an output, not the whole rendered blob:
 - **Coverage is a negative indicator only.** Low coverage reliably flags under-testing; 100% coverage proves nothing about fault detection and is trivially gamed. Do not use coverage as a quality target.
 - **The real value signal is mutation-thinking.** Before writing or keeping a test, ask: _what fault would this fail on that no other test would?_ If you can inject a plausible bug into the code the test "covers" and the test still passes, it is not protecting that behavior. A test that cannot kill any mutant is tautological — it tests the framework, the language, or the test double, not our logic.
 
+### 8.1 The distinct-risk rule
+
+A test case earns its place by protecting a distinct, reachable risk. A different fixture, label,
+chat mode, topic, or input value does not create a new risk when production follows the same path.
+A case is distinct only when it protects at least one of these:
+
+- a separate production branch or state transition;
+- an external boundary that can fail independently, such as wire decoding, persistence mapping,
+  routing, or delivery;
+- an independent failure mode with a different observable outcome;
+- an exhaustive pure-domain contract whose individual values are part of the specification.
+
+Apply these consequences:
+
+- Trace the input through the public production path before writing an integration test. Do not
+  construct combinations that routing or composition cannot produce unless the fail-safe itself is
+  a public contract.
+- Keep one representative case for an unconditional production path. Parameterize only distinct
+  behavior categories or an exhaustive pure-domain contract; parameterization reduces duplicated
+  code but does not make duplicated coverage valuable.
+- Repeat behavior at another layer only when that layer has a separate mutant to catch. Otherwise
+  keep the test at the cheapest stable seam that observes the fault.
+- Use raw SQL migration tests to prove our schema change, constraints, defaults, and preservation of
+  legacy data. Do not use them to prove that SQLite can round-trip an ordinary value already covered
+  through a production store path.
+- Once a persisted or decoded value is established, do not re-derive properties from it merely to
+  re-test pure functions already covered by their owning suite.
+
+### 8.2 Test-intent map
+
+Before implementing tests, map each distinct risk to one primary test. Keep the map in the working
+plan, PR description, or review notes; it does not belong in code comments.
+
+| Risk | Production branch or seam | Nearest existing test | Unique mutant | Primary test |
+| ---- | ------------------------- | --------------------- | ------------- | ------------ |
+| What can regress? | Where can it break? | What already protects it? | What fault only this test catches? | Where should it live? |
+
+Two proposed tests with the same branch or seam and the same mutant are duplicates. Merge them,
+choose one representative, or keep only the test at the stronger observable seam.
+
 ## 9. The decision rubric
 
 Apply in order, when writing a new test or triaging an existing one:
@@ -126,6 +167,25 @@ Apply in order, when writing a new test or triaging an existing one:
 2. **Would it survive a behavior-preserving refactor?** No → assert the outcome, not the mechanism.
 3. **Managed or unmanaged dependency?** Managed (SQLite/GRDB) → use the real thing. Unmanaged (LLM/Telegram) → stub at the protocol seam; assert the outbound contract, never internal call order.
 4. **Signal or stopwatch?** Synchronizing on `sleep` → replace with a gate / `Task.yield()` / emitted signal.
+
+### 9.1 Pre-commit redundancy pass
+
+Review every added or expanded test before committing it:
+
+1. Name the reachable mutant it kills.
+2. Point to the production branch, state transition, or external seam where that mutant lives.
+3. Name the nearest existing test and explain why it would not kill the same mutant.
+4. Confirm that a behavior-preserving refactor would leave the test green.
+
+Delete, merge, or move a test to the owning layer when item 3 has no convincing answer. Look
+specifically for these recurring forms of redundancy:
+
+- DM, group, topic, or named-input variants over code that does not branch on that dimension;
+- a "baseline remains unchanged" case repeated at every layer;
+- a value derived from another value that the same test already proved;
+- absence of an unrelated log or message after the positive outcome is already established;
+- a raw storage round-trip already covered through a real production write/read path;
+- an integration scenario that no public caller can construct.
 
 ## 10. Conventions checklist
 
@@ -139,6 +199,10 @@ A test in this repo:
 - [ ] synchronizes on a **gate or emitted signal**, never a `sleep`;
 - [ ] builds its **own fresh environment** and cleans up; does not depend on order;
 - [ ] reads as a spec: **Given-When-Then**, DAMP narrative, DRY mechanics;
+- [ ] lives in a suite file covering **one nameable behavior area**, not an accumulated grab-bag;
+- [ ] maps to a **reachable production branch, state transition, external seam, or independent failure mode**;
+- [ ] uses one representative when multiple inputs traverse the same unconditional path;
+- [ ] names a mutant that the nearest existing test would not kill;
 - [ ] would **fail on a real fault** you can name.
 
 ---

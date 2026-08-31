@@ -199,7 +199,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     let audit = RecordingAuditLog()
     let callbacks = RecordingCallbacks()
     let coordinator = ApprovalCoordinator()
-    let accessControl = AccessControl(allowlist: allowlist)
+    let accessControl = AccessControl(allowlist: allowlist, groupChats: [])
     let replies = ReplySender(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
       delivery: RecordingTransport(),
@@ -223,7 +223,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
       memory: MemoryStoreGRDB(writer: queue),
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
-      botUsername: "claw_bot",
+      botIdentity: BotIdentity(id: 900, username: "claw_bot"),
       accessControl: accessControl,
       delivery: RecordingTransport(),
       turnRunner: FakeTurnRunner(),

@@ -22,10 +22,14 @@ actor DraftTransport: TelegramTransport {
     allowedUpdates: [String]
   ) async throws -> [RawUpdate] { [] }
 
-  func sendMessage(chatId: Int64, text: String, replyMarkup: String?) async throws -> Int64 { 1 }
+  func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 { 1 }
 
   func sendRichMessage(
-    chatId: Int64,
+    to target: DeliveryTarget,
     markdown: String,
     replyMarkup: String?
   ) async throws -> Int64 { 1 }
@@ -40,7 +44,7 @@ actor DraftTransport: TelegramTransport {
     return true
   }
 
-  func sendChatAction(chatId: Int64, action: String) async throws {}
+  func sendChatAction(chatId: Int64, messageThreadId: Int64?, action: String) async throws {}
 }
 
 @Suite struct TelegramRichDraftStreamerTests {
@@ -51,24 +55,34 @@ actor DraftTransport: TelegramTransport {
     let long = String(repeating: "x", count: TelegramRichDraftStreamer.maxMarkdownCharacters + 10)
 
     // when
-    await streamer.sendDraft(chatId: 42, draftId: 9, markdown: long)
+    let delivered = await streamer.sendDraft(chatId: 42, draftId: 9, markdown: long)
 
     // then
+    #expect(delivered)
     let draft = try #require(await transport.drafts.first)
     #expect(draft.chatId == 42)
     #expect(draft.draftId == 9)
     #expect(draft.markdown.count == TelegramRichDraftStreamer.maxMarkdownCharacters)
   }
 
-  @Test func skipsDraftsForNonPrivateChats() async {
+  /// Telegram accepts a draft only in a private chat, so a group draft is dropped rather than sent
+  /// to the supergroup — and reported as undelivered, which is what keeps the caller's typing pulse
+  /// alive in a topic that will never show a bubble.
+  @Test func reportsNoDeliveryForNonPrivateChats() async {
     // given
     let transport = DraftTransport()
     let streamer = TelegramRichDraftStreamer(transport: transport)
 
     // when
-    await streamer.sendDraft(chatId: -100_123, draftId: 9, markdown: "group draft")
+    let delivered = await streamer.sendDraft(
+      chatId: -100_123,
+      draftId: 9,
+      markdown: "group draft"
+    )
 
     // then
+    #expect(delivered == false)
+    #expect(await transport.draftAttempts.isEmpty)
     #expect(await transport.drafts.isEmpty)
   }
 
@@ -79,9 +93,10 @@ actor DraftTransport: TelegramTransport {
     let streamer = TelegramRichDraftStreamer(transport: transport)
 
     // when
-    await streamer.sendDraft(chatId: 42, draftId: 9, markdown: "partial")
+    let delivered = await streamer.sendDraft(chatId: 42, draftId: 9, markdown: "partial")
 
     // then
+    #expect(delivered == false)
     let attempt = try #require(await transport.draftAttempts.first)
     #expect(attempt == DraftTransport.DraftRecord(chatId: 42, draftId: 9, markdown: "partial"))
     #expect(await transport.drafts.isEmpty)

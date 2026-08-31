@@ -18,6 +18,14 @@ public protocol SessionMessageStore: Sendable {
   func claimAndPersistInbound(
     _ inbound: InboundMessage
   ) throws(StoreError) -> ClaimResult
+  /// The same fused write minus the run: claim the update, upsert the session, insert the user
+  /// message. What a message the bot overheard rather than was asked deserves — it belongs in the
+  /// room's history, but nothing is owed back, so `runId` and `triggerMessageId` come back nil.
+  /// Shares the claim key with `claimAndPersistInbound`, so one update is stored exactly once
+  /// whichever path it takes.
+  func claimAndPersistObserved(
+    _ inbound: InboundMessage
+  ) throws(StoreError) -> ClaimResult
   /// Context snapshot returned oldest-first and bounded to the message this run is answering.
   /// Includes the durable session metadata the assembler needs for recall dedup and taint reads.
   func loadContextSnapshot(

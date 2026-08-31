@@ -25,6 +25,9 @@ public struct ToolDispatchContext: Sendable, Equatable {
   /// approval prompt, so only an action whose `ApprovalReason.offersTurnScopedWindow` is true may
   /// ride it, and only after the same argument scans a parked call takes.
   public let autoApproveWindowOpen: Bool
+  /// How the conversation is served. A group topic has no approval keyboard and no single owner
+  /// to press it, so the gate resolves consent itself instead of parking a prompt nobody owns.
+  public let mode: ChatMode
 
   public init(
     runId: Int64,
@@ -36,7 +39,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
     sessionHasPrivateData: Bool,
     approvalAlreadyPending: Bool,
     runOrigin: RunOrigin,
-    autoApproveWindowOpen: Bool
+    autoApproveWindowOpen: Bool,
+    mode: ChatMode = .direct
   ) {
     self.runId = runId
     self.chatId = chatId
@@ -48,6 +52,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.approvalAlreadyPending = approvalAlreadyPending
     self.runOrigin = runOrigin
     self.autoApproveWindowOpen = autoApproveWindowOpen
+    self.mode = mode
   }
 }
 

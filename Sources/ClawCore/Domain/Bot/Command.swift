@@ -134,3 +134,23 @@ public enum ScheduleCommand: Sendable, Equatable {
     return .create(text: trimmed)
   }
 }
+
+// MARK: - Availability
+
+public extension Command {
+  /// True for the commands that only make sense in the owner's own conversation.
+  ///
+  /// Durable memory and the schedule table are the owner's, single-owner scoped, and delivered to
+  /// a chat id the arming message chose. Both families also park a confirmation that the *next
+  /// plain message* resolves — in a shared room that message belongs to whoever typed fastest, so
+  /// one attendee could commit a draft another one wrote. Everything else a room may use: `/new`
+  /// and `/stop` act on the topic's own session, and the read-only reports name nothing private.
+  var isDirectOnly: Bool {
+    switch self {
+    case .remember, .memory, .schedule, .pause, .resume, .runNow, .cancelJob:
+      true
+    case .start, .stop, .new, .help, .doctor, .mcp, .skills, .plain:
+      false
+    }
+  }
+}

@@ -46,6 +46,7 @@ struct DaemonDoctorReporter: DoctorReporting {
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)
     report.add(key: "config.max_tokens", value: "\(config.llm.maxOutputTokens)", group: .config)
+    report.add(contentsOf: [HealthRowsBuilder.groupModeCheck(chatCount: config.groupChats.count)])
     report.add(key: "db.writable", value: "true", group: .database)
 
     let now = Date()

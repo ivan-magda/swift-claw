@@ -89,7 +89,7 @@ public struct ApprovalCallbackHandler: Sendable {
     let noticeChatId = callback.chatId ?? callback.fromUserId
 
     do throws(RoutingHalt) {
-      try await replies.claimUpdate(updateId: updateId, chatId: noticeChatId)
+      try await replies.claimUpdate(updateId: updateId, target: .chat(noticeChatId))
     } catch {
       return error.outcome
     }

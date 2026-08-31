@@ -325,6 +325,11 @@ public protocol Tool: Sendable {
   /// ask-tier tools; the gate fails closed when a dangerous tool returns nil.
   func prepareAction(arguments: JSONValue) async -> PreparedActionResolution?
 
+  /// True when the tool's real work happens on the approval waiter and its own `execute` is a
+  /// fail-closed stub. Such a tool can never be allowed outright — a mode with no approval fabric
+  /// must refuse it at the gate rather than dispatch a call that cannot do anything.
+  var executesOnlyViaApproval: Bool { get }
+
   /// `canonicalTarget` is the gate-resolved form for `.arbitraryDestination` tools — act on
   /// exactly what was authorized, never re-derive it; `nil` for the other classes.
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
@@ -350,6 +355,10 @@ extension Tool {
 
   public func invocationEcho(arguments: JSONValue) -> String? {
     nil
+  }
+
+  public var executesOnlyViaApproval: Bool {
+    false
   }
 
   public func approvalPresentation(
