@@ -252,8 +252,10 @@ import Testing
     let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
     let command = testCommand(
       ["-c", "(trap '' TERM; sleep 30) & echo $! >&2; printf child"],
-      timeout: .milliseconds(500),
-      teardownGracePeriod: .seconds(1)
+      // The budget is deliberately loose: a loaded runner delays scheduling, and this asserts
+      // which side of the race pays for teardown, never how fast the machine is.
+      timeout: .seconds(2),
+      teardownGracePeriod: .seconds(3)
     )
 
     // when
