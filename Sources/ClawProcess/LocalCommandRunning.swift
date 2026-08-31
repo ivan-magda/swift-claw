@@ -182,28 +182,36 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
       }
     )
 
+    let termination: LocalCommandTermination
     switch outcome {
     case .operationReturned(let result):
-      return result
+      termination = result.termination
     case .deadlineExpired:
       executionTask.cancel()
       _ = await executionTask.value
-      return LocalCommandResult(
-        termination: .timedOut,
-        stdout: stdoutCapture.snapshot(),
-        stderr: stderrCapture.snapshot(),
-        processIdentifier: spawnedProcessIdentifier.value
-      )
+      termination = .timedOut
     case .callerCancelled:
       executionTask.cancel()
       _ = await executionTask.value
-      return LocalCommandResult(
-        termination: .cancelled,
-        stdout: stdoutCapture.snapshot(),
-        stderr: stderrCapture.snapshot(),
-        processIdentifier: spawnedProcessIdentifier.value
-      )
+      termination = .cancelled
     }
+
+    // Reaping runs on EVERY path and outside the race above. The library's own teardown gives up
+    // as soon as the direct child is gone, so a descendant that outlived it is only ever this
+    // launcher's to collect — and the timeout paths are exactly where one is most likely to
+    // remain. Keeping it out of the race also means slow housekeeping can never be reported back
+    // as the command itself timing out.
+    await Self.terminateRemainingProcessGroup(
+      spawnedProcessIdentifier.value,
+      gracePeriod: command.teardownGracePeriod
+    )
+
+    return LocalCommandResult(
+      termination: termination,
+      stdout: stdoutCapture.snapshot(),
+      stderr: stderrCapture.snapshot(),
+      processIdentifier: spawnedProcessIdentifier.value
+    )
   }
 
   private func spawnAndCapture(
@@ -237,11 +245,6 @@ public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
       }
 
       let processIdentifier = Int32(result.processIdentifier.value)
-      await Self.terminateRemainingProcessGroup(
-        processIdentifier,
-        gracePeriod: command.teardownGracePeriod
-      )
-
       return LocalCommandResult(
         termination: Self.classifyTermination(status: result.terminationStatus),
         stdout: result.closureResult.stdout,
@@ -309,35 +312,37 @@ private extension SwiftSubprocessLocalCommandRunner {
   /// The direct child has already been reaped when this runs, so its session identifier names a
   /// live process group only when descendants remain. Terminate that group before returning to the
   /// caller; a background job must never outlive the command that created it.
+  ///
+  /// Liveness is `ProcessLiveness`, not a bare `kill(-pgid, 0)`: a descendant this method just
+  /// terminated stays visible to the signal probe until something reaps it, and an orphan's
+  /// adoptive init may never do that, which would make the wait below run its full budget every
+  /// time rather than only when a descendant is genuinely still running.
   static func terminateRemainingProcessGroup(
-    _ processIdentifier: Int32,
+    _ processIdentifier: Int32?,
     gracePeriod: Duration
   ) async {
-    guard processIdentifier > 0, kill(-processIdentifier, SIGTERM) == 0 else {
+    guard let processIdentifier, processIdentifier > 0, kill(-processIdentifier, SIGTERM) == 0
+    else {
       return
     }
 
     let clock = ContinuousClock()
     let gracefulDeadline = clock.now.advanced(by: gracePeriod)
-    while clock.now < gracefulDeadline {
-      guard processGroupExists(processIdentifier) else {
-        return
+    while clock.now < gracefulDeadline, ProcessLiveness.groupIsRunning(processIdentifier) {
+      // Sleeping stops suspending once this task is cancelled, so a cancelled caller would spin
+      // here at full tilt. Escalate straight to the kill instead.
+      guard (try? await Task.sleep(for: .milliseconds(10))) != nil else {
+        break
       }
-      try? await Task.sleep(for: .milliseconds(10))
     }
 
+    guard ProcessLiveness.groupIsRunning(processIdentifier) else {
+      return
+    }
+    // SIGKILL cannot be caught or ignored, so nothing in the group can run once it lands. There is
+    // no second state worth waiting for, and waiting for the pids to vanish would again depend on
+    // an init that reaps.
     _ = kill(-processIdentifier, SIGKILL)
-    let forcefulDeadline = clock.now.advanced(by: gracePeriod)
-    while clock.now < forcefulDeadline, processGroupExists(processIdentifier) {
-      try? await Task.sleep(for: .milliseconds(10))
-    }
-  }
-
-  static func processGroupExists(_ processIdentifier: Int32) -> Bool {
-    if kill(-processIdentifier, 0) == 0 {
-      return true
-    }
-    return errno != ESRCH
   }
 }
 

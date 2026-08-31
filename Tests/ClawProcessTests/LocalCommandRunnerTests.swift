@@ -246,6 +246,28 @@ import Testing
     #expect(childExited)
   }
 
+  @Test func groupTeardownIsNotChargedToTheCommandTimeout() async throws {
+    // given — the command succeeds at once but leaves a descendant that ignores SIGTERM, so the
+    // group teardown must spend its whole grace period, which here outlasts the command's timeout
+    let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
+    let command = testCommand(
+      ["-c", "(trap '' TERM; sleep 30) & echo $! >&2; printf child"],
+      timeout: .milliseconds(500),
+      teardownGracePeriod: .seconds(1)
+    )
+
+    // when
+    let result = await runner.run(command)
+
+    // then — reaping is this launcher's housekeeping, never the command's own runtime
+    #expect(result.termination == .exited(0))
+    #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "child")
+    let pidText = try #require(String(bytes: result.stderr.bytes, encoding: .utf8))
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let grandchild = try #require(Int32(pidText))
+    #expect(await processEventuallyDoesNotExist(grandchild))
+  }
+
   @Test func childExitTerminatesAGrandchildHoldingThePipe() async throws {
     // given
     let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
@@ -270,6 +292,7 @@ private func testCommand(
   _ arguments: [String],
   captureLimit: Int = 1024,
   timeout: Duration = .seconds(2),
+  teardownGracePeriod: Duration = .milliseconds(50),
   workingDirectory: String? = nil,
   environment: LocalCommandEnvironment = .inherit()
 ) -> LocalCommand {
@@ -277,7 +300,7 @@ private func testCommand(
     arguments: arguments,
     timeout: timeout,
     captureLimit: captureLimit,
-    teardownGracePeriod: .milliseconds(50),
+    teardownGracePeriod: teardownGracePeriod,
     workingDirectory: workingDirectory,
     environment: environment
   )
@@ -306,8 +329,11 @@ private func waitForFileContents(at file: URL) async throws -> String {
   throw MissingFileContentsError()
 }
 
+/// A terminated process is what these assertions are about. Asking whether the pid still exists
+/// answers a different question: a zombie exists until something reaps it, and an orphan adopted
+/// by a container PID 1 that never calls `wait` is never reaped at all.
 private func processDoesNotExist(_ processIdentifier: Int32) -> Bool {
-  kill(processIdentifier, 0) == -1 && errno == ESRCH
+  ProcessLiveness.isRunning(processIdentifier) == false
 }
 
 private func processEventuallyDoesNotExist(_ processIdentifier: Int32) async -> Bool {

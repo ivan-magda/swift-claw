@@ -805,6 +805,14 @@ exists to keep them from being confused for one another, in code and in the owne
   export, or a background job does not reach the next call. The launcher terminates remaining
   members of the command's process group after the shell exits. The tool description states this,
   because a model that assumes otherwise writes commands that silently do nothing.
+- **Reaping the group is the launcher's own housekeeping, not part of the command.** It runs on
+  every exit path — success, timeout, and caller cancellation alike — because the subprocess
+  library's teardown stops as soon as the direct child is gone, which is exactly when a descendant
+  is left behind. It runs *after* the command's deadline has been decided, so a slow teardown can
+  never be reported back as the command timing out. Liveness is termination, not pid existence: a
+  terminated descendant stays visible to `kill(pid, 0)` until something reaps it, and an orphan
+  adopted by a container PID 1 that never calls `wait` is never reaped — reading that probe as
+  "still running" would make every teardown spend its full grace budget.
 - **The child environment is inherit-minus-prefix.** Every daemon secret arrives through a
   `CLAW_`-prefixed variable, so the launcher drops the **prefix** rather than a list of known keys:
   a secret added later is covered without anyone remembering to extend a denylist. The policy is a
