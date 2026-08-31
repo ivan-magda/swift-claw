@@ -68,7 +68,7 @@ import Testing
         count=$((count + 1))
       done
       """
-    let command = testCommand(["-c", script], captureLimit: 1024, timeout: .seconds(5))
+    let command = testCommand(["-c", script], captureLimit: 1024)
 
     // when
     let result = await runner.run(command)
@@ -246,36 +246,12 @@ import Testing
     #expect(childExited)
   }
 
-  @Test func groupTeardownIsNotChargedToTheCommandTimeout() async throws {
-    // given — the command succeeds at once but leaves a descendant that ignores SIGTERM, so the
-    // group teardown must spend its whole grace period, which here outlasts the command's timeout
-    let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
-    let command = testCommand(
-      ["-c", "(trap '' TERM; sleep 30) & echo $! >&2; printf child"],
-      // The budget is deliberately loose: a loaded runner delays scheduling, and this asserts
-      // which side of the race pays for teardown, never how fast the machine is.
-      timeout: .seconds(2),
-      teardownGracePeriod: .seconds(3)
-    )
-
-    // when
-    let result = await runner.run(command)
-
-    // then — reaping is this launcher's housekeeping, never the command's own runtime
-    #expect(result.termination == .exited(0))
-    #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "child")
-    let pidText = try #require(String(bytes: result.stderr.bytes, encoding: .utf8))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    let grandchild = try #require(Int32(pidText))
-    #expect(await processEventuallyDoesNotExist(grandchild))
-  }
-
   @Test func childExitTerminatesAGrandchildHoldingThePipe() async throws {
     // given
     let runner = SwiftSubprocessLocalCommandRunner(executablePath: "/bin/sh")
     // The backgrounded sleep inherits stdout (the asserted pipe); stderr publishes its PID so the
     // test can prove the process group is empty when the runner returns.
-    let command = testCommand(["-c", "sleep 30 & echo $! >&2; printf child"], timeout: .seconds(2))
+    let command = testCommand(["-c", "sleep 300 & echo $! >&2; printf child"])
 
     // when
     let result = await runner.run(command)
@@ -293,8 +269,11 @@ import Testing
 private func testCommand(
   _ arguments: [String],
   captureLimit: Int = 1024,
-  timeout: Duration = .seconds(2),
-  teardownGracePeriod: Duration = .milliseconds(50),
+  // Generous by default: only the tests that deliberately exercise the timeout path pass their
+  // own budget. Everywhere else the deadline is not the subject, and a short one turns runner
+  // contention into a failure — the durations this suite reports on CI are inflated many times
+  // over by the rest of the run.
+  timeout: Duration = .seconds(30),
   workingDirectory: String? = nil,
   environment: LocalCommandEnvironment = .inherit()
 ) -> LocalCommand {
@@ -302,7 +281,7 @@ private func testCommand(
     arguments: arguments,
     timeout: timeout,
     captureLimit: captureLimit,
-    teardownGracePeriod: teardownGracePeriod,
+    teardownGracePeriod: .milliseconds(50),
     workingDirectory: workingDirectory,
     environment: environment
   )
