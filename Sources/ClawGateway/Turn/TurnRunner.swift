@@ -257,13 +257,27 @@ public struct TurnRunner: TurnDispatching {
   }
 }
 
-/// Where a resume gave up, and what that means for the run's terminal receipt. A failed assembly
-/// leaves the turn unfinished; a failed `runTurn` is the provider round-trip itself.
-private enum ResumeStage: String {
+/// Where a resume gave up. A failed assembly leaves the turn unfinished; a failed `runTurn` is the
+/// provider round-trip itself.
+enum ResumeStage: String {
   case contextBuild = "context build"
   case turn
 
-  var terminalCause: TerminalCause {
+  /// The run's terminal cause for a resume that gave up at this stage with this error.
+  ///
+  /// A `StoreError` wins over the stage: the resume path reads `resumeUsage` and the context
+  /// snapshot from SQLite, so a full or unreadable disk surfaces here and is knowable. Recording a
+  /// knowable storage failure as the stage's generic cause would file it under the wrong bucket for
+  /// everything downstream that reads this column. The stage-only cause is deliberately not
+  /// reachable on its own, so no caller can record less than what is known.
+  func terminalCause(for error: any Error) -> TerminalCause {
+    guard error is StoreError else {
+      return stageCause
+    }
+    return .storageFailure
+  }
+
+  private var stageCause: TerminalCause {
     switch self {
     case .contextBuild: .incomplete
     case .turn: .providerFailure
@@ -332,7 +346,7 @@ private extension TurnRunner {
   /// so the lane frees — `resume` is non-throwing by contract.
   func failResume(runId: Int64, stage: ResumeStage, error: any Error) {
     logger.error("resume \(stage.rawValue) failed for run \(runId): \(error)")
-    try? runs.failRun(runId: runId, cause: stage.terminalCause, now: now())
+    try? runs.failRun(runId: runId, cause: stage.terminalCause(for: error), now: now())
   }
 }
 

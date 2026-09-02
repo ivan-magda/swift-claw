@@ -10,10 +10,9 @@ import Logging
 struct TurnEnqueuer: Sendable {
   let lanes: SessionLaneRegistry
   let turns: any TurnDispatching
-  /// The settlement port. Nil leaves the deferred settlement to the boot backstop — the shape a
-  /// composition without persistence-backed learning gets.
-  let learning: (any ScheduledLearningStore)?
-  let now: @Sendable () -> Date
+  /// The lane tail every exit from the turn passes through. Nil `learning` makes it inert and
+  /// leaves the deferred settlement to the boot backstop.
+  let settlement: LaneSettlement
   let logger: Logger
 
   init(
@@ -25,8 +24,7 @@ struct TurnEnqueuer: Sendable {
   ) {
     self.lanes = lanes
     self.turns = turns
-    self.learning = learning
-    self.now = now
+    self.settlement = LaneSettlement(learning: learning, now: now, logger: logger)
     self.logger = logger
   }
 
@@ -41,7 +39,7 @@ struct TurnEnqueuer: Sendable {
   ) async {
     let runLog = log ?? logger
     let runner = turns
-    let settle = settleTail(runId: runId, log: runLog)
+    let settle = settlement
 
     let result = await lanes.enqueue(sessionID: sessionId, runID: runId) {
       do {
@@ -59,7 +57,7 @@ struct TurnEnqueuer: Sendable {
       // Every exit from the turn passes here, including cancellation and supersession. Settling in
       // the closure is what keeps a cancelled bound run inside the learning loop; boot
       // reconciliation is a crash backstop, not the ordinary path to settlement.
-      settle()
+      settle.settle(runId: runId, log: runLog)
     }
 
     if result == .shuttingDown {
@@ -78,26 +76,5 @@ struct TurnEnqueuer: Sendable {
       chatId: fire.ownerChatId,
       triggerMessageId: fire.triggerMessageId
     )
-  }
-}
-
-// MARK: - Lane Tail
-
-private extension TurnEnqueuer {
-  /// Best-effort and non-throwing: the store settles only a bound run that is terminal and still
-  /// open, and a failure leaves it for boot reconciliation rather than failing a turn that already
-  /// delivered its answer.
-  func settleTail(runId: Int64, log: Logger) -> @Sendable () -> Void {
-    guard let learning else {
-      return {}
-    }
-    let clock = now
-    return {
-      do {
-        try learning.settleFromLane(runId: runId, now: clock())
-      } catch {
-        log.error("run \(runId) settlement deferred to boot: \(error)")
-      }
-    }
   }
 }

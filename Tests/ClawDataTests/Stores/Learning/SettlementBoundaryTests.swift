@@ -129,6 +129,30 @@ import Testing
     #expect(receipt.settledAt == bootedAt)
   }
 
+  @Test func theBackstopDatesADamagedReceiptByTheRunsOwnLastTransition() throws {
+    // given — a bound run that ended hours ago and lost its receipt (damaged, or pre-receipt)
+    let env = try BoundRunEnvironment.make()
+    let runId = try env.runningBoundRun()
+    let endedAt = env.now.addingTimeInterval(120)
+    _ = try env.runs.commitAssistantTurn(env.assistantTurn(runId: runId), now: endedAt)
+    try env.forgetReceipt(runId: runId)
+
+    // when — the daemon restarts long afterwards
+    let bootedAt = endedAt.addingTimeInterval(30 * 3_600)
+    _ = try env.runs.reconcileRunsAtBoot(
+      now: bootedAt,
+      degradationText: "unfinished",
+      heartbeatNoticeChatId: nil
+    )
+
+    // then — `unknown` is honest about the cause, but the instant must be the run's own, or every
+    // restart would re-date a stale run into the evidence-age window
+    let receipt = try #require(try env.learning.settlement(runId: runId))
+    #expect(receipt.terminalCause == .unknown)
+    #expect(receipt.terminalAt == endedAt)
+    #expect(receipt.settledAt == bootedAt)
+  }
+
   @Test func bootReconciliationLeavesTheApprovalCrashWindowUnsettled() throws {
     // given — an approved-and-claimed run whose placeholder observation is still unresolved
     let env = try BoundRunEnvironment.make()
@@ -175,6 +199,17 @@ import Testing
 // MARK: - Row Reads
 
 private extension BoundRunEnvironment {
+  /// Drops a terminal receipt the way a pre-receipt build or a damaged row leaves the table: the
+  /// run is bound and terminal, but `run_settlements` has nothing for it.
+  func forgetReceipt(runId: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "DELETE FROM run_settlements WHERE run_id = ?",
+        arguments: [runId]
+      )
+    }
+  }
+
   func usageRowCount(runId: Int64) throws -> Int {
     try queue.read { db in
       try Int.fetchOne(

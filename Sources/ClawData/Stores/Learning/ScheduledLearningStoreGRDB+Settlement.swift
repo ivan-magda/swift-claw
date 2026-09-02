@@ -122,11 +122,13 @@ extension ScheduledLearningStoreGRDB {
   /// Two shapes reach it. A bound terminal run whose lane tail never ran — `/stop` won and the
   /// process died before the closure returned — keeps the cause its cancellation stored and is
   /// simply frozen. A bound terminal run with no receipt at all is damaged or predates receipts,
-  /// and records `unknown` rather than a cause inferred from its state.
+  /// and records `unknown` rather than a cause inferred from its state; its `terminal_at` is the
+  /// run's own last transition, never this boot, because the evidence-age window reads that column
+  /// and a fabricated instant would re-admit a stale run on every restart.
   ///
-  /// A run still holding `unresolvedObservationContent` is owed a primary fact by the boot
-  /// claimed-approval settlement, so it stays open for that writer. Nothing else is excluded: boot
-  /// reconciliation runs before lane admission opens, so no current-process lane owns a run here.
+  /// A run that still owes its approval placeholder is left open for the writer that owes it.
+  /// Nothing else is excluded: boot reconciliation runs before lane admission opens, so no
+  /// current-process lane owns a run here.
   static func settleAbandonedRuns(
     _ db: Database,
     unresolvedObservationContent: String,
@@ -135,17 +137,20 @@ extension ScheduledLearningStoreGRDB {
     let epoch = EpochSecondCodec.epoch(now)
     let terminalStates = RunState.terminalStates.map(\.rawValue)
     let statePlaceholders = databaseQuestionMarks(count: terminalStates.count)
+    // `updated_ts` is a GRDB datetime string; COALESCE keeps one unparseable timestamp from
+    // aborting the whole boot transaction on this NOT NULL column.
+    let terminalAt = "COALESCE(CAST(strftime('%s', runs.updated_ts) AS INTEGER), ?)"
 
     try db.execute(
       sql: """
         INSERT INTO run_settlements(run_id, winning_state, terminal_cause, terminal_at, settled_at)
-        SELECT runs.id, runs.state, ?, ?, ?
+        SELECT runs.id, runs.state, ?, \(terminalAt), ?
         FROM runs
         JOIN run_learning_bindings ON run_learning_bindings.run_id = runs.id
         LEFT JOIN run_settlements ON run_settlements.run_id = runs.id
         WHERE run_settlements.run_id IS NULL
           AND runs.state IN (\(statePlaceholders))
-          AND \(unresolvedFactPredicate(on: "runs.id"))
+          AND NOT \(owedFactExists(runColumn: "runs.id"))
         """,
       arguments: StatementArguments(
         [TerminalCause.unknown.rawValue, epoch, epoch] as [DatabaseValueConvertible]
@@ -156,17 +161,37 @@ extension ScheduledLearningStoreGRDB {
     try db.execute(
       sql: """
         UPDATE run_settlements SET settled_at = ?
-        WHERE settled_at IS NULL AND \(unresolvedFactPredicate(on: "run_settlements.run_id"))
+        WHERE settled_at IS NULL
+          AND NOT \(owedFactExists(runColumn: "run_settlements.run_id"))
         """,
       arguments: [epoch, unresolvedObservationContent]
     )
   }
 
-  /// True while no unresolved approval placeholder remains for `runColumn` — the one primary fact
-  /// a crashed approval still owes. Takes one bound argument: the placeholder body.
-  private static func unresolvedFactPredicate(on runColumn: String) -> String {
+  /// Whether this one run still owes the approval placeholder that the boot claimed-approval
+  /// settlement writes. The per-run half of the same rule `settleAbandonedRuns` applies set-wide.
+  static func owesUnresolvedFact(
+    _ db: Database,
+    runId: Int64,
+    unresolvedObservationContent: String
+  ) throws -> Bool {
+    try Bool.fetchOne(
+      db,
+      sql: "SELECT \(owedFactExists(runColumn: "?"))",
+      arguments: [runId, unresolvedObservationContent]
+    ) ?? false
+  }
+
+  /// The one spelling of "this run still owes an approval placeholder", so the per-run disposition
+  /// and the set-level backstop cannot disagree about the row shape. They are two halves of one
+  /// rule: were they to drift, the orphan sweep would defer a run that the very same transaction's
+  /// backstop then freezes, admitting a later observation fill against frozen evidence.
+  ///
+  /// `runColumn` is the SQL expression naming the run; the fragment binds `runColumn`'s arguments
+  /// first (none, unless it is itself a `?`) and then the placeholder body.
+  private static func owedFactExists(runColumn: String) -> String {
     """
-    NOT EXISTS (
+    EXISTS (
       SELECT 1 FROM messages
       WHERE messages.run_id = \(runColumn)
         AND messages.role = '\(MessageRole.tool.rawValue)'

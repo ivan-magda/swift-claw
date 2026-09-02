@@ -94,6 +94,7 @@ extension DaemonBuilder {
       lanes: coordination.lanes,
       coordinator: coordination.approvalCoordinator,
       waiter: waiter,
+      learning: stores.learning,
       now: { Date() },
       logger: logger
     )

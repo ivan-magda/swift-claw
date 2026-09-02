@@ -26,6 +26,10 @@ public struct ApprovalBootReconciler: Sendable {
   private let lanes: SessionLaneRegistry
   private let coordinator: ApprovalCoordinator
   private let waiter: any ApprovalParking
+  /// This reconciler enqueues onto the lane registry itself rather than through `TurnEnqueuer`, so
+  /// it carries the same tail: the waiter it parks drives the run's own terminal transition, and a
+  /// deny, expiry or command resolution leaves a deferred receipt only this closure can settle.
+  private let settlement: LaneSettlement
 
   private let now: @Sendable () -> Date
 
@@ -37,6 +41,7 @@ public struct ApprovalBootReconciler: Sendable {
     lanes: SessionLaneRegistry,
     coordinator: ApprovalCoordinator,
     waiter: any ApprovalParking,
+    learning: (any ScheduledLearningStore)? = nil,
     now: @escaping @Sendable () -> Date,
     logger: Logger
   ) {
@@ -46,6 +51,7 @@ public struct ApprovalBootReconciler: Sendable {
     self.lanes = lanes
     self.coordinator = coordinator
     self.waiter = waiter
+    self.settlement = LaneSettlement(learning: learning, now: now, logger: logger)
 
     self.now = now
 
@@ -181,6 +187,7 @@ private extension ApprovalBootReconciler {
     }
 
     let park = waiter
+    let settle = settlement
     let approvalId = approval.id
     let runId = approval.runId
     let sessionId = approval.sessionId
@@ -194,6 +201,10 @@ private extension ApprovalBootReconciler {
         chatId: chatId,
         revalidatePolicyOnApprove: revalidate
       )
+      // The same tail `TurnEnqueuer` ends its closure with, for the same reason: the resolution
+      // this park waits on can drive the run terminal with a deferred receipt, and nothing else in
+      // this process would settle it before the next boot.
+      settle.settle(runId: runId)
     }
 
     if result == .shuttingDown {

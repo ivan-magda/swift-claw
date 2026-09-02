@@ -1,10 +1,10 @@
 import ClawAgent
 import ClawCore
-import ClawData
 import Foundation
 import GRDB
 import Testing
 
+@testable import ClawData
 @testable import ClawGateway
 
 /// The lane closure is the only in-process owner of a deferred settlement. Boot reconciliation is
@@ -51,6 +51,24 @@ import Testing
 
     // then — every exit from the turn passes the tail, not just the happy one
     #expect(try env.learning.settlement(runId: runId)?.settledAt != nil)
+  }
+
+  @Test func theBootReparkedApprovalLaneCarriesTheSameTail() async throws {
+    // given — a bound run parked on an unexpired approval, re-parked by boot onto its session lane;
+    // `ApprovalBootReconciler` enqueues onto the registry itself rather than through `TurnEnqueuer`
+    let env = try LaneSettlementEnvironment.make()
+    let parked = try env.parkedApprovalOnABoundRun()
+    let parker = CancellingParker(runs: env.runs, sessionId: env.sessionId, now: env.now)
+
+    // when — the waiter's resolution drives the run terminal while it holds the lane
+    await env.bootReconciler(waiter: parker).reconcile()
+    _ = await env.lanes.drain(timeout: .seconds(5), clock: ContinuousClock())
+
+    // then — the second lane closure settles too; the run does not wait for the next boot
+    #expect(await parker.parkCount == 1)
+    let receipt = try #require(try env.learning.settlement(runId: parked.runId))
+    #expect(receipt.terminalCause == .ownerCancelled)
+    #expect(receipt.settledAt != nil)
   }
 }
 
@@ -134,6 +152,92 @@ private struct LaneSettlementEnvironment {
 
   func cancellingDispatcher(error: (any Error)? = nil) -> CancellingDispatcher {
     CancellingDispatcher(runs: runs, sessionId: sessionId, now: now, error: error)
+  }
+
+  func bootReconciler(waiter: any ApprovalParking) -> ApprovalBootReconciler {
+    ApprovalBootReconciler(
+      approvals: ApprovalStoreGRDB(writer: queue),
+      runs: runs,
+      lanes: lanes,
+      coordinator: ApprovalCoordinator(),
+      waiter: waiter,
+      learning: learning,
+      now: { now },
+      logger: TestLog.silent
+    )
+  }
+
+  /// A bound run suspended to AWAITING_APPROVAL with an unexpired PENDING approval — what boot
+  /// finds in a reopened database and re-parks onto the session lane.
+  func parkedApprovalOnABoundRun() throws -> (runId: Int64, approvalId: Int64) {
+    let runId = try boundRun()
+    let approvalId = try queue.write { db -> Int64 in
+      try db.execute(
+        sql: """
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          """,
+        arguments: [sessionId, runId, RunStoreGRDB.placeholderObservationContent, now]
+      )
+      let observationMessageId = db.lastInsertedRowID
+      let canonicalArgsJSON = #"{"path":"/w/plan.md"}"#
+      let approvalId = try ApprovalStoreGRDB.insertApproval(
+        db,
+        NewApproval(
+          runId: runId,
+          sessionId: sessionId,
+          tool: "file_write",
+          canonicalArgsJSON: canonicalArgsJSON,
+          canonicalTarget: "/w/plan.md",
+          argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
+          policyVersion: "pv16",
+          ownerUserId: 777,
+          nonce: "n-parked",
+          observationMessageId: observationMessageId,
+          toolCallId: "c1",
+          reason: .askTier,
+          createdTs: now,
+          expiresTs: now.addingTimeInterval(3_600)
+        )
+      )
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .suspendForApproval,
+        now: now,
+        terminal: nil
+      )
+      return approvalId
+    }
+    return (runId, approvalId)
+  }
+}
+
+/// The boot-parked waiter's shape: it holds the lane, its resolution drives the run terminal with a
+/// deferred receipt, and it returns. Modeled as `/stop` reaching the run while it is parked, which
+/// is the reachable case that leaves a receipt this closure alone can settle.
+private actor CancellingParker: ApprovalParking {
+  private let runs: RunStoreGRDB
+  private let sessionId: Int64
+  private let now: Date
+
+  private(set) var parkCount = 0
+
+  init(runs: RunStoreGRDB, sessionId: Int64, now: Date) {
+    self.runs = runs
+    self.sessionId = sessionId
+    self.now = now
+  }
+
+  func park(
+    approvalId: Int64,
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    revalidatePolicyOnApprove: Bool
+  ) async {
+    parkCount += 1
+    _ = try? runs.cancelActiveRun(sessionId: self.sessionId, reason: .cancelled, now: now)
   }
 }
 
