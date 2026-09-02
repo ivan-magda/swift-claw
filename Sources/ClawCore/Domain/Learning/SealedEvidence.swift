@@ -1,5 +1,10 @@
 import Foundation
 
+/// Policy the accepted algorithm requires to exist but declines to name. Both bounds are part of
+/// `EligibilityClassifier.version`: `finalOutputByteCap` decides which runs reach the evaluator at
+/// all, so changing either value changes the classification of runs already sealed under the old
+/// one. Bump the classifier version in the same edit, so a new compatibility window opens rather
+/// than old receipts being silently reinterpreted.
 public enum EvidenceLimits {
   /// The evaluator reads the final answer whole or not at all. A run whose answer exceeds this is
   /// classified `insufficientEvidence` rather than sealed truncated, because a clipped answer would

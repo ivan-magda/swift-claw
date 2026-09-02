@@ -172,7 +172,7 @@ struct DaemonBuilder: Sendable {
       costPolicy: roster.primary.costPolicy,
       imageCache: ImageCache(),
       freezeLearningSurface: makeLearningSurfaceFreeze(
-        agentStack: agentStack,
+        toolDefinitions: agentStack.toolDispatcher.definitions,
         workspace: workspace
       )
     )

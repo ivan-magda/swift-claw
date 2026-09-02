@@ -26,7 +26,14 @@ extension ScheduledLearningStoreGRDB {
 
   @discardableResult
   public func sealEvidence(runId: Int64, now: Date) throws(StoreError) -> SealOutcome {
-    try database.writeMapping { db in
+    // Read first. The lane tail notifies on every lane exit, so the overwhelming majority of calls
+    // are ordinary inbound turns that carry no binding, and taking a write lock per owner message
+    // only to discover that is the hot path made expensive. `seal` re-reads the binding inside the
+    // transaction, so this is a filter and never the decision.
+    guard try binding(runId: runId) != nil else {
+      return .excluded(.legacyUnbound)
+    }
+    return try database.writeMapping { db in
       try Self.seal(db, runId: runId, now: now)
     }
   }
@@ -57,6 +64,10 @@ private extension ScheduledLearningStoreGRDB {
     else {
       return .notSettled
     }
+
+    // Before any receipt is built, and after the settlement guard above: every path from here
+    // writes a receipt, and the payload reads this column back.
+    try stampTerminalRoute(db, runId: runId)
 
     let state = try readState(db, jobId: binding.jobId)
     guard state?.epoch == binding.epoch else {
@@ -117,7 +128,7 @@ private extension ScheduledLearningStoreGRDB {
     return .excluded(reason)
   }
 
-  static func insertReceipt(
+  static func insertReceipt(  // swiftlint:disable:this function_parameter_count
     _ db: Database,
     binding: RunLearningBinding,
     eligibility: LearningEligibility,
@@ -125,8 +136,12 @@ private extension ScheduledLearningStoreGRDB {
     payload: EvidencePayload?,
     now: Date
   ) throws {
-    let bytes = payload.flatMap { value in
-      try? CanonicalJSON.data(encoding: value)
+    // Deliberately throwing. A swallowed encode would commit a row marked eligible with a null
+    // payload — indistinguishable from a payload retention has aged out — and the receipt is
+    // terminal, so nothing would ever re-seal it. Throwing aborts the transaction and leaves the
+    // run in the durable unsealed queue for the next sweep instead.
+    let bytes = try payload.map { value in
+      try CanonicalJSON.data(encoding: value)
     }
     try db.execute(
       sql: """
@@ -161,6 +176,29 @@ private extension ScheduledLearningStoreGRDB {
       return EvidenceDigest(rawValue: SHA256Digest.hex(receipt))
     }
     return EvidenceDigest(rawValue: SHA256Digest.hex(payloadBytes))
+  }
+
+  /// Records the route the run's answering round actually served, on the settlement row where the
+  /// compatibility pair lives. Stamped here rather than in the transaction that wins the state:
+  /// `transitionRun` writes the terminal receipt before the same commit inserts that round's usage
+  /// row, so a route read there would name the round before last. Sealing runs strictly after
+  /// settlement, which is the first moment the answer cannot change.
+  ///
+  /// `provider_usage.model` holds the configured reference the call billed under — the same
+  /// vocabulary `run_compatibility.configured_route` is frozen from, which is what makes the pair
+  /// comparable. `id` orders it because `ts` is a formatted datetime string.
+  static func stampTerminalRoute(_ db: Database, runId: Int64) throws {
+    try db.execute(
+      sql: """
+        UPDATE run_settlements
+        SET terminal_route = (
+          SELECT provider_usage.model FROM provider_usage
+          WHERE provider_usage.run_id = ? ORDER BY provider_usage.id DESC LIMIT 1
+        )
+        WHERE run_id = ?
+        """,
+      arguments: [runId, runId]
+    )
   }
 
   static func lessonSetExists(_ db: Database, binding: RunLearningBinding) throws -> Bool {

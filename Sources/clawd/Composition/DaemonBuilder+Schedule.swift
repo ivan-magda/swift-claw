@@ -87,7 +87,7 @@ extension DaemonBuilder {
   /// the policy version arrives from the caller, so the frozen value is byte-identical to the one
   /// the same pickup stamped on the run.
   func makeLearningSurfaceFreeze(
-    agentStack: AgentStack,
+    toolDefinitions: [ToolDefinition],
     workspace: FileSystemWorkspace
   ) -> @Sendable (_ runId: Int64, _ policyVersion: String) -> Void {
     guard config.learningEnabled else {
@@ -95,7 +95,7 @@ extension DaemonBuilder {
       }
     }
     let learning = stores.learning
-    let toolCatalogDigest = Self.toolCatalogDigest(agentStack.toolDispatcher.definitions)
+    let toolCatalogDigest = Self.toolCatalogDigest(toolDefinitions)
     let configuredRoute = config.llm.route.configuredReference
     let logger = logger
     return { runId, policyVersion in

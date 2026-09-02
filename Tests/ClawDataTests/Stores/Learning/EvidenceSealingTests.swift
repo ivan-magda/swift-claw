@@ -56,6 +56,45 @@ import Testing
     #expect(payload.finalOutput == "done")
   }
 
+  @Test func sealedEvidenceCarriesTheRouteTheAnsweringRoundActuallyServed() throws {
+    // given — a run that fell back: an earlier attempt billed the configured primary, and the round
+    // that produced the owner's answer billed a different route
+    let env = try BoundRunEnvironment.make()
+    let runId = try env.runningBoundRun()
+    try env.freezeSurface(runId: runId, skillSetDigest: BoundRunEnvironment.pickupSkillSetDigest)
+    try env.recordEarlierUsage(runId: runId, model: "openai-compatible/primary")
+    let turn = env.assistantTurn(runId: runId, model: "openai-chatgpt/fallback")
+    _ = try env.runs.commitAssistantTurn(turn, now: env.now)
+
+    // when
+    _ = try env.learning.sealEvidence(runId: runId, now: env.now)
+
+    // then — evidence from another route is not evidence about this one, so the newest usage row
+    // wins and the configured route stays a separate field
+    let evidence = try #require(try env.learning.evidence(runId: runId))
+    let payload = try #require(evidence.payload)
+    #expect(payload.terminalRoute == "openai-chatgpt/fallback")
+    #expect(payload.configuredRoute == "openai-compatible/test-model")
+  }
+
+  @Test func aDeferredSettlementStillRecordsTheRouteOnItsReceipt() throws {
+    // given — a cancelled bound run whose in-flight round records its usage after the run is
+    // already terminal, which is the whole reason its settlement is deferred
+    let env = try BoundRunEnvironment.make()
+    let runId = try env.runningBoundRun()
+    try env.freezeSurface(runId: runId, skillSetDigest: BoundRunEnvironment.pickupSkillSetDigest)
+    _ = try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: env.now)
+    try env.recordEarlierUsage(runId: runId, model: "openai-chatgpt/fallback")
+    #expect(try env.learning.settleFromLane(runId: runId, now: env.now))
+
+    // when — an owner interruption is not task evidence, so this seals a receipt with no payload
+    let outcome = try env.learning.sealEvidence(runId: runId, now: env.now)
+
+    // then — the route is recorded for every sealed run, not only the ones carrying a payload
+    #expect(outcome == .sealed(eligibility: .ownerInterruption))
+    #expect(try env.terminalRoute(runId: runId) == "openai-chatgpt/fallback")
+  }
+
   @Test func aMissingCompatibilityRowSealsInsufficientEvidenceRatherThanAGuess() throws {
     // given — a settled bound run that never froze its surface
     let env = try BoundRunEnvironment.make()

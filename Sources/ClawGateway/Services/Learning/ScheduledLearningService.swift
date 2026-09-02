@@ -92,7 +92,7 @@ private extension ScheduledLearningService {
     let previous = drain
     let task = Task {
       await previous?.value
-      self.sealBatch(now: now)
+      await self.sealBatch(now: now)
     }
     drain = task
     return task
@@ -100,7 +100,13 @@ private extension ScheduledLearningService {
 
   /// A run whose sealing throws stays in the durable unsealed queue, so the next sweep retries it
   /// rather than this pass holding the batch open.
-  func sealBatch(now: Date) {
+  ///
+  /// The yield between runs is what keeps a lane out of the batch's way: each seal is a blocking
+  /// store write, and without it a lane tail's `notifySettled` would queue behind up to a whole
+  /// batch while its closure still holds the session lane. The snapshot and the clear stay adjacent
+  /// with no suspension between them, so a notification that arrives mid-batch survives into the
+  /// next drain rather than being dropped by the clear.
+  func sealBatch(now: Date) async {
     let batch = pending.sorted()
     pending.removeAll()
     for runId in batch {
@@ -109,6 +115,7 @@ private extension ScheduledLearningService {
       } catch {
         logger.error("run \(runId) evidence sealing failed: \(error)")
       }
+      await Task.yield()
     }
   }
 }

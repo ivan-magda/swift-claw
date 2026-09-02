@@ -64,6 +64,33 @@ extension BoundRunEnvironment {
     }
   }
 
+  /// An earlier round's usage row, written straight to the table: the fallback shape is a run whose
+  /// first attempt billed one route and whose answering round billed another.
+  func recordEarlierUsage(runId: Int64, model: String) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO provider_usage(provider_call_id, run_id, session_id, model, prompt_tokens,
+            completion_tokens, cost_usd, cost_source, is_estimated, ts)
+          VALUES (?, ?, ?, ?, 1, 1, 0.0, ?, 0, ?)
+          """,
+        arguments: [
+          UUID().uuidString, runId, sessionId, model, CostSource.heuristic.rawValue, now,
+        ]
+      )
+    }
+  }
+
+  func terminalRoute(runId: Int64) throws -> String? {
+    try queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT terminal_route FROM run_settlements WHERE run_id = ?",
+        arguments: [runId]
+      )
+    }
+  }
+
   func advanceJobEpoch() throws {
     try queue.write { db in
       try db.execute(

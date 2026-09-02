@@ -43,7 +43,7 @@ public struct AppConfig: Sendable, Equatable {
     static let heartbeatMaxPerDay = "CLAW_HEARTBEAT_MAX_PER_DAY"
     static let approvalExpiry = "CLAW_APPROVAL_EXPIRY"
 
-    static let learningEnabled = "CLAW_LEARNING_ENABLED"
+    public static let learningEnabled = "CLAW_LEARNING_ENABLED"
 
     public static let webFetchExemptCIDRs = "CLAW_WEBFETCH_EXEMPT_CIDRS"
 
