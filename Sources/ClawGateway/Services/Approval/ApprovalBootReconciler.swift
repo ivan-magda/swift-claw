@@ -41,7 +41,7 @@ public struct ApprovalBootReconciler: Sendable {
     lanes: SessionLaneRegistry,
     coordinator: ApprovalCoordinator,
     waiter: any ApprovalParking,
-    learning: (any ScheduledLearningStore)? = nil,
+    learning: ScheduledLearningService? = nil,
     now: @escaping @Sendable () -> Date,
     logger: Logger
   ) {
@@ -204,7 +204,7 @@ private extension ApprovalBootReconciler {
       // The same tail `TurnEnqueuer` ends its closure with, for the same reason: the resolution
       // this park waits on can drive the run terminal with a deferred receipt, and nothing else in
       // this process would settle it before the next boot.
-      settle.settle(runId: runId)
+      await settle.settle(runId: runId)
     }
 
     if result == .shuttingDown {

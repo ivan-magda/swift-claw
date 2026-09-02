@@ -19,7 +19,8 @@ extension DaemonBuilder {
     turnRunner: TurnRunner,
     scheduleSurface: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler,
-    doctor: any DoctorReporting
+    doctor: any DoctorReporting,
+    learning: ScheduledLearningService?
   ) -> IntakeStack {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
@@ -38,7 +39,7 @@ extension DaemonBuilder {
       imageCache: turnRunner.imageCache,
       lanes: coordination.lanes,
       schedule: scheduleSurface,
-      learning: stores.learning,
+      learning: learning,
       approvalCallbacks: approvalCallbacks,
       voice: voiceService,
       images: imageService,

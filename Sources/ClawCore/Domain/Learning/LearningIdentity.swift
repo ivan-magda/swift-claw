@@ -70,6 +70,17 @@ public struct JobDefinitionDigest: RawRepresentable, Sendable, Hashable, Codable
   }
 }
 
+/// Digest of one run's sealed evidence — over the canonical payload the evaluator reads, or over
+/// the compact receipt when there is no payload. Stays distinct from the evaluation digest that
+/// later references it.
+public struct EvidenceDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+}
+
 /// Digest of one frozen evaluation used as reflection evidence.
 public struct EvaluationDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String

@@ -542,7 +542,9 @@ func makeEnv(
   sessionKey: String? = nil,
   typing: any TypingIndicator = NoopTyping(),
   ownerChatId: Int64? = nil,
-  now: @escaping @Sendable () -> Date = { Date() }
+  now: @escaping @Sendable () -> Date = { Date() },
+  freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in
+  }
 ) throws -> Env {
   let queue = try ClawDatabase.makeInMemoryQueue()
   try ClawDatabase.migrate(queue)
@@ -606,6 +608,7 @@ func makeEnv(
     delivery: transport,
     ownerChatId: ownerChatId,
     now: now,
+    freezeLearningSurface: freezeLearningSurface,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,

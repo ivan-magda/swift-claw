@@ -53,6 +53,27 @@ import Testing
     #expect(try env.learning.settlement(runId: runId)?.settledAt != nil)
   }
 
+  @Test func theLaneTailNotifiesTheSealerAndDoesNotOnlySettle() async throws {
+    // given — the same cancelled bound run; nothing but the tail's own notification can put it in
+    // front of the sealer before the next periodic sweep
+    let env = try LaneSettlementEnvironment.make()
+    let runId = try env.boundRun()
+    let enqueuer = env.enqueuer(dispatcher: env.cancellingDispatcher())
+
+    // when
+    await enqueuer.enqueue(
+      runId: runId,
+      sessionId: env.sessionId,
+      chatId: 777,
+      triggerMessageId: try env.triggerMessageId(runId: runId)
+    )
+    _ = await env.lanes.drain(timeout: .seconds(5), clock: ContinuousClock())
+
+    // then — a settlement with no notification would leave this receipt unwritten until a sweep
+    try await waitUntilSealed(runId: runId, in: env)
+    #expect(try env.learning.evidence(runId: runId) != nil)
+  }
+
   @Test func theBootReparkedApprovalLaneCarriesTheSameTail() async throws {
     // given — a bound run parked on an unexpired approval, re-parked by boot onto its session lane;
     // `ApprovalBootReconciler` enqueues onto the registry itself rather than through `TurnEnqueuer`
@@ -72,6 +93,27 @@ import Testing
   }
 }
 
+// MARK: - Sealing Handoff
+
+/// Yields until the sealing the notification queued has run. Not a wall-clock wait: the sealing
+/// task only needs a turn on the executor, so the loop ends on the first turn after it commits.
+private func waitUntilSealed(
+  runId: Int64,
+  in env: LaneSettlementEnvironment,
+  sourceLocation: SourceLocation = #_sourceLocation
+) async throws {
+  for _ in 0..<10_000 {
+    if try env.learning.evidence(runId: runId) != nil {
+      return
+    }
+    await Task.yield()
+  }
+  Issue.record(
+    "run \(runId) was never sealed after the lane tail notified",
+    sourceLocation: sourceLocation
+  )
+}
+
 // MARK: - Environment
 
 /// One armed scheduled job over a real in-memory database, plus the lane registry the enqueuer
@@ -82,6 +124,7 @@ private struct LaneSettlementEnvironment {
   let jobs: ScheduledJobStoreGRDB
   let runs: RunStoreGRDB
   let learning: ScheduledLearningStoreGRDB
+  let service: ScheduledLearningService
   let lanes: SessionLaneRegistry
   let jobId: Int64
   let sessionId: Int64
@@ -107,6 +150,7 @@ private struct LaneSettlementEnvironment {
       throw StoreError.unexpected("job \(job.id) refused to fire")
     }
     let runs = RunStoreGRDB(writer: queue)
+    let learning = ScheduledLearningStoreGRDB(writer: queue)
     // The fixture's first fire only establishes the job's session; the run it created is retired
     // so the overlap guard lets each test fire its own.
     try runs.failRun(runId: fired.runId, cause: .unknown, now: now)
@@ -114,7 +158,8 @@ private struct LaneSettlementEnvironment {
       queue: queue,
       jobs: jobs,
       runs: runs,
-      learning: ScheduledLearningStoreGRDB(writer: queue),
+      learning: learning,
+      service: ScheduledLearningService(store: learning, now: { now }, logger: TestLog.silent),
       lanes: SessionLaneRegistry(),
       jobId: job.id,
       sessionId: fired.sessionId,
@@ -144,7 +189,7 @@ private struct LaneSettlementEnvironment {
     TurnEnqueuer(
       lanes: lanes,
       turns: dispatcher,
-      learning: learning,
+      learning: service,
       now: { now },
       logger: TestLog.silent
     )
@@ -161,7 +206,7 @@ private struct LaneSettlementEnvironment {
       lanes: lanes,
       coordinator: ApprovalCoordinator(),
       waiter: waiter,
-      learning: learning,
+      learning: service,
       now: { now },
       logger: TestLog.silent
     )

@@ -51,9 +51,9 @@ public struct MessageRouter: Sendable {
     imageCache: ImageCache,
     lanes: SessionLaneRegistry,
     schedule: ScheduleSurface,
-    /// The lane tail's settlement port; nil leaves a bound run's deferred settlement to the boot
-    /// backstop.
-    learning: (any ScheduledLearningStore)? = nil,
+    /// The lane tail's settle-and-seal port; nil leaves a bound run's deferred settlement to the
+    /// boot backstop and seals nothing.
+    learning: ScheduledLearningService? = nil,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     voice: (any VoiceMessageTranscribing)? = nil,
     images: (any ImageMessageHandling)? = nil,

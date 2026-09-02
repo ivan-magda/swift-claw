@@ -40,9 +40,9 @@ public struct SchedulerService: Service {
     heartbeat: HeartbeatSettings?,
     workspace: any WorkspaceReading,
     audit: any AuditLog,
-    /// The lane tail's settlement port; nil leaves a bound run's deferred settlement to the boot
-    /// backstop.
-    learning: (any ScheduledLearningStore)? = nil,
+    /// The lane tail's settle-and-seal port; nil leaves a bound run's deferred settlement to the
+    /// boot backstop and seals nothing.
+    learning: ScheduledLearningService? = nil,
     now: @escaping @Sendable () -> Date,
     clock: any Clock<Duration>,
     logger: Logger

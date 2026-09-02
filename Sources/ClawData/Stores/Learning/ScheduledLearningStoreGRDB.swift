@@ -72,28 +72,6 @@ extension ScheduledLearningStoreGRDB {
     }
     return state
   }
-}
-
-// MARK: - Rows
-
-private extension ScheduledLearningStoreGRDB {
-  static func insertCanonicalEmptySet(_ db: Database, _ set: LessonSet, now: Date) throws {
-    try db.execute(
-      sql: """
-        INSERT OR IGNORE INTO lesson_sets(job_id, digest, schema_version, canonical_bytes,
-          source, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        set.jobId,
-        set.digest.rawValue,
-        set.schemaVersion,
-        set.canonicalBytes,
-        LessonSetSource.canonicalEmpty.rawValue,
-        EpochSecondCodec.epoch(now),
-      ]
-    )
-  }
 
   static func readState(_ db: Database, jobId: Int64) throws -> JobLearningState? {
     let row = try Row.fetchOne(
@@ -115,6 +93,28 @@ private extension ScheduledLearningStoreGRDB {
       stableRevision: StableRevision(row["stable_revision"]),
       openTrialId: row["open_trial_id"],
       feedbackRevision: FeedbackRevision(row["feedback_revision"])
+    )
+  }
+}
+
+// MARK: - Rows
+
+private extension ScheduledLearningStoreGRDB {
+  static func insertCanonicalEmptySet(_ db: Database, _ set: LessonSet, now: Date) throws {
+    try db.execute(
+      sql: """
+        INSERT OR IGNORE INTO lesson_sets(job_id, digest, schema_version, canonical_bytes,
+          source, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+      arguments: [
+        set.jobId,
+        set.digest.rawValue,
+        set.schemaVersion,
+        set.canonicalBytes,
+        LessonSetSource.canonicalEmpty.rawValue,
+        EpochSecondCodec.epoch(now),
+      ]
     )
   }
 }

@@ -11,14 +11,14 @@ struct TurnEnqueuer: Sendable {
   let lanes: SessionLaneRegistry
   let turns: any TurnDispatching
   /// The lane tail every exit from the turn passes through. Nil `learning` makes it inert and
-  /// leaves the deferred settlement to the boot backstop.
+  /// leaves the deferred settlement to the boot backstop and the sealing to the periodic sweep.
   let settlement: LaneSettlement
   let logger: Logger
 
   init(
     lanes: SessionLaneRegistry,
     turns: any TurnDispatching,
-    learning: (any ScheduledLearningStore)? = nil,
+    learning: ScheduledLearningService? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
@@ -57,7 +57,7 @@ struct TurnEnqueuer: Sendable {
       // Every exit from the turn passes here, including cancellation and supersession. Settling in
       // the closure is what keeps a cancelled bound run inside the learning loop; boot
       // reconciliation is a crash backstop, not the ordinary path to settlement.
-      settle.settle(runId: runId, log: runLog)
+      await settle.settle(runId: runId, log: runLog)
     }
 
     if result == .shuttingDown {

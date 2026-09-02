@@ -33,7 +33,8 @@ extension DaemonBuilder {
     coordination: TurnCoordination,
     agentStack: AgentStack,
     costPolicy: LLMCostPolicy,
-    imageCache: ImageCache
+    imageCache: ImageCache,
+    freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void
   ) -> TurnRunner {
     let outboxSignal = coordination.outboxSignal
     return TurnRunner(
@@ -51,6 +52,7 @@ extension DaemonBuilder {
       breaker: BudgetBreaker(budget: config.budget, costPolicy: costPolicy),
       delivery: transport,
       ownerChatId: config.heartbeatOwnerChatId,
+      freezeLearningSurface: freezeLearningSurface,
       parker: coordination.deferredParker,
       approvalExpirySeconds: config.approvalExpirySeconds,
       logger: logger

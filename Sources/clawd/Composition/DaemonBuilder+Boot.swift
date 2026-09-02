@@ -30,15 +30,24 @@ extension DaemonBuilder {
   func bootSequence(
     coordination: TurnCoordination,
     waiter: ApprovalWaiter,
-    heartbeatOwner: Int64?
+    heartbeatOwner: Int64?,
+    learning: ScheduledLearningService?
   ) -> @Sendable () async -> Void {
     let registerMenu = registerMenuCommands()
     let reconcileRuns = bootReconcile(heartbeatOwner: heartbeatOwner)
-    let reconcileApprovals = bootReconcileApprovals(coordination: coordination, waiter: waiter)
+    let reconcileApprovals = bootReconcileApprovals(
+      coordination: coordination,
+      waiter: waiter,
+      learning: learning
+    )
     return {
       await registerMenu()
       await reconcileRuns()
       await reconcileApprovals()
+      // Last, and read-only with respect to settlement: it seals what the run sweep just froze
+      // without settling anything itself, so the ordering the run sweep and the approval backstop
+      // depend on is untouched.
+      await learning?.reconcileAtBoot(now: Date())
     }
   }
 
@@ -86,7 +95,8 @@ extension DaemonBuilder {
   /// the first callback arrives.
   func bootReconcileApprovals(
     coordination: TurnCoordination,
-    waiter: ApprovalWaiter
+    waiter: ApprovalWaiter,
+    learning: ScheduledLearningService?
   ) -> @Sendable () async -> Void {
     let reconciler = ApprovalBootReconciler(
       approvals: stores.approvals,
@@ -94,7 +104,7 @@ extension DaemonBuilder {
       lanes: coordination.lanes,
       coordinator: coordination.approvalCoordinator,
       waiter: waiter,
-      learning: stores.learning,
+      learning: learning,
       now: { Date() },
       logger: logger
     )

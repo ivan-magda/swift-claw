@@ -53,6 +53,12 @@ public struct TurnRunner: TurnDispatching {
 
   private let logger: Logger
 
+  /// Freezes the learning compatibility surface of a bound run, at pickup, while every value in it
+  /// is still current. Injected rather than assembled here: the tool catalog, the skills root and
+  /// the resolved route all live at the composition root, and a run that is not bound freezes
+  /// nothing. Inert when learning is disarmed.
+  private let freezeLearningSurface: @Sendable (_ runId: Int64, _ policyVersion: String) -> Void
+
   /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's
   /// resolution.
   private let parker: any ApprovalParking
@@ -77,6 +83,7 @@ public struct TurnRunner: TurnDispatching {
     delivery: (any MessageDelivery)? = nil,
     ownerChatId: Int64? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
+    freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in },
     // No default: an ask-tier suspend parks the lane on this seam, and a composition site that
     // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
     // would hold that lane forever. Every caller chooses its parker explicitly.
@@ -100,6 +107,7 @@ public struct TurnRunner: TurnDispatching {
     self.ownerChatId = ownerChatId
 
     self.now = now
+    self.freezeLearningSurface = freezeLearningSurface
     self.parker = parker
     self.approvalExpirySeconds = approvalExpirySeconds
     self.logger = logger
@@ -124,6 +132,10 @@ public struct TurnRunner: TurnDispatching {
       logger.debug("run \(runId) was not pending at pickup; skipping turn")
       return
     }
+    // Frozen here rather than read back at sealing: this run's evidence has to be filed under the
+    // surface it actually ran on, and the skills, the tool catalog and the route can all move
+    // before the sealer reaches it.
+    freezeLearningSurface(runId, policyVersion)
 
     guard !Task.isCancelled else {
       return

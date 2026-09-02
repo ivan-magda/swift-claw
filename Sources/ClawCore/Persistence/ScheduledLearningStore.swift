@@ -60,4 +60,29 @@ public protocol ScheduledLearningStore: Sendable {
   /// - Returns: whether this call is the one that froze the evidence.
   @discardableResult
   func settleFromLane(runId: Int64, now: Date) throws(StoreError) -> Bool
+
+  /// Freezes the surface a bound run is executing against, called at pickup while every value in
+  /// it is still current. Insert-once and inert for an unbound run: a second call keeps the first
+  /// snapshot, because a value captured later describes a surface the run never ran on.
+  func freezeCompatibility(runId: Int64, surface: RunSurface) throws(StoreError)
+
+  /// The frozen surface. Nil for a run that never froze one, which makes it unusable as evidence
+  /// rather than a run to guess about.
+  func compatibility(runId: Int64) throws(StoreError) -> RunCompatibility?
+
+  /// Bound runs whose evidence is frozen and whose receipt is not yet sealed, oldest settlement
+  /// first. Selects on `settled_at`, never on terminality: a terminal run with a primary fact still
+  /// owed has facts that can still change.
+  func unsealed(limit: Int) throws(StoreError) -> [Int64]
+
+  /// The one idempotent sealing transaction, keyed by `run_id`. It verifies the run is bound and
+  /// settled, compares the binding epoch against current job state, resolves the frozen surface and
+  /// the lesson set the run ran against, classifies the run, and writes the eligibility receipt
+  /// with its payload — or a content-free tombstone — in one statement group. A row already present
+  /// writes nothing.
+  @discardableResult
+  func sealEvidence(runId: Int64, now: Date) throws(StoreError) -> SealOutcome
+
+  /// The sealed receipt, payload included while retention still holds it.
+  func evidence(runId: Int64) throws(StoreError) -> SealedEvidence?
 }

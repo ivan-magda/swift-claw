@@ -99,6 +99,7 @@ struct DaemonBuilder: Sendable {
       mcpTools: mcpStack.tools
     )
 
+    let learning = makeLearningService()
     let consumers = makeRunnerConsumers(
       coordination: coordination,
       agentStack: agentStack,
@@ -107,7 +108,8 @@ struct DaemonBuilder: Sendable {
       costResolver: costResolver,
       workspace: workspace,
       sandbox: sandbox,
-      mcpCatalog: mcpStack.catalog
+      mcpCatalog: mcpStack.catalog,
+      learning: learning
     )
 
     var services: [any Service] = [
@@ -116,6 +118,9 @@ struct DaemonBuilder: Sendable {
       consumers.scheduler,
       consumers.approvals.expiry,
     ]
+    if let learning {
+      services.append(learning)
+    }
     if let maintenance = sandbox.maintenance {
       services.append(SandboxLifecycleService(maintenance: maintenance))
     }
@@ -132,7 +137,8 @@ struct DaemonBuilder: Sendable {
       boot: bootSequence(
         coordination: coordination,
         waiter: consumers.approvals.waiter,
-        heartbeatOwner: consumers.heartbeatOwner
+        heartbeatOwner: consumers.heartbeatOwner,
+        learning: learning
       )
     )
   }
@@ -157,13 +163,18 @@ struct DaemonBuilder: Sendable {
     costResolver: CostResolver,
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
-    mcpCatalog: ResolvedMCPCatalog
+    mcpCatalog: ResolvedMCPCatalog,
+    learning: ScheduledLearningService?
   ) -> RunnerConsumers {
     let turnRunner = makeTurnRunner(
       coordination: coordination,
       agentStack: agentStack,
       costPolicy: roster.primary.costPolicy,
-      imageCache: ImageCache()
+      imageCache: ImageCache(),
+      freezeLearningSurface: makeLearningSurfaceFreeze(
+        agentStack: agentStack,
+        workspace: workspace
+      )
     )
     let intake = makeIntakeServices(
       coordination: coordination,
@@ -181,7 +192,8 @@ struct DaemonBuilder: Sendable {
         sandbox: sandbox,
         cooldown: cooldown,
         mcpOutcomes: mcpCatalog.outcomes
-      )
+      ),
+      learning: learning
     )
     let approvals = makeApprovalFabric(
       coordination: coordination,
@@ -191,7 +203,8 @@ struct DaemonBuilder: Sendable {
     let (scheduler, heartbeatOwner) = makeScheduler(
       coordination: coordination,
       turnRunner: turnRunner,
-      workspace: workspace
+      workspace: workspace,
+      learning: learning
     )
 
     return RunnerConsumers(
