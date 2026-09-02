@@ -58,8 +58,8 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.commitDegradedTurn(turn, now: now)
   }
 
-  func failRun(runId: Int64, now: Date) throws(StoreError) {
-    try base.failRun(runId: runId, now: now)
+  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
+    try base.failRun(runId: runId, cause: cause, now: now)
   }
 
   func commitSuspendedTurn(
@@ -223,8 +223,8 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     return try base.commitDegradedTurn(turn, now: now)
   }
 
-  func failRun(runId: Int64, now: Date) throws(StoreError) {
-    try base.failRun(runId: runId, now: now)
+  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
+    try base.failRun(runId: runId, cause: cause, now: now)
   }
 
   func commitSuspendedTurn(
@@ -380,7 +380,7 @@ struct DiskFullRuns: RunStore {
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
     .ignored
   }
-  func failRun(runId: Int64, now: Date) throws(StoreError) {}
+  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
   func commitSuspendedTurn(
     runId: Int64,
     sessionId: Int64,

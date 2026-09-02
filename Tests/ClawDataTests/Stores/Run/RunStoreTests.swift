@@ -163,7 +163,7 @@ import Testing
 
     // when
     let result = try env.runs.commitAssistantTurn(turn, now: Date())
-    try env.runs.failRun(runId: env.seedRunId, now: Date())
+    try env.runs.failRun(runId: env.seedRunId, cause: .providerFailure, now: Date())
 
     // then
     let state = try #require(
@@ -663,7 +663,8 @@ private extension RunStoreTests {
         completionTokens: completionTokens,
         costUSD: costUSD
       ),
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "degraded", payloadHash: "h")
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "degraded", payloadHash: "h"),
+      cause: .providerFailure
     )
   }
 

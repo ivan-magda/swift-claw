@@ -1,6 +1,6 @@
 import Foundation
 
-public enum RunState: String, Sendable, Equatable {
+public enum RunState: String, Sendable, Equatable, CaseIterable {
   /// Persisted after the inbound message and run are created atomically, before lane execution.
   case pending = "PENDING"
   /// Persisted when the session lane successfully picks up the turn.
@@ -23,6 +23,16 @@ public enum RunState: String, Sendable, Equatable {
   /// live triple is never duplicated. `pending` is included because a claimed-but-not-yet-picked-up
   /// run loads the current window at pickup.
   public static let liveStates: [RunState] = [.pending, .running, .awaitingApproval]
+
+  /// The absorbing states: `RunFSM` returns nil for every event once a run reaches one, which is
+  /// what makes a terminal transition win exactly once and lets its receipt be written there.
+  public var isTerminal: Bool {
+    !Self.liveStates.contains(self)
+  }
+
+  /// The complement of `liveStates`, derived rather than listed so a new state joins exactly one
+  /// of the two sets.
+  public static let terminalStates: [RunState] = allCases.filter(\.isTerminal)
 }
 
 /// The two command-owned reasons for terminating a live run.
@@ -516,6 +526,10 @@ public struct DegradedTurn: Sendable, Equatable {
   public let setTainted: Bool
   /// Sticky private-data flag — persisted like `setTainted`, incl. on the failure path.
   public let setPrivateData: Bool
+  /// Why this turn ended, supplied by the caller that knows. FAILED alone cannot tell a provider
+  /// outage from a budget stop, a context failure or a policy block, and this commit writes the
+  /// run's terminal receipt.
+  public let cause: TerminalCause
 
   public init(
     runId: Int64,
@@ -525,7 +539,8 @@ public struct DegradedTurn: Sendable, Equatable {
     chunk: OutboxChunk,
     exchanges: [ToolExchange] = [],
     setTainted: Bool = false,
-    setPrivateData: Bool = false
+    setPrivateData: Bool = false,
+    cause: TerminalCause
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -535,6 +550,7 @@ public struct DegradedTurn: Sendable, Equatable {
     self.exchanges = exchanges
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
+    self.cause = cause
   }
 }
 

@@ -118,7 +118,7 @@ import Testing
       ts: base.addingTimeInterval(2)
     )
     _ = try #require(try store.pickUp(runId: failed1, now: base.addingTimeInterval(2)))
-    try store.failRun(runId: failed1, now: base.addingTimeInterval(3))
+    try store.failRun(runId: failed1, cause: .providerFailure, now: base.addingTimeInterval(3))
 
     let failed2 = try seedPendingRun(
       sessions: fix.sessions,
@@ -126,7 +126,7 @@ import Testing
       ts: base.addingTimeInterval(4)
     )
     _ = try #require(try store.pickUp(runId: failed2, now: base.addingTimeInterval(4)))
-    try store.failRun(runId: failed2, now: base.addingTimeInterval(5))
+    try store.failRun(runId: failed2, cause: .providerFailure, now: base.addingTimeInterval(5))
 
     _ = try seedPendingRun(
       sessions: fix.sessions,
@@ -173,7 +173,11 @@ import Testing
         ts: base.addingTimeInterval(offset)
       )
       _ = try #require(try store.pickUp(runId: runId, now: base.addingTimeInterval(offset)))
-      try store.failRun(runId: runId, now: base.addingTimeInterval(offset + 1))
+      try store.failRun(
+        runId: runId,
+        cause: .providerFailure,
+        now: base.addingTimeInterval(offset + 1)
+      )
     }
 
     // when
@@ -193,7 +197,7 @@ import Testing
 
     let run1 = try seedPendingRun(sessions: fix.sessions, updateId: 1, ts: base)
     _ = try #require(try store.pickUp(runId: run1, now: base))
-    try store.failRun(runId: run1, now: base.addingTimeInterval(1))
+    try store.failRun(runId: run1, cause: .providerFailure, now: base.addingTimeInterval(1))
 
     let run2 = try seedPendingRun(
       sessions: fix.sessions,
@@ -201,7 +205,7 @@ import Testing
       ts: base.addingTimeInterval(2)
     )
     _ = try #require(try store.pickUp(runId: run2, now: base.addingTimeInterval(2)))
-    try store.failRun(runId: run2, now: base.addingTimeInterval(3))
+    try store.failRun(runId: run2, cause: .providerFailure, now: base.addingTimeInterval(3))
 
     try commitDone(
       fixture: fix,
@@ -216,7 +220,7 @@ import Testing
       ts: base.addingTimeInterval(6)
     )
     _ = try #require(try store.pickUp(runId: run4, now: base.addingTimeInterval(6)))
-    try store.failRun(runId: run4, now: base.addingTimeInterval(7))
+    try store.failRun(runId: run4, cause: .providerFailure, now: base.addingTimeInterval(7))
 
     // when
     let health = try store.runsHealth(now: base.addingTimeInterval(10))

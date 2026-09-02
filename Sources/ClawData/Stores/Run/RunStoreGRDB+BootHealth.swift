@@ -30,7 +30,16 @@ extension RunStoreGRDB {
       var replies: [DegradationReply] = []
       for row in stale {
         let runId: Int64 = row["run_id"]
-        guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
+        let disposition = try Self.orphanDisposition(db, runId: runId)
+        guard
+          try Self.transitionRun(
+            db,
+            runId: runId,
+            event: .fail,
+            now: now,
+            terminal: disposition
+          ) != nil
+        else {
           continue
         }
 
@@ -87,8 +96,36 @@ extension RunStoreGRDB {
         }
       }
 
+      // The crash backstop for settlement, not for state: a run that reached its terminal state in
+      // a previous process — `/stop` won, then the daemon died before the lane tail returned — has
+      // a receipt but no `settled_at`, and would otherwise stay out of the learning loop forever.
+      try ScheduledLearningStoreGRDB.settleAbandonedRuns(
+        db,
+        unresolvedObservationContent: Self.placeholderObservationContent,
+        now: now
+      )
+
       return replies
     }
+  }
+
+  /// A crashed orphan is `incomplete`: the turn stopped mid-flight and `RunState` alone cannot say
+  /// more. One holding an unresolved approval placeholder is the claimed crash window instead — its
+  /// approval was granted and claimed, and `settleClaimedApprovalAtBoot` still owes it the
+  /// observation, so its evidence must not freeze here.
+  static func orphanDisposition(_ db: Database, runId: Int64) throws -> TerminalDisposition {
+    let owed =
+      try Bool.fetchOne(
+        db,
+        sql: """
+          SELECT EXISTS(
+            SELECT 1 FROM messages
+            WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)' AND content = ?
+          )
+          """,
+        arguments: [runId, Self.placeholderObservationContent]
+      ) ?? false
+    return owed ? .deferred(.approvalUnresolved) : .settled(.incomplete)
   }
 
   public func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
@@ -117,7 +154,14 @@ extension RunStoreGRDB {
       // Claimed, outcome unknown — settle in place. The run is normally already FAILED (the
       // orphan sweep runs first); the transition covers a sweep that missed it and no-ops on any
       // terminal state.
-      if try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil {
+      let transitioned = try Self.transitionRun(
+        db,
+        runId: runId,
+        event: .fail,
+        now: now,
+        terminal: .deferred(.approvalUnresolved)
+      )
+      if transitioned != nil {
         try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
       }
       try Self.fillApprovedObservation(
@@ -126,6 +170,9 @@ extension RunStoreGRDB {
         messageId: observationMessageId,
         content: observationContent
       )
+      // The placeholder was the last fact this run was owed; resolving it is what earns the right
+      // to freeze its evidence, which is why neither the orphan sweep nor the transition above did.
+      _ = try ScheduledLearningStoreGRDB.freezeEvidence(db, runId: runId, now: now)
       let chunk = OutboxChunk(
         stepIndex: try Self.nextOutboxStepBase(db, runId: runId),
         chatId: noticeChatId,

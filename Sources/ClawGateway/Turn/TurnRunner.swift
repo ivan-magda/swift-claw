@@ -214,7 +214,7 @@ public struct TurnRunner: TurnDispatching {
         images: await cachedImages(sessionId: sessionId)
       )
     } catch {
-      failResume(runId: runId, stage: "context build", error: error)
+      failResume(runId: runId, stage: .contextBuild, error: error)
       return
     }
 
@@ -237,7 +237,7 @@ public struct TurnRunner: TurnDispatching {
         threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey)
       )
     } catch {
-      failResume(runId: runId, stage: "turn", error: error)
+      failResume(runId: runId, stage: .turn, error: error)
       return
     }
 
@@ -253,6 +253,20 @@ public struct TurnRunner: TurnDispatching {
       )
     } catch {
       logger.error("resume commit failed for run \(runId): \(error)")
+    }
+  }
+}
+
+/// Where a resume gave up, and what that means for the run's terminal receipt. A failed assembly
+/// leaves the turn unfinished; a failed `runTurn` is the provider round-trip itself.
+private enum ResumeStage: String {
+  case contextBuild = "context build"
+  case turn
+
+  var terminalCause: TerminalCause {
+    switch self {
+    case .contextBuild: .incomplete
+    case .turn: .providerFailure
     }
   }
 }
@@ -316,9 +330,9 @@ private extension TurnRunner {
 
   /// `resume`'s shared failure tail: every pre-commit failure fails the run in-band (best-effort)
   /// so the lane frees — `resume` is non-throwing by contract.
-  func failResume(runId: Int64, stage: String, error: any Error) {
-    logger.error("resume \(stage) failed for run \(runId): \(error)")
-    try? runs.failRun(runId: runId, now: now())
+  func failResume(runId: Int64, stage: ResumeStage, error: any Error) {
+    logger.error("resume \(stage.rawValue) failed for run \(runId): \(error)")
+    try? runs.failRun(runId: runId, cause: stage.terminalCause, now: now())
   }
 }
 
@@ -478,6 +492,7 @@ private extension TurnRunner {
       ),
       action: .turnDegraded,
       decision: kind.auditDecision,
+      cause: kind.terminalCause,
       at: context.committedAt
     )
     if commitResult != .ignored {
@@ -508,6 +523,7 @@ private extension TurnRunner {
       ),
       action: .turnBudgetStopped,
       decision: cap,
+      cause: .budgetStopped,
       at: context.committedAt
     )
     if context.origin != .interactive, cap == BudgetGate.proactivePerDayCap {
@@ -528,6 +544,7 @@ private extension TurnRunner {
     message: String,
     action: AuditAction,
     decision: String,
+    cause: TerminalCause,
     at committedAt: Date
   ) throws -> RunCommitResult {
     let chunk = OutboxChunk(
@@ -546,7 +563,8 @@ private extension TurnRunner {
         chunk: chunk,
         exchanges: exchanges,
         setTainted: setTainted,
-        setPrivateData: setPrivateData
+        setPrivateData: setPrivateData,
+        cause: cause
       ),
       now: committedAt
     )
@@ -589,6 +607,7 @@ private extension TurnRunner {
       message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
       action: .turnDegraded,
       decision: DegradationKind.contextUnavailable.auditDecision,
+      cause: DegradationKind.contextUnavailable.terminalCause,
       at: committedAt
     )
   }

@@ -3,7 +3,7 @@ import Foundation
 import GRDB
 
 public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
-  private let database: MappedDatabase
+  let database: MappedDatabase
 
   public init(writer: any DatabaseWriter) {
     database = MappedDatabase(writer: writer)

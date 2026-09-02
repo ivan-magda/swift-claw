@@ -155,8 +155,9 @@ public protocol RunStore: Sendable {
     _ turn: DegradedTurn,
     now: Date
   ) throws(StoreError) -> RunCommitResult
-  /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING.
-  func failRun(runId: Int64, now: Date) throws(StoreError)
+  /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING. `cause` is the caller's
+  /// own reason for failing the run — the terminal receipt records it verbatim.
+  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError)
   /// Terminates the current RUNNING turn for `/stop`; returns the affected run, if any.
   func cancelActiveRun(
     sessionId: Int64,

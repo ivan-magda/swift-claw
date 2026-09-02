@@ -51,6 +51,9 @@ public struct MessageRouter: Sendable {
     imageCache: ImageCache,
     lanes: SessionLaneRegistry,
     schedule: ScheduleSurface,
+    /// The lane tail's settlement port; nil leaves a bound run's deferred settlement to the boot
+    /// backstop.
+    learning: (any ScheduledLearningStore)? = nil,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     voice: (any VoiceMessageTranscribing)? = nil,
     images: (any ImageMessageHandling)? = nil,
@@ -73,7 +76,13 @@ public struct MessageRouter: Sendable {
     self.logger = logger
 
     let replies = ReplySender(processed: processed, delivery: delivery, logger: logger)
-    let enqueuer = TurnEnqueuer(lanes: lanes, turns: turnRunner, logger: logger)
+    let enqueuer = TurnEnqueuer(
+      lanes: lanes,
+      turns: turnRunner,
+      learning: learning,
+      now: now,
+      logger: logger
+    )
     let turnDispatch = TurnDispatch(
       sessionMessages: sessionMessages,
       enqueuer: enqueuer,

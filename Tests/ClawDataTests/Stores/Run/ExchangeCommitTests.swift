@@ -158,7 +158,8 @@ import Testing
       chatId: 7,
       usage: makeUsage(fixture),
       chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
-      setTainted: true
+      setTainted: true,
+      cause: .providerFailure
     )
 
     // when
@@ -183,7 +184,8 @@ import Testing
       usage: makeUsage(fixture),
       chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
       exchanges: [makeExchange()],
-      setTainted: true
+      setTainted: true,
+      cause: .providerFailure
     )
 
     // when
@@ -283,7 +285,8 @@ import Testing
       chatId: 7,
       usage: nil,
       chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "late", payloadHash: "h"),
-      setTainted: true
+      setTainted: true,
+      cause: .providerFailure
     )
 
     // when
@@ -404,7 +407,8 @@ extension ExchangeCommitTests {
       chatId: 7,
       usage: makeUsage(fixture),
       chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
-      exchanges: [statefulExchange()]
+      exchanges: [statefulExchange()],
+      cause: .providerFailure
     )
 
     // when

@@ -249,7 +249,13 @@ private extension CommandApprovalCancelSignalRaceTests {
         arguments: [sessionId, runId, RunStoreGRDB.placeholderObservationContent, now]
       )
       let observationMessageId = db.lastInsertedRowID
-      _ = try RunStoreGRDB.transitionRun(db, runId: runId, event: .suspendForApproval, now: now)
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .suspendForApproval,
+        now: now,
+        terminal: nil
+      )
       try db.execute(
         sql: """
           INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,

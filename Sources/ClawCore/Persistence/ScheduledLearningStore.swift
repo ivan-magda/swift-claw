@@ -48,4 +48,16 @@ public protocol ScheduledLearningStore: Sendable {
   /// Every decision about whether a trial is still live goes through here, never through
   /// `JobLearningState.openTrialId`.
   func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial?
+
+  /// The terminal receipt the transaction that won the run's state wrote. Nil for a run that never
+  /// bound, or one that is still live.
+  func settlement(runId: Int64) throws(StoreError) -> RunSettlement?
+
+  /// The lane tail's deferred settlement: freezes a bound run's evidence once every primary fact
+  /// has unwound. Idempotent and inert for an unbound, still-live or already-settled run, so the
+  /// tail can call it unconditionally.
+  ///
+  /// - Returns: whether this call is the one that froze the evidence.
+  @discardableResult
+  func settleFromLane(runId: Int64, now: Date) throws(StoreError) -> Bool
 }

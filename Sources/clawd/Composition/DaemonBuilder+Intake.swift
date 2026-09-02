@@ -38,6 +38,7 @@ extension DaemonBuilder {
       imageCache: turnRunner.imageCache,
       lanes: coordination.lanes,
       schedule: scheduleSurface,
+      learning: stores.learning,
       approvalCallbacks: approvalCallbacks,
       voice: voiceService,
       images: imageService,

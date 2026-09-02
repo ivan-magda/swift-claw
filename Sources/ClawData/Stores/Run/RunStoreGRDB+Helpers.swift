@@ -72,19 +72,22 @@ extension RunStoreGRDB {
   }
 
   static func supersedeRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
-    try terminateActiveRuns(db, sessionId: sessionId, event: .supersede, now: now)
+    try terminateActiveRuns(db, sessionId: sessionId, reason: .superseded, now: now)
   }
 
   /// `/stop`'s plural arm: every PENDING and RUNNING run for the session → CANCELLED. Mirrors
   /// `supersedeRuns` so `/stop` and `/new` share one definition of "active".
   static func cancelRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
-    try terminateActiveRuns(db, sessionId: sessionId, event: .cancel, now: now)
+    try terminateActiveRuns(db, sessionId: sessionId, reason: .cancelled, now: now)
   }
 
+  /// Settlement is deliberately deferred on both arms: a provider call still in flight when the
+  /// command wins records its usage after the run is terminal, so freezing the evidence here would
+  /// either lose that usage or admit it against a frozen receipt. The lane tail settles instead.
   private static func terminateActiveRuns(
     _ db: Database,
     sessionId: Int64,
-    event: RunEvent,
+    reason: CancelReason,
     now: Date
   ) throws -> [Int64] {
     let placeholders = databaseQuestionMarks(count: RunState.liveStates.count)
@@ -103,7 +106,14 @@ extension RunStoreGRDB {
     var affected: [Int64] = []
     for row in rows {
       let runId: Int64 = row["id"]
-      if try transitionRun(db, runId: runId, event: event, now: now) != nil {
+      let transitioned = try transitionRun(
+        db,
+        runId: runId,
+        event: reason.runEvent,
+        now: now,
+        terminal: .deferred(reason.terminalCause)
+      )
+      if transitioned != nil {
         affected.append(runId)
       }
     }
@@ -113,12 +123,19 @@ extension RunStoreGRDB {
 
   // `public`: test fixtures outside this module (ClawGatewayTests, via plain `import ClawData`)
   // drive suspended-run fixtures through the real reducer instead of hand-rolling state.
+  /// The one state-change seam, and therefore the one place a bound run's terminal receipt is
+  /// written — inside the very transaction that wins the state.
+  ///
+  /// `terminal` is what that receipt records. Pass nil only for an event no terminal state is
+  /// reachable from; should one be reached anyway, the run is damaged and records `unknown`
+  /// rather than a cause guessed from `RunState`.
   public static func transitionRun(
     _ db: Database,
     runId: Int64,
     event: RunEvent,
     now: Date,
-    policyVersion: String? = nil
+    policyVersion: String? = nil,
+    terminal: TerminalDisposition?
   ) throws -> RunState? {
     guard
       let state = try currentRunState(db, runId: runId),
@@ -138,6 +155,16 @@ extension RunStoreGRDB {
       try db.execute(
         sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
         arguments: [nextState.rawValue, now, runId]
+      )
+    }
+
+    if nextState.isTerminal {
+      try ScheduledLearningStoreGRDB.recordTerminalReceipt(
+        db,
+        runId: runId,
+        state: nextState,
+        disposition: terminal ?? .deferred(.unknown),
+        now: now
       )
     }
 

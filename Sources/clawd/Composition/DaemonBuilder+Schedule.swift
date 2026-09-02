@@ -59,6 +59,7 @@ extension DaemonBuilder {
       heartbeat: heartbeatSettings,
       workspace: workspace,
       audit: stores.audit,
+      learning: stores.learning,
       now: { Date() },
       clock: ContinuousClock(),
       logger: logger
