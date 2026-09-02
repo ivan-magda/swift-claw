@@ -67,7 +67,8 @@ public struct ClawStores: Sendable {
 
 extension ClawDatabase {
   /// Opens the WAL pool, runs migrations, and hands back the protocol-typed stores.
-  public static func openStores(path: String) throws -> ClawStores {
+  /// `learningEnabled` is `CLAW_LEARNING_ENABLED`: disarmed, a fire writes no learning row.
+  public static func openStores(path: String, learningEnabled: Bool = false) throws -> ClawStores {
     let pool = try makePool(path: path)
     try migrate(pool)
     return ClawStores(
@@ -83,7 +84,7 @@ extension ClawDatabase {
       memory: MemoryStoreGRDB(writer: pool),
       memoryCommands: MemoryCommandStoreGRDB(writer: pool),
       retriever: RetrieverGRDB(writer: pool),
-      scheduledJobs: ScheduledJobStoreGRDB(writer: pool),
+      scheduledJobs: ScheduledJobStoreGRDB(writer: pool, learningEnabled: learningEnabled),
       scheduleCommands: ScheduleCommandStoreGRDB(writer: pool),
       approvals: ApprovalStoreGRDB(writer: pool),
       learning: ScheduledLearningStoreGRDB(writer: pool)

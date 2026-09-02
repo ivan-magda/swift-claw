@@ -11,22 +11,19 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
 
   public func armJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState {
     try database.writeMapping { db in
-      // The empty set goes in first: the state row names a digest, and a state that pointed at a
-      // lesson set no row holds would let a job fire against a binding it cannot resolve.
-      let empty = LessonSet.empty(jobId: jobId)
-      try Self.insertCanonicalEmptySet(db, empty, now: now)
-      try db.execute(
-        sql: """
-          INSERT OR IGNORE INTO job_learning_state(job_id, learning_epoch,
-            stable_lesson_set_digest, stable_revision, open_trial_id, feedback_revision, armed_at)
-          VALUES (?, 1, ?, 0, NULL, 0, ?)
-          """,
-        arguments: [jobId, empty.digest.rawValue, EpochSecondCodec.epoch(now)]
-      )
-      guard let state = try Self.readState(db, jobId: jobId) else {
-        throw StoreError.unexpected("job \(jobId) has no learning state after arming")
-      }
-      return state
+      try Self.armState(db, jobId: jobId, now: now)
+    }
+  }
+
+  public func binding(runId: Int64) throws(StoreError) -> RunLearningBinding? {
+    try database.readMapping { db in
+      try Self.readBinding(db, runId: runId)
+    }
+  }
+
+  public func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial? {
+    try database.readMapping { db in
+      try Self.liveTrial(db, jobId: jobId)
     }
   }
 
@@ -49,6 +46,31 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
       }
       return set
     }
+  }
+}
+
+// MARK: - In-Transaction Arming
+
+extension ScheduledLearningStoreGRDB {
+  /// `armJob` without a transaction of its own, so the fire path can arm a job and bind its run
+  /// in one write. Idempotent: a job that has already armed keeps the state it has.
+  static func armState(_ db: Database, jobId: Int64, now: Date) throws -> JobLearningState {
+    // The empty set goes in first: the state row names a digest, and a state that pointed at a
+    // lesson set no row holds would let a job fire against a binding it cannot resolve.
+    let empty = LessonSet.empty(jobId: jobId)
+    try insertCanonicalEmptySet(db, empty, now: now)
+    try db.execute(
+      sql: """
+        INSERT OR IGNORE INTO job_learning_state(job_id, learning_epoch,
+          stable_lesson_set_digest, stable_revision, open_trial_id, feedback_revision, armed_at)
+        VALUES (?, 1, ?, 0, NULL, 0, ?)
+        """,
+      arguments: [jobId, empty.digest.rawValue, EpochSecondCodec.epoch(now)]
+    )
+    guard let state = try readState(db, jobId: jobId) else {
+      throw StoreError.unexpected("job \(jobId) has no learning state after arming")
+    }
+    return state
   }
 }
 

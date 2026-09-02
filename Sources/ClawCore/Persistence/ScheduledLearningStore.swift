@@ -35,4 +35,12 @@ public protocol ScheduledLearningStore: Sendable {
 
   /// Exact identity. Returns nil when the digest belongs to another job.
   func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet?
+
+  /// What the run's fire froze about its learning context. Nil for a run created without a
+  /// binding — a heartbeat, a fire under a disarmed daemon, or a run that predates bindings.
+  func binding(runId: Int64) throws(StoreError) -> RunLearningBinding?
+
+  /// The job's live trial, open or draining. Nil once the trial is decided, which is also what
+  /// makes a job admissible for a new candidate.
+  func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial?
 }

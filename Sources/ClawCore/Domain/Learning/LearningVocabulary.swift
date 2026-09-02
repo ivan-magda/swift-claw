@@ -124,10 +124,13 @@ public enum TrialDecision: Sendable, Equatable {
   case fallback(reason: String)
 }
 
-/// The lifecycle of one admitted trial. `open` is the only nonterminal state, which is what the
-/// partial unique index on `learning_trials` keys on to hold at most one open trial per job.
+/// The lifecycle of one admitted trial. `open` is the only state that grants new assignments,
+/// which is what the partial unique index on `learning_trials` keys on to hold at most one
+/// assigning trial per job. A `draining` trial has hit an exposure bound: it grants nothing more,
+/// but the runs it already assigned still settle and still decide it.
 public enum LearningTrialState: String, Sendable, Equatable, CaseIterable {
   case open
+  case draining
   case promoted
   case fellBack = "fell_back"
   case closed
@@ -138,4 +141,5 @@ public enum LearningTrialState: String, Sendable, Equatable, CaseIterable {
 /// deliberately emptied.
 public enum LessonSetSource: String, Sendable, Equatable, CaseIterable {
   case canonicalEmpty = "canonical_empty"
+  case reflectorCandidate = "reflector_candidate"
 }
