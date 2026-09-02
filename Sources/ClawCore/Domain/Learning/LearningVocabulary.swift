@@ -1,5 +1,3 @@
-import Foundation
-
 /// `RunOrigin` collapses a ticker occurrence and an owner `/runnow` into `.scheduled`. The binding
 /// must freeze which one actually happened, so learning carries its own two-case kind rather than
 /// widening `RunOrigin`, which the scheduler, usage totals and budget gate all branch on.
