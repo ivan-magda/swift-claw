@@ -9,7 +9,7 @@ public struct RunLearningBinding: Sendable, Equatable {
   public let jobId: Int64
   public let occurrenceAt: Date
   public let fireKind: ScheduledFireKind
-  public let jobDefinitionDigest: String
+  public let jobDefinitionDigest: JobDefinitionDigest
   public let epoch: LearningEpoch
   public let stableDigest: LessonSetDigest
   /// The set the run actually ran against: the open trial's candidate while that trial still
@@ -23,7 +23,7 @@ public struct RunLearningBinding: Sendable, Equatable {
     jobId: Int64,
     occurrenceAt: Date,
     fireKind: ScheduledFireKind,
-    jobDefinitionDigest: String,
+    jobDefinitionDigest: JobDefinitionDigest,
     epoch: LearningEpoch,
     stableDigest: LessonSetDigest,
     effectiveDigest: LessonSetDigest,
@@ -40,34 +40,5 @@ public struct RunLearningBinding: Sendable, Equatable {
     self.effectiveDigest = effectiveDigest
     self.trialId = trialId
     self.trialGeneration = trialGeneration
-  }
-}
-
-// MARK: - Job Definition
-
-/// SHA-256 over the canonical bytes of what a job asks for. Two runs are comparable evidence about
-/// the same task only while this value is unchanged: an edited prompt or a moved schedule is a
-/// different task, not more evidence about the old one.
-public enum JobDefinitionDigest {
-  public static func of(
-    label: String,
-    prompt: String,
-    recurrenceJSON: String?,
-    timezone: String
-  ) throws -> String {
-    let payload = Payload(
-      label: label,
-      prompt: prompt,
-      recurrence: recurrenceJSON,
-      timezone: timezone
-    )
-    return SHA256Digest.hex(try CanonicalJSON.data(encoding: payload))
-  }
-
-  private struct Payload: Codable {
-    let label: String
-    let prompt: String
-    let recurrence: String?
-    let timezone: String
   }
 }

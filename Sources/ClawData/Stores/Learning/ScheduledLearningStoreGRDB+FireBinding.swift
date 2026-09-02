@@ -13,13 +13,15 @@ private struct EffectiveSelection {
 // MARK: - Fire Binding
 
 extension ScheduledLearningStoreGRDB {
+  // The six parameters are the fire's frozen facts; bundling five of them into a parameter object
+  // would duplicate half of `RunLearningBinding` to satisfy the count alone.
   /// The learning half of the fire transaction, run inside the caller's write after the occurrence
   /// claim and the overlap guard have both passed and the run row exists. The caller gates this on
   /// the learning flag: a disarmed daemon never reaches it and writes no learning row at all.
   ///
   /// Arming, selection, the binding and the assignment ride the caller's transaction together, so
   /// a run can never exist without the lessons it ran against — nor an assignment without a run.
-  static func bindFire(
+  static func bindFire(  // swiftlint:disable:this function_parameter_count
     _ db: Database,
     jobId: Int64,
     runId: Int64,
@@ -82,7 +84,7 @@ extension ScheduledLearningStoreGRDB {
       jobId: row["job_id"],
       occurrenceAt: occurrenceAt,
       fireKind: fireKind,
-      jobDefinitionDigest: row["job_definition_digest"],
+      jobDefinitionDigest: JobDefinitionDigest(rawValue: row["job_definition_digest"]),
       epoch: LearningEpoch(row["learning_epoch"]),
       stableDigest: LessonSetDigest(rawValue: row["stable_digest"]),
       effectiveDigest: LessonSetDigest(rawValue: row["effective_digest"]),
@@ -201,7 +203,7 @@ private extension ScheduledLearningStoreGRDB {
         binding.epoch.value,
         EpochSecondCodec.epoch(binding.occurrenceAt),
         binding.fireKind.rawValue,
-        binding.jobDefinitionDigest,
+        binding.jobDefinitionDigest.rawValue,
         binding.stableDigest.rawValue,
         binding.effectiveDigest.rawValue,
         binding.trialId,
@@ -246,7 +248,7 @@ private extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func definitionDigest(_ db: Database, jobId: Int64) throws -> String {
+  static func definitionDigest(_ db: Database, jobId: Int64) throws -> JobDefinitionDigest {
     let row = try Row.fetchOne(
       db,
       sql: "SELECT label, prompt, recurrence, timezone FROM scheduled_jobs WHERE id = ?",

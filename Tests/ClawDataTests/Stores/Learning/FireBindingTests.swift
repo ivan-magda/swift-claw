@@ -141,6 +141,8 @@ import Testing
 
     // then
     let binding = try #require(fired.binding)
+    // The occurrence, not the late tick that noticed it: `now` is 30 days past `fireAt` here.
+    #expect(binding.occurrenceAt == env.due)
     #expect(binding.trialId == nil)
     #expect(binding.effectiveDigest == binding.stableDigest)
     let trial = try #require(try env.learning.openTrial(jobId: env.jobId))

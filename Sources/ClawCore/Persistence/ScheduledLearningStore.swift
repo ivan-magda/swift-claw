@@ -7,6 +7,9 @@ public struct JobLearningState: Sendable, Equatable {
   public let epoch: LearningEpoch
   public let stableDigest: LessonSetDigest
   public let stableRevision: StableRevision
+  /// A denormalized convenience pointer, maintained by the trial lifecycle. `learning_trials` is
+  /// authoritative — it holds the state machine and the partial unique index — so this value is
+  /// never read for a correctness decision; `openTrial(jobId:)` is that read.
   public let openTrialId: Int64?
   public let feedbackRevision: FeedbackRevision
 
@@ -40,7 +43,9 @@ public protocol ScheduledLearningStore: Sendable {
   /// binding — a heartbeat, a fire under a disarmed daemon, or a run that predates bindings.
   func binding(runId: Int64) throws(StoreError) -> RunLearningBinding?
 
-  /// The job's live trial, open or draining. Nil once the trial is decided, which is also what
-  /// makes a job admissible for a new candidate.
+  /// The job's live trial, open or draining, read from the authoritative `learning_trials` state.
+  /// Nil once the trial is decided, which is also what makes a job admissible for a new candidate.
+  /// Every decision about whether a trial is still live goes through here, never through
+  /// `JobLearningState.openTrialId`.
   func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial?
 }

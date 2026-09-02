@@ -34,6 +34,42 @@ public struct CandidateDigest: RawRepresentable, Sendable, Hashable, Codable {
   }
 }
 
+/// SHA-256 over the canonical bytes of what a job asks for. Stays distinct from the lesson-set and
+/// candidate digests it sits beside in a binding, so the compiler refuses to swap them. Two runs
+/// are comparable evidence about the same task only while this value is unchanged: an edited prompt
+/// or a moved schedule is a different task, not more evidence about the old one.
+public struct JobDefinitionDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+
+  public static func of(
+    label: String,
+    prompt: String,
+    recurrenceJSON: String?,
+    timezone: String
+  ) throws -> JobDefinitionDigest {
+    let payload = Payload(
+      label: label,
+      prompt: prompt,
+      recurrence: recurrenceJSON,
+      timezone: timezone
+    )
+    return JobDefinitionDigest(
+      rawValue: SHA256Digest.hex(try CanonicalJSON.data(encoding: payload))
+    )
+  }
+
+  private struct Payload: Codable {
+    let label: String
+    let prompt: String
+    let recurrence: String?
+    let timezone: String
+  }
+}
+
 /// Digest of one frozen evaluation used as reflection evidence.
 public struct EvaluationDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
