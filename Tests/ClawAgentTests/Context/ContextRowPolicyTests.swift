@@ -17,6 +17,41 @@ import Testing
     #expect(Set(priorities).count == priorities.count)
   }
 
+  /// `ContextBuilder.spec(for:)` traps on a row id with no spec, so a new case added without its
+  /// entry is a crash the compiler cannot see. This closes that for every future case as well.
+  @Test func everyRowIDHasExactlyOneSpec() {
+    // given
+    let ids = ContextRowID.allCases
+
+    // when
+    let specs = ids.map { id in
+      ContextRowPolicy.specs.filter { spec in
+        spec.id == id
+      }
+    }
+
+    // then
+    #expect(
+      specs.allSatisfy { matches in
+        matches.count == 1
+      }
+    )
+  }
+
+  @Test func theLessonsRowIsFencedAsUntrustedAndNeverTruncated() throws {
+    // given
+    let lessons = try #require(
+      ContextRowPolicy.specs.first { spec in
+        spec.id == .lessons
+      }
+    )
+
+    // when / then — lessons are advisory data a model wrote, so they can never ride the system tier
+    #expect(lessons.tier == .untrustedLabeled)
+    #expect(lessons.truncatable == false)
+    #expect(ContextRowID.lessons.resolve(in: .default, residualGraphemes: 10) == nil)
+  }
+
   @Test func rowCapsResolveThroughContextBudgetWhenResidualIsAbsent() {
     // given
     let budget = ContextBudget(

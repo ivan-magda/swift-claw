@@ -123,3 +123,19 @@ public enum TrialDecision: Sendable, Equatable {
   case promote
   case fallback(reason: String)
 }
+
+/// The lifecycle of one admitted trial. `open` is the only nonterminal state, which is what the
+/// partial unique index on `learning_trials` keys on to hold at most one open trial per job.
+public enum LearningTrialState: String, Sendable, Equatable, CaseIterable {
+  case open
+  case promoted
+  case fellBack = "fell_back"
+  case closed
+}
+
+/// Where a stored lesson set came from. Arming inserts the canonical empty set under its own
+/// origin, so a job that has learned nothing is distinguishable from one whose lessons were
+/// deliberately emptied.
+public enum LessonSetSource: String, Sendable, Equatable, CaseIterable {
+  case canonicalEmpty = "canonical_empty"
+}

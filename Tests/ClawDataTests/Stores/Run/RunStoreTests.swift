@@ -275,7 +275,11 @@ import Testing
       runId: runId,
       chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "x", payloadHash: "h")
     )
-    try env.outbox.markSent(runId: runId, stepIndex: 0, telegramMessageId: 1001, now: Date())
+    try env.outbox.markSent(
+      deliveryKey: OutboxDedupKey.make(runId: runId, stepIndex: 0),
+      telegramMessageId: 1001,
+      now: Date()
+    )
 
     // when
     let replies = try env.runs.reconcileRunsAtBoot(

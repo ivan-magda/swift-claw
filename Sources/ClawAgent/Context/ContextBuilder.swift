@@ -703,7 +703,7 @@ private extension ContextBuilder {
       "recall"
     case .skills:
       WorkspaceSkills.fenceLabel
-    case .policy, .systemWorkspace, .tools, .metadata, .history:
+    case .policy, .systemWorkspace, .tools, .metadata, .lessons, .history:
       id.rawValue
     }
   }

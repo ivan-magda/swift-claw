@@ -19,6 +19,7 @@ public enum ContextRowID: String, Sendable, Equatable, CaseIterable {
   case systemWorkspace
   case tools
   case metadata
+  case lessons
   case userFile
   case memoryFile
   case memoryItems

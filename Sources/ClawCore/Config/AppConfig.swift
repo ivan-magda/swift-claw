@@ -43,6 +43,8 @@ public struct AppConfig: Sendable, Equatable {
     static let heartbeatMaxPerDay = "CLAW_HEARTBEAT_MAX_PER_DAY"
     static let approvalExpiry = "CLAW_APPROVAL_EXPIRY"
 
+    static let learningEnabled = "CLAW_LEARNING_ENABLED"
+
     public static let webFetchExemptCIDRs = "CLAW_WEBFETCH_EXEMPT_CIDRS"
 
     static let voiceTranscription = "CLAW_VOICE_TRANSCRIPTION"
@@ -118,6 +120,10 @@ public struct AppConfig: Sendable, Equatable {
     return allowlist.first
   }
 
+  /// Arms the scheduled-task learning loop. Off by default: with it unset no binding is created
+  /// and no learning row is written, so the daemon behaves exactly as it does without the feature.
+  public let learningEnabled: Bool
+
   public let approvalExpirySeconds: Int
   public let webFetchExemptCIDRs: [CIDR]
   public let exec: ExecConfig
@@ -140,6 +146,7 @@ public struct AppConfig: Sendable, Equatable {
     heartbeatIntervalMinutes: Int,
     heartbeatQuietHours: QuietHours,
     heartbeatMaxPerDay: Int,
+    learningEnabled: Bool,
     approvalExpirySeconds: Int,
     webFetchExemptCIDRs: [CIDR],
     exec: ExecConfig,
@@ -164,6 +171,8 @@ public struct AppConfig: Sendable, Equatable {
     self.heartbeatIntervalMinutes = heartbeatIntervalMinutes
     self.heartbeatQuietHours = heartbeatQuietHours
     self.heartbeatMaxPerDay = heartbeatMaxPerDay
+
+    self.learningEnabled = learningEnabled
 
     self.approvalExpirySeconds = approvalExpirySeconds
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
@@ -232,6 +241,7 @@ public struct AppConfig: Sendable, Equatable {
       heartbeatIntervalMinutes: heartbeat.intervalMinutes,
       heartbeatQuietHours: heartbeat.quietHours,
       heartbeatMaxPerDay: heartbeat.maxPerDay,
+      learningEnabled: try parseLearningEnabled(from: env),
       approvalExpirySeconds: approvalExpirySeconds,
       webFetchExemptCIDRs: webFetchExemptCIDRs,
       exec: exec,
@@ -553,6 +563,10 @@ private extension AppConfig {
     let intervalMinutes: Int
     let quietHours: QuietHours
     let maxPerDay: Int
+  }
+
+  static func parseLearningEnabled(from env: [String: String]) throws -> Bool {
+    try boolValue(env[EnvKey.learningEnabled], key: EnvKey.learningEnabled, default: false)
   }
 
   static func parseHeartbeat(

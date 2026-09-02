@@ -51,6 +51,30 @@ public struct LessonSet: Sendable, Equatable {
   }
 }
 
+// MARK: - Storage Form
+
+package extension LessonSet {
+  /// The exact bytes the digest is taken over, which is what `lesson_sets.canonical_bytes` holds:
+  /// a stored set and its stored digest therefore cannot describe different content.
+  var canonicalBytes: Data {
+    let payload = DigestPayload(lessons: lessons, schemaVersion: schemaVersion)
+    return (try? CanonicalJSON.data(encoding: payload)) ?? Data()
+  }
+
+  /// Rebuilds a stored set from its canonical bytes, re-running validation and re-deriving the
+  /// digest. Returns nil when the bytes are not a lesson set this version can read.
+  static func decoded(jobId: Int64, canonicalBytes: Data) -> LessonSet? {
+    guard
+      let payload = try? JSONDecoder().decode(DigestPayload.self, from: canonicalBytes),
+      payload.schemaVersion == schemaVersion,
+      let set = try? canonical(jobId: jobId, lessons: payload.lessons)
+    else {
+      return nil
+    }
+    return set
+  }
+}
+
 // MARK: - Canonical Form
 
 private extension LessonSet {
@@ -123,7 +147,7 @@ private extension LessonSet {
     return LessonSetDigest(rawValue: SHA256Digest.hex(bytes))
   }
 
-  struct DigestPayload: Encodable {
+  struct DigestPayload: Codable {
     let lessons: [String]
     let schemaVersion: Int
 
