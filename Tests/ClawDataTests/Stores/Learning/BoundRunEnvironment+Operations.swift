@@ -16,6 +16,9 @@ extension BoundRunEnvironment {
   static let evaluatorRubricVersion = 1
   /// Enough headroom that a test not about the breaker never trips it.
   static let unboundedProactiveCapUSD = 1_000.0
+  /// Deliberately not the route `authorization` configures: a commit that stamped the configured
+  /// route in place of the served one would be indistinguishable otherwise.
+  static let evaluatorServedRoute = "openai-compatible/fallback-model"
 
   struct ReservationRow: Equatable {
     let state: String?
@@ -126,7 +129,8 @@ extension BoundRunEnvironment {
   func result(
     for id: LearningOperationID,
     failure: LearningOperationFailure? = nil,
-    costUSD: Double = 0.25
+    costUSD: Double = 0.25,
+    evaluation: LearningEvaluation? = nil
   ) -> LearningOperationResult {
     LearningOperationResult(
       operationId: id,
@@ -138,6 +142,25 @@ extension BoundRunEnvironment {
         costUSD: costUSD,
         costSource: .providerReturned,
         isEstimated: false
+      ),
+      evaluation: evaluation
+    )
+  }
+
+  /// A verdict served by a route other than the one the operation was authorized to start on, so
+  /// the served route the commit stamps is distinguishable from the configured one it holds.
+  func verdict(
+    outcome: EvaluatorOutcome = .reusableIssue,
+    issueCodes: [String] = ["missed_price_change", "empty_answer"]
+  ) -> LearningEvaluation {
+    LearningEvaluation(
+      outcome: outcome,
+      issueCodes: issueCodes,
+      evaluator: EvaluatorSurface(
+        route: Self.evaluatorServedRoute,
+        promptVersion: Self.evaluatorPromptVersion,
+        schemaVersion: Self.evaluatorSchemaVersion,
+        rubricVersion: Self.evaluatorRubricVersion
       )
     )
   }
@@ -200,6 +223,16 @@ extension BoundRunEnvironment {
         db,
         sql: "SELECT provider_call_id FROM learning_operations WHERE operation_id = ?",
         arguments: [id.rawValue]
+      )
+    }
+  }
+
+  func evaluatorRoute(runId: Int64) throws -> String? {
+    try queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT evaluator_route FROM run_compatibility WHERE run_id = ?",
+        arguments: [runId]
       )
     }
   }

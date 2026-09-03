@@ -456,6 +456,10 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.finishOperation(result, now: now)
   }
 
+  func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation? {
+    try base.evaluation(runId: runId)
+  }
+
   @discardableResult
   func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation {
     try base.reconcileOperationsAtBoot(now: now)

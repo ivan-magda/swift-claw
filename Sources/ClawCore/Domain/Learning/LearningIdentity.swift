@@ -145,6 +145,19 @@ public struct FeedbackRevision: Sendable, Hashable, Comparable, Codable {
   }
 }
 
+/// Digest of the whole surface two runs must share before their verdicts may be counted as
+/// evidence about the same question: the surface the run was picked up on, the versions the sealer
+/// stamped, and the evaluator's own route and versions. Frozen onto every evaluation, so a later
+/// change to any of them opens a new comparison window instead of silently reinterpreting old
+/// verdicts.
+public struct CompatibilityDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+}
+
 /// Digest of one `LearningOperationKey`. The stored claim key: `learning_operations` has no
 /// columns for the prompt, schema and rubric versions the key covers, so this is the only value a
 /// unique index can hold the "one live attempt per key" rule on.

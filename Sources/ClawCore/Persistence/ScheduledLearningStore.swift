@@ -116,6 +116,10 @@ public protocol ScheduledLearningStore: Sendable {
     now: Date
   ) throws(StoreError) -> Bool
 
+  /// The frozen verdict on one run's evidence, written by the same transaction that committed the
+  /// operation that produced it. Nil for a run nothing has evaluated.
+  func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation?
+
   /// The boot pass over what a prior process left open. A `started` operation may have reached the
   /// provider, so it is charged conservatively under its saved call id and closed as
   /// `interrupted_unknown` — never resent as the same inference. A `claimed` one provably never
