@@ -24,6 +24,7 @@ struct EvaluationRunEnvironment {
   let runs: RunStoreGRDB
   let learning: ScheduledLearningStoreGRDB
   let provider: SequenceProvider
+  let authorizing: RecordingLearningStore
   let runner: LearningOperationRunner
   let jobId: Int64
   let sessionId: Int64
@@ -115,14 +116,16 @@ struct EvaluationRunEnvironment {
       fallback: routeBinding(provider: fallback, reference: fallbackRoute)
     )
 
+    let authorizing = RecordingLearningStore(base: learning, supersedes: supersedeAuthorization)
     return EvaluationRunEnvironment(
       queue: queue,
       jobs: jobs,
       runs: runs,
       learning: learning,
       provider: primary,
+      authorizing: authorizing,
       runner: LearningOperationRunner(
-        learning: supersedeAuthorization ? SupersedingAuthorization(base: learning) : learning,
+        learning: authorizing,
         jobs: jobs,
         roster: roster,
         budget: budget(proactivePerDayUSD: proactivePerDayUSD),
@@ -290,19 +293,43 @@ private extension EvaluationRunEnvironment {
   }
 }
 
-// MARK: - Superseded Authorization
+// MARK: - Authorization Decorator
 
-/// The real store with one answer replaced: authorization always reports that the claim stopped
-/// describing work worth doing. Everything else stays the real row, so the operation the runner
-/// claimed is genuinely there to be inspected afterwards.
-private struct SupersedingAuthorization: ScheduledLearningStore {
-  let base: ScheduledLearningStoreGRDB
+/// The real store with its authorization hop observed, and optionally answered. Everything else
+/// stays the real row, so the operation the runner claimed is genuinely there to inspect.
+///
+/// Lock-guarded, not an actor: `ScheduledLearningStore` is synchronous — the GRDB stores are
+/// `Sendable` wrappers that lean on GRDB's own serialization — and an actor cannot satisfy a
+/// synchronous requirement.
+final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable {
+  private let lock = NSLock()
+  private let base: ScheduledLearningStoreGRDB
+  private let supersedes: Bool
+  private var presented: [LearningAuthorization] = []
+
+  init(base: ScheduledLearningStoreGRDB, supersedes: Bool = false) {
+    self.base = base
+    self.supersedes = supersedes
+  }
+
+  /// Every authorization the runner presented, in order.
+  var authorizations: [LearningAuthorization] {
+    lock.lock()
+    defer { lock.unlock() }
+    return presented
+  }
 
   func authorizeAndStartOperation(
     _ authorization: LearningAuthorization,
     now: Date
   ) throws(StoreError) -> AuthorizeOutcome {
-    .superseded
+    lock.lock()
+    presented.append(authorization)
+    lock.unlock()
+    guard supersedes == false else {
+      return .superseded
+    }
+    return try base.authorizeAndStartOperation(authorization, now: now)
   }
 
   func armJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState {

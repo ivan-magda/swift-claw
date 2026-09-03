@@ -118,7 +118,7 @@ private extension ScheduledLearningStoreGRDB {
       issueCodes,
       compatibility.rawValue,
     ]
-    return EvaluationDigest(rawValue: SHA256Digest.hex(fields.joined(separator: ":")))
+    return EvaluationDigest(rawValue: SHA256Digest.hex(CanonicalDigestInput.joined(fields)))
   }
 
   /// Deliberately throwing. A swallowed encode would store a verdict whose codes are unreadable,

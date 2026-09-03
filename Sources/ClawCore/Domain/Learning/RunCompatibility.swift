@@ -101,9 +101,6 @@ extension RunCompatibility {
   /// value too, so verdicts frozen under the old list keep answering the question they were
   /// computed for.
   private static let canonicalPrefix = "run-compatibility/v1"
-  /// What an absent field reads as. A digest that simply skipped one would collide with one whose
-  /// neighbouring field held the empty string.
-  private static let absentField = "\u{0}"
   /// The algorithm reserves a slot for an adapter id/version and a task-input schema version.
   /// `scheduled-learning/v1` has neither, and the canonical `none` keeps the slot positionally
   /// present — so the day one arrives it opens a new window instead of colliding with every
@@ -128,8 +125,8 @@ extension RunCompatibility {
       String(epoch.value),
       binding.jobDefinitionDigest.rawValue,
       binding.stableDigest.rawValue,
-      evidenceSchemaVersion ?? Self.absentField,
-      classifierVersion ?? Self.absentField,
+      evidenceSchemaVersion ?? CanonicalDigestInput.absentField,
+      classifierVersion ?? CanonicalDigestInput.absentField,
       String(evaluator.promptVersion),
       String(evaluator.schemaVersion),
       String(evaluator.rubricVersion),
@@ -138,10 +135,10 @@ extension RunCompatibility {
       policyVersion,
       skillSetDigest,
       configuredRoute,
-      terminalRoute ?? Self.absentField,
+      terminalRoute ?? CanonicalDigestInput.absentField,
       evaluator.route,
       Self.adapterSlot,
     ]
-    return CompatibilityDigest(rawValue: SHA256Digest.hex(fields.joined(separator: ":")))
+    return CompatibilityDigest(rawValue: SHA256Digest.hex(CanonicalDigestInput.joined(fields)))
   }
 }

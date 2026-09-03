@@ -45,7 +45,8 @@ public struct LearningOperationKey: Sendable, Hashable {
       String(schemaVersion),
       String(rubricVersion),
     ]
-    return LearningOperationKeyDigest(rawValue: SHA256Digest.hex(fields.joined(separator: ":")))
+    let canonical = CanonicalDigestInput.joined(fields)
+    return LearningOperationKeyDigest(rawValue: SHA256Digest.hex(canonical))
   }
 
   /// Frozen into every key digest. A change to the field list below must change this value too, so
