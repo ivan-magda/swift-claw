@@ -126,12 +126,17 @@ extension AgentRuntime {
   /// A DELIBERATE SOFTENING of "no persistence here": `usageStore`/`auditLog` are injected
   /// so mid-run rows survive a crash. Throws ONLY `StoreError.diskFull`; every
   /// other failure resolves in-band to a `TurnResult`.
+  ///
+  /// - Parameter hasPinnedLessons: whether the assembled context carries a non-empty pinned lesson
+  ///   set. A model wrote those lessons, so they arm the run's untrusted-ingestion flag before the
+  ///   first dispatch instead of waiting for a tool observation to do it.
   public func runTurn(
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
     buildResult: BuildResult,
     sessionTainted: Bool,
+    hasPinnedLessons: Bool = false,
     sessionHasPrivateData: Bool,
     todayTokens: Int,
     todayUSD: Double,
@@ -177,9 +182,10 @@ extension AgentRuntime {
     var wire = buildResult.messages
     var exchanges: [ToolExchange] = []
 
-    var ingestedUntrusted = definitions.contains { definition in
+    let untrustedToolMetadata = definitions.contains { definition in
       definition.metadataProvenance == .untrusted
     }
+    var ingestedUntrusted = untrustedToolMetadata || hasPinnedLessons
     var runPrivateData = false
 
     var pendingSuspension: PendingToolAction?

@@ -10,6 +10,7 @@ import Testing
     _ runtime: AgentRuntime,
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
+    hasPinnedLessons: Bool = false,
     origin: RunOrigin = .interactive,
     proactiveTodayUSD: Double = 0
   ) async throws -> TurnOutcome {
@@ -19,6 +20,7 @@ import Testing
       chatId: 1,
       buildResult: buildResult,
       sessionTainted: sessionTainted,
+      hasPinnedLessons: hasPinnedLessons,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0,
@@ -146,6 +148,34 @@ import Testing
     let outcome = try await run(runtime)
 
     // then
+    #expect(await dispatcher.records.first?.context.runIngestedUntrusted == true)
+    #expect(outcome.ingestedUntrusted)
+  }
+
+  @Test func pinnedLessonsTaintBeforeTheFirstDispatch() async throws {
+    // given — trusted tools, so the pinned set is the only untrusted material in the turn
+    let definition = ToolDefinition(
+      name: "web_fetch",
+      description: "owner-authored metadata",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .arbitraryDestination,
+      riskLevel: .safe
+    )
+    let provider = SequenceProvider([
+      toolCallResponse([ToolCall(id: "c1", name: definition.name, argumentsJSON: "{}")]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(
+      definitions: [definition],
+      respond: okOutcome(ingestedUntrusted: false)
+    )
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    let outcome = try await run(runtime, hasPinnedLessons: true)
+
+    // then — the gate sees the taint on the run's very first tool policy decision
     #expect(await dispatcher.records.first?.context.runIngestedUntrusted == true)
     #expect(outcome.ingestedUntrusted)
   }

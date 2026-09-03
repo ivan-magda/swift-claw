@@ -53,6 +53,9 @@ extension DaemonBuilder {
       delivery: transport,
       ownerChatId: config.heartbeatOwnerChatId,
       freezeLearningSurface: freezeLearningSurface,
+      // Unconditional: with the flag unset the fire path writes no binding, so the read finds
+      // nothing and the turn assembles exactly the rows it assembles today.
+      learning: stores.learning,
       parker: coordination.deferredParker,
       approvalExpirySeconds: config.approvalExpirySeconds,
       logger: logger

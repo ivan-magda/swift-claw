@@ -17,6 +17,9 @@ public struct ContextBuilder: Sendable {
   private static let skillUnitIDPrefix = "skill-"
 
   static let untrustedUserLabel = "untrusted_user_message"
+  /// The fence label the pinned lesson row renders under. `package` so the gateway suite asserts
+  /// the label this builder emits instead of repeating the literal.
+  package static let lessonsLabel = "job lessons"
 
   private let systemPrompt: String
   private let proactiveSystemPrompt: String
@@ -59,20 +62,34 @@ public struct ContextBuilder: Sendable {
     self.warn = warn
   }
 
+  /// - Parameter lessons: the set the run's binding froze, or nil for a run with no binding. A
+  ///   non-empty set is assembled whole ahead of every truncatable row and taints the memory
+  ///   selection, so a bound run can never be answered against a shortened or substituted set.
   public func assemble(
     snapshot: SessionContextSnapshot,
     sessionId: Int64,
-    origin: RunOrigin
+    origin: RunOrigin,
+    lessons: LessonSet? = nil
   ) throws -> BuildResult {
     var ownerNotices: [String] = []
 
-    let fixedSections = buildFixedSections(origin: origin, ownerNotices: &ownerNotices)
+    // An empty set is not a row: it says only that the job has learned nothing yet, so rendering
+    // it would spend budget and raise taint for no content.
+    let pinned = lessons.flatMap { set in
+      set.isEmpty ? nil : set
+    }
+    let fixedSections = buildFixedSections(
+      origin: origin,
+      lessons: pinned,
+      ownerNotices: &ownerNotices
+    )
     let residual = BudgetFitter.residual(for: fixedSections, budget: budget)
     let truncatableSections = buildTruncatableSections(
       snapshot: snapshot,
       sessionId: sessionId,
       origin: origin,
       residual: residual,
+      excludeSensitiveMemory: snapshot.isTainted || pinned != nil,
       ownerNotices: &ownerNotices
     )
 
@@ -99,6 +116,7 @@ public struct ContextBuilder: Sendable {
 private extension ContextBuilder {
   func buildFixedSections(
     origin: RunOrigin,
+    lessons: LessonSet?,
     ownerNotices: inout [String]
   ) -> [FittableSection] {
     [
@@ -134,6 +152,7 @@ private extension ContextBuilder {
           )
         ]
       ),
+      lessons.map(lessonsSection),
       workspaceSection(
         id: .userFile,
         files: [.user],
@@ -149,15 +168,32 @@ private extension ContextBuilder {
     ].compactMap { $0 }
   }
 
+  /// The row is uncapped and non-truncatable by its spec, so it is measured into the residual with
+  /// the system rows: whatever the lessons cost, the truncatable rows share what is left.
+  func lessonsSection(_ lessons: LessonSet) -> FittableSection {
+    let body =
+      lessons.lessons
+      .enumerated()
+      .map { index, lesson in
+        "\(index + 1). \(lesson)"
+      }
+      .joined(separator: "\n")
+    return section(
+      id: .lessons,
+      units: [SectionUnit(id: ContextRowID.lessons.rawValue, content: body, canTruncate: false)]
+    )
+  }
+
   func buildTruncatableSections(
     snapshot: SessionContextSnapshot,
     sessionId: Int64,
     origin: RunOrigin,
     residual: Int,
+    excludeSensitiveMemory: Bool,
     ownerNotices: inout [String]
   ) -> [FittableSection] {
     [
-      memoryItemsSection(snapshot: snapshot, residual: residual),
+      memoryItemsSection(excludeSensitive: excludeSensitiveMemory, residual: residual),
       historySection(snapshot: snapshot, residual: residual),
       // Proactive runs never recall: the retriever's dedup excludes only the CURRENT window,
       // so after a per-fire window reset a recall search would resurface exactly the prior-fire
@@ -215,7 +251,7 @@ private extension ContextBuilder {
   }
 
   func memoryItemsSection(
-    snapshot: SessionContextSnapshot,
+    excludeSensitive: Bool,
     residual: Int
   ) -> FittableSection? {
     let cap = cap(for: .memoryItems, residual: residual)
@@ -226,7 +262,7 @@ private extension ContextBuilder {
     let fetched: [MemoryItem]
     do {
       fetched = try memoryStore.fetchRanked(
-        excludeSensitive: snapshot.isTainted,
+        excludeSensitive: excludeSensitive,
         limit: Self.memoryFetchLimit
       )
     } catch {
@@ -236,7 +272,7 @@ private extension ContextBuilder {
 
     let ranked = MemoryRanker.rank(
       items: fetched,
-      excludeSensitive: snapshot.isTainted,
+      excludeSensitive: excludeSensitive,
       cap: cap
     )
     let units = ranked.map { item in
@@ -703,7 +739,9 @@ private extension ContextBuilder {
       "recall"
     case .skills:
       WorkspaceSkills.fenceLabel
-    case .policy, .systemWorkspace, .tools, .metadata, .lessons, .history:
+    case .lessons:
+      Self.lessonsLabel
+    case .policy, .systemWorkspace, .tools, .metadata, .history:
       id.rawValue
     }
   }

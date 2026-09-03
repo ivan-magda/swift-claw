@@ -59,6 +59,10 @@ public struct TurnRunner: TurnDispatching {
   /// nothing. Inert when learning is disarmed.
   private let freezeLearningSurface: @Sendable (_ runId: Int64, _ policyVersion: String) -> Void
 
+  /// Reads the lesson set a bound run froze at its fire. Nil where no learning store is composed,
+  /// which is the same turn a run with no binding gets: no lesson row, no lesson taint.
+  private let learning: (any ScheduledLearningStore)?
+
   /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's
   /// resolution.
   private let parker: any ApprovalParking
@@ -84,6 +88,7 @@ public struct TurnRunner: TurnDispatching {
     ownerChatId: Int64? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
     freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in },
+    learning: (any ScheduledLearningStore)? = nil,
     // No default: an ask-tier suspend parks the lane on this seam, and a composition site that
     // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
     // would hold that lane forever. Every caller chooses its parker explicitly.
@@ -108,6 +113,7 @@ public struct TurnRunner: TurnDispatching {
 
     self.now = now
     self.freezeLearningSurface = freezeLearningSurface
+    self.learning = learning
     self.parker = parker
     self.approvalExpirySeconds = approvalExpirySeconds
     self.logger = logger
@@ -144,6 +150,7 @@ public struct TurnRunner: TurnDispatching {
     let inputs: TurnInputs
     do {
       inputs = try loadTurnInputs(
+        runId: runId,
         sessionId: sessionId,
         boundMessageId: triggerMessageId,
         origin: origin,
@@ -173,6 +180,7 @@ public struct TurnRunner: TurnDispatching {
       chatId: chatId,
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
+      hasPinnedLessons: inputs.hasPinnedLessons,
       sessionHasPrivateData: inputs.snapshot.hasPrivateData,
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
@@ -219,6 +227,7 @@ public struct TurnRunner: TurnDispatching {
     do {
       carryOver = try runs.resumeUsage(runId: runId)
       inputs = try loadTurnInputs(
+        runId: runId,
         sessionId: sessionId,
         boundMessageId: contextBoundMessageId,
         origin: origin,
@@ -239,6 +248,7 @@ public struct TurnRunner: TurnDispatching {
         chatId: chatId,
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
+        hasPinnedLessons: inputs.hasPinnedLessons,
         sessionHasPrivateData: inputs.snapshot.hasPrivateData,
         todayTokens: inputs.todayTokens,
         todayUSD: inputs.todayUSD,
@@ -318,6 +328,7 @@ private extension TurnRunner {
   /// Loads the bounded snapshot, today's budget totals, and the assembled context in one place —
   /// `run` and `resume` share it; only the bounding message id and the clock differ.
   func loadTurnInputs(
+    runId: Int64,
     sessionId: Int64,
     boundMessageId: Int64,
     origin: RunOrigin,
@@ -340,18 +351,45 @@ private extension TurnRunner {
       proactiveTodayUSD =
         try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: clock).costUSD
     }
+    // Before assembly, and before any provider call: a bound run whose pinned set cannot be
+    // resolved must fail rather than answer against a set its binding never froze.
+    let lessons = try pinnedLessons(runId: runId)
     let buildResult = try contextBuilder.assemble(
       snapshot: snapshot,
       sessionId: sessionId,
-      origin: origin
+      origin: origin,
+      lessons: lessons
     )
     return TurnInputs(
       snapshot: snapshot,
       buildResult: buildResult,
+      hasPinnedLessons: lessons?.isEmpty == false,
       todayTokens: totals.tokens,
       todayUSD: totals.costUSD,
       proactiveTodayUSD: proactiveTodayUSD
     )
+  }
+
+  /// The lesson set this run's fire froze, or nil when it carries no binding. Every identity is
+  /// re-checked here rather than trusted from the read: `(job_id, digest)` is what names a lesson
+  /// set, so two jobs holding the same rules share a digest and a digest-only match would silently
+  /// run one job's evidence against another's lessons.
+  func pinnedLessons(runId: Int64) throws -> LessonSet? {
+    guard let learning, let binding = try learning.binding(runId: runId) else {
+      return nil
+    }
+    guard try learning.runJobId(runId: runId) == binding.jobId else {
+      throw PinnedLessonFailure.identityMismatch(runId: runId)
+    }
+    guard
+      let set = try learning.lessonSet(jobId: binding.jobId, digest: binding.effectiveDigest)
+    else {
+      throw PinnedLessonFailure.missingSet(runId: runId, digest: binding.effectiveDigest)
+    }
+    guard set.jobId == binding.jobId, set.digest == binding.effectiveDigest else {
+      throw PinnedLessonFailure.identityMismatch(runId: runId)
+    }
+    return set
   }
 
   /// `resume`'s shared failure tail: every pre-commit failure fails the run in-band (best-effort)

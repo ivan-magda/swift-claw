@@ -1,0 +1,347 @@
+import ClawAgent
+import ClawCore
+import ClawTestSupport
+import ClawWorkspace
+import Foundation
+import GRDB
+import Testing
+
+@testable import ClawData
+@testable import ClawGateway
+
+/// A bound run answers against the exact lesson set its fire froze, or it does not run at all.
+/// Substituting the job's current set — or running on lessons that belong to another job — would
+/// evaluate a hypothesis the binding never froze, and every later decision reads that evidence.
+@Suite struct PinnedLessonTests {
+  @Test func aBoundRunNeverSubstitutesTheCurrentStableSet() async throws {
+    // given — the job's stable pointer moved after this run was bound
+    let env = try PinnedLessonEnvironment.make()
+    let pinned = try env.pinStableSet(["Report only price changes."])
+    let fired = try env.fireBoundRun()
+    let promoted = try env.pinStableSet(["Report every heading."])
+
+    // when
+    try await env.runner.run(
+      runId: fired.runId,
+      sessionId: fired.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: fired.triggerMessageId
+    )
+
+    // then — the frozen set reached the model; the newer one never did
+    let sent = try #require(await env.provider.requests.first).renderedContext
+    #expect(sent.contains(pinned.lessons[0]))
+    #expect(sent.contains(promoted.lessons[0]) == false)
+    #expect(try env.runState(runId: fired.runId) == .done)
+  }
+
+  @Test func pinnedLessonsTaintTheRunTheyAreAssembledInto() async throws {
+    // given — an untainted session and a job whose bound run carries lessons
+    let env = try PinnedLessonEnvironment.make()
+    _ = try env.pinStableSet(["Report only price changes."])
+    let fired = try env.fireBoundRun()
+
+    // when
+    try await env.runner.run(
+      runId: fired.runId,
+      sessionId: fired.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: fired.triggerMessageId
+    )
+
+    // then — a model wrote those lessons, so the run leaves its session tainted
+    #expect(try env.sessionIsTainted(sessionId: fired.sessionId))
+  }
+
+  @Test func aBindingThatNamesAnotherJobFailsTheRunBeforeDispatch() async throws {
+    // given — a second job holding the identical lessons, so the digest alone still resolves
+    let env = try PinnedLessonEnvironment.make()
+    let pinned = try env.pinStableSet(["Report only price changes."])
+    let fired = try env.fireBoundRun()
+    let otherJobId = try env.armSecondJob(holding: pinned)
+    try env.rebindJob(runId: fired.runId, to: otherJobId)
+
+    // when
+    try await env.runner.run(
+      runId: fired.runId,
+      sessionId: fired.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: fired.triggerMessageId
+    )
+
+    // then — the run fails on the identity the digest cannot carry, before any provider call
+    #expect(await env.provider.callCount == 0)
+    #expect(try env.runState(runId: fired.runId) == .failed)
+  }
+
+  @Test func aRunWithNoBindingStillRunsWhileLearningIsArmed() async throws {
+    // given — the inbound turn every armed daemon serves between fires
+    let env = try PinnedLessonEnvironment.make()
+    _ = try env.pinStableSet(["Report only price changes."])
+    let inbound = try env.inboundRun()
+
+    // when
+    try await env.runner.run(
+      runId: inbound.runId,
+      sessionId: inbound.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: inbound.triggerMessageId
+    )
+
+    // then — no binding, no lesson row, no failure
+    let sent = try #require(await env.provider.requests.first).renderedContext
+    #expect(sent.contains(ContextBuilder.lessonsLabel) == false)
+    #expect(try env.runState(runId: inbound.runId) == .done)
+  }
+
+  @Test func aResumeLoadsTheSamePinnedSetTheDispatchUsed() async throws {
+    // given — a bound run already picked up, as an approval's continuation finds it. The suspend
+    // choreography is elided: the pinned read depends on the run's binding, not on how it parked.
+    let env = try PinnedLessonEnvironment.make()
+    let pinned = try env.pinStableSet(["Report only price changes."])
+    let fired = try env.fireBoundRun()
+    _ = try env.runs.pickUp(runId: fired.runId, now: env.now)
+
+    // when
+    await env.runner.resume(
+      runId: fired.runId,
+      sessionId: fired.sessionId,
+      chatId: env.chatId,
+      contextBoundMessageId: fired.triggerMessageId
+    )
+
+    // then
+    let sent = try #require(await env.provider.requests.first).renderedContext
+    #expect(sent.contains(pinned.lessons[0]))
+  }
+}
+
+// MARK: - Fixture
+
+private extension ChatRequest {
+  /// The whole assembled prompt as the provider receives it.
+  var renderedContext: String {
+    messages.map(\.content.text).joined(separator: "\n")
+  }
+}
+
+/// A migrated database holding one armed scheduled job, the real fire path that binds its runs, and
+/// a `TurnRunner` wired to the same learning store the daemon composes.
+private struct PinnedLessonEnvironment {
+  let queue: DatabaseQueue
+  let runner: TurnRunner
+  let provider: StubLLMProvider
+  let jobs: ScheduledJobStoreGRDB
+  let runs: RunStoreGRDB
+  let learning: ScheduledLearningStoreGRDB
+  let sessionMessages: SessionMessageStoreGRDB
+  let jobId: Int64
+  let chatId: Int64
+  let now: Date
+
+  static func make() throws -> PinnedLessonEnvironment {
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    let chatId: Int64 = 777
+    let now = Date(timeIntervalSince1970: 1_782_000_600)
+
+    let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
+    let job = try jobs.create(
+      NewScheduledJob(
+        ownerChatId: chatId,
+        label: "digest",
+        prompt: "Summarize my unread items",
+        recurrence: nil,
+        timezone: "Europe/Berlin",
+        nextOccurrence: now
+      ),
+      now: now
+    )
+    let learning = ScheduledLearningStoreGRDB(writer: queue)
+    _ = try learning.armJob(jobId: job.id, now: now)
+
+    let sessionMessages = SessionMessageStoreGRDB(writer: queue)
+    let usage = UsageStoreGRDB(writer: queue)
+    let audit = AuditLogGRDB(writer: queue)
+    let provider = StubLLMProvider(
+      .respond(
+        ChatResponse(
+          content: "done",
+          finishReason: "stop",
+          usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
+          costFromProvider: 0.0021
+        )
+      )
+    )
+    let runner = TurnRunner(
+      sessionMessages: sessionMessages,
+      runs: RunStoreGRDB(writer: queue),
+      usageStore: usage,
+      audit: audit,
+      agent: AgentRuntime(
+        roster: makeSingleRouteRoster(provider: provider, wireModel: "gpt-4o"),
+        typingIndicator: NoopTyping(),
+        draftStreamer: NoopRichDraftStreaming(),
+        streamingEnabled: false,
+        costResolver: CostResolver(
+          priceTable: .empty,
+          referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
+        ),
+        budget: .default,
+        usageStore: usage,
+        auditLog: audit,
+        clock: ContinuousClock()
+      ),
+      budget: .default,
+      contextBuilder: ContextBuilder(
+        systemPrompt: SystemPrompt.minimal,
+        proactiveSystemPrompt: "proactive policy",
+        workspace: EmptyWorkspace(),
+        memoryStore: EmptyMemoryStore(),
+        retriever: EmptyRetriever(),
+        budget: .default,
+        now: { now }
+      ),
+      imageCache: ImageCache(),
+      notifyOutbox: {},
+      now: { now },
+      learning: learning,
+      parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
+      approvalExpirySeconds: testApprovalExpirySeconds,
+      logger: TestLog.silent
+    )
+
+    return PinnedLessonEnvironment(
+      queue: queue,
+      runner: runner,
+      provider: provider,
+      jobs: jobs,
+      runs: RunStoreGRDB(writer: queue),
+      learning: learning,
+      sessionMessages: sessionMessages,
+      jobId: job.id,
+      chatId: chatId,
+      now: now
+    )
+  }
+
+  /// Stores a set for this job and makes it the job's stable pointer, which is what the next fire
+  /// binds against.
+  func pinStableSet(_ lessons: [String]) throws -> LessonSet {
+    let set = try LessonSet.canonical(jobId: jobId, lessons: lessons)
+    try insert(set)
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE job_learning_state SET stable_lesson_set_digest = ? WHERE job_id = ?",
+        arguments: [set.digest.rawValue, jobId]
+      )
+    }
+    return set
+  }
+
+  /// A second armed job holding byte-identical lessons — and therefore the identical digest, which
+  /// is what makes a digest-only identity check pass across jobs.
+  func armSecondJob(holding set: LessonSet) throws -> Int64 {
+    let other = try jobs.create(
+      NewScheduledJob(
+        ownerChatId: chatId,
+        label: "other",
+        prompt: "Summarize my unread items",
+        recurrence: nil,
+        timezone: "Europe/Berlin",
+        nextOccurrence: now
+      ),
+      now: now
+    )
+    _ = try learning.armJob(jobId: other.id, now: now)
+    try insert(try LessonSet.canonical(jobId: other.id, lessons: set.lessons))
+    return other.id
+  }
+
+  func rebindJob(runId: Int64, to jobId: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE run_learning_bindings SET job_id = ? WHERE run_id = ?",
+        arguments: [jobId, runId]
+      )
+    }
+  }
+
+  func fireBoundRun() throws -> ClaimedFire {
+    guard case .fired(let fired) = try jobs.fireNow(jobId: jobId, now: now) else {
+      throw StoreError.unexpected("job \(jobId) refused to fire")
+    }
+    return fired
+  }
+
+  /// An ordinary owner message on its own session: the shape that carries no binding at all.
+  func inboundRun() throws -> (runId: Int64, sessionId: Int64, triggerMessageId: Int64) {
+    let claim = try sessionMessages.claimAndPersistInbound(
+      InboundMessage(
+        updateId: 1,
+        sessionKey: SessionKey.telegramDM(chatId: chatId),
+        chatId: chatId,
+        userId: chatId,
+        text: "hi",
+        isEdited: false,
+        ts: now
+      )
+    )
+    return (
+      try #require(claim.runId),
+      try #require(claim.sessionId),
+      try #require(claim.triggerMessageId)
+    )
+  }
+
+  func runState(runId: Int64) throws -> RunState? {
+    try queue.read { db in
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+        .flatMap(RunState.init(rawValue:))
+    }
+  }
+
+  func sessionIsTainted(sessionId: Int64) throws -> Bool {
+    try queue.read { db in
+      try Bool.fetchOne(
+        db,
+        sql: "SELECT tainted FROM sessions WHERE id = ?",
+        arguments: [sessionId]
+      ) ?? false
+    }
+  }
+
+  private func insert(_ set: LessonSet) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT OR IGNORE INTO lesson_sets(job_id, digest, schema_version, canonical_bytes,
+            source, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          set.jobId,
+          set.digest.rawValue,
+          set.schemaVersion,
+          set.canonicalBytes,
+          LessonSetSource.reflectorCandidate.rawValue,
+          EpochSecondCodec.epoch(now),
+        ]
+      )
+    }
+  }
+}
+
+private struct EmptyWorkspace: WorkspaceReading {
+  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
+
+  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
+
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
+}
