@@ -56,6 +56,9 @@ private extension ScheduledLearningStoreGRDB {
     guard try readState(db, jobId: key.jobId)?.epoch == key.epoch else {
       return nil
     }
+    guard try jobPermitsLearningCalls(db, jobId: key.jobId) else {
+      return nil
+    }
     guard try sourceIsClaimable(db, key: key) else {
       return nil
     }
@@ -179,6 +182,26 @@ private extension ScheduledLearningStoreGRDB {
       attemptGeneration: attempt.attemptGeneration,
       supersedes: attempt.supersedes
     )
+  }
+}
+
+// MARK: - Job Gate
+
+extension ScheduledLearningStoreGRDB {
+  /// Whether the job still permits new learning calls against its evidence. Cancellation alone
+  /// blocks here: a paused or completed job's settled evidence is still evidence, and the wider
+  /// "repeatable, non-cancelled" rule belongs to candidate admission rather than to one inference.
+  /// A job row that has gone missing fails closed — nothing may be spent on a job that is not there.
+  static func jobPermitsLearningCalls(_ db: Database, jobId: Int64) throws -> Bool {
+    let status = try String.fetchOne(
+      db,
+      sql: "SELECT status FROM scheduled_jobs WHERE id = ?",
+      arguments: [jobId]
+    )
+    guard let status else {
+      return false
+    }
+    return status != ScheduledJobStatus.cancelled.rawValue
   }
 }
 
