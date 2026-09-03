@@ -101,25 +101,46 @@ extension RunCompatibility {
   /// value too, so verdicts frozen under the old list keep answering the question they were
   /// computed for.
   private static let canonicalPrefix = "run-compatibility/v1"
-  /// What an unsealed run's stamped version reads as. A digest that simply skipped a nil field
-  /// would collide with one whose neighbouring field held the empty string.
+  /// What an absent field reads as. A digest that simply skipped one would collide with one whose
+  /// neighbouring field held the empty string.
   private static let absentField = "\u{0}"
+  /// The algorithm reserves a slot for an adapter id/version and a task-input schema version.
+  /// `scheduled-learning/v1` has neither, and the canonical `none` keeps the slot positionally
+  /// present — so the day one arrives it opens a new window instead of colliding with every
+  /// verdict reached without it.
+  private static let adapterSlot = "none"
 
-  /// The whole surface, both halves, reduced to one comparable value.
-  public func digest(evaluator: EvaluatorSurface) -> CompatibilityDigest {
+  /// Every input two runs must match on before their verdicts may be counted as evidence about the
+  /// same question, in the order the accepted algorithm lists them.
+  ///
+  /// Deliberately absent, because they are provenance rather than compatibility: run ids,
+  /// timestamps, the task input, the final output, the model-visible carrier bytes and the evidence
+  /// digests. `stableDigest` is hashed rather than `effectiveDigest` — a trial run answers against a
+  /// candidate set and never enters a stable evidence window at all.
+  public func digest(
+    binding: RunLearningBinding,
+    terminalRoute: String?,
+    evaluator: EvaluatorSurface
+  ) -> CompatibilityDigest {
     let fields = [
       Self.canonicalPrefix,
+      String(jobId),
+      String(epoch.value),
+      binding.jobDefinitionDigest.rawValue,
+      binding.stableDigest.rawValue,
+      evidenceSchemaVersion ?? Self.absentField,
+      classifierVersion ?? Self.absentField,
+      String(evaluator.promptVersion),
+      String(evaluator.schemaVersion),
+      String(evaluator.rubricVersion),
       contextSchemaVersion,
       toolCatalogDigest,
       policyVersion,
       skillSetDigest,
       configuredRoute,
-      evidenceSchemaVersion ?? Self.absentField,
-      classifierVersion ?? Self.absentField,
+      terminalRoute ?? Self.absentField,
       evaluator.route,
-      String(evaluator.promptVersion),
-      String(evaluator.schemaVersion),
-      String(evaluator.rubricVersion),
+      Self.adapterSlot,
     ]
     return CompatibilityDigest(rawValue: SHA256Digest.hex(fields.joined(separator: ":")))
   }

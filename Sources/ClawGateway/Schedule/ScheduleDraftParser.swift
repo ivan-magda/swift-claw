@@ -241,14 +241,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   /// {"unparseable": true} — honored before the typed decode; anything else that fails the decode
   /// is `.unparseable`, never a guess.
   static func decode(_ content: String) -> ScheduleDraftParseResult {
-    var text = content.trimmingCharacters(in: .whitespacesAndNewlines)
-    if text.hasPrefix("```") {
-      text =
-        text
-        .replacingOccurrences(of: "```json", with: "")
-        .replacingOccurrences(of: "```", with: "")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    let text = FencedJSONReply.unfenced(content)
 
     guard text.hasPrefix("{"), text.hasSuffix("}") else {
       return .unparseable

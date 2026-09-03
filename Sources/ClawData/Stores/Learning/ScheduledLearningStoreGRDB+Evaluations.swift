@@ -25,14 +25,23 @@ extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws {
     let runId = try evaluatedRunId(db, operation: operation)
-    guard let compatibility = try readCompatibility(db, runId: runId) else {
+    guard
+      let compatibility = try readCompatibility(db, runId: runId),
+      // The binding carries the two inputs the compatibility row does not: what the job asked for
+      // when this run fired, and which stable set it was asking under.
+      let binding = try readBinding(db, runId: runId)
+    else {
       throw StoreError.unexpected(
         "run \(runId) was evaluated with no frozen compatibility surface to file it under"
       )
     }
     try stampEvaluatorSurface(db, runId: runId, surface: evaluation.evaluator)
 
-    let compatibilityDigest = compatibility.digest(evaluator: evaluation.evaluator)
+    let compatibilityDigest = compatibility.digest(
+      binding: binding,
+      terminalRoute: try readTerminalRoute(db, runId: runId),
+      evaluator: evaluation.evaluator
+    )
     let issueCodes = try issueCodesJSON(evaluation.issueCodes)
     try db.execute(
       sql: """
