@@ -91,6 +91,19 @@ import Testing
     #expect(receipt.terminalCause == .ownerCancelled)
     #expect(receipt.settledAt != nil)
   }
+
+  @Test func bootReconcilesTheOperationsAPriorProcessLeftOpen() async throws {
+    // given — a claim the last process took and never authorized
+    let env = try LaneSettlementEnvironment.make()
+    try env.seedClaimedOperation(id: "op-1")
+
+    // when — the daemon's own boot pass runs, not the store call underneath it
+    await env.service.reconcileAtBoot(now: env.now)
+
+    // then — sealing alone would leave this row the current generation forever, and the run
+    // behind it would never be evaluated
+    #expect(try env.operationState(id: "op-1") == .pending)
+  }
 }
 
 // MARK: - Sealing Handoff
@@ -193,6 +206,39 @@ private struct LaneSettlementEnvironment {
       now: { now },
       logger: TestLog.silent
     )
+  }
+
+  /// A `learning_operations` row written straight to the table: the durable shape a process that
+  /// died between the claim and the authorization leaves, with none of the sealing and claiming
+  /// this suite is not about.
+  func seedClaimedOperation(id: String) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
+            source_digest, attempt_generation, state, key_digest, created_at)
+          VALUES (?, ?, 1, ?, 'evidence', 1, ?, ?, 0)
+          """,
+        arguments: [
+          id,
+          jobId,
+          LearningPhase.evaluator.rawValue,
+          LearningOperationState.claimed.rawValue,
+          "key-\(id)",
+        ]
+      )
+    }
+  }
+
+  func operationState(id: String) throws -> LearningOperationState? {
+    try queue.read { db in
+      let raw = try String.fetchOne(
+        db,
+        sql: "SELECT state FROM learning_operations WHERE operation_id = ?",
+        arguments: [id]
+      )
+      return raw.flatMap(LearningOperationState.init(rawValue:))
+    }
   }
 
   func cancellingDispatcher(error: (any Error)? = nil) -> CancellingDispatcher {

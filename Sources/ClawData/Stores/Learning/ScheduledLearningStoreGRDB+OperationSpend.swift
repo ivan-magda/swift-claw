@@ -1,0 +1,334 @@
+import ClawCore
+import Foundation
+import GRDB
+
+// MARK: - Authorize And Start
+
+extension ScheduledLearningStoreGRDB {
+  /// The whole gap between a claim and the network, in one commit. Every check reads state this
+  /// transaction also writes, so a second worker cannot observe the headroom this one is about to
+  /// consume: the reservation is visible to it before either call goes out.
+  static func authorize(
+    _ db: Database,
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws -> AuthorizeOutcome {
+    guard
+      let operation = try readOperation(db, id: authorization.operationId),
+      operation.state == .claimed
+    else {
+      return .superseded
+    }
+    // A job that re-epoched between the claim and here is asking a different question. Nothing is
+    // written: no policy refused this call, so no policy verdict may be recorded against it.
+    guard try readState(db, jobId: operation.jobId)?.epoch == operation.epoch else {
+      return .superseded
+    }
+    guard
+      authorization.carrier.isPermitted,
+      authorization.carrier.sourceDigest == operation.sourceDigest
+    else {
+      return try closeWithoutCall(db, operation, failure: .carrierPolicyDenied)
+    }
+    guard try budgetPermits(db, authorization, now: now) else {
+      return try closeWithoutCall(db, operation, failure: .budgetDenied)
+    }
+    return try start(db, operation, authorization)
+  }
+}
+
+// MARK: - Result Commit
+
+extension ScheduledLearningStoreGRDB {
+  /// - Returns: whether this call is the one that committed the result. A duplicate writes nothing,
+  ///   so it can neither insert a second usage row nor close the reservation twice.
+  static func finish(_ db: Database, _ result: LearningOperationResult, now: Date) throws -> Bool {
+    guard
+      let operation = try readOperation(db, id: result.operationId),
+      operation.state == .started
+    else {
+      return false
+    }
+    // Deliberately throwing, not another `false`: `started` is written by the same statement that
+    // stamps the call id, so a row missing one is corrupt, and returning "duplicate" would let the
+    // caller discard a real result as one already committed.
+    guard let callID = operation.providerCallID else {
+      throw StoreError.unexpected(
+        "started operation \(operation.id.rawValue) has no provider call id to charge"
+      )
+    }
+    let terminal: LearningOperationState = result.failure == nil ? .succeeded : .failed
+    guard try closeStarted(db, operation, terminal: terminal, failure: result.failure) else {
+      return false
+    }
+    // The reserved call id, never a fresh one: the estimate never became a row, so this is the
+    // only row that will ever carry this call's spend.
+    try chargeLearningUsage(
+      db,
+      operation: operation,
+      callID: callID,
+      model: result.usage.model,
+      promptTokens: result.usage.promptTokens,
+      completionTokens: result.usage.completionTokens,
+      costUSD: result.usage.costUSD,
+      costSource: result.usage.costSource,
+      isEstimated: result.usage.isEstimated,
+      now: now
+    )
+    return true
+  }
+}
+
+// MARK: - Boot Reconciliation
+
+extension ScheduledLearningStoreGRDB {
+  /// The daemon owns its database alone, so every row still `started` or `claimed` at boot belongs
+  /// to a process that is gone.
+  static func reconcile(_ db: Database, now: Date) throws -> OperationReconciliation {
+    let interrupted = try operationIDs(db, state: .started)
+    for id in interrupted {
+      try chargeInterrupted(db, id: id, now: now)
+    }
+    try db.execute(
+      sql: "UPDATE learning_operations SET state = ? WHERE state = ?",
+      arguments: [
+        LearningOperationState.pending.rawValue,
+        LearningOperationState.claimed.rawValue,
+      ]
+    )
+    return OperationReconciliation(
+      interrupted: interrupted.count,
+      returnedToClaimable: db.changesCount
+    )
+  }
+}
+
+// MARK: - Authorization Steps
+
+private extension ScheduledLearningStoreGRDB {
+  /// Stored spend plus every open reservation. The second term is the whole point: without it two
+  /// workers read the same empty headroom and both dispatch a paid call.
+  static func budgetPermits(
+    _ db: Database,
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws -> Bool {
+    let global = try UsageStoreGRDB.dayTotals(db, now: now)
+    let proactive = try UsageStoreGRDB.dayTotals(
+      db,
+      origins: RunOrigin.proactiveOrigins,
+      now: now
+    )
+    let reserved = try openReservations(db)
+    let decision = authorization.budget.preflight(
+      todayTokens: global.tokens + reserved.tokens,
+      todayUSD: global.costUSD + reserved.costUSD,
+      estimatedTotalTokens: authorization.estimatedTokens,
+      estimatedCostUSD: authorization.estimatedCostUSD,
+      // Learning spend charges the pool of the scheduled job that caused it, so the proactive
+      // branch of the gate is the one that must be consulted.
+      origin: .scheduled,
+      proactiveTodayUSD: proactive.costUSD + reserved.costUSD
+    )
+    return decision == .allow
+  }
+
+  /// Every reservation, not only today's: one survives no longer than the process that opened it,
+  /// because boot closes each of them.
+  static func openReservations(_ db: Database) throws -> (tokens: Int, costUSD: Double) {
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT COALESCE(SUM(reserved_tokens), 0) AS tokens,
+               COALESCE(SUM(reserved_cost_usd), 0) AS cost
+        FROM learning_operations WHERE reservation_state = ?
+        """,
+      arguments: [LearningReservationState.open.rawValue]
+    )
+    guard let row else {
+      return (0, 0)
+    }
+    return (row["tokens"], row["cost"])
+  }
+
+  static func start(
+    _ db: Database,
+    _ operation: OperationRow,
+    _ authorization: LearningAuthorization
+  ) throws -> AuthorizeOutcome {
+    try db.execute(
+      sql: """
+        UPDATE learning_operations
+        SET state = ?, carrier_digest = ?, route = ?, provider_call_id = ?,
+          reserved_tokens = ?, reserved_cost_usd = ?, reservation_state = ?
+        WHERE operation_id = ? AND state = ?
+        """,
+      arguments: [
+        LearningOperationState.started.rawValue,
+        authorization.carrier.digest.rawValue,
+        authorization.configuredRoute,
+        authorization.providerCallID.rawValue,
+        authorization.estimatedTokens,
+        authorization.estimatedCostUSD,
+        LearningReservationState.open.rawValue,
+        operation.id.rawValue,
+        LearningOperationState.claimed.rawValue,
+      ]
+    )
+    return db.changesCount > 0 ? .started : .superseded
+  }
+
+  /// A denial is terminal and never requeued: the same inputs would earn the same refusal, and a
+  /// requeue would spend the breaker's remaining headroom on retrying a decision, not on work.
+  static func closeWithoutCall(
+    _ db: Database,
+    _ operation: OperationRow,
+    failure: LearningOperationFailure
+  ) throws -> AuthorizeOutcome {
+    try db.execute(
+      sql: """
+        UPDATE learning_operations
+        SET state = ?, failure_code = ?, reserved_tokens = 0, reserved_cost_usd = 0,
+          reservation_state = ?
+        WHERE operation_id = ? AND state = ?
+        """,
+      arguments: [
+        LearningOperationState.failedNoCall.rawValue,
+        failure.rawValue,
+        LearningReservationState.closed.rawValue,
+        operation.id.rawValue,
+        LearningOperationState.claimed.rawValue,
+      ]
+    )
+    return db.changesCount > 0 ? .deniedNoCall(failure) : .superseded
+  }
+}
+
+// MARK: - Reservation Close
+
+private extension ScheduledLearningStoreGRDB {
+  /// The one predicate that makes closing idempotent. A duplicate result finds the row already out
+  /// of `started` and changes nothing, so the reservation is emptied exactly once.
+  static func closeStarted(
+    _ db: Database,
+    _ operation: OperationRow,
+    terminal: LearningOperationState,
+    failure: LearningOperationFailure?
+  ) throws -> Bool {
+    try db.execute(
+      sql: """
+        UPDATE learning_operations
+        SET state = ?, failure_code = ?, reserved_tokens = 0, reserved_cost_usd = 0,
+          reservation_state = ?
+        WHERE operation_id = ? AND state = ?
+        """,
+      arguments: [
+        terminal.rawValue,
+        failure?.rawValue,
+        LearningReservationState.closed.rawValue,
+        operation.id.rawValue,
+        LearningOperationState.started.rawValue,
+      ]
+    )
+    return db.changesCount > 0
+  }
+
+  /// A `started` row at boot means the call may have been billed and its answer is unrecoverable.
+  /// The estimate becomes a real charge under the id the call was sent with, so the same id can
+  /// never be reused and the day's totals do not under-report what the provider may have billed.
+  static func chargeInterrupted(_ db: Database, id: LearningOperationID, now: Date) throws {
+    guard let operation = try readOperation(db, id: id) else {
+      return
+    }
+    guard let callID = operation.providerCallID, let route = operation.route else {
+      throw StoreError.unexpected(
+        "started operation \(id.rawValue) has no provider call id or route to charge"
+      )
+    }
+    // Before the state change, so a failure to charge aborts the whole reconciliation rather than
+    // leaving a closed reservation whose spend was never recorded.
+    try chargeLearningUsage(
+      db,
+      operation: operation,
+      callID: callID,
+      model: route,
+      promptTokens: operation.reservedTokens,
+      completionTokens: 0,
+      costUSD: operation.reservedCostUSD,
+      costSource: .heuristic,
+      isEstimated: true,
+      now: now
+    )
+    try db.execute(
+      sql: """
+        UPDATE learning_operations
+        SET state = ?, reserved_tokens = 0, reserved_cost_usd = 0, reservation_state = ?
+        WHERE operation_id = ? AND state = ?
+        """,
+      arguments: [
+        LearningOperationState.interruptedUnknown.rawValue,
+        LearningReservationState.closed.rawValue,
+        id.rawValue,
+        LearningOperationState.started.rawValue,
+      ]
+    )
+  }
+}
+
+// MARK: - Learning Usage Rows
+
+private extension ScheduledLearningStoreGRDB {
+  /// One learning call's spend, scoped to its operation and job rather than to a run it has none
+  /// of. `provider_usage.session_id` is NOT NULL, so the row rides the job's own session lane.
+  static func chargeLearningUsage(  // swiftlint:disable:this function_parameter_count
+    _ db: Database,
+    operation: OperationRow,
+    callID: ProviderCallID,
+    model: String,
+    promptTokens: Int,
+    completionTokens: Int,
+    costUSD: Double,
+    costSource: CostSource,
+    isEstimated: Bool,
+    now: Date
+  ) throws {
+    let usage = ProviderUsage(
+      providerCallID: callID,
+      runId: nil,
+      sessionId: try jobSessionID(db, jobId: operation.jobId),
+      model: model,
+      promptTokens: promptTokens,
+      completionTokens: completionTokens,
+      costUSD: costUSD,
+      costSource: costSource,
+      isEstimated: isEstimated,
+      ts: now,
+      learningScope: LearningUsageScope(operationId: operation.id, jobId: operation.jobId)
+    )
+    _ = try RunStoreGRDB.insertUsage(db, usage)
+  }
+
+  static func jobSessionID(_ db: Database, jobId: Int64) throws -> Int64 {
+    let sessionId = try Int64.fetchOne(
+      db,
+      sql: "SELECT session_id FROM scheduled_jobs WHERE id = ?",
+      arguments: [jobId]
+    )
+    guard let sessionId else {
+      throw StoreError.unexpected("job \(jobId) has no session to charge learning spend against")
+    }
+    return sessionId
+  }
+
+  static func operationIDs(
+    _ db: Database,
+    state: LearningOperationState
+  ) throws -> [LearningOperationID] {
+    try String.fetchAll(
+      db,
+      sql: "SELECT operation_id FROM learning_operations WHERE state = ? ORDER BY operation_id",
+      arguments: [state.rawValue]
+    )
+    .map(LearningOperationID.init(rawValue:))
+  }
+}

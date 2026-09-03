@@ -13,6 +13,11 @@ public enum RunOrigin: String, Sendable, Equatable {
   public var isProactive: Bool {
     self != .interactive
   }
+
+  /// The same pair as a value, for the queries that filter rows by origin rather than test one.
+  /// The doctor gauge, the turn preflight and the learning authorization all charge the one pool,
+  /// so they name this rather than each repeating the list.
+  public static let proactiveOrigins: [RunOrigin] = [.scheduled, .heartbeat]
 }
 
 /// The scheduled-job status FSM. `completed`/`cancelled` are terminal; terminal rows

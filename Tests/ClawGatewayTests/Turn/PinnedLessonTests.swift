@@ -434,4 +434,30 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
   func evidence(runId: Int64) throws(StoreError) -> SealedEvidence? {
     try base.evidence(runId: runId)
   }
+
+  func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation? {
+    try base.claimOperation(key, now: now)
+  }
+
+  func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome {
+    try base.authorizeAndStartOperation(authorization, now: now)
+  }
+
+  func finishOperation(
+    _ result: LearningOperationResult,
+    now: Date
+  ) throws(StoreError) -> Bool {
+    try base.finishOperation(result, now: now)
+  }
+
+  @discardableResult
+  func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation {
+    try base.reconcileOperationsAtBoot(now: now)
+  }
 }

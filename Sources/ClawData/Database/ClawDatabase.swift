@@ -273,6 +273,9 @@ public enum ClawDatabase {
       try addLearningUsageScope(db)
       try rebuildOutboundDeliveriesWithoutRunOwnership(db)
     }
+    migrator.registerMigration("v12") { db in
+      try addLearningOperationClaimKey(db)
+    }
     return migrator
   }
 
