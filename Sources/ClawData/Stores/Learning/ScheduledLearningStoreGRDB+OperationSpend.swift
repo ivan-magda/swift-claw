@@ -84,6 +84,9 @@ extension ScheduledLearningStoreGRDB {
       isEstimated: result.usage.isEstimated,
       now: now
     )
+    if let evaluation = result.evaluation {
+      try recordEvaluation(db, operation: operation, evaluation: evaluation, now: now)
+    }
     return true
   }
 }

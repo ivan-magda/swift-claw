@@ -167,6 +167,36 @@ public struct LearningCallUsage: Sendable, Equatable {
     self.costSource = costSource
     self.isEstimated = isEstimated
   }
+
+  /// Reads one accounted row into the learning shape. The row's own call id, run, session and
+  /// timestamp are dropped deliberately: the result commit owns those, and it charges under the id
+  /// the call was reserved with rather than one the caller supplies a second time.
+  public init(_ usage: ProviderUsage) {
+    self.init(
+      model: usage.model,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      costUSD: usage.costUSD,
+      costSource: usage.costSource,
+      isEstimated: usage.isEstimated
+    )
+  }
+}
+
+/// The evaluator's verdict on one run's sealed evidence, as the result commit records it.
+public struct LearningEvaluation: Sendable, Equatable {
+  public let outcome: EvaluatorOutcome
+  /// Stored sorted and compared by exact equality: two runs report the same defect only when their
+  /// codes match character for character, so an arrival order must never change the comparison.
+  public let issueCodes: [String]
+  public let evaluator: EvaluatorSurface
+
+  /// Sorts on the way in, so no caller can put an arrival order into the durable form.
+  public init(outcome: EvaluatorOutcome, issueCodes: [String], evaluator: EvaluatorSurface) {
+    self.outcome = outcome
+    self.issueCodes = issueCodes.sorted()
+    self.evaluator = evaluator
+  }
 }
 
 /// One network boundary crossing, closed. `failure` nil means the call returned output the
@@ -175,15 +205,22 @@ public struct LearningOperationResult: Sendable, Equatable {
   public let operationId: LearningOperationID
   public let failure: LearningOperationFailure?
   public let usage: LearningCallUsage
+  /// The verdict this crossing produced, nil whenever it produced none. It travels with the result
+  /// rather than behind it because `claim` refuses a finished key forever: an operation committed
+  /// `succeeded` with its verdict still unwritten would be paid-for evidence that nothing can ever
+  /// evaluate again, and no later pass could tell that from a run legitimately never judged.
+  public let evaluation: LearningEvaluation?
 
   public init(
     operationId: LearningOperationID,
     failure: LearningOperationFailure?,
-    usage: LearningCallUsage
+    usage: LearningCallUsage,
+    evaluation: LearningEvaluation?
   ) {
     self.operationId = operationId
     self.failure = failure
     self.usage = usage
+    self.evaluation = evaluation
   }
 }
 

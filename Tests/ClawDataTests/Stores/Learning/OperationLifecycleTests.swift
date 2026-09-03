@@ -190,6 +190,31 @@ import Testing
     #expect(try env.reservation(started.id) == BoundRunEnvironment.closedReservation)
   }
 
+  @Test func aVerdictCommitsInTheSameTransactionAsTheOperationThatBoughtIt() throws {
+    // given — a started evaluator operation over one run's sealed receipt
+    let env = try BoundRunEnvironment.make()
+    let evidence = try env.sealedEvidence()
+    let started = try env.startedOperation(env.evaluatorKey(for: evidence))
+
+    // when
+    let committed = try env.learning.finishOperation(
+      env.result(for: started.id, evaluation: env.verdict()),
+      now: env.now
+    )
+
+    // then — a `succeeded` operation whose verdict landed in a later transaction could lose it to a
+    // crash, and `claim` refuses a finished key forever, so that evidence would never be judged
+    #expect(committed)
+    let stored = try #require(try env.learning.evaluation(runId: evidence.runId))
+    #expect(stored.outcome == .reusableIssue)
+    #expect(stored.issueCodes == ["empty_answer", "missed_price_change"])
+    #expect(stored.evaluator.route == BoundRunEnvironment.evaluatorServedRoute)
+    #expect(
+      try env.evaluatorRoute(runId: evidence.runId) == BoundRunEnvironment.evaluatorServedRoute
+    )
+    #expect(try env.learning.claimOperation(env.evaluatorKey(for: evidence), now: env.now) == nil)
+  }
+
   @Test func anEpochTheJobMovedPastAuthorizesNothing() throws {
     // given — the job re-epoched between the claim and the network handoff
     let env = try BoundRunEnvironment.make()
