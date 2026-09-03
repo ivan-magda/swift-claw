@@ -94,6 +94,51 @@ import Testing
     #expect(try env.runState(runId: inbound.runId) == .done)
   }
 
+  @Test func aBindingWrittenBeforeTheFlagCameOffIsIgnored() async throws {
+    // given — a run bound while learning was armed, resuming under a disarmed daemon
+    let env = try PinnedLessonEnvironment.make(learning: { _ in
+      nil
+    })
+    let pinned = try env.pinStableSet(["Report only price changes."])
+    let fired = try env.fireBoundRun()
+
+    // when
+    try await env.runner.run(
+      runId: fired.runId,
+      sessionId: fired.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: fired.triggerMessageId
+    )
+
+    // then — the flag is a kill switch: no row, no taint, and the run still completes
+    let sent = try #require(await env.provider.requests.first).renderedContext
+    #expect(sent.contains(pinned.lessons[0]) == false)
+    #expect(try env.sessionIsTainted(sessionId: fired.sessionId) == false)
+    #expect(try env.runState(runId: fired.runId) == .done)
+  }
+
+  @Test func anUnresolvablePinnedSetFailsTheRunBeforeDispatch() async throws {
+    // given — the binding's set cannot be read back. The schema's composite foreign key keeps this
+    // out of a real database, so the store is wrapped to produce the one fact under test.
+    let env = try PinnedLessonEnvironment.make(learning: { store in
+      UnresolvableLessonSets(base: store)
+    })
+    _ = try env.pinStableSet(["Report only price changes."])
+    let fired = try env.fireBoundRun()
+
+    // when
+    try await env.runner.run(
+      runId: fired.runId,
+      sessionId: fired.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: fired.triggerMessageId
+    )
+
+    // then — the run fails rather than answering with no lessons at all
+    #expect(await env.provider.callCount == 0)
+    #expect(try env.runState(runId: fired.runId) == .failed)
+  }
+
   @Test func aResumeLoadsTheSamePinnedSetTheDispatchUsed() async throws {
     // given — a bound run already picked up, as an approval's continuation finds it. The suspend
     // choreography is elided: the pinned read depends on the run's binding, not on how it parked.
@@ -139,7 +184,14 @@ private struct PinnedLessonEnvironment {
   let chatId: Int64
   let now: Date
 
-  static func make() throws -> PinnedLessonEnvironment {
+  /// - Parameter learning: what the runner reads pinned lessons through, given the real store.
+  ///   Returning nil is a disarmed daemon; wrapping it is how a test reaches a state the schema's
+  ///   own foreign key keeps out of the database.
+  static func make(
+    learning wiring: (ScheduledLearningStoreGRDB) -> (any ScheduledLearningStore)? = { store in
+      store
+    }
+  ) throws -> PinnedLessonEnvironment {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     let chatId: Int64 = 777
@@ -205,7 +257,7 @@ private struct PinnedLessonEnvironment {
       imageCache: ImageCache(),
       notifyOutbox: {},
       now: { now },
-      learning: learning,
+      learning: wiring(learning),
       parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
       approvalExpirySeconds: testApprovalExpirySeconds,
       logger: TestLog.silent
@@ -332,16 +384,54 @@ private struct PinnedLessonEnvironment {
   }
 }
 
-private struct EmptyWorkspace: WorkspaceReading {
-  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
-    .missing
+/// The real learning store with one fact removed: no lesson set ever resolves. Everything else
+/// — the binding above all — stays the real row the fire wrote.
+private struct UnresolvableLessonSets: ScheduledLearningStore {
+  let base: ScheduledLearningStoreGRDB
+
+  func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
+    nil
   }
 
-  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    .missing
+  func armJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState {
+    try base.armJob(jobId: jobId, now: now)
   }
 
-  func scanSkills() -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
+  func binding(runId: Int64) throws(StoreError) -> RunLearningBinding? {
+    try base.binding(runId: runId)
+  }
+
+  func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial? {
+    try base.openTrial(jobId: jobId)
+  }
+
+  func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {
+    try base.settlement(runId: runId)
+  }
+
+  @discardableResult
+  func settleFromLane(runId: Int64, now: Date) throws(StoreError) -> Bool {
+    try base.settleFromLane(runId: runId, now: now)
+  }
+
+  func freezeCompatibility(runId: Int64, surface: RunSurface) throws(StoreError) {
+    try base.freezeCompatibility(runId: runId, surface: surface)
+  }
+
+  func compatibility(runId: Int64) throws(StoreError) -> RunCompatibility? {
+    try base.compatibility(runId: runId)
+  }
+
+  func unsealed(limit: Int) throws(StoreError) -> [Int64] {
+    try base.unsealed(limit: limit)
+  }
+
+  @discardableResult
+  func sealEvidence(runId: Int64, now: Date) throws(StoreError) -> SealOutcome {
+    try base.sealEvidence(runId: runId, now: now)
+  }
+
+  func evidence(runId: Int64) throws(StoreError) -> SealedEvidence? {
+    try base.evidence(runId: runId)
   }
 }

@@ -19,7 +19,7 @@ struct LessonRowTests {
     ]
     let set = try LessonSet.canonical(jobId: 7, lessons: lessons)
     let builder = makeLessonBuilder(
-      workspace: LessonWorkspace(userFile: "owner profile")
+      workspace: FakeWorkspace(files: [.user: .present("owner profile")])
     )
 
     // when
@@ -44,7 +44,7 @@ struct LessonRowTests {
 
   @Test func anEmptySetEmitsNoRowAndLeavesSensitiveMemoryReachable() throws {
     // given
-    let memoryStore = RecordingMemoryStore(items: [lessonMemory()])
+    let memoryStore = FakeMemoryStore(items: [lessonMemory()])
     let builder = makeLessonBuilder(memoryStore: memoryStore)
 
     // when
@@ -65,8 +65,8 @@ struct LessonRowTests {
   @Test func lessonTaintAugmentsPersistedSessionTaintInsteadOfReplacingIt() throws {
     // given — an untainted session with lessons, and a tainted session without them
     let set = try LessonSet.canonical(jobId: 7, lessons: ["Report only price changes."])
-    let withLessonsMemory = RecordingMemoryStore(items: [lessonMemory()])
-    let withoutLessonsMemory = RecordingMemoryStore(items: [lessonMemory()])
+    let withLessonsMemory = FakeMemoryStore(items: [lessonMemory()])
+    let withoutLessonsMemory = FakeMemoryStore(items: [lessonMemory()])
 
     // when
     let withLessons = try makeLessonBuilder(memoryStore: withLessonsMemory).assemble(
@@ -138,8 +138,8 @@ private func lessonBudget(inputCapGraphemes: Int) -> ContextBudget {
 }
 
 private func makeLessonBuilder(
-  workspace: LessonWorkspace = LessonWorkspace(),
-  memoryStore: RecordingMemoryStore = RecordingMemoryStore(),
+  workspace: FakeWorkspace = FakeWorkspace(),
+  memoryStore: FakeMemoryStore = FakeMemoryStore(),
   budget: ContextBudget = .default
 ) -> ContextBuilder {
   ContextBuilder(
@@ -176,47 +176,4 @@ private func lessonMemory() -> MemoryItem {
     sessionId: nil,
     createdAt: Date(timeIntervalSince1970: 1)
   )
-}
-
-private struct LessonWorkspace: WorkspaceReading {
-  var userFile: String?
-
-  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
-    guard file == .user, let userFile else {
-      return .missing
-    }
-    return LoadedFile(outcome: .present, text: userFile, graphemeCount: userFile.count)
-  }
-
-  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
-
-  func scanSkills() -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
-  }
-}
-
-/// Spies on the one argument the memory taint travels through — the seam is internal, so the
-/// exclusion it produces is asserted alongside it.
-private final class RecordingMemoryStore: MemoryStore, @unchecked Sendable {
-  private let items: [MemoryItem]
-  private(set) var fetchRankedCalls: [Bool] = []
-
-  init(items: [MemoryItem] = []) {
-    self.items = items
-  }
-
-  func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
-    throw StoreError.unexpected("not used")
-  }
-
-  func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
-  func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
-  func delete(id: Int64) throws(StoreError) -> Bool { false }
-
-  func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] {
-    fetchRankedCalls.append(excludeSensitive)
-    return Array(items.prefix(limit))
-  }
 }

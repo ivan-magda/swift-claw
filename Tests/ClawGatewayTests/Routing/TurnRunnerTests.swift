@@ -171,6 +171,10 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.runOrigin(runId: runId)
   }
 
+  func jobId(runId: Int64) throws(StoreError) -> Int64? {
+    try base.jobId(runId: runId)
+  }
+
   func failRunStalePolicy(
     runId: Int64,
     sessionId: Int64,
@@ -336,6 +340,10 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.runOrigin(runId: runId)
   }
 
+  func jobId(runId: Int64) throws(StoreError) -> Int64? {
+    try base.jobId(runId: runId)
+  }
+
   func failRunStalePolicy(
     runId: Int64,
     sessionId: Int64,
@@ -449,6 +457,9 @@ struct DiskFullRuns: RunStore {
     throw StoreError.diskFull
   }
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
+    throw StoreError.diskFull
+  }
+  func jobId(runId: Int64) throws(StoreError) -> Int64? {
     throw StoreError.diskFull
   }
   func failRunStalePolicy(

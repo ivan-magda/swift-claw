@@ -10,9 +10,6 @@ extension TurnRunner {
   struct TurnInputs {
     let snapshot: SessionContextSnapshot
     let buildResult: BuildResult
-    /// Whether the assembled context carries a bound run's non-empty lesson set. Untrusted by
-    /// construction, so it augments the run's taint alongside the session's own.
-    let hasPinnedLessons: Bool
     let todayTokens: Int
     let todayUSD: Double
     let proactiveTodayUSD: Double

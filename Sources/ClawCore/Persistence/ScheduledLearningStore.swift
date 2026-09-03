@@ -43,12 +43,6 @@ public protocol ScheduledLearningStore: Sendable {
   /// binding — a heartbeat, a fire under a disarmed daemon, or a run that predates bindings.
   func binding(runId: Int64) throws(StoreError) -> RunLearningBinding?
 
-  /// The job named by the run row itself, which nothing but the fire that created it ever writes.
-  /// The pinned read path compares it against the binding's job: lesson-set identity is the pair
-  /// `(job_id, digest)`, so this is the only fact that can catch a binding pointing at a set that
-  /// belongs to another job. Nil for a run with no job — every inbound turn and every heartbeat.
-  func runJobId(runId: Int64) throws(StoreError) -> Int64?
-
   /// The job's live trial, open or draining, read from the authoritative `learning_trials` state.
   /// Nil once the trial is decided, which is also what makes a job admissible for a new candidate.
   /// Every decision about whether a trial is still live goes through here, never through

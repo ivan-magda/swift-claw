@@ -35,6 +35,7 @@ import Testing
     #expect(frozen.skillSetDigest == DaemonBuilder.skillSetDigest([]))
     #expect(frozen.configuredRoute == CompositionAcceptance.qualifiedModel)
     #expect(builder.makeLearningService() != nil)
+    #expect(builder.makePinnedLessonStore() != nil)
   }
 
   @Test func theDisarmedRootComposesNoServiceAndFreezesNothing() throws {
@@ -52,6 +53,9 @@ import Testing
     // then — the daemon behaves exactly as it does today: nothing to sweep, nothing frozen
     #expect(builder.makeLearningService() == nil)
     #expect(try builder.stores.learning.compatibility(runId: runId) == nil)
+    // The turn path must refuse the pinned read too: a binding written before the flag came off
+    // outlives the flag, and an approval parked on it can resume under a disarmed daemon.
+    #expect(builder.makePinnedLessonStore() == nil)
   }
 
   @Test func theToolCatalogDigestCoversRiskAndIgnoresCatalogOrder() {

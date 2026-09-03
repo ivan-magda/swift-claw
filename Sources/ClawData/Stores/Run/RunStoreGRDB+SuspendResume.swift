@@ -220,6 +220,12 @@ extension RunStoreGRDB {
     }
   }
 
+  public func jobId(runId: Int64) throws(StoreError) -> Int64? {
+    try database.readMapping { db in
+      try Int64.fetchOne(db, sql: "SELECT job_id FROM runs WHERE id = ?", arguments: [runId])
+    }
+  }
+
   public func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     try database.readMapping { db in
       let rawOrigin = try String.fetchOne(

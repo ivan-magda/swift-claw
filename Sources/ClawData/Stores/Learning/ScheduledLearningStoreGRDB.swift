@@ -21,12 +21,6 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
     }
   }
 
-  public func runJobId(runId: Int64) throws(StoreError) -> Int64? {
-    try database.readMapping { db in
-      try Int64.fetchOne(db, sql: "SELECT job_id FROM runs WHERE id = ?", arguments: [runId])
-    }
-  }
-
   public func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial? {
     try database.readMapping { db in
       try Self.liveTrial(db, jobId: jobId)

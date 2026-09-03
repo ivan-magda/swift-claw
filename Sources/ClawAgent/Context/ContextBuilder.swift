@@ -106,6 +106,7 @@ public struct ContextBuilder: Sendable {
       messages: messages,
       ownerNotices: ownerNotices,
       hasPrivateDataAccess: hasPrivateDataAccess(fitted),
+      hasPinnedLessons: pinned != nil,
       policyVersion: currentPolicyVersion()
     )
   }

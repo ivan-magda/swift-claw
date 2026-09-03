@@ -249,6 +249,11 @@ public protocol RunStore: Sendable {
   func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage
   /// The run's origin, read WITHOUT a re-pick-up (the resume path never re-flips PENDING).
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin?
+  /// The scheduled job this run fired for, as the fire that created it wrote it and nothing since
+  /// has changed it. Nil for every run with no job — inbound turns and heartbeats. The pinned
+  /// lesson read compares it against the job its learning binding claims: a lesson set is named by
+  /// the pair `(job_id, digest)`, so a digest that resolves is not yet proof of the right owner.
+  func jobId(runId: Int64) throws(StoreError) -> Int64?
   /// Stale-policy crash-window belt: fail the run (AWAITING_APPROVAL → FAILED), resolve the
   /// placeholder observation with `observationContent` (left dangling it would assert a pending
   /// approval to every later assembly and false-trigger the boot claimed-window settlement), and

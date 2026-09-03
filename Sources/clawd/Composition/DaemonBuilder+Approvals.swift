@@ -53,13 +53,23 @@ extension DaemonBuilder {
       delivery: transport,
       ownerChatId: config.heartbeatOwnerChatId,
       freezeLearningSurface: freezeLearningSurface,
-      // Unconditional: with the flag unset the fire path writes no binding, so the read finds
-      // nothing and the turn assembles exactly the rows it assembles today.
-      learning: stores.learning,
+      learning: makePinnedLessonStore(),
       parker: coordination.deferredParker,
       approvalExpirySeconds: config.approvalExpirySeconds,
       logger: logger
     )
+  }
+
+  /// The store the turn path reads a bound run's pinned lessons through, or nil when
+  /// `CLAW_LEARNING_ENABLED` is unset. Gated here, not left to the fire path having written no
+  /// binding: a run bound while the flag was on can be parked on an approval, survive a restart
+  /// that removed the flag, and resume — boot reconciliation deliberately leaves AWAITING_APPROVAL
+  /// runs alone. A disarmed daemon therefore has to refuse the read itself.
+  func makePinnedLessonStore() -> (any ScheduledLearningStore)? {
+    guard config.learningEnabled else {
+      return nil
+    }
+    return stores.learning
   }
 
   /// The handler that answers an owner's approve/deny tap. It reaches the router, so it is built

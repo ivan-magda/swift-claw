@@ -27,6 +27,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -61,6 +62,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -96,6 +98,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -126,6 +129,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -158,6 +162,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -191,6 +196,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 999_999,
       todayUSD: 0
@@ -230,6 +236,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -267,6 +274,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -293,6 +301,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -320,6 +329,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -355,6 +365,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -394,6 +405,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -435,6 +447,7 @@ struct AgentRuntimeTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -487,6 +500,7 @@ extension AgentRuntimeTests {
       chatId: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -525,6 +539,7 @@ extension AgentRuntimeTests {
       chatId: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -578,6 +593,7 @@ extension AgentRuntimeTests {
       chatId: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -625,6 +641,7 @@ extension AgentRuntimeTests {
       chatId: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -660,6 +677,7 @@ extension AgentRuntimeTests {
         chatId: 3,
         buildResult: makeBuildResult(),
         sessionTainted: false,
+        hasPinnedLessons: false,
         sessionHasPrivateData: false,
         todayTokens: 0,
         todayUSD: 0
@@ -701,6 +719,7 @@ extension AgentRuntimeTests {
       chatId: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -749,6 +768,7 @@ struct AgentRuntimePolicyTests {
       chatId: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -785,6 +805,7 @@ struct AgentRuntimePolicyTests {
       chatId: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -813,6 +834,7 @@ struct AgentRuntimePolicyTests {
       chatId: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: overUSD
@@ -835,6 +857,7 @@ struct AgentRuntimePolicyTests {
       chatId: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: overUSD
@@ -854,6 +877,7 @@ struct AgentRuntimePolicyTests {
       chatId: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: RunBudget.default.dayTokenCeiling,
       todayUSD: 0
@@ -876,6 +900,7 @@ struct AgentRuntimePolicyTests {
       chatId: 3,
       buildResult: buildResultCarryingState(bytes: stateBytes),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -895,6 +920,7 @@ struct AgentRuntimePolicyTests {
       chatId: 3,
       buildResult: buildResultCarryingState(bytes: stateBytes),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -920,6 +946,7 @@ struct AgentRuntimePolicyTests {
         chatId: 3,
         buildResult: buildResultCarryingState(bytes: stateBytes),
         sessionTainted: false,
+        hasPinnedLessons: false,
         sessionHasPrivateData: false,
         todayTokens: 0,
         todayUSD: 0
@@ -961,6 +988,7 @@ struct AgentRuntimeFailureAccountingTests {
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -1158,6 +1186,7 @@ struct AgentRuntimeFailureAccountingTests {
       chatId: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0

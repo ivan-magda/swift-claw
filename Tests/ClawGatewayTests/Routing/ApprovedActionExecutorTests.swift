@@ -681,6 +681,7 @@ import Testing
       throw StoreError.unexpected("unused in this fixture")
     }
     func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? { nil }
+    func jobId(runId: Int64) throws(StoreError) -> Int64? { nil }
     func failRunStalePolicy(
       runId: Int64,
       sessionId: Int64,

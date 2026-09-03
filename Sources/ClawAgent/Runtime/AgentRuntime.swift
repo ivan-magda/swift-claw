@@ -136,7 +136,7 @@ extension AgentRuntime {
     chatId: Int64,
     buildResult: BuildResult,
     sessionTainted: Bool,
-    hasPinnedLessons: Bool = false,
+    hasPinnedLessons: Bool,
     sessionHasPrivateData: Bool,
     todayTokens: Int,
     todayUSD: Double,

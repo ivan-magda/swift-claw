@@ -59,8 +59,10 @@ public struct TurnRunner: TurnDispatching {
   /// nothing. Inert when learning is disarmed.
   private let freezeLearningSurface: @Sendable (_ runId: Int64, _ policyVersion: String) -> Void
 
-  /// Reads the lesson set a bound run froze at its fire. Nil where no learning store is composed,
-  /// which is the same turn a run with no binding gets: no lesson row, no lesson taint.
+  /// Reads the lesson set a bound run froze at its fire. Nil while learning is disarmed, which is
+  /// the same turn a run with no binding gets: no lesson row, no lesson taint. Disarming has to
+  /// reach this seam, not only the fire path — a run bound before the flag came off can still be
+  /// parked on an approval and resume afterwards.
   private let learning: (any ScheduledLearningStore)?
 
   /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's
@@ -119,7 +121,7 @@ public struct TurnRunner: TurnDispatching {
     self.logger = logger
   }
 
-  public func run(
+  public func run(  // swiftlint:disable:this function_body_length
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
@@ -180,7 +182,7 @@ public struct TurnRunner: TurnDispatching {
       chatId: chatId,
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
-      hasPinnedLessons: inputs.hasPinnedLessons,
+      hasPinnedLessons: inputs.buildResult.hasPinnedLessons,
       sessionHasPrivateData: inputs.snapshot.hasPrivateData,
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
@@ -248,7 +250,7 @@ public struct TurnRunner: TurnDispatching {
         chatId: chatId,
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
-        hasPinnedLessons: inputs.hasPinnedLessons,
+        hasPinnedLessons: inputs.buildResult.hasPinnedLessons,
         sessionHasPrivateData: inputs.snapshot.hasPrivateData,
         todayTokens: inputs.todayTokens,
         todayUSD: inputs.todayUSD,
@@ -327,7 +329,7 @@ private extension TurnRunner {
 
   /// Loads the bounded snapshot, today's budget totals, and the assembled context in one place —
   /// `run` and `resume` share it; only the bounding message id and the clock differ.
-  func loadTurnInputs(
+  func loadTurnInputs(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     sessionId: Int64,
     boundMessageId: Int64,
@@ -363,7 +365,6 @@ private extension TurnRunner {
     return TurnInputs(
       snapshot: snapshot,
       buildResult: buildResult,
-      hasPinnedLessons: lessons?.isEmpty == false,
       todayTokens: totals.tokens,
       todayUSD: totals.costUSD,
       proactiveTodayUSD: proactiveTodayUSD
@@ -378,7 +379,7 @@ private extension TurnRunner {
     guard let learning, let binding = try learning.binding(runId: runId) else {
       return nil
     }
-    guard try learning.runJobId(runId: runId) == binding.jobId else {
+    guard try runs.jobId(runId: runId) == binding.jobId else {
       throw PinnedLessonFailure.identityMismatch(runId: runId)
     }
     guard
