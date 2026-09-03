@@ -213,6 +213,18 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Receipt Rows
 
 extension ScheduledLearningStoreGRDB {
+  /// The route the run's answering round actually billed, as `stampTerminalRoute` froze it at
+  /// sealing. Read from the settlement row rather than from the sealed payload: the payload is
+  /// nulled by the 30-day sweep while the compact receipt around it lives 90, so this is the source
+  /// that outlives retention.
+  static func readTerminalRoute(_ db: Database, runId: Int64) throws -> String? {
+    try String.fetchOne(
+      db,
+      sql: "SELECT terminal_route FROM run_settlements WHERE run_id = ?",
+      arguments: [runId]
+    )
+  }
+
   static func readEvidence(_ db: Database, runId: Int64) throws -> SealedEvidence? {
     let row = try Row.fetchOne(
       db,

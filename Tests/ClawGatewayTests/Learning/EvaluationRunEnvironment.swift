@@ -2,6 +2,7 @@ import ClawCore
 import ClawTestSupport
 import Foundation
 import GRDB
+import Logging
 
 @testable import ClawData
 @testable import ClawGateway
@@ -34,14 +35,24 @@ struct EvaluationRunEnvironment {
     let runId: Int64?
     let jobId: Int64?
     let tokens: Int
+    let costUSD: Double
+    let costSource: String
   }
+
+  /// What the scripted evaluator reply bills. Named so the spend assertions read against the
+  /// provider's own numbers rather than against constants that could drift apart from the script.
+  static let replyPromptTokens = 300
+  static let replyCompletionTokens = 40
+  static let replyCostUSD = 0.0021
 
   static func make(
     reply: String,
     finalOutput: String = EvaluationRunEnvironment.defaultFinalOutput,
     secretValues: [String] = [],
     proactivePerDayUSD: Double = RunBudget.default.proactivePerDayUSD,
-    primaryFailure: (any Error & Sendable)? = nil
+    primaryFailure: (any Error & Sendable)? = nil,
+    supersedeAuthorization: Bool = false,
+    logger: Logger = TestLog.silent
   ) throws -> EvaluationRunEnvironment {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -87,8 +98,12 @@ struct EvaluationRunEnvironment {
     let answer = ChatResponse(
       content: reply,
       finishReason: "stop",
-      usage: ChatUsage(promptTokens: 300, completionTokens: 40, totalTokens: 340),
-      costFromProvider: 0.0021
+      usage: ChatUsage(
+        promptTokens: replyPromptTokens,
+        completionTokens: replyCompletionTokens,
+        totalTokens: replyPromptTokens + replyCompletionTokens
+      ),
+      costFromProvider: replyCostUSD
     )
     let primary =
       primaryFailure.map { failure in
@@ -107,7 +122,7 @@ struct EvaluationRunEnvironment {
       learning: learning,
       provider: primary,
       runner: LearningOperationRunner(
-        learning: learning,
+        learning: supersedeAuthorization ? SupersedingAuthorization(base: learning) : learning,
         jobs: jobs,
         roster: roster,
         budget: budget(proactivePerDayUSD: proactivePerDayUSD),
@@ -116,7 +131,7 @@ struct EvaluationRunEnvironment {
           referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
         ),
         redactor: SecretRedactor(secretValues: secretValues),
-        logger: TestLog.silent
+        logger: logger
       ),
       jobId: job.id,
       sessionId: fired.sessionId,
@@ -157,6 +172,12 @@ extension EvaluationRunEnvironment {
 
   func operationRoute() throws -> String? {
     try operationColumn("route")
+  }
+
+  func evaluationRowCount() throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM learning_evaluations") ?? -1
+    }
   }
 
   func evaluatorRoute() throws -> String? {
@@ -250,7 +271,7 @@ private extension EvaluationRunEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT model, run_id, learning_job_id,
+          SELECT model, run_id, learning_job_id, cost_usd, cost_source,
             prompt_tokens + completion_tokens AS tokens
           FROM provider_usage WHERE \(predicate) ORDER BY id
           """
@@ -260,9 +281,96 @@ private extension EvaluationRunEnvironment {
           model: row["model"],
           runId: row["run_id"],
           jobId: row["learning_job_id"],
-          tokens: row["tokens"]
+          tokens: row["tokens"],
+          costUSD: row["cost_usd"],
+          costSource: row["cost_source"]
         )
       }
     }
+  }
+}
+
+// MARK: - Superseded Authorization
+
+/// The real store with one answer replaced: authorization always reports that the claim stopped
+/// describing work worth doing. Everything else stays the real row, so the operation the runner
+/// claimed is genuinely there to be inspected afterwards.
+private struct SupersedingAuthorization: ScheduledLearningStore {
+  let base: ScheduledLearningStoreGRDB
+
+  func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome {
+    .superseded
+  }
+
+  func armJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState {
+    try base.armJob(jobId: jobId, now: now)
+  }
+
+  func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
+    try base.lessonSet(jobId: jobId, digest: digest)
+  }
+
+  func binding(runId: Int64) throws(StoreError) -> RunLearningBinding? {
+    try base.binding(runId: runId)
+  }
+
+  func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial? {
+    try base.openTrial(jobId: jobId)
+  }
+
+  func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {
+    try base.settlement(runId: runId)
+  }
+
+  @discardableResult
+  func settleFromLane(runId: Int64, now: Date) throws(StoreError) -> Bool {
+    try base.settleFromLane(runId: runId, now: now)
+  }
+
+  func freezeCompatibility(runId: Int64, surface: RunSurface) throws(StoreError) {
+    try base.freezeCompatibility(runId: runId, surface: surface)
+  }
+
+  func compatibility(runId: Int64) throws(StoreError) -> RunCompatibility? {
+    try base.compatibility(runId: runId)
+  }
+
+  func unsealed(limit: Int) throws(StoreError) -> [Int64] {
+    try base.unsealed(limit: limit)
+  }
+
+  @discardableResult
+  func sealEvidence(runId: Int64, now: Date) throws(StoreError) -> SealOutcome {
+    try base.sealEvidence(runId: runId, now: now)
+  }
+
+  func evidence(runId: Int64) throws(StoreError) -> SealedEvidence? {
+    try base.evidence(runId: runId)
+  }
+
+  func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation? {
+    try base.claimOperation(key, now: now)
+  }
+
+  func finishOperation(
+    _ result: LearningOperationResult,
+    now: Date
+  ) throws(StoreError) -> Bool {
+    try base.finishOperation(result, now: now)
+  }
+
+  func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation? {
+    try base.evaluation(runId: runId)
+  }
+
+  @discardableResult
+  func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation {
+    try base.reconcileOperationsAtBoot(now: now)
   }
 }

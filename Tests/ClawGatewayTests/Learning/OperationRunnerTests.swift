@@ -47,7 +47,7 @@ import Testing
     #expect(verdict.evaluator.rubricVersion == EvaluatorRubric.v1.version)
   }
 
-  @Test func learningSpendNeverLandsOnTheEvaluatedRun() async throws {
+  @Test func theChargedRowIsWhatTheEvaluatorCallActuallyBilled() async throws {
     // given — a run that already billed its own answering round
     let env = try EvaluationRunEnvironment.make(reply: EvaluationRunEnvironment.noIssueReply)
     let runSpendBefore = try env.runUsage()
@@ -55,12 +55,17 @@ import Testing
     // when
     await env.runner.runEvaluation(runId: env.runId, now: env.now)
 
-    // then — the evaluator's spend rides the learning scope, never the run it judged
+    // then — the runner chooses these numbers, and a call charged at zero or at a guess would let
+    // the day's breakers under-count real learning spend for the rest of the day
+    let charged = try #require(try env.learningUsage().first)
+    #expect(
+      charged.tokens
+        == EvaluationRunEnvironment.replyPromptTokens
+        + EvaluationRunEnvironment.replyCompletionTokens
+    )
+    #expect(charged.costUSD == EvaluationRunEnvironment.replyCostUSD)
+    #expect(charged.costSource == CostSource.providerReturned.rawValue)
     #expect(try env.runUsage() == runSpendBefore)
-    let learning = try env.learningUsage()
-    #expect(learning.count == 1)
-    #expect(learning.first?.runId == nil)
-    #expect(learning.first?.jobId == env.jobId)
   }
 
   @Test func aCarrierNeedingRedactionIsDeniedWithoutACall() async throws {
@@ -106,12 +111,49 @@ import Testing
     // then — a judging call that could act would stop being a judgement
     let request = try #require(await env.provider.requests.first)
     #expect(request.tools.isEmpty)
-    #expect(request.maxOutputTokens == LearningOperationRunner.evaluatorOutputTokenCap)
+    // The literal, deliberately: `scheduled-learning/v1` fixes the evaluator output cap at 512, and
+    // comparing the constant to itself would let that versioned parameter change in silence.
+    #expect(request.maxOutputTokens == 512)
     #expect(
       request.messages.contains { message in
         message.content.text.contains(EvaluationRunEnvironment.defaultFinalOutput)
       }
     )
+  }
+
+  @Test func aSupersededAuthorizationSendsNothingAndRecordsNoVerdict() async throws {
+    // given — a claim that stopped describing work worth doing between the claim and the network
+    let log = RecordingLogCapture()
+    let env = try EvaluationRunEnvironment.make(
+      reply: EvaluationRunEnvironment.noIssueReply,
+      supersedeAuthorization: true,
+      logger: log.logger()
+    )
+
+    // when
+    await env.runner.runEvaluation(runId: env.runId, now: env.now)
+
+    // then — dispatching here would buy a real call whose commit finds the row out of `started`,
+    // drop the spend with no usage row anywhere, and leave a receipt no policy ever refused
+    #expect(await env.provider.requests.isEmpty)
+    #expect(try env.evaluationRowCount() == 0)
+    #expect(try env.learningUsage().isEmpty)
+    #expect(log.entries.contains { $0.level >= .error } == false)
+  }
+
+  @Test func aFencedReplyIsJudgedRatherThanBurned() async throws {
+    // given — the code fence models add despite being told not to
+    let env = try EvaluationRunEnvironment.make(
+      reply: "```json\n\(EvaluationRunEnvironment.noIssueReply)\n```"
+    )
+
+    // when
+    await env.runner.runEvaluation(runId: env.runId, now: env.now)
+
+    // then — punctuation must not close the key forever: `claim` never reopens a finished one, so
+    // failing here would make this run's paid-for evidence permanently unjudgeable
+    #expect(try env.operationState() == .succeeded)
+    #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
   }
 
   @Test func theCallStartsOnTheConfiguredRouteAndRecordsTheOneThatServedIt() async throws {

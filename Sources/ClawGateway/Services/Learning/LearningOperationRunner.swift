@@ -27,7 +27,9 @@ public struct LearningOperationRunner: Sendable {
   private let budget: RunBudget
   private let costResolver: CostResolver
   /// Applied to the exact serialized carrier, not to any field of it: the decision is over the
-  /// bytes that would go out.
+  /// bytes that would go out. Deliberately not defaulted: an empty redactor makes the whole check
+  /// inert, and a composition root that forgot the argument would put every run's final output on
+  /// the wire with nothing to catch it.
   private let redactor: SecretRedactor
   private let providerCallIDGenerator: any ProviderCallIDGenerating
   private let logger: Logger
@@ -39,7 +41,7 @@ public struct LearningOperationRunner: Sendable {
     cooldown: (any PrimaryRouteCooldownTracking)? = nil,
     budget: RunBudget,
     costResolver: CostResolver,
-    redactor: SecretRedactor = SecretRedactor(secretValues: []),
+    redactor: SecretRedactor,
     providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
     logger: Logger
   ) {
@@ -74,7 +76,10 @@ private extension LearningOperationRunner {
       evidence.eligibility.reachesEvaluator,
       let payload = evidence.payload,
       let job = try jobs.job(id: evidence.jobId),
-      let sessionId = job.sessionId
+      // A job that has never fired has no session for the result commit to charge against. It
+      // cannot own a settled bound run either, so this refuses before the claim rather than
+      // leaving a `started` row for boot to charge conservatively.
+      job.sessionId != nil
     else {
       return
     }
@@ -99,7 +104,6 @@ private extension LearningOperationRunner {
     let call = Call(
       operationId: claim.id,
       callID: providerCallIDGenerator.next(),
-      sessionId: sessionId,
       messages: messages
     )
     let authorized = try authorize(
@@ -188,16 +192,17 @@ private extension LearningOperationRunner {
   /// A reply outside the frozen schema is terminal spend, not a prompt to ask again: there is no
   /// schema-repair call, so the operation closes `schema_invalid` with the call it already paid for.
   func commit(_ response: ChatResponse, call: Call, route: LLMRouteBinding, now: Date) {
-    let usage = accountant(for: route).reconciledRow(
-      for: response,
-      callID: call.callID,
-      context: call.messages,
-      runId: nil,
-      sessionId: call.sessionId
+    let usage = LearningCallUsage(
+      model: route.configuredReference,
+      resolved: accountant(for: route).reconciled(for: response, context: call.messages)
     )
     let output: EvaluatorOutput
     do {
-      output = try JSONDecoder().decode(EvaluatorOutput.self, from: Data(response.content.utf8))
+      // Unfenced first. A model that wrapped its object in a code fence answered the question we
+      // asked; failing it here would close the key forever over punctuation, and `claim` never
+      // reopens a finished one.
+      let reply = FencedJSONReply.unfenced(response.content)
+      output = try JSONDecoder().decode(EvaluatorOutput.self, from: Data(reply.utf8))
     } catch {
       // The reason, not just the refusal: a run's evidence is unjudgeable from here on, and the
       // decoder's own message is the only record of why. It quotes the schema, never the reply.
@@ -222,28 +227,26 @@ private extension LearningOperationRunner {
   /// it holds is real. What it is charged depends on the provider's own verdict: a call that may
   /// have generated tokens owes the conservative estimate, and a proven `notStarted` owes nothing.
   func commit(failure error: any Error, call: Call, route: LLMRouteBinding, now: Date) {
-    let usage: ProviderUsage
+    let usage: LearningCallUsage
     switch ProviderFailureAccounting.classify(error) {
     case .mayHaveStarted(let observedCompletionTokens):
-      usage = accountant(for: route).conservativeRow(
-        callID: call.callID,
-        context: call.messages,
-        observedCompletionTokens: observedCompletionTokens,
-        runId: nil,
-        sessionId: call.sessionId
+      usage = LearningCallUsage(
+        model: route.configuredReference,
+        resolved: accountant(for: route).conservative(
+          context: call.messages,
+          observedCompletionTokens: observedCompletionTokens
+        )
       )
     case .notStarted:
-      usage = ProviderUsage(
-        providerCallID: call.callID,
-        runId: nil,
-        sessionId: call.sessionId,
+      // A confirmed zero, not a guess: the provider proved it generated nothing, which is what
+      // `providerReturned` at $0 means everywhere else in the tree.
+      usage = LearningCallUsage(
         model: route.configuredReference,
         promptTokens: 0,
         completionTokens: 0,
         costUSD: 0,
         costSource: .providerReturned,
-        isEstimated: false,
-        ts: now
+        isEstimated: false
       )
     }
     logger.info("learning call \(call.operationId.rawValue) failed at the provider: \(error)")
@@ -256,7 +259,7 @@ private extension LearningOperationRunner {
   func finish(
     _ call: Call,
     failure: LearningOperationFailure?,
-    usage: ProviderUsage,
+    usage: LearningCallUsage,
     evaluation: LearningEvaluation?,
     now: Date
   ) {
@@ -265,7 +268,7 @@ private extension LearningOperationRunner {
         LearningOperationResult(
           operationId: call.operationId,
           failure: failure,
-          usage: LearningCallUsage(usage),
+          usage: usage,
           evaluation: evaluation
         ),
         now: now
@@ -286,7 +289,6 @@ private extension LearningOperationRunner {
   struct Call {
     let operationId: LearningOperationID
     let callID: ProviderCallID
-    let sessionId: Int64
     let messages: [ChatMessage]
   }
 

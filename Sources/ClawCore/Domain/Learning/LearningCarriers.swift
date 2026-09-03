@@ -169,7 +169,9 @@ public struct EvaluatorOutput: Sendable, Equatable, Codable {
       throw Self.corrupt(container, "outcome '\(rawOutcome)' is outside the closed vocabulary")
     }
 
-    let issueCodes = try container.decode([String].self, forKey: .issueCodes)
+    // An absent list is unambiguous — no defects named — and rejecting it would close the key on a
+    // reply that told us everything we asked for. Every other strictness below is the contract.
+    let issueCodes = try container.decodeIfPresent([String].self, forKey: .issueCodes) ?? []
     guard issueCodes.count <= Self.maxIssueCodes else {
       throw Self.corrupt(container, "\(issueCodes.count) issue codes exceeds the bound")
     }

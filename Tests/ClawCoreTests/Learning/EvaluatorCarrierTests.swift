@@ -16,7 +16,6 @@ private let repliesOutsideTheFrozenSchema: [String] = [
   #"{"schema_version":1,"outcome":"no_issue","issue_codes":[],"confidence":0.9}"#,
   #"{"schema_version":2,"outcome":"no_issue","issue_codes":[]}"#,
   #"{"schema_version":1,"outcome":"maybe","issue_codes":[]}"#,
-  #"{"schema_version":1,"outcome":"no_issue"}"#,
   #"{"schema_version":1,"outcome":"reusable_issue","issue_codes":[""]}"#,
   reply(issueCodes: (0...EvaluatorOutput.maxIssueCodes).map { "code_\($0)" }),
   reply(issueCodes: [String(repeating: "x", count: EvaluatorOutput.maxIssueCodeCharacters + 1)]),
@@ -44,6 +43,9 @@ private func reply(issueCodes: [String]) -> String {
     )
 
     // when
+    // Lossless, not failable: these are `JSONEncoder` bytes, so a failable conversion would add a
+    // branch this test can never take.
+    // swiftlint:disable:next optional_data_string_conversion
     let encoded = String(decoding: try JSONEncoder().encode(carrier), as: UTF8.self)
 
     // then — nothing about what the run was told, and only the named fields copied out
@@ -62,6 +64,18 @@ private func reply(issueCodes: [String]) -> String {
 
     // then — a decode failure is terminal for the operation, so it must not be recoverable here
     #expect(decoded == nil)
+  }
+
+  @Test func aReplyOmittingIssueCodesNamesNoDefects() throws {
+    // given — the shape a model returns when it found nothing to report
+    let json = #"{"schema_version":1,"outcome":"no_issue"}"#
+
+    // when
+    let output = try JSONDecoder().decode(EvaluatorOutput.self, from: Data(json.utf8))
+
+    // then — an absent list is unambiguous, and rejecting it would close the key on a good reply
+    #expect(output.outcome == .noIssue)
+    #expect(output.issueCodes.isEmpty)
   }
 
   @Test func issueCodesAreStoredSortedSoTwoRunsCompareByExactEquality() throws {

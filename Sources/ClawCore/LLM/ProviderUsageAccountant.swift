@@ -73,14 +73,9 @@ public struct ProviderUsageAccountant: Sendable {
     runId: Int64?,
     sessionId: Int64
   ) -> ProviderUsage {
-    let resolvedUsage = usageResolver.resolve(response: response, context: context, tools: tools)
-      .addingReservation(reservationPolicy.additionalTokens(for: context))
-    let resolvedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: resolvedUsage.usage,
-      providerCost: response.costFromProvider,
-      policy: costPolicy
-    )
+    let resolved = reconciled(for: response, context: context, tools: tools)
+    let resolvedUsage = resolved.usage
+    let resolvedCost = resolved.cost
     return ProviderUsage(
       providerCallID: callID,
       runId: runId,
@@ -106,20 +101,13 @@ public struct ProviderUsageAccountant: Sendable {
     runId: Int64?,
     sessionId: Int64
   ) -> ProviderUsage {
-    let resolvedUsage =
-      usageResolver
-      .estimate(
-        context: context,
-        tools: tools,
-        maxOutputTokens: max(outputCap, observedCompletionTokens)
-      )
-      .addingReservation(reservationPolicy.additionalTokens(for: context))
-    let resolvedCost = costResolver.resolve(
-      model: configuredReference,
-      usage: resolvedUsage.usage,
-      providerCost: nil,
-      policy: costPolicy
+    let resolved = conservative(
+      context: context,
+      tools: tools,
+      observedCompletionTokens: observedCompletionTokens
     )
+    let resolvedUsage = resolved.usage
+    let resolvedCost = resolved.cost
     return ProviderUsage(
       providerCallID: callID,
       runId: runId,
@@ -128,6 +116,64 @@ public struct ProviderUsageAccountant: Sendable {
       usage: resolvedUsage,
       cost: resolvedCost,
       ts: now()
+    )
+  }
+
+  /// What a row is built from, without the row. A caller that records spend through a writer other
+  /// than `provider_usage` — the learning result commit, which charges under the call id its own
+  /// reservation already holds — needs these two provenances and nothing else, and inventing a row
+  /// identity to reach them would put values on screen that no reader may trust.
+  public struct Resolved: Sendable, Equatable {
+    public let usage: ResolvedUsage
+    public let cost: ResolvedCost
+
+    public init(usage: ResolvedUsage, cost: ResolvedCost) {
+      self.usage = usage
+      self.cost = cost
+    }
+  }
+
+  /// The reconciled provenances for a response that carries authoritative usage.
+  public func reconciled(
+    for response: ChatResponse,
+    context: [ChatMessage],
+    tools: [ToolDefinition] = []
+  ) -> Resolved {
+    let resolvedUsage = usageResolver.resolve(response: response, context: context, tools: tools)
+      .addingReservation(reservationPolicy.additionalTokens(for: context))
+    return Resolved(
+      usage: resolvedUsage,
+      cost: costResolver.resolve(
+        model: configuredReference,
+        usage: resolvedUsage.usage,
+        providerCost: response.costFromProvider,
+        policy: costPolicy
+      )
+    )
+  }
+
+  /// The conservative provenances for a call with no authoritative usage.
+  public func conservative(
+    context: [ChatMessage],
+    tools: [ToolDefinition] = [],
+    observedCompletionTokens: Int
+  ) -> Resolved {
+    let resolvedUsage =
+      usageResolver
+      .estimate(
+        context: context,
+        tools: tools,
+        maxOutputTokens: max(outputCap, observedCompletionTokens)
+      )
+      .addingReservation(reservationPolicy.additionalTokens(for: context))
+    return Resolved(
+      usage: resolvedUsage,
+      cost: costResolver.resolve(
+        model: configuredReference,
+        usage: resolvedUsage.usage,
+        providerCost: nil,
+        policy: costPolicy
+      )
     )
   }
 

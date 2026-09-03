@@ -168,17 +168,18 @@ public struct LearningCallUsage: Sendable, Equatable {
     self.isEstimated = isEstimated
   }
 
-  /// Reads one accounted row into the learning shape. The row's own call id, run, session and
-  /// timestamp are dropped deliberately: the result commit owns those, and it charges under the id
-  /// the call was reserved with rather than one the caller supplies a second time.
-  public init(_ usage: ProviderUsage) {
+  /// What the shared accounting authority resolved, in the learning shape. There is no row
+  /// identity here on purpose: the result commit charges under the call id its own reservation
+  /// holds, pins `run_id` to null and re-derives the session from the job, so a caller that
+  /// supplied any of those would be writing values nothing reads back.
+  public init(model: String, resolved: ProviderUsageAccountant.Resolved) {
     self.init(
-      model: usage.model,
-      promptTokens: usage.promptTokens,
-      completionTokens: usage.completionTokens,
-      costUSD: usage.costUSD,
-      costSource: usage.costSource,
-      isEstimated: usage.isEstimated
+      model: model,
+      promptTokens: resolved.usage.usage.promptTokens,
+      completionTokens: resolved.usage.usage.completionTokens,
+      costUSD: resolved.cost.costUSD,
+      costSource: resolved.cost.source,
+      isEstimated: resolved.usage.isEstimated || resolved.cost.isEstimated
     )
   }
 }
