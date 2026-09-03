@@ -158,6 +158,12 @@ extension BoundRunEnvironment {
     )
   }
 
+  func cancelJob() throws {
+    guard try jobs.cancel(id: jobId, now: now) != nil else {
+      throw StoreError.unexpected("job \(jobId) refused to cancel")
+    }
+  }
+
   func proactiveSpentUSD() throws -> Double {
     try usage.todayTokensAndCost(origins: RunOrigin.proactiveOrigins, now: now).costUSD
   }

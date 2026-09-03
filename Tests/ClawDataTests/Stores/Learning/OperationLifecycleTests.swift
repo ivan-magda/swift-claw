@@ -125,7 +125,7 @@ import Testing
     #expect(try env.learning.evidence(runId: evidence.runId) == evidence)
   }
 
-  @Test func aCarrierBuiltFromAnotherSourceIsRefused() throws {
+  @Test func aCarrierBuiltFromAnotherSourceStartsNothingAndKeepsTheClaim() throws {
     // given — a carrier assembled from a different run's evidence than the claim names
     let env = try BoundRunEnvironment.make()
     let claimed = try env.claim(try env.evaluatorKey())
@@ -142,9 +142,52 @@ import Testing
       now: env.now
     )
 
-    // then
-    #expect(outcome == .deniedNoCall(.carrierPolicyDenied))
-    #expect(try env.operationState(claimed.id) == .failedNoCall)
+    // then — a caller bug earns no privacy verdict, and closing the row here would refuse this
+    // key forever: the evidence could never be evaluated, even once the bug was fixed
+    #expect(outcome == .superseded)
+    #expect(try env.operationState(claimed.id) == .claimed)
+    #expect(try env.failureCode(claimed.id) == nil)
+  }
+
+  @Test func aCancelledJobBlocksNewLearningCalls() throws {
+    // given — one claim taken and one further piece of evidence sealed while the job was live
+    let env = try BoundRunEnvironment.make()
+    let claimed = try env.claim(try env.evaluatorKey())
+    let unclaimed = try env.evaluatorKey()
+    try env.cancelJob()
+
+    // when
+    let outcome = try env.learning.authorizeAndStartOperation(
+      env.authorization(for: claimed),
+      now: env.now
+    )
+
+    // then — cancelling leaves the learning state row untouched, so the epoch guard sees nothing
+    // wrong; without its own check the owner's cancellation still buys a paid call
+    #expect(outcome == .superseded)
+    #expect(try env.operationState(claimed.id) == .claimed)
+    #expect(try env.providerCallID(claimed.id) == nil)
+    #expect(try env.learning.claimOperation(unclaimed, now: env.now) == nil)
+  }
+
+  @Test func aFailedCallCommitsAsFailedAndIsStillCharged() throws {
+    // given — a started operation whose provider returned output the operation cannot use
+    let env = try BoundRunEnvironment.make()
+    let started = try env.startedOperation(try env.evaluatorKey())
+
+    // when
+    let committed = try env.learning.finishOperation(
+      env.result(for: started.id, failure: .providerTerminal),
+      now: env.now
+    )
+
+    // then — a failure is spend like any other, and the code has to survive for the reader that
+    // must not mistake a failed call for a committed verdict
+    #expect(committed)
+    #expect(try env.operationState(started.id) == .failed)
+    #expect(try env.failureCode(started.id) == .providerTerminal)
+    #expect(try env.learningUsage(operationId: started.id).count == 1)
+    #expect(try env.reservation(started.id) == BoundRunEnvironment.closedReservation)
   }
 
   @Test func anEpochTheJobMovedPastAuthorizesNothing() throws {

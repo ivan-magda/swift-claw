@@ -24,10 +24,19 @@ extension ScheduledLearningStoreGRDB {
     guard try readState(db, jobId: operation.jobId)?.epoch == operation.epoch else {
       return .superseded
     }
-    guard
-      authorization.carrier.isPermitted,
-      authorization.carrier.sourceDigest == operation.sourceDigest
-    else {
+    // The epoch cannot stand in for this: cancelling a job leaves its learning state row exactly
+    // as it was, so a cancelled job would otherwise still buy a paid call against its evidence.
+    guard try jobPermitsLearningCalls(db, jobId: operation.jobId) else {
+      return .superseded
+    }
+    // A carrier built from another source is a caller plumbing bug, not a policy verdict, and gets
+    // the same treatment as the two checks above. Writing `carrier_policy_denied` here would claim
+    // privacy refused a call privacy never saw, and `claim` refuses a closed key forever — so one
+    // bug would also destroy that evidence's only chance of ever being evaluated.
+    guard authorization.carrier.sourceDigest == operation.sourceDigest else {
+      return .superseded
+    }
+    guard authorization.carrier.isPermitted else {
       return try closeWithoutCall(db, operation, failure: .carrierPolicyDenied)
     }
     guard try budgetPermits(db, authorization, now: now) else {
