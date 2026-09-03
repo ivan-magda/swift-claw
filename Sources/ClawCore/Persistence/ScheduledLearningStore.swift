@@ -85,4 +85,41 @@ public protocol ScheduledLearningStore: Sendable {
 
   /// The sealed receipt, payload included while retention still holds it.
   func evidence(runId: Int64) throws(StoreError) -> SealedEvidence?
+
+  /// Takes the durable claim on one logical hypothesis, or returns nil when the key is not work
+  /// this daemon may do: the job has moved to another epoch, the evidence is not something the
+  /// evaluator may read, it already has a verdict, or another attempt at this key is live or
+  /// already finished. A claim authorizes nothing — it only reserves the identity a later
+  /// authorization can start.
+  func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation?
+
+  /// Everything between the claim and the network, in one transaction. Checking the breakers
+  /// outside the store and starting inside it lets two workers both read headroom and both
+  /// dispatch. This re-reads the durable totals, verifies the job's epoch and the carrier
+  /// authorization, records the reservation and the provider-call id, and compare-and-swaps
+  /// `claimed → started`. Nothing may reach the network before it returns `.started`.
+  func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome
+
+  /// Commits one network boundary crossing: the actual usage row under the reserved call id and
+  /// the operation's terminal state, under the predicate `state == started`.
+  ///
+  /// - Returns: whether this call is the one that committed the result. `false` for a duplicate,
+  ///   which writes nothing and cannot close the reservation a second time.
+  func finishOperation(
+    _ result: LearningOperationResult,
+    now: Date
+  ) throws(StoreError) -> Bool
+
+  /// The boot pass over what a prior process left open. A `started` operation may have reached the
+  /// provider, so it is charged conservatively under its saved call id and closed as
+  /// `interrupted_unknown` — never resent as the same inference. A `claimed` one provably never
+  /// called, so it returns to `pending` and is claimable again.
+  @discardableResult
+  func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation
 }

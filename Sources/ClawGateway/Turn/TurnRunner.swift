@@ -351,7 +351,10 @@ private extension TurnRunner {
       proactiveTodayUSD = 0
     } else {
       proactiveTodayUSD =
-        try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: clock).costUSD
+        try usageStore.todayTokensAndCost(
+          origins: RunOrigin.proactiveOrigins,
+          now: clock
+        ).costUSD
     }
     // Before assembly, and before any provider call: a bound run whose pinned set cannot be
     // resolved must fail rather than answer against a set its binding never froze.

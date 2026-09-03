@@ -25,6 +25,10 @@ public protocol UsageStore: Sendable {
   /// The same UTC-day window as `todayTokensAndCost(now:)`, restricted to usage whose run's
   /// origin is IN `origins` (JOIN provider_usage.run_id → runs.id — no denormalized origin
   /// on usage rows). One query, one day-boundary evaluation.
+  ///
+  /// A learning call has no run to join, so it is counted through its own scope columns instead,
+  /// and only when `origins` contains `.scheduled`: learning exists only for a scheduled job, so
+  /// that is the pool its spend charges.
   func todayTokensAndCost(
     origins: [RunOrigin],
     now: Date

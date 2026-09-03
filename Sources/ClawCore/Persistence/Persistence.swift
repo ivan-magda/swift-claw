@@ -310,6 +310,10 @@ public struct ProviderUsage: Sendable, Equatable {
   public let costSource: CostSource
   public let isEstimated: Bool
   public let ts: Date
+  /// Set only for a learning call, which belongs to no run. It is what carries that spend into the
+  /// origin-filtered proactive total: the plain day total sums every row, but the proactive one
+  /// resolves an origin through `runs`, and a null `run_id` has nothing there to resolve.
+  public let learningScope: LearningUsageScope?
 
   public init(
     providerCallID: ProviderCallID,
@@ -321,7 +325,8 @@ public struct ProviderUsage: Sendable, Equatable {
     costUSD: Double,
     costSource: CostSource,
     isEstimated: Bool,
-    ts: Date
+    ts: Date,
+    learningScope: LearningUsageScope? = nil
   ) {
     self.providerCallID = providerCallID
     self.runId = runId
@@ -333,6 +338,7 @@ public struct ProviderUsage: Sendable, Equatable {
     self.costSource = costSource
     self.isEstimated = isEstimated
     self.ts = ts
+    self.learningScope = learningScope
   }
 
   /// Builds the row from its two independent provenances — resolved tokens and resolved cost. This

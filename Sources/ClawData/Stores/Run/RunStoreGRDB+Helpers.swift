@@ -192,8 +192,9 @@ extension RunStoreGRDB {
   /// key failure still raises.
   static let insertUsageStatement = """
     INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-      cost_usd, cost_source, is_estimated, ts, provider_call_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      cost_usd, cost_source, is_estimated, ts, provider_call_id,
+      learning_operation_id, learning_job_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(provider_call_id) DO NOTHING
     """
 
@@ -214,6 +215,8 @@ extension RunStoreGRDB {
         usage.isEstimated,
         usage.ts,
         usage.providerCallID.rawValue,
+        usage.learningScope?.operationId.rawValue,
+        usage.learningScope?.jobId,
       ]
     )
     return db.changesCount > 0

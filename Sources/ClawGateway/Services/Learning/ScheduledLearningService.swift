@@ -71,8 +71,34 @@ public actor ScheduledLearningService {
   /// Runs after boot reconciliation has settled what the last process left open, so this pass sees
   /// those runs already frozen. It reads the durable queue and seals; it never settles a run
   /// itself, so it cannot disturb the ordering the boot sweep and its approval backstop rely on.
+  ///
+  /// The operation pass goes first, and no learning call may be dispatched before it returns: a
+  /// prior process's `started` operation has to be charged and closed as unknown before anything
+  /// re-reads headroom, and its claimed-but-never-authorized siblings have to become claimable
+  /// again or the runs behind them are never evaluated.
   public func reconcileAtBoot(now: Date) async {
+    reconcileOperations(now: now)
     await sealSettled(now: now)
+  }
+}
+
+// MARK: - Boot Operation Pass
+
+private extension ScheduledLearningService {
+  /// A failure here is logged and not thrown: the sealing pass and ordinary scheduled execution
+  /// must still run when the learning tables cannot be reconciled.
+  func reconcileOperations(now: Date) {
+    do {
+      let result = try store.reconcileOperationsAtBoot(now: now)
+      guard result.interrupted > 0 || result.returnedToClaimable > 0 else {
+        return
+      }
+      let closed = result.interrupted
+      let requeued = result.returnedToClaimable
+      logger.info("learning boot closed \(closed) interrupted, requeued \(requeued) unstarted")
+    } catch {
+      logger.error("learning operations could not be reconciled at boot: \(error)")
+    }
   }
 }
 

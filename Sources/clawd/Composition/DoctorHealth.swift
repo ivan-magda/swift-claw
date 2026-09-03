@@ -58,7 +58,7 @@ enum DoctorHealth {
       dueCount: read { try stores.scheduledJobs.dueJobs(now: now).count },
       proactiveTodayUSD: read {
         try stores.usage.todayTokensAndCost(
-          origins: [.scheduled, .heartbeat],
+          origins: RunOrigin.proactiveOrigins,
           now: now
         ).costUSD
       },
