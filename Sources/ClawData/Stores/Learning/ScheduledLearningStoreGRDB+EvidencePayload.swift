@@ -101,7 +101,7 @@ extension ScheduledLearningStoreGRDB {
       policyVersion: compatibility.policyVersion,
       skillSetDigest: compatibility.skillSetDigest,
       configuredRoute: compatibility.configuredRoute,
-      terminalRoute: try terminalRoute(db, runId: runId),
+      terminalRoute: try readTerminalRoute(db, runId: runId),
       usageRowIds: try Int64.fetchAll(
         db,
         sql: "SELECT id FROM provider_usage WHERE run_id = ? ORDER BY id",
@@ -133,13 +133,5 @@ private extension ScheduledLearningStoreGRDB {
     }
     let content: String = row["content"]
     return (messageId: row["message_id"], digest: SHA256Digest.hex(content))
-  }
-
-  static func terminalRoute(_ db: Database, runId: Int64) throws -> String? {
-    try String.fetchOne(
-      db,
-      sql: "SELECT terminal_route FROM run_settlements WHERE run_id = ?",
-      arguments: [runId]
-    )
   }
 }

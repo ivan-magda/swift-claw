@@ -121,6 +121,21 @@ import Testing
     )
   }
 
+  @Test func theAuthorizationReservesARealEstimate() async throws {
+    // given
+    let env = try EvaluationRunEnvironment.make(reply: EvaluationRunEnvironment.noIssueReply)
+
+    // when
+    await env.runner.runEvaluation(runId: env.runId, now: env.now)
+
+    // then — deliberately no magnitude, so re-tuning the estimator can never break this. A zero
+    // reserves nothing, and two workers then read headroom that is already spoken for: the exact
+    // race the open-reservation sum inside the authorize transaction exists to close.
+    let authorization = try #require(env.authorizing.authorizations.first)
+    #expect(authorization.estimatedTokens > 0)
+    #expect(authorization.estimatedCostUSD > 0)
+  }
+
   @Test func aSupersededAuthorizationSendsNothingAndRecordsNoVerdict() async throws {
     // given — a claim that stopped describing work worth doing between the claim and the network
     let log = RecordingLogCapture()

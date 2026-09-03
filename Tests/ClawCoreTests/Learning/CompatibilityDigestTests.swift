@@ -26,6 +26,9 @@ import Testing
       digest(configuredRoute: "openai-compatible/other-primary"),
       digest(terminalRoute: "openai-compatible/served-by-the-fallback"),
       digest(terminalRoute: nil),
+      // An absent field and an empty one, distinct: sharing a sentinel with the separator would
+      // make "no route was ever billed" and "the route was blank" one and the same surface.
+      digest(terminalRoute: ""),
       digest(evaluatorRoute: "openai-compatible/other-evaluator"),
       digest(evaluatorPromptVersion: 2),
       digest(evaluatorSchemaVersion: 2),
@@ -37,6 +40,18 @@ import Testing
 
     // then — every one is distinct: a dropped input would collide its variant with the baseline
     #expect(Set(all).count == all.count)
+  }
+
+  @Test func aColonInsideARouteCannotShiftAFieldBoundary() throws {
+    // given — two surfaces that split the same route text differently. Vendor-qualified model ids
+    // are ordinary, and `configuredRoute` is the owner's `CLAW_LLM_MODEL` verbatim.
+    let splitEarly = digest(configuredRoute: "vendor:model", terminalRoute: "fallback")
+
+    // when
+    let splitLate = digest(configuredRoute: "vendor", terminalRoute: "model:fallback")
+
+    // then — a printable join would make these one digest, pooling two route triples into one window
+    #expect(splitEarly != splitLate)
   }
 
   @Test func provenanceOnlyValuesLeaveTheDigestAlone() throws {
