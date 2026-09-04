@@ -9,6 +9,7 @@ public struct FeedbackCallbackHandler: Sendable {
   private let learning: any ScheduledLearningStore
   private let audit: any AuditLog
   private let callbacks: any CallbackResponding
+  private let challenges: FeedbackChallengeHandler?
   private let now: @Sendable () -> Date
   private let logger: Logger
 
@@ -18,6 +19,7 @@ public struct FeedbackCallbackHandler: Sendable {
     learning: any ScheduledLearningStore,
     audit: any AuditLog,
     callbacks: any CallbackResponding,
+    challenges: FeedbackChallengeHandler? = nil,
     now: @escaping @Sendable () -> Date,
     logger: Logger
   ) {
@@ -26,6 +28,7 @@ public struct FeedbackCallbackHandler: Sendable {
     self.learning = learning
     self.audit = audit
     self.callbacks = callbacks
+    self.challenges = challenges
     self.now = now
     self.logger = logger
   }
@@ -37,6 +40,7 @@ public struct FeedbackCallbackHandler: Sendable {
     learning: any ScheduledLearningStore,
     audit: any AuditLog,
     callbacks: any CallbackResponding,
+    challenges: FeedbackChallengeHandler? = nil,
     now: @escaping @Sendable () -> Date,
     logger: Logger
   ) -> FeedbackCallbackHandler {
@@ -46,6 +50,7 @@ public struct FeedbackCallbackHandler: Sendable {
       learning: learning,
       audit: audit,
       callbacks: callbacks,
+      challenges: challenges,
       now: now,
       logger: logger
     )
@@ -127,11 +132,12 @@ private extension FeedbackCallbackHandler {
       )
     }
     guard parsed.action.opensChallenge == false else {
-      return await deny(
+      return await resolveChallenge(
         callback,
         target: target,
         signal: parsed.action.signal,
-        decision: Self.challengeUnavailableDecision
+        updateId: updateId,
+        challenges: challenges
       )
     }
     return await consume(
@@ -168,8 +174,65 @@ private extension FeedbackCallbackHandler {
     switch outcome {
     case .recorded:
       return await finish(callback, toast: Self.recordedToast)
-    case .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch, .staleEpoch,
-      .alreadyConsumed, .requiresPayloadChallenge:
+    case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired,
+      .actionMismatch, .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
+      return await finish(callback, toast: Self.neutralToast)
+    }
+  }
+}
+
+// MARK: - Challenge Opening
+
+private extension FeedbackCallbackHandler {
+  func resolveChallenge(
+    _ callback: RawCallback,
+    target: FeedbackTarget,
+    signal: OwnerSignal,
+    updateId: Int64,
+    challenges: FeedbackChallengeHandler?
+  ) async -> HandleOutcome {
+    guard let challenges else {
+      return await deny(
+        callback,
+        target: target,
+        signal: signal,
+        decision: Self.challengeUnavailableDecision
+      )
+    }
+    return await openChallenge(
+      callback,
+      target: target,
+      signal: signal,
+      updateId: updateId,
+      challenges: challenges
+    )
+  }
+
+  func openChallenge(
+    _ callback: RawCallback,
+    target: FeedbackTarget,
+    signal: OwnerSignal,
+    updateId: Int64,
+    challenges: FeedbackChallengeHandler
+  ) async -> HandleOutcome {
+    let tap = FeedbackTap(
+      nonce: target.nonce,
+      signal: signal,
+      ownerUserId: callback.fromUserId,
+      chatId: target.chatId,
+      transportUpdateId: updateId
+    )
+    let outcome: FeedbackOutcome
+    do {
+      outcome = try challenges.open(tap)
+    } catch {
+      return await storeFailure(callback, signal: signal, error: error)
+    }
+    switch outcome {
+    case .challengeOpened:
+      return await finish(callback, toast: Self.challengeOpenedToast)
+    case .recorded, .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch,
+      .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
       return await finish(callback, toast: Self.neutralToast)
     }
   }
@@ -264,4 +327,5 @@ private extension FeedbackCallbackHandler {
   static let neutralToast = "This action is no longer available."
   static let retryToast = "Something went wrong — please try again."
   static let recordedToast = "Feedback recorded."
+  static let challengeOpenedToast = "Reply to the prompt with your feedback."
 }

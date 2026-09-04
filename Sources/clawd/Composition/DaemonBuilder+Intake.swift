@@ -58,6 +58,7 @@ extension DaemonBuilder {
   ) -> MessageRouter {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
+    let feedbackChallenges = makeFeedbackChallengeHandler(coordination: coordination)
 
     return MessageRouter(
       processed: stores.processed,
@@ -75,7 +76,8 @@ extension DaemonBuilder {
       schedule: scheduleSurface,
       learning: learning,
       approvalCallbacks: approvalCallbacks,
-      feedbackCallbacks: makeFeedbackCallbackHandler(),
+      feedbackCallbacks: makeFeedbackCallbackHandler(challenges: feedbackChallenges),
+      feedbackChallenges: feedbackChallenges,
       voice: voiceService,
       images: imageService,
       typing: TelegramTypingIndicator(transport: transport),

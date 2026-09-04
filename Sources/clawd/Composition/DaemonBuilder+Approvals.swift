@@ -95,7 +95,9 @@ extension DaemonBuilder {
 
   /// Feedback is inert while learning is disarmed: no target is created and no old target may
   /// mutate learning state after the operator removes the feature flag.
-  func makeFeedbackCallbackHandler() -> FeedbackCallbackHandler? {
+  func makeFeedbackCallbackHandler(
+    challenges: FeedbackChallengeHandler?
+  ) -> FeedbackCallbackHandler? {
     guard config.learningEnabled else {
       return nil
     }
@@ -106,6 +108,26 @@ extension DaemonBuilder {
       learning: stores.learning,
       audit: stores.audit,
       callbacks: transport,
+      challenges: challenges,
+      now: { Date() },
+      logger: logger
+    )
+  }
+
+  /// The same feature gate controls both halves of free-text feedback: opening from a callback and
+  /// intercepting the next direct owner message.
+  func makeFeedbackChallengeHandler(
+    coordination: TurnCoordination
+  ) -> FeedbackChallengeHandler? {
+    guard config.learningEnabled else {
+      return nil
+    }
+    let signal = coordination.outboxSignal
+    return FeedbackChallengeHandler.make(
+      processed: stores.processed,
+      delivery: transport,
+      learning: stores.learning,
+      notifyOutbox: { signal.poke() },
       now: { Date() },
       logger: logger
     )

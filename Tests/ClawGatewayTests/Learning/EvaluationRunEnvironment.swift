@@ -338,6 +338,29 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.consumeAndAppendEvent(tap, now: now)
   }
 
+  func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try base.consumeAndOpenChallenge(tap, prompt: prompt, now: now)
+  }
+
+  func consumeChallenge(
+    id: Int64,
+    payload: String,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try base.consumeChallenge(id: id, payload: payload, now: now)
+  }
+
+  func liveChallenge(
+    ownerUserId: Int64,
+    chatId: Int64
+  ) throws(StoreError) -> FeedbackChallenge? {
+    try base.liveChallenge(ownerUserId: ownerUserId, chatId: chatId)
+  }
+
   func authorizeAndStartOperation(
     _ authorization: LearningAuthorization,
     now: Date

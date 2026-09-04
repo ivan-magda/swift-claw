@@ -76,6 +76,76 @@ public struct FeedbackTarget: Sendable, Equatable {
   }
 }
 
+/// The row inserted after a feedback target has passed its authenticated single-use CAS.
+public struct NewFeedbackChallenge: Sendable, Equatable {
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let jobId: Int64
+  public let epoch: LearningEpoch
+  public let subjectKind: FeedbackSubjectKind
+  public let subjectDigest: String
+  public let promptDigest: String
+  public let expiresAt: Date
+
+  public init(target: FeedbackTarget) {
+    ownerUserId = target.ownerUserId
+    chatId = target.chatId
+    jobId = target.jobId
+    epoch = target.epoch
+    subjectKind = target.subjectKind
+    subjectDigest = target.subjectDigest
+    promptDigest = FeedbackChallengeDeliveryIdentity.digest(targetNonce: target.nonce)
+    expiresAt = target.expiresAt
+  }
+}
+
+/// The durable one-shot owner input slot. Only an unsuperseded, unconsumed row is live.
+public struct FeedbackChallenge: Sendable, Equatable {
+  public let id: Int64
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let jobId: Int64
+  public let epoch: LearningEpoch
+  public let subjectKind: FeedbackSubjectKind
+  public let subjectDigest: String
+  public let supersededBy: Int64?
+  public let consumedAt: Date?
+  public let expiresAt: Date
+
+  public init(
+    id: Int64,
+    ownerUserId: Int64,
+    chatId: Int64,
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String,
+    supersededBy: Int64?,
+    consumedAt: Date?,
+    expiresAt: Date
+  ) {
+    self.id = id
+    self.ownerUserId = ownerUserId
+    self.chatId = chatId
+    self.jobId = jobId
+    self.epoch = epoch
+    self.subjectKind = subjectKind
+    self.subjectDigest = subjectDigest
+    self.supersededBy = supersededBy
+    self.consumedAt = consumedAt
+    self.expiresAt = expiresAt
+  }
+}
+
+/// A prompt gets its own opaque delivery identity, separate from both subject and target nonce.
+public enum FeedbackChallengeDeliveryIdentity {
+  private static let domain = "feedback-challenge-prompt/v1"
+
+  public static func digest(targetNonce: String) -> String {
+    SHA256Digest.hex(CanonicalDigestInput.joined([domain, targetNonce]))
+  }
+}
+
 /// The already transport-claimed owner action the store revalidates and commits atomically.
 public struct FeedbackTap: Sendable, Equatable {
   public let nonce: String
@@ -102,6 +172,7 @@ public struct FeedbackTap: Sendable, Equatable {
 /// Every result of the target CAS. Only `recorded` appended a semantic event and revision.
 public enum FeedbackOutcome: Sendable, Equatable {
   case recorded(FeedbackEvent)
+  case challengeOpened(FeedbackChallenge)
   case targetMissing
   case ownerMismatch
   case chatMismatch
@@ -159,6 +230,26 @@ public protocol ScheduledLearningStore: Sendable {
     _ tap: FeedbackTap,
     now: Date
   ) throws(StoreError) -> FeedbackOutcome
+
+  /// Consumes one payload-bearing target and commits its one-shot challenge plus prompt chunks.
+  func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome
+
+  /// Consumes the one live challenge and appends its exact UTF-8 payload as untrusted feedback.
+  func consumeChallenge(
+    id: Int64,
+    payload: String,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome
+
+  /// Returns the physically live row. Callers apply their captured clock before claiming input.
+  func liveChallenge(
+    ownerUserId: Int64,
+    chatId: Int64
+  ) throws(StoreError) -> FeedbackChallenge?
 
   /// Idempotent. Inserts this job's learning state and its canonical empty lesson set together,
   /// or returns the state already there. The fire transaction calls it, so a job never fires with

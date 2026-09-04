@@ -64,6 +64,8 @@ public struct TurnRunner: TurnDispatching {
   /// reach this seam, not only the fire path — a run bound before the flag came off can still be
   /// parked on an approval and resume afterwards.
   private let learning: (any ScheduledLearningStore)?
+  /// Generates the opaque address embedded in a completed result's feedback keyboard.
+  private let makeFeedbackNonce: @Sendable () -> String
 
   /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's
   /// resolution.
@@ -91,6 +93,7 @@ public struct TurnRunner: TurnDispatching {
     now: @escaping @Sendable () -> Date = { Date() },
     freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in },
     learning: (any ScheduledLearningStore)? = nil,
+    makeFeedbackNonce: @escaping @Sendable () -> String = { OpaqueNonce.generate() },
     // No default: an ask-tier suspend parks the lane on this seam, and a composition site that
     // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
     // would hold that lane forever. Every caller chooses its parker explicitly.
@@ -116,6 +119,7 @@ public struct TurnRunner: TurnDispatching {
     self.now = now
     self.freezeLearningSurface = freezeLearningSurface
     self.learning = learning
+    self.makeFeedbackNonce = makeFeedbackNonce
     self.parker = parker
     self.approvalExpirySeconds = approvalExpirySeconds
     self.logger = logger
@@ -433,7 +437,7 @@ extension TurnRunner {
       mode: mode,
       ownerNotices: ownerNotices,
       origin: origin,
-      committedAt: Date()
+      committedAt: now()
     )
 
     switch outcome.result {
@@ -467,6 +471,14 @@ private extension TurnRunner {
     // Ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
     // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
     let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
+    let feedbackTarget =
+      suppressHeartbeatAck
+      ? nil
+      : resultFeedbackTarget(
+        runId: context.runId,
+        chatId: context.chatId,
+        origin: context.origin
+      )
     let chunks =
       suppressHeartbeatAck
       ? []
@@ -476,7 +488,8 @@ private extension TurnRunner {
           ownerNotices: context.ownerNotices,
           appendedNotices: appendedNotices
         ),
-        chatId: context.chatId
+        chatId: context.chatId,
+        finalReplyMarkup: feedbackTarget.map(LearningNotices.resultKeyboard)
       )
     let turn = AssistantTurn(
       runId: context.runId,
@@ -488,7 +501,8 @@ private extension TurnRunner {
       exchanges: outcome.exchanges,
       setTainted: outcome.ingestedUntrusted,
       setPrivateData: outcome.hadPrivateData,
-      providerState: providerState
+      providerState: providerState,
+      feedbackTarget: feedbackTarget
     )
 
     switch try runs.commitAssistantTurn(turn, now: context.committedAt) {
@@ -501,6 +515,39 @@ private extension TurnRunner {
     case .ignored:
       return
     }
+  }
+
+  /// Best-effort pre-resolution. The store repeats these predicates in the terminal transaction,
+  /// which closes races without making owner delivery depend on learning availability.
+  func resultFeedbackTarget(
+    runId: Int64,
+    chatId: Int64,
+    origin: RunOrigin
+  ) -> NewFeedbackTarget? {
+    guard origin == .scheduled, let learning else {
+      return nil
+    }
+    guard let binding = try? learning.binding(runId: runId) else {
+      return nil
+    }
+    guard (try? runs.jobId(runId: runId)) == binding.jobId else {
+      return nil
+    }
+    guard (try? learning.lessonSet(jobId: binding.jobId, digest: binding.effectiveDigest)) != nil
+    else {
+      return nil
+    }
+    return NewFeedbackTarget(
+      nonce: makeFeedbackNonce(),
+      jobId: binding.jobId,
+      epoch: binding.epoch,
+      subjectKind: .run,
+      subjectDigest: String(runId),
+      allowedActions: [.resultUseful, .resultNotUseful, .resultCorrection],
+      ownerUserId: chatId,
+      chatId: chatId,
+      expiresAt: binding.occurrenceAt.addingTimeInterval(EvidenceWindow.maximumAge)
+    )
   }
 
   /// Audit tail for a committed `.completed` turn: the turn row, plus the heartbeat
