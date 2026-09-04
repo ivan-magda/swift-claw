@@ -53,6 +53,22 @@ import Testing
     #expect(trigger == nil)
   }
 
+  @Test func canonicallyEquivalentIssueCodesRemainByteDistinct() {
+    // given
+    let precomposed = "\u{e9}"
+    let decomposed = "e\u{301}"
+    let window = [
+      outcome(runId: 1, codes: [precomposed]),
+      outcome(runId: 2, codes: [decomposed]),
+    ]
+
+    // when
+    let trigger = LearningTrigger.detect(window: window, corrections: [])
+
+    // then
+    #expect(trigger == nil)
+  }
+
   @Test func positiveRunDoesNotEraseARecurringCode() throws {
     // given
     let window = [
@@ -129,6 +145,36 @@ import Testing
 
     // then
     #expect(trigger == nil)
+  }
+
+  @Test func laterUsefulResultOverridesCorrectionWithoutASupersessionEdge() {
+    // given
+    let window = [outcome(runId: 1, codes: [])]
+    let events = [
+      feedback(.resultCorrection, runId: 1, id: 1, revision: 2),
+      feedback(.resultUseful, runId: 1, id: 2, revision: 3),
+    ]
+
+    // when
+    let trigger = LearningTrigger.detect(window: window, corrections: events)
+
+    // then
+    #expect(trigger == nil)
+  }
+
+  @Test func winningResultIsSelectedIndependentlyForEachEligibleRun() throws {
+    // given
+    let window = [outcome(runId: 1, codes: []), outcome(runId: 2, codes: [])]
+    let events = [
+      feedback(.resultCorrection, runId: 1, id: 1, revision: 2),
+      feedback(.resultUseful, runId: 2, id: 2, revision: 3),
+    ]
+
+    // when
+    let trigger = LearningTrigger.detect(window: window, corrections: events)
+
+    // then
+    #expect(try #require(trigger).reason == .ownerCorrection)
   }
 
   @Test func windowKeepsNewestFiveByOccurrenceThenRunId() {
@@ -293,14 +339,59 @@ import Testing
     #expect(first.digest != second.digest)
   }
 
-  @Test func eachTriggerIdentityInputChangesTheDigest() throws {
+  @Test func issueCodeMembersUseUnambiguousFieldBoundaries() {
     // given
-    let baseline = try #require(
-      LearningTrigger.detect(
-        window: [outcome(runId: 1, codes: ["a"]), outcome(runId: 2, codes: ["a"])],
-        corrections: []
-      )
+    let first = identity(issueCodes: ["a\u{0}b", "c"])
+
+    // when
+    let shifted = identity(issueCodes: ["a", "b\u{0}c"])
+
+    // then
+    #expect(first.digest != shifted.digest)
+  }
+
+  @Test func triggerReasonIsDescriptiveRatherThanIdentity() {
+    // given
+    let recurring = identity(reason: .recurringIssue)
+
+    // when
+    let correction = identity(reason: .ownerCorrection)
+
+    // then
+    #expect(recurring.digest == correction.digest)
+  }
+
+  @Test func triggerIdentityOrdersIssueCodesByRawUTF8() {
+    // given
+    let precomposed = "\u{e9}"
+    let decomposed = "e\u{301}"
+
+    // when
+    let trigger = identity(issueCodes: [precomposed, decomposed])
+
+    // then
+    #expect(
+      trigger.issueCodes.map { code in Array(code.utf8) } == [
+        Array(decomposed.utf8),
+        Array(precomposed.utf8),
+      ]
     )
+  }
+
+  @Test func triggerDigestPreservesByteDistinctIssueCodes() {
+    // given
+    let precomposed = identity(issueCodes: ["\u{e9}"])
+
+    // when
+    let decomposed = identity(issueCodes: ["e\u{301}"])
+
+    // then
+    #expect(precomposed.digest != decomposed.digest)
+  }
+
+  @Test func eachTriggerIdentityInputChangesTheDigest() {
+    // given
+    let baseline = identity()
     let variants = [
       identity(jobId: 12),
       identity(epoch: LearningEpoch(2)),
@@ -312,10 +403,12 @@ import Testing
     ]
 
     // when
-    let digests = [baseline.digest] + variants.map(\.digest)
+    let changedCoordinates = variants.map { variant in
+      variant.digest != baseline.digest
+    }
 
     // then
-    #expect(Set(digests).count == digests.count)
+    #expect(changedCoordinates.allSatisfy { $0 })
   }
 
   @Test func triggerIdentityPreservesEvidenceOrder() {
@@ -365,14 +458,23 @@ private func outcome(
 }
 
 private func correction(runId: Int64) -> FeedbackEvent {
+  feedback(.resultCorrection, runId: runId, id: runId, revision: 2)
+}
+
+private func feedback(
+  _ signal: OwnerSignal,
+  runId: Int64,
+  id: Int64,
+  revision: Int64
+) -> FeedbackEvent {
   FeedbackEvent(
-    id: runId,
+    id: id,
     runId: runId,
-    signal: .resultCorrection,
-    payload: "owner correction",
-    revision: FeedbackRevision(2),
+    signal: signal,
+    payload: signal == .resultCorrection ? "owner correction" : nil,
+    revision: FeedbackRevision(revision),
     supersedes: nil,
-    occurredAt: Date(timeIntervalSince1970: 5_000_000)
+    occurredAt: Date(timeIntervalSince1970: TimeInterval(revision))
   )
 }
 
@@ -384,7 +486,8 @@ private func identity(
   stableDigest: LessonSetDigest = LessonSetDigest(rawValue: "stable-v1"),
   evidenceDigests: [EvidenceDigest] = [EvidenceDigest(rawValue: "evidence-1")],
   feedbackRevision: FeedbackRevision = FeedbackRevision(1),
-  issueCodes: [String] = ["a"]
+  issueCodes: [String] = ["a"],
+  reason: LearningTriggerReason = .recurringIssue
 ) -> TriggerIdentity {
   TriggerIdentity(
     jobId: jobId,
@@ -394,6 +497,6 @@ private func identity(
     evidenceDigests: evidenceDigests,
     feedbackRevision: feedbackRevision,
     issueCodes: issueCodes,
-    reason: .recurringIssue
+    reason: reason
   )
 }

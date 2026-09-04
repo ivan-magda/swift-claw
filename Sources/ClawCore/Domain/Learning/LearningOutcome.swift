@@ -72,12 +72,7 @@ public enum OwnerPrecedence {
     hardVetoes: Set<HardVeto> = []
   ) -> ResolvedOutcome {
     let effectiveSignals = FeedbackEvent.unsuperseded(signals)
-    let resultSignal =
-      effectiveSignals
-      .filter { event in
-        Self.isResultSignal(event.signal)
-      }
-      .max(by: Self.precedes)
+    let resultSignal = FeedbackEvent.latestUnsupersededResult(in: signals)
     let evaluationDisputed = effectiveSignals.contains { event in
       event.signal == .evaluationDispute
     }
@@ -111,26 +106,6 @@ public enum OwnerPrecedence {
 // MARK: - Resolution
 
 private extension OwnerPrecedence {
-  static func isResultSignal(_ signal: OwnerSignal) -> Bool {
-    switch signal {
-    case .resultUseful, .resultNotUseful, .resultCorrection:
-      true
-    case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
-      .candidateEdit, .promotionRollback:
-      false
-    }
-  }
-
-  static func precedes(_ lhs: FeedbackEvent, _ rhs: FeedbackEvent) -> Bool {
-    if lhs.revision != rhs.revision {
-      return lhs.revision < rhs.revision
-    }
-    if lhs.occurredAt != rhs.occurredAt {
-      return lhs.occurredAt < rhs.occurredAt
-    }
-    return lhs.id < rhs.id
-  }
-
   static func ownerOutcome(
     signal: OwnerSignal,
     evaluatorIssueCodes: [String]
@@ -174,10 +149,40 @@ private extension OwnerPrecedence {
 // MARK: - Supersession
 
 extension FeedbackEvent {
+  static func latestUnsupersededResult(in events: [FeedbackEvent]) -> FeedbackEvent? {
+    unsuperseded(events)
+      .filter { event in
+        event.signal.isResultSignal
+      }
+      .max(by: precedes)
+  }
+
   static func unsuperseded(_ events: [FeedbackEvent]) -> [FeedbackEvent] {
     let superseded = Set(events.compactMap(\.supersedes))
     return events.filter { event in
       superseded.contains(event.id) == false
+    }
+  }
+
+  private static func precedes(_ lhs: FeedbackEvent, _ rhs: FeedbackEvent) -> Bool {
+    if lhs.revision != rhs.revision {
+      return lhs.revision < rhs.revision
+    }
+    if lhs.occurredAt != rhs.occurredAt {
+      return lhs.occurredAt < rhs.occurredAt
+    }
+    return lhs.id < rhs.id
+  }
+}
+
+private extension OwnerSignal {
+  var isResultSignal: Bool {
+    switch self {
+    case .resultUseful, .resultNotUseful, .resultCorrection:
+      true
+    case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
+      .candidateEdit, .promotionRollback:
+      false
     }
   }
 }

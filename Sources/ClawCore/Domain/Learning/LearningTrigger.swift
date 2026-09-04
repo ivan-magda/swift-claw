@@ -1,5 +1,27 @@
 import Foundation
 
+private struct ByteExactIssueCode: Hashable, Comparable {
+  let value: String
+  private let bytes: [UInt8]
+
+  init(_ value: String) {
+    self.value = value
+    bytes = Array(value.utf8)
+  }
+
+  static func == (lhs: ByteExactIssueCode, rhs: ByteExactIssueCode) -> Bool {
+    lhs.bytes == rhs.bytes
+  }
+
+  static func < (lhs: ByteExactIssueCode, rhs: ByteExactIssueCode) -> Bool {
+    lhs.bytes.lexicographicallyPrecedes(rhs.bytes)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(bytes)
+  }
+}
+
 /// One completed compatible evaluation after owner precedence has been frozen at a revision.
 public struct EffectiveEvaluation: Sendable, Equatable {
   public let runId: Int64
@@ -109,7 +131,7 @@ public struct TriggerIdentity: Sendable, Equatable {
     self.stableDigest = stableDigest
     self.evidenceDigests = evidenceDigests
     self.feedbackRevision = feedbackRevision
-    self.issueCodes = issueCodes.sorted()
+    self.issueCodes = issueCodes.map(ByteExactIssueCode.init).sorted().map(\.value)
     self.reason = reason
   }
 
@@ -152,9 +174,16 @@ public enum LearningTrigger {
       return nil
     }
     let eligibleRunIds = Set(window.map(\.runId))
-    let effectiveCorrections = FeedbackEvent.unsuperseded(corrections).filter { event in
-      event.signal == .resultCorrection
-        && event.runId.map(eligibleRunIds.contains) == true
+    var signalsByRun: [Int64: [FeedbackEvent]] = [:]
+    for event in corrections {
+      guard let runId = event.runId, eligibleRunIds.contains(runId) else {
+        continue
+      }
+      signalsByRun[runId, default: []].append(event)
+    }
+    let effectiveCorrections = signalsByRun.values.compactMap { signals in
+      let winner = FeedbackEvent.latestUnsupersededResult(in: signals)
+      return winner?.signal == .resultCorrection ? winner : nil
     }
     let issueCodes = qualifyingIssueCodes(in: window)
     let reason: LearningTriggerReason
@@ -186,17 +215,17 @@ public enum LearningTrigger {
 
 private extension LearningTrigger {
   static func qualifyingIssueCodes(in window: [EffectiveEvaluation]) -> [String] {
-    var runsByCode: [String: Set<Int64>] = [:]
+    var runsByCode: [ByteExactIssueCode: Set<Int64>] = [:]
     for evaluation in window {
       guard case .negative(let issueCodes) = evaluation.outcome else {
         continue
       }
-      for issueCode in Set(issueCodes) {
+      for issueCode in Set(issueCodes.map(ByteExactIssueCode.init)) {
         runsByCode[issueCode, default: []].insert(evaluation.runId)
       }
     }
     return runsByCode.compactMap { issueCode, runIds in
       runIds.count >= recurringRunThreshold ? issueCode : nil
-    }.sorted()
+    }.sorted().map(\.value)
   }
 }
