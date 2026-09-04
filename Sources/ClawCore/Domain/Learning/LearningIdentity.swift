@@ -158,6 +158,15 @@ public struct CompatibilityDigest: RawRepresentable, Sendable, Hashable, Codable
   }
 }
 
+/// SHA-256 identity of one frozen reflection question.
+public struct TriggerDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+}
+
 /// Digest of one `LearningOperationKey`. The stored claim key: `learning_operations` has no
 /// columns for the prompt, schema and rubric versions the key covers, so this is the only value a
 /// unique index can hold the "one live attempt per key" rule on.
