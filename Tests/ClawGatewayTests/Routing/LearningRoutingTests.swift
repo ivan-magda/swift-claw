@@ -80,14 +80,18 @@ import Testing
     let expected = SecretRedactor(secretValues: ["x"]).redact(raw)
 
     // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/learning")
-    )
+    let update = textUpdate(id: 1, from: 42, text: "/learning")
+    let outcome = await harness.router.handle(rawUpdate: update)
+    let firstBatch = await harness.transport.sent.map(\.text)
+    let replay = await harness.router.handle(rawUpdate: update)
 
-    // then — rich-limit, split-before-redact, truncation, or reordering breaks this equality.
+    // then — rich-limit, split-before-redact, truncation, reordering, or a chunk-path claim
+    // bypass breaks these equalities; the nearest duplicate test reaches only the one-message path.
     #expect(outcome == .processed)
+    #expect(replay == .skipped)
     let chunks = await harness.transport.sent.map(\.text)
     #expect(chunks.count > 1)
+    #expect(chunks == firstBatch)
     #expect(
       chunks.allSatisfy { chunk in
         chunk.count <= TelegramMessageLimits.maxPlainMessageCharacters
@@ -95,6 +99,27 @@ import Testing
     )
     #expect(chunks.joined() == expected)
     #expect(chunks.joined().contains("x") == false)
+    #expect(await harness.dispatcher.calls.isEmpty)
+  }
+
+  @Test func chunkClaimFailureRetriesWithoutDelivery() async throws {
+    // given
+    let harness = try Harness.make()
+    let job = try harness.createJob(label: "claim failure")
+    _ = try harness.learning.armJob(jobId: job.id, now: harness.now)
+    try await harness.queue.write { db in
+      try db.drop(table: "processed_updates")
+    }
+
+    // when
+    let outcome = await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/learning")
+    )
+
+    // then — sending before the multipart ownership claim leaks a reply for a retryable update;
+    // the nearest claim-failure tests exercise other sender branches.
+    #expect(outcome == .transientFailure)
+    #expect(await harness.transport.sent.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 }

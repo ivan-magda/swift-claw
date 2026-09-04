@@ -42,10 +42,11 @@ private extension LearningSurface {
         readable.lastDecision.map { value in
           "last \(decisionKind(value.detail)) \(value.decidedAt.wallClockMinute(in: zone(readable)))"
         } ?? "no decision"
+      let warning = readable.warnings.isEmpty ? "" : " · warning"
       return """
         \(readable.job.jobId) · \(readable.job.label) · \(readable.job.status.rawValue) · \
         epoch \(readable.epoch.value) · \(readable.stableLessons.lessons.count) lessons · \
-        \(trial) · \(decision)
+        \(trial) · \(decision)\(warning)
         """
     case .unreadable(let job):
       return "\(job.jobId) · \(job.validatedLabel ?? "unknown label") · learning state unreadable"
@@ -109,7 +110,7 @@ private extension LearningSurface {
     lines.append(contentsOf: trialLines(view.liveTrial, timezone: zone(view)))
     lines.append(contentsOf: decisionLines(view.lastDecision, timezone: zone(view)))
     for warning in view.warnings {
-      lines.append("warning: \(warning.rawValue)")
+      lines.append("warning: \(warningText(warning))")
     }
     return lines.joined(separator: "\n")
   }
@@ -171,6 +172,13 @@ private extension LearningSurface {
       AdmissionReceipt.kind
     case .reflectionNoCandidate:
       ReflectionNoCandidateReceipt.kind
+    }
+  }
+
+  static func warningText(_ warning: LearningViewWarning) -> String {
+    switch warning {
+    case .trialPointerMismatch:
+      "stored trial pointer does not match the live trial"
     }
   }
 

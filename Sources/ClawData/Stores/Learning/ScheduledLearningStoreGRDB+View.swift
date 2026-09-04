@@ -27,10 +27,11 @@ extension ScheduledLearningStoreGRDB {
 private extension ScheduledLearningStoreGRDB {
   struct ViewJobRow {
     let jobId: Int64
-    let label: String
-    let status: String
-    let timezone: String
+    let label: String?
+    let status: String?
+    let timezone: String?
     let hasRecurrence: Bool
+    let primitivesAreValid: Bool
   }
 
   enum ViewCorruption: Error {
@@ -41,13 +42,16 @@ private extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT job.id, job.label, job.status, job.timezone, job.recurrence
+        SELECT state.job_id AS selected_job_id, job.id, job.label, job.status, job.timezone,
+          job.recurrence
         FROM job_learning_state AS state
         JOIN scheduled_jobs AS job ON job.id = state.job_id
         ORDER BY job.id
         """
     )
-    return rows.map(viewJob(row:))
+    return rows.map { row in
+      viewJob(row: row, requestedJobId: nil)
+    }
   }
 
   static func viewJob(_ db: Database, jobId: Int64) throws -> ViewJobRow? {
@@ -58,23 +62,37 @@ private extension ScheduledLearningStoreGRDB {
         FROM scheduled_jobs WHERE id = ?
         """,
       arguments: [jobId]
-    ).map(viewJob(row:))
+    ).map { row in
+      viewJob(row: row, requestedJobId: jobId)
+    }
   }
 
-  static func viewJob(row: Row) -> ViewJobRow {
-    ViewJobRow(
-      jobId: row["id"],
-      label: row["label"],
-      status: row["status"],
-      timezone: row["timezone"],
-      hasRecurrence: (row["recurrence"] as String?) != nil
+  static func viewJob(row: Row, requestedJobId: Int64?) -> ViewJobRow {
+    let storedJobId = SQLiteStoredValue.int64(in: row, column: "id")
+    let selectedJobId = SQLiteStoredValue.int64(in: row, column: "selected_job_id")
+    let jobId = requestedJobId ?? selectedJobId ?? storedJobId ?? 0
+    let label = SQLiteStoredValue.string(in: row, column: "label")
+    let status = SQLiteStoredValue.string(in: row, column: "status")
+    let timezone = SQLiteStoredValue.string(in: row, column: "timezone")
+    let recurrence = SQLiteStoredValue.nullableString(in: row, column: "recurrence")
+    return ViewJobRow(
+      jobId: jobId,
+      label: label,
+      status: status,
+      timezone: timezone,
+      hasRecurrence: recurrence?.value != nil,
+      primitivesAreValid: storedJobId == jobId
+        && label != nil
+        && status != nil
+        && timezone != nil
+        && recurrence != nil
     )
   }
 
   static func view(_ db: Database, job: ViewJobRow) throws -> JobLearningView {
     let fallback = UnreadableLearningJob(
       jobId: job.jobId,
-      validatedLabel: validatedLabel(job.label)
+      validatedLabel: job.label.flatMap(validatedLabel)
     )
     do {
       let identity = try jobIdentity(job)
@@ -94,10 +112,14 @@ private extension ScheduledLearningStoreGRDB {
 
   static func jobIdentity(_ row: ViewJobRow) throws -> LearningJobIdentity {
     guard
+      row.primitivesAreValid,
       row.jobId > 0,
-      let label = validatedLabel(row.label),
-      let status = ScheduledJobStatus(rawValue: row.status),
-      TimeZone(identifier: row.timezone) != nil
+      let rawLabel = row.label,
+      let label = validatedLabel(rawLabel),
+      let rawStatus = row.status,
+      let status = ScheduledJobStatus(rawValue: rawStatus),
+      let timezone = row.timezone,
+      TimeZone(identifier: timezone) != nil
     else {
       throw ViewCorruption.invalid
     }
@@ -105,7 +127,7 @@ private extension ScheduledLearningStoreGRDB {
       jobId: row.jobId,
       label: label,
       status: status,
-      timezone: row.timezone
+      timezone: timezone
     )
   }
 
@@ -202,7 +224,12 @@ private extension ScheduledLearningStoreGRDB {
     guard let row = rows.first else {
       return nil
     }
-    guard job.hasRecurrence else {
+    guard
+      job.hasRecurrence,
+      let rawStatus = job.status,
+      let status = ScheduledJobStatus(rawValue: rawStatus),
+      status == .active || status == .paused
+    else {
       throw ViewCorruption.invalid
     }
     let trial = try liveTrialProjection(row)
@@ -229,34 +256,48 @@ private extension ScheduledLearningStoreGRDB {
 
   static func liveTrialProjection(_ row: Row) throws -> LiveTrialProjection {
     guard
-      let state = LearningTrialState(rawValue: row["state"]),
-      let admittedAt = EpochSecondCodec.date(fromEpoch: row["admitted_at"]),
-      let assignmentDeadline = EpochSecondCodec.date(fromEpoch: row["assignment_deadline"]),
-      let decisionDeadline = EpochSecondCodec.date(fromEpoch: row["decision_deadline"]),
-      let cohortCutoff = EpochSecondCodec.date(fromEpoch: row["cohort_cutoff"])
+      let trialId = SQLiteStoredValue.int64(in: row, column: "trial_id"),
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
+      let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
+      let generation = SQLiteStoredValue.int(in: row, column: "generation"),
+      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+      let state = LearningTrialState(rawValue: stateRaw),
+      let admittedEpoch = SQLiteStoredValue.int64(in: row, column: "admitted_at"),
+      let admittedAt = EpochSecondCodec.date(fromEpoch: admittedEpoch),
+      let assignmentEpoch = SQLiteStoredValue.int64(in: row, column: "assignment_deadline"),
+      let assignmentDeadline = EpochSecondCodec.date(fromEpoch: assignmentEpoch),
+      let decisionEpoch = SQLiteStoredValue.int64(in: row, column: "decision_deadline"),
+      let decisionDeadline = EpochSecondCodec.date(fromEpoch: decisionEpoch),
+      let maximumAssignments = SQLiteStoredValue.int(in: row, column: "max_assignments"),
+      let consumedAssignments = SQLiteStoredValue.int(in: row, column: "consumed_assignments"),
+      let cutoffEpoch = SQLiteStoredValue.int64(in: row, column: "cohort_cutoff"),
+      let cohortCutoff = EpochSecondCodec.date(fromEpoch: cutoffEpoch),
+      let closeReason = SQLiteStoredValue.nullableString(in: row, column: "close_reason"),
+      let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm")
     else {
       throw ViewCorruption.invalid
     }
-    let algorithm = LearningAlgorithm(rawValue: row["algorithm"])
     let trialRow = TrialRow(
-      id: row["trial_id"],
-      jobId: row["job_id"],
-      epoch: LearningEpoch(row["learning_epoch"]),
-      baseDigest: LessonSetDigest(rawValue: row["base_digest"]),
-      candidateDigest: CandidateDigest(rawValue: row["candidate_digest"]),
-      generation: row["generation"],
+      id: trialId,
+      jobId: jobId,
+      epoch: LearningEpoch(epoch),
+      baseDigest: LessonSetDigest(rawValue: baseDigest),
+      candidateDigest: CandidateDigest(rawValue: candidateDigest),
+      generation: generation,
       state: state,
-      algorithm: algorithm
+      algorithm: LearningAlgorithm(rawValue: algorithmRaw)
     )
     return LiveTrialProjection(
       row: trialRow,
       admittedAt: admittedAt,
       assignmentDeadline: assignmentDeadline,
       decisionDeadline: decisionDeadline,
-      maximumAssignments: row["max_assignments"],
-      consumedAssignments: row["consumed_assignments"],
+      maximumAssignments: maximumAssignments,
+      consumedAssignments: consumedAssignments,
       cohortCutoff: cohortCutoff,
-      closeReason: row["close_reason"]
+      closeReason: closeReason.value
     )
   }
 
@@ -267,23 +308,7 @@ private extension ScheduledLearningStoreGRDB {
   ) throws -> LearningTrialView {
     let row = trial.row
     guard
-      row.id > 0,
-      row.jobId == state.jobId,
-      row.epoch == state.epoch,
-      row.baseDigest == state.stableDigest,
-      row.generation > 0,
-      row.algorithm == .v1,
-      row.state == .open || row.state == .draining,
-      isDigest(row.candidateDigest.rawValue),
-      trial.maximumAssignments == TrialAdmissionPolicy.maximumAssignments,
-      trial.consumedAssignments >= 0,
-      trial.consumedAssignments <= trial.maximumAssignments,
-      trial.cohortCutoff == trial.admittedAt,
-      trial.assignmentDeadline
-        == trial.admittedAt.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow),
-      trial.decisionDeadline
-        == trial.admittedAt.addingTimeInterval(TrialAdmissionPolicy.decisionWindow),
-      trial.closeReason == nil,
+      trialMetadataMatches(trial, state: state),
       let artifact = try readCandidateArtifact(db, digest: row.candidateDigest),
       artifact.manifest.jobId == state.jobId,
       artifact.manifest.epoch == state.epoch,
@@ -331,6 +356,30 @@ private extension ScheduledLearningStoreGRDB {
     )
   }
 
+  static func trialMetadataMatches(
+    _ trial: LiveTrialProjection,
+    state: JobLearningState
+  ) -> Bool {
+    let row = trial.row
+    return row.id > 0
+      && row.jobId == state.jobId
+      && row.epoch == state.epoch
+      && row.baseDigest == state.stableDigest
+      && row.generation > 0
+      && row.algorithm == .v1
+      && (row.state == .open || row.state == .draining)
+      && isDigest(row.candidateDigest.rawValue)
+      && trial.maximumAssignments == TrialAdmissionPolicy.maximumAssignments
+      && trial.consumedAssignments >= 0
+      && trial.consumedAssignments <= trial.maximumAssignments
+      && trial.cohortCutoff == trial.admittedAt
+      && trial.assignmentDeadline
+        == trial.admittedAt.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)
+      && trial.decisionDeadline
+        == trial.admittedAt.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)
+      && trial.closeReason == nil
+  }
+
   static func validateCreatedAssignments(
     _ db: Database,
     trial: TrialRow,
@@ -355,29 +404,66 @@ private extension ScheduledLearningStoreGRDB {
       arguments: [trial.id]
     )
     for row in rows {
-      guard
-        (row["job_id"] as Int64) == trial.jobId,
-        LearningEpoch(row["learning_epoch"] as Int64) == trial.epoch,
-        (row["trial_generation"] as Int) == trial.generation,
-        (row["state"] as String) == TrialAssignmentState.created.rawValue,
-        (row["outcome"] as String?) == nil,
-        (row["issue_codes"] as String?) == nil,
-        (row["evaluation_digest"] as String?) == nil,
-        row["evaluation_required"] as Bool,
-        (row["effective_feedback_revision"] as Int64?) == nil,
-        (row["resolved_at"] as Int64?) == nil,
-        (row["binding_run_id"] as Int64?) == row["run_id"] as Int64,
-        (row["binding_job_id"] as Int64?) == trial.jobId,
-        (row["binding_epoch"] as Int64?) == trial.epoch.value,
-        (row["stable_digest"] as String?) == trial.baseDigest.rawValue,
-        (row["effective_digest"] as String?) == replacement.rawValue,
-        (row["trial_id"] as Int64?) == trial.id,
-        (row["binding_generation"] as Int?) == trial.generation
-      else {
+      guard createdAssignmentMatches(row, trial: trial, replacement: replacement) else {
         throw ViewCorruption.invalid
       }
     }
     return rows.count
+  }
+
+  static func createdAssignmentMatches(
+    _ row: Row,
+    trial: TrialRow,
+    replacement: LessonSetDigest
+  ) -> Bool {
+    guard
+      let runId = SQLiteStoredValue.int64(in: row, column: "run_id"),
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      jobId == trial.jobId,
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      LearningEpoch(epoch) == trial.epoch,
+      let generation = SQLiteStoredValue.int(in: row, column: "trial_generation"),
+      generation == trial.generation,
+      let state = SQLiteStoredValue.string(in: row, column: "state"),
+      state == TrialAssignmentState.created.rawValue,
+      let outcome = SQLiteStoredValue.nullableString(in: row, column: "outcome"),
+      outcome.value == nil,
+      let issueCodes = SQLiteStoredValue.nullableString(in: row, column: "issue_codes"),
+      issueCodes.value == nil,
+      let evaluation = SQLiteStoredValue.nullableString(in: row, column: "evaluation_digest"),
+      evaluation.value == nil,
+      SQLiteStoredValue.boolean(in: row, column: "evaluation_required") == .trueValue,
+      let feedback = SQLiteStoredValue.nullableInt64(
+        in: row,
+        column: "effective_feedback_revision"
+      ),
+      feedback.value == nil,
+      let resolvedAt = SQLiteStoredValue.nullableInt64(in: row, column: "resolved_at"),
+      resolvedAt.value == nil,
+      let bindingRun = SQLiteStoredValue.nullableInt64(in: row, column: "binding_run_id"),
+      bindingRun.value == runId,
+      let bindingJob = SQLiteStoredValue.nullableInt64(in: row, column: "binding_job_id"),
+      bindingJob.value == trial.jobId,
+      let bindingEpoch = SQLiteStoredValue.nullableInt64(in: row, column: "binding_epoch"),
+      bindingEpoch.value == trial.epoch.value,
+      let stableDigest = SQLiteStoredValue.nullableString(in: row, column: "stable_digest"),
+      stableDigest.value == trial.baseDigest.rawValue,
+      let effectiveDigest = SQLiteStoredValue.nullableString(
+        in: row,
+        column: "effective_digest"
+      ),
+      effectiveDigest.value == replacement.rawValue,
+      let bindingTrial = SQLiteStoredValue.nullableInt64(in: row, column: "trial_id"),
+      bindingTrial.value == trial.id,
+      let bindingGeneration = SQLiteStoredValue.nullableInt(
+        in: row,
+        column: "binding_generation"
+      ),
+      bindingGeneration.value == trial.generation
+    else {
+      return false
+    }
+    return true
   }
 }
 
@@ -404,28 +490,34 @@ private extension ScheduledLearningStoreGRDB {
       return nil
     }
     guard
-      let decidedAt = EpochSecondCodec.date(fromEpoch: row["decided_at"]),
-      (row["decision_id"] as Int64) > 0,
-      (row["job_id"] as Int64) == state.jobId,
-      LearningEpoch(row["learning_epoch"] as Int64) == state.epoch
+      let decisionId = SQLiteStoredValue.int64(in: row, column: "decision_id"),
+      decisionId > 0,
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      jobId == state.jobId,
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      LearningEpoch(epoch) == state.epoch,
+      let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm"),
+      let kind = SQLiteStoredValue.string(in: row, column: "kind"),
+      let inputsJSON = SQLiteStoredValue.string(in: row, column: "inputs"),
+      let resultJSON = SQLiteStoredValue.string(in: row, column: "result"),
+      let decidedEpoch = SQLiteStoredValue.int64(in: row, column: "decided_at"),
+      let decidedAt = EpochSecondCodec.date(fromEpoch: decidedEpoch)
     else {
       throw ViewCorruption.invalid
     }
-    let algorithm = LearningAlgorithm(rawValue: row["algorithm"])
+    let algorithm = LearningAlgorithm(rawValue: algorithmRaw)
     guard algorithm == .v1 else {
       throw ViewCorruption.invalid
     }
-    let inputsJSON: String = row["inputs"]
-    let resultJSON: String = row["result"]
     let detail = try decisionDetail(
       db,
-      kind: row["kind"],
+      kind: kind,
       inputsJSON: inputsJSON,
       resultJSON: resultJSON,
       state: state
     )
     return LearningDecisionView(
-      decisionId: row["decision_id"],
+      decisionId: decisionId,
       jobId: state.jobId,
       epoch: state.epoch,
       algorithm: algorithm,

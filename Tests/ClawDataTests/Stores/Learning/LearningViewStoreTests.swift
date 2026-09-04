@@ -49,6 +49,64 @@ import Testing
     #expect(readable.stableRevision == StableRevision(7))
   }
 
+  @Test(arguments: StableViewCorruption.allCases)
+  func stableStateTrustBoundariesFailClosed(_ corruption: StableViewCorruption) throws {
+    // given
+    let fixture = try LearningViewFixture.make()
+    let job = try fixture.createJob(label: "damaged stable state")
+    _ = try fixture.learning.armJob(jobId: job.id, now: fixture.now)
+    try fixture.applyStableCorruption(corruption, jobId: job.id)
+
+    // when
+    let view = try fixture.learning.learningView(jobId: job.id)
+
+    // then — substituting a missing, foreign, noncanonical, digest-mismatched set, or malformed
+    // job identity would survive the positive exact-set test for correctly stored rows.
+    #expect(view.isOnlyUnreadable)
+  }
+
+  @Test func listKeepsHealthyJobsBesideUnreadableJobs() throws {
+    // given
+    let fixture = try LearningViewFixture.make()
+    let healthy = try fixture.createJob(label: "healthy")
+    let damaged = try fixture.createJob(label: "damaged")
+    _ = try fixture.learning.armJob(jobId: healthy.id, now: fixture.now)
+    _ = try fixture.learning.armJob(jobId: damaged.id, now: fixture.now)
+    try fixture.invalidateTimezone(jobId: damaged.id)
+
+    // when
+    let view = try fixture.learning.learningView(jobId: nil)
+
+    // then — failing the whole list on one semantic row would hide the preceding healthy job;
+    // the nearest list test has no corrupt state to exercise per-job isolation.
+    #expect(view.count == 2)
+    #expect(view.readableJobIds == [healthy.id])
+    #expect(view.unreadableJobIds == [damaged.id])
+  }
+
+  @Test func operationalReadFailureLeavesThroughTheStoreSeam() throws {
+    // given
+    let fixture = try LearningViewFixture.make()
+    let job = try fixture.createJob(label: "operational failure")
+    _ = try fixture.learning.armJob(jobId: job.id, now: fixture.now)
+    try fixture.queue.write { db in
+      try db.drop(table: "job_learning_state")
+    }
+
+    // when
+    do {
+      _ = try fixture.learning.learningView(jobId: job.id)
+      Issue.record("expected a mapped store failure")
+    } catch let error {
+      // then — catching all read errors as row corruption would return unreadable and acknowledge
+      // a retryable database failure; the group refusal test never reaches its dropped table.
+      guard case .unexpected = error else {
+        Issue.record("expected StoreError.unexpected, got \(error)")
+        return
+      }
+    }
+  }
+
   @Test(arguments: LiveTrialCorruption.allCases)
   func liveTrialRejectsMultiplicityAndUsesExactIdentity(
     _ corruption: LiveTrialCorruption
@@ -82,13 +140,59 @@ import Testing
     }
     #expect(inputs.candidateDigest == artifact.digest)
     #expect(decisionReceipt == receipt)
-    try fixture.corruptViewTrial(corruption, trialId: receipt.trialId)
+    try fixture.corruptViewTrial(
+      corruption,
+      artifact: artifact,
+      trialId: receipt.trialId
+    )
 
     // when
     let view = try fixture.env.learning.learningView(jobId: fixture.env.jobId)
 
     // then — following the convenience pointer or omitting assignment identity hides corruption.
     #expect(view.isOnlyUnreadable)
+  }
+
+  @Test(arguments: LiveWorkflowMutation.allCases)
+  func liveWorkflowStatusAndPointerStayReadOnly(
+    _ mutation: LiveWorkflowMutation
+  ) throws {
+    // given
+    let fixture = try AdmissionStoreFixture.make()
+    defer { fixture.remove() }
+    let artifact = try fixture.persistedCandidate()
+    let admitted = try fixture.env.learning.admitCandidate(
+      digest: artifact.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
+    guard case .admitted(let receipt) = admitted else {
+      Issue.record("expected fixture candidate admission")
+      return
+    }
+    try fixture.applyLiveWorkflowMutation(mutation, trialId: receipt.trialId)
+    let before = try fixture.durableLearningSnapshot()
+
+    // when
+    let detail = try fixture.env.learning.learningView(jobId: fixture.env.jobId)
+    let list = try fixture.env.learning.learningView(jobId: nil)
+    let after = try fixture.durableLearningSnapshot()
+
+    // then — admitting a cancelled job's stale trial or repairing the pointer during a read would
+    // survive the positive live-trial test; its nearest tests never snapshot all touched domains.
+    #expect(after == before)
+    switch mutation {
+    case .cancelledJob:
+      #expect(detail.isOnlyUnreadable)
+      #expect(list.isOnlyUnreadable)
+    case .stalePointer:
+      let detailed = try #require(detail.onlyReadable)
+      let listed = try #require(list.onlyReadable)
+      #expect(detailed.liveTrial?.trialId == receipt.trialId)
+      #expect(detailed.warnings == [.trialPointerMismatch])
+      #expect(listed.liveTrial?.trialId == receipt.trialId)
+      #expect(listed.warnings == [.trialPointerMismatch])
+    }
   }
 
   @Test func lastDecisionIsTypedCurrentEpochAndUsesTheStableTieBreak() throws {
@@ -121,12 +225,94 @@ import Testing
     // then — omitting decision_id from the tie break can hide the latest malformed receipt.
     #expect(corrupt.isOnlyUnreadable)
   }
+
+  @Test(arguments: CurrentDecisionCorruption.allCases)
+  func currentDecisionTrustBoundariesFailClosed(
+    _ corruption: CurrentDecisionCorruption
+  ) throws {
+    // given
+    let fixture = try AdmissionStoreFixture.make()
+    defer { fixture.remove() }
+    let artifact = try fixture.persistedCandidate()
+    let admitted = try fixture.env.learning.admitCandidate(
+      digest: artifact.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
+    guard case .admitted(let receipt) = admitted else {
+      Issue.record("expected fixture candidate admission")
+      return
+    }
+    try fixture.closeTrialForDecisionView(trialId: receipt.trialId)
+    try fixture.corruptCurrentDecision(corruption, receipt: receipt)
+
+    // when
+    let view = try fixture.env.learning.learningView(jobId: fixture.env.jobId)
+
+    // then — treating an unknown kind as absent or trusting receipt fields without their durable
+    // identity would survive the current-epoch ordering test's otherwise valid receipt.
+    #expect(view.isOnlyUnreadable)
+  }
+
+  @Test(arguments: ViewPrimitiveCorruption.allCases)
+  func incompatibleStoredPrimitivesArePerJobUnreadable(
+    _ corruption: ViewPrimitiveCorruption
+  ) throws {
+    // given
+    let fixture = try AdmissionStoreFixture.make()
+    defer { fixture.remove() }
+    let artifact = try fixture.persistedCandidate()
+    let admitted = try fixture.env.learning.admitCandidate(
+      digest: artifact.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
+    guard case .admitted(let receipt) = admitted else {
+      Issue.record("expected fixture candidate admission")
+      return
+    }
+    _ = try fixture.env.pendingBoundRun()
+    try fixture.corruptStoredPrimitive(corruption, trialId: receipt.trialId)
+
+    // when
+    let view = try fixture.env.learning.learningView(jobId: fixture.env.jobId)
+
+    // then — a non-optional typed Row subscript can abort instead of isolating a bad job;
+    // existing semantic tests keep the expected SQLite storage classes and cannot kill it.
+    #expect(view.isOnlyUnreadable)
+  }
 }
 
 enum LiveTrialCorruption: CaseIterable, Sendable {
   case secondLiveTrial
   case assignmentEpoch
   case assignmentGeneration
+}
+
+enum LiveWorkflowMutation: CaseIterable, Sendable {
+  case cancelledJob
+  case stalePointer
+}
+
+enum StableViewCorruption: CaseIterable, Sendable {
+  case missingSet
+  case crossJobSet
+  case noncanonicalSet
+  case digestMismatch
+  case invalidJobMetadata
+}
+
+enum CurrentDecisionCorruption: CaseIterable, Sendable {
+  case unknownKind
+  case receiptIdentity
+}
+
+enum ViewPrimitiveCorruption: CaseIterable, Sendable {
+  case job
+  case state
+  case trial
+  case assignment
+  case decision
 }
 
 private extension Array where Element == JobLearningView {
@@ -151,6 +337,15 @@ private extension Array where Element == JobLearningView {
       return false
     }
     return true
+  }
+
+  var unreadableJobIds: [Int64] {
+    compactMap { item in
+      guard case .unreadable(let job) = item else {
+        return nil
+      }
+      return job.jobId
+    }
   }
 }
 
@@ -242,42 +437,211 @@ private struct LearningViewFixture {
     }
     return set
   }
+
+  func applyStableCorruption(_ corruption: StableViewCorruption, jobId: Int64) throws {
+    switch corruption {
+    case .missingSet:
+      try pointStableState(jobId: jobId, digest: String(repeating: "d", count: 64))
+    case .crossJobSet:
+      let other = try createJob(label: "foreign stable owner")
+      _ = try learning.armJob(jobId: other.id, now: now)
+      let foreign = try installStableLessons(["Only the other job owns this."], jobId: other.id)
+      try pointStableState(jobId: jobId, digest: foreign.digest.rawValue)
+    case .noncanonicalSet:
+      try replaceStableBytes(jobId: jobId, bytes: Data("{".utf8))
+    case .digestMismatch:
+      let different = try LessonSet.canonical(jobId: jobId, lessons: ["Different bytes."])
+      try replaceStableBytes(jobId: jobId, bytes: different.canonicalBytes)
+    case .invalidJobMetadata:
+      try invalidateTimezone(jobId: jobId)
+    }
+  }
+
+  func invalidateTimezone(jobId: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE scheduled_jobs SET timezone = 'not/a-zone' WHERE id = ?",
+        arguments: [jobId]
+      )
+    }
+  }
+
+  private func pointStableState(jobId: Int64, digest: String) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE job_learning_state SET stable_lesson_set_digest = ? WHERE job_id = ?",
+        arguments: [digest, jobId]
+      )
+    }
+  }
+
+  private func replaceStableBytes(jobId: Int64, bytes: Data) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          UPDATE lesson_sets SET canonical_bytes = ?
+          WHERE job_id = ? AND digest = (
+            SELECT stable_lesson_set_digest FROM job_learning_state WHERE job_id = ?
+          )
+          """,
+        arguments: [bytes, jobId, jobId]
+      )
+    }
+  }
 }
 
 private extension AdmissionStoreFixture {
   func corruptViewTrial(
     _ corruption: LiveTrialCorruption,
+    artifact: CandidateArtifact,
     trialId: Int64
   ) throws {
+    let sql: String
+    switch corruption {
+    case .secondLiveTrial:
+      try insertCompetingDrainingTrial(from: artifact)
+      return
+    case .assignmentEpoch:
+      sql = "UPDATE trial_assignments SET learning_epoch = learning_epoch + 1 WHERE trial_id = ?"
+    case .assignmentGeneration:
+      sql = "UPDATE trial_assignments SET trial_generation = 99 WHERE trial_id = ?"
+    }
     try env.queue.write { db in
-      switch corruption {
-      case .secondLiveTrial:
+      try db.execute(sql: sql, arguments: [trialId])
+    }
+  }
+
+  func applyLiveWorkflowMutation(
+    _ mutation: LiveWorkflowMutation,
+    trialId: Int64
+  ) throws {
+    switch mutation {
+    case .cancelledJob:
+      try env.cancelJob()
+    case .stalePointer:
+      try env.queue.write { db in
         try db.execute(
-          sql: """
-            INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-              generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-              consumed_assignments, cohort_cutoff, state, algorithm)
-            SELECT job_id, learning_epoch, base_digest, candidate_digest, generation + 1,
-              admitted_at, assignment_deadline, decision_deadline, max_assignments, 0,
-              cohort_cutoff, ?, algorithm
-            FROM learning_trials WHERE trial_id = ?
-            """,
-          arguments: [LearningTrialState.draining.rawValue, trialId]
-        )
-      case .assignmentEpoch:
-        try db.execute(
-          sql:
-            "UPDATE trial_assignments SET learning_epoch = learning_epoch + 1 WHERE trial_id = ?",
-          arguments: [trialId]
-        )
-      case .assignmentGeneration:
-        try db.execute(
-          sql: "UPDATE trial_assignments SET trial_generation = 99 WHERE trial_id = ?",
-          arguments: [trialId]
+          sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
+          arguments: [trialId + 10_000, env.jobId]
         )
       }
     }
   }
+
+  func durableLearningSnapshot() throws -> DurableLearningSnapshot {
+    let tableNames = [
+      "scheduled_jobs",
+      "job_learning_state",
+      "lesson_sets",
+      "learning_candidates",
+      "learning_trials",
+      "trial_assignments",
+      "learning_decisions",
+      "audit_events",
+      "feedback_targets",
+      "outbound_deliveries",
+    ]
+    return try env.queue.read { db in
+      let tables = try tableNames.map { tableName in
+        let columnRows = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+        let columns = columnRows.map { row in row["name"] as String }
+        let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(tableName) ORDER BY rowid")
+        let values = rows.map { row in
+          columns.map { column in row[column] as DatabaseValue }
+        }
+        return DurableTableSnapshot(name: tableName, columns: columns, rows: values)
+      }
+      return DurableLearningSnapshot(tables: tables)
+    }
+  }
+
+  func corruptCurrentDecision(
+    _ corruption: CurrentDecisionCorruption,
+    receipt: AdmissionReceipt
+  ) throws {
+    try env.queue.write { db in
+      switch corruption {
+      case .unknownKind:
+        try db.execute(
+          sql: "UPDATE learning_decisions SET kind = 'unknown' WHERE decision_id = 1"
+        )
+      case .receiptIdentity:
+        let altered = AdmissionReceipt(
+          candidateDigest: receipt.candidateDigest,
+          replacementDigest: receipt.replacementDigest,
+          trialId: receipt.trialId,
+          generation: receipt.generation + 1
+        )
+        let bytes = try CanonicalJSON.data(encoding: altered)
+        guard let result = String(bytes: bytes, encoding: .utf8) else {
+          throw StoreError.unexpected("fixture receipt was not UTF-8")
+        }
+        try db.execute(
+          sql: "UPDATE learning_decisions SET result = ? WHERE decision_id = 1",
+          arguments: [result]
+        )
+      }
+    }
+  }
+
+  func closeTrialForDecisionView(trialId: Int64) throws {
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE learning_trials SET state = ?, close_reason = ? WHERE trial_id = ?",
+        arguments: [LearningTrialState.closed.rawValue, "fixture close", trialId]
+      )
+      try db.execute(
+        sql: "UPDATE job_learning_state SET open_trial_id = NULL WHERE job_id = ?",
+        arguments: [env.jobId]
+      )
+    }
+  }
+
+  func corruptStoredPrimitive(
+    _ corruption: ViewPrimitiveCorruption,
+    trialId: Int64
+  ) throws {
+    let invalid = Data([0xFF])
+    try env.queue.write { db in
+      switch corruption {
+      case .job:
+        try db.execute(
+          sql: "UPDATE scheduled_jobs SET timezone = ? WHERE id = ?",
+          arguments: [invalid, env.jobId]
+        )
+      case .state:
+        try db.execute(
+          sql: "UPDATE job_learning_state SET learning_epoch = ? WHERE job_id = ?",
+          arguments: [invalid, env.jobId]
+        )
+      case .trial:
+        try db.execute(
+          sql: "UPDATE learning_trials SET generation = ? WHERE trial_id = ?",
+          arguments: [invalid, trialId]
+        )
+      case .assignment:
+        try db.execute(
+          sql: "UPDATE trial_assignments SET trial_generation = ? WHERE trial_id = ?",
+          arguments: [invalid, trialId]
+        )
+      case .decision:
+        try db.execute(
+          sql: "UPDATE learning_decisions SET decided_at = ? WHERE decision_id = 1",
+          arguments: [invalid]
+        )
+      }
+    }
+  }
+}
+
+private struct DurableLearningSnapshot: Equatable {
+  let tables: [DurableTableSnapshot]
+}
+
+private struct DurableTableSnapshot: Equatable {
+  let name: String
+  let columns: [String]
+  let rows: [[DatabaseValue]]
 }
 
 private extension BoundRunEnvironment {

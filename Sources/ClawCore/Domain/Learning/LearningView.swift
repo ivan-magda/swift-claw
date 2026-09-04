@@ -28,8 +28,8 @@ public struct UnreadableLearningJob: Sendable, Equatable {
 }
 
 /// A non-authoritative mismatch that can be reported without hiding authoritative state.
-public enum LearningViewWarning: String, Sendable, Equatable {
-  case trialPointerMismatch = "stored trial pointer does not match the live trial"
+public enum LearningViewWarning: Sendable, Equatable {
+  case trialPointerMismatch
 }
 
 /// Current assignment facts. Until durable resolution exists, every reachable assignment is
