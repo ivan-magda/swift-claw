@@ -109,6 +109,17 @@ public enum OwnerSignal: String, Sendable, Equatable, CaseIterable {
       .promotion
     }
   }
+
+  /// Whether a tap opens the two-phase free-text flow instead of appending an immediate event.
+  public var opensFeedbackChallenge: Bool {
+    switch self {
+    case .resultCorrection, .candidateEdit:
+      true
+    case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute,
+      .candidateApprove, .candidateReject, .promotionRollback:
+      false
+    }
+  }
 }
 
 /// What an `OwnerSignal` targets. A candidate binds two to five evaluations, so a signal must name

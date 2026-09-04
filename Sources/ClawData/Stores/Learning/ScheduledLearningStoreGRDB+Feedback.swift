@@ -5,21 +5,15 @@ import GRDB
 extension ScheduledLearningStoreGRDB {
   public func createTargets(
     _ targets: [NewFeedbackTarget],
-    chunks: [LearningNoticeChunk]
-  ) throws(StoreError) -> [FeedbackTarget] {
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) {
     try database.writeMapping { db in
-      let createdAt = Date()
       for chunk in chunks {
-        _ = try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: createdAt)
+        _ = try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now)
       }
       for target in targets {
         try Self.insertTarget(db, target)
-      }
-      return try targets.map { target in
-        guard let stored = try Self.readTarget(db, nonce: target.nonce) else {
-          throw StoreError.unexpected("feedback target was not readable after insert")
-        }
-        return stored
       }
     }
   }
@@ -30,47 +24,33 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  public func consumeAndAppendEvent(_ tap: FeedbackTap) throws(StoreError) -> FeedbackOutcome {
+  public func consumeAndAppendEvent(
+    _ tap: FeedbackTap,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
     try database.writeMapping { db in
-      guard tap.signal.requiresPayloadChallenge == false else {
+      guard tap.signal.opensFeedbackChallenge == false else {
         let target = try Self.readTarget(db, nonce: tap.nonce)
         let outcome = FeedbackOutcome.requiresPayloadChallenge
-        try Self.auditFeedback(db, tap: tap, target: target, outcome: outcome)
+        try Self.auditFeedback(db, tap: tap, target: target, outcome: outcome, now: now)
         return outcome
       }
 
-      guard let target = try Self.consumeTarget(db, tap: tap) else {
+      guard let target = try Self.consumeTarget(db, tap: tap, now: now) else {
         let found = try Self.readTarget(db, nonce: tap.nonce)
-        let outcome = try Self.failedOutcome(db, tap: tap, target: found)
-        try Self.auditFeedback(db, tap: tap, target: found, outcome: outcome)
+        let outcome = try Self.failedOutcome(db, tap: tap, target: found, now: now)
+        try Self.auditFeedback(db, tap: tap, target: found, outcome: outcome, now: now)
         return outcome
       }
 
       guard let revision = try Self.advanceFeedbackRevision(db, target: target) else {
         throw StoreError.unexpected("feedback revision CAS lost after target consumption")
       }
-      let event = try Self.insertEvent(db, tap: tap, target: target, revision: revision)
+      let event = try Self.insertEvent(db, tap: tap, target: target, revision: revision, now: now)
       try Self.applyImmediateVeto(db, target: target, signal: tap.signal)
       let outcome = FeedbackOutcome.recorded(event)
-      try Self.auditFeedback(db, tap: tap, target: target, outcome: outcome)
+      try Self.auditFeedback(db, tap: tap, target: target, outcome: outcome, now: now)
       return outcome
-    }
-  }
-
-  public func feedbackEvents(
-    jobId: Int64,
-    epoch: LearningEpoch,
-    subjectKind: FeedbackSubjectKind,
-    subjectDigest: String
-  ) throws(StoreError) -> [FeedbackEvent] {
-    try database.readMapping { db in
-      try Self.readEvents(
-        db,
-        jobId: jobId,
-        epoch: epoch,
-        subjectKind: subjectKind,
-        subjectDigest: subjectDigest
-      )
     }
   }
 }
@@ -157,7 +137,7 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Consumption CAS
 
 private extension ScheduledLearningStoreGRDB {
-  static func consumeTarget(_ db: Database, tap: FeedbackTap) throws -> FeedbackTarget? {
+  static func consumeTarget(_ db: Database, tap: FeedbackTap, now: Date) throws -> FeedbackTarget? {
     let row = try Row.fetchOne(
       db,
       sql: """
@@ -174,11 +154,11 @@ private extension ScheduledLearningStoreGRDB {
         RETURNING *
         """,
       arguments: [
-        EpochSecondCodec.epoch(tap.occurredAt),
+        EpochSecondCodec.epoch(now),
         tap.nonce,
         tap.ownerUserId,
         tap.chatId,
-        EpochSecondCodec.epoch(tap.occurredAt),
+        EpochSecondCodec.epoch(now),
         tap.signal.rawValue,
       ]
     )
@@ -188,7 +168,8 @@ private extension ScheduledLearningStoreGRDB {
   static func failedOutcome(
     _ db: Database,
     tap: FeedbackTap,
-    target: FeedbackTarget?
+    target: FeedbackTarget?,
+    now: Date
   ) throws -> FeedbackOutcome {
     guard let target else {
       return .targetMissing
@@ -202,7 +183,7 @@ private extension ScheduledLearningStoreGRDB {
     if target.chatId != tap.chatId {
       return .chatMismatch
     }
-    if target.expiresAt <= tap.occurredAt {
+    if target.expiresAt <= now {
       return .expired
     }
     if target.allowedActions.contains(tap.signal) == false {
@@ -249,7 +230,8 @@ private extension ScheduledLearningStoreGRDB {
     _ db: Database,
     tap: FeedbackTap,
     target: FeedbackTarget,
-    revision: FeedbackRevision
+    revision: FeedbackRevision,
+    now: Date
   ) throws -> FeedbackEvent {
     let supersedes = try Int64.fetchOne(
       db,
@@ -274,70 +256,25 @@ private extension ScheduledLearningStoreGRDB {
         target.subjectKind.rawValue,
         target.subjectDigest,
         tap.signal.rawValue,
-        tap.payload,
+        nil as String?,
         AuditActor.owner.rawValue,
         tap.transportUpdateId,
         revision.value,
         supersedes,
-        EpochSecondCodec.epoch(tap.occurredAt),
+        EpochSecondCodec.epoch(now),
       ]
     )
     return FeedbackEvent(
       id: db.lastInsertedRowID,
       runId: try runId(db, target: target),
       signal: tap.signal,
-      payload: tap.payload,
+      payload: nil,
       revision: revision,
       supersedes: supersedes,
-      occurredAt: tap.occurredAt,
+      occurredAt: now,
       actor: .owner,
       transportUpdateId: tap.transportUpdateId
     )
-  }
-
-  static func readEvents(
-    _ db: Database,
-    jobId: Int64,
-    epoch: LearningEpoch,
-    subjectKind: FeedbackSubjectKind,
-    subjectDigest: String
-  ) throws -> [FeedbackEvent] {
-    let rows = try Row.fetchAll(
-      db,
-      sql: """
-        SELECT event_id, signal, payload, actor, transport_update_id, feedback_revision,
-          supersedes, occurred_at
-        FROM feedback_events
-        WHERE job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?
-        ORDER BY feedback_revision, event_id
-        """,
-      arguments: [jobId, epoch.value, subjectKind.rawValue, subjectDigest]
-    )
-    return try rows.map { row in
-      guard
-        let signal = OwnerSignal(rawValue: row["signal"]),
-        let actor = AuditActor(rawValue: row["actor"]),
-        let occurredAt = EpochSecondCodec.date(fromEpoch: row["occurred_at"])
-      else {
-        throw StoreError.unexpected("feedback event row is unreadable")
-      }
-      return FeedbackEvent(
-        id: row["event_id"],
-        runId: try runId(
-          db,
-          jobId: jobId,
-          subjectKind: subjectKind,
-          subjectDigest: subjectDigest
-        ),
-        signal: signal,
-        payload: row["payload"],
-        revision: FeedbackRevision(row["feedback_revision"]),
-        supersedes: row["supersedes"],
-        occurredAt: occurredAt,
-        actor: actor,
-        transportUpdateId: row["transport_update_id"]
-      )
-    }
   }
 
   static func runId(_ db: Database, target: FeedbackTarget) throws -> Int64? {
@@ -419,7 +356,6 @@ private extension ScheduledLearningStoreGRDB {
             ON learning_state.job_id = trial.job_id
             AND learning_state.learning_epoch = trial.learning_epoch
             AND learning_state.stable_lesson_set_digest = trial.base_digest
-            AND learning_state.open_trial_id = trial.trial_id
           WHERE trial.job_id = ? AND trial.learning_epoch = ?
             AND trial.state IN (?, ?)
             AND trial.candidate_digest = ?
@@ -462,7 +398,6 @@ private extension ScheduledLearningStoreGRDB {
             ON learning_state.job_id = trial.job_id
             AND learning_state.learning_epoch = trial.learning_epoch
             AND learning_state.stable_lesson_set_digest = trial.base_digest
-            AND learning_state.open_trial_id = trial.trial_id
           WHERE trial.job_id = ? AND trial.learning_epoch = ?
             AND trial.state IN (?, ?)
             AND candidate.job_id = trial.job_id
@@ -500,7 +435,8 @@ private extension ScheduledLearningStoreGRDB {
     _ db: Database,
     tap: FeedbackTap,
     target: FeedbackTarget?,
-    outcome: FeedbackOutcome
+    outcome: FeedbackOutcome,
+    now: Date
   ) throws {
     let actor: AuditActor = target?.ownerUserId == tap.ownerUserId ? .owner : .system
     try AuditLogGRDB.insertAudit(
@@ -510,12 +446,12 @@ private extension ScheduledLearningStoreGRDB {
         action: .learningFeedback,
         tool: tap.signal.rawValue,
         argsRedacted: auditSubject(target),
-        resultSize: tap.payload?.utf8.count ?? 0,
+        resultSize: 0,
         decision: outcome.auditDecision,
         runId: try target.flatMap { value in
           try runId(db, target: value)
         },
-        ts: tap.occurredAt
+        ts: now
       )
     )
   }
@@ -540,18 +476,6 @@ private extension FeedbackOutcome {
     case .staleEpoch: "stale_epoch"
     case .alreadyConsumed: "consumed"
     case .requiresPayloadChallenge: "challenge_required"
-    }
-  }
-}
-
-private extension OwnerSignal {
-  var requiresPayloadChallenge: Bool {
-    switch self {
-    case .resultCorrection, .candidateEdit:
-      true
-    case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute,
-      .candidateApprove, .candidateReject, .promotionRollback:
-      false
     }
   }
 }

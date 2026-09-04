@@ -83,25 +83,19 @@ public struct FeedbackTap: Sendable, Equatable {
   public let ownerUserId: Int64
   public let chatId: Int64
   public let transportUpdateId: Int64
-  public let payload: String?
-  public let occurredAt: Date
 
   public init(
     nonce: String,
     signal: OwnerSignal,
     ownerUserId: Int64,
     chatId: Int64,
-    transportUpdateId: Int64,
-    payload: String? = nil,
-    occurredAt: Date
+    transportUpdateId: Int64
   ) {
     self.nonce = nonce
     self.signal = signal
     self.ownerUserId = ownerUserId
     self.chatId = chatId
     self.transportUpdateId = transportUpdateId
-    self.payload = payload
-    self.occurredAt = occurredAt
   }
 }
 
@@ -152,23 +146,19 @@ public protocol ScheduledLearningStore: Sendable {
   /// Commits every runless notice chunk and every nonce it exposes in one transaction.
   func createTargets(
     _ targets: [NewFeedbackTarget],
-    chunks: [LearningNoticeChunk]
-  ) throws(StoreError) -> [FeedbackTarget]
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError)
 
   /// Exact opaque lookup. No row-id lookup exists on the feedback seam.
   func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget?
 
   /// Revalidates and consumes one target, appends its event, advances the job feedback revision,
   /// applies an immediately provable exact veto, and audits the outcome in one transaction.
-  func consumeAndAppendEvent(_ tap: FeedbackTap) throws(StoreError) -> FeedbackOutcome
-
-  /// The authenticated events for one exact subject, in feedback revision order.
-  func feedbackEvents(
-    jobId: Int64,
-    epoch: LearningEpoch,
-    subjectKind: FeedbackSubjectKind,
-    subjectDigest: String
-  ) throws(StoreError) -> [FeedbackEvent]
+  func consumeAndAppendEvent(
+    _ tap: FeedbackTap,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome
 
   /// Idempotent. Inserts this job's learning state and its canonical empty lesson set together,
   /// or returns the state already there. The fire transaction calls it, so a job never fires with

@@ -27,17 +27,20 @@ import Testing
     ]
 
     // when
-    let created = try env.learning.createTargets([first, second], chunks: chunks)
+    try env.createTargets([first, second], chunks: chunks)
 
-    // then — deleting nonce lookup or splitting the transactions loses an observable half
-    #expect(created.map(\.nonce) == [first.nonce, second.nonce])
-    #expect(
-      try env.learning.feedbackTarget(nonce: first.nonce)?.targetId == created.first?.targetId
-    )
+    // then — returning identifiers or splitting the transactions loses an observable half
+    #expect(try env.learning.feedbackTarget(nonce: first.nonce)?.nonce == first.nonce)
+    #expect(try env.learning.feedbackTarget(nonce: second.nonce)?.nonce == second.nonce)
     #expect(try env.targetCount() == 2)
     let deliveries = try env.deliveryRows()
     #expect(deliveries.count == 2)
     #expect(deliveries.last?.replyMarkup == chunks.last?.replyMarkup)
+    #expect(
+      deliveries.allSatisfy { row in
+        row.createdAt == env.now
+      }
+    )
     #expect(
       deliveries.allSatisfy { row in
         row.runId == nil && row.source == DeliverySource.learning.rawValue
@@ -49,14 +52,14 @@ import Testing
     // given — an existing nonce plus a transaction that inserts a chunk and a fresh target first
     let env = try FeedbackStoreEnvironment.make()
     let duplicate = env.target(nonce: "duplicate", signal: .resultUseful, subject: "41")
-    _ = try env.learning.createTargets([duplicate], chunks: [])
+    try env.createTargets([duplicate], chunks: [])
     let fresh = env.target(nonce: "fresh", signal: .resultUseful, subject: "42")
     let chunk = env.chunk(subject: "rollback-subject", ordinal: 0, markup: nil)
 
     // when — there is deliberately no application duplicate precheck
     let failure: StoreError?
     do {
-      _ = try env.learning.createTargets([fresh, duplicate], chunks: [chunk])
+      try env.createTargets([fresh, duplicate], chunks: [chunk])
       failure = nil
     } catch let error {
       failure = error
@@ -93,16 +96,16 @@ import Testing
         kind: entry.1
       )
     }
-    _ = try env.learning.createTargets(targets, chunks: [])
+    try env.createTargets(targets, chunks: [])
 
     // when
     let outcomes = try zip(targets, signals).enumerated().map { offset, pair in
-      try env.learning.consumeAndAppendEvent(
+      try env.consume(
         env.tap(target: pair.0, signal: pair.1.0, updateId: Int64(offset + 1))
       )
     }
 
-    // then — omitting any immediate action or double-incrementing revision breaks the sequence
+    // then — hard-coding a signal or double-incrementing revision breaks the typed sequence
     #expect(outcomes.count == signals.count)
     #expect(
       outcomes.allSatisfy { outcome in
@@ -112,10 +115,45 @@ import Testing
     )
     #expect(try env.feedbackRevision() == Int64(signals.count))
     #expect(try env.eventCount() == signals.count)
+    let events = try env.allFeedbackEvents()
+    #expect(events.map(\.signal) == signals.map(\.0))
+    #expect(events.map(\.revision) == (1...7).map { FeedbackRevision(Int64($0)) })
+    #expect(
+      events.allSatisfy { event in
+        event.payload == nil && event.occurredAt == env.now
+      }
+    )
+    for target in targets {
+      #expect(try env.learning.feedbackTarget(nonce: target.nonce)?.consumedAt == env.now)
+    }
+    let audits = try env.feedbackAudits()
+    #expect(audits.count == signals.count)
+    #expect(
+      audits.allSatisfy { row in
+        row.action == AuditAction.learningFeedback.rawValue
+      }
+    )
+    #expect(
+      audits.map(\.tool)
+        == signals.map { signal, _ in
+          signal.rawValue
+        }
+    )
+    #expect(
+      audits.allSatisfy { row in
+        row.resultSize == 0 && row.ts == env.now
+      }
+    )
+    #expect(
+      zip(audits, targets).allSatisfy { audit, target in
+        audit.args.contains(target.subjectKind.rawValue)
+          && audit.args.contains(target.subjectDigest)
+      }
+    )
   }
 
-  @Test func payloadActionsCannotConsumeOrAppendAtTapTimeAndAuditOnlyTheirSize() throws {
-    // given — correction and edit targets with secret-like bytes that must never enter audit text
+  @Test func challengeActionsCannotConsumeOrAppendAnImmediateEvent() throws {
+    // given — correction and edit targets; FeedbackTap structurally has no text payload
     let env = try FeedbackStoreEnvironment.make()
     let correction = env.target(nonce: "correction", signal: .resultCorrection, subject: "41")
     let edit = env.target(
@@ -124,16 +162,14 @@ import Testing
       subject: "candidate-secret",
       kind: .candidate
     )
-    _ = try env.learning.createTargets([correction, edit], chunks: [])
-    let correctionPayload = "owner correction SECRET-BYTES"
-    let editPayload = "owner edit MORE-SECRET-BYTES"
+    try env.createTargets([correction, edit], chunks: [])
 
     // when
-    let first = try env.learning.consumeAndAppendEvent(
-      env.tap(target: correction, signal: .resultCorrection, payload: correctionPayload)
+    let first = try env.consume(
+      env.tap(target: correction, signal: .resultCorrection)
     )
-    let second = try env.learning.consumeAndAppendEvent(
-      env.tap(target: edit, signal: .candidateEdit, updateId: 2, payload: editPayload)
+    let second = try env.consume(
+      env.tap(target: edit, signal: .candidateEdit, updateId: 2)
     )
 
     // then — allowing rc/ce through the immediate path would consume, append, or bump revision
@@ -144,16 +180,10 @@ import Testing
     #expect(try env.feedbackRevision() == 0)
     #expect(try env.eventCount() == 0)
     let audits = try env.feedbackAudits()
-    #expect(audits.map(\.resultSize) == [correctionPayload.utf8.count, editPayload.utf8.count])
+    #expect(audits.map(\.resultSize) == [0, 0])
     #expect(
       audits.allSatisfy { row in
         row.action == AuditAction.learningFeedback.rawValue
-      }
-    )
-    #expect(
-      audits.allSatisfy { row in
-        row.args.contains("SECRET-BYTES") == false
-          && row.args.contains("MORE-SECRET-BYTES") == false
       }
     )
   }
@@ -165,14 +195,15 @@ import Testing
     for failureCase in cases {
       let env = try FeedbackStoreEnvironment.make()
       let target = env.target(nonce: "predicate", signal: .resultUseful, subject: "41")
-      _ = try env.learning.createTargets([target], chunks: [])
+      try env.createTargets([target], chunks: [])
       if failureCase == .epoch {
         try env.setEpoch(2)
       }
 
       // when
-      let outcome = try env.learning.consumeAndAppendEvent(
-        env.invalidTap(target: target, failure: failureCase)
+      let outcome = try env.consume(
+        env.invalidTap(target: target, failure: failureCase),
+        now: failureCase == .expiry ? target.expiresAt : env.now
       )
 
       // then — dropping this case's SQL predicate would append an event and consume the nonce
@@ -188,12 +219,12 @@ import Testing
     // given
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "single-use", signal: .resultUseful, subject: "41")
-    _ = try env.learning.createTargets([target], chunks: [])
+    try env.createTargets([target], chunks: [])
     let tap = env.tap(target: target, signal: .resultUseful, updateId: 7)
 
     // when — a fresh transport update reaches the already-consumed nonce a second time
-    let first = try env.learning.consumeAndAppendEvent(tap)
-    let second = try env.learning.consumeAndAppendEvent(
+    let first = try env.consume(tap)
+    let second = try env.consume(
       env.tap(target: target, signal: .resultUseful, updateId: 8)
     )
 
@@ -208,28 +239,62 @@ import Testing
     #expect(try env.feedbackRevision() == 1)
   }
 
+  @Test func auditFailureRollsBackConsumptionEventAndRevision() throws {
+    // given — a valid target and a database-level failure at the transaction's final audit insert
+    let env = try FeedbackStoreEnvironment.make()
+    let target = env.target(nonce: "audit-rollback", signal: .resultUseful, subject: "41")
+    try env.createTargets([target], chunks: [])
+    try env.forceFeedbackAuditFailure()
+
+    // when
+    let failure: StoreError?
+    do {
+      _ = try env.consume(env.tap(target: target, signal: .resultUseful))
+      failure = nil
+    } catch let error {
+      failure = error
+    }
+
+    // then — moving audit outside the write transaction would leave the preceding mutations behind
+    #expect(failure != nil)
+    #expect(try env.learning.feedbackTarget(nonce: target.nonce)?.consumedAt == nil)
+    #expect(try env.eventCount() == 0)
+    #expect(try env.feedbackRevision() == 0)
+  }
+
   @Test func newerSignalSupersedesTheExactPriorSubjectEvent() throws {
-    // given — two independent targets for the same run subject
+    // given — two targets for one run subject and an interleaved second subject
     let env = try FeedbackStoreEnvironment.make()
     let useful = env.target(nonce: "useful", signal: .resultUseful, subject: "41")
     let notUseful = env.target(nonce: "not-useful", signal: .resultNotUseful, subject: "41")
-    _ = try env.learning.createTargets([useful, notUseful], chunks: [])
+    let other = env.target(nonce: "other", signal: .resultUseful, subject: "42")
+    try env.createTargets([useful, other, notUseful], chunks: [])
 
     // when
-    _ = try env.learning.consumeAndAppendEvent(env.tap(target: useful, signal: .resultUseful))
-    _ = try env.learning.consumeAndAppendEvent(
-      env.tap(target: notUseful, signal: .resultNotUseful, updateId: 2)
+    _ = try env.consume(env.tap(target: useful, signal: .resultUseful))
+    _ = try env.consume(env.tap(target: other, signal: .resultUseful, updateId: 2))
+    _ = try env.consume(
+      env.tap(target: notUseful, signal: .resultNotUseful, updateId: 3)
     )
 
     // then — omitting the supersedes edge leaves two effective signals for one exact subject
-    let events = try env.learning.feedbackEvents(
+    let events = try env.feedbackEvents(
       jobId: env.jobId,
       epoch: LearningEpoch(1),
       subjectKind: .run,
       subjectDigest: "41"
     )
-    #expect(events.map(\.revision) == [FeedbackRevision(1), FeedbackRevision(2)])
+    #expect(events.map(\.revision) == [FeedbackRevision(1), FeedbackRevision(3)])
     #expect(events.last?.supersedes == events.first?.id)
+    let otherEvent = try #require(
+      try env.feedbackEvents(
+        jobId: env.jobId,
+        epoch: LearningEpoch(1),
+        subjectKind: .run,
+        subjectDigest: "42"
+      ).first
+    )
+    #expect(otherEvent.supersedes == nil)
   }
 
   @Test func candidateRejectionClosesOnlyTheExactMatchingLiveTrial() throws {
@@ -248,14 +313,14 @@ import Testing
       subject: trial.candidateDigest,
       kind: .candidate
     )
-    _ = try env.learning.createTargets([unrelated, exact], chunks: [])
+    try env.createTargets([unrelated, exact], chunks: [])
 
     // when
-    _ = try env.learning.consumeAndAppendEvent(
+    _ = try env.consume(
       env.tap(target: unrelated, signal: .candidateReject)
     )
     let afterUnrelated = try env.learning.openTrial(jobId: env.jobId)
-    _ = try env.learning.consumeAndAppendEvent(
+    _ = try env.consume(
       env.tap(target: exact, signal: .candidateReject, updateId: 2)
     )
 
@@ -265,31 +330,60 @@ import Testing
     #expect(try env.trialCloseReason(trial.trialId) == "hard_veto")
   }
 
-  @Test func candidateRejectionLeavesAStaleOrUnpointedTrialOpen() throws {
-    // given — the candidate digest matches, but each database breaks one current-trial predicate
-    for mismatch in CandidateTrialMismatch.allCases {
+  @Test func candidateRejectionClosesAuthoritativeLiveTrialWithStalePointer() throws {
+    // given — the authoritative trial matches while its denormalized pointer is absent or stale
+    for pointer in TrialPointerState.allCases {
       let env = try FeedbackStoreEnvironment.make()
       let trial = try env.seedOpenTrial()
-      try env.invalidateCurrentTrial(trial, mismatch: mismatch)
+      try env.setTrialPointer(pointer)
       let target = env.target(
-        nonce: "stale-candidate-\(mismatch)",
+        nonce: "stale-pointer-\(pointer)",
         signal: .candidateReject,
         subject: trial.candidateDigest,
         kind: .candidate
       )
-      _ = try env.learning.createTargets([target], chunks: [])
+      try env.createTargets([target], chunks: [])
 
       // when
-      let outcome = try env.learning.consumeAndAppendEvent(
+      let outcome = try env.consume(
         env.tap(target: target, signal: .candidateReject)
       )
 
-      // then — dropping the base or current-pointer join would close an unrelated stale trial
+      // then — reintroducing the pointer as a selector would leave the authoritative trial live
       guard case .recorded = outcome else {
-        Issue.record("expected the exact-subject event to remain independently recordable")
+        Issue.record("expected the exact-subject event to record")
         continue
       }
-      #expect(try env.learning.openTrial(jobId: env.jobId)?.trialId == trial.trialId)
+      #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+      #expect(try env.trialState(trial.trialId) == .fellBack)
+      #expect(try env.feedbackRevision() == 1)
+    }
+  }
+
+  @Test func candidateRejectionRequiresEveryFrozenCandidateAndTrialPredicate() throws {
+    // given — one distinct mismatch for every frozen candidate/trial dependency in the selector
+    for mismatch in CandidateTrialMismatch.allCases {
+      let env = try FeedbackStoreEnvironment.make()
+      let trial = try env.seedOpenTrial()
+      try env.introduceCandidateMismatch(mismatch, trial: trial)
+      let target = env.target(
+        nonce: "candidate-mismatch-\(mismatch)",
+        signal: .candidateReject,
+        subject: trial.candidateDigest,
+        kind: .candidate
+      )
+      try env.createTargets([target], chunks: [])
+
+      // when
+      let outcome = try env.consume(env.tap(target: target, signal: .candidateReject))
+
+      // then — deleting this case's independent predicate would close a nonmatching trial
+      guard case .recorded = outcome else {
+        Issue.record("expected the authenticated event to record")
+        continue
+      }
+      #expect(try env.trialState(trial.trialId) == mismatch.expectedState)
+      #expect(try env.trialCloseReason(trial.trialId) == nil)
       #expect(try env.feedbackRevision() == 1)
     }
   }
@@ -300,16 +394,17 @@ import Testing
     let trial = try env.seedOpenTrial()
     let evaluationDigest = "evaluation-required"
     try env.seedAssignment(trial: trial, evaluationDigest: evaluationDigest)
+    try env.setTrialPointer(.absent)
     let target = env.target(
       nonce: "evaluation-dispute",
       signal: .evaluationDispute,
       subject: evaluationDigest,
       kind: .evaluation
     )
-    _ = try env.learning.createTargets([target], chunks: [])
+    try env.createTargets([target], chunks: [])
 
     // when
-    let outcome = try env.learning.consumeAndAppendEvent(
+    let outcome = try env.consume(
       env.tap(target: target, signal: .evaluationDispute)
     )
 
@@ -323,26 +418,23 @@ import Testing
   }
 
   @Test func unrelatedOrStaleTrialEvaluationDependencyDoesNotCloseTheTrial() throws {
-    // given — each database has an assignment whose digest or frozen generation does not match
+    // given — each database has one independently stale or unrelated assignment dependency
     for mismatch in EvaluationDependencyMismatch.allCases {
       let env = try FeedbackStoreEnvironment.make()
       let trial = try env.seedOpenTrial()
       let targetDigest = "evaluation-target"
-      try env.seedAssignment(
-        trial: trial,
-        evaluationDigest: mismatch == .digest ? "another-evaluation" : targetDigest,
-        generation: mismatch == .generation ? trial.generation + 1 : trial.generation
-      )
+      try env.seedAssignment(trial: trial, evaluationDigest: targetDigest)
+      try env.introduceAssignmentMismatch(mismatch, trial: trial)
       let target = env.target(
         nonce: "mismatch-\(mismatch)",
         signal: .evaluationDispute,
         subject: targetDigest,
         kind: .evaluation
       )
-      _ = try env.learning.createTargets([target], chunks: [])
+      try env.createTargets([target], chunks: [])
 
       // when
-      let outcome = try env.learning.consumeAndAppendEvent(
+      let outcome = try env.consume(
         env.tap(target: target, signal: .evaluationDispute)
       )
 
@@ -353,6 +445,36 @@ import Testing
       }
       #expect(try env.learning.openTrial(jobId: env.jobId)?.trialId == trial.trialId)
       #expect(try env.eventCount() == 1)
+      #expect(try env.feedbackRevision() == 1)
+    }
+  }
+
+  @Test func evaluationDisputeRequiresEverySharedCandidateAndTrialPredicate() throws {
+    // given — an exact required assignment but one mismatched shared candidate/trial dependency
+    for mismatch in CandidateTrialMismatch.allCases {
+      let env = try FeedbackStoreEnvironment.make()
+      let trial = try env.seedOpenTrial()
+      let evaluationDigest = "shared-predicate-evaluation"
+      try env.seedAssignment(trial: trial, evaluationDigest: evaluationDigest)
+      try env.introduceCandidateMismatch(mismatch, trial: trial)
+      let target = env.target(
+        nonce: "evaluation-shared-\(mismatch)",
+        signal: .evaluationDispute,
+        subject: evaluationDigest,
+        kind: .evaluation
+      )
+      try env.createTargets([target], chunks: [])
+
+      // when
+      let outcome = try env.consume(env.tap(target: target, signal: .evaluationDispute))
+
+      // then — omitting this shared predicate would close an unrelated or stale trial
+      guard case .recorded = outcome else {
+        Issue.record("expected the authenticated event to record")
+        continue
+      }
+      #expect(try env.trialState(trial.trialId) == mismatch.expectedState)
+      #expect(try env.trialCloseReason(trial.trialId) == nil)
       #expect(try env.feedbackRevision() == 1)
     }
   }
@@ -387,13 +509,31 @@ private enum FeedbackFailureCase: CaseIterable {
 }
 
 private enum EvaluationDependencyMismatch: CaseIterable {
+  case job
+  case epoch
+  case trial
   case digest
   case generation
+  case required
 }
 
 private enum CandidateTrialMismatch: CaseIterable {
-  case base
-  case currentPointer
+  case job
+  case epoch
+  case candidateBase
+  case stableBase
+  case algorithm
+  case replacement
+  case currentState
+
+  var expectedState: LearningTrialState {
+    self == .currentState ? .promoted : .open
+  }
+}
+
+private enum TrialPointerState: CaseIterable {
+  case absent
+  case stale
 }
 
 private struct FeedbackStoreEnvironment {
@@ -408,13 +548,26 @@ private struct FeedbackStoreEnvironment {
     let runId: Int64?
     let source: String
     let replyMarkup: String?
+    let createdAt: Date
   }
 
   struct AuditRow {
     let action: String
+    let tool: String
     let args: String
     let resultSize: Int
     let decision: String
+    let ts: Date
+  }
+
+  struct EventRow {
+    let id: Int64
+    let signal: OwnerSignal
+    let revision: FeedbackRevision
+    let supersedes: Int64?
+    let subjectDigest: String
+    let payload: String?
+    let occurredAt: Date
   }
 
   let base: BoundRunEnvironment
@@ -465,17 +618,14 @@ private struct FeedbackStoreEnvironment {
   func tap(
     target: NewFeedbackTarget,
     signal: OwnerSignal,
-    updateId: Int64 = 1,
-    payload: String? = nil
+    updateId: Int64 = 1
   ) -> FeedbackTap {
     FeedbackTap(
       nonce: target.nonce,
       signal: signal,
       ownerUserId: target.ownerUserId,
       chatId: target.chatId,
-      transportUpdateId: updateId,
-      payload: payload,
-      occurredAt: now
+      transportUpdateId: updateId
     )
   }
 
@@ -485,9 +635,73 @@ private struct FeedbackStoreEnvironment {
       signal: failure == .action ? .resultNotUseful : .resultUseful,
       ownerUserId: failure == .owner ? 43 : target.ownerUserId,
       chatId: failure == .chat ? 43 : target.chatId,
-      transportUpdateId: 1,
-      occurredAt: failure == .expiry ? target.expiresAt : now
+      transportUpdateId: 1
     )
+  }
+
+  func createTargets(
+    _ targets: [NewFeedbackTarget],
+    chunks: [LearningNoticeChunk]
+  ) throws(StoreError) {
+    try learning.createTargets(targets, chunks: chunks, now: now)
+  }
+
+  func consume(
+    _ tap: FeedbackTap,
+    now: Date? = nil
+  ) throws(StoreError) -> FeedbackOutcome {
+    try learning.consumeAndAppendEvent(tap, now: now ?? self.now)
+  }
+
+  func feedbackEvents(
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String
+  ) throws -> [EventRow] {
+    try readFeedbackEvents(
+      whereClause: "job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?",
+      arguments: [jobId, epoch.value, subjectKind.rawValue, subjectDigest]
+    )
+  }
+
+  func allFeedbackEvents() throws -> [EventRow] {
+    try readFeedbackEvents(whereClause: "1 = 1", arguments: [])
+  }
+
+  private func readFeedbackEvents(
+    whereClause: String,
+    arguments: StatementArguments
+  ) throws -> [EventRow] {
+    try queue.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT event_id, signal, feedback_revision, supersedes, subject_digest, payload,
+            occurred_at
+          FROM feedback_events
+          WHERE \(whereClause)
+          ORDER BY feedback_revision, event_id
+          """,
+        arguments: arguments
+      ).map { row in
+        guard
+          let signal = OwnerSignal(rawValue: row["signal"]),
+          let occurredAt = EpochSecondCodec.date(fromEpoch: row["occurred_at"])
+        else {
+          throw StoreError.unexpected("feedback event fixture row is unreadable")
+        }
+        return EventRow(
+          id: row["event_id"],
+          signal: signal,
+          revision: FeedbackRevision(row["feedback_revision"]),
+          supersedes: row["supersedes"],
+          subjectDigest: row["subject_digest"],
+          payload: row["payload"],
+          occurredAt: occurredAt
+        )
+      }
+    }
   }
 
   func setEpoch(_ epoch: Int64) throws {
@@ -495,6 +709,18 @@ private struct FeedbackStoreEnvironment {
       try db.execute(
         sql: "UPDATE job_learning_state SET learning_epoch = ? WHERE job_id = ?",
         arguments: [epoch, jobId]
+      )
+    }
+  }
+
+  func forceFeedbackAuditFailure() throws {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON audit_events
+          WHEN NEW.action = '\(AuditAction.learningFeedback.rawValue)'
+          BEGIN SELECT RAISE(ABORT, 'forced feedback audit failure'); END
+          """
       )
     }
   }
@@ -528,14 +754,16 @@ private struct FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT run_id, delivery_source, reply_markup FROM outbound_deliveries
+          SELECT run_id, delivery_source, reply_markup, created_ts FROM outbound_deliveries
           ORDER BY step_index
           """
       ).map { row in
-        DeliveryRow(
+        let createdAt: Date = row["created_ts"]
+        return DeliveryRow(
           runId: row["run_id"],
           source: row["delivery_source"],
-          replyMarkup: row["reply_markup"]
+          replyMarkup: row["reply_markup"],
+          createdAt: createdAt
         )
       }
     }
@@ -546,16 +774,19 @@ private struct FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT action, args_redacted, result_size, decision FROM audit_events
+          SELECT ts, action, tool, args_redacted, result_size, decision FROM audit_events
           WHERE action = ? ORDER BY id
           """,
         arguments: [AuditAction.learningFeedback.rawValue]
       ).map { row in
-        AuditRow(
+        let ts: Date = row["ts"]
+        return AuditRow(
           action: row["action"],
+          tool: row["tool"],
           args: row["args_redacted"],
           resultSize: row["result_size"],
-          decision: row["decision"]
+          decision: row["decision"],
+          ts: ts
         )
       }
     }
@@ -636,20 +867,24 @@ private struct FeedbackStoreEnvironment {
     }
   }
 
-  func invalidateCurrentTrial(_ trial: Trial, mismatch: CandidateTrialMismatch) throws {
+  func setTrialPointer(_ state: TrialPointerState) throws {
     try queue.write { db in
-      switch mismatch {
-      case .base:
-        try db.execute(
-          sql: "UPDATE job_learning_state SET stable_lesson_set_digest = ? WHERE job_id = ?",
-          arguments: [trial.replacementDigest, jobId]
-        )
-      case .currentPointer:
-        try db.execute(
-          sql: "UPDATE job_learning_state SET open_trial_id = NULL WHERE job_id = ?",
-          arguments: [jobId]
-        )
-      }
+      let pointer: Int64? = state == .absent ? nil : 999_999
+      try db.execute(
+        sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
+        arguments: [pointer, jobId]
+      )
+    }
+  }
+
+  func trialState(_ trialId: Int64) throws -> LearningTrialState? {
+    try queue.read { db in
+      let raw = try String.fetchOne(
+        db,
+        sql: "SELECT state FROM learning_trials WHERE trial_id = ?",
+        arguments: [trialId]
+      )
+      return raw.flatMap(LearningTrialState.init(rawValue:))
     }
   }
 
@@ -670,6 +905,142 @@ private struct FeedbackStoreEnvironment {
           """,
         arguments: [evaluationDigest, generation ?? trial.generation, claimed.runId]
       )
+    }
+  }
+
+  func introduceCandidateMismatch(_ mismatch: CandidateTrialMismatch, trial: Trial) throws {
+    switch mismatch {
+    case .job:
+      try queue.write { db in
+        let otherJobId = jobId + 1_000
+        try db.execute(
+          sql: """
+            INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
+              created_at)
+            SELECT ?, digest, schema_version, canonical_bytes, source, created_at
+            FROM lesson_sets WHERE job_id = ? AND digest = ?
+            """,
+          arguments: [otherJobId, jobId, trial.replacementDigest]
+        )
+        try db.execute(
+          sql: "UPDATE learning_candidates SET job_id = ? WHERE candidate_digest = ?",
+          arguments: [otherJobId, trial.candidateDigest]
+        )
+      }
+    case .epoch:
+      try updateCandidate(
+        column: "learning_epoch",
+        value: state.epoch.value + 1,
+        digest: trial.candidateDigest
+      )
+    case .candidateBase:
+      try updateCandidate(
+        column: "base_digest",
+        value: "stale-base",
+        digest: trial.candidateDigest
+      )
+    case .stableBase:
+      try queue.write { db in
+        try db.execute(
+          sql: "UPDATE job_learning_state SET stable_lesson_set_digest = ? WHERE job_id = ?",
+          arguments: [trial.replacementDigest, jobId]
+        )
+      }
+    case .algorithm:
+      try updateCandidate(
+        column: "algorithm",
+        value: "stale-algorithm",
+        digest: trial.candidateDigest
+      )
+    case .replacement:
+      try updateWithForeignKeysDisabled(
+        sql: "UPDATE learning_candidates SET replacement_digest = ? WHERE candidate_digest = ?",
+        arguments: ["missing-replacement", trial.candidateDigest]
+      )
+    case .currentState:
+      try queue.write { db in
+        try db.execute(
+          sql: "UPDATE learning_trials SET state = ? WHERE trial_id = ?",
+          arguments: [LearningTrialState.promoted.rawValue, trial.trialId]
+        )
+      }
+    }
+  }
+
+  func introduceAssignmentMismatch(
+    _ mismatch: EvaluationDependencyMismatch,
+    trial: Trial
+  ) throws {
+    switch mismatch {
+    case .job:
+      try updateAssignment(column: "job_id", value: jobId + 1, trialId: trial.trialId)
+    case .epoch:
+      try updateAssignment(
+        column: "learning_epoch",
+        value: state.epoch.value + 1,
+        trialId: trial.trialId
+      )
+    case .trial:
+      try updateWithForeignKeysDisabled(
+        sql: "UPDATE trial_assignments SET trial_id = ? WHERE trial_id = ?",
+        arguments: [trial.trialId + 999, trial.trialId]
+      )
+    case .digest:
+      try updateAssignment(
+        column: "evaluation_digest",
+        value: "another-evaluation",
+        trialId: trial.trialId
+      )
+    case .generation:
+      try updateAssignment(
+        column: "trial_generation",
+        value: trial.generation + 1,
+        trialId: trial.trialId
+      )
+    case .required:
+      try updateAssignment(column: "evaluation_required", value: false, trialId: trial.trialId)
+    }
+  }
+
+  private func updateCandidate(
+    column: String,
+    value: (any DatabaseValueConvertible)?,
+    digest: String
+  ) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE learning_candidates SET \(column) = ? WHERE candidate_digest = ?",
+        arguments: [value, digest]
+      )
+    }
+  }
+
+  private func updateAssignment(
+    column: String,
+    value: (any DatabaseValueConvertible)?,
+    trialId: Int64
+  ) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE trial_assignments SET \(column) = ? WHERE trial_id = ?",
+        arguments: [value, trialId]
+      )
+    }
+  }
+
+  private func updateWithForeignKeysDisabled(
+    sql: String,
+    arguments: StatementArguments
+  ) throws {
+    try queue.writeWithoutTransaction { db in
+      try db.execute(sql: "PRAGMA foreign_keys = OFF")
+      do {
+        try db.execute(sql: sql, arguments: arguments)
+        try db.execute(sql: "PRAGMA foreign_keys = ON")
+      } catch {
+        try? db.execute(sql: "PRAGMA foreign_keys = ON")
+        throw error
+      }
     }
   }
 

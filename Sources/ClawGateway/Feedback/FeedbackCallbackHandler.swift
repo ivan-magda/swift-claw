@@ -126,7 +126,7 @@ private extension FeedbackCallbackHandler {
         decision: Self.actionMismatchDecision
       )
     }
-    guard parsed.action.requiresPayloadChallenge == false else {
+    guard parsed.action.opensChallenge == false else {
       return await deny(
         callback,
         target: target,
@@ -157,12 +157,11 @@ private extension FeedbackCallbackHandler {
       signal: signal,
       ownerUserId: callback.fromUserId,
       chatId: target.chatId,
-      transportUpdateId: updateId,
-      occurredAt: now()
+      transportUpdateId: updateId
     )
     let outcome: FeedbackOutcome
     do {
-      outcome = try learning.consumeAndAppendEvent(tap)
+      outcome = try learning.consumeAndAppendEvent(tap, now: now())
     } catch {
       return await storeFailure(callback, signal: signal, error: error)
     }
@@ -265,16 +264,4 @@ private extension FeedbackCallbackHandler {
   static let neutralToast = "This action is no longer available."
   static let retryToast = "Something went wrong — please try again."
   static let recordedToast = "Feedback recorded."
-}
-
-private extension FeedbackAction {
-  var requiresPayloadChallenge: Bool {
-    switch self {
-    case .resultCorrection, .candidateEdit:
-      true
-    case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute,
-      .candidateApprove, .candidateReject, .promotionRollback:
-      false
-    }
-  }
 }
