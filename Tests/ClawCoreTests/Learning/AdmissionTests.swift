@@ -69,6 +69,33 @@ import Testing
     #expect(rejection == .noOpReplacement)
   }
 
+  @Test func approvalExceptionPermitsOnlyClosedHistoryAndNeverANoOp() throws {
+    // given
+    let fixture = try AdmissionFixture.make(baseLessons: ["Keep the stable lesson."])
+    let noOp = try fixture.candidate(replacement: fixture.base)
+
+    // when
+    let closedApproval = AdmissionValidator.validate(
+      candidate: fixture.candidate,
+      context: fixture.context(
+        replacementAlreadyClosed: true,
+        permitsClosedReplacement: true
+      )
+    )
+    let noOpApproval = AdmissionValidator.validate(
+      candidate: noOp,
+      context: fixture.context(
+        stableDigest: fixture.base.digest,
+        replacementAlreadyClosed: true,
+        permitsClosedReplacement: true
+      )
+    )
+
+    // then — a broad approval bypass would also admit the stable lesson set.
+    #expect(closedApproval == nil)
+    #expect(noOpApproval == .noOpReplacement)
+  }
+
   @Test func benignAuthorityWordsAreNeverPolicyOperands() throws {
     // given
     let lessons = [
@@ -357,7 +384,8 @@ private struct AdmissionFixture {
     sourceBindingsAreCurrent: Bool = true,
     hardVetoes: Set<HardVeto> = [],
     replacementAlreadyClosed: Bool = false,
-    support: AdmissionSupport? = .recurringIssue
+    support: AdmissionSupport? = .recurringIssue,
+    permitsClosedReplacement: Bool = false
   ) -> AdmissionValidationContext {
     AdmissionValidationContext(
       currentState: JobLearningState(
@@ -375,6 +403,7 @@ private struct AdmissionFixture {
       hardVetoes: hardVetoes,
       replacementAlreadyClosed: replacementAlreadyClosed,
       support: support,
+      permitsClosedReplacement: permitsClosedReplacement,
       redactor: SecretRedactor(secretValues: [])
     )
   }

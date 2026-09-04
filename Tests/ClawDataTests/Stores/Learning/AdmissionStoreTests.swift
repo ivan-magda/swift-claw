@@ -220,12 +220,14 @@ import Testing
       now: fixture.env.now
     )
     let oldTrial = try #require(admitted.admissionReceipt).trialId
-    let payload = Data(#"{"lessons":[]}"#.utf8)
+    let editedLesson = "Keep the exact owner-edited instruction."
+    let payloadText = #"{"lessons":["\#(editedLesson)"]}"#
+    let payload = Data(payloadText.utf8)
     let control = try fixture.env.appendFeedback(
       subjectKind: .candidate,
       subjectDigest: predecessor.digest.rawValue,
       signal: .candidateEdit,
-      payload: #"{"lessons":[]}"#
+      payload: payloadText
     )
 
     // when
@@ -244,7 +246,7 @@ import Testing
       Issue.record("expected an awaiting edit successor")
       return
     }
-    #expect(successor.replacement.lessons.isEmpty)
+    #expect(successor.replacement.lessons == [editedLesson])
     #expect(successor.manifest.origin == .ownerEdit)
     #expect(successor.manifest.predecessorCandidate == predecessor.digest)
     #expect(successor.manifest.predecessorFeedback == control)

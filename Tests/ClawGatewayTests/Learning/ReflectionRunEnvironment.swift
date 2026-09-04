@@ -33,7 +33,8 @@ struct ReflectionRunEnvironment {
     secretValues: [String] = [],
     proactivePerDayUSD: Double = RunBudget.default.proactivePerDayUSD,
     primaryFailure: (any Error & Sendable)? = nil,
-    admissionFails: Bool = false
+    admissionFails: Bool = false,
+    logger: Logger = TestLog.silent
   ) throws -> ReflectionRunEnvironment {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -128,7 +129,7 @@ struct ReflectionRunEnvironment {
         ),
         redactor: SecretRedactor(secretValues: secretValues),
         providerCallIDGenerator: callIDs,
-        logger: TestLog.silent
+        logger: logger
       ),
       jobId: job.id,
       trigger: trigger,
@@ -244,6 +245,15 @@ extension ReflectionRunEnvironment {
   func cancelJob() throws {
     guard try jobs.cancel(id: jobId, now: now) != nil else {
       throw StoreError.unexpected("reflection fixture job refused cancellation")
+    }
+  }
+
+  func learningStateFeedbackRevision(_ revision: FeedbackRevision) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE job_learning_state SET feedback_revision = ? WHERE job_id = ?",
+        arguments: [revision.value, jobId]
+      )
     }
   }
 

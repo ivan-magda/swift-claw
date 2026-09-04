@@ -23,9 +23,10 @@ import Testing
     let forged = fixture.mutate(valid, mutation: mutation)
     let deliveries = try fixture.env.countRows(in: "outbound_deliveries")
 
-    // when / then — no caller-supplied action, evaluation order, expiry, identity, or chunk shape
-    // may create a capability that the current candidate does not authorize.
-    #expect(throws: StoreError.self) {
+    // when / then — removing the exact subject-kind comparison must not fall through to the
+    // generic target writer, and removing the nonempty-payload guard must not accept an empty body
+    // merely because its hash matches. Every malformed carrier is rejected at this boundary.
+    #expect(throws: StoreError.unexpected("candidate review carrier is inconsistent")) {
       _ = try fixture.env.learning.commitCandidateReview(forged, now: fixture.env.now)
     }
     #expect(try fixture.env.countRows(in: "feedback_targets") == 0)
@@ -242,6 +243,61 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 
+  @Test func committedReviewReplayPrecedesLaterMutableAuthorityChecks() throws {
+    // given
+    let fixture = try AdmissionStoreFixture.make()
+    defer { fixture.remove() }
+    let candidate = try fixture.persistedCandidate()
+    _ = try fixture.env.learning.admitCandidate(
+      digest: candidate.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
+    let first = fixture.review(candidate: candidate, state: .admitted, now: fixture.env.now)
+    #expect(try fixture.env.learning.commitCandidateReview(first, now: fixture.env.now))
+    let snapshot = try fixture.reviewSnapshot()
+    try fixture.env.advanceFeedbackRevision()
+    let replayTime = fixture.env.now.addingTimeInterval(60)
+    let replay = fixture.review(
+      candidate: candidate,
+      state: .admitted,
+      now: replayTime,
+      nonceSuffix: "regenerated"
+    )
+
+    // when
+    let inserted = try fixture.env.learning.commitCandidateReview(replay, now: replayTime)
+
+    // then — validating mutable state before the stable first-chunk identity turns a durable
+    // replay into an error and can tempt callers to regenerate orphan target nonces.
+    #expect(inserted == false)
+    #expect(try fixture.reviewSnapshot() == snapshot)
+  }
+
+  @Test(arguments: CommittedReviewCorruption.allCases)
+  func partialCommittedReviewFailsClosed(_ corruption: CommittedReviewCorruption) throws {
+    // given
+    let fixture = try AdmissionStoreFixture.make()
+    defer { fixture.remove() }
+    let candidate = try fixture.persistedCandidate()
+    _ = try fixture.env.learning.admitCandidate(
+      digest: candidate.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
+    let review = fixture.multipartReview(candidate: candidate, now: fixture.env.now)
+    #expect(try fixture.env.learning.commitCandidateReview(review, now: fixture.env.now))
+    try fixture.corruptCommittedReview(corruption, candidate: candidate)
+    let snapshot = try fixture.reviewSnapshot()
+
+    // when / then — trusting only the first stable delivery key would hide a missing target or
+    // final chunk as a successful replay instead of failing the corrupt atomic record closed.
+    #expect(throws: StoreError.self) {
+      _ = try fixture.env.learning.commitCandidateReview(review, now: fixture.env.now)
+    }
+    #expect(try fixture.reviewSnapshot() == snapshot)
+  }
+
   @Test(arguments: ReviewStateMutation.allCases)
   func reviewCommitRequiresEveryCurrentStateBinding(_ mutation: ReviewStateMutation) throws {
     // given
@@ -352,6 +408,7 @@ enum ReviewCarrierMutation: CaseIterable, Sendable {
   case wrongPassedCandidate
   case wrongCandidateAction
   case wrongCandidateSubject
+  case wrongSubjectKind
   case swappedEvaluations
   case extraTarget
   case overLimitTargets
@@ -366,8 +423,14 @@ enum ReviewCarrierMutation: CaseIterable, Sendable {
   case wrongChunkOrdinal
   case wrongChunkChat
   case wrongChunkHash
+  case emptyChunk
   case nonfinalMarkup
   case missingFinalMarkup
+}
+
+enum CommittedReviewCorruption: CaseIterable, Sendable {
+  case target
+  case finalChunk
 }
 
 enum ReviewJobMutation: CaseIterable, Sendable {
@@ -399,6 +462,61 @@ private extension AdmissionOutcome {
 }
 
 private extension AdmissionStoreFixture {
+  func multipartReview(candidate: CandidateArtifact, now: Date) -> CandidateReviewNotice {
+    let review = review(candidate: candidate, state: .admitted, now: now)
+    let first = "Review this candidate, part one."
+    let final = "Review this candidate, part two."
+    return CandidateReviewNotice(
+      candidateDigest: review.candidateDigest,
+      state: review.state,
+      subjectDigest: review.subjectDigest,
+      targets: review.targets,
+      chunks: [
+        LearningNoticeChunk(
+          subjectDigest: review.subjectDigest,
+          ordinal: 0,
+          chatId: 777,
+          payload: first,
+          payloadHash: ContentHash.fnv1a(first),
+          replyMarkup: nil
+        ),
+        LearningNoticeChunk(
+          subjectDigest: review.subjectDigest,
+          ordinal: 1,
+          chatId: 777,
+          payload: final,
+          payloadHash: ContentHash.fnv1a(final),
+          replyMarkup: "{}"
+        ),
+      ]
+    )
+  }
+
+  func corruptCommittedReview(
+    _ corruption: CommittedReviewCorruption,
+    candidate: CandidateArtifact
+  ) throws {
+    try env.queue.write { db in
+      switch corruption {
+      case .target:
+        try db.execute(
+          sql: "DELETE FROM feedback_targets WHERE subject_kind = ? AND subject_digest = ?",
+          arguments: [FeedbackSubjectKind.candidate.rawValue, candidate.digest.rawValue]
+        )
+      case .finalChunk:
+        try db.execute(
+          sql: "DELETE FROM outbound_deliveries WHERE dedup_key = ?",
+          arguments: [
+            OutboxDedupKey.make(
+              subjectDigest: CandidateReviewIdentity.digest(candidateDigest: candidate.digest),
+              ordinal: 1
+            )
+          ]
+        )
+      }
+    }
+  }
+
   func mutateReviewState(
     _ mutation: ReviewStateMutation,
     replacement: LessonSetDigest
@@ -448,6 +566,8 @@ private extension AdmissionStoreFixture {
       targets[0] = replacing(targets[0], actions: [.candidateApprove])
     case .wrongCandidateSubject:
       targets[0] = replacing(targets[0], subjectDigest: "another-candidate")
+    case .wrongSubjectKind:
+      targets[0] = replacing(targets[0], subjectKind: .evaluation)
     case .swappedEvaluations:
       targets.swapAt(1, 2)
     case .extraTarget:
@@ -489,6 +609,12 @@ private extension AdmissionStoreFixture {
       chunks[0] = replacing(chunks[0], chatId: chunks[0].chatId + 1)
     case .wrongChunkHash:
       chunks[0] = replacing(chunks[0], payloadHash: "wrong-hash")
+    case .emptyChunk:
+      chunks[0] = replacing(
+        chunks[0],
+        payload: "",
+        payloadHash: ContentHash.fnv1a("")
+      )
     case .nonfinalMarkup:
       chunks = [
         chunks[0],
@@ -511,6 +637,7 @@ private extension AdmissionStoreFixture {
     nonce: String? = nil,
     jobId: Int64? = nil,
     epoch: LearningEpoch? = nil,
+    subjectKind: FeedbackSubjectKind? = nil,
     subjectDigest: String? = nil,
     actions: [OwnerSignal]? = nil,
     ownerUserId: Int64? = nil,
@@ -521,7 +648,7 @@ private extension AdmissionStoreFixture {
       nonce: nonce ?? target.nonce,
       jobId: jobId ?? target.jobId,
       epoch: epoch ?? target.epoch,
-      subjectKind: target.subjectKind,
+      subjectKind: subjectKind ?? target.subjectKind,
       subjectDigest: subjectDigest ?? target.subjectDigest,
       allowedActions: actions ?? target.allowedActions,
       ownerUserId: ownerUserId ?? target.ownerUserId,
@@ -535,6 +662,7 @@ private extension AdmissionStoreFixture {
     subjectDigest: String? = nil,
     ordinal: Int? = nil,
     chatId: Int64? = nil,
+    payload: String? = nil,
     payloadHash: String? = nil,
     replyMarkup: String? = "{}"
   ) -> LearningNoticeChunk {
@@ -542,7 +670,7 @@ private extension AdmissionStoreFixture {
       subjectDigest: subjectDigest ?? chunk.subjectDigest,
       ordinal: ordinal ?? chunk.ordinal,
       chatId: chatId ?? chunk.chatId,
-      payload: chunk.payload,
+      payload: payload ?? chunk.payload,
       payloadHash: payloadHash ?? chunk.payloadHash,
       replyMarkup: replyMarkup
     )
@@ -554,6 +682,45 @@ private extension AdmissionStoreFixture {
         sql: "UPDATE learning_trials SET state = ? WHERE trial_id = ?",
         arguments: [state.rawValue, id]
       )
+    }
+  }
+
+  struct ReviewSnapshot: Equatable {
+    let targets: [String]
+    let chunks: [String]
+  }
+
+  func reviewSnapshot() throws -> ReviewSnapshot {
+    try env.queue.read { db in
+      let targets = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT nonce, subject_kind, subject_digest, allowed_actions
+          FROM feedback_targets ORDER BY nonce
+          """
+      ).map { row in
+        let nonce: String = row["nonce"]
+        let kind: String = row["subject_kind"]
+        let digest: String = row["subject_digest"]
+        let actions: String = row["allowed_actions"]
+        return [nonce, kind, digest, actions].joined(separator: "|")
+      }
+      let chunks = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT dedup_key, step_index, payload, payload_hash, reply_markup
+          FROM outbound_deliveries WHERE delivery_source = ? ORDER BY step_index
+          """,
+        arguments: [DeliverySource.learning.rawValue]
+      ).map { row in
+        let key: String = row["dedup_key"]
+        let ordinal: Int = row["step_index"]
+        let payload: String = row["payload"]
+        let hash: String = row["payload_hash"]
+        let markup: String? = row["reply_markup"]
+        return [key, String(ordinal), payload, hash, markup ?? "nil"].joined(separator: "|")
+      }
+      return ReviewSnapshot(targets: targets, chunks: chunks)
     }
   }
 
