@@ -103,6 +103,63 @@ import Testing
     }
   }
 
+  @Test func malformedInjectedNoncesCannotProduceAReviewKeyboard() throws {
+    // given
+    let candidate = try ReviewFixture.candidate(evaluationCount: 1)
+    let boundaryStem = String(repeating: "é", count: 28)
+    let boundaryNonces = ["\(boundaryStem)00", "\(boundaryStem)01"]
+    let overLimitStem = String(repeating: "é", count: 29)
+    let overLimitNonces = ["\(overLimitStem)0", "\(overLimitStem)1"]
+    let invalidNonceSets = [
+      ["nonce:delimiter-0", "nonce:delimiter-1"],
+      overLimitNonces,
+    ]
+
+    // when
+    let boundaryNotice = try LearningNotices(
+      learning: try ReviewFixture.inMemoryStore(),
+      poke: {},
+      nonceGenerator: ReviewNonceSequence(nonces: boundaryNonces).next,
+      chunkLimit: 10_000
+    ).reviewNotice(
+      candidate: candidate,
+      state: .admitted,
+      ownerUserId: 42,
+      chatId: 777,
+      now: ReviewFixture.now
+    )
+
+    // then — callbacks are byte bounded and must parse back to the exact generated nonce/action.
+    #expect(boundaryNonces[0].count == overLimitNonces[0].count)
+    let overLimitCallback = FeedbackKeyboard.callbackData(
+      nonce: overLimitNonces[0],
+      action: .candidateReject
+    )
+    #expect(overLimitCallback.utf8.count == FeedbackKeyboard.maximumCallbackDataBytes + 1)
+    for target in boundaryNotice.targets {
+      let action = FeedbackAction(signal: try #require(target.allowedActions.first))
+      let callback = FeedbackKeyboard.callbackData(nonce: target.nonce, action: action)
+      #expect(callback.utf8.count == FeedbackKeyboard.maximumCallbackDataBytes)
+    }
+    for invalidNonces in invalidNonceSets {
+      let notices = LearningNotices(
+        learning: try ReviewFixture.inMemoryStore(),
+        poke: {},
+        nonceGenerator: ReviewNonceSequence(nonces: invalidNonces).next,
+        chunkLimit: 10_000
+      )
+      #expect(throws: LearningReviewError.invalidCandidate) {
+        _ = try notices.reviewNotice(
+          candidate: candidate,
+          state: .admitted,
+          ownerUserId: 42,
+          chatId: 777,
+          now: ReviewFixture.now
+        )
+      }
+    }
+  }
+
   @Test func multipartReviewPlacesMarkupOnlyOnTheFinalRunlessChunk() throws {
     // given
     let candidate = try ReviewFixture.candidate(evaluationCount: 2)
@@ -229,11 +286,19 @@ import Testing
 
 private final class ReviewNonceSequence: @unchecked Sendable {
   private let lock = NSLock()
+  private var nonces: [String]
   private var value = 0
+
+  init(nonces: [String] = []) {
+    self.nonces = nonces
+  }
 
   func next() -> String {
     lock.lock()
     defer { lock.unlock() }
+    if nonces.isEmpty == false {
+      return nonces.removeFirst()
+    }
     value += 1
     return "nonce-\(value)"
   }

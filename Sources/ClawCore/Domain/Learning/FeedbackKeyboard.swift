@@ -55,6 +55,8 @@ public enum FeedbackAction: String, Sendable, Equatable, CaseIterable {
 
 /// A strict feedback envelope and canonical inline-keyboard representation.
 public enum FeedbackKeyboard {
+  public static let maximumCallbackDataBytes = 64
+
   public struct Button: Sendable, Equatable {
     public let text: String
     public let nonce: String
@@ -79,6 +81,9 @@ public enum FeedbackKeyboard {
   }
 
   public static func parse(_ callbackData: String) -> (nonce: String, action: FeedbackAction)? {
+    guard callbackData.utf8.count <= maximumCallbackDataBytes else {
+      return nil
+    }
     let parts = callbackData.split(separator: ":", omittingEmptySubsequences: false).map(
       String.init
     )
@@ -96,16 +101,23 @@ public enum FeedbackKeyboard {
     guard rows.isEmpty == false, rows.allSatisfy({ $0.isEmpty == false }) else {
       return nil
     }
-    let wire = WireMarkup(
-      inlineKeyboard: rows.map { row in
-        row.map { button in
-          WireButton(
-            callbackData: callbackData(nonce: button.nonce, action: button.action),
-            text: button.text
-          )
+    var wireRows: [[WireButton]] = []
+    for row in rows {
+      var wireButtons: [WireButton] = []
+      for button in row {
+        let callback = callbackData(nonce: button.nonce, action: button.action)
+        guard
+          let parsed = parse(callback),
+          parsed.nonce == button.nonce,
+          parsed.action == button.action
+        else {
+          return nil
         }
+        wireButtons.append(WireButton(callbackData: callback, text: button.text))
       }
-    )
+      wireRows.append(wireButtons)
+    }
+    let wire = WireMarkup(inlineKeyboard: wireRows)
     return CanonicalJSON.encode(wire)
   }
 
