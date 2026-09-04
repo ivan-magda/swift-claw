@@ -141,13 +141,17 @@ import Testing
     )
     #expect(
       audits.allSatisfy { row in
-        row.resultSize == 0 && row.ts == env.now
+        row.actor == .owner
+          && row.decision == "recorded"
+          && row.resultSize == 0
+          && row.ts == env.now
       }
     )
     #expect(
       zip(audits, targets).allSatisfy { audit, target in
         audit.args.contains(target.subjectKind.rawValue)
           && audit.args.contains(target.subjectDigest)
+          && audit.args.contains(target.nonce) == false
       }
     )
   }
@@ -552,6 +556,7 @@ private struct FeedbackStoreEnvironment {
   }
 
   struct AuditRow {
+    let actor: AuditActor
     let action: String
     let tool: String
     let args: String
@@ -774,13 +779,17 @@ private struct FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT ts, action, tool, args_redacted, result_size, decision FROM audit_events
+          SELECT ts, actor, action, tool, args_redacted, result_size, decision FROM audit_events
           WHERE action = ? ORDER BY id
           """,
         arguments: [AuditAction.learningFeedback.rawValue]
       ).map { row in
         let ts: Date = row["ts"]
+        guard let actor = AuditActor(rawValue: row["actor"]) else {
+          throw StoreError.unexpected("feedback audit fixture actor is unreadable")
+        }
         return AuditRow(
+          actor: actor,
           action: row["action"],
           tool: row["tool"],
           args: row["args_redacted"],
