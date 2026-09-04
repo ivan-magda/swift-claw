@@ -12,25 +12,36 @@ extension ScheduledLearningStoreGRDB {
     artifact: CandidateArtifact,
     state: JobLearningState
   ) throws -> Bool {
-    switch artifact.manifest.origin {
-    case .reflection:
-      guard let operation = try readOperation(db, id: artifact.manifest.operationId) else {
-        return false
-      }
-      return try candidateIsCurrent(db, artifact: artifact, operation: operation)
-    case .ownerApproval, .ownerEdit:
-      guard let current = try currentPreparation(db, artifact: artifact, state: state) else {
-        return false
-      }
-      return artifact.manifest.evidence == current.evidenceSources
-        && artifact.manifest.evaluations == current.evaluationSources
-        && artifact.manifest.feedback == current.feedbackSources
+    var visited: Set<CandidateDigest> = []
+    guard try candidateProvenanceIsValid(db, artifact: artifact, state: state, visited: &visited)
+    else {
+      return false
     }
+    guard let current = try currentPreparation(db, artifact: artifact, state: state) else {
+      return false
+    }
+    return artifact.manifest.evidence == current.evidenceSources
+      && artifact.manifest.evaluations == current.evaluationSources
+      && artifact.manifest.feedback == current.feedbackSources
   }
 
   static func currentPreparation(
     _ db: Database,
     artifact: CandidateArtifact,
+    state: JobLearningState
+  ) throws -> ReflectionPreparation? {
+    try preparation(
+      db,
+      artifact: artifact,
+      feedbackCutoff: state.feedbackRevision,
+      state: state
+    )
+  }
+
+  static func preparation(
+    _ db: Database,
+    artifact: CandidateArtifact,
+    feedbackCutoff: FeedbackRevision,
     state: JobLearningState
   ) throws -> ReflectionPreparation? {
     let manifest = artifact.manifest
@@ -52,17 +63,14 @@ extension ScheduledLearningStoreGRDB {
       let current = try prepareReflection(
         db,
         trigger: trigger,
-        feedbackCutoff: state.feedbackRevision,
+        feedbackCutoff: feedbackCutoff,
         requiredStateFeedbackRevision: state.feedbackRevision,
         requiresNoLiveTrial: false
       )
     else {
       return nil
     }
-    return current.evidenceSources == manifest.evidence
-      && current.evaluationSources == manifest.evaluations
-      && current.feedbackSources == manifest.feedback
-      ? current : nil
+    return current
   }
 
   static func triggerFeedbackRevision(
@@ -82,6 +90,144 @@ extension ScheduledLearningStoreGRDB {
       current = loaded
     }
     return current.manifest.feedbackRevision
+  }
+
+  static func candidateProvenanceIsValid(
+    _ db: Database,
+    artifact: CandidateArtifact,
+    state: JobLearningState,
+    visited: inout Set<CandidateDigest>
+  ) throws -> Bool {
+    guard visited.insert(artifact.digest).inserted else {
+      return false
+    }
+    switch artifact.manifest.origin {
+    case .reflection:
+      return try reflectionProvenanceIsValid(db, artifact: artifact, state: state)
+    case .ownerApproval, .ownerEdit:
+      return try successorProvenanceIsValid(
+        db,
+        artifact: artifact,
+        state: state,
+        visited: &visited
+      )
+    }
+  }
+
+  static func reflectionProvenanceIsValid(
+    _ db: Database,
+    artifact: CandidateArtifact,
+    state: JobLearningState
+  ) throws -> Bool {
+    let manifest = artifact.manifest
+    guard
+      manifest.predecessorCandidate == nil,
+      manifest.predecessorFeedback == nil,
+      let operation = try readOperation(db, id: manifest.operationId),
+      reflectionTrigger(artifact: artifact, operation: operation) != nil,
+      let preparation = try preparation(
+        db,
+        artifact: artifact,
+        feedbackCutoff: manifest.feedbackRevision,
+        state: state
+      )
+    else {
+      return false
+    }
+    return manifest.baseRevision == preparation.stableRevision
+      && manifest.evidence == preparation.evidenceSources
+      && manifest.evaluations == preparation.evaluationSources
+      && manifest.feedback == preparation.feedbackSources
+  }
+
+  static func successorProvenanceIsValid(
+    _ db: Database,
+    artifact: CandidateArtifact,
+    state: JobLearningState,
+    visited: inout Set<CandidateDigest>
+  ) throws -> Bool {
+    let manifest = artifact.manifest
+    guard
+      let predecessorDigest = manifest.predecessorCandidate,
+      let claimedControl = manifest.predecessorFeedback,
+      let predecessor = try readCandidateArtifact(db, digest: predecessorDigest),
+      predecessor.digest != artifact.digest,
+      try candidateProvenanceIsValid(
+        db,
+        artifact: predecessor,
+        state: state,
+        visited: &visited
+      ),
+      let storedControl = try storedCandidateControl(
+        db,
+        eventId: claimedControl.eventId,
+        candidate: predecessor,
+        signal: manifest.origin == .ownerApproval ? .candidateApprove : .candidateEdit
+      ),
+      storedControl.source == claimedControl,
+      claimedControl.revision <= manifest.feedbackRevision,
+      let preparation = try preparation(
+        db,
+        artifact: artifact,
+        feedbackCutoff: manifest.feedbackRevision,
+        state: state
+      ),
+      let expected = expectedSuccessor(
+        artifact: artifact,
+        predecessor: predecessor,
+        control: storedControl,
+        effectiveFeedback: preparation.feedbackSources
+      )
+    else {
+      return false
+    }
+    return expected == artifact
+  }
+
+  static func expectedSuccessor(
+    artifact: CandidateArtifact,
+    predecessor: CandidateArtifact,
+    control: StoredCandidateControl,
+    effectiveFeedback: [CandidateFeedbackSource]
+  ) -> CandidateArtifact? {
+    let manifest = artifact.manifest
+    do {
+      switch manifest.origin {
+      case .ownerApproval:
+        guard control.payload == nil, artifact.replacement == predecessor.replacement else {
+          return nil
+        }
+        return try CandidateSuccessorRules.approval(
+          predecessor: predecessor,
+          control: control.source,
+          feedbackRevision: manifest.feedbackRevision,
+          effectiveFeedback: effectiveFeedback
+        )
+      case .ownerEdit:
+        guard
+          let payload = control.payload,
+          let lessons = CandidateEditPayload.decode(Data(payload.utf8)),
+          let replacement = try? LessonSet.canonical(
+            jobId: predecessor.manifest.jobId,
+            lessons: lessons
+          ),
+          replacement == artifact.replacement
+        else {
+          return nil
+        }
+        return try CandidateSuccessorRules.edit(
+          predecessor: predecessor,
+          replacement: replacement,
+          control: control.source,
+          feedbackRevision: manifest.feedbackRevision,
+          effectiveFeedback: effectiveFeedback
+        )
+      case .reflection:
+        return nil
+      }
+    } catch {
+      return nil
+    }
   }
 
   static func hardVetoes(
@@ -163,6 +309,11 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Owner Controls
 
 extension ScheduledLearningStoreGRDB {
+  struct StoredCandidateControl {
+    let source: CandidateFeedbackSource
+    let payload: String?
+  }
+
   static func candidateControl(
     _ db: Database,
     eventId: Int64,
@@ -170,6 +321,26 @@ extension ScheduledLearningStoreGRDB {
     signal: OwnerSignal,
     expectedPayload: Data?
   ) throws -> CandidateFeedbackSource? {
+    guard
+      let stored = try storedCandidateControl(
+        db,
+        eventId: eventId,
+        candidate: candidate,
+        signal: signal
+      ),
+      payloadMatches(stored.payload, expected: expectedPayload)
+    else {
+      return nil
+    }
+    return stored.source
+  }
+
+  static func storedCandidateControl(
+    _ db: Database,
+    eventId: Int64,
+    candidate: CandidateArtifact,
+    signal: OwnerSignal
+  ) throws -> StoredCandidateControl? {
     guard
       let row = try Row.fetchOne(
         db,
@@ -190,32 +361,34 @@ extension ScheduledLearningStoreGRDB {
       subject == .candidate,
       storedSignal == signal,
       actor == .owner,
-      payloadMatches(row["payload"], expected: expectedPayload),
       (row["subject_digest"] as String) == candidate.digest.rawValue
     else {
       return nil
     }
     let revision = FeedbackRevision(row["feedback_revision"])
-    return CandidateFeedbackSource(
-      eventId: eventId,
-      digest: try FeedbackEventDigest.of(
+    return StoredCandidateControl(
+      source: CandidateFeedbackSource(
         eventId: eventId,
-        jobId: candidate.manifest.jobId,
-        epoch: candidate.manifest.epoch,
+        digest: try FeedbackEventDigest.of(
+          eventId: eventId,
+          jobId: candidate.manifest.jobId,
+          epoch: candidate.manifest.epoch,
+          subjectKind: subject,
+          subjectDigest: row["subject_digest"],
+          signal: storedSignal,
+          payload: row["payload"],
+          actor: actor,
+          transportUpdateId: row["transport_update_id"],
+          revision: revision,
+          supersedes: row["supersedes"],
+          occurredAtEpochSecond: row["occurred_at"]
+        ),
+        revision: revision,
         subjectKind: subject,
         subjectDigest: row["subject_digest"],
-        signal: storedSignal,
-        payload: row["payload"],
-        actor: actor,
-        transportUpdateId: row["transport_update_id"],
-        revision: revision,
-        supersedes: row["supersedes"],
-        occurredAtEpochSecond: row["occurred_at"]
+        signal: storedSignal
       ),
-      revision: revision,
-      subjectKind: subject,
-      subjectDigest: row["subject_digest"],
-      signal: storedSignal
+      payload: row["payload"]
     )
   }
 

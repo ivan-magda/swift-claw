@@ -474,6 +474,94 @@ import Testing
     }
   }
 
+  @Test func evaluationDisputeRequiresEverySharedCandidateAndTrialIdentity() throws {
+    // given — Task 10's shared identity gates remain mandatory after switching the dependency
+    // source from trial assignments to the candidate's typed manifest.
+    for mismatch in CandidateTrialMismatch.allCases {
+      let env = try FeedbackStoreEnvironment.make()
+      let evaluationDigest = "evaluation-shared-\(mismatch)"
+      let trial = try env.seedTypedOpenTrial(
+        evaluationDigest: evaluationDigest,
+        evaluationRequired: true,
+        state: .open
+      )
+      try env.introduceCandidateMismatch(mismatch, trial: trial)
+      let target = env.target(
+        nonce: "evaluation-shared-\(mismatch)",
+        signal: .evaluationDispute,
+        subject: evaluationDigest,
+        kind: .evaluation
+      )
+      try env.createTargets([target], chunks: [])
+
+      // when
+      do {
+        _ = try env.consume(env.tap(target: target, signal: .evaluationDispute))
+      } catch {
+        // Strict artifact corruption aborts the whole feedback transaction; a relational mismatch
+        // may still record the event. Both outcomes are fail-closed for the trial.
+      }
+
+      // then — dropping any one shared predicate closes a trial whose frozen identity is corrupt.
+      #expect(try env.trialState(trial.trialId) == mismatch.expectedState)
+      #expect(try env.trialCloseReason(trial.trialId) == nil)
+    }
+  }
+
+  @Test func evaluationDisputeRejectsAnUnreadableCandidateArtifact() throws {
+    // given
+    let env = try FeedbackStoreEnvironment.make()
+    let evaluationDigest = "evaluation-unreadable-artifact"
+    let trial = try env.seedTypedOpenTrial(
+      evaluationDigest: evaluationDigest,
+      evaluationRequired: true,
+      state: .open
+    )
+    try env.corruptCandidateManifest(candidateDigest: trial.candidateDigest)
+    let target = env.target(
+      nonce: "evaluation-unreadable-artifact",
+      signal: .evaluationDispute,
+      subject: evaluationDigest,
+      kind: .evaluation
+    )
+    try env.createTargets([target], chunks: [])
+
+    // when / then — trusting only typed-looking substring bytes would close corrupt provenance.
+    #expect(throws: StoreError.self) {
+      _ = try env.consume(env.tap(target: target, signal: .evaluationDispute))
+    }
+    #expect(try env.trialState(trial.trialId) == .open)
+    #expect(try env.trialCloseReason(trial.trialId) == nil)
+  }
+
+  @Test func evaluationDisputeRequiresTheExactTrialSideIdentity() throws {
+    // given
+    for mismatch in EvaluationTrialMismatch.allCases {
+      let env = try FeedbackStoreEnvironment.make()
+      let evaluationDigest = "evaluation-trial-\(mismatch)"
+      let trial = try env.seedTypedOpenTrial(
+        evaluationDigest: evaluationDigest,
+        evaluationRequired: true,
+        state: .open
+      )
+      try env.introduceTrialMismatch(mismatch, trial: trial)
+      let target = env.target(
+        nonce: "evaluation-trial-\(mismatch)",
+        signal: .evaluationDispute,
+        subject: evaluationDigest,
+        kind: .evaluation
+      )
+      try env.createTargets([target], chunks: [])
+
+      // when
+      _ = try env.consume(env.tap(target: target, signal: .evaluationDispute))
+
+      // then — a candidate manifest cannot authorize a differently bound trial row.
+      #expect(try env.trialState(trial.trialId) == .open)
+      #expect(try env.trialCloseReason(trial.trialId) == nil)
+    }
+  }
+
   @Test func newerSameSubjectPromptSupersedesAndEnqueuesIndependently() throws {
     // given — two independently authenticated correction targets for the same exact run
     let env = try FeedbackStoreEnvironment.make()
@@ -802,6 +890,13 @@ private enum CandidateTrialMismatch: CaseIterable {
   var expectedState: LearningTrialState {
     self == .currentState ? .promoted : .open
   }
+}
+
+private enum EvaluationTrialMismatch: CaseIterable {
+  case job
+  case epoch
+  case base
+  case algorithm
 }
 
 private enum TrialPointerState: CaseIterable {
@@ -1348,6 +1443,40 @@ private struct FeedbackStoreEnvironment {
         arguments: [trialId]
       )
       return raw.flatMap(LearningTrialState.init(rawValue:))
+    }
+  }
+
+  func corruptCandidateManifest(candidateDigest: String) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE learning_candidates SET source_manifest = '{}' WHERE candidate_digest = ?",
+        arguments: [candidateDigest]
+      )
+    }
+  }
+
+  func introduceTrialMismatch(_ mismatch: EvaluationTrialMismatch, trial: Trial) throws {
+    let column: String
+    let value: any DatabaseValueConvertible
+    switch mismatch {
+    case .job:
+      column = "job_id"
+      value = jobId + 1_000
+    case .epoch:
+      column = "learning_epoch"
+      value = state.epoch.value + 1
+    case .base:
+      column = "base_digest"
+      value = trial.replacementDigest
+    case .algorithm:
+      column = "algorithm"
+      value = "stale-algorithm"
+    }
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE learning_trials SET \(column) = ? WHERE trial_id = ?",
+        arguments: [value, trial.trialId]
+      )
     }
   }
 

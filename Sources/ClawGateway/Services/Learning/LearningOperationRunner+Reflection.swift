@@ -256,17 +256,23 @@ private extension LearningOperationRunner {
     product: LearningOperationProduct,
     now: Date
   ) {
+    let committed: Bool
     do {
-      let committed = try learning.finishOperation(
+      committed = try learning.finishOperation(
         LearningOperationResult(operationId: call.operationId, usage: usage, product: product),
         now: now
       )
-      guard committed, case .candidate(let artifact) = product else {
-        return
-      }
-      _ = try learning.admitCandidate(digest: artifact.digest, redactor: redactor, now: now)
     } catch {
       logger.error("reflection \(call.operationId.rawValue) could not be committed: \(error)")
+      return
+    }
+    guard committed, case .candidate(let artifact) = product else {
+      return
+    }
+    do {
+      _ = try learning.admitCandidate(digest: artifact.digest, redactor: redactor, now: now)
+    } catch {
+      logger.error("reflection \(call.operationId.rawValue) admission was deferred: \(error)")
     }
   }
 }

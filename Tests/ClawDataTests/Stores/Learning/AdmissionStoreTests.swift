@@ -35,17 +35,13 @@ import Testing
     #expect(row.cohortCutoff == row.admittedAt)
     #expect(
       row.assignmentDeadline
-        == EpochSecondCodec.epoch(
-          fixture.env.now.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)
-        )
+        == EpochSecondCodec.epoch(fixture.env.now) + 2_592_000
     )
     #expect(
       row.decisionDeadline
-        == EpochSecondCodec.epoch(
-          fixture.env.now.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)
-        )
+        == EpochSecondCodec.epoch(fixture.env.now) + 3_196_800
     )
-    #expect(row.maximumAssignments == TrialAdmissionPolicy.maximumAssignments)
+    #expect(row.maximumAssignments == 3)
     #expect(row.consumedAssignments == 0)
     #expect(row.state == LearningTrialState.open.rawValue)
     #expect(try fixture.env.countRows(in: "learning_candidates") == candidates)
@@ -155,13 +151,18 @@ import Testing
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
+    _ = try fixture.env.appendFeedback(
+      subjectKind: .candidate,
+      subjectDigest: "unrelated-after-approval",
+      signal: .candidateReject
+    )
     let replay = try fixture.env.learning.approveCandidate(
       approval,
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
 
-    // then — mutating/adopting the predecessor or skipping common admission loses provenance.
+    // then — replay resolves the immutable successor even after unrelated feedback advances.
     let firstReceipt = try #require(first.admissionReceipt)
     #expect(replay.admissionReceipt == firstReceipt)
     let successor = try #require(try fixture.candidate(for: firstReceipt.candidateDigest))
@@ -342,47 +343,31 @@ import Testing
     let fixture = try AdmissionStoreFixture.make()
     defer { fixture.remove() }
     let now = fixture.env.now
-    let subject = CandidateReviewIdentity.digest(
-      candidateDigest: CandidateDigest(rawValue: "candidate-review")
+    let candidate = try fixture.persistedCandidate()
+    _ = try fixture.env.learning.admitCandidate(
+      digest: candidate.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: now
     )
-    let target = NewFeedbackTarget(
-      nonce: "review-nonce",
-      jobId: fixture.env.jobId,
-      epoch: LearningEpoch(1),
-      subjectKind: .candidate,
-      subjectDigest: "candidate-review",
-      allowedActions: [.candidateReject, .candidateEdit],
-      ownerUserId: 42,
-      chatId: 777,
-      expiresAt: now.addingTimeInterval(EvidenceWindow.maximumAge)
-    )
-    let payload = "Review this candidate."
-    let review = CandidateReviewNotice(
-      subjectDigest: subject,
-      targets: [target],
-      chunks: [
-        LearningNoticeChunk(
-          subjectDigest: subject,
-          ordinal: 0,
-          chatId: 777,
-          payload: payload,
-          payloadHash: ContentHash.fnv1a(payload),
-          replyMarkup: "{}"
-        )
-      ]
-    )
+    let review = fixture.review(candidate: candidate, state: .admitted, now: now)
+    let deliveries = try fixture.env.countRows(in: "outbound_deliveries")
 
     // when
     let inserted = try fixture.env.learning.commitCandidateReview(review, now: now)
-    let replay = try fixture.env.learning.commitCandidateReview(review, now: now)
+    let replay = try fixture.env.learning.commitCandidateReview(
+      fixture.review(candidate: candidate, state: .admitted, now: now, nonceSuffix: "replay"),
+      now: now
+    )
 
     // then — inserting targets before replay detection creates orphan nonces on every retry.
     #expect(inserted)
     #expect(replay == false)
-    #expect(try fixture.env.countRows(in: "feedback_targets") == 1)
-    #expect(try fixture.env.countRows(in: "outbound_deliveries") == 1)
+    #expect(try fixture.env.countRows(in: "feedback_targets") == review.targets.count)
+    #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries + 1)
     let delivery = try fixture.reviewDelivery()
-    #expect(delivery.key == OutboxDedupKey.make(subjectDigest: subject, ordinal: 0))
+    #expect(
+      delivery.key == OutboxDedupKey.make(subjectDigest: review.subjectDigest, ordinal: 0)
+    )
     #expect(delivery.runId == nil)
     #expect(delivery.source == DeliverySource.learning.rawValue)
   }
@@ -391,43 +376,26 @@ import Testing
     // given
     let fixture = try AdmissionStoreFixture.make()
     defer { fixture.remove() }
+    let candidate = try fixture.persistedCandidate()
+    _ = try fixture.env.learning.admitCandidate(
+      digest: candidate.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
     try fixture.failReviewTarget()
-    let subject = CandidateReviewIdentity.digest(
-      candidateDigest: CandidateDigest(rawValue: "failed-review")
+    let review = fixture.review(
+      candidate: candidate,
+      state: .admitted,
+      now: fixture.env.now
     )
-    let payload = "Must roll back."
-    let review = CandidateReviewNotice(
-      subjectDigest: subject,
-      targets: [
-        NewFeedbackTarget(
-          nonce: "failed-target",
-          jobId: fixture.env.jobId,
-          epoch: LearningEpoch(1),
-          subjectKind: .candidate,
-          subjectDigest: "failed-review",
-          allowedActions: [.candidateReject],
-          ownerUserId: 42,
-          chatId: 777,
-          expiresAt: fixture.env.now.addingTimeInterval(EvidenceWindow.maximumAge)
-        )
-      ],
-      chunks: [
-        LearningNoticeChunk(
-          subjectDigest: subject,
-          ordinal: 0,
-          chatId: 777,
-          payload: payload,
-          payloadHash: ContentHash.fnv1a(payload)
-        )
-      ]
-    )
+    let deliveries = try fixture.env.countRows(in: "outbound_deliveries")
 
     // when / then — committing the outbox before targets would leave a live button with no nonce.
     #expect(throws: StoreError.self) {
       _ = try fixture.env.learning.commitCandidateReview(review, now: fixture.env.now)
     }
     #expect(try fixture.env.countRows(in: "feedback_targets") == 0)
-    #expect(try fixture.env.countRows(in: "outbound_deliveries") == 0)
+    #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 }
 
@@ -440,7 +408,7 @@ private extension AdmissionOutcome {
   }
 }
 
-private struct AdmissionStoreFixture {
+struct AdmissionStoreFixture {
   struct TrialProjection {
     let candidate: String
     let admittedAt: Int64
@@ -473,10 +441,16 @@ private struct AdmissionStoreFixture {
     try? FileManager.default.removeItem(atPath: path)
   }
 
-  func persistedCandidate() throws -> CandidateArtifact {
+  func persistedCandidate(
+    lessons: [String] = ["Report only material changes."]
+  ) throws -> CandidateArtifact {
     let reflection = try env.reflectionFixture()
     let operation = try env.startReflector(reflection)
-    let artifact = try env.candidate(fixture: reflection, operation: operation)
+    let artifact = try env.candidate(
+      fixture: reflection,
+      operation: operation,
+      lessons: lessons
+    )
     guard
       try env.learning.finishOperation(
         env.reflectionResult(operation: operation, product: .candidate(artifact)),
@@ -629,7 +603,11 @@ private struct AdmissionStoreFixture {
     let row = try env.queue.read { db in
       try Row.fetchOne(
         db,
-        sql: "SELECT dedup_key, run_id, delivery_source FROM outbound_deliveries"
+        sql: """
+          SELECT dedup_key, run_id, delivery_source FROM outbound_deliveries
+          WHERE delivery_source = ?
+          """,
+        arguments: [DeliverySource.learning.rawValue]
       )
     }
     guard let row else {
@@ -639,6 +617,65 @@ private struct AdmissionStoreFixture {
       key: row["dedup_key"],
       runId: row["run_id"],
       source: row["delivery_source"]
+    )
+  }
+
+  func review(
+    candidate: CandidateArtifact,
+    state: CandidateReviewState,
+    now: Date,
+    nonceSuffix: String = "first",
+    candidateActions: [OwnerSignal]? = nil
+  ) -> CandidateReviewNotice {
+    let expiry = now.addingTimeInterval(2_592_000)
+    let actions =
+      candidateActions
+      ?? (state == .admitted
+        ? [.candidateReject, .candidateEdit]
+        : [.candidateApprove, .candidateReject, .candidateEdit])
+    var targets = [
+      NewFeedbackTarget(
+        nonce: "candidate-\(nonceSuffix)-\(candidate.digest.rawValue)",
+        jobId: candidate.manifest.jobId,
+        epoch: candidate.manifest.epoch,
+        subjectKind: .candidate,
+        subjectDigest: candidate.digest.rawValue,
+        allowedActions: actions,
+        ownerUserId: 777,
+        chatId: 777,
+        expiresAt: expiry
+      )
+    ]
+    targets += candidate.manifest.evaluations.enumerated().map { index, evaluation in
+      NewFeedbackTarget(
+        nonce: "evaluation-\(nonceSuffix)-\(index)-\(candidate.digest.rawValue)",
+        jobId: candidate.manifest.jobId,
+        epoch: candidate.manifest.epoch,
+        subjectKind: .evaluation,
+        subjectDigest: evaluation.digest.rawValue,
+        allowedActions: [.evaluationConfirm, .evaluationDispute],
+        ownerUserId: 777,
+        chatId: 777,
+        expiresAt: expiry
+      )
+    }
+    let subject = CandidateReviewIdentity.digest(candidateDigest: candidate.digest)
+    let payload = "Review this candidate."
+    return CandidateReviewNotice(
+      candidateDigest: candidate.digest,
+      state: state,
+      subjectDigest: subject,
+      targets: targets,
+      chunks: [
+        LearningNoticeChunk(
+          subjectDigest: subject,
+          ordinal: 0,
+          chatId: 777,
+          payload: payload,
+          payloadHash: ContentHash.fnv1a(payload),
+          replyMarkup: "{}"
+        )
+      ]
     )
   }
 }

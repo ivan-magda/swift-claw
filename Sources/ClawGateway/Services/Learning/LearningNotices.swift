@@ -88,7 +88,10 @@ public struct LearningNotices: Sendable {
     guard parts.isEmpty == false else {
       throw LearningReviewError.invalidCandidate
     }
-    let markup = reviewKeyboard(targets: targets)
+    let markup = reviewKeyboard(
+      targets: targets,
+      evaluations: candidate.manifest.evaluations
+    )
     let chunks = parts.enumerated().map { ordinal, payload in
       LearningNoticeChunk(
         subjectDigest: subject,
@@ -99,7 +102,13 @@ public struct LearningNotices: Sendable {
         replyMarkup: ordinal == parts.count - 1 ? markup : nil
       )
     }
-    return CandidateReviewNotice(subjectDigest: subject, targets: targets, chunks: chunks)
+    return CandidateReviewNotice(
+      candidateDigest: candidate.digest,
+      state: state,
+      subjectDigest: subject,
+      targets: targets,
+      chunks: chunks
+    )
   }
 
   @discardableResult
@@ -192,12 +201,16 @@ private extension LearningNotices {
     return "Candidate lessons for review:\n\(body)"
   }
 
-  func reviewKeyboard(targets: [NewFeedbackTarget]) -> String {
+  func reviewKeyboard(
+    targets: [NewFeedbackTarget],
+    evaluations: [CandidateEvaluationSource]
+  ) -> String {
     let rows = targets.enumerated().map { index, target in
+      let evaluationRunId = index > 0 ? evaluations[index - 1].runId : nil
       let buttons = target.allowedActions.map { signal in
         let action = feedbackAction(signal)
         let callback = FeedbackKeyboard.callbackData(nonce: target.nonce, action: action)
-        let label = reviewLabel(signal, evaluationIndex: index)
+        let label = reviewLabel(signal, evaluationRunId: evaluationRunId)
         return #"{"callback_data":"\#(callback)","text":"\#(label)"}"#
       }
       return "[\(buttons.joined(separator: ","))]"
@@ -219,13 +232,13 @@ private extension LearningNotices {
     }
   }
 
-  func reviewLabel(_ signal: OwnerSignal, evaluationIndex: Int) -> String {
+  func reviewLabel(_ signal: OwnerSignal, evaluationRunId: Int64?) -> String {
     switch signal {
     case .candidateApprove: "Approve"
     case .candidateReject: "Reject"
     case .candidateEdit: "Edit"
-    case .evaluationConfirm: "Eval #\(evaluationIndex) correct"
-    case .evaluationDispute: "Eval #\(evaluationIndex) wrong"
+    case .evaluationConfirm: "Eval #\(evaluationRunId ?? 0) correct"
+    case .evaluationDispute: "Eval #\(evaluationRunId ?? 0) wrong"
     case .resultUseful, .resultNotUseful, .resultCorrection, .promotionRollback:
       signal.rawValue
     }

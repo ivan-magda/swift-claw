@@ -5,34 +5,6 @@ import GRDB
 // MARK: - Candidate Decisions
 
 extension ScheduledLearningStoreGRDB {
-  public func commitCandidateReview(
-    _ review: CandidateReviewNotice,
-    now: Date
-  ) throws(StoreError) -> Bool {
-    try database.writeMapping { db in
-      try Self.validateReview(review)
-      let firstKey = OutboxDedupKey.make(subjectDigest: review.subjectDigest, ordinal: 0)
-      let exists =
-        try Bool.fetchOne(
-          db,
-          sql: "SELECT EXISTS(SELECT 1 FROM outbound_deliveries WHERE dedup_key = ?)",
-          arguments: [firstKey]
-        ) ?? false
-      guard exists == false else {
-        return false
-      }
-      for chunk in review.chunks {
-        guard try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now) else {
-          throw StoreError.unexpected("candidate review chunk identity already exists")
-        }
-      }
-      for target in review.targets {
-        try Self.insertTarget(db, target)
-      }
-      return true
-    }
-  }
-
   public func admitCandidate(
     digest: CandidateDigest,
     redactor: SecretRedactor,
@@ -63,8 +35,13 @@ extension ScheduledLearningStoreGRDB {
       if try Self.trialRow(db, candidate: predecessor.digest) != nil {
         return .rejected(.invalidOwnerControl)
       }
+      guard let state = try Self.readState(db, jobId: predecessor.manifest.jobId) else {
+        return .rejected(.invalidOwnerControl)
+      }
+      guard try Self.sourceBindingsAreCurrent(db, artifact: predecessor, state: state) else {
+        return .rejected(.sourceBindingsChanged)
+      }
       guard
-        let state = try Self.readState(db, jobId: predecessor.manifest.jobId),
         let control = try Self.candidateControl(
           db,
           eventId: approval.feedbackEventId,
@@ -72,7 +49,8 @@ extension ScheduledLearningStoreGRDB {
           signal: .candidateApprove,
           expectedPayload: nil
         ),
-        state.feedbackRevision == control.revision
+        control.revision <= state.feedbackRevision,
+        let preparation = try Self.currentPreparation(db, artifact: predecessor, state: state)
       else {
         return .rejected(.invalidOwnerControl)
       }
@@ -82,14 +60,13 @@ extension ScheduledLearningStoreGRDB {
         control: control,
         origin: .ownerApproval
       ) {
+        guard
+          try Self.onlySuccessor(db, predecessor: predecessor.digest, is: existing.digest),
+          try Self.sourceBindingsAreCurrent(db, artifact: existing, state: state)
+        else {
+          return .rejected(.invalidOwnerControl)
+        }
         return try Self.admit(db, artifact: existing, redactor: redactor, now: now)
-      }
-      guard try Self.hasSuccessor(db, predecessor: predecessor.digest) == false else {
-        return .rejected(.invalidOwnerControl)
-      }
-      guard let preparation = try Self.currentPreparation(db, artifact: predecessor, state: state)
-      else {
-        return .rejected(.sourceBindingsChanged)
       }
       let successor: CandidateArtifact
       do {
@@ -104,11 +81,29 @@ extension ScheduledLearningStoreGRDB {
       } catch {
         throw StoreError.unexpected("approval successor construction failed")
       }
-      if let rejection = Self.contentRejection(successor, redactor: redactor) {
-        return .rejected(rejection)
+      if let existing = try Self.readCandidateArtifact(db, digest: successor.digest) {
+        guard
+          existing == successor,
+          try Self.onlySuccessor(db, predecessor: predecessor.digest, is: successor.digest)
+        else {
+          return .rejected(.invalidOwnerControl)
+        }
+        return try Self.admit(db, artifact: existing, redactor: redactor, now: now)
+      }
+      guard try Self.hasSuccessor(db, predecessor: predecessor.digest) == false else {
+        return .rejected(.invalidOwnerControl)
+      }
+      let plan = try Self.planAdmission(
+        db,
+        artifact: successor,
+        persisted: false,
+        redactor: redactor
+      )
+      guard case .insert = plan else {
+        return Self.outcome(for: plan, artifact: successor)
       }
       try Self.recordCandidateArtifact(db, artifact: successor, now: now)
-      return try Self.admit(db, artifact: successor, redactor: redactor, now: now)
+      return try Self.executeAdmission(db, artifact: successor, plan: plan, now: now)
     }
   }
 
@@ -119,17 +114,6 @@ extension ScheduledLearningStoreGRDB {
   ) throws(StoreError) -> AdmissionOutcome {
     try database.writeMapping { db in
       guard let context = try Self.editContext(db, edit: edit) else {
-        return .rejected(.invalidOwnerControl)
-      }
-      if let existing = try Self.existingSuccessor(
-        db,
-        predecessor: context.predecessor.digest,
-        control: context.control,
-        origin: .ownerEdit
-      ) {
-        return .awaitingApproval(existing)
-      }
-      guard try Self.hasSuccessor(db, predecessor: context.predecessor.digest) == false else {
         return .rejected(.invalidOwnerControl)
       }
       let replacement: LessonSet
@@ -143,7 +127,32 @@ extension ScheduledLearningStoreGRDB {
       case .failure(let rejection):
         return .rejected(rejection)
       }
+      if let existing = try Self.existingSuccessor(
+        db,
+        predecessor: context.predecessor.digest,
+        control: context.control,
+        origin: .ownerEdit
+      ) {
+        guard
+          try Self.onlySuccessor(
+            db,
+            predecessor: context.predecessor.digest,
+            is: existing.digest
+          ),
+          try Self.sourceBindingsAreCurrent(db, artifact: existing, state: context.state),
+          try Self.trialRow(db, candidate: existing.digest) == nil,
+          Self.contentRejection(existing, redactor: redactor) == nil
+        else {
+          return .rejected(.invalidOwnerControl)
+        }
+        return .awaitingApproval(existing)
+      }
       guard
+        try Self.sourceBindingsAreCurrent(
+          db,
+          artifact: context.predecessor,
+          state: context.state
+        ),
         let preparation = try Self.currentPreparation(
           db,
           artifact: context.predecessor,
@@ -166,6 +175,36 @@ extension ScheduledLearningStoreGRDB {
       } catch {
         throw StoreError.unexpected("edit successor construction failed")
       }
+      if let existing = try Self.readCandidateArtifact(db, digest: successor.digest) {
+        guard
+          existing == successor,
+          try Self.onlySuccessor(
+            db,
+            predecessor: context.predecessor.digest,
+            is: successor.digest
+          ),
+          try Self.sourceBindingsAreCurrent(db, artifact: existing, state: context.state),
+          try Self.trialRow(db, candidate: existing.digest) == nil
+        else {
+          return .rejected(.invalidOwnerControl)
+        }
+        return .awaitingApproval(existing)
+      }
+      guard try Self.hasSuccessor(db, predecessor: context.predecessor.digest) == false else {
+        return .rejected(.invalidOwnerControl)
+      }
+      let plan = try Self.planAdmission(
+        db,
+        artifact: successor,
+        persisted: false,
+        redactor: redactor,
+        permittedLiveCandidate: context.predecessor.digest,
+        requiresSupport: false,
+        requiresAdmissibleReplacement: false
+      )
+      guard case .awaitingApproval = plan else {
+        return Self.outcome(for: plan, artifact: successor)
+      }
       _ = try Self.closeCandidateTrial(db, candidate: context.predecessor)
       try Self.recordCandidateArtifact(
         db,
@@ -173,7 +212,7 @@ extension ScheduledLearningStoreGRDB {
         lessonSource: .ownerEdit,
         now: now
       )
-      return .awaitingApproval(successor)
+      return Self.outcome(for: plan, artifact: successor)
     }
   }
 }
@@ -199,7 +238,7 @@ private extension ScheduledLearningStoreGRDB {
         signal: .candidateEdit,
         expectedPayload: edit.payload
       ),
-      state.feedbackRevision == control.revision,
+      control.revision <= state.feedbackRevision,
       let lessons = CandidateEditPayload.decode(edit.payload)
     else {
       return nil
@@ -211,42 +250,16 @@ private extension ScheduledLearningStoreGRDB {
       lessons: lessons
     )
   }
-
-  static func validateReview(_ review: CandidateReviewNotice) throws {
-    guard
-      review.targets.isEmpty == false,
-      review.chunks.isEmpty == false,
-      Set(review.targets.map(\.nonce)).count == review.targets.count,
-      review.targets.first?.subjectKind == .candidate,
-      let candidateDigest = review.targets.first?.subjectDigest,
-      review.subjectDigest
-        == CandidateReviewIdentity.digest(
-          candidateDigest: CandidateDigest(rawValue: candidateDigest)
-        ),
-      review.chunks.enumerated().allSatisfy({ ordinal, chunk in
-        chunk.ordinal == ordinal && chunk.subjectDigest == review.subjectDigest
-      }),
-      review.chunks.dropLast().allSatisfy({ chunk in chunk.replyMarkup == nil }),
-      review.chunks.last?.replyMarkup != nil
-    else {
-      throw StoreError.unexpected("candidate review carrier is inconsistent")
-    }
-  }
 }
 
 // MARK: - Common Admission
 
 private extension ScheduledLearningStoreGRDB {
-  struct AdmissionJob {
-    let status: ScheduledJobStatus
-    let hasRecurrence: Bool
-    let sessionId: Int64?
-  }
-
-  struct TrialRow {
-    let id: Int64
-    let generation: Int
-    let state: LearningTrialState
+  enum AdmissionPlan {
+    case replay(AdmissionReceipt)
+    case awaitingApproval
+    case insert(job: AdmissionJob, generation: Int)
+    case rejected(AdmissionRejection)
   }
 
   static func admit(
@@ -255,24 +268,32 @@ private extension ScheduledLearningStoreGRDB {
     redactor: SecretRedactor,
     now: Date
   ) throws -> AdmissionOutcome {
-    guard
-      let exact = try readCandidateArtifact(db, digest: artifact.digest),
-      exact == artifact
-    else {
-      throw StoreError.unexpected("candidate changed during admission reload")
+    let plan = try planAdmission(db, artifact: artifact, persisted: true, redactor: redactor)
+    return try executeAdmission(db, artifact: artifact, plan: plan, now: now)
+  }
+
+  static func planAdmission(
+    _ db: Database,
+    artifact: CandidateArtifact,
+    persisted: Bool,
+    redactor: SecretRedactor,
+    permittedLiveCandidate: CandidateDigest? = nil,
+    requiresSupport: Bool = true,
+    requiresAdmissibleReplacement: Bool = true
+  ) throws -> AdmissionPlan {
+    if persisted {
+      guard
+        let exact = try readCandidateArtifact(db, digest: artifact.digest),
+        exact == artifact
+      else {
+        throw StoreError.unexpected("candidate changed during admission reload")
+      }
     }
     if let existing = try trialRow(db, candidate: artifact.digest) {
-      guard existing.state == .open || existing.state == .draining else {
-        return .rejected(.replacementAlreadyClosed)
-      }
-      return .admitted(
-        AdmissionReceipt(
-          candidateDigest: artifact.digest,
-          replacementDigest: artifact.replacement.digest,
-          trialId: existing.id,
-          generation: existing.generation
-        )
-      )
+      return .replay(try admissionReceipt(db, artifact: artifact, trial: existing))
+    }
+    guard try admissionDecisionExists(db, artifact: artifact) == false else {
+      throw StoreError.unexpected("candidate admission decision has no matching trial")
     }
     guard
       let state = try readState(db, jobId: artifact.manifest.jobId),
@@ -281,34 +302,65 @@ private extension ScheduledLearningStoreGRDB {
       return .rejected(.jobNotRepeatable)
     }
     let live = try liveTrial(db, jobId: artifact.manifest.jobId)
+    let hasCompetingLiveTrial =
+      live.map { trial in
+        trial.candidateDigest != permittedLiveCandidate
+      } ?? false
     let sourcesCurrent = try sourceBindingsAreCurrent(db, artifact: artifact, state: state)
     let vetoes = try hardVetoes(db, artifact: artifact)
     let context = AdmissionValidationContext(
       currentState: state,
       jobHasRecurrence: job.hasRecurrence,
       jobStatus: job.status,
-      hasLiveTrial: live != nil,
+      hasLiveTrial: hasCompetingLiveTrial,
       sourceBindingsAreCurrent: sourcesCurrent,
       hardVetoes: vetoes,
       replacementAlreadyClosed: try replacementWasClosed(db, artifact: artifact),
       support: support(for: artifact),
+      requiresSupport: requiresSupport,
+      requiresAdmissibleReplacement: requiresAdmissibleReplacement,
       redactor: redactor
     )
     if let rejection = AdmissionValidator.validate(candidate: artifact, context: context) {
       return .rejected(rejection)
     }
     guard artifact.manifest.origin != .ownerEdit else {
-      return .awaitingApproval(artifact)
+      return .awaitingApproval
     }
-    let generation = try nextGeneration(db, artifact: artifact)
-    let receipt = try insertTrial(
-      db,
-      artifact: artifact,
-      job: job,
-      generation: generation,
-      now: now
-    )
-    return .admitted(receipt)
+    return .insert(job: job, generation: try nextGeneration(db, artifact: artifact))
+  }
+
+  static func executeAdmission(
+    _ db: Database,
+    artifact: CandidateArtifact,
+    plan: AdmissionPlan,
+    now: Date
+  ) throws -> AdmissionOutcome {
+    switch plan {
+    case .replay(let receipt):
+      return .admitted(receipt)
+    case .awaitingApproval:
+      return .awaitingApproval(artifact)
+    case .insert(let job, let generation):
+      return .admitted(
+        try insertTrial(db, artifact: artifact, job: job, generation: generation, now: now)
+      )
+    case .rejected(let rejection):
+      return .rejected(rejection)
+    }
+  }
+
+  static func outcome(for plan: AdmissionPlan, artifact: CandidateArtifact) -> AdmissionOutcome {
+    switch plan {
+    case .replay(let receipt):
+      return .admitted(receipt)
+    case .awaitingApproval:
+      return .awaitingApproval(artifact)
+    case .rejected(let rejection):
+      return .rejected(rejection)
+    case .insert:
+      return .rejected(.sourceBindingsChanged)
+    }
   }
 
   static func insertTrial(
@@ -397,39 +449,17 @@ private extension ScheduledLearningStoreGRDB {
     }
   }
 
-  static func admissionJob(_ db: Database, jobId: Int64) throws -> AdmissionJob? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT status, recurrence, session_id FROM scheduled_jobs WHERE id = ?",
-        arguments: [jobId]
-      ),
-      let status = ScheduledJobStatus(rawValue: row["status"])
-    else {
-      return nil
-    }
-    return AdmissionJob(
-      status: status,
-      hasRecurrence: (row["recurrence"] as String?) != nil,
-      sessionId: row["session_id"]
+  static func onlySuccessor(
+    _ db: Database,
+    predecessor: CandidateDigest,
+    is expected: CandidateDigest
+  ) throws -> Bool {
+    let digests = try String.fetchAll(
+      db,
+      sql: "SELECT candidate_digest FROM learning_candidates WHERE predecessor_digest = ?",
+      arguments: [predecessor.rawValue]
     )
-  }
-
-  static func trialRow(_ db: Database, candidate: CandidateDigest) throws -> TrialRow? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: """
-          SELECT trial_id, generation, state FROM learning_trials
-          WHERE candidate_digest = ? ORDER BY trial_id DESC LIMIT 1
-          """,
-        arguments: [candidate.rawValue]
-      ),
-      let state = LearningTrialState(rawValue: row["state"])
-    else {
-      return nil
-    }
-    return TrialRow(id: row["trial_id"], generation: row["generation"], state: state)
+    return digests == [expected.rawValue]
   }
 
   static func nextGeneration(_ db: Database, artifact: CandidateArtifact) throws -> Int {

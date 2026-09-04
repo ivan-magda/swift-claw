@@ -61,6 +61,34 @@ import Testing
         target.allowedActions == [.evaluationConfirm, .evaluationDispute]
       }
     )
+    let markup = try #require(admittedNotice.chunks.last?.replyMarkup)
+    let labels = try ReviewFixture.buttonLabels(markup)
+    for runId in [41, 44, 47, 50, 53] {
+      #expect(labels.contains("Eval #\(runId) correct"))
+      #expect(labels.contains("Eval #\(runId) wrong"))
+    }
+  }
+
+  @Test func aCandidateWithMoreThanFiveEvaluationsHasNoReviewCarrier() throws {
+    // given
+    let candidate = try ReviewFixture.candidate(evaluationCount: 6)
+    let notices = LearningNotices(
+      learning: try ReviewFixture.inMemoryStore(),
+      poke: {},
+      nonceGenerator: ReviewNonceSequence().next,
+      chunkLimit: 10_000
+    )
+
+    // when / then — accepting a sixth evaluation exposes a seventh feedback capability.
+    #expect(throws: LearningReviewError.invalidCandidate) {
+      _ = try notices.reviewNotice(
+        candidate: candidate,
+        state: .admitted,
+        ownerUserId: 42,
+        chatId: 777,
+        now: ReviewFixture.now
+      )
+    }
   }
 
   @Test func multipartReviewPlacesMarkupOnlyOnTheFinalRunlessChunk() throws {
@@ -98,9 +126,15 @@ import Testing
     let learning = ScheduledLearningStoreGRDB(writer: queue)
     let jobId = try ReviewFixture.armJob(queue: queue)
     let candidate = try ReviewFixture.candidate(jobId: jobId, evaluationCount: 2)
+    let other = try ReviewFixture.candidate(jobId: jobId, evaluationCount: 1, suffix: "other")
+    let recording = RecordingLearningStore(
+      base: learning,
+      recordsReviewCommits: true,
+      failingReviewCandidate: other.digest
+    )
     let pokes = PokeRecorder()
     let notices = LearningNotices(
-      learning: learning,
+      learning: recording,
       poke: pokes.poke,
       nonceGenerator: ReviewNonceSequence().next,
       chunkLimit: 10_000
@@ -121,15 +155,6 @@ import Testing
       chatId: 777,
       now: ReviewFixture.now
     )
-    try queue.write { db in
-      try db.execute(
-        sql: """
-          CREATE TRIGGER fail_review_enqueue BEFORE INSERT ON outbound_deliveries
-          BEGIN SELECT RAISE(ABORT, 'forced review enqueue failure'); END
-          """
-      )
-    }
-    let other = try ReviewFixture.candidate(jobId: jobId, evaluationCount: 1, suffix: "other")
     #expect(throws: StoreError.self) {
       _ = try notices.enqueueReview(
         candidate: other,
@@ -213,8 +238,9 @@ private enum ReviewFixture {
       lessons: ["Report every material change for review \(suffix)."]
     )
     let evidence = (0..<evaluationCount).map { index in
-      CandidateEvidenceSource(
-        runId: Int64(index + 1),
+      let runId = Int64(41 + index * 3)
+      return CandidateEvidenceSource(
+        runId: runId,
         digest: EvidenceDigest(rawValue: "evidence-\(suffix)-\(index)"),
         evaluationDigest: EvaluationDigest(rawValue: "evaluation-\(suffix)-\(index)"),
         evaluationRequired: true
@@ -243,5 +269,20 @@ private enum ReviewFixture {
       predecessorFeedback: nil
     )
     return try CandidateArtifact(replacement: replacement, manifest: manifest)
+  }
+
+  static func buttonLabels(_ markup: String) throws -> [String] {
+    guard
+      let object = try JSONSerialization.jsonObject(with: Data(markup.utf8))
+        as? [String: Any],
+      let rows = object["inline_keyboard"] as? [[Any]]
+    else {
+      throw LearningReviewError.invalidCandidate
+    }
+    return rows.flatMap { row in
+      row.compactMap { button in
+        (button as? [String: Any])?["text"] as? String
+      }
+    }
   }
 }
