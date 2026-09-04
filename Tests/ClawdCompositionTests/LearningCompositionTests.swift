@@ -58,6 +58,60 @@ import Testing
     #expect(builder.makePinnedLessonStore() == nil)
   }
 
+  @Test func theDisarmedRootStillComposesTheRedactedLearningReader() async throws {
+    // given — retained learning state exists although the optional worker service is disabled.
+    let response = HTTPResult(
+      statusCode: 200,
+      headers: [:],
+      body: Data(#"{"ok":true,"result":{"message_id":7,"chat":{"id":777}}}"#.utf8)
+    )
+    let http = ScriptedHTTPExecutor([.ok(response)])
+    let builder = try LearningComposition.makeBuilder(learningEnabled: false, http: http)
+    try builder.stores.allowlist.seedAllowlist(userIds: [777])
+    let now = Date(timeIntervalSince1970: 1_782_000_600)
+    let job = try LearningComposition.createJob(builder, now: now, label: "tg-token")
+    _ = try builder.stores.learning.armJob(jobId: job.id, now: now)
+    let router = builder.makeIntakeRouter(
+      coordination: DaemonBuilder.TurnCoordination(),
+      turnRunner: IdleCompositionTurns(),
+      imageCache: ImageCache(),
+      scheduleSurface: LearningComposition.scheduleSurface(builder),
+      approvalCallbacks: nil,
+      doctor: IdleCompositionDoctor(),
+      learning: nil
+    )
+
+    // when
+    let outcome = await router.handle(
+      rawUpdate: RawUpdate(
+        updateId: 70,
+        message: RawMessage(
+          messageId: 70,
+          fromUserId: 777,
+          chatId: 777,
+          text: "/learning \(job.id)",
+          caption: nil,
+          mediaKind: nil,
+          chatKind: .private,
+          chatTitle: nil,
+          messageThreadId: nil,
+          senderDisplayName: nil
+        ),
+        editedMessage: nil
+      )
+    )
+
+    // then — omitting the independent store/redactor injection hides state or leaks root secrets.
+    #expect(outcome == .processed)
+    #expect(builder.makeLearningService() == nil)
+    let call = try #require(await http.recorded.first)
+    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    let text = try #require(body["text"] as? String)
+    #expect(text.contains("Schedule \(job.id)"))
+    #expect(text.contains(SecretRedactor.replacement))
+    #expect(text.contains("tg-token") == false)
+  }
+
   @Test func feedbackRouterIsComposedOnlyWhileLearningIsArmed() async throws {
     // given — each real root owns a live target, but only one has the learning feature armed
     for learningEnabled in [true, false] {
@@ -277,7 +331,10 @@ private enum LearningComposition {
     tool(name: "web_fetch", risk: .ask),
   ]
 
-  static func makeBuilder(learningEnabled: Bool) throws -> DaemonBuilder {
+  static func makeBuilder(
+    learningEnabled: Bool,
+    http: ScriptedHTTPExecutor = ScriptedHTTPExecutor([])
+  ) throws -> DaemonBuilder {
     var environment = [
       AppConfig.EnvKey.stateRoot: NSTemporaryDirectory() + "clawd-learn-" + UUID().uuidString,
       AppConfig.EnvKey.llmModel: CompositionAcceptance.qualifiedModel,
@@ -286,7 +343,7 @@ private enum LearningComposition {
       environment[AppConfig.EnvKey.learningEnabled] = "true"
     }
     return try CompositionAcceptance.makeBuilder(
-      http: ScriptedHTTPExecutor([]),
+      http: http,
       config: try AppConfig.load(environment: environment)
     )
   }
@@ -303,11 +360,15 @@ private enum LearningComposition {
     return fired.runId
   }
 
-  static func createJob(_ builder: DaemonBuilder, now: Date) throws -> ScheduledJob {
+  static func createJob(
+    _ builder: DaemonBuilder,
+    now: Date,
+    label: String = "digest"
+  ) throws -> ScheduledJob {
     try builder.stores.scheduledJobs.create(
       NewScheduledJob(
         ownerChatId: 777,
-        label: "digest",
+        label: label,
         prompt: "Summarize my unread items",
         recurrence: nil,
         timezone: "Europe/Berlin",

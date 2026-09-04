@@ -442,6 +442,10 @@ private extension FeedbackTarget {
 private struct UnresolvableLessonSets: ScheduledLearningStore {
   let base: ScheduledLearningStoreGRDB
 
+  func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView] {
+    try base.learningView(jobId: jobId)
+  }
+
   func admitCandidate(
     digest: CandidateDigest,
     redactor: SecretRedactor,

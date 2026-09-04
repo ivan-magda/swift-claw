@@ -493,12 +493,12 @@ extension ScheduledLearningStoreGRDB {
     epoch: LearningEpoch,
     now: Date
   ) throws {
-    let inputs = NoCandidateInputs(
-      triggerDigest: result.triggerDigest.rawValue,
-      operationId: result.operationId.rawValue,
-      carrierDigest: result.carrierDigest.rawValue
+    let inputs = ReflectionNoCandidateInputs(
+      triggerDigest: result.triggerDigest,
+      operationId: result.operationId,
+      carrierDigest: result.carrierDigest
     )
-    let receipt = NoCandidateReceipt(resultDigest: result.resultDigest.rawValue)
+    let receipt = ReflectionNoCandidateReceipt(resultDigest: result.resultDigest)
     let inputsBytes = try CanonicalJSON.data(encoding: inputs)
     let receiptBytes = try CanonicalJSON.data(encoding: receipt)
     // swiftlint:disable:next optional_data_string_conversion
@@ -512,7 +512,7 @@ extension ScheduledLearningStoreGRDB {
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [
-        NoCandidateReceipt.kind,
+        ReflectionNoCandidateReceipt.kind,
         jobId,
         epoch.value,
         inputsJSON,
@@ -558,27 +558,6 @@ extension ScheduledLearningStoreGRDB {
       throw StoreError.unexpected("candidate \(digest.rawValue) does not match its source bytes")
     }
     return artifact
-  }
-
-  private struct NoCandidateInputs: Encodable {
-    let triggerDigest: String
-    let operationId: String
-    let carrierDigest: String
-
-    enum CodingKeys: String, CodingKey {
-      case triggerDigest = "trigger_digest"
-      case operationId = "operation_id"
-      case carrierDigest = "carrier_digest"
-    }
-  }
-
-  private struct NoCandidateReceipt: Encodable {
-    static let kind = "reflection_no_candidate"
-    let resultDigest: String
-
-    enum CodingKeys: String, CodingKey {
-      case resultDigest = "result_digest"
-    }
   }
 }
 

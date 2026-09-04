@@ -214,6 +214,10 @@ public struct JobLearningState: Sendable, Equatable {
 }
 
 public protocol ScheduledLearningStore: Sendable {
+  /// One read snapshot for the complete owner-facing learning projection. nil lists armed jobs;
+  /// a positive id returns exactly one readable, unarmed, missing, or unreadable result.
+  func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView]
+
   /// Revalidates and admits one already-persisted immutable candidate.
   func admitCandidate(
     digest: CandidateDigest,

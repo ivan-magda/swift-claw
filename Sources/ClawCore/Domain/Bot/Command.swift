@@ -9,6 +9,7 @@ public enum Command: Sendable, Equatable {
   case remember(RememberCommand)
   case memory(MemoryCommand)
   case schedule(ScheduleCommand)
+  case learning(LearningCommand)
   case pause(jobId: Int64?)
   case resume(jobId: Int64?)
   case runNow(jobId: Int64?)
@@ -72,6 +73,9 @@ private extension Command {
     if let jobCommand = jobCommand(named: name, arguments: arguments) {
       return jobCommand
     }
+    if let familyCommand = familyCommand(named: name, arguments: arguments) {
+      return familyCommand
+    }
 
     switch name {
     case "start":
@@ -80,12 +84,6 @@ private extension Command {
       return .stop
     case "new":
       return .new
-    case "remember":
-      return .remember(RememberCommand.parse(arguments: arguments))
-    case "memory":
-      return .memory(MemoryCommand.parse(arguments: arguments))
-    case "schedule":
-      return .schedule(ScheduleCommand.parse(arguments: arguments))
     case "help":
       return .help
     case "status", "doctor":
@@ -96,6 +94,21 @@ private extension Command {
       return .skills
     default:
       return .plain(originalText)
+    }
+  }
+
+  static func familyCommand(named name: String, arguments: Substring) -> Command? {
+    switch name {
+    case "remember":
+      .remember(RememberCommand.parse(arguments: arguments))
+    case "memory":
+      .memory(MemoryCommand.parse(arguments: arguments))
+    case "schedule":
+      .schedule(ScheduleCommand.parse(arguments: arguments))
+    case "learning":
+      .learning(LearningCommand.parse(arguments: arguments))
+    default:
+      nil
     }
   }
 
@@ -135,19 +148,42 @@ public enum ScheduleCommand: Sendable, Equatable {
   }
 }
 
+/// Parsed `/learning` arguments. Unknown non-reset arguments list; reset never guesses an id.
+public enum LearningCommand: Sendable, Equatable {
+  case list
+  case detail(jobId: Int64)
+  case reset(jobId: Int64?)
+
+  public static func parse(arguments: Substring) -> LearningCommand {
+    let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty || trimmed.caseInsensitiveCompare("list") == .orderedSame {
+      return .list
+    }
+    let pieces = trimmed.split(whereSeparator: \.isWhitespace)
+    if pieces.first?.caseInsensitiveCompare("reset") == .orderedSame {
+      guard pieces.count == 2 else {
+        return .reset(jobId: nil)
+      }
+      return .reset(jobId: PositiveInt64.parse(String(pieces[1])))
+    }
+    if let jobId = PositiveInt64.parse(trimmed) {
+      return .detail(jobId: jobId)
+    }
+    return .list
+  }
+}
+
 // MARK: - Availability
 
 public extension Command {
   /// True for the commands that only make sense in the owner's own conversation.
   ///
-  /// Durable memory and the schedule table are the owner's, single-owner scoped, and delivered to
-  /// a chat id the arming message chose. Both families also park a confirmation that the *next
-  /// plain message* resolves — in a shared room that message belongs to whoever typed fastest, so
-  /// one attendee could commit a draft another one wrote. Everything else a room may use: `/new`
-  /// and `/stop` act on the topic's own session, and the read-only reports name nothing private.
+  /// Durable memory, schedules, and scheduled-learning state are owner-private. Memory and
+  /// schedules also park a confirmation that the *next plain message* resolves — in a shared room
+  /// that message belongs to whoever typed fastest, so one attendee could commit another's draft.
   var isDirectOnly: Bool {
     switch self {
-    case .remember, .memory, .schedule, .pause, .resume, .runNow, .cancelJob:
+    case .remember, .memory, .schedule, .learning, .pause, .resume, .runNow, .cancelJob:
       true
     case .start, .stop, .new, .help, .doctor, .mcp, .skills, .plain:
       false

@@ -173,6 +173,7 @@ import Testing
     (Command.remember(.invalid), true),
     (.memory(.review), true),
     (.schedule(.list), true),
+    (.learning(.list), true),
     (.pause(jobId: 1), true),
     (.resume(jobId: 1), true),
     (.runNow(jobId: 1), true),

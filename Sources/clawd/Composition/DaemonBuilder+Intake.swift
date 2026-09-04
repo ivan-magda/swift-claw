@@ -75,6 +75,8 @@ extension DaemonBuilder {
       lanes: coordination.lanes,
       schedule: scheduleSurface,
       learning: learning,
+      learningStore: stores.learning,
+      learningRedactor: SecretRedactor(secretValues: redactionValues),
       approvalCallbacks: approvalCallbacks,
       feedbackCallbacks: makeFeedbackCallbackHandler(challenges: feedbackChallenges),
       feedbackChallenges: feedbackChallenges,
