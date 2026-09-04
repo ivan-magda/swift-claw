@@ -24,8 +24,11 @@ extension ScheduledLearningStoreGRDB {
         return false
       }
       try Self.validateReview(db, review: review, now: now)
+      let deliveryTimestamp = Date(
+        timeIntervalSince1970: TimeInterval(EpochSecondCodec.epoch(now))
+      )
       for chunk in review.chunks {
-        guard try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now) else {
+        guard try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: deliveryTimestamp) else {
           throw StoreError.unexpected("candidate review chunk identity already exists")
         }
       }
