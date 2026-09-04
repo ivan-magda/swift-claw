@@ -44,9 +44,38 @@ import Testing
     #expect(user.contains("provider_state") == false)
     #expect(user.contains("owner_user_id") == false)
     let expected = CarrierDigest(rawValue: SHA256Digest.hex(Data(user.utf8)))
-    let authorization = try #require(env.authorizing.authorizations.first)
-    #expect(authorization.carrier.digest == expected)
+    #expect(try env.operationCarrierDigest() == expected)
     #expect(try env.candidate()?.manifest.carrierDigest == expected)
+  }
+
+  @Test func reflectionUsesRosterFailoverWithoutChangingLogicalCallIdentity() async throws {
+    // given
+    let env = try ReflectionRunEnvironment.make(
+      primaryFailure: ProviderError.quotaLimited(retryAfterSeconds: nil)
+    )
+
+    // when
+    await env.runner.runReflection(trigger: env.trigger, now: env.now)
+
+    // then — terminating after the primary or rebuilding nonce-bearing carrier bytes would either
+    // lose the candidate or turn one logical reflection into two different calls
+    let primary = try #require(await env.provider.requests.first)
+    let fallback = try #require(await env.fallbackProvider.requests.first)
+    #expect(primary.messages == fallback.messages)
+    #expect(primary.tools == fallback.tools)
+    #expect(primary.maxOutputTokens == fallback.maxOutputTokens)
+    #expect(env.callIDs.count == 1)
+    let user = try #require(primary.messages.last?.content.text)
+    let expected = CarrierDigest(rawValue: SHA256Digest.hex(Data(user.utf8)))
+    #expect(try env.reflectorOperationCount() == 1)
+    #expect(
+      try env.operationProviderCallID()
+        == ProviderCallID(rawValue: "reflection-call-1")
+    )
+    #expect(try env.operationCarrierDigest() == expected)
+    #expect(try env.candidate()?.manifest.operationId == env.reflectorOperationId())
+    #expect(try env.candidate()?.manifest.carrierDigest == expected)
+    #expect(try env.reflectionUsageModel() == ReflectionRunEnvironment.fallbackRoute)
   }
 
   @Test func nullCandidateClosesWithAReceiptAndNeverRetries() async throws {
@@ -136,6 +165,28 @@ import Testing
     #expect(try env.rowCount("learning_candidates") == 0)
   }
 
+  @Test(arguments: JSONEscapedSecret.allCases)
+  func candidateSecretWithJSONEscapingNeverPersists(_ escaped: JSONEscapedSecret) async throws {
+    // given
+    let secret = escaped.value
+    let env = try ReflectionRunEnvironment.make(
+      reply: try candidateReply(lesson: "Keep \(secret) out of durable lessons."),
+      secretValues: [secret]
+    )
+
+    // when
+    await env.runner.runReflection(trigger: env.trigger, now: env.now)
+
+    // then — scanning only JSON-encoded bytes misses secrets whose quote, slash, or newline is
+    // escaped; the paid call still closes and charges without persisting candidate or lesson bytes
+    #expect(await env.provider.requests.count == 1)
+    #expect(try env.operationState() == .failed)
+    #expect(try env.failureCode() == .schemaInvalid)
+    #expect(try env.reflectionUsageCount() == 1)
+    #expect(try env.rowCount("learning_candidates") == 0)
+    #expect(try env.reflectorLessonSetCount() == 0)
+  }
+
   @Test func unavailableLearningBudgetRefusesTheCall() async throws {
     // given — the two source runs already consumed the zero proactive allowance
     let env = try ReflectionRunEnvironment.make(proactivePerDayUSD: 0)
@@ -162,8 +213,8 @@ import Testing
     // then — checking only claim eligibility would spend on jobs reflection cannot change safely
     #expect(await cancelled.provider.requests.isEmpty)
     #expect(await oneShot.provider.requests.isEmpty)
-    #expect(try cancelled.rowCount("learning_operations") == 2)
-    #expect(try oneShot.rowCount("learning_operations") == 2)
+    #expect(try cancelled.reflectorOperationCount() == 0)
+    #expect(try oneShot.reflectorOperationCount() == 0)
   }
 
   @Test func liveTrialAndHardVetoNeverReachTheReflectionNetwork() async throws {
@@ -180,8 +231,8 @@ import Testing
     // then — omitting either preparation gate would expose one additional network request
     #expect(await liveTrial.provider.requests.isEmpty)
     #expect(await vetoed.provider.requests.isEmpty)
-    #expect(try liveTrial.rowCount("learning_operations") == 2)
-    #expect(try vetoed.rowCount("learning_operations") == 2)
+    #expect(try liveTrial.reflectorOperationCount() == 0)
+    #expect(try vetoed.reflectorOperationCount() == 0)
   }
 }
 
@@ -194,5 +245,34 @@ private extension ReflectionOperationRunnerTests {
       throw StoreError.unexpected("reflector carrier was not an object")
     }
     return dictionary.keys.sorted()
+  }
+
+  func candidateReply(lesson: String) throws -> String {
+    let object: [String: Any] = [
+      "schema_version": 1,
+      "candidate": ["lessons": [lesson]],
+    ]
+    let bytes = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    guard let reply = String(data: bytes, encoding: .utf8) else {
+      throw StoreError.unexpected("candidate reply was not UTF-8")
+    }
+    return reply
+  }
+}
+
+enum JSONEscapedSecret: CaseIterable, Sendable {
+  case quote
+  case backslash
+  case newline
+
+  var value: String {
+    switch self {
+    case .quote:
+      "secret\"quoted"
+    case .backslash:
+      "secret\\backslash"
+    case .newline:
+      "secret\nnewline"
+    }
   }
 }

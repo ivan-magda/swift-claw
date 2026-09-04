@@ -24,7 +24,16 @@ public struct CandidateEvidenceSource: Sendable, Equatable, Codable {
     self.evaluationRequired = evaluationRequired
   }
 
-  enum CodingKeys: String, CodingKey {
+  public init(from decoder: any Decoder) throws {
+    try CandidateManifestDecoding.requireOnly(CodingKeys.self, in: decoder)
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    runId = try container.decode(Int64.self, forKey: .runId)
+    digest = try container.decode(EvidenceDigest.self, forKey: .digest)
+    evaluationDigest = try container.decode(EvaluationDigest.self, forKey: .evaluationDigest)
+    evaluationRequired = try container.decode(Bool.self, forKey: .evaluationRequired)
+  }
+
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case runId = "run_id"
     case digest = "evidence_digest"
     case evaluationDigest = "evaluation_digest"
@@ -41,7 +50,14 @@ public struct CandidateEvaluationSource: Sendable, Equatable, Codable {
     self.digest = digest
   }
 
-  enum CodingKeys: String, CodingKey {
+  public init(from decoder: any Decoder) throws {
+    try CandidateManifestDecoding.requireOnly(CodingKeys.self, in: decoder)
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    runId = try container.decode(Int64.self, forKey: .runId)
+    digest = try container.decode(EvaluationDigest.self, forKey: .digest)
+  }
+
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case runId = "run_id"
     case digest = "evaluation_digest"
   }
@@ -72,6 +88,7 @@ public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
   }
 
   public init(from decoder: any Decoder) throws {
+    try CandidateManifestDecoding.requireOnly(CodingKeys.self, in: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let rawKind = try container.decode(String.self, forKey: .subjectKind)
     let rawSignal = try container.decode(String.self, forKey: .signal)
@@ -104,7 +121,7 @@ public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
     try container.encode(signal.rawValue, forKey: .signal)
   }
 
-  enum CodingKeys: String, CodingKey {
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case eventId = "event_id"
     case digest = "event_digest"
     case revision = "feedback_revision"
@@ -181,6 +198,57 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
     self.predecessorFeedback = predecessorFeedback
   }
 
+  public init(from decoder: any Decoder) throws {
+    try CandidateManifestDecoding.requireOnly(CodingKeys.self, in: decoder)
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+    guard schemaVersion == Self.currentSchemaVersion else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .schemaVersion,
+        in: container,
+        debugDescription: "schema_version is not the current candidate manifest version"
+      )
+    }
+    self.schemaVersion = schemaVersion
+    origin = try container.decode(CandidateOrigin.self, forKey: .origin)
+    algorithm = try container.decode(LearningAlgorithm.self, forKey: .algorithm)
+    jobId = try container.decode(Int64.self, forKey: .jobId)
+    epoch = try container.decode(LearningEpoch.self, forKey: .epoch)
+    triggerDigest = try container.decode(TriggerDigest.self, forKey: .triggerDigest)
+    triggerReason = try container.decode(LearningTriggerReason.self, forKey: .triggerReason)
+    qualifyingIssueCodes = try container.decode([String].self, forKey: .qualifyingIssueCodes)
+    operationId = try container.decode(LearningOperationID.self, forKey: .operationId)
+    carrierDigest = try container.decode(CarrierDigest.self, forKey: .carrierDigest)
+    resultDigest = try container.decode(ReflectionResultDigest.self, forKey: .resultDigest)
+    baseDigest = try container.decode(LessonSetDigest.self, forKey: .baseDigest)
+    baseRevision = try container.decode(StableRevision.self, forKey: .baseRevision)
+    feedbackRevision = try container.decode(FeedbackRevision.self, forKey: .feedbackRevision)
+    evidence = try container.decode([CandidateEvidenceSource].self, forKey: .evidence)
+    evaluations = try container.decode([CandidateEvaluationSource].self, forKey: .evaluations)
+    feedback = try container.decode([CandidateFeedbackSource].self, forKey: .feedback)
+    predecessorCandidate = try container.decodeIfPresent(
+      CandidateDigest.self,
+      forKey: .predecessorCandidate
+    )
+    predecessorFeedback = try container.decodeIfPresent(
+      CandidateFeedbackSource.self,
+      forKey: .predecessorFeedback
+    )
+  }
+
+  /// The one persisted-manifest trust boundary. Decoding closes every typed object; canonical
+  /// re-encoding also catches unknown keys inside scalar wrapper values and alternate JSON forms.
+  package static func decodedCanonical(from bytes: Data) -> CandidateSourceManifest? {
+    guard
+      let manifest = try? JSONDecoder().decode(Self.self, from: bytes),
+      let canonical = try? CanonicalJSON.data(encoding: manifest),
+      canonical == bytes
+    else {
+      return nil
+    }
+    return manifest
+  }
+
   public var digest: CandidateSourceManifestDigest {
     get throws {
       let bytes = try CanonicalJSON.data(encoding: self)
@@ -193,7 +261,7 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
 
   private static let digestDomain = "candidate-source-manifest/v1"
 
-  enum CodingKeys: String, CodingKey {
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case schemaVersion = "schema_version"
     case origin
     case algorithm
@@ -213,6 +281,40 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
     case feedback
     case predecessorCandidate = "predecessor_candidate"
     case predecessorFeedback = "predecessor_feedback"
+  }
+}
+
+// MARK: - Closed Manifest Decoding
+
+private enum CandidateManifestDecoding {
+  static func requireOnly<Key>(
+    _ keyType: Key.Type,
+    in decoder: any Decoder
+  ) throws where Key: CodingKey & CaseIterable {
+    let container = try decoder.container(keyedBy: AnyKey.self)
+    let allowed = Set(keyType.allCases.map(\.stringValue))
+    let unknown = Set(container.allKeys.map(\.stringValue)).subtracting(allowed)
+    guard unknown.isEmpty else {
+      throw DecodingError.dataCorrupted(
+        DecodingError.Context(
+          codingPath: container.codingPath,
+          debugDescription: "candidate manifest carries unknown keys \(unknown.sorted())"
+        )
+      )
+    }
+  }
+
+  struct AnyKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+
+    init(stringValue: String) {
+      self.stringValue = stringValue
+    }
+
+    init?(intValue: Int) {
+      nil
+    }
   }
 }
 

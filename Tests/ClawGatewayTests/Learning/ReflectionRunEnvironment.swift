@@ -9,6 +9,7 @@ import Logging
 
 struct ReflectionRunEnvironment {
   static let route = "openai-compatible/reflection-model"
+  static let fallbackRoute = "openai-compatible/reflection-fallback"
   static let issueCode = "material.missed"
   static let candidateReply =
     #"{"schema_version":1,"candidate":{"lessons":["Report only material changes."]}}"#
@@ -16,8 +17,9 @@ struct ReflectionRunEnvironment {
   let queue: DatabaseQueue
   let jobs: ScheduledJobStoreGRDB
   let learning: ScheduledLearningStoreGRDB
-  let authorizing: RecordingLearningStore
   let provider: SequenceProvider
+  let fallbackProvider: SequenceProvider
+  let callIDs: RecordingProviderCallIDGenerator
   let runner: LearningOperationRunner
   let jobId: Int64
   let trigger: TriggerIdentity
@@ -28,7 +30,8 @@ struct ReflectionRunEnvironment {
     repeatable: Bool = true,
     finalOutput: String = "The result missed a material change.",
     secretValues: [String] = [],
-    proactivePerDayUSD: Double = RunBudget.default.proactivePerDayUSD
+    proactivePerDayUSD: Double = RunBudget.default.proactivePerDayUSD,
+    primaryFailure: (any Error & Sendable)? = nil
   ) throws -> ReflectionRunEnvironment {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -87,31 +90,37 @@ struct ReflectionRunEnvironment {
       usage: ChatUsage(promptTokens: 350, completionTokens: 50, totalTokens: 400),
       costFromProvider: 0.004
     )
-    let provider = SequenceProvider([response])
-    let binding = LLMRouteBinding(
-      provider: provider,
-      wireModel: route,
-      configuredReference: route,
-      costPolicy: .metered,
-      reservationPolicy: .textOnly
+    let provider =
+      primaryFailure.map { failure in
+        SequenceProvider([], then: failure)
+      } ?? SequenceProvider([response])
+    let fallbackProvider = SequenceProvider(primaryFailure == nil ? [] : [response])
+    let callIDs = RecordingProviderCallIDGenerator()
+    let roster = ProviderRoster(
+      primary: routeBinding(provider: provider, reference: route),
+      fallback:
+        primaryFailure == nil
+        ? nil
+        : routeBinding(provider: fallbackProvider, reference: fallbackRoute)
     )
-    let authorizing = RecordingLearningStore(base: learning)
     return ReflectionRunEnvironment(
       queue: queue,
       jobs: jobs,
       learning: learning,
-      authorizing: authorizing,
       provider: provider,
+      fallbackProvider: fallbackProvider,
+      callIDs: callIDs,
       runner: LearningOperationRunner(
-        learning: authorizing,
+        learning: learning,
         jobs: jobs,
-        roster: ProviderRoster(primary: binding),
+        roster: roster,
         budget: budget(proactivePerDayUSD: proactivePerDayUSD),
         costResolver: CostResolver(
           priceTable: .empty,
           referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
         ),
         redactor: SecretRedactor(secretValues: secretValues),
+        providerCallIDGenerator: callIDs,
         logger: TestLog.silent
       ),
       jobId: job.id,
@@ -121,11 +130,40 @@ struct ReflectionRunEnvironment {
   }
 }
 
+final class RecordingProviderCallIDGenerator: ProviderCallIDGenerating, @unchecked Sendable {
+  private let lock = NSLock()
+  private var issued = 0
+
+  func next() -> ProviderCallID {
+    lock.withLock {
+      issued += 1
+      return ProviderCallID(rawValue: "reflection-call-\(issued)")
+    }
+  }
+
+  var count: Int {
+    lock.withLock { issued }
+  }
+}
+
 // MARK: - Reads and Mutations
 
 extension ReflectionRunEnvironment {
   func operationState() throws -> LearningOperationState? {
     try stringColumn("state").flatMap(LearningOperationState.init(rawValue:))
+  }
+
+  func reflectorOperationId() -> LearningOperationID {
+    let key = LearningOperationKey(
+      jobId: jobId,
+      epoch: trigger.epoch,
+      phase: .reflector,
+      sourceDigest: trigger.digest.rawValue,
+      promptVersion: ReflectorPrompt.v1.version,
+      schemaVersion: ReflectorOutput.currentSchemaVersion,
+      rubricVersion: ReflectorRubric.v1
+    )
+    return LearningOperationID(key: key.digest, attemptGeneration: 1)
   }
 
   func failureCode() throws -> LearningOperationFailure? {
@@ -145,6 +183,54 @@ extension ReflectionRunEnvironment {
   func rowCount(_ table: String) throws -> Int {
     try queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? -1
+    }
+  }
+
+  func reflectorOperationCount() throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM learning_operations WHERE phase = ?",
+        arguments: [LearningPhase.reflector.rawValue]
+      ) ?? -1
+    }
+  }
+
+  func operationCarrierDigest() throws -> CarrierDigest? {
+    try stringColumn("carrier_digest").map(CarrierDigest.init(rawValue:))
+  }
+
+  func operationProviderCallID() throws -> ProviderCallID? {
+    try stringColumn("provider_call_id").map(ProviderCallID.init(rawValue:))
+  }
+
+  func reflectionUsageCount() throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM provider_usage WHERE learning_operation_id = ?",
+        arguments: [reflectorOperationId().rawValue]
+      ) ?? -1
+    }
+  }
+
+  func reflectionUsageModel() throws -> String? {
+    try queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT model FROM provider_usage WHERE learning_operation_id = ?",
+        arguments: [reflectorOperationId().rawValue]
+      )
+    }
+  }
+
+  func reflectorLessonSetCount() throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM lesson_sets WHERE source = ?",
+        arguments: [LessonSetSource.reflectorCandidate.rawValue]
+      ) ?? -1
     }
   }
 
@@ -403,17 +489,14 @@ private extension ReflectionRunEnvironment {
     )
   }
 
-  func operationId() -> LearningOperationID {
-    let key = LearningOperationKey(
-      jobId: jobId,
-      epoch: trigger.epoch,
-      phase: .reflector,
-      sourceDigest: trigger.digest.rawValue,
-      promptVersion: ReflectorPrompt.v1.version,
-      schemaVersion: ReflectorOutput.currentSchemaVersion,
-      rubricVersion: ReflectorRubric.v1
+  static func routeBinding(provider: any LLMProvider, reference: String) -> LLMRouteBinding {
+    LLMRouteBinding(
+      provider: provider,
+      wireModel: reference,
+      configuredReference: reference,
+      costPolicy: .metered,
+      reservationPolicy: .textOnly
     )
-    return LearningOperationID(key: key.digest, attemptGeneration: 1)
   }
 
   func stringColumn(_ column: String) throws -> String? {
@@ -421,7 +504,7 @@ private extension ReflectionRunEnvironment {
       try String.fetchOne(
         db,
         sql: "SELECT \(column) FROM learning_operations WHERE operation_id = ?",
-        arguments: [operationId().rawValue]
+        arguments: [reflectorOperationId().rawValue]
       )
     }
   }
