@@ -663,6 +663,10 @@ struct AdmissionStoreFixture {
     }
     let subject = CandidateReviewIdentity.digest(candidateDigest: candidate.digest)
     let payload = "Review this candidate."
+    let markup = FeedbackKeyboard.candidateReviewMarkup(
+      targets: targets,
+      evaluations: candidate.manifest.evaluations
+    )
     return CandidateReviewNotice(
       candidateDigest: candidate.digest,
       state: state,
@@ -675,7 +679,7 @@ struct AdmissionStoreFixture {
           chatId: 777,
           payload: payload,
           payloadHash: ContentHash.fnv1a(payload),
-          replyMarkup: "{}"
+          replyMarkup: markup
         )
       ]
     )

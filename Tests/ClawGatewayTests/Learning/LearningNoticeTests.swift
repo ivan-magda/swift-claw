@@ -61,7 +61,19 @@ import Testing
         target.allowedActions == [.evaluationConfirm, .evaluationDispute]
       }
     )
+    for notice in [admittedNotice, awaitingNotice] {
+      let markup = try #require(notice.chunks.last?.replyMarkup)
+      let rows = try FeedbackKeyboard.parseMarkup(markup)
+      #expect(rows.count == notice.targets.count)
+      for (row, target) in zip(rows, notice.targets) {
+        #expect(row.map(\.nonce).allSatisfy { nonce in nonce == target.nonce })
+        #expect(row.map(\.action.signal) == target.allowedActions)
+      }
+    }
     let markup = try #require(admittedNotice.chunks.last?.replyMarkup)
+    #expect(throws: FeedbackKeyboardError.invalidMarkup) {
+      _ = try FeedbackKeyboard.parseMarkup(" \(markup)")
+    }
     let labels = try ReviewFixture.buttonLabels(markup)
     for runId in [41, 44, 47, 50, 53] {
       #expect(labels.contains("Eval #\(runId) correct"))
