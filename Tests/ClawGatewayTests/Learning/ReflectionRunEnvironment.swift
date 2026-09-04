@@ -17,6 +17,7 @@ struct ReflectionRunEnvironment {
   let queue: DatabaseQueue
   let jobs: ScheduledJobStoreGRDB
   let learning: ScheduledLearningStoreGRDB
+  let runnerLearning: RecordingLearningStore
   let provider: SequenceProvider
   let fallbackProvider: SequenceProvider
   let callIDs: RecordingProviderCallIDGenerator
@@ -31,7 +32,8 @@ struct ReflectionRunEnvironment {
     finalOutput: String = "The result missed a material change.",
     secretValues: [String] = [],
     proactivePerDayUSD: Double = RunBudget.default.proactivePerDayUSD,
-    primaryFailure: (any Error & Sendable)? = nil
+    primaryFailure: (any Error & Sendable)? = nil,
+    admissionFails: Bool = false
   ) throws -> ReflectionRunEnvironment {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -96,6 +98,10 @@ struct ReflectionRunEnvironment {
       } ?? SequenceProvider([response])
     let fallbackProvider = SequenceProvider(primaryFailure == nil ? [] : [response])
     let callIDs = RecordingProviderCallIDGenerator()
+    let runnerLearning = RecordingLearningStore(
+      base: learning,
+      admissionFails: admissionFails
+    )
     let roster = ProviderRoster(
       primary: routeBinding(provider: provider, reference: route),
       fallback:
@@ -107,11 +113,12 @@ struct ReflectionRunEnvironment {
       queue: queue,
       jobs: jobs,
       learning: learning,
+      runnerLearning: runnerLearning,
       provider: provider,
       fallbackProvider: fallbackProvider,
       callIDs: callIDs,
       runner: LearningOperationRunner(
-        learning: learning,
+        learning: runnerLearning,
         jobs: jobs,
         roster: roster,
         budget: budget(proactivePerDayUSD: proactivePerDayUSD),

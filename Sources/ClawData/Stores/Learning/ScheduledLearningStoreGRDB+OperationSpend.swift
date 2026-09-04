@@ -173,6 +173,25 @@ extension ScheduledLearningStoreGRDB {
     artifact: CandidateArtifact,
     operation: OperationRow
   ) throws -> Bool {
+    guard let trigger = reflectionTrigger(artifact: artifact, operation: operation) else {
+      return false
+    }
+    guard
+      let current = try prepareReflection(db, trigger: trigger)
+    else {
+      return false
+    }
+    let manifest = artifact.manifest
+    return manifest.baseRevision == current.stableRevision
+      && manifest.evidence == current.evidenceSources
+      && manifest.evaluations == current.evaluationSources
+      && manifest.feedback == current.feedbackSources
+  }
+
+  static func reflectionTrigger(
+    artifact: CandidateArtifact,
+    operation: OperationRow
+  ) -> TriggerIdentity? {
     let manifest = artifact.manifest
     guard
       manifest.schemaVersion == CandidateSourceManifest.currentSchemaVersion,
@@ -187,7 +206,7 @@ extension ScheduledLearningStoreGRDB {
       manifest.predecessorCandidate == nil,
       manifest.predecessorFeedback == nil
     else {
-      return false
+      return nil
     }
     let trigger = TriggerIdentity(
       jobId: manifest.jobId,
@@ -199,16 +218,7 @@ extension ScheduledLearningStoreGRDB {
       issueCodes: manifest.qualifyingIssueCodes,
       reason: manifest.triggerReason
     )
-    guard
-      trigger.digest == manifest.triggerDigest,
-      let current = try prepareReflection(db, trigger: trigger)
-    else {
-      return false
-    }
-    return manifest.baseRevision == current.stableRevision
-      && manifest.evidence == current.evidenceSources
-      && manifest.evaluations == current.evaluationSources
-      && manifest.feedback == current.feedbackSources
+    return trigger.digest == manifest.triggerDigest ? trigger : nil
   }
 }
 

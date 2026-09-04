@@ -212,6 +212,33 @@ import Testing
     }
   }
 
+  @Test func anEffectiveDelayedControlFreezesTheCurrentRevision() throws {
+    // given
+    let fixture = try AdmissionFixture.make()
+    let approval = fixture.control(.candidateApprove, eventId: 70, revision: 4)
+
+    // when
+    let successor = try CandidateSuccessorRules.approval(
+      predecessor: fixture.candidate,
+      control: approval,
+      feedbackRevision: FeedbackRevision(6),
+      effectiveFeedback: fixture.candidate.manifest.feedback
+    )
+
+    // then — requiring the control revision itself to equal the current cutoff rejects an
+    // unsuperseded approval merely because unrelated feedback arrived before processing.
+    #expect(successor.manifest.feedbackRevision == FeedbackRevision(6))
+    #expect(successor.manifest.predecessorFeedback == approval)
+  }
+
+  @Test func v1TrialConstantsArePinnedIndependently() {
+    // given / when / then — deriving the expected values from EvidenceWindow or the production
+    // deadline expressions would let an algorithm-version change pass unnoticed.
+    #expect(TrialAdmissionPolicy.assignmentWindow == 2_592_000)
+    #expect(TrialAdmissionPolicy.decisionWindow == 3_196_800)
+    #expect(TrialAdmissionPolicy.maximumAssignments == 3)
+  }
+
   @Test func editPayloadIsTheExactClosedObjectAndAllowsEmptyReplacement() throws {
     // given
     let valid = Data(#"{"lessons":[]}"#.utf8)

@@ -442,6 +442,37 @@ private extension FeedbackTarget {
 private struct UnresolvableLessonSets: ScheduledLearningStore {
   let base: ScheduledLearningStoreGRDB
 
+  func admitCandidate(
+    digest: CandidateDigest,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.admitCandidate(digest: digest, redactor: redactor, now: now)
+  }
+
+  func approveCandidate(
+    _ approval: CandidateApproval,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.approveCandidate(approval, redactor: redactor, now: now)
+  }
+
+  func editCandidate(
+    _ edit: CandidateEdit,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.editCandidate(edit, redactor: redactor, now: now)
+  }
+
+  func commitCandidateReview(
+    _ review: CandidateReviewNotice,
+    now: Date
+  ) throws(StoreError) -> Bool {
+    try base.commitCandidateReview(review, now: now)
+  }
+
   func createTargets(
     _ targets: [NewFeedbackTarget],
     chunks: [LearningNoticeChunk],

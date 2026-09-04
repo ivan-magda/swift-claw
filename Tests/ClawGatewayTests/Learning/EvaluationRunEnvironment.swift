@@ -305,11 +305,25 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   private let lock = NSLock()
   private let base: ScheduledLearningStoreGRDB
   private let supersedes: Bool
+  private let admissionFails: Bool
+  private let recordsReviewCommits: Bool
+  private let failingReviewCandidate: CandidateDigest?
   private var presented: [LearningAuthorization] = []
+  private var reviewSubjects: Set<String> = []
+  private var admissions = 0
 
-  init(base: ScheduledLearningStoreGRDB, supersedes: Bool = false) {
+  init(
+    base: ScheduledLearningStoreGRDB,
+    supersedes: Bool = false,
+    admissionFails: Bool = false,
+    recordsReviewCommits: Bool = false,
+    failingReviewCandidate: CandidateDigest? = nil
+  ) {
     self.base = base
     self.supersedes = supersedes
+    self.admissionFails = admissionFails
+    self.recordsReviewCommits = recordsReviewCommits
+    self.failingReviewCandidate = failingReviewCandidate
   }
 
   /// Every authorization the runner presented, in order.
@@ -317,6 +331,10 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     lock.lock()
     defer { lock.unlock() }
     return presented
+  }
+
+  var admissionAttempts: Int {
+    lock.withLock { admissions }
   }
 
   func createTargets(
@@ -359,6 +377,50 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     chatId: Int64
   ) throws(StoreError) -> FeedbackChallenge? {
     try base.liveChallenge(ownerUserId: ownerUserId, chatId: chatId)
+  }
+
+  func admitCandidate(
+    digest: CandidateDigest,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    lock.withLock { admissions += 1 }
+    guard admissionFails == false else {
+      throw .unexpected("injected admission failure")
+    }
+    return try base.admitCandidate(digest: digest, redactor: redactor, now: now)
+  }
+
+  func approveCandidate(
+    _ approval: CandidateApproval,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.approveCandidate(approval, redactor: redactor, now: now)
+  }
+
+  func editCandidate(
+    _ edit: CandidateEdit,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.editCandidate(edit, redactor: redactor, now: now)
+  }
+
+  func commitCandidateReview(
+    _ review: CandidateReviewNotice,
+    now: Date
+  ) throws(StoreError) -> Bool {
+    if review.candidateDigest == failingReviewCandidate {
+      throw .unexpected("injected review failure")
+    }
+    if recordsReviewCommits {
+      lock.lock()
+      let inserted = reviewSubjects.insert(review.subjectDigest).inserted
+      lock.unlock()
+      return inserted
+    }
+    return try base.commitCandidateReview(review, now: now)
   }
 
   func authorizeAndStartOperation(

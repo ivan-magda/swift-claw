@@ -466,7 +466,8 @@ private extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT trial.trial_id, trial.candidate_digest
+        SELECT trial.trial_id, trial.job_id, trial.learning_epoch, trial.base_digest,
+          trial.candidate_digest, trial.algorithm
         FROM learning_trials AS trial
         JOIN job_learning_state AS learning_state
           ON learning_state.job_id = trial.job_id
@@ -486,6 +487,12 @@ private extension ScheduledLearningStoreGRDB {
       let digest = CandidateDigest(rawValue: row["candidate_digest"])
       guard
         let candidate = try readCandidateArtifact(db, digest: digest),
+        candidate.digest == digest,
+        candidate.replacement.jobId == (row["job_id"] as Int64),
+        candidate.manifest.jobId == (row["job_id"] as Int64),
+        candidate.manifest.epoch.value == (row["learning_epoch"] as Int64),
+        candidate.manifest.baseDigest.rawValue == (row["base_digest"] as String),
+        candidate.manifest.algorithm.rawValue == (row["algorithm"] as String),
         candidate.manifest.evidence.contains(where: { source in
           source.evaluationRequired
             && source.evaluationDigest.rawValue == target.subjectDigest

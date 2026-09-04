@@ -3,7 +3,6 @@ import Foundation
 public enum AdmissionSupport: Sendable, Equatable {
   case recurringIssue
   case ownerCorrection
-  case ownerEdit
   case ownerApproval
 }
 
@@ -95,15 +94,21 @@ public enum CandidateReviewIdentity {
 }
 
 public struct CandidateReviewNotice: Sendable, Equatable {
+  public let candidateDigest: CandidateDigest
+  public let state: CandidateReviewState
   public let subjectDigest: String
   public let targets: [NewFeedbackTarget]
   public let chunks: [LearningNoticeChunk]
 
   public init(
+    candidateDigest: CandidateDigest,
+    state: CandidateReviewState,
     subjectDigest: String,
     targets: [NewFeedbackTarget],
     chunks: [LearningNoticeChunk]
   ) {
+    self.candidateDigest = candidateDigest
+    self.state = state
     self.subjectDigest = subjectDigest
     self.targets = targets
     self.chunks = chunks
@@ -119,6 +124,8 @@ public struct AdmissionValidationContext: Sendable {
   public let hardVetoes: Set<HardVeto>
   public let replacementAlreadyClosed: Bool
   public let support: AdmissionSupport?
+  public let requiresSupport: Bool
+  public let requiresAdmissibleReplacement: Bool
   public let redactor: SecretRedactor
 
   public init(
@@ -130,6 +137,8 @@ public struct AdmissionValidationContext: Sendable {
     hardVetoes: Set<HardVeto>,
     replacementAlreadyClosed: Bool,
     support: AdmissionSupport?,
+    requiresSupport: Bool = true,
+    requiresAdmissibleReplacement: Bool = true,
     redactor: SecretRedactor
   ) {
     self.currentState = currentState
@@ -140,6 +149,8 @@ public struct AdmissionValidationContext: Sendable {
     self.hardVetoes = hardVetoes
     self.replacementAlreadyClosed = replacementAlreadyClosed
     self.support = support
+    self.requiresSupport = requiresSupport
+    self.requiresAdmissibleReplacement = requiresAdmissibleReplacement
     self.redactor = redactor
   }
 }
@@ -175,13 +186,18 @@ public enum AdmissionValidator {
     if let veto = HardVeto.allCases.first(where: context.hardVetoes.contains) {
       return .hardVeto(veto)
     }
-    guard candidate.replacement.digest != state.stableDigest else {
+    guard
+      context.requiresAdmissibleReplacement == false
+        || candidate.replacement.digest != state.stableDigest
+    else {
       return .noOpReplacement
     }
-    guard context.replacementAlreadyClosed == false else {
+    guard
+      context.requiresAdmissibleReplacement == false || context.replacementAlreadyClosed == false
+    else {
       return .replacementAlreadyClosed
     }
-    guard context.support != nil else {
+    guard context.requiresSupport == false || context.support != nil else {
       return .supportUnavailable
     }
     guard containsSecret(candidate.replacement, redactor: context.redactor) == false else {
@@ -286,7 +302,7 @@ private extension CandidateSuccessorRules {
       intent.control.subjectKind == .candidate,
       intent.control.subjectDigest == predecessor.digest.rawValue,
       intent.control.signal == intent.expectedSignal,
-      intent.control.revision == intent.feedbackRevision,
+      intent.control.revision <= intent.feedbackRevision,
       intent.feedbackRevision >= predecessor.manifest.feedbackRevision
     else {
       throw .invalidOwnerControl

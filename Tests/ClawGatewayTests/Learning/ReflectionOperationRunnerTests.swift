@@ -235,6 +235,25 @@ import Testing
     #expect(try liveTrial.reflectorOperationCount() == 0)
     #expect(try vetoed.reflectorOperationCount() == 0)
   }
+
+  @Test func admissionFailureAfterDurableFinishNeverRepeatsTheProviderCall() async throws {
+    // given
+    let env = try ReflectionRunEnvironment.make(admissionFails: true)
+
+    // when
+    await env.runner.runReflection(trigger: env.trigger, now: env.now)
+    await env.runner.runReflection(trigger: env.trigger, now: env.now)
+
+    // then — coupling admission to the finish error path can misreport or retry a paid reflection
+    // even though its operation, usage, and candidate already committed durably.
+    #expect(await env.provider.requests.count == 1)
+    #expect(try env.operationState() == .succeeded)
+    #expect(try env.reflectionUsageCount() == 1)
+    #expect(try env.rowCount("learning_candidates") == 1)
+    #expect(try env.rowCount("learning_trials") == 0)
+    #expect(try env.rowCount("learning_decisions") == 0)
+    #expect(env.runnerLearning.admissionAttempts == 1)
+  }
 }
 
 // MARK: - JSON Reads
