@@ -93,6 +93,24 @@ extension DaemonBuilder {
     )
   }
 
+  /// Feedback is inert while learning is disarmed: no target is created and no old target may
+  /// mutate learning state after the operator removes the feature flag.
+  func makeFeedbackCallbackHandler() -> FeedbackCallbackHandler? {
+    guard config.learningEnabled else {
+      return nil
+    }
+    return FeedbackCallbackHandler.make(
+      processed: stores.processed,
+      delivery: transport,
+      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: []),
+      learning: stores.learning,
+      audit: stores.audit,
+      callbacks: transport,
+      now: { Date() },
+      logger: logger
+    )
+  }
+
   /// Builds the executor (recorded-args execution) and the waiter, adopted into the deferred
   /// parker to close the `turnRunner` ⇄ `approvalWaiter` construction cycle.
   func makeApprovalFabric(

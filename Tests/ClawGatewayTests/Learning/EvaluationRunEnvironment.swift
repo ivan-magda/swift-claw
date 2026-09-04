@@ -319,6 +319,35 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     return presented
   }
 
+  func createTargets(
+    _ targets: [NewFeedbackTarget],
+    chunks: [LearningNoticeChunk]
+  ) throws(StoreError) -> [FeedbackTarget] {
+    try base.createTargets(targets, chunks: chunks)
+  }
+
+  func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget? {
+    try base.feedbackTarget(nonce: nonce)
+  }
+
+  func consumeAndAppendEvent(_ tap: FeedbackTap) throws(StoreError) -> FeedbackOutcome {
+    try base.consumeAndAppendEvent(tap)
+  }
+
+  func feedbackEvents(
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String
+  ) throws(StoreError) -> [FeedbackEvent] {
+    try base.feedbackEvents(
+      jobId: jobId,
+      epoch: epoch,
+      subjectKind: subjectKind,
+      subjectDigest: subjectDigest
+    )
+  }
+
   func authorizeAndStartOperation(
     _ authorization: LearningAuthorization,
     now: Date

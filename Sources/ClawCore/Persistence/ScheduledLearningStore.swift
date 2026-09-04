@@ -1,5 +1,123 @@
 import Foundation
 
+/// A single-use authenticated address for one exact feedback subject.
+public struct NewFeedbackTarget: Sendable, Equatable {
+  public let nonce: String
+  public let jobId: Int64
+  public let epoch: LearningEpoch
+  public let subjectKind: FeedbackSubjectKind
+  public let subjectDigest: String
+  public let allowedActions: [OwnerSignal]
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let expiresAt: Date
+
+  public init(
+    nonce: String,
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String,
+    allowedActions: [OwnerSignal],
+    ownerUserId: Int64,
+    chatId: Int64,
+    expiresAt: Date
+  ) {
+    self.nonce = nonce
+    self.jobId = jobId
+    self.epoch = epoch
+    self.subjectKind = subjectKind
+    self.subjectDigest = subjectDigest
+    self.allowedActions = allowedActions
+    self.ownerUserId = ownerUserId
+    self.chatId = chatId
+    self.expiresAt = expiresAt
+  }
+}
+
+/// The durable target returned by nonce lookup. `targetId` never crosses the transport boundary.
+public struct FeedbackTarget: Sendable, Equatable {
+  public let targetId: Int64
+  public let nonce: String
+  public let jobId: Int64
+  public let epoch: LearningEpoch
+  public let subjectKind: FeedbackSubjectKind
+  public let subjectDigest: String
+  public let allowedActions: [OwnerSignal]
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let expiresAt: Date
+  public let consumedAt: Date?
+
+  public init(
+    targetId: Int64,
+    nonce: String,
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String,
+    allowedActions: [OwnerSignal],
+    ownerUserId: Int64,
+    chatId: Int64,
+    expiresAt: Date,
+    consumedAt: Date?
+  ) {
+    self.targetId = targetId
+    self.nonce = nonce
+    self.jobId = jobId
+    self.epoch = epoch
+    self.subjectKind = subjectKind
+    self.subjectDigest = subjectDigest
+    self.allowedActions = allowedActions
+    self.ownerUserId = ownerUserId
+    self.chatId = chatId
+    self.expiresAt = expiresAt
+    self.consumedAt = consumedAt
+  }
+}
+
+/// The already transport-claimed owner action the store revalidates and commits atomically.
+public struct FeedbackTap: Sendable, Equatable {
+  public let nonce: String
+  public let signal: OwnerSignal
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let transportUpdateId: Int64
+  public let payload: String?
+  public let occurredAt: Date
+
+  public init(
+    nonce: String,
+    signal: OwnerSignal,
+    ownerUserId: Int64,
+    chatId: Int64,
+    transportUpdateId: Int64,
+    payload: String? = nil,
+    occurredAt: Date
+  ) {
+    self.nonce = nonce
+    self.signal = signal
+    self.ownerUserId = ownerUserId
+    self.chatId = chatId
+    self.transportUpdateId = transportUpdateId
+    self.payload = payload
+    self.occurredAt = occurredAt
+  }
+}
+
+/// Every result of the target CAS. Only `recorded` appended a semantic event and revision.
+public enum FeedbackOutcome: Sendable, Equatable {
+  case recorded(FeedbackEvent)
+  case targetMissing
+  case ownerMismatch
+  case chatMismatch
+  case expired
+  case actionMismatch
+  case staleEpoch
+  case alreadyConsumed
+  case requiresPayloadChallenge
+}
+
 /// One job's learning position: which epoch it is in, which lesson set is currently stable, and
 /// which revisions the frozen work under it was computed against.
 public struct JobLearningState: Sendable, Equatable {
@@ -31,6 +149,27 @@ public struct JobLearningState: Sendable, Equatable {
 }
 
 public protocol ScheduledLearningStore: Sendable {
+  /// Commits every runless notice chunk and every nonce it exposes in one transaction.
+  func createTargets(
+    _ targets: [NewFeedbackTarget],
+    chunks: [LearningNoticeChunk]
+  ) throws(StoreError) -> [FeedbackTarget]
+
+  /// Exact opaque lookup. No row-id lookup exists on the feedback seam.
+  func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget?
+
+  /// Revalidates and consumes one target, appends its event, advances the job feedback revision,
+  /// applies an immediately provable exact veto, and audits the outcome in one transaction.
+  func consumeAndAppendEvent(_ tap: FeedbackTap) throws(StoreError) -> FeedbackOutcome
+
+  /// The authenticated events for one exact subject, in feedback revision order.
+  func feedbackEvents(
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String
+  ) throws(StoreError) -> [FeedbackEvent]
+
   /// Idempotent. Inserts this job's learning state and its canonical empty lesson set together,
   /// or returns the state already there. The fire transaction calls it, so a job never fires with
   /// a binding that points at a lesson set that does not exist.

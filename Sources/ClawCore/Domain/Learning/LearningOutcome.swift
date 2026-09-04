@@ -10,6 +10,8 @@ public struct FeedbackEvent: Sendable, Equatable {
   public let revision: FeedbackRevision
   public let supersedes: Int64?
   public let occurredAt: Date
+  public let actor: AuditActor
+  public let transportUpdateId: Int64?
 
   public init(
     id: Int64,
@@ -18,7 +20,9 @@ public struct FeedbackEvent: Sendable, Equatable {
     payload: String?,
     revision: FeedbackRevision,
     supersedes: Int64?,
-    occurredAt: Date
+    occurredAt: Date,
+    actor: AuditActor = .owner,
+    transportUpdateId: Int64? = nil
   ) {
     self.id = id
     self.runId = runId
@@ -27,6 +31,8 @@ public struct FeedbackEvent: Sendable, Equatable {
     self.revision = revision
     self.supersedes = supersedes
     self.occurredAt = occurredAt
+    self.actor = actor
+    self.transportUpdateId = transportUpdateId
   }
 }
 

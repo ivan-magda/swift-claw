@@ -96,6 +96,19 @@ public enum OwnerSignal: String, Sendable, Equatable, CaseIterable {
   case candidateReject = "candidate_reject"
   case candidateEdit = "candidate_edit"
   case promotionRollback = "promotion_rollback"
+
+  public var feedbackSubjectKind: FeedbackSubjectKind {
+    switch self {
+    case .resultUseful, .resultNotUseful, .resultCorrection:
+      .run
+    case .evaluationConfirm, .evaluationDispute:
+      .evaluation
+    case .candidateApprove, .candidateReject, .candidateEdit:
+      .candidate
+    case .promotionRollback:
+      .promotion
+    }
+  }
 }
 
 /// What an `OwnerSignal` targets. A candidate binds two to five evaluations, so a signal must name
