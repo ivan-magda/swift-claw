@@ -248,15 +248,30 @@ import Testing
     let fixture = try AdmissionStoreFixture.make()
     defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
-    _ = try fixture.env.learning.admitCandidate(
+    let admitted = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
+    let receipt = try #require(admitted.admissionReceipt)
     let first = fixture.review(candidate: candidate, state: .admitted, now: fixture.env.now)
     #expect(try fixture.env.learning.commitCandidateReview(first, now: fixture.env.now))
     let snapshot = try fixture.reviewSnapshot()
     try fixture.env.advanceFeedbackRevision()
+    try fixture.setTrialStateForReview(receipt.trialId, state: .closed)
+    try fixture.env.queue.write { db in
+      try db.execute(
+        sql: """
+          UPDATE job_learning_state SET learning_epoch = 2, stable_revision = 1
+          WHERE job_id = ?
+          """,
+        arguments: [fixture.env.jobId]
+      )
+      try db.execute(
+        sql: "UPDATE scheduled_jobs SET status = ? WHERE id = ?",
+        arguments: [ScheduledJobStatus.cancelled.rawValue, fixture.env.jobId]
+      )
+    }
     let replayTime = fixture.env.now.addingTimeInterval(60)
     let replay = fixture.review(
       candidate: candidate,
@@ -290,9 +305,9 @@ import Testing
     try fixture.corruptCommittedReview(corruption, candidate: candidate)
     let snapshot = try fixture.reviewSnapshot()
 
-    // when / then — trusting only the first stable delivery key would hide a missing target or
-    // final chunk as a successful replay instead of failing the corrupt atomic record closed.
-    #expect(throws: StoreError.self) {
+    // when / then — trusting self-consistent subjects or hashes instead of the keyboard's exact
+    // nonce-addressed target rows and the replay's immutable chunk bodies hides partial commits.
+    #expect(throws: StoreError.unexpected("candidate review replay is incomplete")) {
       _ = try fixture.env.learning.commitCandidateReview(review, now: fixture.env.now)
     }
     #expect(try fixture.reviewSnapshot() == snapshot)
@@ -426,11 +441,27 @@ enum ReviewCarrierMutation: CaseIterable, Sendable {
   case emptyChunk
   case nonfinalMarkup
   case missingFinalMarkup
+  case invalidFinalMarkup
 }
 
 enum CommittedReviewCorruption: CaseIterable, Sendable {
-  case target
-  case finalChunk
+  case admittedCandidateActions
+  case missingEvaluationWithDecoy
+  case wrongCallbackNonce
+  case missingCallbackNonce
+  case wrongCallbackAction
+  case wrongCallbackLabel
+  case emptyObjectMarkup
+  case noncanonicalMarkup
+  case missingAdmissionReceipt
+  case runId
+  case deliverySource
+  case missingChunk
+  case extraChunk
+  case noncontiguousChunk
+  case payload
+  case payloadHash
+  case nonfinalMarkup
 }
 
 enum ReviewJobMutation: CaseIterable, Sendable {
@@ -486,7 +517,7 @@ private extension AdmissionStoreFixture {
           chatId: 777,
           payload: final,
           payloadHash: ContentHash.fnv1a(final),
-          replyMarkup: "{}"
+          replyMarkup: review.chunks[0].replyMarkup
         ),
       ]
     )
@@ -498,23 +529,199 @@ private extension AdmissionStoreFixture {
   ) throws {
     try env.queue.write { db in
       switch corruption {
-      case .target:
-        try db.execute(
-          sql: "DELETE FROM feedback_targets WHERE subject_kind = ? AND subject_digest = ?",
-          arguments: [FeedbackSubjectKind.candidate.rawValue, candidate.digest.rawValue]
+      case .admittedCandidateActions:
+        let actions = try #require(
+          String(
+            data: JSONEncoder().encode(
+              [
+                OwnerSignal.candidateApprove.rawValue,
+                OwnerSignal.candidateReject.rawValue,
+                OwnerSignal.candidateEdit.rawValue,
+              ]
+            ),
+            encoding: .utf8
+          )
         )
-      case .finalChunk:
         try db.execute(
-          sql: "DELETE FROM outbound_deliveries WHERE dedup_key = ?",
-          arguments: [
-            OutboxDedupKey.make(
-              subjectDigest: CandidateReviewIdentity.digest(candidateDigest: candidate.digest),
-              ordinal: 1
-            )
+          sql: "UPDATE feedback_targets SET allowed_actions = ? WHERE subject_kind = ?",
+          arguments: [actions, FeedbackSubjectKind.candidate.rawValue]
+        )
+        try rewriteCommittedMarkup(db) { rows in
+          rows[0] = [
+            FeedbackKeyboard.Button(
+              text: "Approve",
+              nonce: rows[0][0].nonce,
+              action: .candidateApprove
+            ),
+            FeedbackKeyboard.Button(
+              text: "Reject",
+              nonce: rows[0][0].nonce,
+              action: .candidateReject
+            ),
+            FeedbackKeyboard.Button(
+              text: "Edit",
+              nonce: rows[0][0].nonce,
+              action: .candidateEdit
+            ),
           ]
+        }
+      case .missingEvaluationWithDecoy:
+        let markup = try committedMarkup(db)
+        let rows = try FeedbackKeyboard.parseMarkup(markup)
+        let nonce = rows[1][0].nonce
+        try db.execute(
+          sql: """
+            INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind,
+              subject_digest, allowed_actions, owner_user_id, chat_id, expires_at, consumed_at)
+            SELECT ?, job_id, learning_epoch, subject_kind, subject_digest, allowed_actions,
+              owner_user_id, chat_id, expires_at, consumed_at
+            FROM feedback_targets WHERE nonce = ?
+            """,
+          arguments: ["decoy-evaluation-target", nonce]
+        )
+        try db.execute(
+          sql: "DELETE FROM feedback_targets WHERE nonce = ?",
+          arguments: [nonce]
+        )
+      case .wrongCallbackNonce:
+        try rewriteCommittedMarkup(db) { rows in
+          let button = rows[1][0]
+          rows[1][0] = FeedbackKeyboard.Button(
+            text: button.text,
+            nonce: "missing-target-nonce",
+            action: button.action
+          )
+        }
+      case .missingCallbackNonce:
+        let markup = try committedMarkup(db)
+        let rows = try FeedbackKeyboard.parseMarkup(markup)
+        let callback = FeedbackKeyboard.callbackData(
+          nonce: rows[1][0].nonce,
+          action: rows[1][0].action
+        )
+        try setCommittedMarkup(db, markup.replacingOccurrences(of: callback, with: "fb::ed"))
+      case .wrongCallbackAction:
+        try rewriteCommittedMarkup(db) { rows in
+          let button = rows[1][1]
+          rows[1][1] = FeedbackKeyboard.Button(
+            text: button.text,
+            nonce: button.nonce,
+            action: .evaluationConfirm
+          )
+        }
+      case .wrongCallbackLabel:
+        try rewriteCommittedMarkup(db) { rows in
+          let button = rows[1][1]
+          rows[1][1] = FeedbackKeyboard.Button(
+            text: "Incorrect evaluation label",
+            nonce: button.nonce,
+            action: button.action
+          )
+        }
+      case .emptyObjectMarkup:
+        try setCommittedMarkup(db, "{}")
+      case .noncanonicalMarkup:
+        try setCommittedMarkup(db, " \(try committedMarkup(db))")
+      case .missingAdmissionReceipt:
+        try db.execute(
+          sql: "DELETE FROM learning_decisions WHERE kind = ?",
+          arguments: [AdmissionReceipt.kind]
+        )
+      case .runId:
+        try db.execute(
+          sql: """
+            UPDATE outbound_deliveries SET run_id = (SELECT MIN(id) FROM runs)
+            WHERE delivery_source = ?
+            """,
+          arguments: [DeliverySource.learning.rawValue]
+        )
+      case .deliverySource:
+        try db.execute(
+          sql: "UPDATE outbound_deliveries SET delivery_source = ? WHERE delivery_source = ?",
+          arguments: ["corrupt", DeliverySource.learning.rawValue]
+        )
+      case .missingChunk:
+        try db.execute(
+          sql: "DELETE FROM outbound_deliveries WHERE step_index = 1 AND delivery_source = ?",
+          arguments: [DeliverySource.learning.rawValue]
+        )
+      case .extraChunk:
+        let subject = CandidateReviewIdentity.digest(candidateDigest: candidate.digest)
+        let payload = "Unexpected third chunk."
+        let markup = try committedMarkup(db)
+        try db.execute(
+          sql: "UPDATE outbound_deliveries SET reply_markup = NULL WHERE step_index = 1"
+        )
+        try db.execute(
+          sql: """
+            INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+              payload_hash, reply_markup, status, created_ts, delivery_source)
+            VALUES(NULL, 2, 777, ?, ?, ?, ?, 'PENDING', ?, ?)
+            """,
+          arguments: [
+            OutboxDedupKey.make(subjectDigest: subject, ordinal: 2),
+            payload,
+            ContentHash.fnv1a(payload),
+            markup,
+            env.now,
+            DeliverySource.learning.rawValue,
+          ]
+        )
+      case .noncontiguousChunk:
+        try db.execute(
+          sql: "UPDATE outbound_deliveries SET step_index = 3 WHERE step_index = 1"
+        )
+      case .payload:
+        let payload = "Altered but self-consistent review body."
+        try db.execute(
+          sql: "UPDATE outbound_deliveries SET payload = ?, payload_hash = ? WHERE step_index = 0",
+          arguments: [payload, ContentHash.fnv1a(payload)]
+        )
+      case .payloadHash:
+        try db.execute(
+          sql: "UPDATE outbound_deliveries SET payload_hash = ? WHERE step_index = 0",
+          arguments: ["wrong-hash"]
+        )
+      case .nonfinalMarkup:
+        let markup = try committedMarkup(db)
+        try db.execute(
+          sql: """
+            UPDATE outbound_deliveries
+            SET reply_markup = CASE step_index WHEN 0 THEN ? ELSE NULL END
+            WHERE delivery_source = ?
+            """,
+          arguments: [markup, DeliverySource.learning.rawValue]
         )
       }
     }
+  }
+
+  func committedMarkup(_ db: Database) throws -> String {
+    let markup: String? = try String.fetchOne(
+      db,
+      sql: """
+        SELECT reply_markup FROM outbound_deliveries
+        WHERE delivery_source = ? AND reply_markup IS NOT NULL
+        """,
+      arguments: [DeliverySource.learning.rawValue]
+    )
+    return try #require(markup)
+  }
+
+  func setCommittedMarkup(_ db: Database, _ markup: String) throws {
+    try db.execute(
+      sql: "UPDATE outbound_deliveries SET reply_markup = ? WHERE step_index = 1",
+      arguments: [markup]
+    )
+  }
+
+  func rewriteCommittedMarkup(
+    _ db: Database,
+    mutate: (inout [[FeedbackKeyboard.Button]]) -> Void
+  ) throws {
+    var rows = try FeedbackKeyboard.parseMarkup(try committedMarkup(db))
+    mutate(&rows)
+    try setCommittedMarkup(db, try #require(FeedbackKeyboard.markup(rows: rows)))
   }
 
   func mutateReviewState(
@@ -622,6 +829,8 @@ private extension AdmissionStoreFixture {
       ]
     case .missingFinalMarkup:
       chunks[0] = replacing(chunks[0], replyMarkup: nil)
+    case .invalidFinalMarkup:
+      chunks[0] = replacing(chunks[0], replyMarkup: "{}")
     }
     return CandidateReviewNotice(
       candidateDigest: review.candidateDigest,
@@ -695,30 +904,61 @@ private extension AdmissionStoreFixture {
       let targets = try Row.fetchAll(
         db,
         sql: """
-          SELECT nonce, subject_kind, subject_digest, allowed_actions
+          SELECT target_id, nonce, job_id, learning_epoch, subject_kind, subject_digest,
+            allowed_actions, owner_user_id, chat_id, expires_at, consumed_at
           FROM feedback_targets ORDER BY nonce
           """
       ).map { row in
+        let targetId: Int64 = row["target_id"]
         let nonce: String = row["nonce"]
+        let jobId: Int64 = row["job_id"]
+        let epoch: Int64 = row["learning_epoch"]
         let kind: String = row["subject_kind"]
         let digest: String = row["subject_digest"]
         let actions: String = row["allowed_actions"]
-        return [nonce, kind, digest, actions].joined(separator: "|")
+        let owner: Int64 = row["owner_user_id"]
+        let chat: Int64 = row["chat_id"]
+        let expiry: Int64 = row["expires_at"]
+        let consumed: Int64? = row["consumed_at"]
+        return [
+          String(targetId), nonce, String(jobId), String(epoch), kind, digest, actions,
+          String(owner), String(chat), String(expiry), consumed.map(String.init) ?? "nil",
+        ].joined(separator: "|")
       }
       let chunks = try Row.fetchAll(
         db,
         sql: """
-          SELECT dedup_key, step_index, payload, payload_hash, reply_markup
-          FROM outbound_deliveries WHERE delivery_source = ? ORDER BY step_index
-          """,
-        arguments: [DeliverySource.learning.rawValue]
+          SELECT run_id, step_index, chat_id, dedup_key, payload, payload_hash,
+            telegram_message_id, status, created_ts, sent_ts, approval_id, reply_markup,
+            message_thread_id, reply_to_message_id, delivery_source
+          FROM outbound_deliveries ORDER BY dedup_key
+          """
       ).map { row in
+        let runId: Int64? = row["run_id"]
         let key: String = row["dedup_key"]
         let ordinal: Int = row["step_index"]
+        let chatId: Int64 = row["chat_id"]
         let payload: String = row["payload"]
         let hash: String = row["payload_hash"]
+        let messageId: Int64? = row["telegram_message_id"]
+        let status: String = row["status"]
+        let created: DatabaseValue = row["created_ts"]
+        let sent: DatabaseValue = row["sent_ts"]
+        let approvalId: Int64? = row["approval_id"]
         let markup: String? = row["reply_markup"]
-        return [key, String(ordinal), payload, hash, markup ?? "nil"].joined(separator: "|")
+        let threadId: Int64? = row["message_thread_id"]
+        let replyId: Int64? = row["reply_to_message_id"]
+        let source: String = row["delivery_source"]
+        let run = runId.map(String.init) ?? "nil"
+        let message = messageId.map(String.init) ?? "nil"
+        let approval = approvalId.map(String.init) ?? "nil"
+        let thread = threadId.map(String.init) ?? "nil"
+        let reply = replyId.map(String.init) ?? "nil"
+        return [
+          run, String(ordinal), String(chatId), key, payload, hash, message, status,
+          String(describing: created), String(describing: sent), approval, markup ?? "nil", thread,
+          reply, source,
+        ].joined(separator: "|")
       }
       return ReviewSnapshot(targets: targets, chunks: chunks)
     }

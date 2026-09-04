@@ -88,10 +88,14 @@ public struct LearningNotices: Sendable {
     guard parts.isEmpty == false else {
       throw LearningReviewError.invalidCandidate
     }
-    let markup = reviewKeyboard(
-      targets: targets,
-      evaluations: candidate.manifest.evaluations
-    )
+    guard
+      let markup = FeedbackKeyboard.candidateReviewMarkup(
+        targets: targets,
+        evaluations: candidate.manifest.evaluations
+      )
+    else {
+      throw LearningReviewError.invalidCandidate
+    }
     let chunks = parts.enumerated().map { ordinal, payload in
       LearningNoticeChunk(
         subjectDigest: subject,
@@ -199,48 +203,5 @@ private extension LearningNotices {
         "\(index + 1). \(lesson)"
       }.joined(separator: "\n")
     return "Candidate lessons for review:\n\(body)"
-  }
-
-  func reviewKeyboard(
-    targets: [NewFeedbackTarget],
-    evaluations: [CandidateEvaluationSource]
-  ) -> String {
-    let rows = targets.enumerated().map { index, target in
-      let evaluationRunId = index > 0 ? evaluations[index - 1].runId : nil
-      let buttons = target.allowedActions.map { signal in
-        let action = feedbackAction(signal)
-        let callback = FeedbackKeyboard.callbackData(nonce: target.nonce, action: action)
-        let label = reviewLabel(signal, evaluationRunId: evaluationRunId)
-        return #"{"callback_data":"\#(callback)","text":"\#(label)"}"#
-      }
-      return "[\(buttons.joined(separator: ","))]"
-    }
-    return #"{"inline_keyboard":["# + rows.joined(separator: ",") + "]}"
-  }
-
-  func feedbackAction(_ signal: OwnerSignal) -> FeedbackAction {
-    switch signal {
-    case .resultUseful: .resultUseful
-    case .resultNotUseful: .resultNotUseful
-    case .resultCorrection: .resultCorrection
-    case .evaluationConfirm: .evaluationConfirm
-    case .evaluationDispute: .evaluationDispute
-    case .candidateApprove: .candidateApprove
-    case .candidateReject: .candidateReject
-    case .candidateEdit: .candidateEdit
-    case .promotionRollback: .promotionRollback
-    }
-  }
-
-  func reviewLabel(_ signal: OwnerSignal, evaluationRunId: Int64?) -> String {
-    switch signal {
-    case .candidateApprove: "Approve"
-    case .candidateReject: "Reject"
-    case .candidateEdit: "Edit"
-    case .evaluationConfirm: "Eval #\(evaluationRunId ?? 0) correct"
-    case .evaluationDispute: "Eval #\(evaluationRunId ?? 0) wrong"
-    case .resultUseful, .resultNotUseful, .resultCorrection, .promotionRollback:
-      signal.rawValue
-    }
   }
 }
