@@ -541,7 +541,9 @@ extension ScheduledLearningStoreGRDB {
     else {
       return nil
     }
-    let stored = StoredCandidateProjection(row: row)
+    guard let stored = StoredCandidateProjection(row: row) else {
+      throw StoreError.unexpected("candidate \(digest.rawValue) has an unreadable artifact")
+    }
     let manifestBytes = Data(stored.manifestJSON.utf8)
     guard
       let manifest = CandidateSourceManifest.decodedCanonical(from: manifestBytes),
@@ -574,18 +576,36 @@ private struct StoredCandidateProjection {
   let predecessorDigest: String?
   let algorithm: String
 
-  init(row: Row) {
-    candidateDigest = row["candidate_digest"]
-    jobId = row["job_id"]
-    epoch = row["learning_epoch"]
-    replacementDigest = row["replacement_digest"]
-    baseDigest = row["base_digest"]
-    baseRevision = row["base_revision"]
-    feedbackRevision = row["frozen_feedback_revision"]
-    origin = row["origin"]
-    manifestJSON = row["source_manifest"]
-    predecessorDigest = row["predecessor_digest"]
-    algorithm = row["algorithm"]
+  init?(row: Row) {
+    guard
+      let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      let replacementDigest = SQLiteStoredValue.string(in: row, column: "replacement_digest"),
+      let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
+      let baseRevision = SQLiteStoredValue.int64(in: row, column: "base_revision"),
+      let feedbackRevision = SQLiteStoredValue.int64(
+        in: row,
+        column: "frozen_feedback_revision"
+      ),
+      let origin = SQLiteStoredValue.string(in: row, column: "origin"),
+      let manifestJSON = SQLiteStoredValue.string(in: row, column: "source_manifest"),
+      let predecessor = SQLiteStoredValue.nullableString(in: row, column: "predecessor_digest"),
+      let algorithm = SQLiteStoredValue.string(in: row, column: "algorithm")
+    else {
+      return nil
+    }
+    self.candidateDigest = candidateDigest
+    self.jobId = jobId
+    self.epoch = epoch
+    self.replacementDigest = replacementDigest
+    self.baseDigest = baseDigest
+    self.baseRevision = baseRevision
+    self.feedbackRevision = feedbackRevision
+    self.origin = origin
+    self.manifestJSON = manifestJSON
+    predecessorDigest = predecessor.value
+    self.algorithm = algorithm
   }
 
   func matches(

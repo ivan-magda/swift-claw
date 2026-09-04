@@ -245,19 +245,34 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
+    guard
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      let phaseRaw = SQLiteStoredValue.string(in: row, column: "phase"),
+      let sourceDigest = SQLiteStoredValue.string(in: row, column: "source_digest"),
+      let keyDigest = SQLiteStoredValue.string(in: row, column: "key_digest"),
+      let carrier = SQLiteStoredValue.nullableString(in: row, column: "carrier_digest"),
+      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+      let route = SQLiteStoredValue.nullableString(in: row, column: "route"),
+      let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
+      let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
+      let reservedCost = SQLiteStoredValue.nullableDouble(in: row, column: "reserved_cost_usd")
+    else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds unreadable stored values")
+    }
     return OperationRow(
       id: id,
-      jobId: row["job_id"],
-      epoch: LearningEpoch(row["learning_epoch"]),
-      phase: try learningPhase(row["phase"], of: id),
-      sourceDigest: row["source_digest"],
-      keyDigest: LearningOperationKeyDigest(rawValue: row["key_digest"]),
-      carrierDigest: (row["carrier_digest"] as String?).map(CarrierDigest.init(rawValue:)),
-      state: try operationState(row["state"], of: id),
-      route: row["route"],
-      providerCallID: (row["provider_call_id"] as String?).map(ProviderCallID.init(rawValue:)),
-      reservedTokens: row["reserved_tokens"] ?? 0,
-      reservedCostUSD: row["reserved_cost_usd"] ?? 0
+      jobId: jobId,
+      epoch: LearningEpoch(epoch),
+      phase: try learningPhase(phaseRaw, of: id),
+      sourceDigest: sourceDigest,
+      keyDigest: LearningOperationKeyDigest(rawValue: keyDigest),
+      carrierDigest: carrier.value.map(CarrierDigest.init(rawValue:)),
+      state: try operationState(stateRaw, of: id),
+      route: route.value,
+      providerCallID: providerCall.value.map(ProviderCallID.init(rawValue:)),
+      reservedTokens: reservedTokens.value ?? 0,
+      reservedCostUSD: reservedCost.value ?? 0
     )
   }
 

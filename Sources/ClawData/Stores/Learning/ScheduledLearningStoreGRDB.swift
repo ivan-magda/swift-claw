@@ -50,8 +50,8 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
-    let bytes: Data = row["canonical_bytes"]
     guard
+      let bytes = SQLiteStoredValue.data(in: row, column: "canonical_bytes"),
       let set = LessonSet.decoded(jobId: jobId, canonicalBytes: bytes),
       set.digest == digest
     else {
@@ -94,13 +94,25 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
+    guard
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      let stableDigest = SQLiteStoredValue.string(
+        in: row,
+        column: "stable_lesson_set_digest"
+      ),
+      let stableRevision = SQLiteStoredValue.int64(in: row, column: "stable_revision"),
+      let openTrial = SQLiteStoredValue.nullableInt64(in: row, column: "open_trial_id"),
+      let feedbackRevision = SQLiteStoredValue.int64(in: row, column: "feedback_revision")
+    else {
+      throw StoreError.unexpected("job \(jobId) has an unreadable learning state")
+    }
     return JobLearningState(
       jobId: jobId,
-      epoch: LearningEpoch(row["learning_epoch"]),
-      stableDigest: LessonSetDigest(rawValue: row["stable_lesson_set_digest"]),
-      stableRevision: StableRevision(row["stable_revision"]),
-      openTrialId: row["open_trial_id"],
-      feedbackRevision: FeedbackRevision(row["feedback_revision"])
+      epoch: LearningEpoch(epoch),
+      stableDigest: LessonSetDigest(rawValue: stableDigest),
+      stableRevision: StableRevision(stableRevision),
+      openTrialId: openTrial.value,
+      feedbackRevision: FeedbackRevision(feedbackRevision)
     )
   }
 }

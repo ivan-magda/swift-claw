@@ -28,6 +28,13 @@ import Testing
     #expect(rendered.contains("decision result generation: 2"))
     #expect(rendered.contains("  1. Keep facts exact."))
     #expect(rendered.contains("  2. Preserve order."))
+    #expect(rendered.contains("warning: stored trial pointer does not match the live trial"))
+
+    // when
+    let listed = LearningSurface.render([.readable(view)], style: .list)
+
+    // then — omitting warnings from the compact projection hides a known integrity mismatch.
+    #expect(listed.contains("warning"))
   }
 
   @Test func unreadableAndUnarmedStatesDoNotInventLearningFacts() {
