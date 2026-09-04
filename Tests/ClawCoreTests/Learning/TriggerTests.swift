@@ -371,7 +371,9 @@ import Testing
 
     // then
     #expect(
-      trigger.issueCodes.map { code in Array(code.utf8) } == [
+      trigger.issueCodes.map { code in
+        Array(code.utf8)
+      } == [
         Array(decomposed.utf8),
         Array(precomposed.utf8),
       ]
@@ -408,7 +410,11 @@ import Testing
     }
 
     // then
-    #expect(changedCoordinates.allSatisfy { $0 })
+    #expect(
+      changedCoordinates.allSatisfy { changed in
+        changed
+      }
+    )
   }
 
   @Test func triggerIdentityPreservesEvidenceOrder() {
