@@ -61,6 +61,35 @@ import Testing
     )
   }
 
+  @Test func evaluationSummaryWireHasOnlyItsClosedFields() throws {
+    // given
+    let carrier = try ReflectorCarrier(
+      stableLessons: [],
+      evaluations: [
+        ReflectorEvaluationSummary(
+          runId: 41,
+          finalOutput: "A bounded result.",
+          outcome: .negative(issueCodes: ["material.missed"])
+        )
+      ],
+      issueCodes: ["material.missed"],
+      ownerPayloads: []
+    )
+
+    // when
+    let bytes = try CanonicalJSON.data(encoding: carrier)
+    let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+    let evaluations = try #require(object["evaluations"] as? [String])
+    let body = try unfencedBody(try #require(evaluations.first))
+    let summary = try #require(
+      JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any]
+    )
+
+    // then — adding tool args, history, observations, candidate, or provider fields widens the
+    // nested blind-evaluation boundary without changing the outer five-key carrier
+    #expect(Set(summary.keys) == ["run_id", "final_output", "outcome", "issue_codes"])
+  }
+
   @Test func nullAndEmptyReplacementRemainDifferentClosedResults() throws {
     // given
     let none = #"{"schema_version":1,"candidate":null}"#
@@ -125,6 +154,20 @@ private func fenceNonce(_ body: String) -> String? {
     return nil
   }
   return String(body[start..<end])
+}
+
+private func unfencedBody(_ value: String) throws -> String {
+  guard
+    let opening = value.firstIndex(of: "\n"),
+    let closing = value.range(of: "\n</claw-untrusted", options: .backwards)
+  else {
+    throw TestFixtureError.malformedFence
+  }
+  return String(value[value.index(after: opening)..<closing.lowerBound])
+}
+
+private enum TestFixtureError: Error {
+  case malformedFence
 }
 
 private func candidateManifest(resultDigest: String) -> CandidateSourceManifest {

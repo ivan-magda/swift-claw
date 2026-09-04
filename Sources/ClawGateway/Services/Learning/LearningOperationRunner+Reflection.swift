@@ -187,6 +187,11 @@ private extension LearningOperationRunner {
       jobId: preparation.trigger.jobId,
       lessons: candidate.lessons
     )
+    for lesson in replacement.lessons {
+      guard redactor.redact(lesson) == lesson else {
+        throw ReflectionValidationError.secretLeak
+      }
+    }
     // swiftlint:disable:next optional_data_string_conversion
     let replacementBytes = String(decoding: replacement.canonicalBytes, as: UTF8.self)
     guard redactor.redact(replacementBytes) == replacementBytes else {

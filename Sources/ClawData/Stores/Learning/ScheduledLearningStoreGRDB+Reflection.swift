@@ -531,7 +531,9 @@ extension ScheduledLearningStoreGRDB {
       let row = try Row.fetchOne(
         db,
         sql: """
-          SELECT job_id, replacement_digest, source_manifest
+          SELECT candidate_digest, job_id, learning_epoch, replacement_digest, base_digest,
+            base_revision, frozen_feedback_revision, origin, source_manifest, predecessor_digest,
+            algorithm
           FROM learning_candidates WHERE candidate_digest = ?
           """,
         arguments: [digest.rawValue]
@@ -539,20 +541,20 @@ extension ScheduledLearningStoreGRDB {
     else {
       return nil
     }
-    let jobId: Int64 = row["job_id"]
-    let replacementDigest = LessonSetDigest(rawValue: row["replacement_digest"])
-    let manifestJSON: String = row["source_manifest"]
+    let stored = StoredCandidateProjection(row: row)
+    let manifestBytes = Data(stored.manifestJSON.utf8)
     guard
-      let manifest = try? JSONDecoder().decode(
-        CandidateSourceManifest.self,
-        from: Data(manifestJSON.utf8)
-      ),
-      let replacement = try readLessonSet(db, jobId: jobId, digest: replacementDigest)
+      let manifest = CandidateSourceManifest.decodedCanonical(from: manifestBytes),
+      let replacement = try readLessonSet(
+        db,
+        jobId: stored.jobId,
+        digest: LessonSetDigest(rawValue: stored.replacementDigest)
+      )
     else {
       throw StoreError.unexpected("candidate \(digest.rawValue) has an unreadable artifact")
     }
     let artifact = try CandidateArtifact(replacement: replacement, manifest: manifest)
-    guard artifact.digest == digest else {
+    guard stored.matches(artifact: artifact, requestedDigest: digest) else {
       throw StoreError.unexpected("candidate \(digest.rawValue) does not match its source bytes")
     }
     return artifact
@@ -577,5 +579,52 @@ extension ScheduledLearningStoreGRDB {
     enum CodingKeys: String, CodingKey {
       case resultDigest = "result_digest"
     }
+  }
+}
+
+private struct StoredCandidateProjection {
+  let candidateDigest: String
+  let jobId: Int64
+  let epoch: Int64
+  let replacementDigest: String
+  let baseDigest: String
+  let baseRevision: Int64
+  let feedbackRevision: Int64
+  let origin: String
+  let manifestJSON: String
+  let predecessorDigest: String?
+  let algorithm: String
+
+  init(row: Row) {
+    candidateDigest = row["candidate_digest"]
+    jobId = row["job_id"]
+    epoch = row["learning_epoch"]
+    replacementDigest = row["replacement_digest"]
+    baseDigest = row["base_digest"]
+    baseRevision = row["base_revision"]
+    feedbackRevision = row["frozen_feedback_revision"]
+    origin = row["origin"]
+    manifestJSON = row["source_manifest"]
+    predecessorDigest = row["predecessor_digest"]
+    algorithm = row["algorithm"]
+  }
+
+  func matches(
+    artifact: CandidateArtifact,
+    requestedDigest: CandidateDigest
+  ) -> Bool {
+    let manifest = artifact.manifest
+    return candidateDigest == requestedDigest.rawValue
+      && candidateDigest == artifact.digest.rawValue
+      && jobId == artifact.replacement.jobId
+      && jobId == manifest.jobId
+      && epoch == manifest.epoch.value
+      && replacementDigest == artifact.replacement.digest.rawValue
+      && baseDigest == manifest.baseDigest.rawValue
+      && baseRevision == manifest.baseRevision.value
+      && feedbackRevision == manifest.feedbackRevision.value
+      && origin == manifest.origin.rawValue
+      && predecessorDigest == manifest.predecessorCandidate?.rawValue
+      && algorithm == manifest.algorithm.rawValue
   }
 }
