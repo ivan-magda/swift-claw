@@ -29,6 +29,10 @@ public enum FeedbackAction: String, Sendable, Equatable, CaseIterable {
   public var subjectKind: FeedbackSubjectKind {
     signal.feedbackSubjectKind
   }
+
+  public var opensChallenge: Bool {
+    signal.opensFeedbackChallenge
+  }
 }
 
 /// A strict feedback envelope: only `fb:<opaque nonce>:<known action>` survives parsing.

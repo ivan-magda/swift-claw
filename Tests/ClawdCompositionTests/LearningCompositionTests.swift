@@ -58,6 +58,61 @@ import Testing
     #expect(builder.makePinnedLessonStore() == nil)
   }
 
+  @Test func feedbackRouterIsComposedOnlyWhileLearningIsArmed() async throws {
+    // given — each real root owns a live target, but only one has the learning feature armed
+    for learningEnabled in [true, false] {
+      let builder = try LearningComposition.makeBuilder(learningEnabled: learningEnabled)
+      try builder.stores.allowlist.seedAllowlist(userIds: [777])
+      let now = Date(timeIntervalSince1970: 1_782_000_600)
+      let job = try LearningComposition.createJob(builder, now: now)
+      let state = try builder.stores.learning.armJob(jobId: job.id, now: now)
+      let target = NewFeedbackTarget(
+        nonce: "composition-\(learningEnabled)",
+        jobId: job.id,
+        epoch: state.epoch,
+        subjectKind: .run,
+        subjectDigest: "41",
+        allowedActions: [.resultUseful],
+        ownerUserId: 777,
+        chatId: 777,
+        expiresAt: .distantFuture
+      )
+      try builder.stores.learning.createTargets([target], chunks: [], now: now)
+      let router = builder.makeIntakeRouter(
+        coordination: DaemonBuilder.TurnCoordination(),
+        turnRunner: IdleCompositionTurns(),
+        imageCache: ImageCache(),
+        scheduleSurface: LearningComposition.scheduleSurface(builder),
+        approvalCallbacks: nil,
+        doctor: IdleCompositionDoctor(),
+        learning: nil
+      )
+      let update = RawUpdate(
+        updateId: learningEnabled ? 80 : 81,
+        message: nil,
+        editedMessage: nil,
+        callback: RawCallback(
+          callbackId: "composition-feedback",
+          fromUserId: 777,
+          chatId: 777,
+          messageId: 1,
+          data: FeedbackKeyboard.callbackData(
+            nonce: target.nonce,
+            action: .resultUseful
+          )
+        )
+      )
+
+      // when
+      let outcome = await router.handle(rawUpdate: update)
+
+      // then — wiring feedback regardless of the flag consumes the disarmed root's live target
+      let stored = try #require(try builder.stores.learning.feedbackTarget(nonce: target.nonce))
+      #expect(outcome == (learningEnabled ? .processed : .skipped))
+      #expect((stored.consumedAt != nil) == learningEnabled)
+    }
+  }
+
   @Test func theToolCatalogDigestCoversRiskAndIgnoresCatalogOrder() {
     // given — the same two tools at different risk tiers, and the same pair reordered
     let safe = LearningComposition.tool(name: "file_read", risk: .safe)
@@ -115,7 +170,16 @@ private enum LearningComposition {
   /// freeze joins against — and carries none at all when the flag is off.
   static func fireBoundRun(_ builder: DaemonBuilder) throws -> Int64 {
     let now = Date(timeIntervalSince1970: 1_782_000_600)
-    let job = try builder.stores.scheduledJobs.create(
+    let job = try createJob(builder, now: now)
+    guard case .fired(let fired) = try builder.stores.scheduledJobs.fireNow(jobId: job.id, now: now)
+    else {
+      throw StoreError.unexpected("job \(job.id) refused to fire")
+    }
+    return fired.runId
+  }
+
+  static func createJob(_ builder: DaemonBuilder, now: Date) throws -> ScheduledJob {
+    try builder.stores.scheduledJobs.create(
       NewScheduledJob(
         ownerChatId: 777,
         label: "digest",
@@ -126,11 +190,16 @@ private enum LearningComposition {
       ),
       now: now
     )
-    guard case .fired(let fired) = try builder.stores.scheduledJobs.fireNow(jobId: job.id, now: now)
-    else {
-      throw StoreError.unexpected("job \(job.id) refused to fire")
-    }
-    return fired.runId
+  }
+
+  static func scheduleSurface(_ builder: DaemonBuilder) -> ScheduleSurface {
+    ScheduleSurface(
+      parser: IdleCompositionScheduleParser(),
+      validator: ScheduleDraftValidator(minIntervalMinutes: 5, defaultTimezone: .gmt),
+      calculator: OccurrenceCalculator(),
+      jobs: builder.stores.scheduledJobs,
+      commands: builder.stores.scheduleCommands
+    )
   }
 
   static func workspace() -> FileSystemWorkspace {
@@ -154,5 +223,30 @@ private enum LearningComposition {
       description: description,
       directory: URL(fileURLWithPath: "/tmp/skills/" + name)
     )
+  }
+}
+
+private actor IdleCompositionTurns: TurnDispatching {
+  func run(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    triggerMessageId: Int64
+  ) async throws {}
+}
+
+private struct IdleCompositionScheduleParser: ScheduleDraftParsing {
+  func parse(ownerText: String, sessionId: Int64) async -> ScheduleDraftParseResult {
+    .unparseable
+  }
+}
+
+private struct IdleCompositionDoctor: DoctorReporting {
+  func report() async -> DoctorReport {
+    DoctorReport()
+  }
+
+  func scanSkills() async -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
   }
 }

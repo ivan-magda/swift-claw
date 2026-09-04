@@ -30,6 +30,7 @@ import Testing
       #expect(parsed.action == action)
       #expect(parsed.action.signal == signal)
       #expect(parsed.action.subjectKind == subjectKind)
+      #expect(parsed.action.opensChallenge == signal.opensFeedbackChallenge)
     }
     #expect(FeedbackKeyboard.parse("fb:abc:zz") == nil)
     #expect(FeedbackKeyboard.parse("fb::ru") == nil)
@@ -58,7 +59,7 @@ import Testing
         signal: .resultUseful,
         subject: "subject-digest"
       )
-      _ = try env.learning.createTargets([target], chunks: [])
+      try env.createTargets([target], chunks: [])
       let callback = failure.callback(target: target)
 
       // when
@@ -89,7 +90,7 @@ import Testing
       subject: "candidate-digest",
       kind: .candidate
     )
-    _ = try env.learning.createTargets([target], chunks: [])
+    try env.createTargets([target], chunks: [])
     let callback = env.callback(
       data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .candidateReject),
       from: 43,
@@ -114,7 +115,7 @@ import Testing
     // given
     let env = try FeedbackCallbackEnvironment.make()
     let target = env.target(nonce: "single-use", signal: .resultUseful, subject: "41")
-    _ = try env.learning.createTargets([target], chunks: [])
+    try env.createTargets([target], chunks: [])
     let callback = env.callback(
       data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultUseful)
     )
@@ -135,13 +136,7 @@ import Testing
     #expect(answers.count == 2)
     #expect(answers.first?.text == "Feedback recorded.")
     #expect(answers.last?.text == "This action is no longer available.")
-    let events = try env.learning.feedbackEvents(
-      jobId: env.jobId,
-      epoch: env.state.epoch,
-      subjectKind: .run,
-      subjectDigest: target.subjectDigest
-    )
-    #expect(events.first?.transportUpdateId == 7)
+    #expect(try env.eventTransportUpdateIds() == [7])
   }
 
   @Test func expiredTargetAnswersNeutrallyAndAuditsWithoutMutation() async throws {
@@ -153,7 +148,7 @@ import Testing
       subject: "41",
       expiresAt: env.now
     )
-    _ = try env.learning.createTargets([target], chunks: [])
+    try env.createTargets([target], chunks: [])
     let callback = env.callback(
       data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultUseful)
     )
@@ -186,7 +181,7 @@ import Testing
         subject: "subject-\(offset)",
         kind: entry.1
       )
-      _ = try env.learning.createTargets([target], chunks: [])
+      try env.createTargets([target], chunks: [])
       let callback = env.callback(
         data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: entry.0)
       )
@@ -206,7 +201,7 @@ import Testing
 
   @Test func routerOwnsMalformedFeedbackDomainWithoutPreParsingIt() async throws {
     // given — a malformed fb envelope and a router with only the feedback callback handler wired
-    let env = try FeedbackCallbackEnvironment.make(wireRouter: true)
+    let env = try FeedbackCallbackEnvironment.make(wireFeedbackRouter: true)
     let update = RawUpdate(
       updateId: 30,
       message: nil,
@@ -223,6 +218,34 @@ import Testing
     #expect(env.handlerAudit.events.last?.action == .learningFeedback)
     #expect(env.handlerAudit.events.last?.decision == "malformed")
     #expect(await env.callbacks.answers.first?.text == "This action is no longer available.")
+  }
+
+  @Test func routerKeepsApprovalCallbacksBesideFeedbackCallbacks() async throws {
+    // given — one router has both callback domains wired to their real handlers
+    let env = try FeedbackCallbackEnvironment.make(
+      wireFeedbackRouter: true,
+      wireApprovalRouter: true
+    )
+    let update = RawUpdate(
+      updateId: 31,
+      message: nil,
+      editedMessage: nil,
+      callback: env.callback(
+        data: ApprovalKeyboard.callbackData(
+          nonce: FeedbackCallbackEnvironment.approvalNonce,
+          verdict: ApprovalKeyboard.approveVerdict
+        )
+      )
+    )
+
+    // when
+    let outcome = await env.router.handle(rawUpdate: update)
+
+    // then — routing every callback to feedback would never invoke approval's CAS seam
+    #expect(outcome == .processed)
+    #expect(env.approvals.approveCalls.count == 1)
+    #expect(try env.eventCount() == 0)
+    #expect(env.handlerAudit.events.isEmpty)
   }
 }
 
@@ -333,10 +356,14 @@ private struct FeedbackCallbackEnvironment {
   let callbacks: RecordingCallbacks
   let handler: FeedbackCallbackHandler
   let router: MessageRouter
+  let approvals: ScriptedApprovals
+
+  static let approvalNonce = "APPROVALNONCEEXAMPLE00"
 
   static func make(
     allowed: [Int64] = [42],
-    wireRouter: Bool = false
+    wireFeedbackRouter: Bool = false,
+    wireApprovalRouter: Bool = false
   ) throws -> FeedbackCallbackEnvironment {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -371,6 +398,43 @@ private struct FeedbackCallbackEnvironment {
       now: { now },
       logger: TestLog.silent
     )
+    let approval = Approval(
+      id: 7,
+      runId: 100,
+      sessionId: 200,
+      state: .pending,
+      tool: "file_write",
+      canonicalArgsJSON: "{}",
+      canonicalTarget: "/workspace/file",
+      argsHash: "args-hash",
+      policyVersion: "POLICYV1",
+      ownerUserId: 42,
+      nonce: approvalNonce,
+      observationMessageId: 300,
+      toolCallId: "approval-call",
+      reason: .askTier,
+      promptMessageId: nil,
+      createdTs: now,
+      expiresTs: now.addingTimeInterval(3_600),
+      resolvedTs: nil
+    )
+    let approvals = ScriptedApprovals(
+      byNonce: [approvalNonce: approval],
+      approveOutcome: .approved(approval),
+      denyResult: true
+    )
+    let coordinator = ApprovalCoordinator()
+    let approvalHandler = ApprovalCallbackHandler(
+      replies: ReplySender(processed: processed, delivery: delivery, logger: TestLog.silent),
+      accessControl: access,
+      approvals: approvals,
+      audit: handlerAudit,
+      coordinator: coordinator,
+      callbacks: callbacks,
+      currentPolicyVersion: { "POLICYV1" },
+      now: { now },
+      logger: TestLog.silent
+    )
     let router = MessageRouter(
       processed: processed,
       sessionMessages: SessionMessageStoreGRDB(writer: queue),
@@ -385,8 +449,9 @@ private struct FeedbackCallbackEnvironment {
       imageCache: ImageCache(),
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
-      feedbackCallbacks: wireRouter ? handler : nil,
-      coordinator: ApprovalCoordinator(),
+      approvalCallbacks: wireApprovalRouter ? approvalHandler : nil,
+      feedbackCallbacks: wireFeedbackRouter ? handler : nil,
+      coordinator: coordinator,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
@@ -399,7 +464,8 @@ private struct FeedbackCallbackEnvironment {
       handlerAudit: handlerAudit,
       callbacks: callbacks,
       handler: handler,
-      router: router
+      router: router,
+      approvals: approvals
     )
   }
 
@@ -435,6 +501,22 @@ private struct FeedbackCallbackEnvironment {
 
   func eventCount() throws -> Int {
     try count(table: "feedback_events")
+  }
+
+  func createTargets(
+    _ targets: [NewFeedbackTarget],
+    chunks: [LearningNoticeChunk]
+  ) throws {
+    try learning.createTargets(targets, chunks: chunks, now: now)
+  }
+
+  func eventTransportUpdateIds() throws -> [Int64] {
+    try queue.read { db in
+      try Int64.fetchAll(
+        db,
+        sql: "SELECT transport_update_id FROM feedback_events ORDER BY event_id"
+      )
+    }
   }
 
   func processedCount() throws -> Int {

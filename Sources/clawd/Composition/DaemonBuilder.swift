@@ -188,7 +188,6 @@ struct DaemonBuilder: Sendable {
         coordination: coordination,
         agentStack: agentStack
       ),
-      feedbackCallbacks: makeFeedbackCallbackHandler(),
       doctor: makeDoctorReporter(
         sandbox: sandbox,
         cooldown: cooldown,
