@@ -153,10 +153,11 @@ import Testing
       signals: signals
     )
 
-    // then
+    // then — treating every dispute as an unconditional veto would erase independent run feedback
     #expect(resolved.outcome == .positive)
-    #expect(resolved.hardVetoes == [.ownerDependencyRejected])
-    #expect(resolved.permitsDependentDecision == false)
+    #expect(resolved.evaluationRequired == false)
+    #expect(resolved.hardVetoes.isEmpty)
+    #expect(resolved.permitsDependentDecision)
   }
 
   @Test(arguments: HardVeto.allCases)

@@ -132,9 +132,16 @@ extension BoundRunEnvironment {
     costUSD: Double = 0.25,
     evaluation: LearningEvaluation? = nil
   ) -> LearningOperationResult {
-    LearningOperationResult(
+    let product: LearningOperationProduct
+    if let failure {
+      product = .failure(failure)
+    } else if let evaluation {
+      product = .evaluation(evaluation)
+    } else {
+      product = .evaluation(verdict(outcome: .noIssue, issueCodes: []))
+    }
+    return LearningOperationResult(
       operationId: id,
-      failure: failure,
       usage: LearningCallUsage(
         model: "openai-compatible/test-model",
         promptTokens: 900,
@@ -143,7 +150,7 @@ extension BoundRunEnvironment {
         costSource: .providerReturned,
         isEstimated: false
       ),
-      evaluation: evaluation
+      product: product
     )
   }
 

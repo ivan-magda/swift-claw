@@ -29,22 +29,7 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
 
   public func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
     try database.readMapping { db in
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT canonical_bytes FROM lesson_sets WHERE job_id = ? AND digest = ?",
-        arguments: [jobId, digest.rawValue]
-      )
-      guard let row else {
-        return nil
-      }
-      let bytes: Data = row["canonical_bytes"]
-      guard
-        let set = LessonSet.decoded(jobId: jobId, canonicalBytes: bytes),
-        set.digest == digest
-      else {
-        throw StoreError.unexpected("lesson set \(digest.rawValue) for job \(jobId) is unreadable")
-      }
-      return set
+      try Self.readLessonSet(db, jobId: jobId, digest: digest)
     }
   }
 }
@@ -52,6 +37,29 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
 // MARK: - In-Transaction Arming
 
 extension ScheduledLearningStoreGRDB {
+  static func readLessonSet(
+    _ db: Database,
+    jobId: Int64,
+    digest: LessonSetDigest
+  ) throws -> LessonSet? {
+    let row = try Row.fetchOne(
+      db,
+      sql: "SELECT canonical_bytes FROM lesson_sets WHERE job_id = ? AND digest = ?",
+      arguments: [jobId, digest.rawValue]
+    )
+    guard let row else {
+      return nil
+    }
+    let bytes: Data = row["canonical_bytes"]
+    guard
+      let set = LessonSet.decoded(jobId: jobId, canonicalBytes: bytes),
+      set.digest == digest
+    else {
+      throw StoreError.unexpected("lesson set \(digest.rawValue) for job \(jobId) is unreadable")
+    }
+    return set
+  }
+
   /// `armJob` without a transaction of its own, so the fire path can arm a job and bind its run
   /// in one write. Idempotent: a job that has already armed keeps the state it has.
   static func armState(_ db: Database, jobId: Int64, now: Date) throws -> JobLearningState {

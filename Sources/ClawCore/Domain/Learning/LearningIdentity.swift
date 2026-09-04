@@ -34,6 +34,16 @@ public struct CandidateDigest: RawRepresentable, Sendable, Hashable, Codable {
   }
 }
 
+/// Digest of the canonical typed source manifest, distinct from the candidate record that also
+/// binds replacement bytes and origin.
+public struct CandidateSourceManifestDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+}
+
 /// SHA-256 over the canonical bytes of what a job asks for. Stays distinct from the lesson-set and
 /// candidate digests it sits beside in a binding, so the compiler refuses to swap them. Two runs
 /// are comparable evidence about the same task only while this value is unchanged: an edited prompt
@@ -87,6 +97,81 @@ public struct EvaluationDigest: RawRepresentable, Sendable, Hashable, Codable {
 
   public init(rawValue: String) {
     self.rawValue = rawValue
+  }
+}
+
+/// Digest of one exact append-only owner-feedback event. The row id locates the dependency; this
+/// digest binds every value whose later verification decides whether that dependency is unchanged.
+public struct FeedbackEventDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+
+  public static func of(  // swiftlint:disable:this function_parameter_count
+    eventId: Int64,
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String,
+    signal: OwnerSignal,
+    payload: String?,
+    actor: AuditActor,
+    transportUpdateId: Int64?,
+    revision: FeedbackRevision,
+    supersedes: Int64?,
+    occurredAtEpochSecond: Int64
+  ) throws -> FeedbackEventDigest {
+    let event = EventProjection(
+      eventId: eventId,
+      jobId: jobId,
+      epoch: epoch.value,
+      subjectKind: subjectKind.rawValue,
+      subjectDigest: subjectDigest,
+      signal: signal.rawValue,
+      payload: payload,
+      actor: actor.rawValue,
+      transportUpdateId: transportUpdateId,
+      revision: revision.value,
+      supersedes: supersedes,
+      occurredAtEpochSecond: occurredAtEpochSecond
+    )
+    let bytes = try CanonicalJSON.data(encoding: event)
+    let framed = CanonicalDigestInput.joined([
+      "feedback-event/v1", bytes.base64EncodedString(),
+    ])
+    return FeedbackEventDigest(rawValue: SHA256Digest.hex(framed))
+  }
+
+  private struct EventProjection: Encodable {
+    let eventId: Int64
+    let jobId: Int64
+    let epoch: Int64
+    let subjectKind: String
+    let subjectDigest: String
+    let signal: String
+    let payload: String?
+    let actor: String
+    let transportUpdateId: Int64?
+    let revision: Int64
+    let supersedes: Int64?
+    let occurredAtEpochSecond: Int64
+
+    enum CodingKeys: String, CodingKey {
+      case eventId = "event_id"
+      case jobId = "job_id"
+      case epoch = "learning_epoch"
+      case subjectKind = "subject_kind"
+      case subjectDigest = "subject_digest"
+      case signal
+      case payload
+      case actor
+      case transportUpdateId = "transport_update_id"
+      case revision = "feedback_revision"
+      case supersedes
+      case occurredAtEpochSecond = "occurred_at"
+    }
   }
 }
 
@@ -200,5 +285,22 @@ public struct CarrierDigest: RawRepresentable, Sendable, Hashable, Codable {
 
   public init(rawValue: String) {
     self.rawValue = rawValue
+  }
+}
+
+/// Digest of the exact closed reflector reply after fence removal. It is source provenance, not
+/// candidate identity: a null result has one too, and a candidate digest also binds its manifest.
+public struct ReflectionResultDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+
+  public static func of(_ bytes: Data) -> ReflectionResultDigest {
+    let framed = CanonicalDigestInput.joined([
+      "reflection-result/v1", bytes.base64EncodedString(),
+    ])
+    return ReflectionResultDigest(rawValue: SHA256Digest.hex(framed))
   }
 }

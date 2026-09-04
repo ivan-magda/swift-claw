@@ -420,6 +420,12 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.evidence(runId: runId)
   }
 
+  func prepareReflection(
+    trigger: TriggerIdentity
+  ) throws(StoreError) -> ReflectionPreparation? {
+    try base.prepareReflection(trigger: trigger)
+  }
+
   func claimOperation(
     _ key: LearningOperationKey,
     now: Date
@@ -436,6 +442,10 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
 
   func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation? {
     try base.evaluation(runId: runId)
+  }
+
+  func candidateArtifact(digest: CandidateDigest) throws(StoreError) -> CandidateArtifact? {
+    try base.candidateArtifact(digest: digest)
   }
 
   @discardableResult

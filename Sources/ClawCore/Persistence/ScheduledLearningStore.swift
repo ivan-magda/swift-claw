@@ -306,6 +306,12 @@ public protocol ScheduledLearningStore: Sendable {
   /// The sealed receipt, payload included while retention still holds it.
   func evidence(runId: Int64) throws(StoreError) -> SealedEvidence?
 
+  /// One aggregate reflection read. Nil means the frozen trigger is no longer authoritative: its
+  /// job, base, revisions, source edges, veto state, or live-trial gate no longer matches.
+  func prepareReflection(
+    trigger: TriggerIdentity
+  ) throws(StoreError) -> ReflectionPreparation?
+
   /// Takes the durable claim on one logical hypothesis, or returns nil when the key is not work
   /// this daemon may do: the job has moved to another epoch, the evidence is not something the
   /// evaluator may read, it already has a verdict, or another attempt at this key is live or
@@ -339,6 +345,10 @@ public protocol ScheduledLearningStore: Sendable {
   /// The frozen verdict on one run's evidence, written by the same transaction that committed the
   /// operation that produced it. Nil for a run nothing has evaluated.
   func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation?
+
+  /// Reads one immutable reflector artifact back through its typed manifest. Admission consumes
+  /// this row; it never invents a second candidate for the same reflection result.
+  func candidateArtifact(digest: CandidateDigest) throws(StoreError) -> CandidateArtifact?
 
   /// The boot pass over what a prior process left open. A `started` operation may have reached the
   /// provider, so it is charged conservatively under its saved call id and closed as

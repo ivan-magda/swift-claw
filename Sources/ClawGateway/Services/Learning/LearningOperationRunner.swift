@@ -18,21 +18,21 @@ public struct LearningOperationRunner: Sendable {
   public static let evaluatorOutputTokenCap = 512
   private static let carrierLabel = "evaluation-record"
 
-  private let learning: any ScheduledLearningStore
-  private let jobs: any ScheduledJobStore
-  private let roster: ProviderRoster
+  let learning: any ScheduledLearningStore
+  let jobs: any ScheduledJobStore
+  let roster: ProviderRoster
   /// The primary's cooldown window, shared with the turn path so a route that just walled off a
   /// turn is not re-probed by background learning work. Absent when nothing composed one.
-  private let cooldown: (any PrimaryRouteCooldownTracking)?
-  private let budget: RunBudget
-  private let costResolver: CostResolver
+  let cooldown: (any PrimaryRouteCooldownTracking)?
+  let budget: RunBudget
+  let costResolver: CostResolver
   /// Applied to the exact serialized carrier, not to any field of it: the decision is over the
   /// bytes that would go out. Deliberately not defaulted: an empty redactor makes the whole check
   /// inert, and a composition root that forgot the argument would put every run's final output on
   /// the wire with nothing to catch it.
-  private let redactor: SecretRedactor
-  private let providerCallIDGenerator: any ProviderCallIDGenerating
-  private let logger: Logger
+  let redactor: SecretRedactor
+  let providerCallIDGenerator: any ProviderCallIDGenerating
+  let logger: Logger
 
   public init(
     learning: any ScheduledLearningStore,
@@ -207,17 +207,18 @@ private extension LearningOperationRunner {
       // The reason, not just the refusal: a run's evidence is unjudgeable from here on, and the
       // decoder's own message is the only record of why. It quotes the schema, never the reply.
       logger.info("learning call \(call.operationId.rawValue) returned an unusable reply: \(error)")
-      finish(call, failure: .schemaInvalid, usage: usage, evaluation: nil, now: now)
+      finish(call, usage: usage, product: .failure(.schemaInvalid), now: now)
       return
     }
     finish(
       call,
-      failure: nil,
       usage: usage,
-      evaluation: LearningEvaluation(
-        outcome: output.outcome,
-        issueCodes: output.issueCodes,
-        evaluator: Self.surface(servedBy: route)
+      product: .evaluation(
+        LearningEvaluation(
+          outcome: output.outcome,
+          issueCodes: output.issueCodes,
+          evaluator: Self.surface(servedBy: route)
+        )
       ),
       now: now
     )
@@ -250,7 +251,7 @@ private extension LearningOperationRunner {
       )
     }
     logger.info("learning call \(call.operationId.rawValue) failed at the provider: \(error)")
-    finish(call, failure: .providerTerminal, usage: usage, evaluation: nil, now: now)
+    finish(call, usage: usage, product: .failure(.providerTerminal), now: now)
   }
 
   /// The verdict rides the same commit as the operation's terminal state. A `succeeded` row whose
@@ -258,18 +259,16 @@ private extension LearningOperationRunner {
   /// key forever — so that run's evidence would be paid for and permanently unjudgeable.
   func finish(
     _ call: Call,
-    failure: LearningOperationFailure?,
     usage: LearningCallUsage,
-    evaluation: LearningEvaluation?,
+    product: LearningOperationProduct,
     now: Date
   ) {
     do {
       _ = try learning.finishOperation(
         LearningOperationResult(
           operationId: call.operationId,
-          failure: failure,
           usage: usage,
-          evaluation: evaluation
+          product: product
         ),
         now: now
       )
