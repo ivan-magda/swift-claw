@@ -19,6 +19,7 @@ extension DaemonBuilder {
     turnRunner: TurnRunner,
     scheduleSurface: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler,
+    feedbackCallbacks: FeedbackCallbackHandler?,
     doctor: any DoctorReporting,
     learning: ScheduledLearningService?
   ) -> IntakeStack {
@@ -41,6 +42,7 @@ extension DaemonBuilder {
       schedule: scheduleSurface,
       learning: learning,
       approvalCallbacks: approvalCallbacks,
+      feedbackCallbacks: feedbackCallbacks,
       voice: voiceService,
       images: imageService,
       typing: TelegramTypingIndicator(transport: transport),

@@ -17,24 +17,7 @@ public struct OutboxStoreGRDB: OutboxStore {
 
   public func claimNotice(_ chunk: LearningNoticeChunk) throws(StoreError) -> Bool {
     try database.writeMapping { db in
-      try db.execute(
-        sql: """
-          INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
-            payload, payload_hash, reply_markup, status, created_ts, delivery_source)
-          VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-          """,
-        arguments: [
-          chunk.ordinal,
-          chunk.chatId,
-          OutboxDedupKey.make(subjectDigest: chunk.subjectDigest, ordinal: chunk.ordinal),
-          chunk.payload,
-          chunk.payloadHash,
-          chunk.replyMarkup,
-          Date(),
-          DeliverySource.learning.rawValue,
-        ]
-      )
-      return db.changesCount > 0
+      try Self.insertNotice(db, chunk: chunk, now: Date())
     }
   }
 
@@ -92,5 +75,36 @@ public struct OutboxStoreGRDB: OutboxStore {
         )
       }
     }
+  }
+}
+
+// MARK: - In-Transaction Notice Insert
+
+extension OutboxStoreGRDB {
+  /// The runless outbox insert without a transaction of its own, shared by learning transactions
+  /// that must commit a notice and every feedback target exposed by its keyboard atomically.
+  static func insertNotice(
+    _ db: Database,
+    chunk: LearningNoticeChunk,
+    now: Date
+  ) throws -> Bool {
+    try db.execute(
+      sql: """
+        INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
+          payload, payload_hash, reply_markup, status, created_ts, delivery_source)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+        """,
+      arguments: [
+        chunk.ordinal,
+        chunk.chatId,
+        OutboxDedupKey.make(subjectDigest: chunk.subjectDigest, ordinal: chunk.ordinal),
+        chunk.payload,
+        chunk.payloadHash,
+        chunk.replyMarkup,
+        now,
+        DeliverySource.learning.rawValue,
+      ]
+    )
+    return db.changesCount > 0
   }
 }
