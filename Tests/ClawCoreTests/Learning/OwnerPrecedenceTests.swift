@@ -139,6 +139,26 @@ import Testing
     #expect(resolved.permitsDependentDecision == false)
   }
 
+  @Test func ownerResultRemainsEffectiveWhenEvaluatorIsDisputed() {
+    // given
+    let signals = [
+      event(.evaluationDispute, id: 1, revision: 1),
+      event(.resultUseful, id: 2, revision: 2),
+    ]
+
+    // when
+    let resolved = OwnerPrecedence.resolve(
+      evaluator: .reusableIssue,
+      issueCodes: ["evaluator-code"],
+      signals: signals
+    )
+
+    // then
+    #expect(resolved.outcome == .positive)
+    #expect(resolved.hardVetoes == [.ownerDependencyRejected])
+    #expect(resolved.permitsDependentDecision == false)
+  }
+
   @Test(arguments: HardVeto.allCases)
   func eachHardVetoOutranksAPositiveOutcome(veto: HardVeto) {
     // given / when
@@ -151,6 +171,7 @@ import Testing
 
     // then
     #expect(resolved.outcome == .positive)
+    #expect(resolved.hardVetoes == [veto])
     #expect(resolved.permitsDependentDecision == false)
   }
 }
