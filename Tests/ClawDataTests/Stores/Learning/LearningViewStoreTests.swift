@@ -281,6 +281,46 @@ import Testing
     // existing semantic tests keep the expected SQLite storage classes and cannot kill it.
     #expect(view.isOnlyUnreadable)
   }
+
+  @Test func wrongClassNullableJobFieldIsPerJobUnreadable() throws {
+    // given
+    let fixture = try LearningViewFixture.make()
+    let job = try fixture.createJob(label: "wrong nullable class")
+    _ = try fixture.learning.armJob(jobId: job.id, now: fixture.now)
+    try fixture.storeBlobAsRecurrence(jobId: job.id)
+
+    // when
+    let view = try fixture.learning.learningView(jobId: job.id)
+
+    // then — accepting a wrong-class nullable value as SQL NULL makes this job readable; the
+    // nearest primitive matrix reaches only non-optional fields.
+    #expect(view.isOnlyUnreadable)
+  }
+
+  @Test func outOfDomainAssignmentBooleanIsPerJobUnreadable() throws {
+    // given
+    let fixture = try AdmissionStoreFixture.make()
+    defer { fixture.remove() }
+    let artifact = try fixture.persistedCandidate()
+    let admitted = try fixture.env.learning.admitCandidate(
+      digest: artifact.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
+    guard case .admitted(let receipt) = admitted else {
+      Issue.record("expected fixture candidate admission")
+      return
+    }
+    _ = try fixture.env.pendingBoundRun()
+    try fixture.storeOutOfDomainEvaluationRequired(trialId: receipt.trialId)
+
+    // when
+    let view = try fixture.env.learning.learningView(jobId: fixture.env.jobId)
+
+    // then — treating every nonzero INTEGER as true accepts the damaged assignment; the nearest
+    // primitive matrix changes an integer's storage class and never tests the Boolean domain.
+    #expect(view.isOnlyUnreadable)
+  }
 }
 
 enum LiveTrialCorruption: CaseIterable, Sendable {
@@ -466,6 +506,15 @@ private struct LearningViewFixture {
     }
   }
 
+  func storeBlobAsRecurrence(jobId: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE scheduled_jobs SET recurrence = ? WHERE id = ?",
+        arguments: [Data([0xFF]), jobId]
+      )
+    }
+  }
+
   private func pointStableState(jobId: Int64, digest: String) throws {
     try queue.write { db in
       try db.execute(
@@ -491,6 +540,15 @@ private struct LearningViewFixture {
 }
 
 private extension AdmissionStoreFixture {
+  func storeOutOfDomainEvaluationRequired(trialId: Int64) throws {
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE trial_assignments SET evaluation_required = 2 WHERE trial_id = ?",
+        arguments: [trialId]
+      )
+    }
+  }
+
   func corruptViewTrial(
     _ corruption: LiveTrialCorruption,
     artifact: CandidateArtifact,
