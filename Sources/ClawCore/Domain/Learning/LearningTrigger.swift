@@ -99,9 +99,9 @@ private extension EvidenceWindow {
   }
 }
 
-public enum LearningTriggerReason: Sendable, Equatable {
-  case recurringIssue
-  case ownerCorrection
+public enum LearningTriggerReason: String, Sendable, Equatable, Codable {
+  case recurringIssue = "recurring_issue"
+  case ownerCorrection = "owner_correction"
 }
 
 /// The complete idempotency identity for one logical reflector operation.

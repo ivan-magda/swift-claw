@@ -36,6 +36,9 @@ extension ScheduledLearningStoreGRDB {
     guard authorization.carrier.sourceDigest == operation.sourceDigest else {
       return .superseded
     }
+    guard try authorizationMatchesPhase(db, authorization, operation: operation) else {
+      return .superseded
+    }
     guard authorization.carrier.isPermitted else {
       return try closeWithoutCall(db, operation, failure: .carrierPolicyDenied)
     }
@@ -66,8 +69,14 @@ extension ScheduledLearningStoreGRDB {
         "started operation \(operation.id.rawValue) has no provider call id to charge"
       )
     }
-    let terminal: LearningOperationState = result.failure == nil ? .succeeded : .failed
-    guard try closeStarted(db, operation, terminal: terminal, failure: result.failure) else {
+    guard product(result.product, belongsTo: operation.phase) else {
+      throw StoreError.unexpected(
+        "operation \(operation.id.rawValue) received a product for another phase"
+      )
+    }
+    let failure = result.product.failure
+    let terminal: LearningOperationState = failure == nil ? .succeeded : .failed
+    guard try closeStarted(db, operation, terminal: terminal, failure: failure) else {
       return false
     }
     // The reserved call id, never a fresh one: the estimate never became a row, so this is the
@@ -84,8 +93,142 @@ extension ScheduledLearningStoreGRDB {
       isEstimated: result.usage.isEstimated,
       now: now
     )
-    if let evaluation = result.evaluation {
+    switch result.product {
+    case .failure:
+      break
+    case .evaluation(let evaluation):
       try recordEvaluation(db, operation: operation, evaluation: evaluation, now: now)
+    case .candidate(let artifact):
+      if try candidateIsCurrent(db, artifact: artifact, operation: operation) {
+        try recordCandidateArtifact(db, artifact: artifact, now: now)
+      }
+    case .noCandidate(let noCandidate):
+      if try noCandidateIsCurrent(db, result: noCandidate, operation: operation) {
+        try recordNoCandidate(
+          db,
+          result: noCandidate,
+          jobId: operation.jobId,
+          epoch: operation.epoch,
+          now: now
+        )
+      }
+    }
+    return true
+  }
+}
+
+// MARK: - Phase Gates
+
+private extension ScheduledLearningStoreGRDB {
+  static func authorizationMatchesPhase(
+    _ db: Database,
+    _ authorization: LearningAuthorization,
+    operation: OperationRow
+  ) throws -> Bool {
+    switch (operation.phase, authorization.context) {
+    case (.evaluator, .evaluation):
+      return true
+    case (.reflector, .reflection(let reflection)):
+      let sourcesAreCurrent = try reflectionAuthorizationIsCurrent(
+        db,
+        authorization: reflection
+      )
+      let expectedKey = LearningOperationKey(
+        jobId: operation.jobId,
+        epoch: operation.epoch,
+        phase: .reflector,
+        sourceDigest: reflection.trigger.digest.rawValue,
+        promptVersion: ReflectorPrompt.v1.version,
+        schemaVersion: ReflectorOutput.currentSchemaVersion,
+        rubricVersion: ReflectorRubric.v1
+      )
+      return operation.keyDigest == expectedKey.digest
+        && operation.sourceDigest == reflection.trigger.digest.rawValue
+        && reflection.trigger.jobId == operation.jobId
+        && reflection.trigger.epoch == operation.epoch
+        && reflection.trigger.algorithm == .v1
+        && sourcesAreCurrent
+    case (.evaluator, .reflection), (.reflector, .evaluation):
+      return false
+    }
+  }
+
+  static func product(
+    _ product: LearningOperationProduct,
+    belongsTo phase: LearningPhase
+  ) -> Bool {
+    switch (phase, product) {
+    case (.evaluator, .evaluation), (.reflector, .candidate), (.reflector, .noCandidate),
+      (_, .failure):
+      return true
+    case (.evaluator, .candidate), (.evaluator, .noCandidate), (.reflector, .evaluation):
+      return false
+    }
+  }
+
+  static func candidateIsCurrent(
+    _ db: Database,
+    artifact: CandidateArtifact,
+    operation: OperationRow
+  ) throws -> Bool {
+    let manifest = artifact.manifest
+    guard
+      manifest.schemaVersion == CandidateSourceManifest.currentSchemaVersion,
+      manifest.origin == .reflection,
+      manifest.algorithm == .v1,
+      manifest.jobId == operation.jobId,
+      artifact.replacement.jobId == operation.jobId,
+      manifest.epoch == operation.epoch,
+      manifest.triggerDigest.rawValue == operation.sourceDigest,
+      manifest.operationId == operation.id,
+      manifest.carrierDigest == operation.carrierDigest,
+      manifest.predecessorCandidate == nil,
+      manifest.predecessorFeedback == nil
+    else {
+      return false
+    }
+    let trigger = TriggerIdentity(
+      jobId: manifest.jobId,
+      epoch: manifest.epoch,
+      algorithm: manifest.algorithm,
+      stableDigest: manifest.baseDigest,
+      evidenceDigests: manifest.evidence.map(\.digest),
+      feedbackRevision: manifest.feedbackRevision,
+      issueCodes: manifest.qualifyingIssueCodes,
+      reason: manifest.triggerReason
+    )
+    guard
+      trigger.digest == manifest.triggerDigest,
+      let current = try prepareReflection(db, trigger: trigger)
+    else {
+      return false
+    }
+    return manifest.baseRevision == current.stableRevision
+      && manifest.evidence == current.evidenceSources
+      && manifest.evaluations == current.evaluationSources
+      && manifest.feedback == current.feedbackSources
+  }
+
+  static func noCandidateIsCurrent(
+    _ db: Database,
+    result: NoCandidateResult,
+    operation: OperationRow
+  ) throws -> Bool {
+    guard
+      result.algorithm == .v1,
+      result.triggerDigest.rawValue == operation.sourceDigest,
+      result.operationId == operation.id,
+      result.carrierDigest == operation.carrierDigest,
+      result.authorization.trigger.digest == result.triggerDigest
+    else {
+      return false
+    }
+    // A no-candidate carries no durable source bytes. Its authorization is revalidated before the
+    // call, and finish still fences the state whose identity is stored on the operation itself.
+    guard
+      try reflectionAuthorizationIsCurrent(db, authorization: result.authorization)
+    else {
+      return false
     }
     return true
   }

@@ -236,8 +236,8 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-        SELECT job_id, learning_epoch, source_digest, state, route, provider_call_id,
-          reserved_tokens, reserved_cost_usd
+        SELECT job_id, learning_epoch, phase, source_digest, key_digest, carrier_digest, state,
+          route, provider_call_id, reserved_tokens, reserved_cost_usd
         FROM learning_operations WHERE operation_id = ?
         """,
       arguments: [id.rawValue]
@@ -249,7 +249,10 @@ extension ScheduledLearningStoreGRDB {
       id: id,
       jobId: row["job_id"],
       epoch: LearningEpoch(row["learning_epoch"]),
+      phase: try learningPhase(row["phase"], of: id),
       sourceDigest: row["source_digest"],
+      keyDigest: LearningOperationKeyDigest(rawValue: row["key_digest"]),
+      carrierDigest: (row["carrier_digest"] as String?).map(CarrierDigest.init(rawValue:)),
       state: try operationState(row["state"], of: id),
       route: row["route"],
       providerCallID: (row["provider_call_id"] as String?).map(ProviderCallID.init(rawValue:)),
@@ -268,6 +271,13 @@ extension ScheduledLearningStoreGRDB {
     return state
   }
 
+  static func learningPhase(_ raw: String, of id: LearningOperationID) throws -> LearningPhase {
+    guard let phase = LearningPhase(rawValue: raw) else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds an unreadable phase '\(raw)'")
+    }
+    return phase
+  }
+
   struct AttemptRow {
     let id: LearningOperationID
     let attemptGeneration: Int
@@ -279,7 +289,10 @@ extension ScheduledLearningStoreGRDB {
     let id: LearningOperationID
     let jobId: Int64
     let epoch: LearningEpoch
+    let phase: LearningPhase
     let sourceDigest: String
+    let keyDigest: LearningOperationKeyDigest
+    let carrierDigest: CarrierDigest?
     let state: LearningOperationState
     let route: String?
     let providerCallID: ProviderCallID?

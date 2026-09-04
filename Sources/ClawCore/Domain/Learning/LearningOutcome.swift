@@ -49,15 +49,19 @@ public enum HardVeto: Sendable, Hashable, CaseIterable {
 public struct ResolvedOutcome: Sendable, Equatable {
   public let outcome: EffectiveOutcome
   public let ownerConfirmed: Bool
+  /// Whether this effective outcome consumed the evaluator verdict or its issue codes.
+  public let evaluationRequired: Bool
   public let hardVetoes: Set<HardVeto>
 
   public init(
     outcome: EffectiveOutcome,
     ownerConfirmed: Bool,
+    evaluationRequired: Bool,
     hardVetoes: Set<HardVeto>
   ) {
     self.outcome = outcome
     self.ownerConfirmed = ownerConfirmed
+    self.evaluationRequired = evaluationRequired
     self.hardVetoes = hardVetoes
   }
 
@@ -82,14 +86,32 @@ public enum OwnerPrecedence {
     let evaluationDisputed = effectiveSignals.contains { event in
       event.signal == .evaluationDispute
     }
+    let usesEvaluatorCodes = issueCodes.isEmpty == false && evaluationDisputed == false
+    let evaluationRequired: Bool
+    if let resultSignal {
+      switch resultSignal.signal {
+      case .resultNotUseful, .resultCorrection:
+        evaluationRequired = usesEvaluatorCodes
+      case .resultUseful:
+        evaluationRequired = false
+      case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
+        .candidateEdit, .promotionRollback:
+        evaluationRequired = false
+      }
+    } else {
+      evaluationRequired = true
+    }
     var effectiveVetoes = hardVetoes
-    if evaluationDisputed {
+    if evaluationDisputed && evaluationRequired {
       effectiveVetoes.insert(.ownerDependencyRejected)
     }
 
     let outcome =
       resultSignal.map { event in
-        Self.ownerOutcome(signal: event.signal, evaluatorIssueCodes: issueCodes)
+        Self.ownerOutcome(
+          signal: event.signal,
+          evaluatorIssueCodes: usesEvaluatorCodes ? issueCodes : []
+        )
       }
       ?? Self.evaluatorOutcome(
         evaluator,
@@ -104,6 +126,7 @@ public enum OwnerPrecedence {
     return ResolvedOutcome(
       outcome: outcome,
       ownerConfirmed: ownerConfirmed,
+      evaluationRequired: evaluationRequired,
       hardVetoes: effectiveVetoes
     )
   }
@@ -155,7 +178,7 @@ private extension OwnerPrecedence {
 // MARK: - Supersession
 
 extension FeedbackEvent {
-  static func latestUnsupersededResult(in events: [FeedbackEvent]) -> FeedbackEvent? {
+  package static func latestUnsupersededResult(in events: [FeedbackEvent]) -> FeedbackEvent? {
     unsuperseded(events)
       .filter { event in
         event.signal.isResultSignal
@@ -163,7 +186,7 @@ extension FeedbackEvent {
       .max(by: precedes)
   }
 
-  static func unsuperseded(_ events: [FeedbackEvent]) -> [FeedbackEvent] {
+  package static func unsuperseded(_ events: [FeedbackEvent]) -> [FeedbackEvent] {
     let superseded = Set(events.compactMap(\.supersedes))
     return events.filter { event in
       superseded.contains(event.id) == false

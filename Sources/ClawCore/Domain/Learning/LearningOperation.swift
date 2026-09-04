@@ -104,6 +104,7 @@ public struct LearningAuthorization: Sendable {
   public let configuredRoute: String
   public let providerCallID: ProviderCallID
   public let budget: BudgetGate
+  public let context: LearningAuthorizationContext
 
   public init(
     operationId: LearningOperationID,
@@ -112,7 +113,8 @@ public struct LearningAuthorization: Sendable {
     estimatedCostUSD: Double,
     configuredRoute: String,
     providerCallID: ProviderCallID,
-    budget: BudgetGate
+    budget: BudgetGate,
+    context: LearningAuthorizationContext = .evaluation
   ) {
     self.operationId = operationId
     self.carrier = carrier
@@ -121,6 +123,46 @@ public struct LearningAuthorization: Sendable {
     self.configuredRoute = configuredRoute
     self.providerCallID = providerCallID
     self.budget = budget
+    self.context = context
+  }
+}
+
+/// Phase-specific state the authorize transaction must revalidate immediately before the network.
+/// Evaluation has no wider frozen window; reflection must still describe the exact source edges.
+public enum LearningAuthorizationContext: Sendable, Equatable {
+  case evaluation
+  case reflection(ReflectionAuthorization)
+}
+
+public struct ReflectionAuthorization: Sendable, Equatable {
+  public let trigger: TriggerIdentity
+  public let stableRevision: StableRevision
+  public let evidence: [CandidateEvidenceSource]
+  public let evaluations: [CandidateEvaluationSource]
+  public let feedback: [CandidateFeedbackSource]
+
+  public init(
+    trigger: TriggerIdentity,
+    stableRevision: StableRevision,
+    evidence: [CandidateEvidenceSource],
+    evaluations: [CandidateEvaluationSource],
+    feedback: [CandidateFeedbackSource]
+  ) {
+    self.trigger = trigger
+    self.stableRevision = stableRevision
+    self.evidence = evidence
+    self.evaluations = evaluations
+    self.feedback = feedback
+  }
+
+  public init(preparation: ReflectionPreparation) {
+    self.init(
+      trigger: preparation.trigger,
+      stableRevision: preparation.stableRevision,
+      evidence: preparation.evidenceSources,
+      evaluations: preparation.evaluationSources,
+      feedback: preparation.feedbackSources
+    )
   }
 }
 
@@ -201,28 +243,62 @@ public struct LearningEvaluation: Sendable, Equatable {
   }
 }
 
-/// One network boundary crossing, closed. `failure` nil means the call returned output the
-/// operation can use; a failure means it returned something it cannot, which is still spend.
+public struct NoCandidateResult: Sendable, Equatable {
+  public let algorithm: LearningAlgorithm
+  public let triggerDigest: TriggerDigest
+  public let operationId: LearningOperationID
+  public let carrierDigest: CarrierDigest
+  public let resultDigest: ReflectionResultDigest
+  public let authorization: ReflectionAuthorization
+
+  public init(
+    algorithm: LearningAlgorithm,
+    triggerDigest: TriggerDigest,
+    operationId: LearningOperationID,
+    carrierDigest: CarrierDigest,
+    resultDigest: ReflectionResultDigest,
+    authorization: ReflectionAuthorization
+  ) {
+    self.algorithm = algorithm
+    self.triggerDigest = triggerDigest
+    self.operationId = operationId
+    self.carrierDigest = carrierDigest
+    self.resultDigest = resultDigest
+    self.authorization = authorization
+  }
+}
+
+/// The one phase-valid product of a completed crossing. The enum makes two semantic products at
+/// once unrepresentable; failure is terminal spend with no artifact or receipt.
+public enum LearningOperationProduct: Sendable, Equatable {
+  case failure(LearningOperationFailure)
+  case evaluation(LearningEvaluation)
+  case candidate(CandidateArtifact)
+  case noCandidate(NoCandidateResult)
+
+  public var failure: LearningOperationFailure? {
+    guard case .failure(let failure) = self else {
+      return nil
+    }
+    return failure
+  }
+}
+
+/// One network boundary crossing, closed. Every product travels with the result because a
+/// finished key is never reopened after an ordinary completed generation.
 public struct LearningOperationResult: Sendable, Equatable {
   public let operationId: LearningOperationID
-  public let failure: LearningOperationFailure?
   public let usage: LearningCallUsage
-  /// The verdict this crossing produced, nil whenever it produced none. It travels with the result
-  /// rather than behind it because `claim` refuses a finished key forever: an operation committed
-  /// `succeeded` with its verdict still unwritten would be paid-for evidence that nothing can ever
-  /// evaluate again, and no later pass could tell that from a run legitimately never judged.
-  public let evaluation: LearningEvaluation?
+  public let product: LearningOperationProduct
 
   public init(
     operationId: LearningOperationID,
-    failure: LearningOperationFailure?,
     usage: LearningCallUsage,
-    evaluation: LearningEvaluation?
+    product: LearningOperationProduct
   ) {
     self.operationId = operationId
-    self.failure = failure
     self.usage = usage
-    self.evaluation = evaluation
+    self.product = product
   }
 }
 

@@ -98,14 +98,18 @@ struct BoundRunEnvironment {
     }
   }
 
-  func assistantTurn(runId: Int64, model: String = "m") -> AssistantTurn {
+  func assistantTurn(
+    runId: Int64,
+    model: String = "m",
+    content: String = "done"
+  ) -> AssistantTurn {
     AssistantTurn(
       runId: runId,
       sessionId: sessionId,
       chatId: 777,
-      content: "done",
+      content: content,
       usage: makeProviderUsage(runId: runId, sessionId: sessionId, model: model),
-      chunks: [chunk(payload: "done")]
+      chunks: [chunk(payload: content)]
     )
   }
 
