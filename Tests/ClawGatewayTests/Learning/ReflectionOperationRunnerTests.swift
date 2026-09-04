@@ -6,7 +6,7 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct ReflectionOperationRunnerTests {
-  @Test func oneTriggerMakesOneFreshToolFreeCallAndOneUnadmittedArtifact() async throws {
+  @Test func oneTriggerMakesOneFreshToolFreeCallAndAdmitsTheCurrentArtifact() async throws {
     // given
     let env = try ReflectionRunEnvironment.make()
 
@@ -14,7 +14,7 @@ import Testing
     await env.runner.runReflection(trigger: env.trigger, now: env.now)
     await env.runner.runReflection(trigger: env.trigger, now: env.now)
 
-    // then — permitting a completed key to claim again would duplicate both spend and artifacts
+    // then — omitting automatic admission or replay fencing loses/duplicates the live experiment
     let requests = await env.provider.requests
     #expect(requests.count == 1)
     let request = try #require(requests.first)
@@ -23,7 +23,8 @@ import Testing
     #expect(request.messages.count == 2)
     #expect(request.messages.map(\.role) == [.system, .user])
     #expect(try env.rowCount("learning_candidates") == 1)
-    #expect(try env.rowCount("learning_trials") == 0)
+    #expect(try env.rowCount("learning_trials") == 1)
+    #expect(try env.rowCount("learning_decisions") == 1)
     #expect(try env.operationState() == .succeeded)
   }
 

@@ -214,6 +214,33 @@ public struct JobLearningState: Sendable, Equatable {
 }
 
 public protocol ScheduledLearningStore: Sendable {
+  /// Revalidates and admits one already-persisted immutable candidate.
+  func admitCandidate(
+    digest: CandidateDigest,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome
+
+  /// Creates an immutable approval successor and admits it through the common transaction.
+  func approveCandidate(
+    _ approval: CandidateApproval,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome
+
+  /// Vetoes the predecessor and creates an immutable unadmitted edit successor.
+  func editCandidate(
+    _ edit: CandidateEdit,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome
+
+  /// Atomically inserts every target and every runless chunk for one stable review identity.
+  func commitCandidateReview(
+    _ review: CandidateReviewNotice,
+    now: Date
+  ) throws(StoreError) -> Bool
+
   /// Commits every runless notice chunk and every nonce it exposes in one transaction.
   func createTargets(
     _ targets: [NewFeedbackTarget],
@@ -356,4 +383,40 @@ public protocol ScheduledLearningStore: Sendable {
   /// called, so it returns to `pending` and is claimable again.
   @discardableResult
   func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation
+}
+
+public extension ScheduledLearningStore {
+  func admitCandidate(
+    digest _: CandidateDigest,
+    redactor _: SecretRedactor,
+    now _: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    throw .unexpected("candidate admission is unavailable")
+  }
+
+  func approveCandidate(
+    _ approval: CandidateApproval,
+    redactor _: SecretRedactor,
+    now _: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    _ = approval
+    throw .unexpected("candidate approval is unavailable")
+  }
+
+  func editCandidate(
+    _ edit: CandidateEdit,
+    redactor _: SecretRedactor,
+    now _: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    _ = edit
+    throw .unexpected("candidate edit is unavailable")
+  }
+
+  func commitCandidateReview(
+    _ review: CandidateReviewNotice,
+    now _: Date
+  ) throws(StoreError) -> Bool {
+    _ = review
+    throw .unexpected("candidate review is unavailable")
+  }
 }

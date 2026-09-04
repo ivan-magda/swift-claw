@@ -463,57 +463,59 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func closeEvaluationTrial(_ db: Database, target: FeedbackTarget) throws -> Int64? {
-    try Int64.fetchOne(
+    let rows = try Row.fetchAll(
       db,
       sql: """
-        UPDATE learning_trials SET state = ?, close_reason = ?
-        WHERE trial_id = (
-          SELECT trial.trial_id
-          FROM learning_trials AS trial
-          JOIN learning_candidates AS candidate
-            ON candidate.candidate_digest = trial.candidate_digest
-          JOIN lesson_sets AS replacement
-            ON replacement.job_id = candidate.job_id
-            AND replacement.digest = candidate.replacement_digest
-          JOIN trial_assignments AS assignment
-            ON assignment.trial_id = trial.trial_id
-          JOIN job_learning_state AS learning_state
-            ON learning_state.job_id = trial.job_id
-            AND learning_state.learning_epoch = trial.learning_epoch
-            AND learning_state.stable_lesson_set_digest = trial.base_digest
-          WHERE trial.job_id = ? AND trial.learning_epoch = ?
-            AND trial.state IN (?, ?)
-            AND candidate.job_id = trial.job_id
-            AND candidate.learning_epoch = trial.learning_epoch
-            AND candidate.base_digest = trial.base_digest
-            AND candidate.algorithm = trial.algorithm
-            AND assignment.job_id = trial.job_id
-            AND assignment.learning_epoch = trial.learning_epoch
-            AND assignment.trial_generation = trial.generation
-            AND assignment.evaluation_digest = ?
-            AND assignment.evaluation_required = 1
-          ORDER BY trial.trial_id DESC LIMIT 1
-        )
-        RETURNING trial_id
+        SELECT trial.trial_id, trial.candidate_digest
+        FROM learning_trials AS trial
+        JOIN job_learning_state AS learning_state
+          ON learning_state.job_id = trial.job_id
+          AND learning_state.learning_epoch = trial.learning_epoch
+          AND learning_state.stable_lesson_set_digest = trial.base_digest
+        WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.state IN (?, ?)
+        ORDER BY trial.trial_id DESC
         """,
       arguments: [
-        LearningTrialState.fellBack.rawValue,
-        Self.hardVetoReason,
         target.jobId,
         target.epoch.value,
         LearningTrialState.open.rawValue,
         LearningTrialState.draining.rawValue,
-        target.subjectDigest,
       ]
     )
+    for row in rows {
+      let digest = CandidateDigest(rawValue: row["candidate_digest"])
+      guard
+        let candidate = try readCandidateArtifact(db, digest: digest),
+        candidate.manifest.evidence.contains(where: { source in
+          source.evaluationRequired
+            && source.evaluationDigest.rawValue == target.subjectDigest
+        })
+      else {
+        continue
+      }
+      let trialId: Int64 = row["trial_id"]
+      try db.execute(
+        sql: """
+          UPDATE learning_trials SET state = ?, close_reason = ?
+          WHERE trial_id = ? AND state IN (?, ?)
+          """,
+        arguments: [
+          LearningTrialState.fellBack.rawValue,
+          Self.hardVetoReason,
+          trialId,
+          LearningTrialState.open.rawValue,
+          LearningTrialState.draining.rawValue,
+        ]
+      )
+      return db.changesCount == 1 ? trialId : nil
+    }
+    return nil
   }
 }
 
 // MARK: - Audit
 
 private extension ScheduledLearningStoreGRDB {
-  static let hardVetoReason = "hard_veto"
-
   static func auditFeedback(
     _ db: Database,
     tap: FeedbackTap,

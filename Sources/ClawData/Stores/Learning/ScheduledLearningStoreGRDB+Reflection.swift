@@ -29,6 +29,25 @@ extension ScheduledLearningStoreGRDB {
     _ db: Database,
     trigger: TriggerIdentity
   ) throws -> ReflectionPreparation? {
+    try prepareReflection(
+      db,
+      trigger: trigger,
+      feedbackCutoff: trigger.feedbackRevision,
+      requiredStateFeedbackRevision: trigger.feedbackRevision,
+      requiresNoLiveTrial: true
+    )
+  }
+
+  static func prepareReflection(
+    _ db: Database,
+    trigger: TriggerIdentity,
+    feedbackCutoff: FeedbackRevision,
+    requiredStateFeedbackRevision: FeedbackRevision,
+    requiresNoLiveTrial: Bool
+  ) throws -> ReflectionPreparation? {
+    let trialRequirementIsMet =
+      requiresNoLiveTrial == false
+      ? true : try liveTrial(db, jobId: trigger.jobId) == nil
     guard trigger.algorithm == .v1 else {
       return nil
     }
@@ -36,9 +55,9 @@ extension ScheduledLearningStoreGRDB {
       let state = try readState(db, jobId: trigger.jobId),
       state.epoch == trigger.epoch,
       state.stableDigest == trigger.stableDigest,
-      state.feedbackRevision == trigger.feedbackRevision,
+      state.feedbackRevision == requiredStateFeedbackRevision,
       try jobIsRepeatable(db, jobId: trigger.jobId),
-      try liveTrial(db, jobId: trigger.jobId) == nil,
+      trialRequirementIsMet,
       let stable = try readLessonSet(db, jobId: trigger.jobId, digest: trigger.stableDigest)
     else {
       return nil
@@ -55,7 +74,12 @@ extension ScheduledLearningStoreGRDB {
     guard rows.count == trigger.evidenceDigests.count else {
       return nil
     }
-    let feedback = try reflectionFeedback(db, trigger: trigger, rows: rows)
+    let feedback = try reflectionFeedback(
+      db,
+      trigger: trigger,
+      rows: rows,
+      cutoff: feedbackCutoff
+    )
     let reduced = try reduceReflectionRows(rows, feedback: feedback, trigger: trigger)
     guard reduced.vetoed == false else {
       return nil
@@ -73,32 +97,6 @@ extension ScheduledLearningStoreGRDB {
       feedbackSources: reduced.feedbackSources,
       ownerPayloads: reduced.payloads
     )
-  }
-
-  static func reflectionAuthorizationIsCurrent(
-    _ db: Database,
-    authorization: ReflectionAuthorization
-  ) throws -> Bool {
-    guard let current = try prepareReflection(db, trigger: authorization.trigger) else {
-      return false
-    }
-    return ReflectionAuthorization(preparation: current) == authorization
-  }
-
-  static func jobIsRepeatable(_ db: Database, jobId: Int64) throws -> Bool {
-    let row = try Row.fetchOne(
-      db,
-      sql: "SELECT status, recurrence FROM scheduled_jobs WHERE id = ?",
-      arguments: [jobId]
-    )
-    guard
-      let row,
-      row["recurrence"] as String? != nil,
-      let status = ScheduledJobStatus(rawValue: row["status"])
-    else {
-      return false
-    }
-    return status == .active || status == .paused
   }
 }
 
@@ -196,7 +194,8 @@ private extension ScheduledLearningStoreGRDB {
   static func reflectionFeedback(
     _ db: Database,
     trigger: TriggerIdentity,
-    rows: [ReflectionRow]
+    rows: [ReflectionRow],
+    cutoff: FeedbackRevision
   ) throws -> [StoredReflectionFeedback] {
     let subjects = ReflectionSubjects(
       runIds: Set(
@@ -220,7 +219,7 @@ private extension ScheduledLearningStoreGRDB {
           WHERE job_id = ? AND learning_epoch = ? AND feedback_revision <= ?
           ORDER BY feedback_revision, event_id
         """,
-      arguments: [trigger.jobId, trigger.epoch.value, trigger.feedbackRevision.value]
+      arguments: [trigger.jobId, trigger.epoch.value, cutoff.value]
     )
     return try stored.compactMap { row in
       try storedReflectionFeedback(row, trigger: trigger, subjects: subjects)
@@ -431,6 +430,7 @@ extension ScheduledLearningStoreGRDB {
   static func recordCandidateArtifact(
     _ db: Database,
     artifact: CandidateArtifact,
+    lessonSource: LessonSetSource = .reflectorCandidate,
     now: Date
   ) throws {
     let bytes = try CanonicalJSON.data(encoding: artifact.manifest)
@@ -448,7 +448,7 @@ extension ScheduledLearningStoreGRDB {
         artifact.replacement.digest.rawValue,
         artifact.replacement.schemaVersion,
         artifact.replacement.canonicalBytes,
-        LessonSetSource.reflectorCandidate.rawValue,
+        lessonSource.rawValue,
         EpochSecondCodec.epoch(now),
       ]
     )

@@ -16,8 +16,19 @@ struct BoundRunEnvironment {
   let sessionId: Int64
   let now: Date
 
-  static func make(learningEnabled: Bool = true) throws -> BoundRunEnvironment {
-    let queue = try ClawDatabase.makeInMemoryQueue()
+  static func make(
+    learningEnabled: Bool = true,
+    databasePath: String? = nil
+  ) throws -> BoundRunEnvironment {
+    let queue: DatabaseQueue
+    if let databasePath {
+      queue = try DatabaseQueue(
+        path: databasePath,
+        configuration: ClawDatabase.makeConfiguration()
+      )
+    } else {
+      queue = try ClawDatabase.makeInMemoryQueue()
+    }
     try ClawDatabase.migrate(queue)
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: learningEnabled)
     let now = Date(timeIntervalSince1970: 1_782_000_600)
