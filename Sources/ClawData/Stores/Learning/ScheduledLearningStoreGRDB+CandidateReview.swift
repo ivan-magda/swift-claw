@@ -59,7 +59,7 @@ private extension ScheduledLearningStoreGRDB {
           state: state,
           ownerChatId: job.ownerChatId
         ),
-        let markup = try committedChunksMarkup(
+        let delivery = try committedReviewDelivery(
           db,
           review: review,
           ownerChatId: job.ownerChatId
@@ -69,7 +69,7 @@ private extension ScheduledLearningStoreGRDB {
           artifact: artifact,
           state: state,
           ownerChatId: job.ownerChatId,
-          markup: markup
+          delivery: delivery
         )
       else {
         return false
@@ -94,17 +94,17 @@ private extension ScheduledLearningStoreGRDB {
     return .awaitingApproval
   }
 
-  static func committedChunksMarkup(
+  static func committedReviewDelivery(
     _ db: Database,
     review: CandidateReviewNotice,
     ownerChatId: Int64
-  ) throws -> String? {
+  ) throws -> CommittedReviewDelivery? {
     let prefix = OutboxDedupKey.make(subjectDigest: review.subjectDigest, ordinal: 0).dropLast()
     let rows = try Row.fetchAll(
       db,
       sql: """
         SELECT run_id, step_index, chat_id, dedup_key, payload, payload_hash, approval_id,
-          reply_markup, message_thread_id, reply_to_message_id, delivery_source
+          reply_markup, message_thread_id, reply_to_message_id, created_ts, delivery_source
         FROM outbound_deliveries WHERE dedup_key GLOB ? ORDER BY step_index
         """,
       arguments: ["\(prefix)*"]
@@ -112,6 +112,7 @@ private extension ScheduledLearningStoreGRDB {
     guard rows.count == review.chunks.count, rows.isEmpty == false else {
       return nil
     }
+    let createdAt: Date = rows[0]["created_ts"]
     for (ordinal, row) in rows.enumerated() {
       let expected = review.chunks[ordinal]
       let payload: String = row["payload"]
@@ -131,6 +132,7 @@ private extension ScheduledLearningStoreGRDB {
         (row["approval_id"] as Int64?) == nil,
         (row["message_thread_id"] as Int64?) == nil,
         (row["reply_to_message_id"] as Int64?) == nil,
+        row["created_ts"] as Date == createdAt,
         row["delivery_source"] as String == DeliverySource.learning.rawValue
       else {
         return nil
@@ -143,7 +145,7 @@ private extension ScheduledLearningStoreGRDB {
     else {
       return nil
     }
-    return markup
+    return CommittedReviewDelivery(markup: markup, createdAt: createdAt)
   }
 
   static func committedTargetsAreComplete(
@@ -151,18 +153,20 @@ private extension ScheduledLearningStoreGRDB {
     artifact: CandidateArtifact,
     state: CandidateReviewState,
     ownerChatId: Int64,
-    markup: String
+    delivery: CommittedReviewDelivery
   ) throws -> Bool {
     guard
-      let rows = try? FeedbackKeyboard.parseMarkup(markup),
+      let rows = try? FeedbackKeyboard.parseMarkup(delivery.markup),
       rows.count == artifact.manifest.evaluations.count + 1
     else {
       return false
     }
     let candidateActions = candidateActions(for: state)
+    let expectedExpiry = Date(
+      timeIntervalSince1970: TimeInterval(EpochSecondCodec.epoch(delivery.createdAt))
+    ).addingTimeInterval(EvidenceWindow.maximumAge)
     var targetNonces: Set<String> = []
     var targets: [NewFeedbackTarget] = []
-    var candidateExpiry: Date?
     for (index, buttons) in rows.enumerated() {
       guard
         let nonce = buttons.first?.nonce,
@@ -179,7 +183,6 @@ private extension ScheduledLearningStoreGRDB {
         expectedKind = .candidate
         expectedDigest = artifact.digest.rawValue
         expectedActions = candidateActions
-        candidateExpiry = target.expiresAt
       } else {
         expectedKind = .evaluation
         expectedDigest = artifact.manifest.evaluations[index - 1].digest.rawValue
@@ -194,7 +197,7 @@ private extension ScheduledLearningStoreGRDB {
         target.allowedActions == expectedActions,
         target.ownerUserId == ownerChatId,
         target.chatId == ownerChatId,
-        target.expiresAt == candidateExpiry
+        target.expiresAt == expectedExpiry
       else {
         return false
       }
@@ -204,7 +207,7 @@ private extension ScheduledLearningStoreGRDB {
       FeedbackKeyboard.candidateReviewMarkup(
         targets: targets,
         evaluations: artifact.manifest.evaluations
-      ) == markup
+      ) == delivery.markup
     else {
       return false
     }
@@ -245,7 +248,6 @@ private extension ScheduledLearningStoreGRDB {
       try hardVetoes(db, artifact: artifact).isEmpty,
       review.subjectDigest == CandidateReviewIdentity.digest(candidateDigest: artifact.digest),
       review.targets.count == artifact.manifest.evaluations.count + 1,
-      review.targets.count <= 6,
       review.chunks.isEmpty == false,
       review.targets.allSatisfy({ target in target.nonce.isEmpty == false }),
       Set(review.targets.map(\.nonce)).count == review.targets.count,
@@ -353,7 +355,6 @@ private extension ScheduledLearningStoreGRDB {
     guard
       review.state == state,
       review.targets.count == artifact.manifest.evaluations.count + 1,
-      review.targets.count <= 6,
       let expiry = review.targets.first?.expiresAt,
       review.targets.allSatisfy({ $0.nonce.isEmpty == false }),
       Set(review.targets.map(\.nonce)).count == review.targets.count,
@@ -375,4 +376,9 @@ private extension ScheduledLearningStoreGRDB {
     }
     return true
   }
+}
+
+private struct CommittedReviewDelivery {
+  let markup: String
+  let createdAt: Date
 }

@@ -630,6 +630,7 @@ struct AdmissionStoreFixture {
     candidateActions: [OwnerSignal]? = nil
   ) -> CandidateReviewNotice {
     let expiry = now.addingTimeInterval(2_592_000)
+    let candidateIdentity = candidate.digest.rawValue.prefix(8)
     let actions =
       candidateActions
       ?? (state == .admitted
@@ -637,7 +638,7 @@ struct AdmissionStoreFixture {
         : [.candidateApprove, .candidateReject, .candidateEdit])
     var targets = [
       NewFeedbackTarget(
-        nonce: "candidate-\(nonceSuffix)-\(candidate.digest.rawValue)",
+        nonce: "candidate-\(nonceSuffix)-\(candidateIdentity)",
         jobId: candidate.manifest.jobId,
         epoch: candidate.manifest.epoch,
         subjectKind: .candidate,
@@ -650,7 +651,7 @@ struct AdmissionStoreFixture {
     ]
     targets += candidate.manifest.evaluations.enumerated().map { index, evaluation in
       NewFeedbackTarget(
-        nonce: "evaluation-\(nonceSuffix)-\(index)-\(candidate.digest.rawValue)",
+        nonce: "evaluation-\(nonceSuffix)-\(index)-\(candidateIdentity)",
         jobId: candidate.manifest.jobId,
         epoch: candidate.manifest.epoch,
         subjectKind: .evaluation,

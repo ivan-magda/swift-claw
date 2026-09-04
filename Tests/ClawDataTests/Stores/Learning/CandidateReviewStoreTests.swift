@@ -426,11 +426,11 @@ enum ReviewCarrierMutation: CaseIterable, Sendable {
   case wrongSubjectKind
   case swappedEvaluations
   case extraTarget
-  case overLimitTargets
   case wrongTargetJob
   case wrongTargetEpoch
   case duplicateNonce
   case emptyNonce
+  case delimiterNonce
   case wrongExpiry
   case wrongOwner
   case wrongChat
@@ -462,6 +462,8 @@ enum CommittedReviewCorruption: CaseIterable, Sendable {
   case payload
   case payloadHash
   case nonfinalMarkup
+  case shiftedTargetExpiry
+  case mismatchedChunkCreation
 }
 
 enum ReviewJobMutation: CaseIterable, Sendable {
@@ -685,12 +687,15 @@ private extension AdmissionStoreFixture {
       case .nonfinalMarkup:
         let markup = try committedMarkup(db)
         try db.execute(
-          sql: """
-            UPDATE outbound_deliveries
-            SET reply_markup = CASE step_index WHEN 0 THEN ? ELSE NULL END
-            WHERE delivery_source = ?
-            """,
-          arguments: [markup, DeliverySource.learning.rawValue]
+          sql: "UPDATE outbound_deliveries SET reply_markup = ? WHERE step_index = 0",
+          arguments: [markup]
+        )
+      case .shiftedTargetExpiry:
+        try db.execute(sql: "UPDATE feedback_targets SET expires_at = expires_at + 1")
+      case .mismatchedChunkCreation:
+        try db.execute(
+          sql: "UPDATE outbound_deliveries SET created_ts = ? WHERE step_index = 1",
+          arguments: [env.now.addingTimeInterval(1)]
         )
       }
     }
@@ -781,16 +786,6 @@ private extension AdmissionStoreFixture {
       targets.append(
         replacing(targets[1], nonce: "extra-target", subjectDigest: "extra-evaluation")
       )
-    case .overLimitTargets:
-      while targets.count < 7 {
-        targets.append(
-          replacing(
-            targets[1],
-            nonce: "extra-target-\(targets.count)",
-            subjectDigest: "extra-evaluation-\(targets.count)"
-          )
-        )
-      }
     case .wrongTargetJob:
       targets[0] = replacing(targets[0], jobId: targets[0].jobId + 1)
     case .wrongTargetEpoch:
@@ -799,6 +794,15 @@ private extension AdmissionStoreFixture {
       targets[1] = replacing(targets[1], nonce: targets[0].nonce)
     case .emptyNonce:
       targets[0] = replacing(targets[0], nonce: "")
+    case .delimiterNonce:
+      let validNonce = targets[0].nonce
+      let delimiterNonce = "nonce:with-delimiter"
+      targets[0] = replacing(targets[0], nonce: delimiterNonce)
+      let markup = chunks[0].replyMarkup?.replacingOccurrences(
+        of: validNonce,
+        with: delimiterNonce
+      )
+      chunks[0] = replacing(chunks[0], replyMarkup: markup)
     case .wrongExpiry:
       targets[0] = replacing(
         targets[0],
@@ -823,9 +827,10 @@ private extension AdmissionStoreFixture {
         payloadHash: ContentHash.fnv1a("")
       )
     case .nonfinalMarkup:
+      let markup = chunks[0].replyMarkup
       chunks = [
-        chunks[0],
-        replacing(chunks[0], ordinal: 1, replyMarkup: "{}"),
+        replacing(chunks[0], replyMarkup: markup),
+        replacing(chunks[0], ordinal: 1, replyMarkup: markup),
       ]
     case .missingFinalMarkup:
       chunks[0] = replacing(chunks[0], replyMarkup: nil)
