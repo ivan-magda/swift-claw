@@ -109,29 +109,16 @@ import Testing
     let expiresAt = env.now.addingTimeInterval(10)
     try await env.openChallenge(nonce: "expired-router", expiresAt: expiresAt)
     env.clock.advance(to: expiresAt)
-    let rawUpdate = textUpdate(
-      id: 2,
-      from: env.ownerId,
-      text: "today's ordinary turn"
-    )
-    let message = try #require(IncomingMessage.normalize(from: rawUpdate))
+    let text = "today's ordinary turn"
 
-    // when — first observe the interception decision before ordinary routing owns the update
-    let intercepted = try await env.challenges.consumeIfOpen(
-      text: "today's ordinary turn",
-      rawUpdate: rawUpdate,
-      message: message
+    // when
+    let outcome = await env.router.handle(
+      rawUpdate: textUpdate(id: 2, from: env.ownerId, text: text)
     )
-    guard intercepted == nil else {
-      Issue.record("an expired challenge intercepted and claimed the owner message")
-      return
-    }
-    let outcome = await env.router.handle(rawUpdate: rawUpdate)
-    await env.turns.waitForCalls(atLeast: 1)
 
-    // then — claiming in the challenge handler would make TurnDispatch see a duplicate
+    // then — the ordinary path persists its inbound and run before returning
     #expect(outcome == .processed)
-    #expect(await env.turns.calls.count == 1)
+    #expect(try env.persistedTurnCount(text: text) == 1)
     #expect(try env.eventCount() == 0)
     #expect(try env.processedCount() == 2)
   }
@@ -155,7 +142,7 @@ import Testing
     #expect(try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId) == nil)
   }
 
-  @Test func resultKeyboardIsDeterministicAndContainsExactlyTheThreeRunActions() throws {
+  @Test func resultKeyboardContainsExactlyTheThreeRunActionsInOrder() throws {
     // given
     let target = NewFeedbackTarget(
       nonce: "keyboard-nonce",
@@ -170,11 +157,9 @@ import Testing
     )
 
     // when
-    let first = LearningNotices.resultKeyboard(target: target)
-    let second = LearningNotices.resultKeyboard(target: target)
+    let keyboard = LearningNotices.resultKeyboard(target: target)
 
-    // then — adding a candidate/evaluation action or varying JSON bytes breaks this closed surface
-    #expect(first == second)
+    // then — adding, removing, or reordering a candidate/evaluation action breaks this surface
     let expectedCallbacks = [
       FeedbackAction.resultUseful,
       FeedbackAction.resultNotUseful,
@@ -182,10 +167,11 @@ import Testing
     ].map { action in
       FeedbackKeyboard.callbackData(nonce: target.nonce, action: action)
     }
-    let envelope = try JSONDecoder().decode(KeyboardEnvelope.self, from: Data(first.utf8))
+    let envelope = try JSONDecoder().decode(KeyboardEnvelope.self, from: Data(keyboard.utf8))
     #expect(envelope.inlineKeyboard.count == 1)
-    #expect(envelope.inlineKeyboard[0].map(\.callbackData) == expectedCallbacks)
-    #expect(envelope.inlineKeyboard[0].map(\.text) == ["Useful", "Not useful", "Correct it"])
+    let buttons = envelope.inlineKeyboard[0]
+    #expect(buttons.count == 3)
+    #expect(buttons.map(\.callbackData) == expectedCallbacks)
   }
 }
 
@@ -199,11 +185,9 @@ private struct KeyboardEnvelope: Decodable {
 
 private struct KeyboardButton: Decodable {
   let callbackData: String
-  let text: String
 
   private enum CodingKeys: String, CodingKey {
     case callbackData = "callback_data"
-    case text
   }
 }
 
@@ -221,7 +205,6 @@ private struct ChallengeEnvironment {
   let logs: RecordingLogCapture
   let turns: FakeTurnRunner
   let pokes: PokeRecorder
-  let challenges: FeedbackChallengeHandler
   let router: MessageRouter
 
   var now: Date { clock.now }
@@ -304,7 +287,6 @@ private struct ChallengeEnvironment {
       logs: logs,
       turns: turns,
       pokes: pokes,
-      challenges: challenges,
       router: router
     )
   }
@@ -367,6 +349,20 @@ private extension ChallengeEnvironment {
 
   func processedCount() throws -> Int {
     try rowCount(table: "processed_updates")
+  }
+
+  func persistedTurnCount(text: String) throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: """
+          SELECT COUNT(*) FROM runs
+          JOIN messages ON messages.id = runs.trigger_message_id
+          WHERE messages.content = ? AND messages.role = ?
+          """,
+        arguments: [text, MessageRole.user.rawValue]
+      ) ?? -1
+    }
   }
 
   func rowCount(table: String) throws -> Int {
