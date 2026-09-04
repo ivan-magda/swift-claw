@@ -337,6 +337,10 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     lock.withLock { admissions }
   }
 
+  func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView] {
+    try base.learningView(jobId: jobId)
+  }
+
   func createTargets(
     _ targets: [NewFeedbackTarget],
     chunks: [LearningNoticeChunk],

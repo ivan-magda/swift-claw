@@ -112,16 +112,6 @@ extension ScheduledLearningStoreGRDB {
   }
 }
 
-// MARK: - Decision Decoding
-
-private struct AdmissionInputs: Codable {
-  let candidateDigest: CandidateDigest
-
-  enum CodingKeys: String, CodingKey {
-    case candidateDigest = "candidate_digest"
-  }
-}
-
 private extension ScheduledLearningStoreGRDB {
   static func admissionReceipts(
     _ db: Database,
@@ -146,7 +136,7 @@ private extension ScheduledLearningStoreGRDB {
       let resultBytes = Data((row["result"] as String).utf8)
       guard
         (row["algorithm"] as String) == artifact.manifest.algorithm.rawValue,
-        let inputs = try? JSONDecoder().decode(AdmissionInputs.self, from: inputsBytes),
+        let inputs = try? JSONDecoder().decode(AdmissionDecisionInputs.self, from: inputsBytes),
         let receipt = try? JSONDecoder().decode(AdmissionReceipt.self, from: resultBytes),
         let canonicalInputs = try? CanonicalJSON.data(encoding: inputs),
         let canonicalResult = try? CanonicalJSON.data(encoding: receipt),

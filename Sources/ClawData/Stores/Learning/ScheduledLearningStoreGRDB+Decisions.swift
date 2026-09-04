@@ -505,14 +505,9 @@ private extension ScheduledLearningStoreGRDB {
     receipt: AdmissionReceipt,
     now: Date
   ) throws {
-    struct Inputs: Encodable {
-      let candidateDigest: CandidateDigest
-
-      enum CodingKeys: String, CodingKey {
-        case candidateDigest = "candidate_digest"
-      }
-    }
-    let inputs = try CanonicalJSON.data(encoding: Inputs(candidateDigest: artifact.digest))
+    let inputs = try CanonicalJSON.data(
+      encoding: AdmissionDecisionInputs(candidateDigest: artifact.digest)
+    )
     let result = try CanonicalJSON.data(encoding: receipt)
     // swiftlint:disable:next optional_data_string_conversion
     let inputsJSON = String(decoding: inputs, as: UTF8.self)
