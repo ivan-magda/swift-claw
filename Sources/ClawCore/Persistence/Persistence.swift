@@ -496,6 +496,8 @@ public struct AssistantTurn: Sendable, Equatable {
   /// The final assistant message's replay state, committed in the same transaction as the message
   /// it belongs to so an anchor and its state can never be persisted apart.
   public let providerState: ProviderExchangeState?
+  /// Optional result feedback address. The run-store validates and inserts it with final delivery.
+  public let feedbackTarget: NewFeedbackTarget?
 
   public init(
     runId: Int64,
@@ -507,7 +509,8 @@ public struct AssistantTurn: Sendable, Equatable {
     exchanges: [ToolExchange] = [],
     setTainted: Bool = false,
     setPrivateData: Bool = false,
-    providerState: ProviderExchangeState? = nil
+    providerState: ProviderExchangeState? = nil,
+    feedbackTarget: NewFeedbackTarget? = nil
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -519,6 +522,7 @@ public struct AssistantTurn: Sendable, Equatable {
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
     self.providerState = providerState
+    self.feedbackTarget = feedbackTarget
   }
 }
 

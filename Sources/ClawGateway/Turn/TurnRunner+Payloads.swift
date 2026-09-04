@@ -67,13 +67,19 @@ extension TurnRunner {
 
   /// Splits an assistant reply into deterministic outbox chunks (grapheme-capped, FNV-1a hashed).
   /// Mechanical helper for the `.completed` path — not part of the commit ordering.
-  func outboxChunks(for content: String, chatId: Int64) -> [OutboxChunk] {
-    ReplySplitter.split(text: content).enumerated().map { index, payload in
+  func outboxChunks(
+    for content: String,
+    chatId: Int64,
+    finalReplyMarkup: String? = nil
+  ) -> [OutboxChunk] {
+    let payloads = ReplySplitter.split(text: content)
+    return payloads.enumerated().map { index, payload in
       OutboxChunk(
         stepIndex: index,
         chatId: chatId,
         payload: payload,
-        payloadHash: ContentHash.fnv1a(payload)
+        payloadHash: ContentHash.fnv1a(payload),
+        replyMarkup: index == payloads.indices.last ? finalReplyMarkup : nil
       )
     }
   }

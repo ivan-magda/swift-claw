@@ -31,6 +31,7 @@ public struct MessageRouter: Sendable {
   private let turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
   private let feedbackCallbacks: FeedbackCallbackHandler?
+  private let feedbackChallenges: FeedbackChallengeHandler?
   private let voice: (any VoiceMessageTranscribing)?
   private let images: (any ImageMessageHandling)?
   private let typing: (any TypingIndicator)?
@@ -57,6 +58,7 @@ public struct MessageRouter: Sendable {
     learning: ScheduledLearningService? = nil,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     feedbackCallbacks: FeedbackCallbackHandler? = nil,
+    feedbackChallenges: FeedbackChallengeHandler? = nil,
     voice: (any VoiceMessageTranscribing)? = nil,
     images: (any ImageMessageHandling)? = nil,
     typing: (any TypingIndicator)? = nil,
@@ -71,6 +73,7 @@ public struct MessageRouter: Sendable {
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
     self.feedbackCallbacks = feedbackCallbacks
+    self.feedbackChallenges = feedbackChallenges
     self.voice = voice
     self.images = images
     self.typing = typing
@@ -207,9 +210,28 @@ private extension MessageRouter {
     case .voice(let attachment):
       return try await routeVoice(attachment, rawUpdate: rawUpdate, message: message, mode: mode)
     case .text(let text):
-      let command = Command.parse(text, botUsername: botUsername)
-      return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
+      return try await routeText(text, rawUpdate: rawUpdate, message: message, mode: mode)
     }
+  }
+
+  func routeText(
+    _ text: String,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    if mode == .direct, let feedbackChallenges {
+      let consumed = try await feedbackChallenges.consumeIfOpen(
+        text: text,
+        rawUpdate: rawUpdate,
+        message: message
+      )
+      if let consumed {
+        return consumed
+      }
+    }
+    let command = Command.parse(text, botUsername: botUsername)
+    return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
   }
 
   func routeCallback(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {

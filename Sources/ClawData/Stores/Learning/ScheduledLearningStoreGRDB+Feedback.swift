@@ -53,11 +53,122 @@ extension ScheduledLearningStoreGRDB {
       return outcome
     }
   }
+
+  public func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try database.writeMapping { db in
+      guard tap.signal.opensFeedbackChallenge else {
+        let target = try Self.readTarget(db, nonce: tap.nonce)
+        let outcome = FeedbackOutcome.actionMismatch
+        try Self.auditFeedback(db, tap: tap, target: target, outcome: outcome, now: now)
+        return outcome
+      }
+
+      guard let target = try Self.consumeTarget(db, tap: tap, now: now) else {
+        let found = try Self.readTarget(db, nonce: tap.nonce)
+        let outcome = try Self.failedOutcome(db, tap: tap, target: found, now: now)
+        try Self.auditFeedback(db, tap: tap, target: found, outcome: outcome, now: now)
+        return outcome
+      }
+
+      let insertion = NewFeedbackChallenge(target: target)
+      guard prompt.isEmpty == false else {
+        throw StoreError.unexpected("feedback challenge prompt has no chunks")
+      }
+      guard
+        prompt.allSatisfy({ chunk in
+          chunk.subjectDigest == insertion.promptDigest && chunk.chatId == insertion.chatId
+        })
+      else {
+        throw StoreError.unexpected("feedback challenge prompt identity does not match its target")
+      }
+
+      let priorId = try Self.temporarilyConsumeLiveChallenge(db, challenge: insertion, now: now)
+      let challenge = try Self.insertChallenge(db, insertion)
+      try Self.finishChallengeSupersession(db, priorId: priorId, replacementId: challenge.id)
+
+      for chunk in prompt {
+        guard try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now) else {
+          throw StoreError.unexpected("feedback challenge prompt delivery already exists")
+        }
+      }
+
+      let outcome = FeedbackOutcome.challengeOpened(challenge)
+      try Self.auditFeedback(db, tap: tap, target: target, outcome: outcome, now: now)
+      return outcome
+    }
+  }
+
+  public func consumeChallenge(
+    id: Int64,
+    payload: String,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try database.writeMapping { db in
+      guard let challenge = try Self.consumeLiveChallenge(db, id: id, now: now) else {
+        let found = try Self.readChallenge(db, id: id)
+        let outcome = try Self.failedChallengeOutcome(db, challenge: found, now: now)
+        try Self.auditChallenge(
+          db,
+          challenge: found,
+          outcome: outcome,
+          payloadByteCount: payload.utf8.count,
+          now: now
+        )
+        return outcome
+      }
+
+      guard let revision = try Self.advanceFeedbackRevision(db, challenge: challenge) else {
+        throw StoreError.unexpected("feedback revision CAS lost after challenge consumption")
+      }
+      let event = try Self.insertEvent(
+        db,
+        challenge: challenge,
+        payload: payload,
+        revision: revision,
+        now: now
+      )
+      let outcome = FeedbackOutcome.recorded(event)
+      try Self.auditChallenge(
+        db,
+        challenge: challenge,
+        outcome: outcome,
+        payloadByteCount: payload.utf8.count,
+        now: now
+      )
+      return outcome
+    }
+  }
+
+  public func liveChallenge(
+    ownerUserId: Int64,
+    chatId: Int64
+  ) throws(StoreError) -> FeedbackChallenge? {
+    try database.readMapping { db in
+      guard
+        let row = try Row.fetchOne(
+          db,
+          sql: """
+            SELECT * FROM feedback_challenges
+            WHERE owner_user_id = ? AND chat_id = ?
+              AND superseded_by IS NULL AND consumed_at IS NULL
+            """,
+          arguments: [ownerUserId, chatId]
+        )
+      else {
+        return nil
+      }
+      return try Self.decodeChallenge(row)
+    }
+  }
 }
 
 // MARK: - Target Rows
 
-private extension ScheduledLearningStoreGRDB {
+extension ScheduledLearningStoreGRDB {
   static func insertTarget(_ db: Database, _ target: NewFeedbackTarget) throws {
     guard
       target.allowedActions.isEmpty == false,
@@ -144,6 +255,7 @@ private extension ScheduledLearningStoreGRDB {
         UPDATE feedback_targets SET consumed_at = ?
         WHERE nonce = ? AND consumed_at IS NULL AND owner_user_id = ? AND chat_id = ?
           AND expires_at > ?
+          AND subject_kind = ?
           AND learning_epoch = (
             SELECT learning_epoch FROM job_learning_state
             WHERE job_id = feedback_targets.job_id
@@ -159,6 +271,7 @@ private extension ScheduledLearningStoreGRDB {
         tap.ownerUserId,
         tap.chatId,
         EpochSecondCodec.epoch(now),
+        tap.signal.feedbackSubjectKind.rawValue,
         tap.signal.rawValue,
       ]
     )
@@ -186,7 +299,9 @@ private extension ScheduledLearningStoreGRDB {
     if target.expiresAt <= now {
       return .expired
     }
-    if target.allowedActions.contains(tap.signal) == false {
+    if target.subjectKind != tap.signal.feedbackSubjectKind
+      || target.allowedActions.contains(tap.signal) == false
+    {
       return .actionMismatch
     }
     guard
@@ -275,38 +390,6 @@ private extension ScheduledLearningStoreGRDB {
       actor: .owner,
       transportUpdateId: tap.transportUpdateId
     )
-  }
-
-  static func runId(_ db: Database, target: FeedbackTarget) throws -> Int64? {
-    try runId(
-      db,
-      jobId: target.jobId,
-      subjectKind: target.subjectKind,
-      subjectDigest: target.subjectDigest
-    )
-  }
-
-  static func runId(
-    _ db: Database,
-    jobId: Int64,
-    subjectKind: FeedbackSubjectKind,
-    subjectDigest: String
-  ) throws -> Int64? {
-    switch subjectKind {
-    case .run:
-      return Int64(subjectDigest)
-    case .evaluation:
-      return try Int64.fetchOne(
-        db,
-        sql: """
-          SELECT run_id FROM learning_evaluations
-          WHERE job_id = ? AND evaluation_digest = ?
-          """,
-        arguments: [jobId, subjectDigest]
-      )
-    case .candidate, .promotion:
-      return nil
-    }
   }
 }
 
@@ -464,10 +547,11 @@ private extension ScheduledLearningStoreGRDB {
   }
 }
 
-private extension FeedbackOutcome {
+extension FeedbackOutcome {
   var auditDecision: String {
     switch self {
     case .recorded: "recorded"
+    case .challengeOpened: "challenge_opened"
     case .targetMissing: "unknown"
     case .ownerMismatch: "owner_mismatch"
     case .chatMismatch: "chat_mismatch"

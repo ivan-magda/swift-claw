@@ -113,6 +113,131 @@ import Testing
     }
   }
 
+  @Test func freeTextChallengeOpeningAndInterceptionShareTheLearningFeatureGate() async throws {
+    // given — both roots hold the same kind of payload-bearing target
+    for learningEnabled in [true, false] {
+      let builder = try LearningComposition.makeBuilder(learningEnabled: learningEnabled)
+      try builder.stores.allowlist.seedAllowlist(userIds: [777])
+      let now = Date(timeIntervalSince1970: 1_782_000_600)
+      let job = try LearningComposition.createJob(builder, now: now)
+      let state = try builder.stores.learning.armJob(jobId: job.id, now: now)
+      let target = NewFeedbackTarget(
+        nonce: "composition-challenge-\(learningEnabled)",
+        jobId: job.id,
+        epoch: state.epoch,
+        subjectKind: .run,
+        subjectDigest: "41",
+        allowedActions: [.resultCorrection],
+        ownerUserId: 777,
+        chatId: 777,
+        expiresAt: .distantFuture
+      )
+      try builder.stores.learning.createTargets([target], chunks: [], now: now)
+      if !learningEnabled {
+        let residual = NewFeedbackTarget(
+          nonce: "residual-disabled-challenge",
+          jobId: job.id,
+          epoch: state.epoch,
+          subjectKind: .run,
+          subjectDigest: "43",
+          allowedActions: [.resultCorrection],
+          ownerUserId: 777,
+          chatId: 777,
+          expiresAt: .distantFuture
+        )
+        try builder.stores.learning.createTargets([residual], chunks: [], now: now)
+        let tap = FeedbackTap(
+          nonce: residual.nonce,
+          signal: .resultCorrection,
+          ownerUserId: 777,
+          chatId: 777,
+          transportUpdateId: 89
+        )
+        let opened = try builder.stores.learning.consumeAndOpenChallenge(
+          tap,
+          prompt: LearningComposition.challengePrompt(for: tap),
+          now: now
+        )
+        guard case .challengeOpened = opened else {
+          Issue.record("failed to seed the residual challenge")
+          return
+        }
+      }
+      let turns = RecordingCompositionTurns()
+      let coordination = DaemonBuilder.TurnCoordination()
+      if !learningEnabled {
+        guard case nil = builder.makeFeedbackChallengeHandler(coordination: coordination) else {
+          Issue.record("the disarmed composition returned a challenge interceptor")
+          return
+        }
+      }
+      let router = builder.makeIntakeRouter(
+        coordination: coordination,
+        turnRunner: turns,
+        imageCache: ImageCache(),
+        scheduleSurface: LearningComposition.scheduleSurface(builder),
+        approvalCallbacks: nil,
+        doctor: IdleCompositionDoctor(),
+        learning: nil
+      )
+
+      // when — correction tap, then its free-text payload
+      let callbackOutcome = await router.handle(
+        rawUpdate: RawUpdate(
+          updateId: learningEnabled ? 90 : 91,
+          message: nil,
+          editedMessage: nil,
+          callback: RawCallback(
+            callbackId: "composition-challenge",
+            fromUserId: 777,
+            chatId: 777,
+            messageId: 1,
+            data: FeedbackKeyboard.callbackData(
+              nonce: target.nonce,
+              action: .resultCorrection
+            )
+          )
+        )
+      )
+      let opened = try builder.stores.learning.liveChallenge(ownerUserId: 777, chatId: 777)
+      #expect(opened?.subjectDigest == (learningEnabled ? "41" : "43"))
+      let messageOutcome = await router.handle(
+        rawUpdate: RawUpdate(
+          updateId: learningEnabled ? 92 : 93,
+          message: RawMessage(
+            messageId: 2,
+            fromUserId: 777,
+            chatId: 777,
+            text: "The result omitted the price change.",
+            caption: nil,
+            mediaKind: nil,
+            chatKind: .private,
+            chatTitle: nil,
+            messageThreadId: nil,
+            senderDisplayName: nil
+          ),
+          editedMessage: nil
+        )
+      )
+      let remaining = try builder.stores.learning.liveChallenge(ownerUserId: 777, chatId: 777)
+      if !learningEnabled {
+        guard remaining?.subjectDigest == "43" else {
+          Issue.record("the disarmed router intercepted a residual challenge")
+          return
+        }
+        await turns.waitForFirstCall()
+      }
+
+      // then — disabling learning wires neither half and leaves the target untouched
+      let stored = try #require(try builder.stores.learning.feedbackTarget(nonce: target.nonce))
+      #expect(callbackOutcome == (learningEnabled ? .processed : .skipped))
+      #expect((stored.consumedAt != nil) == learningEnabled)
+      #expect(messageOutcome == .processed)
+      #expect(await turns.callCount == (learningEnabled ? 0 : 1))
+      #expect((remaining == nil) == learningEnabled)
+    }
+  }
+
   @Test func theToolCatalogDigestCoversRiskAndIgnoresCatalogOrder() {
     // given — the same two tools at different risk tiers, and the same pair reordered
     let safe = LearningComposition.tool(name: "file_read", risk: .safe)
@@ -224,6 +349,19 @@ private enum LearningComposition {
       directory: URL(fileURLWithPath: "/tmp/skills/" + name)
     )
   }
+
+  static func challengePrompt(for tap: FeedbackTap) -> [LearningNoticeChunk] {
+    let payload = "Reply with what this result should have done differently."
+    return [
+      LearningNoticeChunk(
+        subjectDigest: FeedbackChallengeDeliveryIdentity.digest(targetNonce: tap.nonce),
+        ordinal: 0,
+        chatId: tap.chatId,
+        payload: payload,
+        payloadHash: ContentHash.fnv1a(payload)
+      )
+    ]
+  }
 }
 
 private actor IdleCompositionTurns: TurnDispatching {
@@ -233,6 +371,25 @@ private actor IdleCompositionTurns: TurnDispatching {
     chatId: Int64,
     triggerMessageId: Int64
   ) async throws {}
+}
+
+private actor RecordingCompositionTurns: TurnDispatching {
+  private(set) var callCount = 0
+  private let firstCall = AsyncGate()
+
+  func run(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    triggerMessageId: Int64
+  ) async throws {
+    callCount += 1
+    firstCall.open()
+  }
+
+  func waitForFirstCall() async {
+    await firstCall.wait()
+  }
 }
 
 private struct IdleCompositionScheduleParser: ScheduleDraftParsing {

@@ -125,7 +125,7 @@ public struct NewApproval: Sendable, Equatable {
 
 /// 16 CSPRNG bytes, base64url without padding (22 chars). `SystemRandomNumberGenerator` is
 /// CSPRNG-backed on Apple platforms and Linux, so no extra entropy dependency is needed.
-public enum ApprovalNonce {
+public enum OpaqueNonce {
   public static func generate() -> String {
     var generator = SystemRandomNumberGenerator()
     var bytes = Data(capacity: 16)
@@ -140,6 +140,12 @@ public enum ApprovalNonce {
       .replacingOccurrences(of: "+", with: "-")
       .replacingOccurrences(of: "/", with: "_")
       .replacingOccurrences(of: "=", with: "")
+  }
+}
+
+public enum ApprovalNonce {
+  public static func generate() -> String {
+    OpaqueNonce.generate()
   }
 }
 
