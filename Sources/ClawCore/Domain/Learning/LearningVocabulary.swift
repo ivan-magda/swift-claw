@@ -166,4 +166,5 @@ public enum LearningTrialState: String, Sendable, Equatable, CaseIterable {
 public enum LessonSetSource: String, Sendable, Equatable, CaseIterable {
   case canonicalEmpty = "canonical_empty"
   case reflectorCandidate = "reflector_candidate"
+  case ownerEdit = "owner_edit"
 }

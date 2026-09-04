@@ -165,7 +165,9 @@ private extension ScheduledLearningStoreGRDB {
       return false
     }
   }
+}
 
+extension ScheduledLearningStoreGRDB {
   static func candidateIsCurrent(
     _ db: Database,
     artifact: CandidateArtifact,
@@ -208,7 +210,9 @@ private extension ScheduledLearningStoreGRDB {
       && manifest.evaluations == current.evaluationSources
       && manifest.feedback == current.feedbackSources
   }
+}
 
+private extension ScheduledLearningStoreGRDB {
   static func noCandidateIsCurrent(
     _ db: Database,
     result: NoCandidateResult,

@@ -257,10 +257,14 @@ private extension LearningOperationRunner {
     now: Date
   ) {
     do {
-      _ = try learning.finishOperation(
+      let committed = try learning.finishOperation(
         LearningOperationResult(operationId: call.operationId, usage: usage, product: product),
         now: now
       )
+      guard committed, case .candidate(let artifact) = product else {
+        return
+      }
+      _ = try learning.admitCandidate(digest: artifact.digest, redactor: redactor, now: now)
     } catch {
       logger.error("reflection \(call.operationId.rawValue) could not be committed: \(error)")
     }
