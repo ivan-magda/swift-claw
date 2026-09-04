@@ -289,6 +289,47 @@ import Testing
     #expect(try fixture.reviewSnapshot() == snapshot)
   }
 
+  @Test func subsecondReviewCommitReplaysAgainstOneNormalizedDeliveryInstant() throws {
+    // given
+    let fixture = try AdmissionStoreFixture.make()
+    defer { fixture.remove() }
+    let candidate = try fixture.persistedCandidate()
+    _ = try fixture.env.learning.admitCandidate(
+      digest: candidate.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
+    let wholeSecond = Date(
+      timeIntervalSince1970: fixture.env.now.timeIntervalSince1970.rounded(.down)
+    )
+    let reviewTime = wholeSecond.addingTimeInterval(0.4996)
+    let first = fixture.multipartReview(
+      candidate: candidate,
+      now: reviewTime,
+      nonceSuffix: "subsecond-first"
+    )
+    #expect(try fixture.env.learning.commitCandidateReview(first, now: reviewTime))
+    let snapshot = try fixture.reviewSnapshot()
+    let replay = fixture.multipartReview(
+      candidate: candidate,
+      now: reviewTime,
+      nonceSuffix: "subsecond-replay"
+    )
+
+    // when
+    let inserted = try fixture.env.learning.commitCandidateReview(replay, now: reviewTime)
+
+    // then — writing raw `.4996` lets millisecond serialization become `.500`, so replay rounds
+    // the delivery up although the integer target expiry rounded the original instant down.
+    #expect(inserted == false)
+    #expect(
+      try fixture.reviewCreatedDates(subjectDigest: first.subjectDigest) == [
+        wholeSecond, wholeSecond,
+      ]
+    )
+    #expect(try fixture.reviewSnapshot() == snapshot)
+  }
+
   @Test(arguments: CommittedReviewCorruption.allCases)
   func partialCommittedReviewFailsClosed(_ corruption: CommittedReviewCorruption) throws {
     // given
@@ -495,8 +536,17 @@ private extension AdmissionOutcome {
 }
 
 private extension AdmissionStoreFixture {
-  func multipartReview(candidate: CandidateArtifact, now: Date) -> CandidateReviewNotice {
-    let review = review(candidate: candidate, state: .admitted, now: now)
+  func multipartReview(
+    candidate: CandidateArtifact,
+    now: Date,
+    nonceSuffix: String = "first"
+  ) -> CandidateReviewNotice {
+    let review = review(
+      candidate: candidate,
+      state: .admitted,
+      now: now,
+      nonceSuffix: nonceSuffix
+    )
     let first = "Review this candidate, part one."
     let final = "Review this candidate, part two."
     return CandidateReviewNotice(
@@ -966,6 +1016,22 @@ private extension AdmissionStoreFixture {
         ].joined(separator: "|")
       }
       return ReviewSnapshot(targets: targets, chunks: chunks)
+    }
+  }
+
+  func reviewCreatedDates(subjectDigest: String) throws -> [Date] {
+    let prefix = OutboxDedupKey.make(subjectDigest: subjectDigest, ordinal: 0).dropLast()
+    return try env.queue.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT created_ts FROM outbound_deliveries
+          WHERE dedup_key GLOB ? ORDER BY step_index
+          """,
+        arguments: ["\(prefix)*"]
+      ).map { row in
+        row["created_ts"]
+      }
     }
   }
 
