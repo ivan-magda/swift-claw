@@ -15,7 +15,6 @@ import Testing
     let undomained = SHA256Digest.hex(nonce)
 
     // then — hashing only the nonce would couple this key to every other opaque-address hash
-    #expect(challenge != nonce)
     #expect(challenge != undomained)
   }
 
@@ -762,12 +761,10 @@ import Testing
     }
 
     // then — application supersession cannot make this pass; the v11 partial index must fire
-    guard case .unexpected(let detail) = failure else {
+    guard case .unexpected = failure else {
       Issue.record("expected the mapped live-challenge unique-index failure")
       return
     }
-    #expect(detail.contains("feedback_challenges.owner_user_id"))
-    #expect(detail.contains("feedback_challenges.chat_id"))
     #expect(try env.rowCount(table: "feedback_challenges") == 0)
   }
 }

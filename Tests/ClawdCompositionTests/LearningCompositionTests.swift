@@ -163,17 +163,10 @@ import Testing
           return
         }
       }
-      let turns = RecordingCompositionTurns()
       let coordination = DaemonBuilder.TurnCoordination()
-      if !learningEnabled {
-        guard case nil = builder.makeFeedbackChallengeHandler(coordination: coordination) else {
-          Issue.record("the disarmed composition returned a challenge interceptor")
-          return
-        }
-      }
       let router = builder.makeIntakeRouter(
         coordination: coordination,
-        turnRunner: turns,
+        turnRunner: IdleCompositionTurns(),
         imageCache: ImageCache(),
         scheduleSurface: LearningComposition.scheduleSurface(builder),
         approvalCallbacks: nil,
@@ -201,6 +194,7 @@ import Testing
       )
       let opened = try builder.stores.learning.liveChallenge(ownerUserId: 777, chatId: 777)
       #expect(opened?.subjectDigest == (learningEnabled ? "41" : "43"))
+      let ownerText = "The result omitted the price change."
       let messageOutcome = await router.handle(
         rawUpdate: RawUpdate(
           updateId: learningEnabled ? 92 : 93,
@@ -208,7 +202,7 @@ import Testing
             messageId: 2,
             fromUserId: 777,
             chatId: 777,
-            text: "The result omitted the price change.",
+            text: ownerText,
             caption: nil,
             mediaKind: nil,
             chatKind: .private,
@@ -220,21 +214,27 @@ import Testing
         )
       )
       let remaining = try builder.stores.learning.liveChallenge(ownerUserId: 777, chatId: 777)
-      if !learningEnabled {
-        guard remaining?.subjectDigest == "43" else {
-          Issue.record("the disarmed router intercepted a residual challenge")
-          return
-        }
-        await turns.waitForFirstCall()
+      let sessionId = try builder.stores.sessionMessages.findSession(
+        sessionKey: SessionKey.telegramDM(chatId: 777)
+      )
+      var ordinaryHistory: [StoredMessage] = []
+      if let sessionId {
+        ordinaryHistory = try builder.stores.sessionMessages.loadContextSnapshot(
+          sessionId: sessionId,
+          throughMessageId: .max,
+          limit: 10
+        ).history
       }
+      let runHealth = try builder.stores.runs.runsHealth(now: now)
 
       // then — disabling learning wires neither half and leaves the target untouched
       let stored = try #require(try builder.stores.learning.feedbackTarget(nonce: target.nonce))
       #expect(callbackOutcome == (learningEnabled ? .processed : .skipped))
       #expect((stored.consumedAt != nil) == learningEnabled)
       #expect(messageOutcome == .processed)
-      #expect(await turns.callCount == (learningEnabled ? 0 : 1))
       #expect((remaining == nil) == learningEnabled)
+      #expect(ordinaryHistory.map(\.content) == (learningEnabled ? [] : [ownerText]))
+      #expect(runHealth.inFlight == (learningEnabled ? 0 : 1))
     }
   }
 
@@ -371,25 +371,6 @@ private actor IdleCompositionTurns: TurnDispatching {
     chatId: Int64,
     triggerMessageId: Int64
   ) async throws {}
-}
-
-private actor RecordingCompositionTurns: TurnDispatching {
-  private(set) var callCount = 0
-  private let firstCall = AsyncGate()
-
-  func run(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    triggerMessageId: Int64
-  ) async throws {
-    callCount += 1
-    firstCall.open()
-  }
-
-  func waitForFirstCall() async {
-    await firstCall.wait()
-  }
 }
 
 private struct IdleCompositionScheduleParser: ScheduleDraftParsing {
