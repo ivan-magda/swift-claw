@@ -97,7 +97,8 @@ extension ScheduledLearningStoreGRDB {
         db,
         artifact: successor,
         persisted: false,
-        redactor: redactor
+        redactor: redactor,
+        permitsClosedReplacement: true
       )
       guard case .insert = plan else {
         return Self.outcome(for: plan, artifact: successor)
@@ -199,8 +200,7 @@ extension ScheduledLearningStoreGRDB {
         persisted: false,
         redactor: redactor,
         permittedLiveCandidate: context.predecessor.digest,
-        requiresSupport: false,
-        requiresAdmissibleReplacement: false
+        requiresSupport: false
       )
       guard case .awaitingApproval = plan else {
         return Self.outcome(for: plan, artifact: successor)
@@ -279,7 +279,7 @@ private extension ScheduledLearningStoreGRDB {
     redactor: SecretRedactor,
     permittedLiveCandidate: CandidateDigest? = nil,
     requiresSupport: Bool = true,
-    requiresAdmissibleReplacement: Bool = true
+    permitsClosedReplacement: Bool = false
   ) throws -> AdmissionPlan {
     if persisted {
       guard
@@ -318,7 +318,7 @@ private extension ScheduledLearningStoreGRDB {
       replacementAlreadyClosed: try replacementWasClosed(db, artifact: artifact),
       support: support(for: artifact),
       requiresSupport: requiresSupport,
-      requiresAdmissibleReplacement: requiresAdmissibleReplacement,
+      permitsClosedReplacement: permitsClosedReplacement,
       redactor: redactor
     )
     if let rejection = AdmissionValidator.validate(candidate: artifact, context: context) {

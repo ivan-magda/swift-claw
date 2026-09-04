@@ -125,7 +125,7 @@ public struct AdmissionValidationContext: Sendable {
   public let replacementAlreadyClosed: Bool
   public let support: AdmissionSupport?
   public let requiresSupport: Bool
-  public let requiresAdmissibleReplacement: Bool
+  public let permitsClosedReplacement: Bool
   public let redactor: SecretRedactor
 
   public init(
@@ -138,7 +138,7 @@ public struct AdmissionValidationContext: Sendable {
     replacementAlreadyClosed: Bool,
     support: AdmissionSupport?,
     requiresSupport: Bool = true,
-    requiresAdmissibleReplacement: Bool = true,
+    permitsClosedReplacement: Bool = false,
     redactor: SecretRedactor
   ) {
     self.currentState = currentState
@@ -150,7 +150,7 @@ public struct AdmissionValidationContext: Sendable {
     self.replacementAlreadyClosed = replacementAlreadyClosed
     self.support = support
     self.requiresSupport = requiresSupport
-    self.requiresAdmissibleReplacement = requiresAdmissibleReplacement
+    self.permitsClosedReplacement = permitsClosedReplacement
     self.redactor = redactor
   }
 }
@@ -186,15 +186,10 @@ public enum AdmissionValidator {
     if let veto = HardVeto.allCases.first(where: context.hardVetoes.contains) {
       return .hardVeto(veto)
     }
-    guard
-      context.requiresAdmissibleReplacement == false
-        || candidate.replacement.digest != state.stableDigest
-    else {
+    guard candidate.replacement.digest != state.stableDigest else {
       return .noOpReplacement
     }
-    guard
-      context.requiresAdmissibleReplacement == false || context.replacementAlreadyClosed == false
-    else {
+    guard context.permitsClosedReplacement || context.replacementAlreadyClosed == false else {
       return .replacementAlreadyClosed
     }
     guard context.requiresSupport == false || context.support != nil else {

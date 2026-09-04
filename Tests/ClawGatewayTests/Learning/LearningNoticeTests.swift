@@ -170,6 +170,49 @@ import Testing
     #expect(replay == false)
     #expect(pokes.count == 1)
   }
+
+  @Test func committedReviewReplayAfterStateMovementNeverPokesAgain() async throws {
+    // given
+    let env = try ReflectionRunEnvironment.make()
+    await env.runner.runReflection(trigger: env.trigger, now: env.now)
+    let candidate = try #require(try env.candidate())
+    let pokes = PokeRecorder()
+    let notices = LearningNotices(
+      learning: env.learning,
+      poke: pokes.poke,
+      nonceGenerator: ReviewNonceSequence().next,
+      chunkLimit: 10_000
+    )
+    #expect(
+      try notices.enqueueReview(
+        candidate: candidate,
+        state: .admitted,
+        ownerUserId: 777,
+        chatId: 777,
+        now: env.now
+      )
+    )
+    let targets = try env.rowCount("feedback_targets")
+    let chunks = try env.rowCount("outbound_deliveries")
+    try env.learningStateFeedbackRevision(FeedbackRevision(1))
+    let replayTime = env.now.addingTimeInterval(60)
+
+    // when
+    let replay = try notices.enqueueReview(
+      candidate: candidate,
+      state: .admitted,
+      ownerUserId: 777,
+      chatId: 777,
+      now: replayTime
+    )
+
+    // then — regenerated nonces do not turn the same stable committed delivery into new work,
+    // even though the mutable admission authority has since moved.
+    #expect(replay == false)
+    #expect(pokes.count == 1)
+    #expect(try env.rowCount("feedback_targets") == targets)
+    #expect(try env.rowCount("outbound_deliveries") == chunks)
+  }
 }
 
 private final class ReviewNonceSequence: @unchecked Sendable {

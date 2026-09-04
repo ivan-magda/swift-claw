@@ -12,12 +12,17 @@ extension ScheduledLearningStoreGRDB {
     artifact: CandidateArtifact,
     state: JobLearningState
   ) throws -> Bool {
-    var visited: Set<CandidateDigest> = []
-    guard try candidateProvenanceIsValid(db, artifact: artifact, state: state, visited: &visited)
+    guard
+      let ancestry = try candidateAncestry(db, artifact: artifact),
+      try candidateProvenanceIsValid(db, ancestry: ancestry, state: state),
+      let current = try preparation(
+        db,
+        artifact: artifact,
+        feedbackCutoff: state.feedbackRevision,
+        state: state,
+        triggerFeedbackRevision: ancestry.triggerFeedbackRevision
+      )
     else {
-      return false
-    }
-    guard let current = try currentPreparation(db, artifact: artifact, state: state) else {
       return false
     }
     return artifact.manifest.evidence == current.evidenceSources
@@ -30,11 +35,15 @@ extension ScheduledLearningStoreGRDB {
     artifact: CandidateArtifact,
     state: JobLearningState
   ) throws -> ReflectionPreparation? {
-    try preparation(
+    guard let ancestry = try candidateAncestry(db, artifact: artifact) else {
+      return nil
+    }
+    return try preparation(
       db,
       artifact: artifact,
       feedbackCutoff: state.feedbackRevision,
-      state: state
+      state: state,
+      triggerFeedbackRevision: ancestry.triggerFeedbackRevision
     )
   }
 
@@ -42,12 +51,10 @@ extension ScheduledLearningStoreGRDB {
     _ db: Database,
     artifact: CandidateArtifact,
     feedbackCutoff: FeedbackRevision,
-    state: JobLearningState
+    state: JobLearningState,
+    triggerFeedbackRevision: FeedbackRevision
   ) throws -> ReflectionPreparation? {
     let manifest = artifact.manifest
-    guard let triggerFeedbackRevision = try triggerFeedbackRevision(db, artifact: artifact) else {
-      return nil
-    }
     let trigger = TriggerIdentity(
       jobId: manifest.jobId,
       epoch: manifest.epoch,
@@ -73,15 +80,27 @@ extension ScheduledLearningStoreGRDB {
     return current
   }
 
-  static func triggerFeedbackRevision(
+  struct CandidateAncestry {
+    let rootToTip: [CandidateArtifact]
+    let triggerFeedbackRevision: FeedbackRevision
+  }
+
+  static func candidateAncestry(
     _ db: Database,
     artifact: CandidateArtifact
-  ) throws -> FeedbackRevision? {
+  ) throws -> CandidateAncestry? {
     var current = artifact
+    var tipToRoot: [CandidateArtifact] = []
     var visited: Set<CandidateDigest> = []
-    while current.manifest.origin != .reflection {
+    while true {
+      guard visited.insert(current.digest).inserted else {
+        return nil
+      }
+      tipToRoot.append(current)
+      if current.manifest.origin == .reflection {
+        break
+      }
       guard
-        visited.insert(current.digest).inserted,
         let predecessor = current.manifest.predecessorCandidate,
         let loaded = try readCandidateArtifact(db, digest: predecessor)
       else {
@@ -89,47 +108,64 @@ extension ScheduledLearningStoreGRDB {
       }
       current = loaded
     }
-    return current.manifest.feedbackRevision
+    return CandidateAncestry(
+      rootToTip: tipToRoot.reversed(),
+      triggerFeedbackRevision: current.manifest.feedbackRevision
+    )
   }
 
   static func candidateProvenanceIsValid(
     _ db: Database,
-    artifact: CandidateArtifact,
-    state: JobLearningState,
-    visited: inout Set<CandidateDigest>
+    ancestry: CandidateAncestry,
+    state: JobLearningState
   ) throws -> Bool {
-    guard visited.insert(artifact.digest).inserted else {
+    guard
+      let root = ancestry.rootToTip.first,
+      try reflectionProvenanceIsValid(
+        db,
+        artifact: root,
+        state: state,
+        triggerFeedbackRevision: ancestry.triggerFeedbackRevision
+      )
+    else {
       return false
     }
-    switch artifact.manifest.origin {
-    case .reflection:
-      return try reflectionProvenanceIsValid(db, artifact: artifact, state: state)
-    case .ownerApproval, .ownerEdit:
-      return try successorProvenanceIsValid(
-        db,
-        artifact: artifact,
-        state: state,
-        visited: &visited
-      )
+    for index in ancestry.rootToTip.indices.dropFirst() {
+      guard
+        try successorProvenanceIsValid(
+          db,
+          artifact: ancestry.rootToTip[index],
+          predecessor: ancestry.rootToTip[ancestry.rootToTip.index(before: index)],
+          state: state,
+          triggerFeedbackRevision: ancestry.triggerFeedbackRevision
+        )
+      else {
+        return false
+      }
     }
+    return true
   }
 
   static func reflectionProvenanceIsValid(
     _ db: Database,
     artifact: CandidateArtifact,
-    state: JobLearningState
+    state: JobLearningState,
+    triggerFeedbackRevision: FeedbackRevision
   ) throws -> Bool {
     let manifest = artifact.manifest
     guard
+      manifest.origin == .reflection,
       manifest.predecessorCandidate == nil,
       manifest.predecessorFeedback == nil,
+      manifest.feedbackRevision == triggerFeedbackRevision,
       let operation = try readOperation(db, id: manifest.operationId),
       reflectionTrigger(artifact: artifact, operation: operation) != nil,
       let preparation = try preparation(
         db,
         artifact: artifact,
         feedbackCutoff: manifest.feedbackRevision,
-        state: state
+        state: state,
+        triggerFeedbackRevision: triggerFeedbackRevision
       )
     else {
       return false
@@ -143,21 +179,16 @@ extension ScheduledLearningStoreGRDB {
   static func successorProvenanceIsValid(
     _ db: Database,
     artifact: CandidateArtifact,
+    predecessor: CandidateArtifact,
     state: JobLearningState,
-    visited: inout Set<CandidateDigest>
+    triggerFeedbackRevision: FeedbackRevision
   ) throws -> Bool {
     let manifest = artifact.manifest
     guard
       let predecessorDigest = manifest.predecessorCandidate,
       let claimedControl = manifest.predecessorFeedback,
-      let predecessor = try readCandidateArtifact(db, digest: predecessorDigest),
+      predecessorDigest == predecessor.digest,
       predecessor.digest != artifact.digest,
-      try candidateProvenanceIsValid(
-        db,
-        artifact: predecessor,
-        state: state,
-        visited: &visited
-      ),
       let storedControl = try storedCandidateControl(
         db,
         eventId: claimedControl.eventId,
@@ -170,7 +201,8 @@ extension ScheduledLearningStoreGRDB {
         db,
         artifact: artifact,
         feedbackCutoff: manifest.feedbackRevision,
-        state: state
+        state: state,
+        triggerFeedbackRevision: triggerFeedbackRevision
       ),
       let expected = expectedSuccessor(
         artifact: artifact,

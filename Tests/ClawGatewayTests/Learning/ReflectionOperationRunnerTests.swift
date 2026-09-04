@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -238,7 +239,11 @@ import Testing
 
   @Test func admissionFailureAfterDurableFinishNeverRepeatsTheProviderCall() async throws {
     // given
-    let env = try ReflectionRunEnvironment.make(admissionFails: true)
+    let logs = RecordingLogCapture()
+    let env = try ReflectionRunEnvironment.make(
+      admissionFails: true,
+      logger: logs.logger()
+    )
 
     // when
     await env.runner.runReflection(trigger: env.trigger, now: env.now)
@@ -253,6 +258,10 @@ import Testing
     #expect(try env.rowCount("learning_trials") == 0)
     #expect(try env.rowCount("learning_decisions") == 0)
     #expect(env.runnerLearning.admissionAttempts == 1)
+    #expect(logs.entries.contains { entry in entry.message.contains("admission was deferred") })
+    #expect(
+      logs.entries.contains { entry in entry.message.contains("could not be committed") } == false
+    )
   }
 }
 
