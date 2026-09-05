@@ -151,6 +151,21 @@ private extension LearningSurface {
       "decided at: \(time(decision.decidedAt, timezone: timezone))",
     ]
     switch decision.detail {
+    case .terminal(let receipt):
+      lines.append("decision result: \(receipt.result.rawValue)")
+      lines.append("decision reason: \(receipt.record.reason)")
+      lines.append("decision candidate: \(receipt.inputs.candidateDigest.rawValue)")
+      lines.append("decision base: \(receipt.inputs.baseDigest.rawValue)")
+      lines.append("decision replacement: \(receipt.inputs.replacementDigest.rawValue)")
+      lines.append("decision reviewed feedback: \(receipt.inputs.feedbackRevision.value)")
+      let runIds = receipt.cohort.map { support in
+        String(support.runId)
+      }.joined(separator: ", ")
+      lines.append("decision cohort runs: \(runIds)")
+      let confirmed = receipt.cohort.count { support in
+        support.outcome == .positive && support.ownerConfirmed
+      }
+      lines.append("evidence: heuristic; owner-confirmed positive runs: \(confirmed)")
     case .candidateAdmission(let inputs, let result):
       lines.append("decision input candidate: \(inputs.candidateDigest.rawValue)")
       lines.append("decision result candidate: \(result.candidateDigest.rawValue)")
@@ -182,6 +197,9 @@ private extension LearningSurface {
 
   static func decisionKind(_ detail: LearningDecisionDetail) -> String {
     switch detail {
+    case .terminal(let receipt):
+      receipt.record.rollbackTrigger == nil
+        ? LearningDecisionKind.trial.rawValue : LearningDecisionKind.rollback.rawValue
     case .candidateAdmission:
       AdmissionReceipt.kind
     case .reflectionNoCandidate:

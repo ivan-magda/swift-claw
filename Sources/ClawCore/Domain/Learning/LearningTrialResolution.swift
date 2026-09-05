@@ -1,6 +1,6 @@
 import Foundation
 
-public struct LearningTrialIdentity: Sendable, Equatable, Hashable {
+public struct LearningTrialIdentity: Sendable, Equatable, Hashable, Codable {
   public let trialId: Int64
   public let jobId: Int64
   public let epoch: LearningEpoch
@@ -24,7 +24,7 @@ public struct TrialAssignmentIdentity: Sendable, Equatable, Hashable {
   }
 }
 
-public enum TrialOutcomeKind: String, Sendable, Equatable, CaseIterable {
+public enum TrialOutcomeKind: String, Sendable, Equatable, CaseIterable, Codable {
   case positive
   case negative
   case neutral

@@ -283,7 +283,7 @@ import Testing
   }
 }
 
-private extension LearningRoutingTests {
+extension LearningRoutingTests {
   struct Harness {
     let queue: DatabaseQueue
     let router: MessageRouter
@@ -296,7 +296,8 @@ private extension LearningRoutingTests {
 
     static func make(
       groupChats: Set<Int64> = [],
-      secretValues: [String] = []
+      secretValues: [String] = [],
+      outboxSignal: OutboxSignal? = nil
     ) throws -> Harness {
       let queue = try ClawDatabase.makeInMemoryQueue()
       try ClawDatabase.migrate(queue)
@@ -323,6 +324,7 @@ private extension LearningRoutingTests {
         schedule: makeIdleScheduleSurface(writer: queue),
         learningStore: learning,
         learningRedactor: SecretRedactor(secretValues: secretValues),
+        learningOutboxSignal: outboxSignal,
         coordinator: ApprovalCoordinator(),
         doctor: StubDoctorReporter(),
         logger: TestLog.silent

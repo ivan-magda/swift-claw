@@ -251,6 +251,7 @@ import Testing
     #expect(successor.manifest.predecessorCandidate == predecessor.digest)
     #expect(successor.manifest.predecessorFeedback == control)
     #expect(try fixture.trial(oldTrial).state == LearningTrialState.fellBack.rawValue)
+    #expect(try fixture.env.terminalDecisionCount() == 1)
     #expect(try fixture.env.learning.openTrial(jobId: fixture.env.jobId) == nil)
     #expect(try fixture.env.countRows(in: "learning_trials") == 1)
     #expect(try fixture.env.countRows(in: "learning_candidates") == 2)
