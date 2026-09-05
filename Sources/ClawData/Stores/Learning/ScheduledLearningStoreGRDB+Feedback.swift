@@ -47,6 +47,14 @@ extension ScheduledLearningStoreGRDB {
         throw StoreError.unexpected("feedback revision CAS lost after target consumption")
       }
       let event = try Self.insertEvent(db, tap: tap, target: target, revision: revision, now: now)
+      try Self.recomputeFeedbackSubject(
+        db,
+        jobId: target.jobId,
+        epoch: target.epoch,
+        subjectKind: target.subjectKind,
+        subjectDigest: target.subjectDigest,
+        now: now
+      )
       try Self.applyImmediateVeto(db, target: target, signal: tap.signal)
       let outcome = FeedbackOutcome.recorded(event)
       try Self.auditFeedback(db, tap: tap, target: target, outcome: outcome, now: now)
@@ -129,6 +137,14 @@ extension ScheduledLearningStoreGRDB {
         challenge: challenge,
         payload: payload,
         revision: revision,
+        now: now
+      )
+      try Self.recomputeFeedbackSubject(
+        db,
+        jobId: challenge.jobId,
+        epoch: challenge.epoch,
+        subjectKind: challenge.subjectKind,
+        subjectDigest: challenge.subjectDigest,
         now: now
       )
       let outcome = FeedbackOutcome.recorded(event)

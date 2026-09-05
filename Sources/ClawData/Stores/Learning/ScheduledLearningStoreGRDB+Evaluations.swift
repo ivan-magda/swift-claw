@@ -5,6 +5,18 @@ import GRDB
 // MARK: - Verdicts
 
 extension ScheduledLearningStoreGRDB {
+  struct StoredEvaluationProjection {
+    let digest: EvaluationDigest
+    let jobId: Int64
+    let epoch: LearningEpoch
+    let runId: Int64
+    let evidenceDigest: EvidenceDigest
+    let evaluation: LearningEvaluation
+    let issueCodesJSON: String
+    let compatibilityDigest: CompatibilityDigest
+    let createdAt: Date
+  }
+
   public func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation? {
     try database.readMapping { db in
       try Self.readEvaluation(db, runId: runId)
@@ -76,7 +88,7 @@ extension ScheduledLearningStoreGRDB {
 
 // MARK: - Verdict Rows
 
-private extension ScheduledLearningStoreGRDB {
+extension ScheduledLearningStoreGRDB {
   /// The evaluator's source digest names a sealed receipt, and a receipt is keyed by its run — so
   /// the run is resolved from the operation's own identity rather than taken from the caller, which
   /// could otherwise file one run's verdict against another.
@@ -133,35 +145,94 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func readEvaluation(_ db: Database, runId: Int64) throws -> LearningEvaluation? {
-    let row = try Row.fetchOne(
+    let rows = try storedEvaluations(db, runId: runId)
+    guard rows.count <= 1 else {
+      throw StoreError.unexpected("run \(runId) holds multiple evaluations")
+    }
+    return rows.first?.evaluation
+  }
+
+  static func storedEvaluations(
+    _ db: Database,
+    runId: Int64
+  ) throws -> [StoredEvaluationProjection] {
+    let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT learning_evaluations.outcome, learning_evaluations.issue_codes,
+        SELECT learning_evaluations.evaluation_digest, learning_evaluations.job_id,
+          learning_evaluations.learning_epoch, learning_evaluations.run_id,
+          learning_evaluations.evidence_digest, learning_evaluations.outcome,
+          learning_evaluations.issue_codes,
           learning_evaluations.rubric_version, learning_evaluations.evaluator_prompt_version,
-          learning_evaluations.evaluator_schema_version, run_compatibility.evaluator_route
+          learning_evaluations.evaluator_schema_version,
+          learning_evaluations.compatibility_digest, learning_evaluations.created_at,
+          run_compatibility.evaluator_route
         FROM learning_evaluations
         LEFT JOIN run_compatibility ON run_compatibility.run_id = learning_evaluations.run_id
         WHERE learning_evaluations.run_id = ?
+        ORDER BY learning_evaluations.evaluation_digest
         """,
       arguments: [runId]
     )
-    guard let row else {
-      return nil
+    return try rows.map { row in
+      try decodeStoredEvaluation(row, expectedRunId: runId)
     }
+  }
+
+  static func decodeCanonicalIssueCodes(_ json: String) throws -> [String] {
     guard
-      let outcome = EvaluatorOutcome(rawValue: row["outcome"]),
-      let route: String = row["evaluator_route"],
-      let promptVersion = Int(row["evaluator_prompt_version"] as String),
-      let schemaVersion = Int(row["evaluator_schema_version"] as String),
-      let rubricVersion = Int(row["rubric_version"] as String),
-      let issueCodes = try? JSONDecoder().decode(
-        [String].self,
-        from: Data((row["issue_codes"] as String).utf8)
-      )
+      let data = json.data(using: .utf8),
+      let codes = try? JSONDecoder().decode([String].self, from: data),
+      codes.count <= EvaluatorOutput.maxIssueCodes,
+      codes.allSatisfy({ code in
+        code.isEmpty == false && code.count <= EvaluatorOutput.maxIssueCodeCharacters
+      }),
+      codes == codes.sorted(),
+      try issueCodesJSON(codes) == json
     else {
-      throw StoreError.unexpected("run \(runId) holds an unreadable evaluation")
+      throw StoreError.unexpected("assignment source has noncanonical issue codes")
     }
-    return LearningEvaluation(
+    return codes
+  }
+
+  private static func decodeStoredEvaluation(
+    _ row: Row,
+    expectedRunId: Int64
+  ) throws -> StoredEvaluationProjection {
+    guard
+      let digestRaw = SQLiteStoredValue.string(in: row, column: "evaluation_digest"),
+      isCanonicalDigest(digestRaw),
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      jobId > 0,
+      let epochRaw = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      epochRaw > 0,
+      let runId = SQLiteStoredValue.int64(in: row, column: "run_id"),
+      runId == expectedRunId,
+      let evidenceRaw = SQLiteStoredValue.string(in: row, column: "evidence_digest"),
+      isCanonicalDigest(evidenceRaw),
+      let outcomeRaw = SQLiteStoredValue.string(in: row, column: "outcome"),
+      let outcome = EvaluatorOutcome(rawValue: outcomeRaw),
+      let issueJSON = SQLiteStoredValue.string(in: row, column: "issue_codes"),
+      let issueCodes = try? decodeCanonicalIssueCodes(issueJSON),
+      let rubricRaw = SQLiteStoredValue.string(in: row, column: "rubric_version"),
+      let rubricVersion = Int(rubricRaw),
+      let promptRaw = SQLiteStoredValue.string(in: row, column: "evaluator_prompt_version"),
+      let promptVersion = Int(promptRaw),
+      let schemaRaw = SQLiteStoredValue.string(in: row, column: "evaluator_schema_version"),
+      let schemaVersion = Int(schemaRaw),
+      let compatibilityRaw = SQLiteStoredValue.string(
+        in: row,
+        column: "compatibility_digest"
+      ),
+      isCanonicalDigest(compatibilityRaw),
+      let createdRaw = SQLiteStoredValue.int64(in: row, column: "created_at"),
+      let createdAt = EpochSecondCodec.date(fromEpoch: createdRaw),
+      let route = SQLiteStoredValue.string(in: row, column: "evaluator_route"),
+      route.isEmpty == false
+    else {
+      throw StoreError.unexpected("run \(expectedRunId) holds an unreadable evaluation")
+    }
+    let evaluation = LearningEvaluation(
       outcome: outcome,
       issueCodes: issueCodes,
       evaluator: EvaluatorSurface(
@@ -170,6 +241,20 @@ private extension ScheduledLearningStoreGRDB {
         schemaVersion: schemaVersion,
         rubricVersion: rubricVersion
       )
+    )
+    guard evaluation.issueCodes == issueCodes else {
+      throw StoreError.unexpected("run \(expectedRunId) holds noncanonical evaluation codes")
+    }
+    return StoredEvaluationProjection(
+      digest: EvaluationDigest(rawValue: digestRaw),
+      jobId: jobId,
+      epoch: LearningEpoch(epochRaw),
+      runId: runId,
+      evidenceDigest: EvidenceDigest(rawValue: evidenceRaw),
+      evaluation: evaluation,
+      issueCodesJSON: issueJSON,
+      compatibilityDigest: CompatibilityDigest(rawValue: compatibilityRaw),
+      createdAt: createdAt
     )
   }
 }

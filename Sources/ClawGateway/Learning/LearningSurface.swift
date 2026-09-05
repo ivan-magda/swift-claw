@@ -36,7 +36,7 @@ private extension LearningSurface {
       let trial =
         readable.liveTrial.map { value in
           "trial \(value.state.rawValue) \(value.counts.consumed)/\(value.counts.maximum)"
-            + " (\(value.counts.unresolved) unresolved)"
+            + " · \(assignmentOutcomes(value.counts))"
         } ?? "no live trial"
       let decision =
         readable.lastDecision.map { value in
@@ -129,7 +129,7 @@ private extension LearningSurface {
       "trial base revision: \(trial.baseRevision.value)",
       "replacement digest: \(trial.replacementDigest.rawValue)",
       "assignments: \(trial.counts.consumed) of \(trial.counts.maximum)",
-      "assignment outcomes: \(trial.counts.unresolved) unresolved",
+      assignmentOutcomes(trial.counts),
       "assignment deadline: \(time(trial.assignmentDeadline, timezone: timezone))",
       "decision deadline: \(time(trial.decisionDeadline, timezone: timezone))",
     ]
@@ -189,6 +189,11 @@ private extension LearningSurface {
     case .learningReset:
       ResetReceipt.kind
     }
+  }
+
+  static func assignmentOutcomes(_ counts: LearningTrialCounts) -> String {
+    "assignment outcomes: \(counts.positive) positive, \(counts.negative) negative, "
+      + "\(counts.neutral) neutral, \(counts.unresolved) unresolved"
   }
 
   static func warningText(_ warning: LearningViewWarning) -> String {

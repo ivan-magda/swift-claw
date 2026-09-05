@@ -40,12 +40,18 @@ extension ScheduledLearningStoreGRDB {
       return .superseded
     }
     guard authorization.carrier.isPermitted else {
-      return try closeWithoutCall(db, operation, failure: .carrierPolicyDenied)
+      let outcome = try closeWithoutCall(db, operation, failure: .carrierPolicyDenied)
+      try recomputeEvaluatorOperation(db, operation: operation, outcome: outcome, now: now)
+      return outcome
     }
     guard try budgetPermits(db, authorization, now: now) else {
-      return try closeWithoutCall(db, operation, failure: .budgetDenied)
+      let outcome = try closeWithoutCall(db, operation, failure: .budgetDenied)
+      try recomputeEvaluatorOperation(db, operation: operation, outcome: outcome, now: now)
+      return outcome
     }
-    return try start(db, operation, authorization)
+    let outcome = try start(db, operation, authorization)
+    try recomputeEvaluatorOperation(db, operation: operation, outcome: outcome, now: now)
+    return outcome
   }
 }
 
@@ -111,6 +117,15 @@ extension ScheduledLearningStoreGRDB {
           now: now
         )
       }
+    }
+    if operation.phase == .evaluator {
+      try recomputeEvaluatorSource(
+        db,
+        jobId: operation.jobId,
+        epoch: operation.epoch,
+        evidenceDigest: operation.sourceDigest,
+        now: now
+      )
     }
     return true
   }
@@ -253,6 +268,7 @@ extension ScheduledLearningStoreGRDB {
   /// The daemon owns its database alone, so every row still `started` or `claimed` at boot belongs
   /// to a process that is gone.
   static func reconcile(_ db: Database, now: Date) throws -> OperationReconciliation {
+    let affectedEvaluatorRuns = try bootAffectedEvaluatorRuns(db)
     let interrupted = try operationIDs(db, state: .started)
     for id in interrupted {
       try chargeInterrupted(db, id: id, now: now)
@@ -264,9 +280,59 @@ extension ScheduledLearningStoreGRDB {
         LearningOperationState.claimed.rawValue,
       ]
     )
+    let returnedToClaimable = db.changesCount
+    for runId in affectedEvaluatorRuns {
+      _ = try recomputeAndReconcile(db, runId: runId, now: now)
+    }
     return OperationReconciliation(
       interrupted: interrupted.count,
-      returnedToClaimable: db.changesCount
+      returnedToClaimable: returnedToClaimable
+    )
+  }
+}
+
+// MARK: - Trial Projection Hooks
+
+private extension ScheduledLearningStoreGRDB {
+  static func recomputeEvaluatorOperation(
+    _ db: Database,
+    operation: OperationRow,
+    outcome: AuthorizeOutcome,
+    now: Date
+  ) throws {
+    guard operation.phase == .evaluator, outcome != .superseded else {
+      return
+    }
+    try recomputeEvaluatorSource(
+      db,
+      jobId: operation.jobId,
+      epoch: operation.epoch,
+      evidenceDigest: operation.sourceDigest,
+      now: now
+    )
+  }
+
+  static func bootAffectedEvaluatorRuns(_ db: Database) throws -> [Int64] {
+    try Int64.fetchAll(
+      db,
+      sql: """
+        SELECT DISTINCT evidence.run_id
+        FROM learning_operations AS operation
+        JOIN learning_evidence AS evidence
+          ON evidence.job_id = operation.job_id
+          AND evidence.learning_epoch = operation.learning_epoch
+          AND evidence.evidence_digest = operation.source_digest
+        JOIN trial_assignments AS assignment ON assignment.run_id = evidence.run_id
+        JOIN job_learning_state AS learning ON learning.job_id = assignment.job_id
+          AND learning.learning_epoch = assignment.learning_epoch
+        WHERE operation.phase = ? AND operation.state IN (?, ?)
+        ORDER BY evidence.run_id
+        """,
+      arguments: [
+        LearningPhase.evaluator.rawValue,
+        LearningOperationState.started.rawValue,
+        LearningOperationState.claimed.rawValue,
+      ]
     )
   }
 }

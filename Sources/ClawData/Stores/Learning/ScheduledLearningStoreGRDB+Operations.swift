@@ -62,26 +62,37 @@ private extension ScheduledLearningStoreGRDB {
     guard try sourceIsClaimable(db, key: key) else {
       return nil
     }
-    guard let latest = try latestAttempt(db, key: key.digest) else {
-      return try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
+    let claimed: ClaimedOperation?
+    if let latest = try latestAttempt(db, key: key.digest) {
+      switch latest.state {
+      case .pending:
+        // A claim the last process took but never authorized. No call was ever made under this row,
+        // so the attempt is resumed where it stopped rather than replaced by a new generation.
+        claimed = try reclaim(db, latest, key: key)
+      case .interruptedUnknown:
+        claimed = try insertClaim(
+          db,
+          key: key,
+          generation: latest.attemptGeneration + 1,
+          supersedes: latest.id,
+          now: now
+        )
+      case .claimed, .started, .succeeded, .failed, .failedNoCall:
+        claimed = nil
+      }
+    } else {
+      claimed = try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
     }
-
-    switch latest.state {
-    case .pending:
-      // A claim the last process took but never authorized. No call was ever made under this row,
-      // so the attempt is resumed where it stopped rather than replaced by a new generation.
-      return try reclaim(db, latest, key: key)
-    case .interruptedUnknown:
-      return try insertClaim(
+    if claimed != nil, key.phase == .evaluator {
+      try recomputeEvaluatorSource(
         db,
-        key: key,
-        generation: latest.attemptGeneration + 1,
-        supersedes: latest.id,
+        jobId: key.jobId,
+        epoch: key.epoch,
+        evidenceDigest: key.sourceDigest,
         now: now
       )
-    case .claimed, .started, .succeeded, .failed, .failedNoCall:
-      return nil
     }
+    return claimed
   }
 
   /// What the key's source has to be for the question to still be worth asking.

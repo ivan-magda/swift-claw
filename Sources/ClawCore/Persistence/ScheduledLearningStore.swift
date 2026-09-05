@@ -300,6 +300,21 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
   /// `JobLearningState.openTrialId`.
   func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial?
 
+  /// Rebuilds one assignment cache from its exact durable sources and current feedback.
+  func recomputeAssignment(
+    runId: Int64,
+    now: Date
+  ) throws(StoreError) -> AssignmentRecomputation
+
+  /// Every open-or-draining trial identity, sorted by job and trial id.
+  func liveTrialIdentities() throws(StoreError) -> [LearningTrialIdentity]
+
+  /// Reprojects one exact live cohort and applies only its open-to-draining edge.
+  func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult
+
   /// The terminal receipt the transaction that won the run's state wrote. Nil for a run that never
   /// bound, or one that is still live.
   func settlement(runId: Int64) throws(StoreError) -> RunSettlement?

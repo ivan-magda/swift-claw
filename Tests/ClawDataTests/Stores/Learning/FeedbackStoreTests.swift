@@ -944,7 +944,7 @@ private struct FeedbackStoreEnvironment {
   let base: BoundRunEnvironment
   let state: JobLearningState
 
-  var queue: DatabaseQueue { base.queue }
+  var queue: any DatabaseWriter { base.queue }
   var learning: ScheduledLearningStoreGRDB { base.learning }
   var jobId: Int64 { base.jobId }
   var now: Date { base.now }
@@ -1272,44 +1272,34 @@ private struct FeedbackStoreEnvironment {
   }
 
   func seedOpenTrial() throws -> Trial {
-    let candidate = try LessonSet.canonical(jobId: jobId, lessons: ["Prefer exact evidence."])
-    let candidateDigest = SHA256Digest.hex("feedback-candidate-\(jobId)")
+    let replacement = try LessonSet.canonical(jobId: jobId, lessons: ["Prefer exact evidence."])
+    let manifest = CandidateSourceManifest(
+      origin: .reflection,
+      algorithm: .v1,
+      jobId: jobId,
+      epoch: state.epoch,
+      triggerDigest: TriggerDigest(rawValue: SHA256Digest.hex("feedback-trigger-\(jobId)")),
+      triggerReason: .ownerCorrection,
+      qualifyingIssueCodes: [],
+      operationId: LearningOperationID(rawValue: "feedback-operation"),
+      carrierDigest: CarrierDigest(rawValue: SHA256Digest.hex("feedback-carrier-\(jobId)")),
+      resultDigest: ReflectionResultDigest(rawValue: SHA256Digest.hex("feedback-result-\(jobId)")),
+      baseDigest: state.stableDigest,
+      baseRevision: state.stableRevision,
+      feedbackRevision: state.feedbackRevision,
+      evidence: [],
+      evaluations: [],
+      feedback: [],
+      predecessorCandidate: nil,
+      predecessorFeedback: nil
+    )
+    let artifact = try CandidateArtifact(replacement: replacement, manifest: manifest)
     let generation = 3
     return try queue.write { db in
-      try db.execute(
-        sql: """
-          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
-            created_at) VALUES (?, ?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          jobId,
-          candidate.digest.rawValue,
-          candidate.schemaVersion,
-          candidate.canonicalBytes,
-          LessonSetSource.reflectorCandidate.rawValue,
-          EpochSecondCodec.epoch(now),
-        ]
-      )
-      try db.execute(
-        sql: """
-          INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-            replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-            source_manifest, algorithm, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          candidateDigest,
-          jobId,
-          state.epoch.value,
-          candidate.digest.rawValue,
-          state.stableDigest.rawValue,
-          state.stableRevision.value,
-          state.feedbackRevision.value,
-          LearningPhase.reflector.rawValue,
-          "{}",
-          LearningAlgorithm.v1.rawValue,
-          EpochSecondCodec.epoch(now),
-        ]
+      try ScheduledLearningStoreGRDB.recordCandidateArtifact(
+        db,
+        artifact: artifact,
+        now: now
       )
       try db.execute(
         sql: """
@@ -1322,25 +1312,40 @@ private struct FeedbackStoreEnvironment {
           jobId,
           state.epoch.value,
           state.stableDigest.rawValue,
-          candidateDigest,
+          artifact.digest.rawValue,
           generation,
           EpochSecondCodec.epoch(now),
-          EpochSecondCodec.epoch(now.addingTimeInterval(30 * 86_400)),
-          EpochSecondCodec.epoch(now.addingTimeInterval(37 * 86_400)),
+          EpochSecondCodec.epoch(now.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)),
+          EpochSecondCodec.epoch(now.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)),
           EpochSecondCodec.epoch(now),
           LearningTrialState.open.rawValue,
           LearningAlgorithm.v1.rawValue,
         ]
       )
       let trialId = db.lastInsertedRowID
+      try ScheduledLearningStoreGRDB.insertDecision(
+        db,
+        kind: AdmissionReceipt.kind,
+        jobId: jobId,
+        epoch: state.epoch,
+        inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
+        result: AdmissionReceipt(
+          candidateDigest: artifact.digest,
+          replacementDigest: replacement.digest,
+          trialId: trialId,
+          generation: generation
+        ),
+        algorithm: .v1,
+        now: now
+      )
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
         arguments: [trialId, jobId]
       )
       return Trial(
         trialId: trialId,
-        candidateDigest: candidateDigest,
-        replacementDigest: candidate.digest.rawValue,
+        candidateDigest: artifact.digest.rawValue,
+        replacementDigest: replacement.digest.rawValue,
         generation: generation
       )
     }
@@ -1404,14 +1409,29 @@ private struct FeedbackStoreEnvironment {
           artifact.digest.rawValue,
           generation,
           EpochSecondCodec.epoch(now),
-          EpochSecondCodec.epoch(now.addingTimeInterval(30 * 86_400)),
-          EpochSecondCodec.epoch(now.addingTimeInterval(37 * 86_400)),
+          EpochSecondCodec.epoch(now.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)),
+          EpochSecondCodec.epoch(now.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)),
           EpochSecondCodec.epoch(now),
           trialState.rawValue,
           LearningAlgorithm.v1.rawValue,
         ]
       )
       let trialId = db.lastInsertedRowID
+      try ScheduledLearningStoreGRDB.insertDecision(
+        db,
+        kind: AdmissionReceipt.kind,
+        jobId: jobId,
+        epoch: state.epoch,
+        inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
+        result: AdmissionReceipt(
+          candidateDigest: artifact.digest,
+          replacementDigest: replacement.digest,
+          trialId: trialId,
+          generation: generation
+        ),
+        algorithm: .v1,
+        now: now
+      )
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
         arguments: [trialId, jobId]

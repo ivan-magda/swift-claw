@@ -53,6 +53,7 @@ private extension ScheduledLearningStoreGRDB {
   /// content-free tombstone so the run is closed exactly once.
   static func seal(_ db: Database, runId: Int64, now: Date) throws -> SealOutcome {
     guard try readEvidence(db, runId: runId) == nil else {
+      _ = try recomputeAndReconcile(db, runId: runId, now: now)
       return .alreadySealed
     }
     guard let binding = try readBinding(db, runId: runId) else {
@@ -104,6 +105,7 @@ private extension ScheduledLearningStoreGRDB {
       now: now
     )
     try stampSealingVersions(db, runId: runId)
+    _ = try recomputeAndReconcile(db, runId: runId, now: now)
     return .sealed(eligibility: eligibility)
   }
 
@@ -125,6 +127,7 @@ private extension ScheduledLearningStoreGRDB {
       now: now
     )
     try stampSealingVersions(db, runId: binding.runId)
+    _ = try recomputeAndReconcile(db, runId: binding.runId, now: now)
     return .excluded(reason)
   }
 

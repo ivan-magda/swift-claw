@@ -141,18 +141,9 @@ public enum TrialAssignmentState: String, Sendable, Equatable {
   case learningOutcomeResolved = "learning_outcome_resolved"
 }
 
-/// What the trial policy decides once an assignment's exposure and settlement state are known.
-public enum TrialDecision: Sendable, Equatable {
-  case wait
-  case closeAssignment(reason: String)
-  case promote
-  case fallback(reason: String)
-}
-
-/// The lifecycle of one admitted trial. `open` is the only state that grants new assignments,
-/// which is what the partial unique index on `learning_trials` keys on to hold at most one
-/// assigning trial per job. A `draining` trial has hit an exposure bound: it grants nothing more,
-/// but the runs it already assigned still settle and still decide it.
+/// The lifecycle of one admitted trial. `open` is the only state that grants new assignments.
+/// The partial unique index covers `open` and `draining`, so at most one live trial owns a job.
+/// A draining trial grants nothing more, but its assigned runs still settle and still decide it.
 public enum LearningTrialState: String, Sendable, Equatable, CaseIterable {
   case open
   case draining

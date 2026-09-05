@@ -276,6 +276,9 @@ public enum ClawDatabase {
     migrator.registerMigration("v12") { db in
       try addLearningOperationClaimKey(db)
     }
+    migrator.registerMigration("v13") { db in
+      try replaceOpenTrialIndexWithLiveTrialIndex(db)
+    }
     return migrator
   }
 
