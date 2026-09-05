@@ -86,7 +86,7 @@ import Testing
 
     // when
     _ = try env.learning.sweepRetention(now: env.now.addingTimeInterval(150 * 86_400))
-    let retry = try AdmissionStoreFixture(path: "", env: env).persistedCandidate(
+    let retry = try AdmissionStoreFixture(env: env).persistedCandidate(
       lessons: replacement.lessons
     )
     let outcome = try env.learning.admitCandidate(
@@ -112,7 +112,7 @@ import Testing
       feedbackRevision: FeedbackRevision(0),
       now: failed.assignmentDeadline
     )
-    let fixture = AdmissionStoreFixture(path: "", env: env)
+    let fixture = AdmissionStoreFixture(env: env)
     let other = try fixture.persistedCandidate(lessons: ["Consult the complete archive."])
     _ = try env.learning.admitCandidate(
       digest: other.digest,
@@ -145,7 +145,7 @@ import Testing
   @Test func liveEditedCandidateRetainsItsPredecessorAndSourcePayloads() throws {
     // given
     let env = try BoundRunEnvironment.make()
-    let original = try AdmissionStoreFixture(path: "", env: env).persistedCandidate()
+    let original = try AdmissionStoreFixture(env: env).persistedCandidate()
     let payload = #"{"lessons":["Ignore counter-only changes."]}"#
     let feedback = try env.appendFeedback(
       subjectKind: .candidate,

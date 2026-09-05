@@ -9,7 +9,6 @@ import Testing
   func everyExistingTrialStateReplaysTheImmutableReceipt(_ state: LearningTrialState) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -35,7 +34,6 @@ import Testing
   @Test func corruptedAdmissionReceiptFailsClosedWithoutWriting() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let outcome = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -60,7 +58,6 @@ import Testing
   @Test func admissionDecisionWithoutItsTrialFailsClosedWithoutWriting() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -85,7 +82,6 @@ import Testing
   @Test func noncanonicalAdmissionInputsFailClosedWithoutWriting() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -111,7 +107,6 @@ import Testing
   func replayRequiresEveryTrialAndDecisionIdentity(_ corruption: AdmissionReplayCorruption) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -137,7 +132,6 @@ import Testing
   func durableAdmissionWiresEveryCurrentBindingGate(_ mutation: AdmissionBindingMutation) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     try fixture.apply(mutation, artifact: artifact)
 
@@ -156,7 +150,6 @@ import Testing
   @Test func aPausedRecurringJobStillAdmitsThroughTheDurableSeam() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     try fixture.setJobStatus(.paused)
 

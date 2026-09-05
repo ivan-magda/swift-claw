@@ -35,11 +35,11 @@ import Testing
     let now = fixture.env.now
 
     // when
-    let recomputationTask = Task.detached {
+    let recomputationTask = databaseTask {
       try learning.recomputeAssignment(runId: evidence.runId, now: now)
     }
     await gate.entered.wait()
-    let resetTask = Task.detached {
+    let resetTask = databaseTask {
       try learning.applyReset(updateId: 9_160, jobId: jobId, now: now.addingTimeInterval(1))
     }
     gate.release()
@@ -88,11 +88,11 @@ import Testing
     let now = fixture.env.now
 
     // when
-    let resetTask = Task.detached {
+    let resetTask = databaseTask {
       try learning.applyReset(updateId: 9_161, jobId: jobId, now: now.addingTimeInterval(1))
     }
     await gate.entered.wait()
-    let recomputationTask = Task.detached {
+    let recomputationTask = databaseTask {
       try learning.recomputeAssignment(runId: evidence.runId, now: now.addingTimeInterval(2))
     }
     gate.release()
@@ -118,7 +118,7 @@ import Testing
       gate.release()
       try? FileManager.default.removeItem(atPath: fixture.path)
     }
-    let admission = AdmissionStoreFixture(path: fixture.path, env: fixture.env)
+    let admission = AdmissionStoreFixture(env: fixture.env)
     let candidate = try admission.persistedCandidate()
     try fixture.env.installTrial()
     try fixture.env.makeRepeatable()
@@ -137,11 +137,11 @@ import Testing
     let env = fixture.env
 
     // when
-    let fireTask = Task.detached {
+    let fireTask = databaseTask {
       try env.pendingBoundRun()
     }
     await gate.entered.wait()
-    let admissionTask = Task.detached {
+    let admissionTask = databaseTask {
       try env.learning.admitCandidate(
         digest: candidate.digest,
         redactor: SecretRedactor(secretValues: []),
@@ -162,6 +162,18 @@ import Testing
 private struct PooledTrialEnvironment {
   let path: String
   let env: BoundRunEnvironment
+}
+
+private func databaseTask<Value: Sendable>(
+  _ operation: @escaping @Sendable () throws -> Value
+) -> Task<Value, any Error> {
+  Task {
+    try await withCheckedThrowingContinuation { continuation in
+      DispatchQueue.global().async {
+        continuation.resume(with: Result(catching: operation))
+      }
+    }
+  }
 }
 
 private func pooledTrialEnvironment(

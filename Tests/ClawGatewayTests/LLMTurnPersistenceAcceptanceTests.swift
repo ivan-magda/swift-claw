@@ -605,7 +605,7 @@ func makeStopNewStack(
   )
 }
 
-@Suite struct LLMTurnPersistenceAcceptanceTests {
+@Suite(.timeLimit(.minutes(1))) struct LLMTurnPersistenceAcceptanceTests {
   // MARK: - Durable-state probes
 
   /// The most recently inserted run's `state` — DONE / FAILED / RUNNING.
@@ -635,18 +635,16 @@ func makeStopNewStack(
 
   private func waitForRunStates(
     _ writer: any DatabaseWriter,
+    signal: OutboxSignal,
     expected: [String]
   ) async throws {
-    _ = try await pollUntil { try runStates(writer) == expected ? expected : nil }
+    var notifications = signal.notifications.makeAsyncIterator()
+    while try runStates(writer) != expected {
+      guard await notifications.next() != nil else {
+        break
+      }
+    }
     #expect(try runStates(writer) == expected)
-  }
-
-  private func waitForPendingOutboxCount(
-    _ outbox: OutboxStoreGRDB,
-    count: Int
-  ) async throws {
-    _ = try await pollUntil { try outbox.pendingOutbound().count == count ? count : nil }
-    #expect(try outbox.pendingOutbound().count == count)
   }
 
   // MARK: - Tests
@@ -664,7 +662,7 @@ func makeStopNewStack(
     await stack.provider.waitForStreamCalls(1)
     await stack.transport.waitForDrafts(atLeast: 1)
     await stack.provider.releasePostDelta()
-    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+    try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
 
     // then
     #expect(outcome == .processed)
@@ -694,7 +692,7 @@ func makeStopNewStack(
     let outcome = await stack.router.handle(
       rawUpdate: textUpdate(id: 502, from: stack.chatId, text: "fallback")
     )
-    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+    try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
     await stack.dispatcher.drainOnce()
 
     // then
@@ -718,7 +716,7 @@ func makeStopNewStack(
     await stack.provider.waitForStreamCalls(1)
     await stack.transport.waitForDrafts(atLeast: 1)
     await stack.provider.releasePostDelta()
-    try await waitForRunStates(queue, expected: [RunState.failed.rawValue])
+    try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.failed.rawValue])
 
     // then
     #expect(outcome == .processed)
@@ -740,7 +738,7 @@ func makeStopNewStack(
     let outcome = await stack.router.handle(
       rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello")
     )
-    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+    try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
 
     // then — everything is durable, nothing is on the wire yet
     #expect(outcome == .processed)
@@ -771,11 +769,12 @@ func makeStopNewStack(
 
     // when — two sequential turns from the same chat (distinct update ids)
     await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "first"))
-    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+    try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
     await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "second"))
     await stack.provider.waitForRequestCount(2)
     try await waitForRunStates(
       queue,
+      signal: stack.signal,
       expected: [RunState.done.rawValue, RunState.done.rawValue]
     )
 
@@ -802,8 +801,8 @@ func makeStopNewStack(
 
     // when
     await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
-    try await waitForRunStates(queue, expected: [RunState.failed.rawValue])
-    try await waitForPendingOutboxCount(stack.outbox, count: 1)
+    try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.failed.rawValue])
+    #expect(try stack.outbox.pendingOutbound().count == 1)
     await stack.dispatcher.drainOnce()
 
     // then — the run failed but the owner was told, never left silent
@@ -854,9 +853,10 @@ func makeStopNewStack(
     await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
     try await waitForRunStates(
       queue,
+      signal: stack.signal,
       expected: [RunState.superseded.rawValue, RunState.failed.rawValue]
     )
-    try await waitForPendingOutboxCount(stack.outbox, count: 1)
+    #expect(try stack.outbox.pendingOutbound().count == 1)
     await stack.dispatcher.drainOnce()
 
     // then — the gate refused pre-call (provider never invoked), the run failed, and the owner was told
@@ -884,7 +884,7 @@ func makeStopNewStack(
       try ClawDatabase.migrate(pool)
       let stack = try makeStack(writer: pool, outcome: .respond("stub answer"))
       await stack.router.handle(rawUpdate: textUpdate(id: 100, from: stack.chatId, text: "hello"))
-      try await waitForRunStates(pool, expected: [RunState.done.rawValue])
+      try await waitForRunStates(pool, signal: stack.signal, expected: [RunState.done.rawValue])
       try stack.cursor.advanceCursor(to: 100)
     }
 
@@ -940,6 +940,7 @@ func makeStopNewStack(
     await stack.provider.waitForRequestCount(2)
     try await waitForRunStates(
       queue,
+      signal: stack.signal,
       expected: [RunState.done.rawValue, RunState.done.rawValue]
     )
 
@@ -1061,7 +1062,7 @@ func makeStopNewStack(
 
     // when
     await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
-    try await waitForRunStates(queue, expected: [RunState.done.rawValue])
+    try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
     await stack.dispatcher.drainOnce()
 
     // then — the assistant anchor kept its provider state (round-trip through real GRDB)

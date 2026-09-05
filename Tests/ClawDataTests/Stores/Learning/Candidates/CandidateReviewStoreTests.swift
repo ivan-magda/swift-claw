@@ -12,7 +12,6 @@ import Testing
   ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -36,7 +35,6 @@ import Testing
   @Test func reviewStateIsDerivedFromTheAuthoritativeLiveTrial() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -67,7 +65,6 @@ import Testing
   @Test func admittedReviewRequiresTheExactImmutableReceipt() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -94,7 +91,6 @@ import Testing
   @Test func onlyACurrentUnadmittedOwnerEditCanUseAwaitingApprovalState() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let payload = #"{"lessons":["Keep owner-confirmed material changes only."]}"#
     let editControl = try fixture.env.appendFeedback(
@@ -134,7 +130,6 @@ import Testing
   @Test func rawAndSupersededCandidatesCannotExposeAwaitingApproval() throws {
     // given
     let rawFixture = try AdmissionStoreFixture.make()
-    defer { rawFixture.remove() }
     let raw = try rawFixture.persistedCandidate()
     let rawReview = rawFixture.review(
       candidate: raw,
@@ -143,7 +138,6 @@ import Testing
     )
 
     let supersededFixture = try AdmissionStoreFixture.make()
-    defer { supersededFixture.remove() }
     let predecessor = try supersededFixture.persistedCandidate()
     let payload = #"{"lessons":["Keep the approved owner edit."]}"#
     let editControl = try supersededFixture.env.appendFeedback(
@@ -198,7 +192,6 @@ import Testing
   @Test func pausedRecurringJobCanCommitItsCurrentAdmittedReview() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -224,7 +217,6 @@ import Testing
   @Test func reviewCommitClosesStateAndSourceRacesBeforeWriting() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -246,7 +238,6 @@ import Testing
   @Test func committedReviewReplayPrecedesLaterMutableAuthorityChecks() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -292,7 +283,6 @@ import Testing
   @Test func subsecondReviewCommitReplaysAgainstOneNormalizedDeliveryInstant() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -334,7 +324,6 @@ import Testing
   func partialCommittedReviewFailsClosed(_ corruption: CommittedReviewCorruption) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -358,7 +347,6 @@ import Testing
   func reviewCommitRequiresEveryCurrentStateBinding(_ mutation: ReviewStateMutation) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -380,7 +368,6 @@ import Testing
   @Test func reviewCommitRevalidatesThePersistedSourceRows() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -407,7 +394,6 @@ import Testing
   @Test func reviewCommitRevalidatesAnExactCandidateHardVeto() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,
@@ -440,7 +426,6 @@ import Testing
   func cancelledOrNonrepeatableJobsCannotCommitAReview(_ mutation: ReviewJobMutation) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,

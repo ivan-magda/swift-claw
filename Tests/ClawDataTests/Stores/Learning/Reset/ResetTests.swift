@@ -607,7 +607,6 @@ import Testing
   @Test func resetSeparatesNeverAdmittedCandidateFromAdmittedReplay() throws {
     // given — a persisted candidate that has never opened a trial
     let staleFixture = try AdmissionStoreFixture.make()
-    defer { staleFixture.remove() }
     let staleCandidate = try staleFixture.persistedCandidate()
     _ = try staleFixture.env.learning.applyReset(
       updateId: 9_014,
@@ -627,7 +626,6 @@ import Testing
 
     // given — an already-admitted candidate has an immutable idempotency receipt.
     let replayFixture = try AdmissionStoreFixture.make()
-    defer { replayFixture.remove() }
     let admittedCandidate = try replayFixture.persistedCandidate()
     let admitted = try replayFixture.env.learning.admitCandidate(
       digest: admittedCandidate.digest,

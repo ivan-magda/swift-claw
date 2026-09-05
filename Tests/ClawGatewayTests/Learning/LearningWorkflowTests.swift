@@ -407,7 +407,8 @@ extension LearningWorkflowTests {
 extension LearningWorkflowTests {
   @Test func transitionBudgetYieldsAndCompletedWindowsDoNotStarveLaterWork() async throws {
     // given
-    let windowCount = LearningWorkflow.maxTransitionsPerInvocation + 1
+    let transitionLimit = 2
+    let windowCount = transitionLimit + 1
     let evaluationCount = windowCount * LearningTrigger.recurringRunThreshold
     let noCandidate = #"{"schema_version":1,"candidate":null}"#
     let replies =
@@ -436,11 +437,11 @@ extension LearningWorkflowTests {
       logger: logs.logger()
     )
     // when
-    await workflow.advance(jobId: env.jobId, now: env.now)
+    await workflow.advance(jobId: env.jobId, now: env.now, transitionLimit: transitionLimit)
     // then
     #expect(
       await env.provider.requests.count
-        == evaluationCount + LearningWorkflow.maxTransitionsPerInvocation
+        == evaluationCount + transitionLimit
     )
     #expect(
       logs.entries.contains {
@@ -449,7 +450,7 @@ extension LearningWorkflowTests {
       }
     )
     // when
-    await workflow.advance(jobId: env.jobId, now: env.now)
+    await workflow.advance(jobId: env.jobId, now: env.now, transitionLimit: transitionLimit)
     // then
     #expect(await env.provider.requests.count == evaluationCount + windowCount)
   }

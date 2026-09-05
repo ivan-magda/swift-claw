@@ -163,7 +163,7 @@ import Testing
         now: trial.assignmentDeadline
       )
     }
-    let fixture = AdmissionStoreFixture(path: "", env: env)
+    let fixture = AdmissionStoreFixture(env: env)
     let replacement = try #require(
       try env.learning.lessonSet(jobId: env.jobId, digest: trial.replacementDigest)
     )
@@ -217,7 +217,7 @@ import Testing
 extension BoundRunEnvironment {
   static func promotionEnvironment() throws -> Self {
     let env = try make()
-    let fixture = AdmissionStoreFixture(path: "", env: env)
+    let fixture = AdmissionStoreFixture(env: env)
     let artifact = try fixture.persistedCandidate()
     guard
       case .admitted = try env.learning.admitCandidate(
