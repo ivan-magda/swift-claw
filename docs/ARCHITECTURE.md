@@ -871,7 +871,10 @@ stored drain task. Owner callbacks and challenge acknowledgements enqueue work w
 an inference. Direct `advance(runId:)` and `advance(jobId:)` calls await a bounded `LearningWorkflow`
 pass. The composition root supplies the actual provider roster, shared primary cooldown, configured
 budget and cost resolver, the redactor including MCP secrets, and notices using the shared outbox
-signal. A failed boot operation reconciliation prevents learning dispatch; ordinary delivery remains
+signal. Operation orphan reconciliation succeeds once per service instance before learning dispatch.
+A settlement notification from a resumed approval may establish that boundary before the explicit
+boot pass; the later pass reuses its success and does not reclassify this process's live calls.
+Failed reconciliation remains retryable and prevents learning dispatch; ordinary delivery remains
 available.
 
 The run pass seals evidence, evaluates it under the durable operation claim, recomputes its trial

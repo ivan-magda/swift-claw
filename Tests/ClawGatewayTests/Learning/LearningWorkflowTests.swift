@@ -141,6 +141,12 @@ extension LearningWorkflowTests {
     // then
     #expect(await env.provider.requests.isEmpty)
     #expect(try env.learning.evaluation(runId: env.runId) == nil)
+    // when
+    env.authorizing.failBootReconciliation = false
+    await service.reconcileAtBoot(now: env.now)
+    // then
+    #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
+    #expect(await env.provider.requests.count == 1)
   }
 }
 
@@ -568,5 +574,46 @@ extension LearningWorkflowTests {
     // then
     #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
     #expect(await env.provider.requests.count == 1)
+  }
+}
+
+extension LearningWorkflowTests {
+  @Test func explicitBootPreservesNotificationStartedInference() async throws {
+    // given
+    let entered = AsyncGate()
+    let release = AsyncGate()
+    let bootReachedSweep = AsyncGate()
+    defer { release.open() }
+    let env = try EvaluationRunEnvironment.make(
+      reply: EvaluationRunEnvironment.noIssueReply,
+      beforeResponse: {
+        entered.open()
+        await release.wait()
+      }
+    )
+    let bootStore = RecordingLearningStore(base: env.learning, onUnsealed: bootReachedSweep.open)
+    let service = Self.service(env, bootStore: bootStore)
+    await service.notifySettled(runId: env.runId)
+    await entered.wait()
+    // when
+    let boot = Task { await service.reconcileAtBoot(now: env.now) }
+    await bootReachedSweep.wait()
+    // then
+    #expect(try env.operationState() == .started)
+    #expect(try env.learningUsage().isEmpty)
+    release.open()
+    await boot.value
+    await service.sweep(now: env.now)
+    #expect(try env.operationState() == .succeeded)
+    #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
+    #expect(await env.provider.requests.count == 1)
+    let usages = try env.learningUsage()
+    #expect(usages.count == 1)
+    let usage = try #require(usages.first)
+    #expect(usage.costUSD == EvaluationRunEnvironment.replyCostUSD)
+    #expect(
+      usage.tokens == EvaluationRunEnvironment.replyPromptTokens
+        + EvaluationRunEnvironment.replyCompletionTokens
+    )
   }
 }

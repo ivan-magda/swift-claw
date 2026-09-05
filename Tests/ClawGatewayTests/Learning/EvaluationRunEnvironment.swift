@@ -353,6 +353,7 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   private let recordsReviewCommits: Bool
   private let failingReviewCandidate: CandidateDigest?
   private let serviceBehavior: ServiceBehavior
+  private let onUnsealed: @Sendable () -> Void
   private var presented: [LearningAuthorization] = []
   private var reviewSubjects: Set<String> = []
   private var admissions = 0
@@ -365,7 +366,8 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     admissionFails: Bool = false,
     recordsReviewCommits: Bool = false,
     failingReviewCandidate: CandidateDigest? = nil,
-    serviceBehavior: ServiceBehavior = ServiceBehavior()
+    serviceBehavior: ServiceBehavior = ServiceBehavior(),
+    onUnsealed: @escaping @Sendable () -> Void = {}
   ) {
     self.base = base
     self.supersedes = supersedes
@@ -373,6 +375,7 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     self.recordsReviewCommits = recordsReviewCommits
     self.failingReviewCandidate = failingReviewCandidate
     self.serviceBehavior = serviceBehavior
+    self.onUnsealed = onUnsealed
   }
 
   /// Every authorization the runner presented, in order.
@@ -607,6 +610,7 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   }
 
   func unsealed(limit: Int) throws(StoreError) -> [Int64] {
+    onUnsealed()
     recordServiceCall("unsealed")
     if let runIds = serviceBehavior.unsealedRunIds {
       return runIds

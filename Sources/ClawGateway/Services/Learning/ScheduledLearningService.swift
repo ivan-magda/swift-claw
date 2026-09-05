@@ -135,8 +135,8 @@ public actor ScheduledLearningService {
   /// re-reads headroom, and its claimed-but-never-authorized siblings have to become claimable
   /// again or the runs behind them are never evaluated.
   public func reconcileAtBoot(now: Date) async {
-    operationsReconciled = reconcileOperations(now: now)
-    guard workflow == nil || operationsReconciled else {
+    let reconciled = ensureOperations(now: now)
+    guard workflow == nil || reconciled else {
       return
     }
     await sweep(now: now)
