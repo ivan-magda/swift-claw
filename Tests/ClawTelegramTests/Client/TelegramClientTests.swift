@@ -168,7 +168,9 @@ private func client(status: Int, json: String) -> TelegramClient {
     await #expect {
       _ = try await telegram.getMe()
     } throws: { error in
-      guard let telegramErr = error as? TelegramError else { return false }
+      guard let telegramErr = error as? TelegramError else {
+        return false
+      }
       if case .decoding = telegramErr { return true }
       return false
     }
@@ -187,7 +189,9 @@ private func client(status: Int, json: String) -> TelegramClient {
     await #expect {
       _ = try await telegram.getMe()
     } throws: { error in
-      guard case TelegramError.transport(let message) = error else { return false }
+      guard case TelegramError.transport(let message) = error else {
+        return false
+      }
       thrownMessage = message
       return true
     }

@@ -1,0 +1,4 @@
+#!/bin/sh
+artifact_dir=${0%/*}
+[ "$artifact_dir" = "$0" ] && artifact_dir=.
+exec /usr/bin/python3 -I "$artifact_dir/page-bootstrap" lesson-lint "$@"

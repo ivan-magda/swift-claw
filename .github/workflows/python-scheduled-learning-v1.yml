@@ -1,0 +1,69 @@
+name: Python Scheduled Learning V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "experiments/scheduled-task-learning/benchmark-core/benchmark_core/**"
+      - "experiments/scheduled-task-learning/benchmark-core/benchmark_learning/**"
+      - "experiments/scheduled-task-learning/page-change/page_benchmark/**"
+      - "experiments/scheduled-task-learning/scheduled-learning-v1/**"
+      - "docs/research/172-validation-protocol.md"
+      - "Sources/ClawEvaluation/**"
+      - "Sources/claw-eval/**"
+      - "Package.swift"
+      - "Package.resolved"
+      - ".github/workflows/python-scheduled-learning-v1.yml"
+  pull_request:
+    paths:
+      - "experiments/scheduled-task-learning/benchmark-core/benchmark_core/**"
+      - "experiments/scheduled-task-learning/benchmark-core/benchmark_learning/**"
+      - "experiments/scheduled-task-learning/page-change/page_benchmark/**"
+      - "experiments/scheduled-task-learning/scheduled-learning-v1/**"
+      - "docs/research/172-validation-protocol.md"
+      - "Sources/ClawEvaluation/**"
+      - "Sources/claw-eval/**"
+      - "Package.swift"
+      - "Package.resolved"
+      - ".github/workflows/python-scheduled-learning-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-scheduled-learning-v1-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: experiments/scheduled-task-learning/scheduled-learning-v1
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.5"
+      - name: Run scripts/lint.sh
+        run: scripts/lint.sh
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.5"
+      - name: Run scripts/test.sh
+        run: scripts/test.sh
+      - name: Run replay conformance
+        run: uv run python -B -m scheduled_learning_v1.conformance .

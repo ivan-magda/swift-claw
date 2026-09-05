@@ -90,8 +90,7 @@ struct StreamingTurnRuntime: Sendable {
     case .failed(let error):
       throw error
     case .timedOut(.notStarted):
-      // A no-start deadline generated nothing, so it bills nothing: a bare cancel writes no row.
-      throw CancellationError()
+      throw ProviderNoStartDeadline()
     case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
       // The interrupted attempt may already owe tokens, so the typed marker carries the observed
       // lower bound for the runtime's conservative row.

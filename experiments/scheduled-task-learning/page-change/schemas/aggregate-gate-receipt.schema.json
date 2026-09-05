@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/aggregate-gate-receipt.schema.json",
+  "title": "PageChangeAggregateGateReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "gate_id",
+    "stage",
+    "manifest_sha256",
+    "freeze_commit",
+    "run_order_sha256",
+    "records_sha256",
+    "fixture_bundle_sha256",
+    "scorer_digest",
+    "conformance_receipt_sha256",
+    "result"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "gate_id": {"type": "string", "pattern": "^gate-[0-9a-f]{12}$"},
+    "stage": {"enum": ["development", "regression", "sealed"]},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "freeze_commit": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
+    "run_order_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "records_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fixture_bundle_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "scorer_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "conformance_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "result": {"type": "object"}
+  }
+}

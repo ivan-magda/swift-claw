@@ -488,6 +488,28 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(run.response.content == "text")
   }
 
+  /// Production returns the first terminal without making later aliases authoritative. Model-alias
+  /// enforcement belongs only to the evaluation's strict drain policy.
+  @Test func productionFirstTerminalIgnoresLaterModelSpellingsInTheSameBatch() throws {
+    // given
+    let repeatedTerminal =
+      Self.addedMessageEvent(index: 0, phase: "final")
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+      + Self.event(
+        #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","model":"gpt-a"}}"#
+      )
+      + Self.event(
+        #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-b"}}"#
+      )
+
+    // when
+    let run = try Self.consume(repeatedTerminal)
+
+    // then — globally enforcing strict alias equality would reject this production-default reply.
+    #expect(run.response.content == "text")
+    #expect(run.response.reportedModel == "gpt-a")
+  }
+
   /// A conflicting terminal that arrives in a *later* batch is not consulted: the outcome was
   /// already decided and the parser does not wait for the wire to finish having opinions.
   @Test func aConflictingTerminalInALaterBatchIsIgnoredRatherThanRejected() throws {
@@ -532,7 +554,7 @@ private typealias Support = ChatGPTProviderTestSupport
     _ = try accumulator.consume(try parser.push(Data(stream.utf8)))
 
     // then
-    #expect(throws: ProviderError.self) {
+    #expect(throws: ProviderError.partialStreamWithoutCompletedTerminal) {
       try accumulator.finish()
     }
     #expect(accumulator.observedCompletionTokens > 0)
@@ -543,7 +565,7 @@ private typealias Support = ChatGPTProviderTestSupport
     var accumulator = Self.accumulator()
 
     // then
-    #expect(throws: ProviderError.self) {
+    #expect(throws: ProviderError.partialStreamWithoutCompletedTerminal) {
       try accumulator.finish()
     }
     #expect(accumulator.observedCompletionTokens == 0)

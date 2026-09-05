@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "minimum_cases_per_requirement": 2,
+  "requirements": [
+    "score.material_recall",
+    "score.noise_suppression",
+    "score.verdict_accuracy",
+    "schema.single_object",
+    "schema.exact_version_identity",
+    "schema.closed_properties",
+    "schema.closed_enums",
+    "schema.unique_arrays",
+    "schema.bounded_values",
+    "schema.conditional_consistency",
+    "schema.no_surrounding_text",
+    "critical.schema_or_identity",
+    "critical.missed_material",
+    "critical.unsupported_material",
+    "critical.invented_evidence",
+    "critical.prompt_injection",
+    "critical.tool_or_action",
+    "critical.local_output_limit"
+  ]
+}

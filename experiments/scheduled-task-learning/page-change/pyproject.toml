@@ -1,0 +1,67 @@
+[project]
+name = "page-benchmark"
+version = "0.1.0"
+description = "Deterministic page-change benchmark tooling."
+requires-python = ">=3.11"
+dependencies = [
+    "swift-claw-benchmark-core",
+]
+
+[tool.uv.sources]
+swift-claw-benchmark-core = { path = "../benchmark-core" }
+
+[tool.setuptools.packages.find]
+include = ["page_benchmark"]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.4",
+    "mypy==1.19.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["page_benchmark", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF", "S", "N", "PL"]
+ignore = [
+    # Function/branch/argument-count complexity rules. Several benchmark evaluation
+    # functions already exceed these thresholds; reducing that is a dedicated
+    # refactor, not a side effect of adopting linting. Tracked as follow-up work.
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR0917",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+strict = true
+mypy_path = "tests"
+files = ["page_benchmark", "tests"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+# mypy module patterns wildcard whole dotted components, not filename globs, and
+# tests/ isn't a package (no __init__.py) — so each module is listed by exact name.
+module = [
+    "aggregate_test_support",
+    "path_test_support",
+    "test_artifact_bootstrap",
+    "test_aggregate",
+    "test_canonical",
+    "test_fixtures",
+    "test_gate_evaluation",
+    "test_records",
+    "test_scorer_conformance",
+    "test_scorer_semantics",
+    "test_synthesis",
+    "test_validation",
+]
+disallow_any_generics = false
+disallow_untyped_defs = false

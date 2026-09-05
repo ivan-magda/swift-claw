@@ -9,18 +9,23 @@ import Foundation
 ///
 /// One codec, parameterized by `(version, associatedData)`: a future format change is then made once,
 /// not copied into two framing implementations that can drift apart under a single key.
-struct AESGCMEnvelope: Sendable {
+package struct AESGCMEnvelope: Sendable {
   /// Cap on the envelope before its plaintext is allocated.
-  static let maximumByteCount = 256 * 1024
+  package static let maximumByteCount = 256 * 1024
 
   /// The single accepted version. Single-version today; bound as AAD so a future multi-version world
   /// dispatches on it AND authenticates it.
-  let version: UInt8
+  package let version: UInt8
   /// The AEAD associated data bound under `version`. Held once so the seal and open sides can never
   /// authenticate under different labels.
-  let associatedData: Data
+  package let associatedData: Data
 
-  func seal(_ plaintext: Data, key: SymmetricKey) throws(AESGCMEnvelopeError) -> Data {
+  package init(version: UInt8, associatedData: Data) {
+    self.version = version
+    self.associatedData = associatedData
+  }
+
+  package func seal(_ plaintext: Data, key: SymmetricKey) throws(AESGCMEnvelopeError) -> Data {
     guard
       let sealedBox = try? AES.GCM.seal(plaintext, using: key, authenticating: associatedData),
       let combined = sealedBox.combined
@@ -30,7 +35,7 @@ struct AESGCMEnvelope: Sendable {
     return Data([version]) + combined
   }
 
-  func open(_ envelope: Data, key: SymmetricKey) throws(AESGCMEnvelopeError) -> Data {
+  package func open(_ envelope: Data, key: SymmetricKey) throws(AESGCMEnvelopeError) -> Data {
     guard let onDiskVersion = envelope.first else {
       throw .missingVersion
     }
@@ -52,7 +57,7 @@ struct AESGCMEnvelope: Sendable {
 /// The codec's closed failure set. Each store maps these into its own seam error: "unknown version"
 /// and "failed tag" carry different remedies to the owner, and one store distinguishes them while the
 /// other collapses both, so the taxonomy stays with the store rather than the codec.
-enum AESGCMEnvelopeError: Error {
+package enum AESGCMEnvelopeError: Error {
   case missingVersion
   case unsupportedVersion
   case openFailed

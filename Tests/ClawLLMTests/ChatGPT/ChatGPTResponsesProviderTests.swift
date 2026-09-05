@@ -217,6 +217,49 @@ import Testing
   }
 
   @Test(.timeLimit(.minutes(1)))
+  func terminalModelMetadataSurvivesTheResponsesAdapter() async throws {
+    // given
+    let events =
+      Fixtures.basicSuccess().dropLast() + [
+        Fixtures.completedTerminal(model: "gpt-5.6-sol")
+      ]
+    let harness = ProviderHarness(steps: [.stream(okHead, Array(events))])
+
+    // when
+    let response = try await harness.provider.complete(request: plainRequest)
+
+    // then
+    #expect(response.reportedModel == "gpt-5.6-sol")
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func strictTerminalValidationReconcilesALateModelAliasThroughTheProvider() async throws {
+    // given
+    let body =
+      Fixtures.basicSuccess() + [
+        Fixtures.event(
+          #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-5.6-sol"}}"#
+        )
+      ]
+    let harness = ProviderHarness(steps: [.stream(okHead, body)])
+    let request = ChatRequest(
+      model: "gpt-5",
+      messages: [ChatMessage(role: .user, content: "hello")],
+      maxOutputTokens: 256,
+      outputScope: nil,
+      terminalValidationPolicy: .throughStreamEnd
+    )
+
+    // when
+    let response = try await harness.provider.complete(request: request)
+
+    // then
+    #expect(response.content == "Hello")
+    #expect(response.reportedModel == "gpt-5.6-sol")
+    #expect(await harness.http.recorded.count == 1)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
   func completeAndStreamShareOneRetryBudgetOnTheSameScript() async throws {
     // given — a clean 5xx then success, on both entry points
     let completeHarness = ProviderHarness(
@@ -421,7 +464,9 @@ import Testing
 
     // then — only the pre-done delta is published, and the final content never grows past it
     let deltas = drained.events.compactMap { event -> String? in
-      guard case .delta(let text) = event else { return nil }
+      guard case .delta(let text) = event else {
+        return nil
+      }
       return text
     }
     #expect(deltas == ["Hello"])

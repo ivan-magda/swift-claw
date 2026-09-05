@@ -24,11 +24,11 @@ public enum ChatGPTCredentialError: Error, Sendable, Equatable {
 /// What this daemon does about a refresh that fails, as opposed to what the vendor's protocol says.
 /// It lives apart from the pinned provider metadata for that reason: none of it is negotiated, and
 /// none of it is a value the vendor publishes.
-enum ChatGPTRefreshPolicy {
+package enum ChatGPTRefreshPolicy {
   /// Total attempts one flight may spend on failures that might not recur. Low on purpose: a token
   /// endpoint that is down does not get better for being asked harder, and a flight is holding
   /// every waiter for the whole budget.
-  static let attemptBudget = 3
+  package static let attemptBudget = 3
 
   /// The longest a caller is ever told to wait on this source's own initiative, and the wait it
   /// picks when a throttle names none. It exists so a wave of new turns arriving at an unhealthy
@@ -58,6 +58,10 @@ enum ChatGPTRefreshPolicy {
 struct ChatGPTValidatedCredential: Sendable, Equatable {
   let stored: StoredOAuthCredential
 
+  private init(validated stored: StoredOAuthCredential) {
+    self.stored = stored
+  }
+
   var profileID: UUID { stored.profileID }
   var accessToken: String { stored.accessToken }
   var refreshToken: String { stored.refreshToken }
@@ -83,6 +87,17 @@ struct ChatGPTValidatedCredential: Sendable, Equatable {
         accessToken: pair.accessToken,
         refreshToken: pair.refreshToken ?? previous.refreshToken,
         expiresAt: pair.expiresAt
+      )
+    )
+  }
+
+  func requiringRefresh() -> Self {
+    Self(
+      validated: StoredOAuthCredential(
+        profileID: profileID,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        expiresAt: Date(timeIntervalSince1970: 0)
       )
     )
   }
@@ -138,7 +153,7 @@ where ClockType.Duration == Duration {
       // token is one of the two values that just failed. Only a new login repairs it.
       state =
         ChatGPTValidatedCredential(stored).map { credential in
-          .ready(credential: credential, generation: Self.initialGeneration, forceRefresh: false)
+          .ready(credential: credential, generation: Self.initialGeneration)
         } ?? .authenticationRequired
     }
   }
@@ -151,7 +166,7 @@ where ClockType.Duration == Duration {
     case .missing, .authenticationRequired:
       throw ChatGPTCredentialError.authenticationRequired
     case .pendingPersistence(let pending):
-      return try retryPublication(of: pending)
+      return try await retryPublication(of: pending)
     case .refreshing(let flight):
       return try await join(flight)
     case .cooldown(let cooling):
@@ -160,9 +175,9 @@ where ClockType.Duration == Duration {
         throw cooling.failure(retryAfter: remaining)
       }
       return try await join(startFlight(from: cooling.credential, replacing: cooling.generation))
-    case .ready(let credential, let generation, let forceRefresh):
+    case .ready(let credential, let generation):
       let freshness = ChatGPTCredentialFreshness.classify(expiresAt: credential.expiresAt, now: now)
-      guard forceRefresh || freshness != .fresh else {
+      guard freshness != .fresh else {
         return authorization(for: credential, generation: generation)
       }
       return try await join(startFlight(from: credential, replacing: generation))
@@ -177,10 +192,20 @@ where ClockType.Duration == Duration {
     disposition: LLMCredentialRejection
   ) async {
     switch state {
-    case .ready(let credential, let current, _) where current == generation:
+    case .ready(let credential, let current) where current == generation:
       switch disposition {
       case .refresh:
-        state = .ready(credential: credential, generation: current, forceRefresh: true)
+        let pending = Pending(
+          credential: credential.requiringRefresh(),
+          baseGeneration: current,
+          purpose: .forceRefresh
+        )
+        do {
+          try commit(pending)
+          state = .ready(credential: pending.credential, generation: current)
+        } catch {
+          state = .pendingPersistence(pending)
+        }
       case .authenticationRequired:
         state = .authenticationRequired
       }
@@ -199,7 +224,7 @@ where ClockType.Duration == Duration {
   }
 
   /// The lifecycle's commit point. It runs to a durable answer or a typed failure — never to a quiet
-  /// success that lost a rotation the vendor has already performed.
+  /// success that lost a rotation or a required refresh marker.
   public func shutdown() async throws {
     let retained = closeAdmission()
     // Cancelled but not forgotten: the worker may be holding a complete pair, and its finalizer is
@@ -255,9 +280,15 @@ private extension ChatGPTCredentialSource {
 
   struct Pending {
     let credential: ChatGPTValidatedCredential
-    /// The generation this pair replaces once it is durable. Held rather than applied, because the
-    /// generation is what tells a caller its headers are real.
+    /// The generation a rotation replaces, or a refresh marker keeps until that refresh completes.
+    /// Held rather than applied because only a durable rotated pair may advance authorization.
     let baseGeneration: LLMCredentialGeneration
+    let purpose: Purpose
+
+    enum Purpose: Sendable {
+      case publishRotation
+      case forceRefresh
+    }
   }
 
   struct Cooling {
@@ -290,11 +321,7 @@ private extension ChatGPTCredentialSource {
 
   enum State {
     case missing
-    case ready(
-      credential: ChatGPTValidatedCredential,
-      generation: LLMCredentialGeneration,
-      forceRefresh: Bool
-    )
+    case ready(credential: ChatGPTValidatedCredential, generation: LLMCredentialGeneration)
     case refreshing(Flight)
     case pendingPersistence(Pending)
     case cooldown(Cooling)
@@ -323,9 +350,10 @@ private extension ChatGPTCredentialSource {
 // MARK: - Publication
 
 private extension ChatGPTCredentialSource {
-  /// A caller retrying a write it did not start. It spends no rotation: the vendor may already have
-  /// consumed the refresh token that produced this pair, so asking again could lose it for good.
-  func retryPublication(of pending: Pending) throws -> LLMRequestAuthorization {
+  /// A caller retrying credential state it did not start. It retries only the write: a rotated pair
+  /// must not spend its refresh token twice, while a refresh marker starts its flight only after the
+  /// rejected token is durably unusable across process replacement.
+  func retryPublication(of pending: Pending) async throws -> LLMRequestAuthorization {
     // The write is bounded but not free, and it is not cancellable once begun — so the check belongs
     // here, before it starts, rather than inside a store that would have to abandon a half-written
     // envelope to honor it.
@@ -335,7 +363,14 @@ private extension ChatGPTCredentialSource {
     } catch {
       throw ChatGPTCredentialError.persistenceFailed(error)
     }
-    return install(pending)
+    switch pending.purpose {
+    case .publishRotation:
+      return install(pending)
+    case .forceRefresh:
+      return try await join(
+        startFlight(from: pending.credential, replacing: pending.baseGeneration)
+      )
+    }
   }
 
   func commit(_ pending: Pending) throws(LLMCredentialStoreError) {
@@ -345,7 +380,7 @@ private extension ChatGPTCredentialSource {
   /// Publication proper: the generation moves only here, and only after the write returned.
   func install(_ pending: Pending) -> LLMRequestAuthorization {
     let generation = LLMCredentialGeneration(value: pending.baseGeneration.value + 1)
-    state = .ready(credential: pending.credential, generation: generation, forceRefresh: false)
+    state = .ready(credential: pending.credential, generation: generation)
     return authorization(for: pending.credential, generation: generation)
   }
 
@@ -371,7 +406,9 @@ private extension ChatGPTCredentialSource {
   }
 
   func append(_ value: String, to values: inout [String]) {
-    guard values.contains(value) == false else { return }
+    guard values.contains(value) == false else {
+      return
+    }
     values.append(value)
   }
 }
@@ -436,7 +473,9 @@ private extension ChatGPTCredentialSource {
   }
 
   nonisolated static func isWorthRetrying(_ error: any Error) -> Bool {
-    guard case .transport = error as? ChatGPTOAuthFailure else { return false }
+    guard case .transport = error as? ChatGPTOAuthFailure else {
+      return false
+    }
     return true
   }
 
@@ -489,7 +528,11 @@ private extension ChatGPTCredentialSource {
       accessToken: flight.credential.accessToken,
       refreshToken: flight.credential.refreshToken
     )
-    let pending = Pending(credential: rotated, baseGeneration: flight.baseGeneration)
+    let pending = Pending(
+      credential: rotated,
+      baseGeneration: flight.baseGeneration,
+      purpose: .publishRotation
+    )
     do {
       try commit(pending)
     } catch {
@@ -574,7 +617,7 @@ private extension ChatGPTCredentialSource {
 
 private extension ChatGPTCredentialSource {
   /// Closes the door and resumes everyone already inside, keeping only what the commit rule still
-  /// owes: an active flight, or a pair that was never written.
+  /// owes: an active flight, or credential state that was never written.
   func closeAdmission() -> Stopping {
     let retained: Stopping
     switch state {

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "grade_scope": "frozen_gold_remediation_queue",
+  "grade": {
+    "non_queue": 0,
+    "queue": {
+      "calculation": "base_plus_one_term_per_factor",
+      "base": 1,
+      "terms": {
+        "reachability": {
+          "unreachable": 0,
+          "unknown": 16,
+          "reachable": 32
+        },
+        "runtime_scope": {
+          "development_only": 0,
+          "production": 8
+        },
+        "compatible_remediation": {
+          "absent": 0,
+          "available": 4
+        },
+        "severity": {
+          "low": 0,
+          "moderate": 1,
+          "high": 2,
+          "critical": 3
+        }
+      }
+    }
+  },
+  "normalization": {
+    "reachability": "frozen_canonical_finding_value",
+    "runtime_scope": "production_if_any_canonical_path_is_runtime_otherwise_development_only",
+    "compatible_remediation": "available_if_any_option_is_available_unaffected_and_compatible_otherwise_absent",
+    "severity": "maximum_frozen_normalized_band_across_alias_cluster",
+    "missing_or_unmapped_severity": "fixture_ineligible"
+  },
+  "ndcg_gain": "linear_grade"
+}

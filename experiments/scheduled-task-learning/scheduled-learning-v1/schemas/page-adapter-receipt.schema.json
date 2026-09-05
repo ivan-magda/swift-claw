@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/scheduled-learning-v1/page-adapter-receipt.schema.json",
+  "title": "ScheduledLearningV1PageAdapterReceipt",
+  "description": "The neutral adapter-receipt envelope the page adapter hands to the generic reducer; it carries opaque identities and digests only, never page HTML, scores, or gold. candidate_digest is the replacement lesson-set digest, not the candidate-record digest. receipt_digest is SHA-256 of the full page receipt, not of this envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "adapter_id",
+    "adapter_version",
+    "candidate_digest",
+    "dataset_digest",
+    "oracle_digest",
+    "gates_digest",
+    "execution_surface_digest",
+    "outcome",
+    "receipt_digest"
+  ],
+  "properties": {
+    "adapter_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "adapter_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "candidate_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "dataset_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "oracle_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gates_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "execution_surface_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "outcome": { "enum": ["pass", "regression", "critical", "inconclusive"] },
+    "receipt_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

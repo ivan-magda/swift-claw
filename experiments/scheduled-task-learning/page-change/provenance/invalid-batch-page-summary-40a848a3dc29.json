@@ -1,0 +1,29 @@
+{
+  "accounted_tokens" : 66859,
+  "attempts" : 26,
+  "completed_attempt_ids" : [
+    "page-development-ec90007b3260a4c0",
+    "page-development-47659b311234ee32",
+    "page-development-9ea13df0a349acc3",
+    "page-development-c5433e20d2e734f8",
+    "page-development-7a651d74c6239386",
+    "page-development-ce557de9f271d06c",
+    "page-development-5f62eb6b836215be",
+    "page-development-3e2fad94e44a29b1",
+    "page-development-a6cd71f58a93056c",
+    "page-development-ef485d0f9d48b24f",
+    "page-development-467422054f7c0ef8",
+    "page-development-c627ad160fa600de",
+    "page-development-ccfbafe6871cc180",
+    "page-development-57025649ebb41ef0",
+    "page-development-72390d9aecc15322",
+    "page-development-7cbff096e39c45d5",
+    "page-development-67414bc33fe93e44",
+    "page-development-a04188a1d689340d"
+  ],
+  "file_reads" : 25,
+  "incomplete" : false,
+  "replacements" : 0,
+  "responses_sends" : 50,
+  "schema_version" : 1
+}

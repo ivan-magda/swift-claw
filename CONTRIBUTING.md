@@ -16,7 +16,9 @@ For vulnerabilities, never open a public issue. Follow [SECURITY.md](SECURITY.md
 
 ## Development setup
 
-You need a Swift 6.3 toolchain and SwiftLint (the lint gate exits 1 without it):
+You need a Swift 6.3 toolchain and SwiftLint (the lint gate exits 1 without it). The gate's
+third tool, SwiftFormat, needs no install — `scripts/lint.sh` runs it out of the `BuildTools`
+package at a pinned version, so the first run builds it and needs network access.
 
 ```bash
 # macOS
@@ -50,7 +52,7 @@ Then:
 ```bash
 swift build            # build
 swift test             # run the suite
-scripts/lint.sh --fix  # auto-apply swift-format + SwiftLint fixes
+scripts/lint.sh --fix  # auto-apply layout, multiline guard bodies, and SwiftLint fixes
 scripts/lint.sh        # verify; must pass before committing
 ```
 
@@ -60,7 +62,8 @@ Day-to-day commands, including how to run the daemon locally, live in
 ## What a pull request needs
 
 - A linked issue with an agreed approach (except trivial fixes).
-- `scripts/lint.sh` and `swift test` green. CI enforces both on macOS and Linux.
+- `scripts/lint.sh` and `swift test` green. CI runs the tests on macOS and Linux, and the
+  lint gate on Linux.
 - Tests for behavior changes, structured as Given-When-Then
   (`// given` / `// when` / `// then`). [docs/TESTING.md](docs/TESTING.md) is
   the rubric for what earns a test.

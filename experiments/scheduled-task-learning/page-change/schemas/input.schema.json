@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/input.schema.json",
+  "title": "PageChangeInput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "task", "active_lessons"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {
+      "type": "string",
+      "pattern": "^page-[0-9a-f]{12}$"
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before_html", "after_html", "region_ids"],
+      "properties": {
+        "before_html": {"type": "string", "minLength": 1, "maxLength": 30000},
+        "after_html": {"type": "string", "minLength": 1, "maxLength": 30000},
+        "region_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^region-[0-9a-f]{10}$"}
+        }
+      }
+    },
+    "active_lessons": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "lesson_set_id", "lessons"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "lesson_set_id": {"type": "string", "pattern": "^[a-z0-9-]{1,64}$"},
+        "lessons": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["lesson_id", "target_class", "text"],
+            "properties": {
+              "lesson_id": {"type": "string", "pattern": "^[a-z0-9-]{1,64}$"},
+              "target_class": {
+                "enum": [
+                  "noise.volatile_value",
+                  "noise.time_or_build_metadata",
+                  "noise.structure_or_order"
+                ]
+              },
+              "text": {"type": "string", "minLength": 1, "maxLength": 400}
+            }
+          }
+        }
+      }
+    }
+  }
+}

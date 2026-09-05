@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "runtime_scope": {
+    "precedence": ["production", "development_only"],
+    "empty": "invalid"
+  },
+  "reachability": {
+    "precedence": ["reachable", "unknown", "unreachable"],
+    "empty": "invalid"
+  },
+  "actionability": {
+    "unaffected": {
+      "value": "no_action",
+      "target_class": "policy.abstention"
+    },
+    "affected": {
+      "development_only": {
+        "unreachable": {
+          "value": "no_action",
+          "target_class": "policy.reachability"
+        },
+        "unknown": {
+          "value": "no_action",
+          "target_class": "policy.runtime_scope"
+        },
+        "reachable": {
+          "value": "actionable",
+          "target_class": "policy.reachability"
+        }
+      },
+      "production": {
+        "unreachable": {
+          "value": "no_action",
+          "target_class": "policy.reachability"
+        },
+        "unknown": {
+          "value": "actionable",
+          "target_class": "policy.runtime_scope"
+        },
+        "reachable": {
+          "value": "actionable",
+          "target_class": "policy.reachability"
+        }
+      }
+    }
+  },
+  "remediation": {
+    "candidate_versions": {
+      "sources": ["advisory_fixed_events", "frozen_release_inventory"],
+      "combination": "union",
+      "advisory_fixed_event_availability": "available",
+      "invalid_fixed_version": "fixture_invalid"
+    },
+    "candidate_identity": {
+      "required_fields": [
+        "target_version",
+        "origin_id",
+        "source_key",
+        "availability",
+        "affected_status",
+        "compatibility"
+      ],
+      "stage": "pre_materialization",
+      "origin_id": "advisory_record_id_or_reserved_release_inventory_origin",
+      "source_key": "unique_per_finding",
+      "equivalent_version_resolution": "origin_id_then_source_key",
+      "materialization_binding": "source_key_to_canonical_option_id_from_authoritative_normalization_binding",
+      "duplicate_selection_key": "fixture_invalid"
+    },
+    "safe_option": {
+      "availability": "available",
+      "affected_status": "unaffected",
+      "compatibility": "compatible",
+      "version_relation": "greater_than_installed"
+    },
+    "selection_order": [
+      "ecosystem_version_ascending",
+      "origin_id_ascending",
+      "source_key_ascending"
+    ],
+    "dispositions": {
+      "actionable_with_safe_option": "upgrade",
+      "actionable_without_safe_option": "no_safe_fix",
+      "no_action": "no_action"
+    },
+    "target_classes": {
+      "actionable": "policy.remediation",
+      "no_action": "policy.abstention"
+    }
+  },
+  "queue": {
+    "membership": "exactly_actionable_findings",
+    "target_class": "actionability_target_class"
+  },
+  "evidence": {
+    "gold_reference_set": "all_model_visible_references_owned_by_finding"
+  },
+  "ranking_opportunity": {
+    "minimum_actionable_findings": 2,
+    "requires_unequal_grades": true
+  },
+  "unrelated_family": {
+    "all_pair_disjoint_dimensions": [
+      "project_packages",
+      "record_alias_components"
+    ],
+    "cross_split_disjoint_dimensions": [
+      "graph_template_ids",
+      "graph_template_digests",
+      "generator_seeds",
+      "manifest_digests"
+    ],
+    "graph_template_digest": "identity_free_model_visible_task_path_structure",
+    "record_alias_identity": "transitive_component",
+    "manifest_digest": "identity_free_model_visible_decision_structure"
+  }
+}

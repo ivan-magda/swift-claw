@@ -1,6 +1,7 @@
 import ClawCore
 import ClawGateway
 import ClawSecrets
+import ClawSubprocess
 import Foundation
 import Testing
 

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swift-claw.local/scheduled-task-learning/page-change/attempt.schema.json",
+  "title": "PageChangeAttempt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runtime_outcome", "raw_output", "tool_events"],
+  "properties": {
+    "runtime_outcome": {"enum": ["completed", "local_output_limit", "tool_budget_stop"]},
+    "raw_output": {"type": ["string", "null"]},
+    "responses_requests": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "requested_model",
+          "body_byte_count",
+          "body_sha256",
+          "normalized_structure_sha256",
+          "untrusted_fence_present",
+          "untrusted_payload_sha256"
+        ],
+        "properties": {
+          "sequence": {"type": "integer", "minimum": 1, "maximum": 2},
+          "requested_model": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+          "body_byte_count": {"type": "integer", "minimum": 1},
+          "body_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "normalized_structure_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "untrusted_fence_present": {"type": "boolean"},
+          "untrusted_payload_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "tool_events": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "status"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 64},
+          "path": {"type": ["string", "null"], "minLength": 1, "maxLength": 256},
+          "status": {"enum": ["proposed", "succeeded", "failed"]}
+        }
+      }
+    }
+  }
+}

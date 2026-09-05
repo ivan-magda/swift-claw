@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "target_class_order": [
+    "policy.runtime_scope",
+    "policy.reachability",
+    "policy.remediation",
+    "policy.abstention",
+    "policy.ranking"
+  ],
+  "definitions": {
+    "policy.runtime_scope": {
+      "description": "Use canonical dependency-path scope when deciding actionability and queue membership.",
+      "owned_fields": ["actionability", "queue_membership"]
+    },
+    "policy.reachability": {
+      "description": "Use canonical reachability when deciding actionability and queue membership.",
+      "owned_fields": ["actionability", "queue_membership"]
+    },
+    "policy.remediation": {
+      "description": "Choose a safe canonical remediation option or abstain with no_safe_fix.",
+      "owned_fields": ["remediation_disposition", "selected_option_id"]
+    },
+    "policy.abstention": {
+      "description": "Keep canonical no-action findings out of remediation decisions and the queue.",
+      "owned_fields": [
+        "actionability",
+        "remediation_disposition",
+        "selected_option_id",
+        "queue_membership"
+      ]
+    },
+    "policy.ranking": {
+      "description": "Order existing gold-matched queue entries by the frozen D5 linear grade.",
+      "owned_fields": ["remediation_queue_order"]
+    }
+  }
+}

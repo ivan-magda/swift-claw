@@ -30,14 +30,18 @@ import Testing
         waiter.resume()
       }
       startedWaiters.removeAll()
-      guard released == false else { return }
+      guard released == false else {
+        return
+      }
       await withCheckedContinuation { continuation in
         releaseWaiters.append(continuation)
       }
     }
 
     func waitUntilStarted() async {
-      guard started == false else { return }
+      guard started == false else {
+        return
+      }
       await withCheckedContinuation { continuation in
         startedWaiters.append(continuation)
       }

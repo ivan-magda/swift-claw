@@ -1,0 +1,15 @@
+{
+  "accounted_tokens" : 19098,
+  "attempts" : 8,
+  "completed_attempt_ids" : [
+    "page-canary-a-clean",
+    "page-canary-a-nonempty",
+    "page-canary-b-clean",
+    "page-canary-b-nonempty"
+  ],
+  "file_reads" : 8,
+  "incomplete" : false,
+  "replacements" : 0,
+  "responses_sends" : 16,
+  "schema_version" : 1
+}

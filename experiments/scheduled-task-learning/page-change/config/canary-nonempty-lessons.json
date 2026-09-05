@@ -1,0 +1,1 @@
+{"lesson_set_id":"canary-nonempty","lessons":[{"lesson_id":"canary-volatile","target_class":"noise.volatile_value","text":"Treat isolated volatile counters as non-material when structure is stable."}],"schema_version":1}

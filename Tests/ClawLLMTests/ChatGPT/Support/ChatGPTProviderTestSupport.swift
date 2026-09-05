@@ -85,10 +85,14 @@ enum ChatGPTProviderTestSupport {
     switch failure {
     case .connectFailed(let message):
       return message
+    case .transportFailure(let message):
+      return message
     case .retryable(_, let message), .rejected(_, let message), .terminal(_, let message):
       return message
     case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .invalidProviderState, .visionUnsupported:
+      .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable,
+      .invalidProviderState, .visionUnsupported, .partialStreamWithoutCompletedTerminal,
+      .localOutputLimit, .modelIdentityMismatch:
       return nil
     }
   }
@@ -252,9 +256,13 @@ enum ChatGPTProviderTestSupport {
       ]
     }
 
-    static func completedTerminal() -> Data {
-      event(
-        #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}"#
+    static func completedTerminal(model: String? = nil) -> Data {
+      let modelField =
+        model.map { value in
+          ",\"model\":\"\(value)\""
+        } ?? ""
+      return event(
+        #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}\#(modelField)}}"#
       )
     }
   }

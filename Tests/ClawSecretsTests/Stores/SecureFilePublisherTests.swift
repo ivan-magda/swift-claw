@@ -210,6 +210,42 @@ import Testing
     #expect(try Data(contentsOf: target) == Data("new".utf8))
   }
 
+  @Test func durabilityRecoverySyncsTheExactCommittedIdentity() throws {
+    // given
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let target = SecretStatePaths(stateRoot: stateRoot).credentialEnvelope
+    let outcome = try SecureFilePublisher(failpoint: .init(.directorySync))
+      .publish(Data("committed".utf8), to: target)
+
+    // when
+    let stillUnproven = SecureFilePublisher(failpoint: .init(.directorySync))
+      .proveDurable(outcome, at: target)
+    let durable = SecureFilePublisher().proveDurable(outcome, at: target)
+
+    // then
+    #expect(stillUnproven == false)
+    #expect(durable)
+  }
+
+  @Test func durabilityRecoveryRefusesASubstitutedIdentity() throws {
+    // given
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let target = SecretStatePaths(stateRoot: stateRoot).credentialEnvelope
+    let outcome = try SecureFilePublisher(failpoint: .init(.directorySync))
+      .publish(Data("original".utf8), to: target)
+    try FileManager.default.removeItem(at: target)
+    _ = try SecureFilePublisher().publish(Data("substitute".utf8), to: target)
+
+    // when
+    let durable = SecureFilePublisher().proveDurable(outcome, at: target)
+
+    // then
+    #expect(durable == false)
+    #expect(try Data(contentsOf: target) == Data("substitute".utf8))
+  }
+
   // MARK: - Bounded, no-follow reads
 
   @Test func readRefusesASymlinkEvenWhenItsTargetIsWellFormed() throws {
