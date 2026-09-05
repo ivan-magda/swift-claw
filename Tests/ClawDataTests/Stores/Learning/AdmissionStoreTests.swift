@@ -568,12 +568,32 @@ struct AdmissionStoreFixture {
           competitor.manifest.baseDigest.rawValue,
           competitor.digest.rawValue,
           EpochSecondCodec.epoch(env.now),
-          EpochSecondCodec.epoch(env.now.addingTimeInterval(86_400)),
-          EpochSecondCodec.epoch(env.now.addingTimeInterval(172_800)),
+          EpochSecondCodec.epoch(
+            env.now.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)
+          ),
+          EpochSecondCodec.epoch(
+            env.now.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)
+          ),
           EpochSecondCodec.epoch(env.now),
           LearningTrialState.draining.rawValue,
           LearningAlgorithm.v1.rawValue,
         ]
+      )
+      let trialId = db.lastInsertedRowID
+      try ScheduledLearningStoreGRDB.insertDecision(
+        db,
+        kind: AdmissionReceipt.kind,
+        jobId: env.jobId,
+        epoch: competitor.manifest.epoch,
+        inputs: AdmissionDecisionInputs(candidateDigest: competitor.digest),
+        result: AdmissionReceipt(
+          candidateDigest: competitor.digest,
+          replacementDigest: competitor.replacement.digest,
+          trialId: trialId,
+          generation: 1
+        ),
+        algorithm: .v1,
+        now: env.now
       )
     }
   }

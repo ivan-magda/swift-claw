@@ -115,11 +115,6 @@ private extension ScheduledLearningStoreGRDB {
     let finalOutput: String
   }
 
-  struct StoredReflectionFeedback {
-    let event: FeedbackEvent
-    let source: CandidateFeedbackSource
-  }
-
   struct ReducedReflectionRows {
     let prepared: [PreparedReflectionEvaluation]
     let effective: [EffectiveEvaluation]
@@ -127,12 +122,6 @@ private extension ScheduledLearningStoreGRDB {
     let feedbackSources: [CandidateFeedbackSource]
     let payloads: [PreparedOwnerPayload]
     let vetoed: Bool
-  }
-
-  struct ReflectionSubjects {
-    let runIds: Set<String>
-    let evaluationDigests: Set<String>
-    let rows: [ReflectionRow]
   }
 
   static func reflectionRows(
@@ -196,108 +185,22 @@ private extension ScheduledLearningStoreGRDB {
     trigger: TriggerIdentity,
     rows: [ReflectionRow],
     cutoff: FeedbackRevision
-  ) throws -> [StoredReflectionFeedback] {
-    let subjects = ReflectionSubjects(
-      runIds: Set(
-        rows.map { row in
-          String(row.runId)
-        }
-      ),
-      evaluationDigests: Set(
-        rows.map { row in
-          row.evaluationDigest.rawValue
-        }
-      ),
-      rows: rows
-    )
-    let stored = try Row.fetchAll(
+  ) throws -> [StoredFeedbackProjection] {
+    var evaluationRuns: [String: Int64] = [:]
+    for row in rows {
+      guard evaluationRuns.updateValue(row.runId, forKey: row.evaluationDigest.rawValue) == nil
+      else {
+        throw StoreError.unexpected("reflection source has a duplicate evaluation digest")
+      }
+    }
+    return try storedFeedback(
       db,
-      sql: """
-          SELECT event_id, subject_kind, subject_digest, signal, payload, feedback_revision,
-            supersedes, occurred_at, actor, transport_update_id
-          FROM feedback_events
-          WHERE job_id = ? AND learning_epoch = ? AND feedback_revision <= ?
-          ORDER BY feedback_revision, event_id
-        """,
-      arguments: [trigger.jobId, trigger.epoch.value, cutoff.value]
+      jobId: trigger.jobId,
+      epoch: trigger.epoch,
+      runIds: Set(rows.map(\.runId)),
+      evaluationRuns: evaluationRuns,
+      cutoff: cutoff
     )
-    return try stored.compactMap { row in
-      try storedReflectionFeedback(row, trigger: trigger, subjects: subjects)
-    }
-  }
-
-  static func storedReflectionFeedback(
-    _ row: Row,
-    trigger: TriggerIdentity,
-    subjects: ReflectionSubjects
-  ) throws -> StoredReflectionFeedback? {
-    guard
-      let subjectKind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
-      let signal = OwnerSignal(rawValue: row["signal"]),
-      let occurredAt = EpochSecondCodec.date(fromEpoch: row["occurred_at"]),
-      let actor = AuditActor(rawValue: row["actor"])
-    else {
-      throw StoreError.unexpected("reflection source holds an unreadable feedback event")
-    }
-    let subject: String = row["subject_digest"]
-    let belongs =
-      (subjectKind == .run && subjects.runIds.contains(subject))
-      || (subjectKind == .evaluation && subjects.evaluationDigests.contains(subject))
-    guard belongs else {
-      return nil
-    }
-    let event = FeedbackEvent(
-      id: row["event_id"],
-      runId: runId(rows: subjects.rows, subjectKind: subjectKind, subject: subject),
-      signal: signal,
-      payload: row["payload"],
-      revision: FeedbackRevision(row["feedback_revision"]),
-      supersedes: row["supersedes"],
-      occurredAt: occurredAt,
-      actor: actor,
-      transportUpdateId: row["transport_update_id"]
-    )
-    return StoredReflectionFeedback(
-      event: event,
-      source: CandidateFeedbackSource(
-        eventId: event.id,
-        digest: try FeedbackEventDigest.of(
-          eventId: event.id,
-          jobId: trigger.jobId,
-          epoch: trigger.epoch,
-          subjectKind: subjectKind,
-          subjectDigest: subject,
-          signal: signal,
-          payload: event.payload,
-          actor: actor,
-          transportUpdateId: event.transportUpdateId,
-          revision: event.revision,
-          supersedes: event.supersedes,
-          occurredAtEpochSecond: EpochSecondCodec.epoch(event.occurredAt)
-        ),
-        revision: event.revision,
-        subjectKind: subjectKind,
-        subjectDigest: subject,
-        signal: signal
-      )
-    )
-  }
-
-  static func runId(
-    rows: [ReflectionRow],
-    subjectKind: FeedbackSubjectKind,
-    subject: String
-  ) -> Int64? {
-    switch subjectKind {
-    case .run:
-      return Int64(subject)
-    case .evaluation:
-      return rows.first { row in
-        row.evaluationDigest.rawValue == subject
-      }?.runId
-    case .candidate, .promotion:
-      return nil
-    }
   }
 }
 
@@ -314,7 +217,7 @@ private extension ScheduledLearningStoreGRDB {
 
   static func reduceReflectionRows(
     _ rows: [ReflectionRow],
-    feedback: [StoredReflectionFeedback],
+    feedback: [StoredFeedbackProjection],
     trigger: TriggerIdentity
   ) throws -> ReducedReflectionRows {
     let reduced = rows.map { row in
@@ -345,7 +248,7 @@ private extension ScheduledLearningStoreGRDB {
 
   static func reduceReflectionRow(
     _ row: ReflectionRow,
-    feedback: [StoredReflectionFeedback],
+    feedback: [StoredFeedbackProjection],
     trigger: TriggerIdentity
   ) -> ReducedReflectionRow {
     let events = feedback.map(\.event)
@@ -404,7 +307,7 @@ private extension ScheduledLearningStoreGRDB {
 
   static func ownerPayload(
     for correction: FeedbackEvent?,
-    feedback: [StoredReflectionFeedback],
+    feedback: [StoredFeedbackProjection],
     effectiveEvents: [FeedbackEvent]
   ) -> PreparedOwnerPayload? {
     guard

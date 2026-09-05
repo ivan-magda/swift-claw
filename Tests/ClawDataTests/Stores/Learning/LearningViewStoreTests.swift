@@ -132,7 +132,17 @@ import Testing
     #expect(trial.candidateDigest == artifact.digest)
     #expect(trial.baseDigest == artifact.manifest.baseDigest)
     #expect(trial.replacementDigest == artifact.replacement.digest)
-    #expect(trial.counts == LearningTrialCounts(consumed: 1, maximum: 3, unresolved: 1))
+    #expect(
+      trial.counts
+        == LearningTrialCounts(
+          consumed: 1,
+          maximum: 3,
+          positive: 0,
+          negative: 0,
+          neutral: 0,
+          unresolved: 1
+        )
+    )
     guard case .candidateAdmission(let inputs, let decisionReceipt) = baseline.lastDecision?.detail
     else {
       Issue.record("expected the typed admission receipt")
@@ -151,6 +161,142 @@ import Testing
 
     // then — following the convenience pointer or omitting assignment identity hides corruption.
     #expect(view.isOnlyUnreadable)
+  }
+
+  @Test func liveTrialCountsAuthoritativeFourWayOutcomesWithoutWriting() throws {
+    // given
+    let env = try BoundRunEnvironment.make()
+    try env.makeRepeatable()
+    try env.installTrial()
+    let verdicts = [
+      env.verdict(outcome: .noIssue, issueCodes: []),
+      env.verdict(outcome: .reusableIssue, issueCodes: ["wrong_fact"]),
+      env.verdict(outcome: .transientIssue, issueCodes: []),
+    ]
+    var operations: [ClaimedOperation] = []
+    for _ in verdicts {
+      let evidence = try env.sealedTrialEvidence()
+      operations.append(try env.startedOperation(env.evaluatorKey(for: evidence)))
+    }
+    for (operation, verdict) in zip(operations, verdicts) {
+      _ = try env.learning.finishOperation(
+        env.result(for: operation.id, evaluation: verdict),
+        now: env.now
+      )
+    }
+    let identities = try env.learning.liveTrialIdentities()
+    #expect(identities.count == 1)
+    let identity = try #require(identities.first)
+    _ = try env.learning.reconcileTrial(identity, now: env.now)
+    let before = try env.trialAssignmentSnapshot()
+
+    // when
+    let view = try #require(try env.learning.learningView(jobId: env.jobId).onlyReadable)
+    let after = try env.trialAssignmentSnapshot()
+
+    // then — counting cache state or mutating it during the read would survive the unresolved-only
+    // fixture because every stored and derived row agrees there.
+    #expect(after == before)
+    #expect(
+      view.liveTrial?.counts
+        == LearningTrialCounts(
+          consumed: 3,
+          maximum: 3,
+          positive: 1,
+          negative: 1,
+          neutral: 1,
+          unresolved: 0
+        )
+    )
+  }
+
+  @Test func liveTrialViewDerivesAResolvedOutcomeFromSourcesDespiteLaggingCache() throws {
+    // given
+    let env = try BoundRunEnvironment.make()
+    try env.makeRepeatable()
+    try env.installTrial()
+    let evidence = try env.sealedTrialEvidence()
+    let operation = try env.startedOperation(env.evaluatorKey(for: evidence))
+    _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
+    try env.resetAssignmentCache(runId: evidence.runId, state: .learningOutcomeUnresolved)
+    let before = try env.trialAssignmentSnapshot()
+
+    // when
+    let view = try #require(try env.learning.learningView(jobId: env.jobId).onlyReadable)
+    let after = try env.trialAssignmentSnapshot()
+
+    // then — the cache says unresolved, but the succeeded exact evaluation says positive.
+    #expect(after == before)
+    #expect(
+      view.liveTrial?.counts
+        == LearningTrialCounts(
+          consumed: 1,
+          maximum: 3,
+          positive: 1,
+          negative: 0,
+          neutral: 0,
+          unresolved: 0
+        )
+    )
+  }
+
+  @Test func liveTrialViewUsesNewerFeedbackWithoutRepairingTheCache() throws {
+    // given
+    let env = try BoundRunEnvironment.make()
+    try env.makeRepeatable()
+    try env.installTrial()
+    let evidence = try env.sealedTrialEvidence()
+    let operation = try env.startedOperation(env.evaluatorKey(for: evidence))
+    _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
+    _ = try env.appendFeedback(
+      subjectKind: .run,
+      subjectDigest: String(evidence.runId),
+      signal: .resultNotUseful
+    )
+    let before = try env.trialAssignmentSnapshot()
+
+    // when
+    let view = try #require(try env.learning.learningView(jobId: env.jobId).onlyReadable)
+    let after = try env.trialAssignmentSnapshot()
+
+    // then — reading cached positive would hide the newer current owner verdict.
+    #expect(after == before)
+    #expect(
+      view.liveTrial?.counts
+        == LearningTrialCounts(
+          consumed: 1,
+          maximum: 3,
+          positive: 0,
+          negative: 1,
+          neutral: 0,
+          unresolved: 0
+        )
+    )
+  }
+
+  @Test func liveTrialViewRejectsAResolvedCacheWithoutItsAuthoritativeEvaluation() throws {
+    // given
+    let env = try BoundRunEnvironment.make()
+    try env.makeRepeatable()
+    try env.installTrial()
+    let evidence = try env.sealedTrialEvidence()
+    let operation = try env.startedOperation(env.evaluatorKey(for: evidence))
+    _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
+    try env.queue.write { db in
+      try db.execute(
+        sql: "UPDATE learning_operations SET key_digest = ? WHERE operation_id = ?",
+        arguments: [String(repeating: "f", count: 64), operation.id.rawValue]
+      )
+    }
+    let before = try env.trialAssignmentSnapshot()
+
+    // when
+    let view = try env.learning.learningView(jobId: env.jobId)
+    let after = try env.trialAssignmentSnapshot()
+
+    // then — guessing from the cached outcome would expose unsupported quality evidence.
+    #expect(view.isOnlyUnreadable)
+    #expect(after == before)
   }
 
   @Test(arguments: LiveWorkflowMutation.allCases)
@@ -557,6 +703,9 @@ private extension AdmissionStoreFixture {
     let sql: String
     switch corruption {
     case .secondLiveTrial:
+      try env.queue.write { db in
+        try db.execute(sql: "DROP INDEX idx_learning_trials_live_job")
+      }
       try insertCompetingDrainingTrial(from: artifact)
       return
     case .assignmentEpoch:
@@ -703,6 +852,24 @@ private struct DurableTableSnapshot: Equatable {
 }
 
 private extension BoundRunEnvironment {
+  func trialAssignmentSnapshot() throws -> [[DatabaseValue]] {
+    try queue.read { db in
+      let columns = try String.fetchAll(
+        db,
+        sql: "SELECT name FROM pragma_table_info('trial_assignments') ORDER BY cid"
+      )
+      let rows = try Row.fetchAll(
+        db,
+        sql: "SELECT * FROM trial_assignments ORDER BY run_id"
+      )
+      return rows.map { row in
+        columns.map { column in
+          row[column] as DatabaseValue
+        }
+      }
+    }
+  }
+
   func insertNonCurrentDecision(decidedAt: Date) throws {
     try queue.write { db in
       try db.execute(

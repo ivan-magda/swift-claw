@@ -543,6 +543,24 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.openTrial(jobId: jobId)
   }
 
+  func recomputeAssignment(
+    runId: Int64,
+    now: Date
+  ) throws(StoreError) -> AssignmentRecomputation {
+    try base.recomputeAssignment(runId: runId, now: now)
+  }
+
+  func liveTrialIdentities() throws(StoreError) -> [LearningTrialIdentity] {
+    try base.liveTrialIdentities()
+  }
+
+  func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult {
+    try base.reconcileTrial(identity, now: now)
+  }
+
   func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {
     try base.settlement(runId: runId)
   }

@@ -183,17 +183,6 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Trial Projection
 
 private extension ScheduledLearningStoreGRDB {
-  struct LiveTrialProjection {
-    let row: TrialRow
-    let admittedAt: Date
-    let assignmentDeadline: Date
-    let decisionDeadline: Date
-    let maximumAssignments: Int
-    let consumedAssignments: Int
-    let cohortCutoff: Date
-    let closeReason: String?
-  }
-
   static func liveTrialView(
     _ db: Database,
     job: ViewJobRow,
@@ -232,8 +221,11 @@ private extension ScheduledLearningStoreGRDB {
     else {
       throw ViewCorruption.invalid
     }
-    let trial = try liveTrialProjection(row)
-    return try validateTrial(db, trial: trial, state: state)
+    let trial = try strictTrial(db, row: row, currentState: state)
+    guard trial.state == .open || trial.state == .draining else {
+      throw ViewCorruption.invalid
+    }
+    return try projectedTrialView(db, trial: trial, state: state)
   }
 
   static func currentEpochHasOnlyKnownTrialStates(
@@ -254,216 +246,64 @@ private extension ScheduledLearningStoreGRDB {
     ) ?? false
   }
 
-  static func liveTrialProjection(_ row: Row) throws -> LiveTrialProjection {
-    guard
-      let trialId = SQLiteStoredValue.int64(in: row, column: "trial_id"),
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
-      let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
-      let generation = SQLiteStoredValue.int(in: row, column: "generation"),
-      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
-      let state = LearningTrialState(rawValue: stateRaw),
-      let admittedEpoch = SQLiteStoredValue.int64(in: row, column: "admitted_at"),
-      let admittedAt = EpochSecondCodec.date(fromEpoch: admittedEpoch),
-      let assignmentEpoch = SQLiteStoredValue.int64(in: row, column: "assignment_deadline"),
-      let assignmentDeadline = EpochSecondCodec.date(fromEpoch: assignmentEpoch),
-      let decisionEpoch = SQLiteStoredValue.int64(in: row, column: "decision_deadline"),
-      let decisionDeadline = EpochSecondCodec.date(fromEpoch: decisionEpoch),
-      let maximumAssignments = SQLiteStoredValue.int(in: row, column: "max_assignments"),
-      let consumedAssignments = SQLiteStoredValue.int(in: row, column: "consumed_assignments"),
-      let cutoffEpoch = SQLiteStoredValue.int64(in: row, column: "cohort_cutoff"),
-      let cohortCutoff = EpochSecondCodec.date(fromEpoch: cutoffEpoch),
-      let closeReason = SQLiteStoredValue.nullableString(in: row, column: "close_reason"),
-      let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm")
-    else {
-      throw ViewCorruption.invalid
-    }
-    let trialRow = TrialRow(
-      id: trialId,
-      jobId: jobId,
-      epoch: LearningEpoch(epoch),
-      baseDigest: LessonSetDigest(rawValue: baseDigest),
-      candidateDigest: CandidateDigest(rawValue: candidateDigest),
-      generation: generation,
-      state: state,
-      algorithm: LearningAlgorithm(rawValue: algorithmRaw)
-    )
-    return LiveTrialProjection(
-      row: trialRow,
-      admittedAt: admittedAt,
-      assignmentDeadline: assignmentDeadline,
-      decisionDeadline: decisionDeadline,
-      maximumAssignments: maximumAssignments,
-      consumedAssignments: consumedAssignments,
-      cohortCutoff: cohortCutoff,
-      closeReason: closeReason.value
-    )
-  }
-
-  static func validateTrial(
+  static func projectedTrialView(
     _ db: Database,
-    trial: LiveTrialProjection,
+    trial: LearningTrial,
     state: JobLearningState
   ) throws -> LearningTrialView {
-    let row = trial.row
+    let runIds = try assignmentRunIds(db, trialId: trial.trialId)
     guard
-      trialMetadataMatches(trial, state: state),
-      let artifact = try readCandidateArtifact(db, digest: row.candidateDigest),
-      artifact.manifest.jobId == state.jobId,
-      artifact.manifest.epoch == state.epoch,
-      artifact.manifest.baseDigest == state.stableDigest,
-      artifact.manifest.baseRevision == state.stableRevision,
-      artifact.manifest.algorithm == .v1,
-      artifact.replacement.jobId == state.jobId
+      runIds.count == trial.consumedAssignments,
+      Set(runIds).count == runIds.count
     else {
       throw ViewCorruption.invalid
     }
-    let receipt = try admissionReceipt(db, artifact: artifact, trial: row)
-    guard
-      receipt.candidateDigest == row.candidateDigest,
-      receipt.replacementDigest == artifact.replacement.digest,
-      receipt.trialId == row.id,
-      receipt.generation == row.generation
-    else {
-      throw ViewCorruption.invalid
+    var positive = 0
+    var negative = 0
+    var neutral = 0
+    var unresolved = 0
+    for runId in runIds {
+      let assignment = try authoritativeAssignment(
+        db,
+        runId: runId,
+        trial: trial,
+        currentState: state
+      )
+      switch assignment.resolvedEvidence?.outcome {
+      case .positive:
+        positive += 1
+      case .negative:
+        negative += 1
+      case .neutral:
+        neutral += 1
+      case nil:
+        unresolved += 1
+      }
     }
-    let unresolved = try validateCreatedAssignments(
-      db,
-      trial: row,
-      replacement: artifact.replacement.digest
-    )
-    guard unresolved == trial.consumedAssignments else {
+    guard positive + negative + neutral + unresolved == trial.consumedAssignments else {
       throw ViewCorruption.invalid
     }
     let counts = LearningTrialCounts(
       consumed: trial.consumedAssignments,
-      maximum: trial.maximumAssignments,
+      maximum: trial.maxAssignments,
+      positive: positive,
+      negative: negative,
+      neutral: neutral,
       unresolved: unresolved
     )
     return LearningTrialView(
-      trialId: row.id,
-      epoch: row.epoch,
-      generation: row.generation,
-      state: row.state,
-      candidateDigest: row.candidateDigest,
-      baseDigest: row.baseDigest,
-      baseRevision: artifact.manifest.baseRevision,
-      replacementDigest: artifact.replacement.digest,
+      trialId: trial.trialId,
+      epoch: trial.epoch,
+      generation: trial.generation,
+      state: trial.state,
+      candidateDigest: trial.candidateDigest,
+      baseDigest: trial.baseDigest,
+      baseRevision: trial.baseRevision,
+      replacementDigest: trial.replacementDigest,
       counts: counts,
       assignmentDeadline: trial.assignmentDeadline,
       decisionDeadline: trial.decisionDeadline
     )
-  }
-
-  static func trialMetadataMatches(
-    _ trial: LiveTrialProjection,
-    state: JobLearningState
-  ) -> Bool {
-    let row = trial.row
-    return row.id > 0
-      && row.jobId == state.jobId
-      && row.epoch == state.epoch
-      && row.baseDigest == state.stableDigest
-      && row.generation > 0
-      && row.algorithm == .v1
-      && (row.state == .open || row.state == .draining)
-      && isCanonicalDigest(row.candidateDigest.rawValue)
-      && trial.maximumAssignments == TrialAdmissionPolicy.maximumAssignments
-      && trial.consumedAssignments >= 0
-      && trial.consumedAssignments <= trial.maximumAssignments
-      && trial.cohortCutoff == trial.admittedAt
-      && trial.assignmentDeadline
-        == trial.admittedAt.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)
-      && trial.decisionDeadline
-        == trial.admittedAt.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)
-      && trial.closeReason == nil
-  }
-
-  static func validateCreatedAssignments(
-    _ db: Database,
-    trial: TrialRow,
-    replacement: LessonSetDigest
-  ) throws -> Int {
-    let rows = try Row.fetchAll(
-      db,
-      sql: """
-        SELECT assignment.run_id, assignment.job_id, assignment.learning_epoch,
-          assignment.trial_generation, assignment.state, assignment.outcome,
-          assignment.issue_codes, assignment.evaluation_digest,
-          assignment.evaluation_required, assignment.effective_feedback_revision,
-          assignment.resolved_at, binding.run_id AS binding_run_id,
-          binding.job_id AS binding_job_id, binding.learning_epoch AS binding_epoch,
-          binding.stable_digest, binding.effective_digest, binding.trial_id,
-          binding.trial_generation AS binding_generation
-        FROM trial_assignments AS assignment
-        LEFT JOIN run_learning_bindings AS binding ON binding.run_id = assignment.run_id
-        WHERE assignment.trial_id = ?
-        ORDER BY assignment.run_id
-        """,
-      arguments: [trial.id]
-    )
-    for row in rows {
-      guard createdAssignmentMatches(row, trial: trial, replacement: replacement) else {
-        throw ViewCorruption.invalid
-      }
-    }
-    return rows.count
-  }
-
-  static func createdAssignmentMatches(
-    _ row: Row,
-    trial: TrialRow,
-    replacement: LessonSetDigest
-  ) -> Bool {
-    guard
-      let runId = SQLiteStoredValue.int64(in: row, column: "run_id"),
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      jobId == trial.jobId,
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      LearningEpoch(epoch) == trial.epoch,
-      let generation = SQLiteStoredValue.int(in: row, column: "trial_generation"),
-      generation == trial.generation,
-      let state = SQLiteStoredValue.string(in: row, column: "state"),
-      state == TrialAssignmentState.created.rawValue,
-      let outcome = SQLiteStoredValue.nullableString(in: row, column: "outcome"),
-      outcome.value == nil,
-      let issueCodes = SQLiteStoredValue.nullableString(in: row, column: "issue_codes"),
-      issueCodes.value == nil,
-      let evaluation = SQLiteStoredValue.nullableString(in: row, column: "evaluation_digest"),
-      evaluation.value == nil,
-      SQLiteStoredValue.boolean(in: row, column: "evaluation_required") == .trueValue,
-      let feedback = SQLiteStoredValue.nullableInt64(
-        in: row,
-        column: "effective_feedback_revision"
-      ),
-      feedback.value == nil,
-      let resolvedAt = SQLiteStoredValue.nullableInt64(in: row, column: "resolved_at"),
-      resolvedAt.value == nil,
-      let bindingRun = SQLiteStoredValue.nullableInt64(in: row, column: "binding_run_id"),
-      bindingRun.value == runId,
-      let bindingJob = SQLiteStoredValue.nullableInt64(in: row, column: "binding_job_id"),
-      bindingJob.value == trial.jobId,
-      let bindingEpoch = SQLiteStoredValue.nullableInt64(in: row, column: "binding_epoch"),
-      bindingEpoch.value == trial.epoch.value,
-      let stableDigest = SQLiteStoredValue.nullableString(in: row, column: "stable_digest"),
-      stableDigest.value == trial.baseDigest.rawValue,
-      let effectiveDigest = SQLiteStoredValue.nullableString(
-        in: row,
-        column: "effective_digest"
-      ),
-      effectiveDigest.value == replacement.rawValue,
-      let bindingTrial = SQLiteStoredValue.nullableInt64(in: row, column: "trial_id"),
-      bindingTrial.value == trial.id,
-      let bindingGeneration = SQLiteStoredValue.nullableInt(
-        in: row,
-        column: "binding_generation"
-      ),
-      bindingGeneration.value == trial.generation
-    else {
-      return false
-    }
-    return true
   }
 }
 

@@ -32,16 +32,28 @@ public enum LearningViewWarning: Sendable, Equatable {
   case trialPointerMismatch
 }
 
-/// Current assignment facts. Until durable resolution exists, every reachable assignment is
-/// unresolved; the projection never treats a cached outcome as final.
+/// Current assignment facts projected from authoritative source rows in one read snapshot.
 public struct LearningTrialCounts: Sendable, Equatable {
   public let consumed: Int
   public let maximum: Int
+  public let positive: Int
+  public let negative: Int
+  public let neutral: Int
   public let unresolved: Int
 
-  public init(consumed: Int, maximum: Int, unresolved: Int) {
+  public init(
+    consumed: Int,
+    maximum: Int,
+    positive: Int,
+    negative: Int,
+    neutral: Int,
+    unresolved: Int
+  ) {
     self.consumed = consumed
     self.maximum = maximum
+    self.positive = positive
+    self.negative = negative
+    self.neutral = neutral
     self.unresolved = unresolved
   }
 }

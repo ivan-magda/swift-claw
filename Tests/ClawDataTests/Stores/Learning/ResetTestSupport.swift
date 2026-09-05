@@ -171,6 +171,7 @@ struct ResetFixture {
 
   func seedOpenAndDrainingTrials(base: LessonSetDigest) throws -> [Int64] {
     try env.queue.write { db in
+      try db.execute(sql: "DROP INDEX idx_learning_trials_live_job")
       var ids: [Int64] = []
       for (index, state) in [LearningTrialState.open, .draining].enumerated() {
         let candidateDigest = String(repeating: index == 0 ? "a" : "b", count: 64)

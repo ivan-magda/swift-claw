@@ -8,7 +8,7 @@ import GRDB
 /// settlement suites drive: the fire path that binds a run, the run store that terminates it, and
 /// the learning store that reads back its receipt.
 struct BoundRunEnvironment {
-  let queue: DatabaseQueue
+  let queue: any DatabaseWriter
   let jobs: ScheduledJobStoreGRDB
   let runs: RunStoreGRDB
   let learning: ScheduledLearningStoreGRDB
@@ -20,17 +20,24 @@ struct BoundRunEnvironment {
     learningEnabled: Bool = true,
     databasePath: String? = nil
   ) throws -> BoundRunEnvironment {
-    let queue: DatabaseQueue
+    let writer: any DatabaseWriter
     if let databasePath {
-      queue = try DatabaseQueue(
+      writer = try DatabaseQueue(
         path: databasePath,
         configuration: ClawDatabase.makeConfiguration()
       )
     } else {
-      queue = try ClawDatabase.makeInMemoryQueue()
+      writer = try ClawDatabase.makeInMemoryQueue()
     }
-    try ClawDatabase.migrate(queue)
-    let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: learningEnabled)
+    return try make(learningEnabled: learningEnabled, writer: writer)
+  }
+
+  static func make(
+    learningEnabled: Bool = true,
+    writer: any DatabaseWriter
+  ) throws -> BoundRunEnvironment {
+    try ClawDatabase.migrate(writer)
+    let jobs = ScheduledJobStoreGRDB(writer: writer, learningEnabled: learningEnabled)
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let job = try jobs.create(
       NewScheduledJob(
@@ -45,7 +52,7 @@ struct BoundRunEnvironment {
     )
     // The fire path creates the job's session lazily; establishing it up front lets the fixture
     // seed unbound runs on the same lane without firing first.
-    let sessionId = try queue.write { db in
+    let sessionId = try writer.write { db in
       let sessionId = try SessionMessageStoreGRDB.upsertSession(
         db,
         sessionKey: SessionKey.scheduledJob(id: job.id),
@@ -58,10 +65,10 @@ struct BoundRunEnvironment {
       return sessionId
     }
     return BoundRunEnvironment(
-      queue: queue,
+      queue: writer,
       jobs: jobs,
-      runs: RunStoreGRDB(writer: queue),
-      learning: ScheduledLearningStoreGRDB(writer: queue),
+      runs: RunStoreGRDB(writer: writer),
+      learning: ScheduledLearningStoreGRDB(writer: writer),
       jobId: job.id,
       sessionId: sessionId,
       now: now

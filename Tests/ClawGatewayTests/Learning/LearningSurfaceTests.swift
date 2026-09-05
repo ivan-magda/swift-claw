@@ -22,8 +22,10 @@ import Testing
     )
     #expect(rendered.contains(assignmentDeadline.wallClockMinute(in: Self.zone)))
     #expect(rendered.contains(decisionDeadline.wallClockMinute(in: Self.zone)))
-    #expect(rendered.contains("assignments: 1 of 3"))
-    #expect(rendered.contains("assignment outcomes: 1 unresolved"))
+    #expect(rendered.contains("assignments: 10 of 12"))
+    #expect(
+      rendered.contains("assignment outcomes: 1 positive, 2 negative, 3 neutral, 4 unresolved")
+    )
     #expect(rendered.contains("decision result trial: 41"))
     #expect(rendered.contains("decision result generation: 2"))
     #expect(rendered.contains("  1. Keep facts exact."))
@@ -35,6 +37,9 @@ import Testing
 
     // then — omitting warnings from the compact projection hides a known integrity mismatch.
     #expect(listed.contains("warning"))
+    #expect(
+      listed.contains("assignment outcomes: 1 positive, 2 negative, 3 neutral, 4 unresolved")
+    )
   }
 
   @Test func unreadableAndUnarmedStatesDoNotInventLearningFacts() {
@@ -171,7 +176,14 @@ private extension LearningSurfaceTests {
       baseDigest: Self.base,
       baseRevision: StableRevision(6),
       replacementDigest: Self.replacement,
-      counts: LearningTrialCounts(consumed: 1, maximum: 3, unresolved: 1),
+      counts: LearningTrialCounts(
+        consumed: 10,
+        maximum: 12,
+        positive: 1,
+        negative: 2,
+        neutral: 3,
+        unresolved: 4
+      ),
       assignmentDeadline: Date(timeIntervalSince1970: 1_782_086_400),
       decisionDeadline: Date(timeIntervalSince1970: 1_782_172_800)
     )

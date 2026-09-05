@@ -123,10 +123,9 @@ import Testing
     #expect(trial.consumedAssignments == 1)
   }
 
-  @Test func aTrialPastItsAssignmentDeadlineDrainsWithoutConsuming() throws {
+  @Test func aTrialAtItsAssignmentDeadlineDrainsWithoutConsuming() throws {
     // given
     let env = try FireBindingEnvironment.make(withOpenTrial: true, consumedAssignments: 0)
-    let afterDeadline = env.assignmentDeadline.addingTimeInterval(1)
 
     // when
     let fired = try #require(
@@ -135,7 +134,7 @@ import Testing
         due: env.due,
         fireAt: env.due,
         nextOccurrence: nil,
-        now: afterDeadline
+        now: env.assignmentDeadline
       )
     )
 
@@ -175,6 +174,94 @@ import Testing
     let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
     #expect(trial.state == .draining)
     #expect(trial.consumedAssignments == FireBindingEnvironment.assignmentLimit)
+  }
+
+  @Test func thirdFireAtomicallyConsumesAndDrains() throws {
+    // given
+    let env = try FireBindingEnvironment.make(withOpenTrial: true, consumedAssignments: 0)
+
+    // when
+    var bindings: [RunLearningBinding] = []
+    for offset in 0..<FireBindingEnvironment.assignmentLimit {
+      let fire = try #require(
+        try env.firedNow(at: env.due.addingTimeInterval(Double(offset)))
+      )
+      bindings.append(try #require(fire.binding))
+      try env.finishRun(fire.runId)
+    }
+
+    // then
+    let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
+    #expect(bindings.allSatisfy { $0.trialId == trial.trialId })
+    #expect(trial.consumedAssignments == FireBindingEnvironment.assignmentLimit)
+    #expect(trial.state == .draining)
+    #expect(try env.assignmentCount() == FireBindingEnvironment.assignmentLimit)
+
+    let fourth = try #require(try env.firedNow(at: env.due.addingTimeInterval(4)))
+    #expect(fourth.binding?.trialId == nil)
+    #expect(fourth.binding?.effectiveDigest == fourth.binding?.stableDigest)
+  }
+
+  @Test func preAdmissionOccurrenceUsesStableAndConsumesNoExposure() throws {
+    // given
+    let env = try FireBindingEnvironment.make(withOpenTrial: true, consumedAssignments: 0)
+    try env.moveAdmission(to: env.due.addingTimeInterval(60))
+
+    // when
+    let fired = try #require(
+      try env.jobs.claimAndFire(
+        jobId: env.jobId,
+        due: env.due,
+        fireAt: env.due,
+        nextOccurrence: nil,
+        now: env.due.addingTimeInterval(120)
+      )
+    )
+
+    // then
+    #expect(fired.binding?.trialId == nil)
+    #expect(fired.binding?.effectiveDigest == fired.binding?.stableDigest)
+    let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
+    #expect(trial.state == .open)
+    #expect(trial.consumedAssignments == 0)
+  }
+
+  @Test func assignmentInsertFailureRollsBackRunBindingCounterAndDrain() throws {
+    // given
+    let env = try FireBindingEnvironment.make(withOpenTrial: true, consumedAssignments: 2)
+    try env.rejectAssignmentInserts()
+
+    // when / then
+    #expect {
+      _ = try env.jobs.fireNow(jobId: env.jobId, now: env.due)
+    } throws: { _ in true }
+    let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
+    #expect(trial.state == .open)
+    #expect(trial.consumedAssignments == 2)
+    #expect(try env.assignmentCount() == 0)
+    #expect(try env.bindingCount() == 0)
+    #expect(try env.runCount() == 0)
+  }
+
+  @Test(arguments: FireSourceCorruption.allCases)
+  func fireSelectionRequiresEveryCurrentTrialSource(
+    _ corruption: FireSourceCorruption
+  ) throws {
+    // given
+    let env = try FireBindingEnvironment.make(withOpenTrial: true, consumedAssignments: 0)
+    try env.apply(corruption)
+
+    // when / then
+    #expect {
+      _ = try env.jobs.fireNow(jobId: env.jobId, now: env.due)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect(try env.runCount() == 0)
+    #expect(try env.bindingCount() == 0)
   }
 
   @Test func pausingAndResumingNeitherExtendsTheDeadlineNorRevokesAnAssignment() throws {
@@ -232,6 +319,25 @@ import Testing
     #expect(try env.rowCount(in: "lesson_sets") == 0)
     #expect(try env.rowCount(in: "run_learning_bindings") == 0)
   }
+}
+
+enum FireSourceCorruption: CaseIterable {
+  case currentEpoch
+  case currentBase
+  case currentRevision
+  case trialBase
+  case trialGeneration
+  case trialAlgorithm
+  case assignmentDeadline
+  case decisionDeadline
+  case maximumAssignments
+  case consumedAssignments
+  case candidateEpoch
+  case candidateBase
+  case candidateBaseRevision
+  case candidateReplacement
+  case candidateAlgorithm
+  case admissionReceipt
 }
 
 // MARK: - Environment
@@ -343,6 +449,157 @@ private struct FireBindingEnvironment {
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? -1
     }
   }
+
+  func firedNow(at now: Date) throws -> ClaimedFire? {
+    guard case .fired(let fire) = try jobs.fireNow(jobId: jobId, now: now) else {
+      return nil
+    }
+    return fire
+  }
+
+  func finishRun(_ runId: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE runs SET state = ? WHERE id = ?",
+        arguments: [RunState.done.rawValue, runId]
+      )
+    }
+  }
+
+  func assignmentCount() throws -> Int { try rowCount(in: "trial_assignments") }
+  func bindingCount() throws -> Int { try rowCount(in: "run_learning_bindings") }
+  func runCount() throws -> Int { try rowCount(in: "runs") }
+
+  func moveAdmission(to admittedAt: Date) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          UPDATE learning_trials
+          SET admitted_at = ?, cohort_cutoff = ?, assignment_deadline = ?, decision_deadline = ?
+          WHERE job_id = ?
+          """,
+        arguments: [
+          EpochSecondCodec.epoch(admittedAt),
+          EpochSecondCodec.epoch(admittedAt),
+          EpochSecondCodec.epoch(admittedAt.addingTimeInterval(Self.assignmentWindow)),
+          EpochSecondCodec.epoch(admittedAt.addingTimeInterval(Self.decisionWindow)),
+          jobId,
+        ]
+      )
+    }
+  }
+
+  func rejectAssignmentInserts() throws {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          CREATE TRIGGER reject_trial_assignment BEFORE INSERT ON trial_assignments
+          BEGIN SELECT RAISE(ABORT, 'injected assignment failure'); END
+          """
+      )
+    }
+  }
+
+  func apply(_ corruption: FireSourceCorruption) throws {
+    try queue.write { db in
+      let base = LessonSet.empty(jobId: jobId).digest.rawValue
+      switch corruption {
+      case .currentEpoch:
+        try db.execute(
+          sql: "UPDATE job_learning_state SET learning_epoch = 2 WHERE job_id = ?",
+          arguments: [jobId]
+        )
+      case .currentBase:
+        try db.execute(
+          sql: "UPDATE job_learning_state SET stable_lesson_set_digest = ? WHERE job_id = ?",
+          arguments: [candidateDigest.rawValue, jobId]
+        )
+      case .currentRevision:
+        try db.execute(
+          sql: "UPDATE job_learning_state SET stable_revision = 1 WHERE job_id = ?",
+          arguments: [jobId]
+        )
+      case .trialBase:
+        try db.execute(
+          sql: "UPDATE learning_trials SET base_digest = ? WHERE job_id = ?",
+          arguments: [candidateDigest.rawValue, jobId]
+        )
+      case .trialGeneration:
+        try db.execute(
+          sql: "UPDATE learning_trials SET generation = 2 WHERE job_id = ?",
+          arguments: [jobId]
+        )
+      case .trialAlgorithm:
+        try db.execute(
+          sql: "UPDATE learning_trials SET algorithm = 'unknown' WHERE job_id = ?",
+          arguments: [jobId]
+        )
+      case .assignmentDeadline:
+        try db.execute(
+          sql:
+            "UPDATE learning_trials SET assignment_deadline = assignment_deadline + 1 WHERE job_id = ?",
+          arguments: [jobId]
+        )
+      case .decisionDeadline:
+        try db.execute(
+          sql:
+            "UPDATE learning_trials SET decision_deadline = decision_deadline + 1 WHERE job_id = ?",
+          arguments: [jobId]
+        )
+      case .maximumAssignments:
+        try db.execute(
+          sql: "UPDATE learning_trials SET max_assignments = 4 WHERE job_id = ?",
+          arguments: [jobId]
+        )
+      case .consumedAssignments:
+        try db.execute(
+          sql: "UPDATE learning_trials SET consumed_assignments = 4 WHERE job_id = ?",
+          arguments: [jobId]
+        )
+      case .candidateEpoch:
+        try db.execute(sql: "UPDATE learning_candidates SET learning_epoch = 2")
+      case .candidateBase:
+        try db.execute(
+          sql: "UPDATE learning_candidates SET base_digest = replacement_digest"
+        )
+      case .candidateBaseRevision:
+        try db.execute(sql: "UPDATE learning_candidates SET base_revision = 99")
+      case .candidateReplacement:
+        try db.execute(
+          sql: "UPDATE learning_candidates SET replacement_digest = ?",
+          arguments: [base]
+        )
+      case .candidateAlgorithm:
+        try db.execute(sql: "UPDATE learning_candidates SET algorithm = 'unknown'")
+      case .admissionReceipt:
+        guard
+          let raw = try String.fetchOne(
+            db,
+            sql: "SELECT result FROM learning_decisions WHERE kind = ?",
+            arguments: [AdmissionReceipt.kind]
+          ),
+          let bytes = raw.data(using: .utf8),
+          let receipt = try? JSONDecoder().decode(AdmissionReceipt.self, from: bytes)
+        else {
+          throw StoreError.unexpected("fixture admission receipt is missing")
+        }
+        let changed = AdmissionReceipt(
+          candidateDigest: receipt.candidateDigest,
+          replacementDigest: receipt.replacementDigest,
+          trialId: receipt.trialId,
+          generation: receipt.generation + 1
+        )
+        let changedBytes = try CanonicalJSON.data(encoding: changed)
+        guard let changedRaw = String(bytes: changedBytes, encoding: .utf8) else {
+          throw StoreError.unexpected("fixture admission receipt is not UTF-8")
+        }
+        try db.execute(
+          sql: "UPDATE learning_decisions SET result = ? WHERE kind = ?",
+          arguments: [changedRaw, AdmissionReceipt.kind]
+        )
+      }
+    }
+  }
 }
 
 // MARK: - Trial Fixture
@@ -357,32 +614,33 @@ private extension FireBindingEnvironment {
     admittedAt: Date,
     consumedAssignments: Int
   ) throws {
-    let candidateDigest = SHA256Digest.hex("candidate-\(jobId)")
-    let baseDigest = LessonSet.empty(jobId: jobId).digest.rawValue
+    let baseDigest = LessonSet.empty(jobId: jobId).digest
+    let manifest = CandidateSourceManifest(
+      origin: .reflection,
+      algorithm: .v1,
+      jobId: jobId,
+      epoch: LearningEpoch(1),
+      triggerDigest: TriggerDigest(rawValue: SHA256Digest.hex("trigger-\(jobId)")),
+      triggerReason: .ownerCorrection,
+      qualifyingIssueCodes: [],
+      operationId: LearningOperationID(rawValue: "fixture-operation"),
+      carrierDigest: CarrierDigest(rawValue: SHA256Digest.hex("carrier-\(jobId)")),
+      resultDigest: ReflectionResultDigest(rawValue: SHA256Digest.hex("result-\(jobId)")),
+      baseDigest: baseDigest,
+      baseRevision: StableRevision(0),
+      feedbackRevision: FeedbackRevision(0),
+      evidence: [],
+      evaluations: [],
+      feedback: [],
+      predecessorCandidate: nil,
+      predecessorFeedback: nil
+    )
+    let artifact = try CandidateArtifact(replacement: candidate, manifest: manifest)
     try queue.write { db in
-      try db.execute(
-        sql: """
-          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
-            created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          jobId, candidate.digest.rawValue, candidate.schemaVersion, candidate.canonicalBytes,
-          LessonSetSource.reflectorCandidate.rawValue, EpochSecondCodec.epoch(admittedAt),
-        ]
-      )
-      try db.execute(
-        sql: """
-          INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-            replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-            source_manifest, algorithm, created_at)
-          VALUES (?, ?, 1, ?, ?, 0, 0, ?, '{}', ?, ?)
-          """,
-        arguments: [
-          candidateDigest, jobId, candidate.digest.rawValue, baseDigest,
-          LearningPhase.reflector.rawValue, LearningAlgorithm.v1.rawValue,
-          EpochSecondCodec.epoch(admittedAt),
-        ]
+      try ScheduledLearningStoreGRDB.recordCandidateArtifact(
+        db,
+        artifact: artifact,
+        now: admittedAt
       )
       try db.execute(
         sql: """
@@ -392,7 +650,7 @@ private extension FireBindingEnvironment {
           VALUES (?, 1, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
           """,
         arguments: [
-          jobId, baseDigest, candidateDigest,
+          jobId, baseDigest.rawValue, artifact.digest.rawValue,
           EpochSecondCodec.epoch(admittedAt),
           EpochSecondCodec.epoch(admittedAt.addingTimeInterval(assignmentWindow)),
           EpochSecondCodec.epoch(admittedAt.addingTimeInterval(decisionWindow)),
@@ -400,9 +658,25 @@ private extension FireBindingEnvironment {
           LearningTrialState.open.rawValue, LearningAlgorithm.v1.rawValue,
         ]
       )
+      let trialId = db.lastInsertedRowID
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
-        arguments: [db.lastInsertedRowID, jobId]
+        arguments: [trialId, jobId]
+      )
+      try ScheduledLearningStoreGRDB.insertDecision(
+        db,
+        kind: AdmissionReceipt.kind,
+        jobId: jobId,
+        epoch: LearningEpoch(1),
+        inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
+        result: AdmissionReceipt(
+          candidateDigest: artifact.digest,
+          replacementDigest: candidate.digest,
+          trialId: trialId,
+          generation: 1
+        ),
+        algorithm: .v1,
+        now: admittedAt
       )
     }
   }
