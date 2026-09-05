@@ -83,6 +83,16 @@ extension ScheduledLearningStoreGRDB {
         EpochSecondCodec.epoch(now),
       ]
     )
+    try AuditLogGRDB.insertAudit(
+      db,
+      AuditEvent(
+        actor: .system,
+        action: .learningEvaluated,
+        decision: evaluation.outcome.rawValue,
+        runId: runId,
+        ts: now
+      )
+    )
   }
 }
 

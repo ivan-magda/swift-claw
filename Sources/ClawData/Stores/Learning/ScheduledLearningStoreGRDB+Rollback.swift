@@ -34,6 +34,16 @@ extension ScheduledLearningStoreGRDB {
         return nil
       }
       let inputs = promotion.inputs
+      let priorRows = try Row.fetchAll(
+        db,
+        sql:
+          "SELECT decision_id, inputs, result FROM learning_decisions WHERE job_id = ? AND kind = ?",
+        arguments: [inputs.identity.jobId, LearningDecisionKind.rollback.rawValue]
+      )
+      for priorRow in priorRows {
+        let prior = try Self.decodeTerminalReceipt(priorRow)
+        if prior.record.rollbackTrigger == trigger { return prior }
+      }
       let state = try Self.readState(db, jobId: inputs.identity.jobId)
       let current =
         state.map { value in

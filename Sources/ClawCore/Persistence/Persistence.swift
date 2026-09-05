@@ -604,6 +604,7 @@ public enum AuditAction: String, Sendable, Equatable {
   case approvalDenied = "approval_denied"
   case learningBound = "learning_bound"
   case learningFeedback = "learning_feedback"
+  case learningEvaluated = "learning_evaluated"
   case learningCandidateAdmitted = "learning_candidate_admitted"
   case learningReset = "learning_reset"
 }

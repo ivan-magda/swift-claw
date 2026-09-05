@@ -99,7 +99,12 @@ struct DaemonBuilder: Sendable {
       mcpTools: mcpStack.tools
     )
 
-    let learning = makeLearningService()
+    let learning = makeLearningService(
+      roster: roster,
+      cooldown: cooldown,
+      costResolver: costResolver,
+      signal: coordination.outboxSignal
+    )
     let consumers = makeRunnerConsumers(
       coordination: coordination,
       agentStack: agentStack,

@@ -58,7 +58,10 @@ extension DaemonBuilder {
   ) -> MessageRouter {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
-    let feedbackChallenges = makeFeedbackChallengeHandler(coordination: coordination)
+    let feedbackChallenges = makeFeedbackChallengeHandler(
+      coordination: coordination,
+      learning: learning
+    )
 
     return MessageRouter(
       processed: stores.processed,
@@ -79,7 +82,10 @@ extension DaemonBuilder {
       learningRedactor: SecretRedactor(secretValues: redactionValues),
       learningOutboxSignal: coordination.outboxSignal,
       approvalCallbacks: approvalCallbacks,
-      feedbackCallbacks: makeFeedbackCallbackHandler(challenges: feedbackChallenges),
+      feedbackCallbacks: makeFeedbackCallbackHandler(
+        challenges: feedbackChallenges,
+        learning: learning
+      ),
       feedbackChallenges: feedbackChallenges,
       voice: voiceService,
       images: imageService,
