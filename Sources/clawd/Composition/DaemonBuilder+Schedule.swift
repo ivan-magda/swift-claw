@@ -61,7 +61,7 @@ extension DaemonBuilder {
       workspace: workspace,
       audit: stores.audit,
       learning: learning,
-      now: { Date() },
+      now: now,
       clock: ContinuousClock(),
       logger: logger
     )
@@ -106,7 +106,7 @@ extension DaemonBuilder {
     return ScheduledLearningService(
       store: stores.learning,
       workflow: workflow,
-      now: { Date() },
+      now: now,
       logger: logger
     )
   }

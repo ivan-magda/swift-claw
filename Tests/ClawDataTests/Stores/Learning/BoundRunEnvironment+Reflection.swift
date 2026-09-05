@@ -34,7 +34,7 @@ extension BoundRunEnvironment {
       algorithm: .v1,
       stableDigest: try currentLearningState().stableDigest,
       evidenceDigests: [first.evidence.digest, second.evidence.digest],
-      feedbackRevision: FeedbackRevision(0),
+      feedbackRevision: try currentLearningState().feedbackRevision,
       issueCodes: [issueCode],
       reason: .recurringIssue
     )

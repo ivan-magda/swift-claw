@@ -52,6 +52,7 @@ extension DaemonBuilder {
       breaker: BudgetBreaker(budget: config.budget, costPolicy: costPolicy),
       delivery: transport,
       ownerChatId: config.heartbeatOwnerChatId,
+      now: now,
       freezeLearningSurface: freezeLearningSurface,
       learning: makePinnedLessonStore(),
       parker: coordination.deferredParker,
@@ -111,7 +112,7 @@ extension DaemonBuilder {
       callbacks: transport,
       challenges: challenges,
       workflow: learning,
-      now: { Date() },
+      now: now,
       logger: logger
     )
   }
@@ -132,7 +133,7 @@ extension DaemonBuilder {
       learning: stores.learning,
       workflow: learning,
       notifyOutbox: { signal.poke() },
-      now: { Date() },
+      now: now,
       logger: logger
     )
   }
