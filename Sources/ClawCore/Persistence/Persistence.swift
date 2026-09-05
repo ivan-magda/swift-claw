@@ -605,6 +605,7 @@ public enum AuditAction: String, Sendable, Equatable {
   case learningBound = "learning_bound"
   case learningFeedback = "learning_feedback"
   case learningCandidateAdmitted = "learning_candidate_admitted"
+  case learningReset = "learning_reset"
 }
 
 public struct AuditEvent: Sendable, Equatable {

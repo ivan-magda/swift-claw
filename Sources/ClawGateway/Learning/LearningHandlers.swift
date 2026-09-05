@@ -1,10 +1,14 @@
 import ClawCore
+import Foundation
 
-/// Provider-free `/learning` reads plus the current unavailable reset reply.
+/// Provider-free `/learning` reads plus the owner-confirmed reset barrier.
 struct LearningHandlers: Sendable {
   let learning: any ScheduledLearningStore
   let redactor: SecretRedactor
+  let sessionMessages: any SessionMessageStore
+  let pendingConfirmations: PendingConfirmationRegistry
   let replies: ReplySender
+  let now: @Sendable () -> Date
 
   func handle(
     _ command: LearningCommand,
@@ -27,14 +31,83 @@ struct LearningHandlers: Sendable {
         message: message
       )
     case .reset(let jobId):
-      let text =
-        jobId == nil ? CommandReplies.learningUsage : CommandReplies.learningResetUnavailable
+      guard let jobId else {
+        return await replies.sendCanned(
+          updateId: rawUpdate.updateId,
+          target: .chat(message.chatId),
+          text: CommandReplies.learningUsage
+        )
+      }
+      return try await requestReset(jobId: jobId, rawUpdate: rawUpdate, message: message)
+    }
+  }
+
+  private func requestReset(
+    jobId: Int64,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    let view = try await replies.perform(
+      "learning reset view",
+      updateId: rawUpdate.updateId,
+      target: .chat(message.chatId)
+    ) {
+      try learning.learningView(jobId: jobId)
+    }
+    guard view.count == 1 else {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
         target: .chat(message.chatId),
-        text: text
+        text: CommandReplies.learningUnavailable
       )
     }
+    switch view[0] {
+    case .notFound, .unarmed:
+      return await send(view: view, style: .detail, rawUpdate: rawUpdate, message: message)
+    case .readable(let readable):
+      return try await parkReset(
+        jobId: jobId,
+        label: readable.job.label,
+        rawUpdate: rawUpdate,
+        message: message
+      )
+    case .unreadable(let unreadable):
+      return try await parkReset(
+        jobId: jobId,
+        label: unreadable.validatedLabel,
+        rawUpdate: rawUpdate,
+        message: message
+      )
+    }
+  }
+
+  private func parkReset(
+    jobId: Int64,
+    label: String?,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    let claim = try await replies.perform(
+      "learning reset claim",
+      updateId: rawUpdate.updateId,
+      target: .chat(message.chatId)
+    ) {
+      try sessionMessages.claimCommandUpdate(
+        updateId: rawUpdate.updateId,
+        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+        now: now()
+      )
+    }
+    guard case .claimed(let sessionId) = claim else {
+      return replies.skipDuplicate(updateId: rawUpdate.updateId)
+    }
+    await pendingConfirmations.park(.learningReset(jobId: jobId), sessionId: sessionId)
+    let prompt = LearningReplies.resetConfirmation(jobId: jobId, label: label)
+    return await replies.sendCommandAck(
+      updateId: rawUpdate.updateId,
+      target: .chat(message.chatId),
+      text: redactor.redact(prompt)
+    )
   }
 
   private func read(
@@ -50,6 +123,15 @@ struct LearningHandlers: Sendable {
     ) {
       try learning.learningView(jobId: jobId)
     }
+    return await send(view: view, style: style, rawUpdate: rawUpdate, message: message)
+  }
+
+  private func send(
+    view: [JobLearningView],
+    style: LearningSurface.Style,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async -> HandleOutcome {
     let rendered = LearningSurface.render(view, style: style)
     let safe = redactor.redact(rendered)
     let chunks = ReplySplitter.split(

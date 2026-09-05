@@ -74,6 +74,81 @@ import Testing
     #expect(lines.first?.hasPrefix("7 · digest") == true)
     #expect(lines.last?.hasPrefix("72 · damaged · learning state unreadable") == true)
   }
+
+  @Test func resetDecisionRendersOnlySafeBarrierFactsAndCounts() {
+    // given
+    let empty = LessonSet.empty(jobId: 7)
+    let inputs = LearningResetDecisionInputs(
+      oldEpoch: LearningEpoch(3),
+      oldStableDigest: Self.base,
+      oldStableRevision: StableRevision(6),
+      feedbackRevisionAtCut: FeedbackRevision(9),
+      priorOpenTrialId: 41
+    )
+    let result = LearningResetDecisionResult(
+      newEpoch: LearningEpoch(4),
+      emptyStableDigest: empty.digest,
+      newStableRevision: StableRevision(7),
+      closedTrials: [
+        ResetTrialIdentity(
+          trialId: 41,
+          jobId: 7,
+          epoch: LearningEpoch(3),
+          generation: 2,
+          baseDigest: Self.base,
+          candidateDigest: Self.candidate,
+          algorithm: .v1
+        )
+      ],
+      invalidatedTargetCount: 5,
+      invalidatedChallengeCount: 2,
+      staleNoCallOperationIds: [LearningOperationID(rawValue: "opaque-stale-id")],
+      inFlightOperationIds: [LearningOperationID(rawValue: "opaque-flight-id")]
+    )
+    let view = ReadableJobLearningView(
+      job: LearningJobIdentity(
+        jobId: 7,
+        label: "digest",
+        status: .active,
+        timezone: Self.zone.identifier
+      ),
+      epoch: result.newEpoch,
+      stableRevision: result.newStableRevision,
+      stableLessons: empty,
+      liveTrial: nil,
+      lastDecision: LearningDecisionView(
+        decisionId: 14,
+        jobId: 7,
+        epoch: result.newEpoch,
+        algorithm: .v1,
+        decidedAt: Date(timeIntervalSince1970: 1_782_000_600),
+        detail: .learningReset(inputs: inputs, result: result)
+      ),
+      warnings: []
+    )
+
+    // when
+    let rendered = LearningSurface.render([.readable(view)])
+
+    // then — rendering raw receipt identities would expose opaque operation ids without adding
+    // owner value; the category counts and epoch transition are the useful safe projection.
+    #expect(rendered.contains("decision kind: \(ResetReceipt.kind)"))
+    #expect(rendered.contains("reset old epoch: 3"))
+    #expect(rendered.contains("reset new epoch: 4"))
+    #expect(rendered.contains("reset old stable digest: \(Self.base.rawValue)"))
+    #expect(rendered.contains("reset empty stable digest: \(empty.digest.rawValue)"))
+    #expect(rendered.contains("reset old stable revision: 6"))
+    #expect(rendered.contains("reset new stable revision: 7"))
+    #expect(rendered.contains("reset feedback revision: 9"))
+    #expect(rendered.contains("reset prior live trial: 41"))
+    #expect(rendered.contains("reset closed trials: 1"))
+    #expect(rendered.contains("reset invalidated targets: 5"))
+    #expect(rendered.contains("reset invalidated challenges: 2"))
+    #expect(rendered.contains("reset abandoned calls: 1"))
+    #expect(rendered.contains("reset in-flight calls: 1"))
+    #expect(rendered.contains("opaque-stale-id") == false)
+    #expect(rendered.contains("opaque-flight-id") == false)
+  }
 }
 
 private extension LearningSurfaceTests {

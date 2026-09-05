@@ -126,12 +126,16 @@ public struct MessageRouter: Sendable {
     self.learningHandlers = Self.makeLearningHandlers(
       store: learningStore,
       redactor: learningRedactor,
-      replies: replies
+      sessionMessages: sessionMessages,
+      pendingConfirmations: pendingConfirmations,
+      replies: replies,
+      now: now
     )
     self.confirmations = ConfirmationResolver(
       sessionMessages: sessionMessages,
       pendingConfirmations: pendingConfirmations,
       memoryCommands: memoryCommands,
+      learningReset: learningStore,
       schedule: schedule,
       replies: replies,
       now: now,
@@ -162,12 +166,22 @@ private extension MessageRouter {
   static func makeLearningHandlers(
     store: (any ScheduledLearningStore)?,
     redactor: SecretRedactor?,
-    replies: ReplySender
+    sessionMessages: any SessionMessageStore,
+    pendingConfirmations: PendingConfirmationRegistry,
+    replies: ReplySender,
+    now: @escaping @Sendable () -> Date
   ) -> LearningHandlers? {
     guard let store, let redactor else {
       return nil
     }
-    return LearningHandlers(learning: store, redactor: redactor, replies: replies)
+    return LearningHandlers(
+      learning: store,
+      redactor: redactor,
+      sessionMessages: sessionMessages,
+      pendingConfirmations: pendingConfirmations,
+      replies: replies,
+      now: now
+    )
   }
 
   func route(rawUpdate: RawUpdate) async throws(RoutingHalt) -> HandleOutcome {
@@ -661,7 +675,7 @@ private extension MessageRouter {
   /// unclaimed message becomes a durable turn.
   ///
   /// A room skips the offer outright instead of being trusted to come up empty. Nothing can park
-  /// there — the two families that park are refused in `routeAllowed` — and skipping keeps it that
+  /// there — all families that park are refused in `routeAllowed` — and skipping keeps it that
   /// way even if a third one is ever added: a "yes" typed in a topic is just a word.
   func routePlain(
     _ text: String,

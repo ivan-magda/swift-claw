@@ -162,6 +162,20 @@ private extension LearningSurface {
       lines.append("decision input operation: \(inputs.operationId.rawValue)")
       lines.append("decision input carrier: \(inputs.carrierDigest.rawValue)")
       lines.append("decision result digest: \(result.resultDigest.rawValue)")
+    case .learningReset(let inputs, let result):
+      lines.append("reset old epoch: \(inputs.oldEpoch.value)")
+      lines.append("reset new epoch: \(result.newEpoch.value)")
+      lines.append("reset old stable digest: \(inputs.oldStableDigest.rawValue)")
+      lines.append("reset empty stable digest: \(result.emptyStableDigest.rawValue)")
+      lines.append("reset old stable revision: \(inputs.oldStableRevision.value)")
+      lines.append("reset new stable revision: \(result.newStableRevision.value)")
+      lines.append("reset feedback revision: \(inputs.feedbackRevisionAtCut.value)")
+      lines.append("reset prior live trial: \(inputs.priorOpenTrialId.map(String.init) ?? "none")")
+      lines.append("reset closed trials: \(result.closedTrials.count)")
+      lines.append("reset invalidated targets: \(result.invalidatedTargetCount)")
+      lines.append("reset invalidated challenges: \(result.invalidatedChallengeCount)")
+      lines.append("reset abandoned calls: \(result.staleNoCallOperationIds.count)")
+      lines.append("reset in-flight calls: \(result.inFlightOperationIds.count)")
     }
     return lines
   }
@@ -172,6 +186,8 @@ private extension LearningSurface {
       AdmissionReceipt.kind
     case .reflectionNoCandidate:
       ReflectionNoCandidateReceipt.kind
+    case .learningReset:
+      ResetReceipt.kind
     }
   }
 

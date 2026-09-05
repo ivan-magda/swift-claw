@@ -135,12 +135,16 @@ public struct ReflectionNoCandidateReceipt: Sendable, Equatable, Codable {
   }
 }
 
-/// The only two immutable decision receipt shapes production can currently write.
+/// The immutable decision receipt shapes production can currently write.
 public enum LearningDecisionDetail: Sendable, Equatable {
   case candidateAdmission(inputs: AdmissionDecisionInputs, result: AdmissionReceipt)
   case reflectionNoCandidate(
     inputs: ReflectionNoCandidateInputs,
     result: ReflectionNoCandidateReceipt
+  )
+  case learningReset(
+    inputs: LearningResetDecisionInputs,
+    result: LearningResetDecisionResult
   )
 }
 

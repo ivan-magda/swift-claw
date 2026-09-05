@@ -505,28 +505,15 @@ private extension ScheduledLearningStoreGRDB {
     receipt: AdmissionReceipt,
     now: Date
   ) throws {
-    let inputs = try CanonicalJSON.data(
-      encoding: AdmissionDecisionInputs(candidateDigest: artifact.digest)
-    )
-    let result = try CanonicalJSON.data(encoding: receipt)
-    // swiftlint:disable:next optional_data_string_conversion
-    let inputsJSON = String(decoding: inputs, as: UTF8.self)
-    // swiftlint:disable:next optional_data_string_conversion
-    let resultJSON = String(decoding: result, as: UTF8.self)
-    try db.execute(
-      sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-          decided_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        AdmissionReceipt.kind,
-        artifact.manifest.jobId,
-        artifact.manifest.epoch.value,
-        inputsJSON,
-        resultJSON,
-        artifact.manifest.algorithm.rawValue,
-        EpochSecondCodec.epoch(now),
-      ]
+    try insertDecision(
+      db,
+      kind: AdmissionReceipt.kind,
+      jobId: artifact.manifest.jobId,
+      epoch: artifact.manifest.epoch,
+      inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
+      result: receipt,
+      algorithm: artifact.manifest.algorithm,
+      now: now
     )
   }
 }

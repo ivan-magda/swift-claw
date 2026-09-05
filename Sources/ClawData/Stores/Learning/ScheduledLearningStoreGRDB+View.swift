@@ -470,6 +470,15 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Decision Projection
 
 private extension ScheduledLearningStoreGRDB {
+  struct ViewDecisionRecord {
+    let decisionId: Int64
+    let kind: String
+    let inputsJSON: String
+    let resultJSON: String
+    let algorithm: LearningAlgorithm
+    let decidedAt: Date
+  }
+
   static func lastDecisionView(
     _ db: Database,
     state: JobLearningState
@@ -509,34 +518,34 @@ private extension ScheduledLearningStoreGRDB {
     guard algorithm == .v1 else {
       throw ViewCorruption.invalid
     }
-    let detail = try decisionDetail(
-      db,
+    let record = ViewDecisionRecord(
+      decisionId: decisionId,
       kind: kind,
       inputsJSON: inputsJSON,
       resultJSON: resultJSON,
-      state: state
+      algorithm: algorithm,
+      decidedAt: decidedAt
     )
+    let detail = try decisionDetail(db, record: record, state: state)
     return LearningDecisionView(
-      decisionId: decisionId,
+      decisionId: record.decisionId,
       jobId: state.jobId,
       epoch: state.epoch,
-      algorithm: algorithm,
-      decidedAt: decidedAt,
+      algorithm: record.algorithm,
+      decidedAt: record.decidedAt,
       detail: detail
     )
   }
 
   static func decisionDetail(
     _ db: Database,
-    kind: String,
-    inputsJSON: String,
-    resultJSON: String,
+    record: ViewDecisionRecord,
     state: JobLearningState
   ) throws -> LearningDecisionDetail {
-    switch kind {
+    switch record.kind {
     case AdmissionReceipt.kind:
-      let inputs: AdmissionDecisionInputs = try decodeCanonical(inputsJSON)
-      let result: AdmissionReceipt = try decodeCanonical(resultJSON)
+      let inputs: AdmissionDecisionInputs = try decodeCanonicalDecision(record.inputsJSON)
+      let result: AdmissionReceipt = try decodeCanonicalDecision(record.resultJSON)
       guard
         inputs.candidateDigest == result.candidateDigest,
         let artifact = try readCandidateArtifact(db, digest: inputs.candidateDigest),
@@ -550,8 +559,8 @@ private extension ScheduledLearningStoreGRDB {
       }
       return .candidateAdmission(inputs: inputs, result: result)
     case ReflectionNoCandidateReceipt.kind:
-      let inputs: ReflectionNoCandidateInputs = try decodeCanonical(inputsJSON)
-      let result: ReflectionNoCandidateReceipt = try decodeCanonical(resultJSON)
+      let inputs: ReflectionNoCandidateInputs = try decodeCanonicalDecision(record.inputsJSON)
+      let result: ReflectionNoCandidateReceipt = try decodeCanonicalDecision(record.resultJSON)
       guard
         isDigest(inputs.triggerDigest.rawValue),
         isDigest(inputs.carrierDigest.rawValue),
@@ -567,21 +576,27 @@ private extension ScheduledLearningStoreGRDB {
         throw ViewCorruption.invalid
       }
       return .reflectionNoCandidate(inputs: inputs, result: result)
+    case ResetReceipt.kind:
+      guard
+        let receipt = try resetReceipt(
+          db,
+          record: ResetDecisionRecord(
+            decisionId: record.decisionId,
+            jobId: state.jobId,
+            epoch: state.epoch,
+            inputsJSON: record.inputsJSON,
+            resultJSON: record.resultJSON,
+            algorithm: record.algorithm,
+            decidedAt: record.decidedAt
+          )
+        )
+      else {
+        throw ViewCorruption.invalid
+      }
+      return .learningReset(inputs: receipt.inputs, result: receipt.result)
     default:
       throw ViewCorruption.invalid
     }
-  }
-
-  static func decodeCanonical<Value: Codable>(_ json: String) throws -> Value {
-    let bytes = Data(json.utf8)
-    guard
-      let value = try? JSONDecoder().decode(Value.self, from: bytes),
-      let canonical = try? CanonicalJSON.data(encoding: value),
-      canonical == bytes
-    else {
-      throw ViewCorruption.invalid
-    }
-    return value
   }
 
   static func isDigest(_ value: String) -> Bool {

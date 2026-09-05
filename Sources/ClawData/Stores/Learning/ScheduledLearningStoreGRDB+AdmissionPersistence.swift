@@ -149,15 +149,9 @@ private extension ScheduledLearningStoreGRDB {
       else {
         throw StoreError.unexpected("candidate admission decision is unreadable")
       }
-      let inputsBytes = Data(inputsJSON.utf8)
-      let resultBytes = Data(resultJSON.utf8)
       guard
-        let inputs = try? JSONDecoder().decode(AdmissionDecisionInputs.self, from: inputsBytes),
-        let receipt = try? JSONDecoder().decode(AdmissionReceipt.self, from: resultBytes),
-        let canonicalInputs = try? CanonicalJSON.data(encoding: inputs),
-        let canonicalResult = try? CanonicalJSON.data(encoding: receipt),
-        canonicalInputs == inputsBytes,
-        canonicalResult == resultBytes
+        let inputs: AdmissionDecisionInputs = try? decodeCanonicalDecision(inputsJSON),
+        let receipt: AdmissionReceipt = try? decodeCanonicalDecision(resultJSON)
       else {
         throw StoreError.unexpected("candidate admission decision is unreadable")
       }

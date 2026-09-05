@@ -213,7 +213,7 @@ public struct JobLearningState: Sendable, Equatable {
   }
 }
 
-public protocol ScheduledLearningStore: Sendable {
+public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
   /// One read snapshot for the complete owner-facing learning projection. nil lists armed jobs;
   /// a positive id returns exactly one readable, unarmed, missing, or unreadable result.
   func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView]

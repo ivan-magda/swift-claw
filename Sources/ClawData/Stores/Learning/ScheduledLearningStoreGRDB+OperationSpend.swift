@@ -93,6 +93,9 @@ extension ScheduledLearningStoreGRDB {
       isEstimated: result.usage.isEstimated,
       now: now
     )
+    guard try readState(db, jobId: operation.jobId)?.epoch == operation.epoch else {
+      return true
+    }
     switch result.product {
     case .failure:
       break
