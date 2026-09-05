@@ -442,6 +442,37 @@ private extension FeedbackTarget {
 private struct UnresolvableLessonSets: ScheduledLearningStore {
   let base: ScheduledLearningStoreGRDB
 
+  func applyTrialDecision(
+    _ decision: TrialDecision,
+    trial: LearningTrial,
+    feedbackRevision: FeedbackRevision,
+    now: Date
+  ) throws(StoreError) -> DecisionReceipt? {
+    try base.applyTrialDecision(
+      decision,
+      trial: trial,
+      feedbackRevision: feedbackRevision,
+      now: now
+    )
+  }
+
+  func rollback(_ trigger: RollbackTrigger, now: Date) throws(StoreError) -> DecisionReceipt? {
+    try base.rollback(trigger, now: now)
+  }
+
+  func commitPromotionReply(
+    updateId: Int64,
+    target: NewFeedbackTarget,
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> PromotionReplyOutcome {
+    try base.commitPromotionReply(updateId: updateId, target: target, chunks: chunks, now: now)
+  }
+
+  func currentPromotion(jobId: Int64) throws(StoreError) -> DecisionReceipt? {
+    try base.currentPromotion(jobId: jobId)
+  }
+
   func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView] {
     try base.learningView(jobId: jobId)
   }

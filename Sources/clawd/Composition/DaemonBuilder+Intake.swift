@@ -77,6 +77,7 @@ extension DaemonBuilder {
       learning: learning,
       learningStore: stores.learning,
       learningRedactor: SecretRedactor(secretValues: redactionValues),
+      learningOutboxSignal: coordination.outboxSignal,
       approvalCallbacks: approvalCallbacks,
       feedbackCallbacks: makeFeedbackCallbackHandler(challenges: feedbackChallenges),
       feedbackChallenges: feedbackChallenges,

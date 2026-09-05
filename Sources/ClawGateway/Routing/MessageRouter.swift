@@ -59,6 +59,7 @@ public struct MessageRouter: Sendable {
     learning: ScheduledLearningService? = nil,
     learningStore: (any ScheduledLearningStore)? = nil,
     learningRedactor: SecretRedactor? = nil,
+    learningOutboxSignal: OutboxSignal? = nil,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     feedbackCallbacks: FeedbackCallbackHandler? = nil,
     feedbackChallenges: FeedbackChallengeHandler? = nil,
@@ -125,6 +126,7 @@ public struct MessageRouter: Sendable {
     )
     self.learningHandlers = Self.makeLearningHandlers(
       store: learningStore,
+      outboxSignal: learningOutboxSignal,
       redactor: learningRedactor,
       sessionMessages: sessionMessages,
       pendingConfirmations: pendingConfirmations,
@@ -165,6 +167,7 @@ public struct MessageRouter: Sendable {
 private extension MessageRouter {
   static func makeLearningHandlers(
     store: (any ScheduledLearningStore)?,
+    outboxSignal: OutboxSignal?,
     redactor: SecretRedactor?,
     sessionMessages: any SessionMessageStore,
     pendingConfirmations: PendingConfirmationRegistry,
@@ -180,7 +183,8 @@ private extension MessageRouter {
       sessionMessages: sessionMessages,
       pendingConfirmations: pendingConfirmations,
       replies: replies,
-      now: now
+      now: now,
+      outboxSignal: outboxSignal
     )
   }
 

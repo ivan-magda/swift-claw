@@ -205,7 +205,7 @@ extension ScheduledLearningStoreGRDB {
       guard case .awaitingApproval = plan else {
         return Self.outcome(for: plan, artifact: successor)
       }
-      _ = try Self.closeCandidateTrial(db, candidate: context.predecessor)
+      _ = try Self.closeCandidateTrial(db, candidate: context.predecessor, now: now)
       try Self.recordCandidateArtifact(
         db,
         artifact: successor,
@@ -484,7 +484,7 @@ private extension ScheduledLearningStoreGRDB {
           JOIN learning_candidates AS candidate
             ON candidate.candidate_digest = trial.candidate_digest
           WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.base_digest = ?
-            AND candidate.replacement_digest = ?
+            AND candidate.replacement_digest = ? AND trial.algorithm = ?
             AND trial.state NOT IN (?, ?)
         )
         """,
@@ -493,6 +493,7 @@ private extension ScheduledLearningStoreGRDB {
         artifact.manifest.epoch.value,
         artifact.manifest.baseDigest.rawValue,
         artifact.replacement.digest.rawValue,
+        artifact.manifest.algorithm.rawValue,
         LearningTrialState.open.rawValue,
         LearningTrialState.draining.rawValue,
       ]

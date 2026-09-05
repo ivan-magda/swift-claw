@@ -55,7 +55,7 @@ extension ScheduledLearningStoreGRDB {
         subjectDigest: target.subjectDigest,
         now: now
       )
-      try Self.applyImmediateVeto(db, target: target, signal: tap.signal)
+      try Self.applyImmediateVeto(db, target: target, signal: tap.signal, now: now)
       let outcome = FeedbackOutcome.recorded(event)
       try Self.auditFeedback(db, tap: tap, target: target, outcome: outcome, now: now)
       return outcome
@@ -415,7 +415,8 @@ private extension ScheduledLearningStoreGRDB {
   static func applyImmediateVeto(
     _ db: Database,
     target: FeedbackTarget,
-    signal: OwnerSignal
+    signal: OwnerSignal,
+    now: Date
   ) throws {
     let trialId: Int64?
     switch signal {
@@ -428,13 +429,7 @@ private extension ScheduledLearningStoreGRDB {
       trialId = nil
     }
     if let trialId {
-      try db.execute(
-        sql: """
-          UPDATE job_learning_state SET open_trial_id = NULL
-          WHERE job_id = ? AND learning_epoch = ? AND open_trial_id = ?
-          """,
-        arguments: [target.jobId, target.epoch.value, trialId]
-      )
+      try terminalFallback(db, trialId: trialId, now: now)
     }
   }
 
@@ -442,8 +437,7 @@ private extension ScheduledLearningStoreGRDB {
     try Int64.fetchOne(
       db,
       sql: """
-        UPDATE learning_trials SET state = ?, close_reason = ?
-        WHERE trial_id = (
+        SELECT trial_id FROM learning_trials WHERE trial_id = (
           SELECT trial.trial_id
           FROM learning_trials AS trial
           JOIN learning_candidates AS candidate
@@ -464,11 +458,8 @@ private extension ScheduledLearningStoreGRDB {
             AND candidate.algorithm = trial.algorithm
           ORDER BY trial.trial_id DESC LIMIT 1
         )
-        RETURNING trial_id
         """,
       arguments: [
-        LearningTrialState.fellBack.rawValue,
-        Self.hardVetoReason,
         target.jobId,
         target.epoch.value,
         LearningTrialState.open.rawValue,
@@ -516,21 +507,7 @@ private extension ScheduledLearningStoreGRDB {
       else {
         continue
       }
-      let trialId: Int64 = row["trial_id"]
-      try db.execute(
-        sql: """
-          UPDATE learning_trials SET state = ?, close_reason = ?
-          WHERE trial_id = ? AND state IN (?, ?)
-          """,
-        arguments: [
-          LearningTrialState.fellBack.rawValue,
-          Self.hardVetoReason,
-          trialId,
-          LearningTrialState.open.rawValue,
-          LearningTrialState.draining.rawValue,
-        ]
-      )
-      return db.changesCount == 1 ? trialId : nil
+      return row["trial_id"] as Int64
     }
     return nil
   }

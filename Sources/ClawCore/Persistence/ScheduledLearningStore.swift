@@ -315,6 +315,27 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
     now: Date
   ) throws(StoreError) -> TrialReconciliationResult
 
+  /// Revalidates the complete cohort and commits an exact terminal recommendation atomically.
+  func applyTrialDecision(
+    _ decision: TrialDecision,
+    trial: LearningTrial,
+    feedbackRevision: FeedbackRevision,
+    now: Date
+  ) throws(StoreError) -> DecisionReceipt?
+
+  /// Restores only the direct base of the named current promotion.
+  func rollback(_ trigger: RollbackTrigger, now: Date) throws(StoreError) -> DecisionReceipt?
+
+  /// Claims the command update and commits an exact current promotion target with all chunks.
+  func commitPromotionReply(
+    updateId: Int64,
+    target: NewFeedbackTarget,
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> PromotionReplyOutcome
+
+  func currentPromotion(jobId: Int64) throws(StoreError) -> DecisionReceipt?
+
   /// The terminal receipt the transaction that won the run's state wrote. Nil for a run that never
   /// bound, or one that is still live.
   func settlement(runId: Int64) throws(StoreError) -> RunSettlement?

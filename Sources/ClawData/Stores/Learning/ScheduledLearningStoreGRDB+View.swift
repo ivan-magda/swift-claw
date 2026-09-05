@@ -383,6 +383,17 @@ private extension ScheduledLearningStoreGRDB {
     state: JobLearningState
   ) throws -> LearningDecisionDetail {
     switch record.kind {
+    case LearningDecisionKind.trial.rawValue, LearningDecisionKind.rollback.rawValue:
+      let inputs: TrialDecisionInputs = try decodeCanonicalDecision(record.inputsJSON)
+      let result: LearningDecisionRecord = try decodeCanonicalDecision(record.resultJSON)
+      guard inputs.identity.jobId == state.jobId, inputs.identity.epoch == state.epoch,
+        inputs.algorithm == record.algorithm
+      else {
+        throw ViewCorruption.invalid
+      }
+      return .terminal(
+        DecisionReceipt(decisionId: record.decisionId, inputs: inputs, record: result)
+      )
     case AdmissionReceipt.kind:
       let inputs: AdmissionDecisionInputs = try decodeCanonicalDecision(record.inputsJSON)
       let result: AdmissionReceipt = try decodeCanonicalDecision(record.resultJSON)

@@ -9,6 +9,7 @@ struct LearningHandlers: Sendable {
   let pendingConfirmations: PendingConfirmationRegistry
   let replies: ReplySender
   let now: @Sendable () -> Date
+  let outboxSignal: OutboxSignal?
 
   func handle(
     _ command: LearningCommand,
@@ -122,6 +123,17 @@ struct LearningHandlers: Sendable {
       target: .chat(message.chatId)
     ) {
       try learning.learningView(jobId: jobId)
+    }
+    if let jobId, let outboxSignal,
+      let outcome = try await promotionReply(
+        jobId: jobId,
+        view: view,
+        rawUpdate: rawUpdate,
+        message: message,
+        signal: outboxSignal
+      )
+    {
+      return outcome
     }
     return await send(view: view, style: style, rawUpdate: rawUpdate, message: message)
   }

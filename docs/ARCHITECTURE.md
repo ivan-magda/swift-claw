@@ -810,6 +810,60 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 - **Per-fire context isolation.** The fire transaction resets the session's context window (`window_start_message_id` → the pre-fire high-water mark, taint/private-data cleared — `/new` semantics) before inserting the trigger row, so every fire that runs starts on a fresh transcript of its persistent `sched:job:<id>` (or `sched:heartbeat`) session. That reset is session-global, so a fire into a session that already has a live run (PENDING/RUNNING/AWAITING_APPROVAL — e.g. one parked on an approval) is **skipped entirely** rather than run: resetting would advance the shared `window_start_message_id` past the live run's own rows and empty its context on resume (silent data loss). A skip resets nothing and inserts no trigger/run — the occurrence is dropped misfire-style with the schedule still advancing, audited as `job_overlap_skipped` (jobs) or `heartbeat_skipped` with the overlap reason (heartbeat). Prior fires stay durable (audit, FTS, interactive recall) but never replay into a proactive run's context, and proactive turns assemble under the dedicated proactive prompt with recall omitted (§9.2) — a fired task can never read as a "please arm a schedule" chat message, and one bad fire cannot poison the next.
 - `getUpdates` recovery is pinned: socket read timeout = long-poll timeout + 10 s; backoff-reconnect on timeout/network error. Scheduler-side gap recovery is lateness-based (§6.3's catch-up table) — no wake detection. Doctor exposes `last_tick_at`.
 
+### 14.1 Scheduled learning terminal decisions
+
+The generic learning loop follows the accepted
+[production design](superpowers/specs/2026-09-02-generic-production-learning-loop-design.md)
+and the fixed `scheduled-learning/v1`
+[algorithm](research/170-generic-scheduled-task-learning-algorithm.md). `ClawCore` owns its
+protocols and value types; `ScheduledLearningStoreGRDB` commits its transitions through
+`writeMapping`. The workflow coordinator consumes store recommendations separately from the
+terminal transaction.
+
+`applyTrialDecision(_:trial:feedbackRevision:now:)` captures the reviewed trial identity,
+candidate and replacement digests, base digest and revision, algorithm, and current feedback
+revision. In one transaction it checks the repeatable non-cancelled job, epoch and generation,
+all reviewed identities, stable base and feedback revision, then projects the entire assigned
+cohort from authoritative evidence, evaluator operations and effective owner signals. Promotion
+requires at least two distinct positive runs, zero negatives or hard vetoes, and resolution of
+all assigned runs. It revalidates the candidate's immutable provenance and effective source
+edges. Trial feedback may advance the reviewed revision without changing an unrelated candidate
+source edge. Production freezes no deterministic adapter, so it requires no deterministic receipt.
+
+The transaction writes a canonical terminal receipt, compare-and-swaps the stable pointer and
+revision, and closes the exact trial. The receipt keeps the complete cohort, including every
+positive run, its evaluation dependency, effective feedback revision, correction digest and owner
+confirmation. Activation and evidence remain separate: promotion is heuristic, while the receipt
+reports owner-confirmed support. A repeated exact terminal request returns its original receipt.
+An unresolved cohort produces no terminal receipt until a policy deadline or veto permits fallback.
+Fallback leaves the stable pointer untouched. Stale reviewed predicates record a stale decision;
+only the matching live trial may close. Candidate-edit predecessor closure, candidate rejection,
+and disputes of required candidate-source evaluations use the same terminal receipt helper within
+their existing feedback/edit transaction.
+
+`rollback(_:now:)` names one promotion receipt. It restores that promotion's direct retained base
+only if both the current stable digest and revision still identify the promotion in the same epoch.
+Owner triggers reference a durable, effective authenticated `candidate_reject` or
+`promotion_rollback` event on the exact candidate or promotion subject. Support-withdrawal triggers
+reference an effective owner not-useful, correction or evaluation-dispute event affecting one of
+the receipt's positive runs; the store reprojects only that fixed positive set and rolls back when
+fewer than two valid supports remain. A later active-run heuristic issue cannot supply this trigger.
+Trusted safety receipts bind the promotion and a security, secret-leakage, corruption or invariant
+failure. Adapter critical/regression triggers remain inert because production freezes no adapter.
+Stale triggers record a stale receipt and leave state unchanged. A successful rollback also closes
+a live successor trial with a stale receipt because that trial depended on the withdrawn base.
+Rollback keeps the epoch and
+advances the stable revision; owner reset remains its separate epoch-raising transaction. A closed
+or rolled-back replacement cannot open another trial against the same base and algorithm.
+
+The owner view decodes terminal receipts as well as admission, reflection and reset receipts.
+`currentPromotion(jobId:)` finds the exact active promotion independently of the last decision.
+For `/learning <jobId>`, `commitPromotionReply` rechecks that promotion, claims the transport update,
+and writes the exact promotion feedback target and all command-reply outbox chunks in one
+transaction. Only the final chunk carries the rollback button. The gateway pokes `OutboxSignal`
+after commit. A stale promotion exposes no new target. Callback-driven progression belongs to the
+workflow coordinator; the feedback boundary still authenticates, consumes and records the request.
+
 ## 15. Configuration & secrets
 
 - **Environment variables are the active configuration surface; `config.toml` remains future work.** The typed `AppConfig` is loaded from the environment/`.env` today; the structured-file behavior described below is the intended shape once that file lands, not a shipped surface. **A provider-qualified `CLAW_LLM_MODEL` value (`openai-chatgpt/<model>`) is the only configuration selector the subscription route adds** — there is deliberately **no per-provider environment namespace**. The model value carries the route selector, provider-owned OAuth state lives in the credential store, and fixed protocol details are implementation constants (§8.3), so ad-hoc `CLAW_CHATGPT_*` variables would only duplicate the structure that structured configuration will supply; they are **deferred with `config.toml`**, not merely unimplemented. When it lands, the registry deserializes provider-specific blocks into the same resolved route (§8.1) without changing any downstream seam.

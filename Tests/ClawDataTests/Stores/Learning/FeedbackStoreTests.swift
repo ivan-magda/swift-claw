@@ -372,6 +372,7 @@ import Testing
       }
       #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
       #expect(try env.trialState(trial.trialId) == .fellBack)
+      #expect(try env.base.terminalDecisionCount() == 1)
       #expect(try env.feedbackRevision() == 1)
     }
   }
@@ -433,6 +434,7 @@ import Testing
       return
     }
     #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+    #expect(try env.base.terminalDecisionCount() == 1)
     #expect(try env.trialCloseReason(trial.trialId) == ScheduledLearningStoreGRDB.hardVetoReason)
   }
 
