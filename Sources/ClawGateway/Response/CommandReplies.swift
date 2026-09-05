@@ -12,13 +12,11 @@ public enum CommandReplies {
     "Not here — memory, schedules, and learning state live in my owner's direct chat."
 
   public static let learningUsage = "Usage: /learning reset <id>. See /learning"
-  public static let learningResetUnavailable =
-    "Learning reset is not available in this build."
   public static let learningUnavailable = "Learning status is unavailable. Try again."
 
   /// The owner manual, including the parked-entry interaction rules (stated verbatim as
   /// owner-visible text): slash commands bypass confirmation resolution entirely; only the
-  /// next plain text resolves a parked entry; /new clears it; a second /schedule displaces it;
+  /// next plain text resolves a parked entry; /new clears it; another gated command displaces it;
   /// /stop and /new act on the interactive session only.
   public static let help = """
     Commands:
@@ -26,7 +24,7 @@ public enum CommandReplies {
     /schedule list: list schedules
     /pause <id> · /resume <id> · /runnow <id> · /cancel <id>: manage schedules
     /learning · /learning <id>: inspect scheduled-job learning
-    /learning reset <id>: reset learning (not available in this build)
+    /learning reset <id>: reset a job's learning after confirmation
     /remember, /memory: durable memory
     /new: fresh conversation · /stop: stop the current run
     /status: daemon health (also /doctor) · /mcp: MCP server status
@@ -35,8 +33,8 @@ public enum CommandReplies {
     Confirmations:
     Slash commands never resolve a pending confirmation. Only your next plain-text \
     message does: "yes" confirms, "no" or "cancel" rejects, anything else drops it. \
-    /new also clears a pending confirmation, and a second /schedule replaces a parked \
-    draft. /stop and /new act on this chat only, never on scheduled job sessions. \
+    /new also clears a pending confirmation, and another confirmation-gated command \
+    replaces it. /stop and /new act on this chat only, never on scheduled job sessions. \
     Stop a job's future fires with /cancel <id>.
     """
 

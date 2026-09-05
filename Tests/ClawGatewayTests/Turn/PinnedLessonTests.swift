@@ -446,6 +446,14 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.learningView(jobId: jobId)
   }
 
+  func applyReset(
+    updateId: Int64,
+    jobId: Int64,
+    now: Date
+  ) throws(StoreError) -> ConfirmedLearningResetResult {
+    try base.applyReset(updateId: updateId, jobId: jobId, now: now)
+  }
+
   func admitCandidate(
     digest: CandidateDigest,
     redactor: SecretRedactor,

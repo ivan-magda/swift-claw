@@ -6,6 +6,7 @@ public enum CommandConfirmation: Sendable, Equatable {
   case rememberWrite(MemoryWriteRequest)
   case deleteItem(id: Int64)
   case scheduleArm(ValidatedSchedule)
+  case learningReset(jobId: Int64)
 }
 
 public actor PendingConfirmationRegistry {

@@ -64,6 +64,7 @@ public enum LearningOperationFailure: String, Sendable, Equatable {
   case carrierPolicyDenied = "carrier_policy_denied"
   case schemaInvalid = "schema_invalid"
   case providerTerminal = "provider_terminal"
+  case staleEpoch = "stale_epoch"
 }
 
 /// The evaluator's raw structured verdict on one run, before owner precedence resolves it into an
@@ -158,6 +159,11 @@ public enum LearningTrialState: String, Sendable, Equatable, CaseIterable {
   case promoted
   case fellBack = "fell_back"
   case closed
+}
+
+/// Why a trial reached the generic closed state without promotion or fallback.
+public enum LearningTrialCloseReason: String, Sendable, Equatable {
+  case learningReset = "learning_reset"
 }
 
 /// Where a stored lesson set came from. Arming inserts the canonical empty set under its own

@@ -499,27 +499,15 @@ extension ScheduledLearningStoreGRDB {
       carrierDigest: result.carrierDigest
     )
     let receipt = ReflectionNoCandidateReceipt(resultDigest: result.resultDigest)
-    let inputsBytes = try CanonicalJSON.data(encoding: inputs)
-    let receiptBytes = try CanonicalJSON.data(encoding: receipt)
-    // swiftlint:disable:next optional_data_string_conversion
-    let inputsJSON = String(decoding: inputsBytes, as: UTF8.self)
-    // swiftlint:disable:next optional_data_string_conversion
-    let receiptJSON = String(decoding: receiptBytes, as: UTF8.self)
-    try db.execute(
-      sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-          decided_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        ReflectionNoCandidateReceipt.kind,
-        jobId,
-        epoch.value,
-        inputsJSON,
-        receiptJSON,
-        result.algorithm.rawValue,
-        EpochSecondCodec.epoch(now),
-      ]
+    try insertDecision(
+      db,
+      kind: ReflectionNoCandidateReceipt.kind,
+      jobId: jobId,
+      epoch: epoch,
+      inputs: inputs,
+      result: receipt,
+      algorithm: result.algorithm,
+      now: now
     )
   }
 
