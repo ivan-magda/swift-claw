@@ -118,7 +118,7 @@ import Testing
       gate.release()
       try? FileManager.default.removeItem(atPath: fixture.path)
     }
-    let admission = AdmissionStoreFixture(path: fixture.path, env: fixture.env)
+    let admission = AdmissionStoreFixture(env: fixture.env)
     let candidate = try admission.persistedCandidate()
     try fixture.env.installTrial()
     try fixture.env.makeRepeatable()

@@ -10,7 +10,6 @@ import Testing
   @Test func persistedArtifactOpensExactlyOneEmptyTrialAndChangesNoStableOrSpendState() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let before = try fixture.env.currentLearningState()
     let usage = try fixture.env.countRows(in: "provider_usage")
@@ -58,7 +57,6 @@ import Testing
   @Test func drainingTrialBlocksAdmissionEvenWhenConveniencePointerIsNil() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     try fixture.insertCompetingDrainingTrial(from: artifact)
 
@@ -78,7 +76,6 @@ import Testing
   @Test func feedbackCutoffAdvancingMakesTheArtifactStaleWithoutRebindingIt() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     try fixture.env.advanceFeedbackRevision()
 
@@ -98,7 +95,6 @@ import Testing
   @Test func replayAndConcurrentAdmissionReturnOneDurableOutcome() async throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let learning = fixture.env.learning
     let now = fixture.env.now
@@ -133,7 +129,6 @@ import Testing
   @Test func approvalCreatesOneSuccessorAndAdmitsItThroughTheCommonGates() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let control = try fixture.env.appendFeedback(
       subjectKind: .candidate,
@@ -178,7 +173,6 @@ import Testing
   @Test func supersededManifestFeedbackMakesApprovalStaleWithoutRebinding() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let (predecessor, frozenSource) = try fixture.persistedCandidateWithFeedback()
     _ = try fixture.env.appendFeedback(
       subjectKind: frozenSource.subjectKind,
@@ -212,7 +206,6 @@ import Testing
   @Test func editVetoesTheOldTrialAndPersistsOnlyAnAwaitingSuccessor() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: predecessor.digest,
@@ -260,7 +253,6 @@ import Testing
   @Test func invalidOrSecretEditBytesNeverReachCandidateOrLessonRows() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let payload = Data(#"{"lessons":["loaded-secret"]}"#.utf8)
     let control = try fixture.env.appendFeedback(
@@ -292,7 +284,6 @@ import Testing
   @Test func lateAuditFailureRollsBackTrialPointerAndReceipt() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     try fixture.failAdmissionAudit()
 
@@ -314,7 +305,6 @@ import Testing
   @Test func lateAdmissionFailureAlsoRollsBackAnApprovalSuccessor() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let control = try fixture.env.appendFeedback(
       subjectKind: .candidate,
@@ -344,7 +334,6 @@ import Testing
   @Test func candidateReviewCommitIsAtomicAndIdempotent() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let now = fixture.env.now
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
@@ -378,7 +367,6 @@ import Testing
   @Test func reviewTargetFailureRollsBackEveryRunlessChunk() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let candidate = try fixture.persistedCandidate()
     _ = try fixture.env.learning.admitCandidate(
       digest: candidate.digest,

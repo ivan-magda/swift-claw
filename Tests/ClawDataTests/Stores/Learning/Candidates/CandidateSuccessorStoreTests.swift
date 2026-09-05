@@ -12,7 +12,6 @@ import Testing
   ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate(lessons: scenario.lessons)
     try fixture.arrangeApprovalRejection(scenario, predecessor: predecessor)
     let control = try fixture.env.appendFeedback(
@@ -40,7 +39,6 @@ import Testing
   @Test func approvalOfExactCurrentPredecessorMayReuseAClosedReplacement() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     try fixture.insertClosedReplacementTrial(from: predecessor)
     let control = try fixture.env.appendFeedback(
@@ -79,7 +77,6 @@ import Testing
   @Test func editToStableRejectsWithoutClosingThePredecessorTrial() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let admission = try fixture.env.learning.admitCandidate(
       digest: predecessor.digest,
@@ -118,7 +115,6 @@ import Testing
   @Test func editToPreviouslyClosedReplacementPreservesThePredecessorTrial() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let admission = try fixture.env.learning.admitCandidate(
       digest: predecessor.digest,
@@ -159,7 +155,6 @@ import Testing
   @Test func delayedEffectiveApprovalFreezesTheCurrentFeedbackRevision() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let control = try fixture.env.appendFeedback(
       subjectKind: .candidate,
@@ -188,7 +183,6 @@ import Testing
   @Test func delayedEffectiveEditFreezesTheCurrentFeedbackRevision() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let payload = #"{"lessons":["Keep only owner-confirmed changes."]}"#
     let control = try fixture.env.appendFeedback(
@@ -225,7 +219,6 @@ import Testing
   ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let successor = try fixture.persistForgedApproval(
       predecessor: predecessor,
@@ -248,7 +241,6 @@ import Testing
   @Test func anEditReplayReturnsTheSameAwaitingArtifactAndWritesNothing() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let payload = #"{"lessons":["Keep only verified material changes."]}"#
     let control = try fixture.env.appendFeedback(
@@ -285,7 +277,6 @@ import Testing
   @Test func anApprovedEditRevalidatesItsCompletePredecessorChain() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let editPayload = #"{"lessons":["Keep only verified changes from the owner."]}"#
     let editControl = try fixture.env.appendFeedback(
@@ -332,7 +323,6 @@ import Testing
   @Test func longSuccessorChainValidatesThroughThePublicStoreWithoutADepthLimit() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     var current = try fixture.persistedCandidate()
 
     // when
@@ -385,7 +375,6 @@ import Testing
   @Test func approvalOfAnEditRequiresItsInheritedRootPredecessor() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let editPayload = #"{"lessons":["Keep the durable owner correction."]}"#
     let editControl = try fixture.env.appendFeedback(
@@ -435,7 +424,6 @@ import Testing
   @Test func approvalOfAnEditRevalidatesTheInheritedRootOperation() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let editPayload = #"{"lessons":["Keep the exact root provenance."]}"#
     let editControl = try fixture.env.appendFeedback(
@@ -485,7 +473,6 @@ import Testing
   @Test func persistedOwnerEditMustMatchItsExactControlPayload() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let payload = #"{"lessons":["The control payload replacement."]}"#
     let control = try fixture.env.appendFeedback(
@@ -548,7 +535,6 @@ import Testing
   func invalidNonSecretEditPayloadNeverPersists(_ invalid: InvalidEditPayload) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let predecessor = try fixture.persistedCandidate()
     let control = try fixture.env.appendFeedback(
       subjectKind: .candidate,

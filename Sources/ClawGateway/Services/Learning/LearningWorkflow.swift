@@ -60,6 +60,10 @@ public struct LearningWorkflow: Sendable {
   }
 
   public func advance(jobId: Int64, now: Date) async {
+    await advance(jobId: jobId, now: now, transitionLimit: Self.maxTransitionsPerInvocation)
+  }
+
+  func advance(jobId: Int64, now: Date, transitionLimit: Int) async {
     do {
       guard try store.learningState(jobId: jobId) != nil else {
         return
@@ -69,7 +73,7 @@ public struct LearningWorkflow: Sendable {
         guard !Task.isCancelled else {
           return
         }
-        guard visited.count < Self.maxTransitionsPerInvocation else {
+        guard visited.count < transitionLimit else {
           logger.error("learning workflow hit its transition budget for job \(jobId)")
           return
         }

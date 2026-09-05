@@ -106,7 +106,7 @@ import Testing
     _ = try env.positiveTrialRun()
     _ = try env.positiveTrialRun()
     let promotion = try env.promoteTrial()
-    let fixture = AdmissionStoreFixture(path: "", env: env)
+    let fixture = AdmissionStoreFixture(env: env)
     let next = try fixture.persistedCandidate(lessons: [
       "Compare every material change with the archive."
     ])
@@ -138,7 +138,7 @@ import Testing
     _ = try env.positiveTrialRun()
     _ = try env.positiveTrialRun()
     let promotion = try env.promoteTrial()
-    let fixture = AdmissionStoreFixture(path: "", env: env)
+    let fixture = AdmissionStoreFixture(env: env)
     let next = try fixture.persistedCandidate(lessons: ["Consult the complete archive."])
     _ = try env.learning.admitCandidate(
       digest: next.digest,

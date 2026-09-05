@@ -23,19 +23,10 @@ struct AdmissionStoreFixture {
     let source: String
   }
 
-  let path: String
   let env: BoundRunEnvironment
 
   static func make() throws -> AdmissionStoreFixture {
-    let path = makeTempDatabasePath(prefix: "claw-learning-admission")
-    return AdmissionStoreFixture(
-      path: path,
-      env: try BoundRunEnvironment.make(databasePath: path)
-    )
-  }
-
-  func remove() {
-    try? FileManager.default.removeItem(atPath: path)
+    AdmissionStoreFixture(env: try BoundRunEnvironment.make())
   }
 
   func persistedCandidate(
