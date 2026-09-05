@@ -230,6 +230,40 @@ import Testing
     #expect(try fixture.resetAuditCount() == 1)
   }
 
+  @Test func ownerViewRejectsResetReceiptWhoseStartedCallIdentityIsUnreadable() throws {
+    // given
+    let fixture = try ResetFixture.make()
+    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    let otherJobId = try fixture.createOtherJob()
+    try fixture.seedOperations(otherJobId: otherJobId)
+    _ = try fixture.env.learning.applyReset(
+      updateId: 9_027,
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
+    let readable = try #require(
+      try fixture.env.learning.learningView(jobId: fixture.env.jobId).onlyReadable
+    )
+    guard case .learningReset(_, let result) = readable.lastDecision?.detail else {
+      Issue.record("expected a readable reset receipt")
+      return
+    }
+    #expect(
+      result.inFlightOperationIds == [LearningOperationID(rawValue: "op-started")]
+    )
+    try fixture.corruptStartedOperation(.missingProviderCallID)
+    let before = try fixture.durableProjection()
+
+    // when
+    let view = try fixture.env.learning.learningView(jobId: fixture.env.jobId)
+    let after = try fixture.durableProjection()
+
+    // then — bypassing started-reservation validation in the shared receipt matcher survives the
+    // effective-reset and clean-replay tests because neither calls the owner view after corruption.
+    #expect(view.isOnlyUnreadable)
+    #expect(after == before)
+  }
+
   @Test func resetClearsTheConvenienceTrialPointer() throws {
     // given
     let fixture = try ResetFixture.make()

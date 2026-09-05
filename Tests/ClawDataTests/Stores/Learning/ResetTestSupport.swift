@@ -115,6 +115,16 @@ struct ResetFixture {
     let resetAuditCount: Int
   }
 
+  struct DurableProjection: Equatable {
+    let tables: [DurableTableProjection]
+  }
+
+  struct DurableTableProjection: Equatable {
+    let name: String
+    let columns: [String]
+    let rows: [[DatabaseValue]]
+  }
+
   let env: BoundRunEnvironment
 
   static func make() throws -> ResetFixture {
@@ -620,6 +630,45 @@ struct ResetFixture {
       resetDecisionCount: try resetDecisionCount(),
       resetAuditCount: try resetAuditCount()
     )
+  }
+
+  func durableProjection() throws -> DurableProjection {
+    let tableNames = [
+      "processed_updates",
+      "scheduled_jobs",
+      "job_learning_state",
+      "lesson_sets",
+      "run_learning_bindings",
+      "run_compatibility",
+      "learning_evidence",
+      "learning_operations",
+      "learning_evaluations",
+      "feedback_targets",
+      "feedback_challenges",
+      "feedback_events",
+      "learning_candidates",
+      "learning_trials",
+      "trial_assignments",
+      "learning_decisions",
+      "audit_events",
+    ]
+    return try env.queue.read { db in
+      let tables = try tableNames.map { tableName in
+        let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))").map { row in
+          row["name"] as String
+        }
+        let rows = try Row.fetchAll(
+          db,
+          sql: "SELECT * FROM \(tableName) ORDER BY rowid"
+        ).map { row in
+          columns.map { column in
+            row[column] as DatabaseValue
+          }
+        }
+        return DurableTableProjection(name: tableName, columns: columns, rows: rows)
+      }
+      return DurableProjection(tables: tables)
+    }
   }
 
   func resetDecisionCount() throws -> Int {

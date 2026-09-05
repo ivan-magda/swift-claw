@@ -373,6 +373,12 @@ private extension ScheduledLearningStoreGRDB {
       return false
     }
     guard case .staleNoCall = expectation else {
+      if state == .started {
+        guard let operation = try readOperation(db, id: id) else {
+          return false
+        }
+        _ = try startedOperationReservation(operation)
+      }
       return true
     }
     return SQLiteStoredValue.string(in: row, column: "failure_code")
