@@ -45,9 +45,8 @@ extension DaemonBuilder {
       await registerMenu()
       await reconcileRuns()
       await reconcileApprovals()
-      // Last, and read-only with respect to settlement: it seals what the run sweep just froze
-      // without settling anything itself, so the ordering the run sweep and the approval backstop
-      // depend on is untouched.
+      // Prior-process accounting is attempted before serving; network recovery starts with the
+      // learning service so a stalled inference cannot hold the poller or primary outbox.
       await learning?.reconcileAtBoot(now: now())
     }
   }

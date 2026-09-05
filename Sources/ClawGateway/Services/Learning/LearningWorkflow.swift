@@ -49,6 +49,9 @@ public struct LearningWorkflow: Sendable {
       }
       try store.sealEvidence(runId: runId, now: now)
       await runner.runEvaluation(runId: runId, now: now)
+      guard !Task.isCancelled else {
+        return
+      }
       _ = try store.recomputeAssignment(runId: runId, now: now)
       await advance(jobId: binding.jobId, now: now)
     } catch {
@@ -63,6 +66,9 @@ public struct LearningWorkflow: Sendable {
       }
       var visited: Set<WorkflowStep> = []
       while let claim = try next(jobId: jobId, visited: visited, now: now) {
+        guard !Task.isCancelled else {
+          return
+        }
         guard visited.count < Self.maxTransitionsPerInvocation else {
           logger.error("learning workflow hit its transition budget for job \(jobId)")
           return
