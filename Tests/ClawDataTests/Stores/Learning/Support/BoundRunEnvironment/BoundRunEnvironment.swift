@@ -28,6 +28,7 @@ struct BoundRunEnvironment {
       )
     } else {
       writer = try ClawDatabase.makeInMemoryQueue()
+      try emptyDatabase.get().backup(to: writer)
     }
     return try make(learningEnabled: learningEnabled, writer: writer)
   }
@@ -180,6 +181,12 @@ struct BoundRunEnvironment {
 // MARK: - Fixture Plumbing
 
 private extension BoundRunEnvironment {
+  static let emptyDatabase: Result<DatabaseQueue, any Error> = Result {
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrate(queue)
+    return queue
+  }
+
   static func fire(
     _ jobs: ScheduledJobStoreGRDB,
     jobId: Int64,
