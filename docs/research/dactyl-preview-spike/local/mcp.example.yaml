@@ -1,0 +1,7 @@
+servers:
+  - name: swiftui-preview
+    url: http://127.0.0.1:8767/mcp
+    tools:
+      include: [render_swiftui]
+      risk:
+        render_swiftui: safe

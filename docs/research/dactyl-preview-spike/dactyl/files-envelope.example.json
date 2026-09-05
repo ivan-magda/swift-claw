@@ -1,0 +1,7 @@
+{
+  "files": {
+    "ContentView.swift": "import SwiftUI\nstruct ContentView: View { var body: some View { DetailView() } }",
+    "DetailView.swift": "import SwiftUI\nstruct DetailView: View { var body: some View { Image(\"dot\") } }",
+    "Assets/dot.png": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+  }
+}
