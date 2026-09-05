@@ -43,7 +43,7 @@ extension ScheduledLearningStoreGRDB {
       inputs.oldEpoch.value < Int64.max,
       inputs.oldEpoch.next() == result.newEpoch,
       result.newEpoch == record.epoch,
-      resetDigestIsCanonical(inputs.oldStableDigest.rawValue),
+      isCanonicalDigest(inputs.oldStableDigest.rawValue),
       inputs.oldStableRevision.value >= 0,
       inputs.oldStableRevision.value < Int64.max,
       inputs.oldStableRevision.next() == result.newStableRevision,
@@ -279,8 +279,8 @@ private extension ScheduledLearningStoreGRDB {
         trial.trialId > 0,
         trial.epoch.value > 0,
         trial.generation > 0,
-        resetDigestIsCanonical(trial.baseDigest.rawValue),
-        resetDigestIsCanonical(trial.candidateDigest.rawValue),
+        isCanonicalDigest(trial.baseDigest.rawValue),
+        isCanonicalDigest(trial.candidateDigest.rawValue),
         trial.algorithm == .v1,
         let row = try Row.fetchOne(
           db,
@@ -389,15 +389,6 @@ private extension ScheduledLearningStoreGRDB {
     arguments: StatementArguments
   ) throws -> Bool {
     try Bool.fetchOne(db, sql: sql, arguments: arguments) ?? true
-  }
-}
-
-extension ScheduledLearningStoreGRDB {
-  static func resetDigestIsCanonical(_ value: String) -> Bool {
-    value.utf8.count == 64
-      && value.utf8.allSatisfy { byte in
-        (48...57).contains(byte) || (97...102).contains(byte)
-      }
   }
 }
 

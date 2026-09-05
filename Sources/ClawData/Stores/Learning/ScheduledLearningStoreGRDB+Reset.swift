@@ -157,7 +157,7 @@ private extension ScheduledLearningStoreGRDB {
       state.jobId == job.jobId,
       state.epoch.value > 0,
       state.epoch.value < Int64.max,
-      resetDigestIsCanonical(state.stableDigest.rawValue),
+      isCanonicalDigest(state.stableDigest.rawValue),
       state.stableRevision.value >= 0,
       state.stableRevision.value < Int64.max,
       state.feedbackRevision.value >= 0,
@@ -244,9 +244,9 @@ private extension ScheduledLearningStoreGRDB {
       let generation = SQLiteStoredValue.int(in: row, column: "generation"),
       generation > 0,
       let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
-      resetDigestIsCanonical(baseDigest),
+      isCanonicalDigest(baseDigest),
       let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
-      resetDigestIsCanonical(candidateDigest),
+      isCanonicalDigest(candidateDigest),
       let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm"),
       LearningAlgorithm(rawValue: algorithmRaw) == .v1
     else {
@@ -335,7 +335,7 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT operation_id, job_id, learning_epoch, state
+        SELECT operation_id
         FROM learning_operations
         WHERE job_id = ? AND learning_epoch < ? AND state IN (\(placeholders))
         ORDER BY operation_id
@@ -345,16 +345,23 @@ extension ScheduledLearningStoreGRDB {
     return try rows.map { row in
       guard
         let operationId = SQLiteStoredValue.string(in: row, column: "operation_id"),
-        operationId.isEmpty == false,
-        SQLiteStoredValue.int64(in: row, column: "job_id") == jobId,
-        let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-        epoch < newEpoch.value,
-        let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
-        stateValues.contains(stateRaw)
+        operationId.isEmpty == false
       else {
         throw StoreError.unexpected("learning operation is unreadable for reset")
       }
-      return LearningOperationID(rawValue: operationId)
+      let id = LearningOperationID(rawValue: operationId)
+      guard
+        let operation = try readOperation(db, id: id),
+        operation.jobId == jobId,
+        operation.epoch.value < newEpoch.value,
+        stateValues.contains(operation.state.rawValue)
+      else {
+        throw StoreError.unexpected("learning operation is unreadable for reset")
+      }
+      if operation.state == .started {
+        _ = try startedOperationReservation(operation)
+      }
+      return id
     }
   }
 }

@@ -154,7 +154,7 @@ private extension ScheduledLearningStoreGRDB {
       state.epoch.value > 0,
       state.stableRevision.value >= 0,
       state.feedbackRevision.value >= 0,
-      isDigest(state.stableDigest.rawValue),
+      isCanonicalDigest(state.stableDigest.rawValue),
       let stable = try readLessonSet(db, jobId: job.jobId, digest: state.stableDigest),
       stable.jobId == job.jobId,
       stable.digest == state.stableDigest
@@ -368,7 +368,7 @@ private extension ScheduledLearningStoreGRDB {
       && row.generation > 0
       && row.algorithm == .v1
       && (row.state == .open || row.state == .draining)
-      && isDigest(row.candidateDigest.rawValue)
+      && isCanonicalDigest(row.candidateDigest.rawValue)
       && trial.maximumAssignments == TrialAdmissionPolicy.maximumAssignments
       && trial.consumedAssignments >= 0
       && trial.consumedAssignments <= trial.maximumAssignments
@@ -562,9 +562,9 @@ private extension ScheduledLearningStoreGRDB {
       let inputs: ReflectionNoCandidateInputs = try decodeCanonicalDecision(record.inputsJSON)
       let result: ReflectionNoCandidateReceipt = try decodeCanonicalDecision(record.resultJSON)
       guard
-        isDigest(inputs.triggerDigest.rawValue),
-        isDigest(inputs.carrierDigest.rawValue),
-        isDigest(result.resultDigest.rawValue),
+        isCanonicalDigest(inputs.triggerDigest.rawValue),
+        isCanonicalDigest(inputs.carrierDigest.rawValue),
+        isCanonicalDigest(result.resultDigest.rawValue),
         let operation = try readOperation(db, id: inputs.operationId),
         operation.jobId == state.jobId,
         operation.epoch == state.epoch,
@@ -597,12 +597,5 @@ private extension ScheduledLearningStoreGRDB {
     default:
       throw ViewCorruption.invalid
     }
-  }
-
-  static func isDigest(_ value: String) -> Bool {
-    value.utf8.count == 64
-      && value.utf8.allSatisfy { byte in
-        (48...57).contains(byte) || (97...102).contains(byte)
-      }
   }
 }

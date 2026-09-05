@@ -62,13 +62,9 @@ extension ScheduledLearningStoreGRDB {
       return false
     }
     // Deliberately throwing, not another `false`: `started` is written by the same statement that
-    // stamps the call id, so a row missing one is corrupt, and returning "duplicate" would let the
-    // caller discard a real result as one already committed.
-    guard let callID = operation.providerCallID else {
-      throw StoreError.unexpected(
-        "started operation \(operation.id.rawValue) has no provider call id to charge"
-      )
-    }
+    // stamps the call reservation, so a row missing any required part is corrupt. Returning
+    // "duplicate" would let the caller discard a real result as one already committed.
+    let reservation = try startedOperationReservation(operation)
     guard product(result.product, belongsTo: operation.phase) else {
       throw StoreError.unexpected(
         "operation \(operation.id.rawValue) received a product for another phase"
@@ -84,7 +80,7 @@ extension ScheduledLearningStoreGRDB {
     try chargeLearningUsage(
       db,
       operation: operation,
-      callID: callID,
+      callID: reservation.providerCallID,
       model: result.usage.model,
       promptTokens: result.usage.promptTokens,
       completionTokens: result.usage.completionTokens,
@@ -412,21 +408,17 @@ private extension ScheduledLearningStoreGRDB {
     guard let operation = try readOperation(db, id: id) else {
       return
     }
-    guard let callID = operation.providerCallID, let route = operation.route else {
-      throw StoreError.unexpected(
-        "started operation \(id.rawValue) has no provider call id or route to charge"
-      )
-    }
+    let reservation = try startedOperationReservation(operation)
     // Before the state change, so a failure to charge aborts the whole reconciliation rather than
     // leaving a closed reservation whose spend was never recorded.
     try chargeLearningUsage(
       db,
       operation: operation,
-      callID: callID,
-      model: route,
-      promptTokens: operation.reservedTokens,
+      callID: reservation.providerCallID,
+      model: reservation.route,
+      promptTokens: reservation.reservedTokens,
       completionTokens: 0,
-      costUSD: operation.reservedCostUSD,
+      costUSD: reservation.reservedCostUSD,
       costSource: .heuristic,
       isEstimated: true,
       now: now
